@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposal Builder — IOT TECHS</title>
+<script src="/vendor/jspdf.umd.min.js"></script>
+<script>window.IOT_REQUIRE='manager'</script><script src="/auth.js"></script>
+<style>
+  :root{ --cream:#FAF8F4; --slate:#2C3347; --gold:#C9A96E; --gold-dim:#9c7f48; --ink:#0B0F1A; --ink-2:#121726; --ink-3:#0e1422; --line:#2a3247; --green:#4ADE80; --red:#e07a7a; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{background:var(--ink);min-height:100%;}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--cream);min-height:100vh;line-height:1.5;
+    background:radial-gradient(1100px 600px at 85% -8%, rgba(201,169,110,.13), transparent 60%),
+               radial-gradient(800px 600px at -10% 20%, rgba(110,143,176,.06), transparent 55%), var(--ink);
+    -webkit-font-smoothing:antialiased;padding-bottom:40px;}
+  /* header */
+  header{position:sticky;top:0;z-index:40;background:rgba(11,15,26,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  .hwrap{max-width:1180px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .brand h1{font-size:18px;letter-spacing:3px;font-weight:800;color:#fff;}
+  .brand .tag{color:var(--gold);letter-spacing:2px;font-size:9px;text-transform:uppercase;margin-top:2px;}
+  .htotal{margin-left:auto;text-align:right;}
+  .htotal .l{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;}
+  .htotal .v{font-size:24px;font-weight:800;color:#fff;line-height:1.1;}
+  .hlink{color:var(--gold);text-decoration:none;font-size:12px;font-weight:700;border:1px solid var(--gold-dim);border-radius:8px;padding:8px 12px;}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px;display:grid;grid-template-columns:1fr 360px;gap:22px;align-items:start;}
+  @media(max-width:920px){ .wrap{grid-template-columns:1fr;} .summary{position:static!important;} }
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:16px;padding:20px;}
+  .card+.card{margin-top:18px;}
+  .card h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:14px;}
+  /* customer grid */
+  .cgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .cgrid .full{grid-column:1/-1;}
+  .field label{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#8a93a6;font-weight:700;margin-bottom:5px;}
+  .field input{width:100%;background:var(--ink-3);border:1px solid var(--line);color:#fff;border-radius:9px;padding:11px 12px;font:inherit;font-size:14px;outline:none;transition:border-color .15s;}
+  .field input:focus{border-color:var(--gold);}
+  /* tabs */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+  .tab{flex:1;min-width:96px;background:var(--ink-2);border:1px solid var(--line);color:#9aa3b5;border-radius:12px;padding:13px 8px;font-size:13px;font-weight:800;cursor:pointer;text-align:center;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:5px;}
+  .tab .ic{font-size:19px;}
+  .tab.on{background:linear-gradient(180deg,rgba(201,169,110,.18),rgba(201,169,110,.06));border-color:var(--gold);color:#fff;}
+  .tab .cnt{font-size:9px;font-weight:800;background:var(--gold);color:var(--ink);border-radius:9px;padding:1px 6px;display:none;}
+  .tab.has .cnt{display:inline-block;}
+  /* item rows */
+  .item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid #1c2230;}
+  .item:last-child{border-bottom:none;}
+  .item.active{background:rgba(201,169,110,.05);border-radius:8px;}
+  .item .nm{flex:1;min-width:0;}
+  .item .nm .d{font-size:14px;color:#e6e9f0;font-weight:600;}
+  .item .nm .u{font-size:11px;color:#7e879a;}
+  .stepper{display:flex;align-items:center;gap:0;background:var(--ink-3);border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .stepper button{width:34px;height:34px;border:none;background:transparent;color:var(--gold);font-size:18px;font-weight:700;cursor:pointer;}
+  .stepper button:hover{background:rgba(201,169,110,.12);}
+  .stepper input{width:46px;height:34px;border:none;background:transparent;color:#fff;text-align:center;font:inherit;font-size:14px;font-weight:700;outline:none;}
+  .item .lt{width:84px;text-align:right;font-weight:800;font-size:14px;color:var(--gold);white-space:nowrap;}
+  .item .lt.zero{color:#3a4258;}
+  .tgl{position:relative;display:inline-block;width:48px;height:28px;flex:0 0 auto;cursor:pointer;}
+  .tgl input{opacity:0;width:0;height:0;}
+  .tgl .sl{position:absolute;inset:0;background:var(--ink-3);border:1px solid var(--line);border-radius:20px;transition:.2s;}
+  .tgl .sl:before{content:"";position:absolute;height:20px;width:20px;left:3px;top:3px;background:#9aa3b5;border-radius:50%;transition:.2s;}
+  .tgl input:checked + .sl{background:var(--gold);border-color:var(--gold);}
+  .tgl input:checked + .sl:before{transform:translateX(20px);background:var(--ink);}
+  /* locations */
+  textarea.loc{width:100%;background:var(--ink-3);border:1px solid var(--line);color:#fff;border-radius:9px;padding:12px;font:inherit;font-size:13px;min-height:90px;resize:vertical;outline:none;}
+  textarea.loc:focus{border-color:var(--gold);}
+  .ltags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .ltag{background:rgba(201,169,110,.12);border:1px solid var(--gold-dim);color:#e8cf9d;border-radius:20px;padding:4px 11px;font-size:12px;font-weight:600;}
+  /* summary */
+  .summary{position:sticky;top:84px;background:var(--ink-2);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:16px;padding:20px;}
+  .summary h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:12px;}
+  .sline{display:flex;justify-content:space-between;font-size:13px;color:#c4cbd9;padding:5px 0;}
+  .sline.tot{border-top:1px solid var(--line);margin-top:8px;padding-top:11px;font-size:18px;font-weight:800;color:#fff;}
+  .sline .g{color:var(--gold);font-weight:700;}
+  .selitems{max-height:170px;overflow-y:auto;margin-bottom:8px;}
+  .selrow{display:flex;justify-content:space-between;font-size:12px;color:#9aa3b5;padding:3px 0;gap:8px;}
+  .selrow span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .opt{display:flex;align-items:center;gap:8px;margin:10px 0;flex-wrap:wrap;}
+  .chip{background:var(--ink-3);border:1px solid var(--line);color:#9aa3b5;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;}
+  .chip.on{background:var(--gold);color:var(--ink);border-color:var(--gold);}
+  .depbar{background:#1d2f24;border:1px solid #2f6b4f;color:#a7d3b5;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:600;margin-top:10px;}
+  .actions{display:flex;flex-direction:column;gap:9px;margin-top:14px;}
+  .btn{border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;text-align:center;}
+  .btn.gold{background:linear-gradient(135deg,var(--gold),#A07840);color:var(--ink);}
+  .btn.dark{background:var(--ink-3);color:var(--gold);border:1px solid var(--gold-dim);}
+  .btn.ghost{background:transparent;color:#8a93a6;border:1px solid var(--line);}
+  .btn:disabled{opacity:.5;cursor:default;}
+  .muted{color:#7e879a;font-size:12px;}
+  /* toast + modal */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--slate);border:1px solid var(--gold);color:var(--cream);padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:1;}
+  .scrim{position:fixed;inset:0;background:rgba(5,8,15,.72);z-index:300;display:none;align-items:center;justify-content:center;padding:18px;}
+  .scrim.on{display:flex;}
+  .sheet{background:#FAF8F4;color:#0B0F1A;border-radius:14px;max-width:520px;width:100%;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);}
+  .sheet .sh{background:var(--slate);color:#fff;padding:15px 20px;border-left:4px solid var(--gold);font-weight:800;letter-spacing:.05em;text-transform:uppercase;font-size:13px;}
+  .sheet .sb{padding:20px;}
+</style>
+</head>
+<body>
+<header><div class="hwrap">
+  <div class="brand"><h1>IOT&nbsp;TECHS</h1><div class="tag">Proposal Builder</div></div>
+  <div class="htotal"><div class="l">Grand Total</div><div class="v" id="hTotal">$0</div></div>
+  <a class="hlink" href="/survey.html" title="Site survey — place cameras & devices on a floor plan"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M3 17 17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg> Site Survey</a>
+  <a class="hlink" href="/costs.html" title="Edit standard prices"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 2.6 1.6 1.6 0 0 0 8 1.1V1a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 14 2.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg> Standard Costs</a>
+  <a class="hlink" href="/dashboard.html">Dashboard</a>
+</div></header>
+
+<div class="wrap">
+  <div class="build">
+    <!-- Customer -->
+    <div class="card">
+      <h2>Customer</h2>
+      <div class="cgrid">
+        <div class="field"><label>Client Name *</label><input id="cName" placeholder="First & last name" oninput="autoNum();paint()"></div>
+        <div class="field"><label>Business</label><input id="cBiz" placeholder="Business name" oninput="autoNum();paint()"></div>
+        <div class="field full"><label>Project Address</label><input id="cAddr" placeholder="Street, City, State" oninput="autoNum()"></div>
+        <div class="field"><label>Phone</label><input id="cPhone" placeholder="(xxx) xxx-xxxx"></div>
+        <div class="field"><label>Email</label><input id="cEmail" placeholder="client@email.com"></div>
+        <div class="field"><label>Proposal #</label><input id="cNum" readonly style="opacity:.8;cursor:default;"></div>
+        <div class="field"><label>Date</label><input id="cDate" readonly style="opacity:.8;cursor:default;"></div>
+      </div>
+    </div>
+
+    <!-- Product lines -->
+    <div class="card">
+      <div class="tabs" id="tabs"></div>
+      <div id="catalog" style="margin-top:6px;"></div>
+    </div>
+
+    <!-- Locations -->
+    <div class="card">
+      <h2>Locations</h2>
+      <div class="muted" style="margin-bottom:8px;">Where the cameras / devices go — one per line or comma-separated.</div>
+      <textarea class="loc" id="locInput" placeholder="Front door, Rear entrance, Parking lot, Register 1…" oninput="paintTags()"></textarea>
+      <div class="ltags" id="locTags"></div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <h2>Proposal</h2>
+    <div class="selitems" id="selItems"></div>
+    <div class="sline"><span>Subtotal</span><span id="sSub">$0.00</span></div>
+    <div class="opt">
+      <span class="muted">Tax</span>
+      <span class="chip" id="taxChip" onclick="toggleTax()">Off</span>
+      <span class="chip" id="njChip" onclick="setTaxState('NJ')">NJ</span>
+      <span class="chip" id="nyChip" onclick="setTaxState('NY')">NY</span>
+    </div>
+    <div class="sline" id="taxLine" style="display:none;"><span id="taxLbl">Tax</span><span id="sTax">$0.00</span></div>
+    <div class="opt">
+      <span class="muted">Payment</span>
+      <span class="chip on" id="s5050" onclick="setStruct('50/50')">50 / 50</span>
+      <span class="chip" id="s502030" onclick="setStruct('50/30/20')">50 / 30 / 20</span>
+      <span class="chip" id="s100" onclick="setStruct('100')">100%</span>
+    </div>
+    <div class="sline tot"><span>Total</span><span id="sTotal">$0.00</span></div>
+    <div class="depbar" id="depBar">Deposit to start: <b>$0.00</b></div>
+    <div class="actions">
+      <button class="btn gold" id="propLinkBtn" onclick="proposalLink()">Send Proposal Link</button>
+      <button class="btn dark" id="signBtn" onclick="signSend()">Sign &amp; Send PDF</button>
+      <button class="btn dark" onclick="quickView()">Quick View PDF</button>
+      <button class="btn ghost" onclick="saveOnly()">Save Draft</button>
+      <button class="btn ghost" onclick="clearAll()" style="color:#a06a6a;">Clear</button>
+    </div>
+    <div class="muted" id="loadedHint" style="margin-top:10px;text-align:center;"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="scrim" id="scrim"><div class="sheet" id="sheet"></div></div>
+
+<script>
+const TAX_RATES = { NJ: 6.625, NY: 8.875 };
+const LINES = [
+  { key:'camera',  label:'Cameras',  ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M3 7.4l12.6-2.6l.85 4.1l-12.6 2.6z"/><circle cx="6.1" cy="8.3" r="1.25"/><path d="M16.45 5.3l2.7-.56a1.2 1.2 0 0 1 1.42 1l.42 2.04a1.2 1.2 0 0 1-1 1.42l-2.7.56"/><path d="M9.6 11.2l1.7 4.2"/><path d="M7.4 15.4h7"/></svg>' },
+  { key:'speaker', label:'Speakers', ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>' },
+  { key:'toast',   label:'Toast',    ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M4 9a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4 2 2 0 0 1-2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7a2 2 0 0 1-2-2z"/></svg>' },
+  { key:'adt',     label:'ADT',      ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5z"/></svg>' },
+];
+let book = { camera:[], speaker:[], toast:[], adt:[] };
+let qty  = { camera:{}, speaker:{}, toast:{}, adt:{} };
+let active = 'camera';
+let tax = { on:false, state:'NJ' };
+let structure = '50/50';
+let customerId = null;
+let facialRecog = false;
+// Items the calculator controls automatically (no manual stepper)
+const CONTROLLED = {
+  camera: ['Face Recognition','Facial Recognition + LPR','NVR (8-Channel)','NVR (16-Channel)','NVR (32-Channel)'],
+  speaker: ['Amplifier','Amplifier (5–8 speakers)','Amplifier (9+ speakers)'],
+};
+function nvrTier(cams){ if(cams<=0) return null; if(cams<=8) return 'NVR (8-Channel)'; if(cams<=16) return 'NVR (16-Channel)'; return 'NVR (32-Channel)'; }
+function ampTier(spk){ if(spk<=0) return null; if(spk<=4) return 'Amplifier'; if(spk<=8) return 'Amplifier (5–8 speakers)'; return 'Amplifier (9+ speakers)'; }
+function priceOf(line,desc){ const it=(book[line]||[]).find(i=>i.desc===desc); return it?it.price:0; }
+// Recompute auto-driven items: facial recognition add-ons, NVR by camera count, amp by speaker count
+function recomputeAuto(){
+  const cams = qty.camera['4K Camera']||0;
+  qty.camera['Face Recognition'] = facialRecog ? cams : 0;
+  qty.camera['Facial Recognition + LPR'] = facialRecog ? 1 : 0;
+  ['NVR (8-Channel)','NVR (16-Channel)','NVR (32-Channel)'].forEach(d=>{ qty.camera[d]=0; });
+  const nvr = nvrTier(Math.max(cams, facialRecog?1:0));   // facial recognition forces an NVR
+  if(nvr) qty.camera[nvr]=1;
+  const spk = qty.speaker['Speaker']||0;
+  ['Amplifier','Amplifier (5–8 speakers)','Amplifier (9+ speakers)'].forEach(d=>{ qty.speaker[d]=0; });
+  const amp = ampTier(spk);
+  if(amp) qty.speaker[amp]=1;
+}
+window.toggleFacial = function(v){ facialRecog=!!v; recomputeAuto(); renderTabs(); renderCatalog(); paint(); };
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function money(n){ return '$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function money0(n){ return '$'+(Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.className='toast show'; clearTimeout(toastT); toastT=setTimeout(()=>t.className='toast',2600); }
+
+async function init(){
+  $('cDate').value = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  try{ book = await (await fetch('/api/pricebook')).json(); }catch(e){ toast('Could not load prices'); }
+  LINES.forEach(l=>{ if(!book[l.key]) book[l.key]=[]; });
+  renderTabs(); renderCatalog(); paint();
+  // open an existing customer if linked
+  const cid = new URLSearchParams(location.search).get('customer');
+  if(cid) loadCustomer(Number(cid));
+}
+function renderTabs(){
+  $('tabs').innerHTML = LINES.map(l=>{
+    const c = countLine(l.key);
+    return '<div class="tab '+(active===l.key?'on':'')+(c?' has':'')+'" onclick="setTab(\''+l.key+'\')">'+
+      '<span class="ic">'+l.ic+'</span>'+esc(l.label)+' <span class="cnt">'+c+'</span></div>';
+  }).join('');
+}
+function countLine(k){ let n=0; (book[k]||[]).forEach(it=>{ if((qty[k][it.desc]||0)>0) n++; }); return n; }
+window.setTab = function(k){ active=k; renderTabs(); renderCatalog(); };
+function stepperRow(it){
+  const q = qty[active][it.desc]||0; const lt=q*it.price; const d=esc(it.desc).replace(/\x27/g,"&#39;");
+  return '<div class="item'+(q>0?' active':'')+'">'+
+    '<div class="nm"><div class="d">'+esc(it.desc)+'</div><div class="u">'+money(it.price)+' each</div></div>'+
+    '<div class="stepper"><button onclick="bump(\''+active+'\',\''+d+'\',-1)">−</button>'+
+      '<input type="number" min="0" value="'+q+'" onchange="setQ(\''+active+'\',\''+d+'\',this.value)">'+
+      '<button onclick="bump(\''+active+'\',\''+d+'\',1)">+</button></div>'+
+    '<div class="lt'+(lt?'':' zero')+'">'+money(lt)+'</div></div>';
+}
+function facialRow(){
+  const cams=qty.camera['4K Camera']||0; const perCam=priceOf('camera','Face Recognition'); const upg=priceOf('camera','Facial Recognition + LPR');
+  const addl=facialRecog?(cams*perCam+upg):0;
+  return '<div class="item'+(facialRecog?' active':'')+'">'+
+    '<div class="nm"><div class="d">Facial Recognition <span style="font-size:10px;color:#7e879a;font-weight:600;">AI + LPR</span></div>'+
+      '<div class="u">+'+money0(perCam)+'/camera + '+money0(upg)+' NVR upgrade · requires NVR</div></div>'+
+    '<label class="tgl"><input type="checkbox" '+(facialRecog?'checked':'')+' onchange="toggleFacial(this.checked)"><span class="sl"></span></label>'+
+    '<div class="lt'+(addl?'':' zero')+'">'+money(addl)+'</div></div>';
+}
+function autoRow(line,desc,note){
+  if(!desc) return '<div class="item"><div class="nm"><div class="d" style="color:#7e879a;">'+(line==='camera'?'NVR':'Amplifier')+' (auto)</div><div class="u">'+note+'</div></div><div class="lt zero">$0.00</div></div>';
+  return '<div class="item active"><div class="nm"><div class="d">'+esc(desc)+' <span style="font-size:9px;color:var(--gold);font-weight:800;letter-spacing:.05em;">AUTO</span></div>'+
+    '<div class="u">'+note+'</div></div><div class="lt">'+money(priceOf(line,desc))+'</div></div>';
+}
+function renderCatalog(){
+  const all = book[active]||[];
+  if(!all.length){ $('catalog').innerHTML='<div class="muted" style="padding:16px 4px;">No items for this line — add them in <a href="/costs.html" style="color:var(--gold);">Standard Costs</a>.</div>'; return; }
+  const ctrl = CONTROLLED[active]||[];
+  let html = all.filter(it=>ctrl.indexOf(it.desc)<0).map(stepperRow).join('');
+  if(active==='camera'){
+    const cams=qty.camera['4K Camera']||0;
+    html += facialRow();
+    html += autoRow('camera', nvrTier(Math.max(cams, facialRecog?1:0)),
+      cams||facialRecog ? ('Auto-selected for '+cams+' camera'+(cams===1?'':'s')+' · ≤8→8ch, 9–16→16ch, 17+→32ch') : 'Add cameras to auto-select the recorder (≤8→8ch, 9–16→16ch, 17+→32ch)');
+  }
+  if(active==='speaker'){
+    const spk=qty.speaker['Speaker']||0;
+    html += autoRow('speaker', ampTier(spk),
+      spk ? ('Auto-selected for '+spk+' speaker'+(spk===1?'':'s')+' · ≤4→$250, 5–8→$350, 9+→$450') : 'Add speakers to auto-select the amp · ≤4→$250, 5–8→$350, 9+→$450');
+  }
+  $('catalog').innerHTML = html;
+}
+window.bump = function(line,desc,d){ desc=unesc(desc); const v=Math.max(0,(qty[line][desc]||0)+d); qty[line][desc]=v; recomputeAuto(); renderTabs(); renderCatalog(); paint(); };
+window.setQ = function(line,desc,v){ desc=unesc(desc); qty[line][desc]=Math.max(0,Math.floor(Number(v)||0)); recomputeAuto(); renderTabs(); renderCatalog(); paint(); };
+function unesc(s){ const t=document.createElement('textarea'); t.innerHTML=s; return t.value; }
+
+function totals(){
+  let sub=0; LINES.forEach(l=>{ (book[l.key]||[]).forEach(it=>{ sub += (qty[l.key][it.desc]||0)*it.price; }); });
+  const rate = tax.on ? TAX_RATES[tax.state]/100 : 0;
+  const taxAmt = Math.round(sub*rate*100)/100;
+  const grand = Math.round((sub+taxAmt)*100)/100;
+  const deposit = Math.round((structure==='100'?sub:sub*0.5)*100)/100;
+  return { sub, taxAmt, grand, deposit };
+}
+function paint(){
+  const t = totals();
+  $('hTotal').textContent = money0(t.grand);
+  $('sSub').textContent = money(t.sub);
+  $('sTotal').textContent = money(t.grand);
+  $('taxChip').textContent = tax.on?'On':'Off'; $('taxChip').className='chip'+(tax.on?' on':'');
+  $('njChip').className='chip'+(tax.on&&tax.state==='NJ'?' on':''); $('nyChip').className='chip'+(tax.on&&tax.state==='NY'?' on':'');
+  $('taxLine').style.display = tax.on?'flex':'none';
+  $('taxLbl').textContent = 'Tax ('+tax.state+' '+TAX_RATES[tax.state]+'%)'; $('sTax').textContent = money(t.taxAmt);
+  $('s5050').className='chip'+(structure==='50/50'?' on':'');
+  $('s502030').className='chip'+(structure==='50/30/20'?' on':'');
+  $('s100').className='chip'+(structure==='100'?' on':'');
+  if(structure==='100') $('depBar').innerHTML='Paid in full to start: <b>'+money(t.sub)+'</b>';
+  else if(structure==='50/30/20') $('depBar').innerHTML='Deposit to start: <b>'+money(t.sub*0.5)+'</b> · 30% '+money(t.sub*0.3)+' at midpoint · 20% '+money(t.sub*0.2)+' on completion';
+  else $('depBar').innerHTML='Deposit to start: <b>'+money(t.sub*0.5)+'</b> · balance on completion';
+  // selected items list
+  const sel=[]; LINES.forEach(l=>{ (book[l.key]||[]).forEach(it=>{ const q=qty[l.key][it.desc]||0; if(q>0) sel.push({d:it.desc,q:q,t:q*it.price}); }); });
+  $('selItems').innerHTML = sel.length ? sel.map(s=>'<div class="selrow"><span>'+esc(s.d)+' ×'+s.q+'</span><span>'+money(s.t)+'</span></div>').join('') : '<div class="muted" style="padding:6px 0;">No items yet — add from the tabs.</div>';
+}
+window.toggleTax = function(){ tax.on=!tax.on; paint(); };
+window.setTaxState = function(s){ tax.state=s; tax.on=true; paint(); };
+window.setStruct = function(s){ structure=s; paint(); };
+function paintTags(){
+  const raw=$('locInput').value; const parts=raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
+  $('locTags').innerHTML = parts.map(p=>'<span class="ltag">'+esc(p)+'</span>').join('');
+}
+
+function autoNum(){
+  if($('cNum').dataset.manual) return;
+  const nm=($('cBiz').value||$('cName').value||'').trim();
+  const init=(nm.split(/\s+/).map(w=>w[0]).join('')||nm.slice(0,3)).toUpperCase().replace(/[^A-Z]/g,'').slice(0,3)||'IOT';
+  const st=(($('cAddr').value.match(/\b(NJ|NY|CT|PA|FL|TX|CA)\b/i)||[])[1]||'NJ').toUpperCase();
+  const yr=new Date().getFullYear();
+  if(!$('cNum').value) $('cNum').value = init+'-'+st+'-'+yr+'-'+(100+Math.floor(Math.random()*900));
+}
+
+// ── Build backend-compatible state (SECTIONS + inputs + structure) ──
+function buildState(){
+  const SECTIONS={};
+  LINES.forEach(l=>{ SECTIONS[l.key]={ items:(book[l.key]||[]).map(it=>({ desc:it.desc, qty:qty[l.key][it.desc]||0, price:it.price, enabled:(qty[l.key][it.desc]||0)>0 })) }; });
+  return { SECTIONS, inputs:{ taxToggle:{kind:'check',value:tax.on}, taxRate:{kind:'value',value: tax.on?TAX_RATES[tax.state]:0} },
+    paymentStructure:structure, payments:[], locations:$('locInput').value, facialRecog:facialRecog, builder:'calc.html' };
+}
+function meta(){ return { name:$('cName').value.trim(), business:$('cBiz').value.trim(), phone:$('cPhone').value.trim(),
+  email:$('cEmail').value.trim(), address:$('cAddr').value.trim(), num:$('cNum').value.trim() }; }
+async function save(silent){
+  const m=meta();
+  if(!m.name && !m.business){ toast('Add a client or business name first'); return null; }
+  const t=totals();
+  try{
+    const r = await (await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      customer:{ id:customerId, name:m.name, business:m.business, phone:m.phone, email:m.email, address:m.address },
+      proposal:{ proposalNum:m.num, clientLabel:m.business||m.name, grandTotal:t.grand, status:'saved', state:buildState() }
+    })})).json();
+    if(r.ok){ customerId=r.customerId; if(!silent) toast('Saved'); $('loadedHint').textContent='Saved · project #'+customerId; return r; }
+    toast(r.error||'Save failed'); return null;
+  }catch(e){ toast('Save failed — server offline?'); return null; }
+}
+window.saveOnly = function(){ save(false); };
+
+async function loadCustomer(id){
+  try{
+    const c = await (await fetch('/api/customers/'+id)).json(); if(c.error) return;
+    customerId=Number(id);
+    $('cName').value=c.name||''; $('cBiz').value=c.business||''; $('cAddr').value=c.address||'';
+    $('cPhone').value=c.phone||''; $('cEmail').value=c.email||'';
+    const st=c.latestState; if(st){
+      if(st.SECTIONS) LINES.forEach(l=>{ (st.SECTIONS[l.key]&&st.SECTIONS[l.key].items||[]).forEach(it=>{ if(it.qty>0) qty[l.key][it.desc]=it.qty; }); });
+      if(st.inputs&&st.inputs.taxToggle){ tax.on=!!st.inputs.taxToggle.value; const r=Number(st.inputs.taxRate&&st.inputs.taxRate.value); tax.state = r>7?'NY':'NJ'; }
+      if(st.paymentStructure) structure=st.paymentStructure;
+      if(st.locations){ $('locInput').value=st.locations; paintTags(); }
+      facialRecog = !!st.facialRecog || (qty.camera['Face Recognition']||0)>0;
+      recomputeAuto();
+    }
+    if(c.proposals&&c.proposals[0]&&c.proposals[0].proposal_num){ $('cNum').value=c.proposals[0].proposal_num; $('cNum').dataset.manual='1'; }
+    $('loadedHint').textContent='Loaded '+(c.business||c.name||'customer');
+    renderTabs(); renderCatalog(); paint();
+  }catch(e){}
+}
+
+// ── PDF (proposal) ──
+function buildPDF(){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation:'portrait', unit:'pt', format:'letter' });
+  const W=612, M=48; let y=54; const m=meta(), t=totals();
+  const gold=[201,169,110], ink=[20,25,38], gray=[110,118,130];
+  doc.setFillColor(44,51,71); doc.rect(0,0,W,86,'F');
+  doc.setTextColor(...gold); doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.text('IOT TECHS',M,48);
+  doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.text('Security · Audio · Networks · Alarms — NY / NJ',M,64);
+  doc.setTextColor(...gold); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('PROPOSAL',W-M,42,{align:'right'});
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text((m.num||''),W-M,58,{align:'right'}); doc.text($('cDate').value,W-M,72,{align:'right'});
+  y=120;
+  doc.setTextColor(...gray); doc.setFontSize(8); doc.text('PREPARED FOR',M,y);
+  doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(14); y+=18; doc.text(m.business||m.name||'Customer',M,y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...gray); y+=15;
+  [m.business&&m.name?m.name:'', m.phone, m.email, m.address].filter(Boolean).forEach(line=>{ doc.text(String(line),M,y); y+=14; });
+  // line items
+  y+=12; doc.setDrawColor(...gold); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=18;
+  doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('ITEM',M,y); doc.text('QTY',W-M-150,y,{align:'right'}); doc.text('UNIT',W-M-80,y,{align:'right'}); doc.text('TOTAL',W-M,y,{align:'right'}); y+=8;
+  doc.setDrawColor(220,215,205); doc.setLineWidth(.6); doc.line(M,y,W-M,y); y+=4;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  LINES.forEach(l=>{
+    const rows=(book[l.key]||[]).filter(it=>(qty[l.key][it.desc]||0)>0);
+    if(!rows.length) return;
+    y+=14; doc.setFont('helvetica','bold'); doc.setTextColor(...gold); doc.setFontSize(8); doc.text(l.label.toUpperCase(),M,y); doc.setFont('helvetica','normal'); doc.setTextColor(...ink); doc.setFontSize(10);
+    rows.forEach(it=>{ const q=qty[l.key][it.desc]||0; y+=16; if(y>720){ doc.addPage(); y=60; }
+      doc.text(String(it.desc),M,y,{maxWidth:300}); doc.text(String(q),W-M-150,y,{align:'right'});
+      doc.text(money(it.price),W-M-80,y,{align:'right'}); doc.text(money(q*it.price),W-M,y,{align:'right'}); });
+  });
+  // totals
+  y+=22; if(y>680){ doc.addPage(); y=60; } doc.setDrawColor(220,215,205); doc.line(W-M-220,y,W-M,y); y+=16;
+  const tline=(lbl,val,bold)=>{ doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(bold?13:10); doc.setTextColor(...ink);
+    doc.text(lbl,W-M-220,y); doc.text(val,W-M,y,{align:'right'}); y+=bold?20:15; };
+  tline('Subtotal',money(t.sub));
+  if(tax.on) tline('Tax ('+tax.state+' '+TAX_RATES[tax.state]+'%)',money(t.taxAmt));
+  tline('Total',money(t.grand),true);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...gray);
+  doc.text((structure==='100'?'Paid in full to start':'50% deposit to start')+': '+money(t.deposit),W-M,y,{align:'right'}); y+=24;
+  // locations
+  const locs=$('locInput').value.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
+  if(locs.length){ if(y>660){ doc.addPage(); y=60; } doc.setTextColor(...gold); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('LOCATIONS',M,y); y+=14;
+    doc.setTextColor(...ink); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(locs.join(' · '),M,y,{maxWidth:W-2*M}); y+=20; }
+  // acceptance
+  if(y>640){ doc.addPage(); y=60; } y+=18;
+  doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('ACCEPTANCE OF PROPOSAL',M,y); y+=14;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...gray); doc.text('By signing, you approve this proposal and authorize IOT Techs to proceed.',M,y); y+=34;
+  doc.setDrawColor(...ink); doc.setLineWidth(1); doc.setTextColor(...ink); doc.setFontSize(12); doc.text('X',M,y); doc.line(M+14,y,M+300,y);
+  doc.setFontSize(9); doc.setTextColor(...gray); doc.text('Authorized Signature',M+14,y+13);
+  return doc;
+}
+window.quickView = function(){
+  try{ const doc=buildPDF(); const url=doc.output('bloburl'); window.open(url,'_blank'); }
+  catch(e){ toast('Could not build PDF'); }
+};
+window.signSend = async function(){
+  const btn=$('signBtn'); btn.disabled=true; const lbl=btn.textContent; btn.textContent='Saving…';
+  try{
+    const r=await save(true); if(!r||!customerId){ btn.disabled=false; btn.textContent=lbl; return; }
+    btn.textContent='Generating…';
+    const doc=buildPDF(); const data=doc.output('datauristring'); const m=meta(), t=totals();
+    const sr=await (await fetch('/api/project/'+customerId+'/sign-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      data:data, name:(m.num||'Proposal')+'.pdf', proposal_num:m.num, total:t.grand, signer_name:m.name||m.business, signer_email:m.email
+    })})).json();
+    if(sr&&sr.ok) showSignLink(location.origin+sr.signUrl); else toast('Sign request failed: '+(sr&&sr.error||'?'));
+  }catch(e){ toast('Failed — '+(e.message||'try again')); }
+  btn.disabled=false; btn.textContent=lbl;
+};
+window.proposalLink = async function(){
+  const btn=$('propLinkBtn'); btn.disabled=true; const lbl=btn.textContent; btn.textContent='Saving…';
+  try{
+    const r=await save(true); if(!r||!r.proposalId){ toast('Add a customer and some items first'); btn.disabled=false; btn.textContent=lbl; return; }
+    btn.textContent='Creating link…';
+    const link=await (await fetch('/api/proposals/'+r.proposalId+'/share-link',{method:'POST'})).json();
+    if(link&&link.url){ showSignLink(location.origin+link.url); }
+    else toast('Could not create link: '+(link&&link.error||'?'));
+  }catch(e){ toast('Failed — '+(e.message||'try again')); }
+  btn.disabled=false; btn.textContent=lbl;
+};
+function showSignLink(link){
+  $('sheet').innerHTML='<div class="sh">Proposal Sent for Signature</div><div class="sb">'+
+    '<p style="margin:0 0 14px;font-size:14px;color:#3a4258;line-height:1.5;">Send this link to the customer to review &amp; sign. A work order is created automatically once they sign.</p>'+
+    '<div style="display:flex;gap:8px;"><input id="slink" readonly value="'+esc(link)+'" style="flex:1;min-width:0;font:inherit;font-size:13px;padding:11px 12px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#0B0F1A;">'+
+    '<button onclick="navigator.clipboard.writeText(\''+link.replace(/\x27/g,"\\x27")+'\').then(()=>toast(\'Copied\'))" style="font:inherit;font-weight:700;border:none;border-radius:8px;padding:11px 16px;cursor:pointer;background:#C9A96E;color:#0B0F1A;">Copy</button></div>'+
+    '<div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;"><a href="'+esc(link)+'" target="_blank" rel="noopener" style="font:inherit;font-weight:700;text-decoration:none;border:1px solid #d9d4ca;border-radius:8px;padding:11px 16px;color:#2C3347;background:#eceae4;">Open</a>'+
+    '<button onclick="$(\'scrim\').classList.remove(\'on\')" style="font:inherit;font-weight:700;border:none;border-radius:8px;padding:11px 18px;cursor:pointer;background:#1f6b4f;color:#fff;">Done</button></div></div>';
+  $('scrim').classList.add('on');
+}
+$('scrim').onclick=function(e){ if(e.target===$('scrim')) $('scrim').classList.remove('on'); };
+window.clearAll = function(){
+  if(!confirm('Clear this proposal and start fresh?')) return;
+  qty={ camera:{}, speaker:{}, toast:{}, adt:{} }; customerId=null; tax={on:false,state:'NJ'}; structure='50/50'; facialRecog=false;
+  ['cName','cBiz','cAddr','cPhone','cEmail','locInput'].forEach(id=>$(id).value=''); $('cNum').value=''; delete $('cNum').dataset.manual;
+  $('locTags').innerHTML=''; $('loadedHint').textContent=''; active='camera';
+  renderTabs(); renderCatalog(); paint();
+};
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>IOT TECHS — Sign Your Proposal</title>
+<script src="/vendor/pdf.min.js"></script>
+<script src="/vendor/pdf-lib.min.js"></script>
+<style>
+  :root{
+    --cream:#FAF8F4; --ink:#0B0F1A; --slate:#2C3347; --slate2:#3a4258;
+    --gold:#C9A96E; --gold-soft:#d9bf91; --gray:#8a8f9c; --green:#1f6b4f; --red:#b04545;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;}
+  body{font-family:Helvetica,Arial,sans-serif;color:var(--cream);
+    background:radial-gradient(1200px 600px at 50% -10%, #1a2030 0%, var(--ink) 60%);
+    display:flex;flex-direction:column;min-height:100vh;}
+  header{background:var(--ink);border-bottom:1px solid rgba(201,169,110,.25);display:flex;align-items:stretch;position:sticky;top:0;z-index:30;}
+  .goldstrip{width:6px;background:var(--gold);}
+  .head-inner{flex:1;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 18px;flex-wrap:wrap;}
+  .brand h1{margin:0;font-size:18px;letter-spacing:.14em;font-weight:700;}
+  .brand .tag{margin-top:3px;font-size:10.5px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;}
+  .head-meta{text-align:right;font-size:12px;color:var(--gray);}
+  .head-meta b{color:var(--cream);}
+  .head-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .btn{font:inherit;font-size:13px;letter-spacing:.05em;font-weight:600;border-radius:8px;padding:11px 18px;cursor:pointer;border:1px solid transparent;transition:.15s ease;text-transform:uppercase;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-gold{background:var(--gold);color:var(--ink);}
+  .btn-gold:not(:disabled):hover{background:var(--gold-soft);}
+  .btn-quiet{background:rgba(255,255,255,.06);color:var(--cream);border-color:rgba(255,255,255,.14);}
+  .btn-quiet:hover{background:rgba(255,255,255,.12);}
+
+  /* review banner */
+  .reviewbar{position:sticky;top:54px;z-index:20;background:#15326f;color:#dbe6ff;border-bottom:1px solid rgba(255,255,255,.12);
+    padding:10px 18px;font-size:13px;display:flex;align-items:center;gap:12px;justify-content:center;text-align:center;}
+  .reviewbar.done{background:var(--green);color:#eafff2;}
+  .reviewbar .pill{font-weight:700;}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;padding:22px 14px 80px;}
+  .state{max-width:560px;margin-top:9vh;text-align:center;color:var(--gray);}
+  .state h2{color:var(--cream);font-size:20px;margin:0 0 8px;letter-spacing:.03em;}
+  .spinner{width:34px;height:34px;border:3px solid rgba(201,169,110,.25);border-top-color:var(--gold);border-radius:50%;margin:0 auto 16px;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  #workspace{width:100%;display:none;flex-direction:column;align-items:center;gap:22px;}
+  .page{position:relative;background:#fff;border-radius:4px;box-shadow:0 18px 50px rgba(0,0,0,.5);max-width:100%;}
+  .page canvas{display:block;border-radius:4px;}
+  .pagetag{position:absolute;top:8px;left:8px;background:rgba(11,15,26,.6);color:#fff;font-size:11px;padding:3px 9px;border-radius:20px;letter-spacing:.04em;}
+
+  .stamp{position:absolute;cursor:grab;touch-action:none;outline:1px dashed rgba(201,169,110,.85);}
+  .stamp:active{cursor:grabbing;}
+  .stamp img{display:block;width:100%;height:100%;pointer-events:none;user-select:none;}
+  .stamp .del{position:absolute;top:-12px;right:-12px;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;border:2px solid #fff;font-size:15px;line-height:22px;text-align:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.4);}
+  .stamp .grip{position:absolute;bottom:-9px;right:-9px;width:20px;height:20px;border-radius:4px;background:var(--gold);border:2px solid #fff;cursor:nwse-resize;touch-action:none;box-shadow:0 2px 5px rgba(0,0,0,.4);}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(5,8,15,.72);display:none;z-index:50;align-items:center;justify-content:center;padding:16px;}
+  .scrim.on{display:flex;}
+  .sheet{width:100%;max-width:560px;background:var(--cream);color:var(--ink);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);}
+  .sheet-head{background:var(--slate);color:#fff;padding:16px 20px;border-left:4px solid var(--gold);display:flex;justify-content:space-between;align-items:center;}
+  .sheet-head h3{margin:0;font-size:15px;letter-spacing:.12em;text-transform:uppercase;}
+  .sheet-head .x{background:none;border:none;color:#cfd3dc;font-size:24px;cursor:pointer;line-height:1;}
+  .sheet-body{padding:20px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--slate);font-weight:700;margin-bottom:7px;}
+  .field input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:var(--ink);}
+  .field input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.25);}
+  .padwrap{position:relative;border:1px solid #d9d4ca;border-radius:10px;background:#fff;overflow:hidden;}
+  #pad{display:block;width:100%;height:200px;touch-action:none;cursor:crosshair;}
+  .baseline{position:absolute;left:24px;right:24px;bottom:46px;border-top:1px dashed var(--gold);pointer-events:none;}
+  .padhint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#c3bdb1;font-size:14px;letter-spacing:.08em;pointer-events:none;}
+  .padbar{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap;}
+  .inks{display:flex;gap:8px;align-items:center;}
+  .ink{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid #d9d4ca;}
+  .ink.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.3);}
+  .link{background:none;border:none;color:var(--slate);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;}
+  .sheet-foot{display:flex;gap:10px;justify-content:flex-end;padding:0 20px 20px;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;background:#eceae4;padding:4px;border-radius:9px;}
+  .tab{flex:1;font:inherit;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:9px;border:none;border-radius:7px;background:transparent;color:var(--slate);cursor:pointer;}
+  .tab.sel{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .typeprev{min-height:104px;display:flex;align-items:center;justify-content:center;border:1px solid #d9d4ca;border-radius:10px;background:#fff;font-size:48px;color:#0B0F1A;padding:8px 16px;overflow:hidden;text-align:center;line-height:1.1;white-space:nowrap;}
+  .typeprev.empty{color:#c3bdb1;font-size:16px;letter-spacing:.08em;}
+  .stylebar{display:flex;gap:8px;margin-top:12px;}
+  .styleopt{flex:1;min-width:0;font-size:21px;padding:11px 6px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:var(--slate);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .styleopt.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.28);color:var(--ink);}
+
+  /* signed terminal state */
+  .done-overlay{position:fixed;inset:0;background:rgba(5,8,15,.92);display:none;z-index:70;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;}
+  .done-overlay.on{display:flex;}
+  .done-overlay .check{width:84px;height:84px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:46px;color:#fff;margin-bottom:20px;}
+  .done-overlay h2{font-size:24px;margin:0 0 8px;letter-spacing:.04em;}
+  .done-overlay p{color:var(--gray);max-width:420px;margin:0 0 6px;line-height:1.5;}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--green);color:#eafff2;padding:13px 22px;border-radius:10px;font-size:14px;box-shadow:0 14px 40px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.25s ease;z-index:60;border:1px solid rgba(255,255,255,.15);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.err{background:#5c1f1f;color:#ffe6e6;}
+  @media (max-width:520px){ .brand h1{font-size:15px;} .btn{padding:10px 13px;font-size:12px;} .head-meta{display:none;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="goldstrip"></div>
+  <div class="head-inner">
+    <div class="brand"><h1>IOT&nbsp;TECHS</h1><div class="tag">Proposal Signing</div></div>
+    <div class="head-meta" id="headMeta"></div>
+    <div class="head-actions">
+      <button class="btn btn-quiet" id="btnSign" style="display:none" disabled>+ Add Signature</button>
+      <button class="btn btn-gold" id="btnSubmit" style="display:none" disabled>Submit Signed Proposal</button>
+    </div>
+  </div>
+</header>
+
+<div class="reviewbar" id="reviewbar" style="display:none">
+  <span id="reviewText">Please scroll through the entire proposal to enable signing.</span>
+</div>
+
+<div class="stage">
+  <div class="state" id="state"><div class="spinner"></div><h2>Loading your proposal…</h2><p>One moment.</p></div>
+  <div id="workspace"></div>
+</div>
+
+<!-- Sign modal -->
+<div class="scrim" id="scrim">
+  <div class="sheet">
+    <div class="sheet-head"><h3>Sign Here</h3><button class="x" id="mClose">&times;</button></div>
+    <div class="sheet-body">
+      <div class="field"><label for="name">Full name</label><input id="name" type="text" autocomplete="name" placeholder="e.g. John Carter"></div>
+      <div class="field" style="margin-bottom:8px">
+        <label>Signature</label>
+        <div class="tabs"><button class="tab sel" data-mode="type" type="button">Type</button><button class="tab" data-mode="draw" type="button">Draw</button></div>
+        <div class="panel" id="panel-type">
+          <div class="typeprev empty" id="typeprev">Enter a name above</div>
+        </div>
+        <div class="panel" id="panel-draw" style="display:none">
+          <div class="padwrap"><canvas id="pad"></canvas><div class="baseline"></div><div class="padhint" id="padhint">Sign with your finger or mouse</div></div>
+          <div class="padbar"><div class="inks"><div class="ink sel" data-ink="#0B0F1A" style="background:#0B0F1A"></div><div class="ink" data-ink="#1c3faa" style="background:#1c3faa"></div></div><span style="flex:1"></span><button class="link" id="clearPad" type="button">Clear</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-quiet" id="mCancel" style="color:var(--slate);background:#eceae4;border-color:#d9d4ca">Cancel</button>
+      <button class="btn btn-gold" id="mApply" disabled>Place on Document</button>
+    </div>
+  </div>
+</div>
+
+<div class="done-overlay" id="doneOverlay">
+  <div class="check">&#10003;</div>
+  <h2>Proposal Signed</h2>
+  <p>Thank you! Your signed proposal has been received and our team has been notified.</p>
+  <p id="doneRedirect" style="display:none">Taking you to your project dashboard…</p>
+  <a class="btn btn-gold" id="dashBtn" href="#" style="display:none;text-decoration:none;margin-top:16px;">Go to my dashboard &rarr;</a>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const pdfjsLib = window.pdfjsLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdf.worker.min.js";
+const { PDFDocument } = PDFLib;
+
+// ---------- state ----------
+const TOKEN = (function(){
+  const q = new URLSearchParams(location.search);
+  const m = location.pathname.match(/^\/s\/([^\/?#]+)/);   // short link:  /s/<token>
+  return (m && decodeURIComponent(m[1])) || q.get("t") || q.get("token") || "";
+})();
+let originalBytes = null, fileName = "proposal", meta = null;
+const pageEls = [];
+let inkColor = "#0B0F1A", hasStroke = false;
+let hasViewed = false; const seenPages = new Set(); let numPages = 0;
+let sigTarget = null;   // auto-detected signature spot: { pageIdx, left, bottom }
+
+const $ = id => document.getElementById(id);
+const workspace = $("workspace"), btnSign = $("btnSign"), btnSubmit = $("btnSubmit");
+const scrim = $("scrim"), nameInput = $("name"), pad = $("pad"), padhint = $("padhint"), mApply = $("mApply");
+
+let toastT;
+function toast(msg, err){ const t=$("toast"); t.textContent=msg; t.className="toast show"+(err?" err":""); clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast",2800); }
+function showState(html){ $("state").innerHTML = html; $("state").style.display="block"; }
+
+// ---------- init: load proposal by token ----------
+(async function init(){
+  if(!TOKEN){ showState('<h2>Invalid link</h2><p>This signing link is missing its token.</p>'); return; }
+  let m;
+  try{ m = await (await fetch("/api/sign/"+encodeURIComponent(TOKEN))).json(); }
+  catch(e){ showState('<h2>Couldn’t load</h2><p>Please check your connection and reopen the link.</p>'); return; }
+  if(!m || !m.ok){ showState('<h2>Link not found</h2><p>This signing link is invalid or has expired. Please contact IOT Techs.</p>'); return; }
+  meta = m; fileName = (m.proposal_num || "proposal");
+  $("headMeta").innerHTML = "<b>"+esc(m.business||"")+"</b>"+(m.proposal_num?" &middot; "+esc(m.proposal_num):"")+(m.total?" &middot; $"+Number(m.total).toLocaleString("en-US"):"");
+  if(m.signed){ $("state").style.display="none"; showDone(m.dashboard, false); return; }
+  // fetch the PDF bytes
+  try{
+    const resp = await fetch("/api/sign/"+encodeURIComponent(TOKEN)+"/file");
+    if(!resp.ok) throw new Error("file");
+    const buf = await resp.arrayBuffer();
+    originalBytes = new Uint8Array(buf);
+    await renderDocument(new Uint8Array(buf).slice());
+  }catch(e){ showState('<h2>Couldn’t open the proposal</h2><p>Please contact IOT Techs for help.</p>'); return; }
+  $("state").style.display="none";
+  workspace.style.display="flex";
+  btnSign.style.display = btnSubmit.style.display = "inline-block";
+  $("reviewbar").style.display = "flex";
+  updateReview();
+})();
+
+async function renderDocument(data){
+  workspace.innerHTML=""; pageEls.length=0; seenPages.clear(); sigTarget=null;
+  const doc = await pdfjsLib.getDocument({ data }).promise;
+  numPages = doc.numPages;
+  const dpr = window.devicePixelRatio || 1;
+  const maxW = Math.min(880, (window.innerWidth - 36));
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(en=>{ if(en.isIntersecting){ seenPages.add(Number(en.target.dataset.idx)); updateReview(); } });
+  }, { threshold:0.5 });
+  for(let n=1;n<=doc.numPages;n++){
+    const page = await doc.getPage(n);
+    const vp1 = page.getViewport({ scale:1 });
+    const cssScale = Math.min(maxW / vp1.width, 2);
+    const vp = page.getViewport({ scale: cssScale * dpr });
+    const wrap = document.createElement("div"); wrap.className="page"; wrap.dataset.idx=(n-1);
+    wrap.style.width = (vp1.width*cssScale)+"px";
+    const canvas = document.createElement("canvas");
+    canvas.width=vp.width; canvas.height=vp.height;
+    canvas.style.width=(vp1.width*cssScale)+"px"; canvas.style.height=(vp1.height*cssScale)+"px";
+    wrap.appendChild(canvas);
+    const tag=document.createElement("div"); tag.className="pagetag"; tag.textContent="Page "+n+" / "+doc.numPages; wrap.appendChild(tag);
+    workspace.appendChild(wrap); pageEls.push(wrap);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    // auto-detect the signature line on this page (we know the PDF says "Authorized Signature")
+    try{ detectSignatureSpot(await page.getTextContent(), page.getViewport({ scale: cssScale }), n-1); }catch(e){}
+    io.observe(wrap);
+  }
+}
+// Find the customer signature line by reading the PDF text. Best (lowest-priority-number,
+// lowest-on-page) match wins; the stamp is placed just above that label/line.
+function detectSignatureSpot(tc, vpCss, pageIdx){
+  const rank = s => {
+    s = s.toLowerCase();
+    if(/(customer|client|authorized)\s*signature|signature\s*of\s*(customer|client)|accepted\s*by/.test(s)) return 1;
+    if(/^x[\s_]*$/.test(s) || /^x[_\s]{2,}/.test(s)) return 2;
+    if(/\bsignature\b|\bsign\s*here\b/.test(s)) return 3;
+    return 99;
+  };
+  for(const it of tc.items){
+    const str = (it.str||"").trim(); if(!str) continue;
+    const prio = rank(str); if(prio===99) continue;
+    const p = vpCss.convertToViewportPoint(it.transform[4], it.transform[5]); // baseline, CSS px from top-left
+    const textH = Math.max(8, (it.height||10) * vpCss.scale);
+    const yTop = p[1] - textH;                  // top of the label
+    const cand = { pageIdx, left: Math.max(0, p[0]-4), bottom: Math.max(0, yTop-4), prio, y: p[1] };
+    if(!sigTarget || cand.prio < sigTarget.prio || (cand.prio===sigTarget.prio && cand.pageIdx>sigTarget.pageIdx) ||
+       (cand.prio===sigTarget.prio && cand.pageIdx===sigTarget.pageIdx && cand.y>sigTarget.y)){
+      sigTarget = cand;
+    }
+  }
+}
+function updateReview(){
+  const bar=$("reviewbar"), txt=$("reviewText");
+  if(seenPages.size >= numPages && numPages>0){
+    hasViewed = true; bar.classList.add("done");
+    txt.innerHTML = '<span class="pill"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><polyline points="20 6 9 17 4 12"/></svg> Proposal reviewed</span> &nbsp;—&nbsp; you can now add your signature.';
+    btnSign.disabled = false;
+  } else {
+    txt.innerHTML = 'Please scroll through the entire proposal to enable signing &nbsp;<span class="pill">'+seenPages.size+' / '+(numPages||"?")+' pages</span>';
+    btnSign.disabled = true;
+  }
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+// ---------- signature pad ----------
+const pctx = pad.getContext("2d"); let padReady=false;
+function sizePad(){ const r=pad.getBoundingClientRect(); if(r.width===0)return; const dpr=window.devicePixelRatio||1;
+  pad.width=r.width*dpr; pad.height=r.height*dpr; pctx.setTransform(dpr,0,0,dpr,0,0);
+  pctx.lineJoin=pctx.lineCap="round"; pctx.strokeStyle=inkColor; pctx.lineWidth=2.6; padReady=true; }
+let drawing=false,lastX=0,lastY=0;
+function padPos(e){ const r=pad.getBoundingClientRect(),p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left,y:p.clientY-r.top}; }
+function startDraw(e){ e.preventDefault(); drawing=true; const p=padPos(e); lastX=p.x; lastY=p.y; pctx.strokeStyle=inkColor; padhint.style.display="none"; }
+function moveDraw(e){ if(!drawing)return; e.preventDefault(); const p=padPos(e); pctx.beginPath(); pctx.moveTo(lastX,lastY); pctx.lineTo(p.x,p.y); pctx.stroke(); lastX=p.x; lastY=p.y; hasStroke=true; refreshApply(); }
+function endDraw(){ drawing=false; }
+pad.addEventListener("pointerdown",startDraw); pad.addEventListener("pointermove",moveDraw); window.addEventListener("pointerup",endDraw);
+document.querySelectorAll(".ink").forEach(sw=>sw.addEventListener("click",()=>{ document.querySelectorAll(".ink").forEach(i=>i.classList.remove("sel")); sw.classList.add("sel"); inkColor=sw.dataset.ink; pctx.strokeStyle=inkColor; }));
+$("clearPad").addEventListener("click",clearPad);
+function clearPad(){ pctx.clearRect(0,0,pad.width,pad.height); hasStroke=false; padhint.style.display="block"; refreshApply(); }
+nameInput.addEventListener("input",()=>{ updateTypePreview(); refreshApply(); });
+function refreshApply(){ const hasName=!!nameInput.value.trim(); mApply.disabled = (activeMode==="draw") ? !(hasName&&hasStroke) : !hasName; }
+
+// ---------- modal ----------
+btnSign.addEventListener("click",openSign); $("mClose").addEventListener("click",closeSign); $("mCancel").addEventListener("click",closeSign);
+function openSign(){ if(!hasViewed){ toast("Please scroll through the proposal first",true); return; }
+  scrim.classList.add("on"); nameInput.value = (meta && (meta.signer_name || meta.business)) || ""; hasStroke=false; padhint.style.display="block";
+  padReady=false; clearPad(); setMode("type"); requestAnimationFrame(()=>{ updateTypePreview(); refreshApply(); nameInput.focus(); }); }
+function closeSign(){ scrim.classList.remove("on"); }
+
+let activeMode="type", typeStyle=0;
+const sigStyles=[
+  { css:"'Snell Roundhand','Segoe Script','Brush Script MT',cursive", italic:false }
+];
+function setMode(m){ activeMode=m; document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("sel",t.dataset.mode===m));
+  $("panel-draw").style.display=m==="draw"?"block":"none"; $("panel-type").style.display=m==="type"?"block":"none"; if(m==="draw"&&!padReady)sizePad(); }
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{ setMode(t.dataset.mode); updateTypePreview(); refreshApply(); }));
+function updateTypePreview(){ const raw=nameInput.value.trim(),prev=$("typeprev");
+  if(!raw){ prev.textContent="Enter a name above"; prev.classList.add("empty"); }
+  else{ const s=sigStyles[0]; prev.textContent=raw; prev.classList.remove("empty"); prev.style.fontFamily=s.css; prev.style.fontStyle=s.italic?"italic":"normal";
+    prev.style.fontSize="48px"; const box=prev.clientWidth-40; if(box>0){ const probe=document.createElement("canvas").getContext("2d"); probe.font=(s.italic?"italic ":"")+"400 48px "+s.css; const w=probe.measureText(raw).width; if(w>box) prev.style.fontSize=Math.max(20,Math.floor(48*box/w))+"px"; } } }
+
+function getSignatureMark(){
+  if(activeMode==="draw"){ const b=strokeBounds(); if(!b)return null; return { src:pad, sx:b.x, sy:b.y, sw:b.w, sh:b.h }; }
+  const name=nameInput.value.trim(); if(!name)return null; const s=sigStyles[typeStyle]; const fs=76;
+  const font=(s.italic?"italic ":"")+"400 "+fs+"px "+s.css; const probe=document.createElement("canvas").getContext("2d"); probe.font=font;
+  const tw=Math.ceil(probe.measureText(name).width); const oc=document.createElement("canvas"); oc.width=Math.max(tw+48,80); oc.height=Math.round(fs*1.7);
+  const o=oc.getContext("2d"); o.font=font; o.fillStyle=inkColor; o.textBaseline="middle"; o.fillText(name,24,oc.height/2);
+  return { src:oc, sx:0, sy:0, sw:oc.width, sh:oc.height }; }
+function buildStamp(name){
+  const ts=new Date().toLocaleString("en-US",{ weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short" });
+  const S=2,W=520,sigH=150,labH=64,H=sigH+labH; const c=document.createElement("canvas"); c.width=W*S; c.height=H*S; const x=c.getContext("2d"); x.scale(S,S);
+  const mark=getSignatureMark(); if(mark){ const fit=Math.min((W-40)/mark.sw,(sigH-20)/mark.sh); const dw=mark.sw*fit,dh=mark.sh*fit; x.drawImage(mark.src,mark.sx,mark.sy,mark.sw,mark.sh,(W-dw)/2,(sigH-dh)/2,dw,dh); }
+  x.strokeStyle="#C9A96E"; x.lineWidth=1.4; x.beginPath(); x.moveTo(16,sigH); x.lineTo(W-16,sigH); x.stroke();
+  x.fillStyle="#0B0F1A"; x.font="700 22px Helvetica,Arial,sans-serif"; x.textBaseline="alphabetic"; x.fillText(name,18,sigH+30);
+  x.fillStyle="#1f8a4d"; x.font="600 14px Helvetica,Arial,sans-serif"; x.fillText("Signed "+ts,18,sigH+52);
+  return { url:c.toDataURL("image/png"), ratio:H/W }; }
+function strokeBounds(){ const img=pctx.getImageData(0,0,pad.width,pad.height).data; let minX=pad.width,minY=pad.height,maxX=0,maxY=0,found=false;
+  for(let y=0;y<pad.height;y++)for(let xp=0;xp<pad.width;xp++)if(img[(y*pad.width+xp)*4+3]>10){ found=true; if(xp<minX)minX=xp; if(xp>maxX)maxX=xp; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+  if(!found)return null; const dpr=window.devicePixelRatio||1,p=8*dpr; minX=Math.max(0,minX-p); minY=Math.max(0,minY-p); maxX=Math.min(pad.width,maxX+p); maxY=Math.min(pad.height,maxY+p);
+  return { x:minX,y:minY,w:maxX-minX,h:maxY-minY }; }
+
+mApply.addEventListener("click",()=>{ const name=nameInput.value.trim(); const stamp=buildStamp(name);
+  const onPage = sigTarget ? (pageEls[sigTarget.pageIdx]||currentPage()) : currentPage();
+  const el = dropStamp(onPage, stamp, sigTarget && pageEls[sigTarget.pageIdx] ? sigTarget : null);
+  closeSign(); btnSubmit.disabled=false;
+  if(el) try{ el.scrollIntoView({ behavior:"smooth", block:"center" }); }catch(e){}
+  toast(sigTarget ? "Signature placed on the signature line — drag to fine-tune, then Submit" : "Signature placed — drag to position, then Submit"); });
+// nearest page to the viewport center (works whether the window or a container scrolls)
+function currentPage(){ const mid=window.innerHeight/2; let best=pageEls[0],bd=Infinity; pageEls.forEach(p=>{ const r=p.getBoundingClientRect(); const cy=r.top+r.height/2; const d=Math.abs(cy-mid); if(d<bd){bd=d;best=p;} }); return best; }
+function dropStamp(pageEl,stamp,target){ const w=Math.min(230,pageEl.clientWidth*0.5),h=w*stamp.ratio; const el=document.createElement("div"); el.className="stamp";
+  let left, top;
+  if(target && typeof target.left==="number"){
+    left = Math.max(0, Math.min(target.left, pageEl.clientWidth - w));
+    top  = Math.max(0, Math.min((target.bottom!=null ? target.bottom - h : pageEl.clientHeight*0.72), pageEl.clientHeight - h));
+  } else { left = (pageEl.clientWidth-w)/2; top = pageEl.clientHeight*0.72; }
+  el.style.width=w+"px"; el.style.height=h+"px"; el.style.left=left+"px"; el.style.top=top+"px"; el.dataset.ratio=stamp.ratio;
+  const img=new Image(); img.src=stamp.url; el.appendChild(img);
+  const del=document.createElement("div"); del.className="del"; del.textContent="×"; const grip=document.createElement("div"); grip.className="grip";
+  el.appendChild(del); el.appendChild(grip); pageEl.appendChild(el); wireStamp(el,pageEl,del,grip); return el; }
+function wireStamp(el,pageEl,del,grip){
+  del.addEventListener("pointerdown",e=>{ e.stopPropagation(); el.remove(); if(!document.querySelectorAll(".stamp").length) btnSubmit.disabled=true; });
+  el.addEventListener("pointerdown",e=>{ if(e.target===grip||e.target===del)return; e.preventDefault(); el.setPointerCapture(e.pointerId);
+    const sx=e.clientX,sy=e.clientY,ox=el.offsetLeft,oy=el.offsetTop;
+    const move=ev=>{ let nx=ox+(ev.clientX-sx),ny=oy+(ev.clientY-sy); nx=Math.max(0,Math.min(nx,pageEl.clientWidth-el.offsetWidth)); ny=Math.max(0,Math.min(ny,pageEl.clientHeight-el.offsetHeight)); el.style.left=nx+"px"; el.style.top=ny+"px"; };
+    const up=()=>{ el.removeEventListener("pointermove",move); el.removeEventListener("pointerup",up); };
+    el.addEventListener("pointermove",move); el.addEventListener("pointerup",up); });
+  grip.addEventListener("pointerdown",e=>{ e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
+    const sx=e.clientX,ow=el.offsetWidth,ratio=parseFloat(el.dataset.ratio);
+    const move=ev=>{ let nw=ow+(ev.clientX-sx); nw=Math.max(70,Math.min(nw,pageEl.clientWidth-el.offsetLeft)); el.style.width=nw+"px"; el.style.height=(nw*ratio)+"px"; };
+    const up=()=>{ grip.removeEventListener("pointermove",move); grip.removeEventListener("pointerup",up); };
+    grip.addEventListener("pointermove",move); grip.addEventListener("pointerup",up); });
+}
+
+// ---------- submit (flatten via pdf-lib, upload) ----------
+btnSubmit.addEventListener("click",submitSigned);
+async function submitSigned(){
+  const stamps=document.querySelectorAll(".stamp");
+  if(!stamps.length) return toast("Add your signature first",true);
+  const signer = (stamps[0].dataset.signer) || lastSigner || (meta&&meta.signer_name) || "Customer";
+  btnSubmit.disabled=true; btnSubmit.textContent="Submitting…";
+  try{
+    const doc=await PDFDocument.load(originalBytes.slice());
+    const pages=doc.getPages();
+    for(const st of stamps){
+      const pageEl=st.parentElement; const idx=pageEls.indexOf(pageEl); if(idx<0)continue;
+      const page=pages[idx]; const pw=page.getWidth(),ph=page.getHeight(); const ratio=pw/pageEl.clientWidth;
+      const left=st.offsetLeft,top=st.offsetTop,w=st.offsetWidth,h=st.offsetHeight;
+      const png=await doc.embedPng(dataUrlToBytes(st.querySelector("img").src));
+      page.drawImage(png,{ x:left*ratio, y:ph-(top+h)*ratio, width:w*ratio, height:h*ratio });
+    }
+    const out=await doc.save();
+    const b64=u8ToBase64(out);
+    const r=await fetch("/api/sign/"+encodeURIComponent(TOKEN),{ method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ name: fileName+"-signed.pdf", signer: signerName(), data:"data:application/pdf;base64,"+b64 }) }).then(r=>r.json());
+    if(!r || !r.ok) throw new Error(r && r.error || "upload failed");
+    showDone(r.dashboard, true);
+  }catch(err){ console.error(err); toast("Submit failed — "+(err.message||"try again"),true); btnSubmit.disabled=false; btnSubmit.textContent="Submit Signed Proposal"; }
+}
+function showDone(dashboard, autoRedirect){
+  $("doneOverlay").classList.add("on");
+  if(dashboard){
+    const btn=$("dashBtn"); if(btn){ btn.href=dashboard; btn.style.display="inline-block"; }
+    if(autoRedirect){ const r=$("doneRedirect"); if(r) r.style.display="block"; setTimeout(()=>{ location.href=dashboard; }, 2400); }
+  }
+}
+let lastSigner=""; function signerName(){ return lastSigner || (meta&&meta.signer_name) || "Customer"; }
+// capture the name typed in the modal for the upload
+nameInput.addEventListener("input",()=>{ lastSigner = nameInput.value.trim(); });
+
+function dataUrlToBytes(url){ const b=atob(url.split(",")[1]); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i); return a; }
+function u8ToBase64(u8){ let bin=""; const chunk=0x8000; for(let i=0;i<u8.length;i+=chunk){ bin+=String.fromCharCode.apply(null,u8.subarray(i,i+chunk)); } return btoa(bin); }
+</script>
+</body>
+</html>

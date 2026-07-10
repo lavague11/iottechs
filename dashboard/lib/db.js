@@ -1,0 +1,1962 @@
+import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import path from "node:path";
+import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
+import { missingReqs, nextStageOf, AUTO_STAGES } from "./stage-flow.js";
+import { toolHasData, toolFingerprint } from "./tool-data.js";
+
+// Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
+// Legacy accounts were a single unsalted SHA-256; verifyPw still accepts those so existing
+// logins keep working, and verifyUserByCredential upgrades them to scrypt on next sign-in.
+const LEGACY_SALT = "iot_techs_2026";
+const legacyHash = (pw) => createHash("sha256").update(String(pw) + LEGACY_SALT).digest("hex");
+
+function hashPw(pw) {
+  const salt = randomBytes(16).toString("hex");
+  const dk = scryptSync(String(pw), salt, 64).toString("hex");
+  return `scrypt$${salt}$${dk}`;
+}
+
+function verifyPw(pw, stored) {
+  if (!stored) return false;
+  if (stored.startsWith("scrypt$")) {
+    const [, salt, hash] = stored.split("$");
+    if (!salt || !hash) return false;
+    const dk = scryptSync(String(pw), salt, 64);
+    const want = Buffer.from(hash, "hex");
+    return dk.length === want.length && timingSafeEqual(dk, want);
+  }
+  // Legacy unsalted SHA-256 — constant-length hex, so a direct compare is fine.
+  return legacyHash(pw) === stored;
+}
+
+// True when a stored hash is still in the legacy (non-scrypt) format and should be re-hashed.
+const isLegacyHash = (stored) => !!stored && !String(stored).startsWith("scrypt$");
+
+const STAFF = [
+  { name: "Admin",        username: "admin",   email: "admin@iot-techs.com",   phone: null,             password: "password", role: "admin"   },
+  { name: "Manager",      username: "manager", email: "manager@iot-techs.com", phone: null,             password: "password", role: "manager" },
+  { name: "Sales Rep",    username: "sales",   email: "sales@iot-techs.com",   phone: null,             password: "password", role: "sales"   },
+  { name: "Marco (Tech)", username: "marco",   email: "marco@iot-techs.com",   phone: "(646) 555-0101", password: "password", role: "tech"    },
+  { name: "Devon (Tech)", username: "devon",   email: "devon@iot-techs.com",   phone: "(646) 555-0102", password: "password", role: "tech"    },
+];
+
+const STAGE_FOR_STATUS = {
+  lead: "inquiry", open: "inquiry", survey: "site_survey",
+  quoted: "proposal", approved: "approval_deposit",
+  awaiting_parts: "schedule", scheduled: "schedule",
+  dispatched: "install", installing: "install", onsite: "install",
+  closed: "completion",
+};
+
+// Contact info from intake form — keyed by customer name.
+// Used both in fresh seed and to backfill existing rows.
+const CONTACT_INFO = {
+  "Riverside Auto Body": { n: "Marco Diaz",       e: "mdiaz@riversideauto.com",   p: "(646) 555-0142", m: "Need 8 cameras for lot and garage entrance. Vandalism concern.", s: "web" },
+  "Lakeshore Pharmacy":  { n: "Diana Chen",        e: "d.chen@lakeshorerx.com",    p: "(718) 555-0241", m: "Replacing old analog system. 12 cams for storefront and parking.", s: "referral" },
+  "Greenfield Storage":  { n: "Sam Greenfield",    e: "sam@gfstore.com",            p: "(732) 555-0039", m: "Large facility. 24 cameras for aisles and exterior.", s: "web" },
+  "Westend Warehouse":   { n: "Bill Tonner",       e: "b.tonner@westendwh.com",    p: "(201) 555-0318", m: "Industrial warehouse. 32 cameras for docks and perimeter.", s: "referral" },
+  "Corner Liquor":       { n: "Tony Marino",       e: "tony@cornerliquor.com",     p: "(718) 555-0451", m: "6 cameras, PTZ for counter. After-hours vandalism concern.", s: "web" },
+  "Hillview Apartments": { n: "Maria Santos",      e: "m.santos@hillviewapts.com", p: "(646) 555-0733", m: "16 cameras for entrances, parking, lobby.", s: "referral" },
+  "Sunrise Daycare":     { n: "Kelly Kim",         e: "k.kim@sunrisedaycare.com",  p: "(646) 555-0812", m: "5 cameras. Need parent remote access for classrooms.", s: "web" },
+  "Metro Dental":        { n: "Dr. Carlos Ruiz",   e: "c.ruiz@metrodental.com",    p: "(212) 555-0661", m: "4 cameras for reception and parking area.", s: "web" },
+  "Bayview Diner":       { n: "Robert Banks",      e: "r.banks@bayviewdiner.com",  p: "(718) 555-0504", m: null, s: "existing" },
+  "Park Plaza Mall":     { n: "Management Office", e: "mgmt@parkplaza.com",        p: "(201) 555-0900", m: null, s: "existing" },
+  // Residential
+  "Martinez Residence":  { n: "James Martinez",    e: "jmartinez@gmail.com",       p: "(201) 555-0177", m: "4 cameras — front door, driveway, backyard, and side gate. Had a break-in last year.", s: "web" },
+  "Thompson Home":       { n: "Linda Thompson",    e: "l.thompson@gmail.com",      p: "(973) 555-0394", m: "Full alarm system for colonial. 3 bed 2 bath, two floors.", s: "web" },
+  "Patel Residence":     { n: "Raj Patel",         e: "raj.patel@gmail.com",       p: "(973) 555-0528", m: "New construction — security cameras + alarm system. Want to do it right from the start.", s: "referral" },
+  "Sullivan Home":       { n: "Kevin Sullivan",    e: "k.sullivan@gmail.com",      p: "(908) 555-0763", m: "Whole-home audio, 5 zones. Living room, kitchen, master, patio, garage.", s: "referral" },
+};
+
+const SEED = [
+  // Commercial — active
+  { n:1042, svc:"SC", type:"A", category:"open",      customer:"Riverside Auto Body", address:"2503 Jay Pl, Bronx, NY 10462",              cameras:8,  value:6400,  status:"installing",    tech:"Marco", date:"2026-06-24", issue:null },
+  { n:1041, svc:"SC", type:"A", category:"open",      customer:"Lakeshore Pharmacy",  address:"118 Lake St, Weehawken, NJ 07086",          cameras:12, value:9800,  status:"scheduled",     tech:"Devon", date:"2026-06-27", issue:null },
+  { n:1039, svc:"SC", type:"A", category:"open",      customer:"Greenfield Storage",  address:"44 Industrial Pkwy, Secaucus, NJ 07094",    cameras:24, value:21500, status:"approved",      tech:null,    date:null,         issue:null },
+  { n:1031, svc:"AS", type:"A", category:"open",      customer:"Westend Warehouse",   address:"1200 Dock Rd, Newark, NJ 07114",            cameras:32, value:28900, status:"installing",    tech:"Devon", date:"2026-06-23", issue:null },
+  // Commercial — pending
+  { n:1038, svc:"SC", type:"A", category:"pending",   customer:"Corner Liquor",       address:"900 Main St, Hackensack, NJ 07601",         cameras:6,  value:4100,  status:"quoted",        tech:null,    date:null,         issue:null },
+  { n:1036, svc:"SC", type:"A", category:"pending",   customer:"Hillview Apartments", address:"77 Hill Rd, Fort Lee, NJ 07024",            cameras:16, value:13200, status:"quoted",        tech:null,    date:null,         issue:null },
+  { n:1035, svc:"SC", type:"A", category:"pending",   customer:"Sunrise Daycare",     address:"210 Elm Ave, Bergenfield, NJ 07621",        cameras:5,  value:3600,  status:"survey",        tech:"Marco", date:"2026-06-25", issue:null },
+  { n:1033, svc:"SC", type:"A", category:"pending",   customer:"Metro Dental",        address:"55 Center Blvd, Jersey City, NJ 07306",     cameras:4,  value:2900,  status:"lead",          tech:null,    date:null,         issue:null },
+  // Upgrades
+  { n:3104, svc:"SC", type:"B", category:"upgrade",   customer:"Bayview Diner",       address:"8 Harbor Way, Bayonne, NJ 07002",           cameras:4,  value:3200,  status:"approved",      tech:null,    date:null,         issue:"Add 4 cams to rear lot" },
+  { n:3102, svc:"AC", type:"B", category:"upgrade",   customer:"Park Plaza Mall",     address:"500 Plaza Dr, Paramus, NJ 07652",           cameras:0,  value:5400,  status:"scheduled",     tech:"Devon", date:"2026-06-30", issue:"NVR + storage upgrade" },
+  // Service calls
+  { n:2207, svc:"SC", type:"C", category:"service",   customer:"Bayview Diner",       address:"8 Harbor Way, Bayonne, NJ 07002",           cameras:7,  value:180,   status:"dispatched",    tech:"Marco", date:"2026-06-24", issue:"Cam 3 offline" },
+  { n:2206, svc:"AC", type:"C", category:"service",   customer:"Park Plaza Mall",     address:"500 Plaza Dr, Paramus, NJ 07652",           cameras:40, value:0,     status:"awaiting_parts",tech:"Devon", date:"2026-06-26", issue:"NVR hard drive failure" },
+  { n:2204, svc:"SC", type:"C", category:"service",   customer:"Greenfield Storage",  address:"44 Industrial Pkwy, Secaucus, NJ 07094",    cameras:24, value:150,   status:"open",          tech:null,    date:null,         issue:"Night vision blurry, 2 cams" },
+  // Completed commercial
+  { n:1028, svc:"SC", type:"A", category:"completed", customer:"Bayview Diner",       address:"8 Harbor Way, Bayonne, NJ 07002",           cameras:7,  value:5200,  status:"closed",        tech:"Marco", date:"2026-06-18", issue:null },
+  { n:1025, svc:"AC", type:"A", category:"completed", customer:"Park Plaza Mall",     address:"500 Plaza Dr, Paramus, NJ 07652",           cameras:40, value:41000, status:"closed",        tech:"Devon", date:"2026-06-12", issue:null },
+  { n:1019, svc:"SC", type:"A", category:"completed", customer:"Lakeshore Pharmacy",  address:"118 Lake St, Weehawken, NJ 07086",          cameras:6,  value:4800,  status:"closed",        tech:"Marco", date:"2026-05-30", issue:null },
+  // Residential — new
+  { n:1044, svc:"SC", type:"A", category:"open",      customer:"Martinez Residence",  address:"147 Maple Ave, Ridgewood, NJ 07450",        cameras:4,  value:2800,  status:"installing",    tech:"Marco", date:"2026-06-25", issue:null },
+  { n:1043, svc:"AS", type:"A", category:"pending",   customer:"Thompson Home",       address:"83 Oak Lane, Montclair, NJ 07042",          cameras:0,  value:3200,  status:"survey",        tech:"Marco", date:"2026-06-26", issue:null },
+  { n:1045, svc:"MX", type:"A", category:"pending",   customer:"Patel Residence",     address:"29 Birch St, Livingston, NJ 07039",         cameras:6,  value:5100,  status:"quoted",        tech:null,    date:null,         issue:null },
+  { n:1047, svc:"SS", type:"A", category:"completed", customer:"Sullivan Home",       address:"612 Cedar Ave, Summit, NJ 07901",           cameras:0,  value:4400,  status:"closed",        tech:"Devon", date:"2026-06-15", issue:null },
+];
+
+function init() {
+  const dir = path.join(process.cwd(), "data");
+  mkdirSync(dir, { recursive: true });
+  const db = new DatabaseSync(path.join(dir, "dashboard.db"));
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT NOT NULL,
+      email         TEXT,
+      phone         TEXT,
+      password_hash TEXT,
+      role          TEXT NOT NULL DEFAULT 'customer',
+      created_at    TEXT DEFAULT (datetime('now')),
+      UNIQUE(email),
+      UNIQUE(phone)
+    );
+  `);
+
+  const uCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
+  if (!uCols.includes("phone"))    db.exec("ALTER TABLE users ADD COLUMN phone TEXT");
+  if (!uCols.includes("username")) db.exec("ALTER TABLE users ADD COLUMN username TEXT");
+  if (!uCols.includes("disabled")) db.exec("ALTER TABLE users ADD COLUMN disabled INTEGER DEFAULT 0");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
+
+  // Seed staff — DO NOTHING if email already exists so admin edits are never overwritten
+  const userStmt = db.prepare(
+    "INSERT INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?) ON CONFLICT(email) DO NOTHING"
+  );
+  for (const u of STAFF) {
+    userStmt.run(u.name, u.username, u.email, u.phone || null, hashPw(u.password), u.role);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      access_id     TEXT UNIQUE NOT NULL,
+      customer      TEXT NOT NULL,
+      address       TEXT,
+      service_code  TEXT NOT NULL,
+      project_type  TEXT NOT NULL,
+      category      TEXT NOT NULL,
+      stage         TEXT NOT NULL,
+      status        TEXT NOT NULL,
+      cameras       INTEGER DEFAULT 0,
+      value         INTEGER DEFAULT 0,
+      tech          TEXT,
+      date          TEXT,
+      issue         TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  const cols = db.prepare("PRAGMA table_info(projects)").all().map((c) => c.name);
+  if (!cols.includes("customer_pin"))    db.exec("ALTER TABLE projects ADD COLUMN customer_pin TEXT");
+  if (!cols.includes("tech_pin"))        db.exec("ALTER TABLE projects ADD COLUMN tech_pin TEXT");
+  if (!cols.includes("contact_name"))    db.exec("ALTER TABLE projects ADD COLUMN contact_name TEXT");
+  if (!cols.includes("contact_email"))   db.exec("ALTER TABLE projects ADD COLUMN contact_email TEXT");
+  if (!cols.includes("contact_phone"))   db.exec("ALTER TABLE projects ADD COLUMN contact_phone TEXT");
+  if (!cols.includes("contact_message")) db.exec("ALTER TABLE projects ADD COLUMN contact_message TEXT");
+  if (!cols.includes("source"))          db.exec("ALTER TABLE projects ADD COLUMN source TEXT DEFAULT 'internal'");
+  if (!cols.includes("company_name"))    db.exec("ALTER TABLE projects ADD COLUMN company_name TEXT");
+  if (!cols.includes("install_date"))    db.exec("ALTER TABLE projects ADD COLUMN install_date TEXT");
+  if (!cols.includes("lost_reason"))       db.exec("ALTER TABLE projects ADD COLUMN lost_reason TEXT");
+  if (!cols.includes("lost_at"))           db.exec("ALTER TABLE projects ADD COLUMN lost_at TEXT");
+  if (!cols.includes("needs_attention"))    db.exec("ALTER TABLE projects ADD COLUMN needs_attention INTEGER DEFAULT 0");
+  if (!cols.includes("attention_note"))     db.exec("ALTER TABLE projects ADD COLUMN attention_note TEXT");
+  if (!cols.includes("commission_rate"))    db.exec("ALTER TABLE projects ADD COLUMN commission_rate REAL DEFAULT 0");
+  if (!cols.includes("commission_status"))  db.exec("ALTER TABLE projects ADD COLUMN commission_status TEXT DEFAULT 'pending'");
+  if (!cols.includes("sales_rep"))          db.exec("ALTER TABLE projects ADD COLUMN sales_rep TEXT");
+  if (!cols.includes("restricted"))         db.exec("ALTER TABLE projects ADD COLUMN restricted INTEGER DEFAULT 0");
+  if (!cols.includes("customer_granted"))   db.exec("ALTER TABLE projects ADD COLUMN customer_granted INTEGER DEFAULT 0");
+  if (!cols.includes("managers_granted"))   db.exec("ALTER TABLE projects ADD COLUMN managers_granted INTEGER DEFAULT 0");
+  if (!cols.includes("completed_at"))       db.exec("ALTER TABLE projects ADD COLUMN completed_at TEXT");
+  if (!cols.includes("payout_amount"))      db.exec("ALTER TABLE projects ADD COLUMN payout_amount REAL DEFAULT 0");
+  if (!cols.includes("payout_status"))      db.exec("ALTER TABLE projects ADD COLUMN payout_status TEXT DEFAULT 'pending'");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS work_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      submitted_by_id INTEGER,
+      submitted_by_name TEXT,
+      submitted_at TEXT DEFAULT (datetime('now','localtime')),
+      notes TEXT,
+      status TEXT DEFAULT 'pending',
+      reviewed_by_id INTEGER,
+      reviewed_by_name TEXT,
+      reviewed_at TEXT,
+      review_notes TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      user_id INTEGER,
+      user_name TEXT,
+      user_email TEXT,
+      role TEXT NOT NULL,
+      granted_by INTEGER,
+      granted_at TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+
+  // INSERT OR IGNORE: adds new seed rows, skips existing ones.
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO projects
+      (access_id,customer,address,service_code,project_type,category,stage,status,
+       cameras,value,tech,date,issue,contact_name,contact_email,contact_phone,contact_message,source)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `);
+  for (const j of SEED) {
+    const ci = CONTACT_INFO[j.customer] || {};
+    stmt.run(
+      makeAccessId(j.type, j.svc, j.n),
+      j.customer, j.address, j.svc, j.type, j.category,
+      STAGE_FOR_STATUS[j.status] || "inquiry",
+      j.status, j.cameras, j.value, j.tech, j.date, j.issue,
+      ci.n || null, ci.e || null, ci.p || null, ci.m || null, ci.s || "internal"
+    );
+  }
+  // Always sync addresses from seed (handles format updates to existing rows).
+  const addrStmt = db.prepare("UPDATE projects SET address = ? WHERE access_id = ?");
+  for (const j of SEED) {
+    addrStmt.run(j.address, makeAccessId(j.type, j.svc, j.n));
+  }
+
+  const OLD_TO_NEW = {
+    qualified: "inquiry", mockup: "proposal", approval: "approval_deposit",
+    deposit: "approval_deposit", procurement: "schedule", dispatch: "install",
+    tech_qc: "qc", customer_qc: "qc",
+  };
+  for (const [oldKey, newKey] of Object.entries(OLD_TO_NEW)) {
+    db.prepare("UPDATE projects SET stage = ? WHERE stage = ?").run(newKey, oldKey);
+  }
+
+  const needPins = db.prepare("SELECT id, access_id, tech FROM projects WHERE customer_pin IS NULL OR tech_pin IS NULL").all();
+  if (needPins.length) {
+    const upd = db.prepare("UPDATE projects SET customer_pin = ?, tech_pin = ? WHERE id = ?");
+    for (const r of needPins) {
+      const { customer, tech } = makePins(r.access_id);
+      upd.run(customer, r.tech ? tech : null, r.id);
+    }
+  }
+
+  // Backfill contact info for existing rows
+  const bfStmt = db.prepare(
+    "UPDATE projects SET contact_name=?,contact_email=?,contact_phone=?,contact_message=?,source=? WHERE customer=? AND contact_name IS NULL"
+  );
+  for (const [cust, ci] of Object.entries(CONTACT_INFO)) {
+    bfStmt.run(ci.n, ci.e, ci.p, ci.m, ci.s || "internal", cust);
+  }
+
+  // Migrate login_logs if it exists with old schema (no ip_address column)
+  const _llCols = (() => {
+    try { return db.prepare("PRAGMA table_info(login_logs)").all().map(c => c.name); } catch { return []; }
+  })();
+  if (_llCols.length > 0 && !_llCols.includes("ip_address")) {
+    db.exec("DROP TABLE IF EXISTS login_logs");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS login_logs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER,
+      event_type  TEXT NOT NULL DEFAULT 'login',
+      login_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      logout_at   TEXT,
+      ip_address  TEXT,
+      user_agent  TEXT,
+      project_id  INTEGER,
+      notes       TEXT
+    )
+  `);
+
+  // ---- Inventory ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      name              TEXT NOT NULL,
+      category          TEXT,
+      sku               TEXT,
+      quantity          INTEGER DEFAULT 0,
+      unit_cost         INTEGER DEFAULT 0,
+      location          TEXT,
+      project_access_id TEXT,
+      created_at        TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  const invCols = db.prepare("PRAGMA table_info(inventory)").all().map((c) => c.name);
+  if (!invCols.includes("qty_for_project")) db.exec("ALTER TABLE inventory ADD COLUMN qty_for_project INTEGER DEFAULT 0");
+  if (!invCols.includes("qty_used"))        db.exec("ALTER TABLE inventory ADD COLUMN qty_used INTEGER DEFAULT 0");
+
+  const invCount = db.prepare("SELECT COUNT(*) AS n FROM inventory").get().n;
+  if (!invCount) {
+    const projIds = db.prepare("SELECT access_id FROM projects ORDER BY id LIMIT 3").all().map((r) => r.access_id);
+    const INV_SEED = [
+      ["Hikvision DS-2CD2143G2 4MP Dome", "Camera",   "HK-2143G2", 24, 95,  "Warehouse A", null],
+      ["Hikvision DS-2CD2T87G2 8MP Bullet","Camera",   "HK-2T87G2", 18, 140, "Warehouse A", null],
+      ["Dahua 16ch NVR 4K",               "NVR",       "DH-NVR16",  9,  420, "Warehouse A", null],
+      ["Dahua 32ch NVR 4K",               "NVR",       "DH-NVR32",  5,  690, "Warehouse A", null],
+      ["WD Purple 8TB Surveillance HDD",  "Storage",   "WD-PUR8",   22, 160, "Warehouse B", null],
+      ["Cat6 Cable — 1000ft Box",         "Cabling",   "C6-1000",   31, 110, "Warehouse B", null],
+      ["PoE Switch 24-Port Gigabit",      "Networking","PoE-24",    7,  280, "Warehouse A", null],
+      ["LPR Camera 4MP Varifocal",        "Camera",    "LPR-4MP",   6,  310, "Warehouse A", projIds[0] || null],
+      ["Access Control Panel 4-Door",     "Access",    "AC-4D",     4,  240, "Warehouse B", projIds[1] || null],
+      ["Commercial Speaker 70V 8in",      "Audio",     "SPK-70V",   28, 65,  "Warehouse B", projIds[2] || null],
+    ];
+    const insInv = db.prepare("INSERT INTO inventory (name, category, sku, quantity, unit_cost, location, project_access_id) VALUES (?,?,?,?,?,?,?)");
+    for (const r of INV_SEED) insInv.run(...r);
+  }
+
+  // ---- Tickets + messages ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      access_id      TEXT,
+      subject        TEXT NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'open',
+      priority       TEXT NOT NULL DEFAULT 'medium',
+      opened_by_id   INTEGER,
+      opened_by_name TEXT,
+      opened_by_role TEXT,
+      assignee_id    INTEGER,
+      assignee_name  TEXT,
+      audience       TEXT NOT NULL DEFAULT 'admin,manager,tech,customer',
+      created_at     TEXT DEFAULT (datetime('now')),
+      updated_at     TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ticket_messages (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id   INTEGER NOT NULL,
+      author_id   INTEGER,
+      author_name TEXT,
+      author_role TEXT,
+      body        TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
+  if (!tCount) {
+    const URGENT = /offline|down|not\s+(working|record)|no\s+signal|dead|fail/i;
+    const MED = /static|intermittent|slow|delay|glitch|loose/i;
+    const issues = db.prepare("SELECT access_id, customer, issue, stage, tech, contact_name FROM projects WHERE issue IS NOT NULL AND issue != ''").all();
+    const insT = db.prepare("INSERT INTO tickets (access_id, subject, status, priority, opened_by_name, opened_by_role, assignee_name, audience) VALUES (?,?,?,?,?,?,?,?)");
+    const insM = db.prepare("INSERT INTO ticket_messages (ticket_id, author_name, author_role, body) VALUES (?,?,?,?)");
+    for (const r of issues) {
+      const priority = URGENT.test(r.issue) ? "urgent" : MED.test(r.issue) ? "medium" : "low";
+      const status = ["payment", "completion"].includes(r.stage) ? "closed" : "open";
+      const info = insT.run(r.access_id, r.issue, status, priority, r.contact_name || r.customer, "customer", r.tech || null, "admin,manager,tech,customer");
+      insM.run(Number(info.lastInsertRowid), r.contact_name || r.customer, "customer", r.issue);
+    }
+  }
+
+  // ---- Notifications ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL,
+      type       TEXT,
+      title      TEXT NOT NULL,
+      body       TEXT,
+      link       TEXT,
+      read       INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  const nCount = db.prepare("SELECT COUNT(*) AS n FROM notifications").get().n;
+  if (!nCount) {
+    const admins = db.prepare("SELECT id FROM users WHERE role IN ('admin','manager')").all();
+    const openTickets = db.prepare("SELECT id, subject, access_id FROM tickets WHERE status != 'closed' LIMIT 5").all();
+    const insN = db.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?,?,?,?,?)");
+    for (const a of admins) {
+      for (const t of openTickets) insN.run(a.id, "ticket", "New ticket", t.subject, `/tickets/${t.id}`);
+    }
+  }
+
+  // ---- Expenses ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      description TEXT NOT NULL,
+      category    TEXT,
+      amount      INTEGER NOT NULL DEFAULT 0,
+      vendor      TEXT,
+      access_id   TEXT,
+      spent_on    TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  // Migrate expenses to support tech submissions + approval workflow
+  const eCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+  if (!eCols.includes("submitted_by_id"))   db.exec("ALTER TABLE expenses ADD COLUMN submitted_by_id INTEGER");
+  if (!eCols.includes("submitted_by_name")) db.exec("ALTER TABLE expenses ADD COLUMN submitted_by_name TEXT");
+  if (!eCols.includes("status"))            db.exec("ALTER TABLE expenses ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'");
+  if (!eCols.includes("review_notes"))      db.exec("ALTER TABLE expenses ADD COLUMN review_notes TEXT");
+  if (!eCols.includes("reviewed_by_id"))    db.exec("ALTER TABLE expenses ADD COLUMN reviewed_by_id INTEGER");
+  if (!eCols.includes("reviewed_by_name"))  db.exec("ALTER TABLE expenses ADD COLUMN reviewed_by_name TEXT");
+  if (!eCols.includes("reviewed_at"))       db.exec("ALTER TABLE expenses ADD COLUMN reviewed_at TEXT");
+  if (!eCols.includes("payment_date"))      db.exec("ALTER TABLE expenses ADD COLUMN payment_date TEXT");
+  if (!eCols.includes("payment_method"))    db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT");
+  // Normalize legacy category names
+  db.exec("UPDATE expenses SET category='Operations' WHERE category='Overhead'");
+
+  // ---- Requests (equipment / tool / material requests from techs) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS requests (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT,
+      request_type      TEXT NOT NULL DEFAULT 'equipment',
+      description       TEXT NOT NULL,
+      notes             TEXT,
+      submitted_by_id   INTEGER,
+      submitted_by_name TEXT,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      review_notes      TEXT,
+      reviewed_by_id    INTEGER,
+      reviewed_by_name  TEXT,
+      reviewed_at       TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+
+  const eCount = db.prepare("SELECT COUNT(*) AS n FROM expenses").get().n;
+  if (!eCount) {
+    const EXP_SEED = [
+      ["Camera stock — bulk order", "Equipment", 4800, "Hikvision Distributor", "2026-06-02"],
+      ["Van fuel & tolls — June",   "Vehicle",   620,  "Shell / EZ-Pass",       "2026-06-20"],
+      ["Cat6 + conduit restock",    "Materials", 1340, "Graybar",               "2026-06-10"],
+      ["Software licenses (NVR)",   "Software",  390,  "Dahua",                 "2026-06-01"],
+      ["Tech tools — drill set",    "Tools",     280,  "Home Depot",            "2026-06-15"],
+      ["Liability insurance — June","Insurance", 950,  "The Hartford",          "2026-06-05"],
+      ["Office rent — June",        "Overhead",  2200, "La Vague Holdings",     "2026-06-01"],
+    ];
+    const insE = db.prepare("INSERT INTO expenses (description, category, amount, vendor, spent_on) VALUES (?,?,?,?,?)");
+    for (const r of EXP_SEED) insE.run(...r);
+  }
+
+  // ---- Dev Roadmap (internal build tracker for the platform itself) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dev_tasks (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      category     TEXT NOT NULL,
+      title        TEXT NOT NULL,
+      detail       TEXT,
+      route        TEXT,
+      route_status TEXT NOT NULL DEFAULT 'na',
+      priority     INTEGER NOT NULL DEFAULT 100,
+      done         INTEGER NOT NULL DEFAULT 0,
+      done_at      TEXT,
+      is_custom    INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
+  if (!dCount) {
+    // [category, title, detail, route, route_status, priority, done]
+    // route_status: exists | partial | missing | na
+    const DEV_SEED = [
+      // ---- Security (Sprint 0) ----
+      ["Security", "Gate dev-only master PINs", "0000/8965-style global PINs auto-disable in production (NODE_ENV check).", "/project/:sample", "exists", 10, 1],
+      ["Security", "Route /portal & /projects through getVisibleJobs", "These pages still call getAllJobs(), leaking restricted projects to any role by URL.", "/portal", "partial", 11, 0],
+      ["Security", "Central role-guard for unguarded pages", "/customers, /dashboard, /projects, /portal, /notifications have no role check — techs/sales can reach by URL.", null, "missing", 12, 0],
+      ["Security", "Gate /api/config + rotate Maps key", "Live Google Maps key is in config.json and served unauthenticated. Restrict by referrer + auth the endpoint.", null, "missing", 13, 0],
+      ["Security", "Fix pin-check null-PIN bypass", "A project with no customer_pin is accessible with any PIN (api/pin-check).", null, "missing", 14, 0],
+      ["Security", "Session token expiry + stronger password hashing", "Tokens carry no expiry; passwords are unsalted SHA-256. Move to expiring tokens + bcrypt/argon.", null, "missing", 15, 0],
+
+      // ---- Core Spine ----
+      ["Core Spine", "Action Center", "Role + stage pending-tasks list pinned to top of every project. The command-center centerpiece.", "/project/:sample", "missing", 20, 0],
+      ["Core Spine", "Blocker + Project Health engine", "Show one primary blocker + health (Healthy/Waiting/Behind/At Risk); gate stage advancement on cleared blockers.", "/project/:sample", "missing", 21, 0],
+      ["Core Spine", "Required Actions engine", "Each stage blocks advance until its required actions are complete (server-validated).", "/project/:sample", "missing", 22, 0],
+      ["Core Spine", "Real Activity Log / Audit Trail", "Replace the hardcoded ACTIVITY feed with real per-project events (user, IP, old→new value, immutable).", "/project/:sample", "partial", 23, 0],
+
+      // ---- Stage Model ----
+      ["Stage Model", "Split Approval and Schedule stages", "Spec forbids merging. Approval = signature only; deposit/procurement/work-order live in Schedule. (Needs Removal Suggestion — current key is approval_deposit.)", null, "missing", 30, 0],
+      ["Stage Model", "Sales final stage label = 'Completed'", "Sales timeline must end in 'Completed', never 'Closed'.", "/sales", "partial", 31, 0],
+      ["Stage Model", "Tech payout as widget inside Completed", "Tech 4-step ends at Completed; payout is a widget there, not its own progress step.", "/project/:sample", "partial", 32, 0],
+
+      // ---- Operational Centers ----
+      ["Operational Centers", "Appointment Center", "First-class survey/install appointments with customer + technician confirmation states.", "/project/:sample", "missing", 40, 0],
+      ["Operational Centers", "Document Center", "Proposal, signed proposal, invoices, receipts, certificate, warranty, manuals + version history.", "/project/:sample", "missing", 41, 0],
+      ["Operational Centers", "Photo Center", "Categorized photos (Survey/Install/QC/Completion/Warranty) with uploader, date, GPS, permission-gated.", "/project/:sample", "missing", 42, 0],
+      ["Operational Centers", "Equipment Center", "Per-device registry: model, serial, MAC, IP, firmware, location, warranty expiration, QR.", "/project/:sample", "missing", 43, 0],
+      ["Operational Centers", "Inventory + Procurement blocking", "Link inventory/procurement to Schedule; block install if required items are unavailable.", "/inventory", "partial", 44, 0],
+
+      // ---- Notifications ----
+      ["Notifications", "Notification Manager", "Rule-driven triggers: templates, channels (SMS/email/push/internal), delay, reminders, escalation, retry.", null, "missing", 50, 0],
+      ["Notifications", "Replace hardcoded notifications feed", "Gateway NOTIFS array is fake & identical on every project — wire to real project events.", "/project/:sample", "partial", 51, 0],
+
+      // ---- Financial ----
+      ["Financial", "Payments — deposit + balance", "Deposit at Schedule, final balance at Payment. Needs a payment integration (Stripe).", "/project/:sample", "missing", 60, 0],
+      ["Financial", "Commission rollup report", "getCommissionsByRep exists but nothing reads it — build a sales commission/earnings view.", "/sales", "partial", 61, 0],
+      ["Financial", "Real payroll / technician payout module", "Replace the 10%-of-value placeholder on admin dashboard & finances with a real payout subsystem.", "/finances", "partial", 62, 0],
+
+      // ---- Customer Experience ----
+      ["Customer Experience", "E-signature + proposal builder", "Customer signs proposal; sales builds it. (Deferred — owner will add later.)", "/project/:sample", "missing", 70, 0],
+      ["Customer Experience", "Customer action flows", "Make the customer buttons real: sign, pay deposit/balance, confirm appointment, walkthrough, download docs.", "/project/:sample", "missing", 71, 0],
+
+      // ---- Cleanup & Polish ----
+      ["Cleanup & Polish", "Replace pv-grid 'What you see / do'", "Temporary placeholder card — replace with the advanced per-stage role tool.", "/project/:sample", "partial", 80, 0],
+      ["Cleanup & Polish", "Remove 2503 Jay Pl test-address fallback", "Projects with no address render a Bronx test address as if real; also stop boot-time address resync overwriting edits.", "/project/:sample", "partial", 81, 0],
+      ["Cleanup & Polish", "Persist tech checklists & certifications", "Tools/Vehicle checklists & Training certs are local-only and reset on reload — save to DB per tech.", "/tech", "partial", 82, 0],
+      ["Cleanup & Polish", "Real Manager dashboard", "/manager currently just redirects to /tickets — build a real manager home (approvals, workload, QC).", "/manager", "missing", 83, 0],
+      ["Cleanup & Polish", "Wire dead buttons", "Claim (tech jobs), + Log Call (Service Calls), + Add (certs) render but do nothing.", "/tech", "partial", 84, 0],
+
+      // ---- Shipped (done — sink to bottom) ----
+      ["Roles & Access", "Role-based nav filtering", "Tech sees Tech/Tickets/Expenses; Sales sees Sales/Customers/Tickets; correct order.", "/dashboard", "exists", 90, 1],
+      ["Roles & Access", "Restricted project visibility toggle", "Team & Access 'All Staff / Restricted' toggle; getVisibleJobs hides restricted projects from unassigned staff.", "/project/:sample", "exists", 91, 1],
+      ["Roles & Access", "Sales dashboard + commission panel", "Sales-only dashboard; per-project commission setter (rate/status/rep).", "/sales", "exists", 92, 1],
+      ["Roles & Access", "Tech dashboard + Tech Action Bar", "Tech accepts job (Schedule→Install) and completes install (Install→QC); tickets filtered to the tech.", "/tech", "exists", 93, 1],
+      ["Roles & Access", "Expenses & Requests workflow", "Techs submit expenses/requests; admin/manager pay/decline/approve with status lifecycle.", "/expenses", "exists", 94, 1],
+      ["Security", "User duplicate prevention", "Block duplicate username/email/phone on create & edit; seed no longer overwrites admin edits.", "/users", "exists", 95, 1],
+    ];
+    const insD = db.prepare("INSERT INTO dev_tasks (category, title, detail, route, route_status, priority, done, done_at) VALUES (?,?,?,?,?,?,?,?)");
+    for (const t of DEV_SEED) insD.run(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[6] ? new Date().toISOString().slice(0,19).replace("T"," ") : null);
+  }
+
+  // ---- Archive (soft-delete store — deleted records land here, restorable or purgeable) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS archive (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type      TEXT NOT NULL,
+      source_table     TEXT NOT NULL,
+      entity_id        INTEGER,
+      label            TEXT,
+      detail           TEXT,
+      payload          TEXT NOT NULL,
+      archived_by_id   INTEGER,
+      archived_by_name TEXT,
+      archived_at      TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+
+  // ---- Proposal views (who opened the proposal bucket, when, from where) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS proposal_views (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      viewer_role       TEXT,
+      viewer_name       TEXT,
+      ip                TEXT,
+      viewed_at         TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+
+  // ---- Proposals (versioned business record: options A/B/C, line items, pricing) ----
+  // Sent versions are immutable; revisions clone to version+1 and mark the old row superseded.
+  // cost lives only inside payload JSON and is stripped server-side for non-admin/manager (lib/proposal.js).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS proposals (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      version           INTEGER NOT NULL DEFAULT 1,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      payload           TEXT NOT NULL,
+      tax_rate          REAL NOT NULL DEFAULT 0,
+      deposit_pct       REAL NOT NULL DEFAULT 50,
+      selected_option   TEXT,
+      selected_at       TEXT,
+      sent_at           TEXT,
+      sent_by_name      TEXT,
+      change_note       TEXT,
+      created_by_name   TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      updated_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_proposals_project ON proposals(project_access_id)`);
+  const propCols = db.prepare("PRAGMA table_info(proposals)").all().map((c) => c.name);
+  if (!propCols.includes("customer_flags")) db.exec("ALTER TABLE proposals ADD COLUMN customer_flags TEXT");
+  if (!propCols.includes("signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN signed_name TEXT");
+  if (!propCols.includes("signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN signed_at TEXT");
+  if (!propCols.includes("signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN signature_data TEXT");
+  if (!propCols.includes("accepted_options")) db.exec("ALTER TABLE proposals ADD COLUMN accepted_options TEXT");
+  if (!propCols.includes("declined_reason"))  db.exec("ALTER TABLE proposals ADD COLUMN declined_reason TEXT");
+  if (!propCols.includes("declined_at"))      db.exec("ALTER TABLE proposals ADD COLUMN declined_at TEXT");
+  if (!propCols.includes("declined_options")) db.exec("ALTER TABLE proposals ADD COLUMN declined_options TEXT"); // { optId: reason } — per-option declines, independent of accepted_options
+  if (!propCols.includes("tech_signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_name TEXT");    // technician who accepted the work order
+  if (!propCols.includes("tech_signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_at TEXT");
+  if (!propCols.includes("tech_signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN tech_signature_data TEXT");
+
+  // ---- Payments / deposits recorded against a project (approval & deposit stage) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_payments (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      amount            REAL NOT NULL DEFAULT 0,
+      method            TEXT,
+      kind              TEXT NOT NULL DEFAULT 'deposit',
+      source            TEXT NOT NULL DEFAULT 'staff',
+      note              TEXT,
+      recorded_by       TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_payments_project ON project_payments(project_access_id)`);
+  // Customer-submitted payments start 'pending' until staff confirm receipt; staff entries are
+  // 'confirmed' at creation. Only confirmed money counts toward the balance.
+  const payCols = db.prepare("PRAGMA table_info(project_payments)").all().map((c) => c.name);
+  if (!payCols.includes("status")) db.exec("ALTER TABLE project_payments ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
+
+  // ---- Inquiry-stage extras: appointment point-of-contact + a lightweight notes thread ----
+  if (!cols.includes("poc_name"))  db.exec("ALTER TABLE projects ADD COLUMN poc_name TEXT");
+  if (!cols.includes("poc_phone")) db.exec("ALTER TABLE projects ADD COLUMN poc_phone TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_notes (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      author_role       TEXT,
+      author_name       TEXT,
+      body              TEXT NOT NULL,
+      created_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_project ON project_notes(project_access_id)`);
+
+  // ---- Server copy of the browser tools' working data (survey / mockup / schedule) ----
+  // These tools draft in localStorage for speed; this table is the authoritative backup so a
+  // cleared cache or a different device never loses a site survey. One row per project+tool.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_tool_data (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      tool              TEXT NOT NULL,
+      data              TEXT NOT NULL,
+      updated_by        TEXT,
+      updated_at        TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(project_access_id, tool)
+    )
+  `);
+
+  // ---- Per-stage customer acceptances (site survey / mockup gating) ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stage_acceptances (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      stage             TEXT NOT NULL,
+      accepted_by       TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(project_access_id, stage)
+    )
+  `);
+  // Data fingerprint captured at approval time — if the survey/mockup changes later, the stored
+  // fingerprint no longer matches and the approval is treated as void (customer must re-approve).
+  const saCols = db.prepare("PRAGMA table_info(stage_acceptances)").all().map(c => c.name);
+  if (!saCols.includes("fingerprint")) db.exec("ALTER TABLE stage_acceptances ADD COLUMN fingerprint TEXT");
+
+  // ---- Company-wide default price book (single row) — the proposal gear "Default pricing" ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS price_book (
+      id          INTEGER PRIMARY KEY CHECK (id = 1),
+      prices      TEXT NOT NULL DEFAULT '{}',
+      updated_by  TEXT,
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`INSERT OR IGNORE INTO price_book (id, prices) VALUES (1, '{}')`);
+
+  // ---- Technician work-order rate library — one row per scope ("default" or "tech:<name>") ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rate_book (
+      scope       TEXT PRIMARY KEY,
+      data        TEXT NOT NULL DEFAULT '{}',
+      updated_by  TEXT,
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+
+  return db;
+}
+
+function makePins(accessId) {
+  let h = 0;
+  for (let i = 0; i < accessId.length; i++) h = (h * 31 + accessId.charCodeAt(i)) >>> 0;
+  const customer = String(1000 + (h % 9000));
+  const tech = String(100000 + ((h * 7 + 13) % 900000));
+  return { customer, tech };
+}
+
+const DB_VER = "v29";
+const g = globalThis;
+if (!g.__iotDb || g.__iotDbVer !== DB_VER) {
+  try { if (g.__iotDb) g.__iotDb.close(); } catch (_) {}
+  g.__iotDb = init();
+  g.__iotDbVer = DB_VER;
+}
+const db = g.__iotDb;
+
+const decorate = (r) => ({
+  ...r,
+  stageLabel: stageLabel(r.stage),
+  service: SERVICE_CODES[r.service_code] || r.service_code,
+});
+
+export function getAllJobs() {
+  return db.prepare("SELECT * FROM projects ORDER BY id DESC").all().map(decorate);
+}
+
+// For roles that aren't admin/manager: exclude restricted projects unless the user is assigned
+export function getVisibleJobs(userId, role) {
+  if (role === "admin" || role === "manager") return getAllJobs();
+  // Unrestricted projects + restricted projects where this user is assigned
+  return db.prepare(`
+    SELECT DISTINCT p.* FROM projects p
+    LEFT JOIN project_assignments a
+      ON a.project_access_id = p.access_id AND a.user_id = ?
+    WHERE p.restricted = 0 OR a.id IS NOT NULL
+    ORDER BY p.id DESC
+  `).all(Number(userId) || 0).map(decorate);
+}
+
+export function setProjectRestricted(accessId, restricted) {
+  db.prepare("UPDATE projects SET restricted = ? WHERE access_id = ? COLLATE NOCASE")
+    .run(restricted ? 1 : 0, String(accessId));
+}
+
+export function getCustomers() {
+  return db.prepare("SELECT DISTINCT customer FROM projects ORDER BY customer").all().map((r) => r.customer);
+}
+
+export function getJobsForCustomer(name) {
+  return db.prepare("SELECT * FROM projects WHERE customer = ? ORDER BY id DESC").all(name).map(decorate);
+}
+
+export function getJobByAccessId(accessId) {
+  const r = db.prepare("SELECT * FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId || "").trim());
+  return r ? decorate(r) : null;
+}
+
+export function updateStage(accessId, stage) {
+  const info = db.prepare("UPDATE projects SET stage = ? WHERE access_id = ? COLLATE NOCASE").run(String(stage), String(accessId || "").trim());
+  if (!info.changes) return null;
+  return getJobByAccessId(accessId);
+}
+
+// ---- Stage auto-advance ------------------------------------------------------
+// Build the fact object lib/stage-flow.js checks run against — same field names the
+// page hands the gateway, sourced straight from the DB so server decisions are current.
+export function buildStageFacts(accessId) {
+  const p = db.prepare("SELECT * FROM projects WHERE access_id=?").get(String(accessId));
+  if (!p) return null;
+  const prop = db.prepare(
+    "SELECT status, signed_name, tech_signed_name FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
+  ).get(String(accessId));
+  const pays = db.prepare("SELECT amount, status FROM project_payments WHERE project_access_id=?").all(String(accessId));
+  return {
+    stage: p.stage,
+    date: p.date,
+    sales_rep: p.sales_rep,
+    tech: p.tech,
+    // Satisfied when every tool WITH data has a current (unvoided) approval; nothing to
+    // approve → satisfied (customer can sail straight through).
+    survey_accepted: surveyStageSatisfied(accessId),
+    proposal_status: prop?.status || null,
+    proposal_signed: !!prop?.signed_name,
+    tech_accepted: !!prop?.tech_signed_name,
+    deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
+    deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
+  };
+}
+// When every requirement of the current stage passes (customer's AND ours), move the
+// project forward automatically — chains across stages (e.g. proposal → approval →
+// schedule in one shot if everything is already satisfied). Only AUTO_STAGES advance
+// this way; field-work stages stay manual. Returns the (possibly new) current stage.
+export function maybeAutoAdvance(accessId) {
+  for (let hop = 0; hop < 4; hop++) {
+    const facts = buildStageFacts(accessId);
+    if (!facts || !AUTO_STAGES.has(facts.stage)) return facts?.stage || null;
+    if (missingReqs(facts.stage, facts, getProjectAssignments(accessId)).length) return facts.stage;
+    const next = nextStageOf(facts.stage);
+    if (!next) return facts.stage;
+    updateStage(accessId, next);
+  }
+  return buildStageFacts(accessId)?.stage || null;
+}
+
+export function getCustomersWithStats() {
+  return db.prepare(`
+    SELECT customer,
+           MAX(address) AS address,
+           MAX(contact_name) AS contact_name,
+           MAX(contact_email) AS contact_email,
+           MAX(contact_phone) AS contact_phone,
+           COUNT(*) AS total_projects,
+           SUM(CASE WHEN category IN ('open','pending') THEN 1 ELSE 0 END) AS active_count,
+           SUM(CASE WHEN category = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+           SUM(COALESCE(value, 0)) AS total_value
+    FROM projects GROUP BY customer ORDER BY MAX(id) DESC
+  `).all();
+}
+
+export function getCustomerProfile(name) {
+  const customer = db.prepare(`
+    SELECT customer, MAX(address) AS address,
+           MAX(contact_name) AS contact_name, MAX(contact_email) AS contact_email,
+           MAX(contact_phone) AS contact_phone, MAX(contact_message) AS contact_message,
+           MAX(source) AS source,
+           COUNT(*) AS total_projects,
+           SUM(CASE WHEN category IN ('open','pending') THEN 1 ELSE 0 END) AS active_count,
+           SUM(CASE WHEN category = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+           SUM(COALESCE(value, 0)) AS total_value
+    FROM projects WHERE customer = ? COLLATE NOCASE
+  `).get(name);
+  if (!customer?.customer) return null;
+  const jobs = db.prepare("SELECT * FROM projects WHERE customer = ? ORDER BY id DESC").all(name).map(decorate);
+  return { customer, jobs };
+}
+
+export function updateCustomerContact(name, { contact_name, contact_email, contact_phone, contact_message, source }) {
+  db.prepare(`UPDATE projects SET contact_name=?,contact_email=?,contact_phone=?,contact_message=?,source=? WHERE customer=? COLLATE NOCASE`)
+    .run(contact_name || null, contact_email || null, contact_phone || null, contact_message || null, source || "internal", name);
+}
+
+export function getAllUsers() {
+  return db.prepare("SELECT id, name, username, email, phone, role, disabled, created_at FROM users ORDER BY id").all();
+}
+
+export function setUserDisabled(targetId, disabled) {
+  db.prepare("UPDATE users SET disabled = ? WHERE id = ?").run(disabled ? 1 : 0, Number(targetId));
+}
+
+function checkUserDuplicates(excludeId, { username, email, phone }) {
+  if (username) {
+    const row = db.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").get(String(username).trim());
+    if (row && Number(row.id) !== Number(excludeId)) throw new Error("USERNAME_TAKEN");
+  }
+  if (email) {
+    const row = db.prepare("SELECT id FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
+    if (row && Number(row.id) !== Number(excludeId)) throw new Error("EMAIL_TAKEN");
+  }
+  if (phone) {
+    const clean = String(phone).trim();
+    const row = db.prepare("SELECT id FROM users WHERE phone = ?").get(clean);
+    if (row && Number(row.id) !== Number(excludeId)) throw new Error("PHONE_TAKEN");
+  }
+}
+
+export function createStaffUser({ name, username, email, phone, role, password }) {
+  const normalEmail = email ? String(email).trim().toLowerCase() : null;
+  checkUserDuplicates(null, { username, email: normalEmail, phone });
+  const info = db.prepare(
+    "INSERT INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)"
+  ).run(
+    String(name || "").trim() || "New User",
+    username ? String(username).trim() : null,
+    normalEmail,
+    phone ? String(phone).trim() : null,
+    hashPw(String(password || "changeme")),
+    String(role || "tech")
+  );
+  return Number(info.lastInsertRowid);
+}
+
+export function setUserRole(targetId, newRole) {
+  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(String(newRole), Number(targetId));
+}
+
+export function deleteUser(targetId) {
+  db.prepare("DELETE FROM users WHERE id = ?").run(Number(targetId));
+}
+
+export function resetUserPassword(userId, plainPassword) {
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPw(String(plainPassword)), Number(userId));
+}
+
+export function getUserById(id) {
+  return db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE id = ?").get(Number(id));
+}
+
+// True when the account already has a password set — registration must never overwrite it
+// (that would let anyone take over an existing account by "registering" with its email).
+export function userHasPassword(userId) {
+  const r = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(Number(userId));
+  return !!(r && r.password_hash);
+}
+
+export function getUserByEmail(email) {
+  return db.prepare("SELECT id, name, username, email, phone, role FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
+}
+
+export function getUserByPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return null;
+  return db.prepare(
+    "SELECT id, name, username, email, phone, role FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') = ?"
+  ).get(digits);
+}
+
+export function recordLogin(userId, ip, ua) {
+  db.prepare(
+    "INSERT INTO login_logs (user_id, event_type, login_at, ip_address, user_agent) VALUES (?, 'login', datetime('now'), ?, ?)"
+  ).run(Number(userId), ip || null, ua || null);
+}
+
+export function recordLogout(userId) {
+  const row = db.prepare(
+    "SELECT id FROM login_logs WHERE user_id = ? AND logout_at IS NULL ORDER BY id DESC LIMIT 1"
+  ).get(Number(userId));
+  if (row) db.prepare("UPDATE login_logs SET logout_at = datetime('now') WHERE id = ?").run(row.id);
+}
+
+export function recordEvent(eventType, userId, ip, ua, projectId, notes) {
+  db.prepare(
+    "INSERT INTO login_logs (user_id, event_type, login_at, ip_address, user_agent, project_id, notes) VALUES (?, ?, datetime('now'), ?, ?, ?, ?)"
+  ).run(userId ? Number(userId) : null, String(eventType), ip || null, ua || null, projectId ? Number(projectId) : null, notes || null);
+}
+
+export function getLoginStatsMap() {
+  const rows = db.prepare(`
+    SELECT l.user_id,
+           MAX(l.login_at) AS last_login,
+           (SELECT logout_at FROM login_logs WHERE user_id = l.user_id AND logout_at IS NOT NULL ORDER BY id DESC LIMIT 1) AS last_logout,
+           (SELECT ip_address FROM login_logs WHERE user_id = l.user_id ORDER BY id DESC LIMIT 1) AS last_ip,
+           (SELECT user_agent FROM login_logs WHERE user_id = l.user_id ORDER BY id DESC LIMIT 1) AS last_ua
+    FROM login_logs l WHERE l.user_id IS NOT NULL GROUP BY l.user_id
+  `).all();
+  const map = {};
+  for (const r of rows) {
+    const sessionMins = r.last_logout
+      ? Math.round((new Date(r.last_logout + "Z") - new Date(r.last_login + "Z")) / 60000)
+      : null;
+    map[r.user_id] = {
+      last_login:   r.last_login,
+      last_logout:  r.last_logout,
+      session_mins: sessionMins,
+      last_ip:      r.last_ip,
+      last_ua:      r.last_ua,
+    };
+  }
+  return map;
+}
+
+export function getActivityLog(limit = 500) {
+  return db.prepare(`
+    SELECT l.id, l.event_type, l.login_at, l.logout_at,
+           l.ip_address, l.user_agent, l.project_id, l.notes,
+           u.name AS user_name, u.username, u.role AS user_role,
+           p.customer AS project_customer, p.address AS project_address, p.access_id AS project_access_id
+    FROM login_logs l
+    LEFT JOIN users u ON u.id = l.user_id
+    LEFT JOIN projects p ON p.id = l.project_id
+    ORDER BY l.id DESC LIMIT ?
+  `).all(Number(limit));
+}
+
+export function updateUser(userId, { name, username, email, phone, password }) {
+  const normalEmail = email ? email.trim().toLowerCase() : null;
+  checkUserDuplicates(userId, {
+    username: username || null,
+    email:    normalEmail,
+    phone:    phone    || null,
+  });
+  const sets = [], vals = [];
+  if (name     !== undefined) { sets.push("name = ?");          vals.push(name || null); }
+  if (username !== undefined) { sets.push("username = ?");      vals.push(username || null); }
+  if (email    !== undefined) { sets.push("email = ?");         vals.push(normalEmail); }
+  if (phone    !== undefined) { sets.push("phone = ?");         vals.push(phone || null); }
+  if (password)               { sets.push("password_hash = ?"); vals.push(hashPw(String(password))); }
+  if (!sets.length) return;
+  vals.push(Number(userId));
+  db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+}
+
+export function getProjectsByContactEmail(email) {
+  if (!email) return [];
+  return db.prepare("SELECT * FROM projects WHERE LOWER(contact_email) = ? ORDER BY id DESC")
+    .all(String(email).trim().toLowerCase()).map(decorate);
+}
+
+export function searchProjects(q) {
+  const like = `%${q}%`;
+  return db
+    .prepare("SELECT * FROM projects WHERE customer LIKE ? OR access_id LIKE ? OR address LIKE ? OR issue LIKE ? ORDER BY id DESC")
+    .all(like, like, like, like)
+    .map(decorate);
+}
+
+export function verifyUser(email, password) {
+  const user = db.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").get(String(email || "").trim().toLowerCase());
+  if (!user) return null;
+  if (!verifyPw(String(password || ""), user.password_hash)) return null;
+  if (isLegacyHash(user.password_hash)) upgradeHash(user.id, password);
+  return { id: user.id, name: user.name, email: user.email, role: user.role || "customer" };
+}
+
+// Re-hash a legacy password to scrypt after a successful login (transparent migration).
+function upgradeHash(userId, plainPassword) {
+  try { db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPw(String(plainPassword)), Number(userId)); }
+  catch { /* best-effort — a failed upgrade just means we try again next login */ }
+}
+
+export function verifyUserByCredential(identifier, password) {
+  const cred   = String(identifier || "").trim().toLowerCase();
+  if (!cred) return null;
+  const digits = cred.replace(/\D/g, "");
+
+  // Build the WHERE clause dynamically. Only match on phone when the identifier
+  // actually contains enough digits to be a phone number — otherwise an empty/short
+  // digit string would match every account with a NULL/blank phone.
+  const where = [
+    "LOWER(COALESCE(username,'')) = ?",
+    "LOWER(COALESCE(email,''))    = ?",
+  ];
+  const params = [cred, cred];
+  if (digits.length >= 7) {
+    where.push("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'(',''),')',''),'-',''),' ',''),'+','') = ?");
+    params.push(digits);
+  }
+
+  // A phone number can be shared by more than one account (e.g. a staff member who is
+  // also a customer), so check the password against EVERY candidate, not just the first.
+  const candidates = db.prepare(`SELECT * FROM users WHERE ${where.join(" OR ")}`).all(...params);
+  const user = candidates.find((u) => verifyPw(String(password || ""), u.password_hash));
+  if (!user) return null;
+  if (isLegacyHash(user.password_hash)) upgradeHash(user.id, password);
+  if (user.disabled) return { disabled: true };
+  return { id: user.id, name: user.name, username: user.username, email: user.email, phone: user.phone, role: user.role || "customer" };
+}
+
+export function createCustomerUser(name, email, phone) {
+  const normalEmail = email ? String(email).trim().toLowerCase() : null;
+  const normalPhone = phone ? String(phone).trim() : null;
+  const digits = normalPhone ? normalPhone.replace(/\D/g, "") : null;
+  const initialPw = digits && digits.length >= 7 ? digits : "customer";
+  try {
+    db.prepare(
+      "INSERT OR IGNORE INTO users (name, email, phone, password_hash, role) VALUES (?,?,?,?,?)"
+    ).run(name || "Customer", normalEmail, normalPhone, hashPw(initialPw), "customer");
+  } catch (_) {}
+}
+
+export function createLeadProject(name, email, phone, address, service, company) {
+  const normalEmail = email ? String(email).trim().toLowerCase() : null;
+  const normalPhone = phone ? String(phone).trim() : null;
+
+  // Upsert user
+  let user = normalEmail
+    ? db.prepare("SELECT * FROM users WHERE LOWER(email) = ?").get(normalEmail)
+    : null;
+  if (!user && normalPhone) {
+    const d = normalPhone.replace(/\D/g, "");
+    user = db.prepare("SELECT * FROM users WHERE REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-','') = ?").get(d);
+  }
+  if (!user) {
+    const digits = normalPhone ? normalPhone.replace(/\D/g, "") : null;
+    const initialPw = digits && digits.length >= 7 ? digits : "customer";
+    const info = db.prepare(
+      "INSERT OR IGNORE INTO users (name, email, phone, password_hash, role) VALUES (?,?,?,?,?)"
+    ).run(name || "Customer", normalEmail, normalPhone, hashPw(initialPw), "customer");
+    user = info.lastInsertRowid
+      ? db.prepare("SELECT * FROM users WHERE id = ?").get(Number(info.lastInsertRowid))
+      : normalEmail
+        ? db.prepare("SELECT * FROM users WHERE LOWER(email) = ?").get(normalEmail)
+        : db.prepare("SELECT * FROM users WHERE name = ? ORDER BY id DESC LIMIT 1").get(name || "Customer");
+  }
+  // Final safety net so a project can always be created.
+  if (!user) user = { id: null };
+
+  // Generate unique access_id (type=A, svc=SC for "Security Camera" as default)
+  const svcMap = { "Security Cameras / CCTV": "SC", "Commercial Audio": "AU", "Networking & Cat6": "NW",
+    "Access Control / Door Entry": "AC", "Full System — not sure yet": "SC" };
+  const svc = svcMap[service] || "SC";
+  const count = (db.prepare("SELECT COUNT(*) as n FROM projects").get()?.n || 0) + 1;
+  let accessId = `A${svc}${String(count).toString(36).toUpperCase().padStart(4, "0")}`;
+  // Ensure uniqueness
+  while (db.prepare("SELECT id FROM projects WHERE access_id = ?").get(accessId)) {
+    accessId = `A${svc}${String(Math.floor(Math.random() * 99999)).toString(36).toUpperCase().padStart(4, "0")}`;
+  }
+
+  // Auto-set the customer PIN to the last 4 digits of the phone number.
+  // Fall back to a deterministic generated PIN when no usable phone is on file.
+  const phoneDigits = normalPhone ? normalPhone.replace(/\D/g, "") : "";
+  const pin = phoneDigits.length >= 4
+    ? phoneDigits.slice(-4)
+    : String(1000 + (Math.abs(user.id * 7919 + count * 31) % 9000));
+
+  const companyName = company ? String(company).trim() : null;
+  const customerLabel = companyName || name || "Customer";
+  const today = new Date().toISOString().slice(0, 10);
+  db.prepare(`
+    INSERT INTO projects
+      (access_id, customer, address, service_code, project_type, category, stage, status,
+       contact_name, contact_email, contact_phone, source, customer_pin, date, company_name)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    accessId, customerLabel, address || "", svc, "A", "open",
+    "inquiry", "New", name || "Customer", normalEmail, normalPhone,
+    "external", pin, today, companyName
+  );
+
+  return { userId: user.id, accessId, customerPin: pin };
+}
+
+export function setCommission(accessId, { rate, status, salesRep }) {
+  const sets = [];
+  const vals = [];
+  if (rate !== undefined) { sets.push("commission_rate=?"); vals.push(Number(rate) || 0); }
+  if (status !== undefined) { sets.push("commission_status=?"); vals.push(status || "pending"); }
+  if (salesRep !== undefined) { sets.push("sales_rep=?"); vals.push(salesRep || null); }
+  if (!sets.length) return;
+  vals.push(String(accessId));
+  db.prepare(`UPDATE projects SET ${sets.join(",")} WHERE access_id=? COLLATE NOCASE`).run(...vals);
+}
+// Record / approve the technician payout for a completed job. Amount is clamped to a sane range.
+export function setProjectPayout(accessId, { amount, status }) {
+  const sets = [], vals = [];
+  if (amount !== undefined) { sets.push("payout_amount=?"); vals.push(Math.max(0, Math.min(1_000_000, Number(amount) || 0))); }
+  if (status !== undefined) { sets.push("payout_status=?"); vals.push(["pending", "approved", "paid"].includes(status) ? status : "pending"); }
+  if (!sets.length) return getJobByAccessId(accessId);
+  vals.push(String(accessId));
+  db.prepare(`UPDATE projects SET ${sets.join(",")} WHERE access_id=? COLLATE NOCASE`).run(...vals);
+  return getJobByAccessId(accessId);
+}
+// Stamp the project complete (job closed & handed off). Idempotent — keeps the first stamp.
+export function markProjectCompleted(accessId) {
+  db.prepare("UPDATE projects SET completed_at = COALESCE(completed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+// Re-open a completed project (clears the completion stamp) — admin correction path.
+export function reopenProjectCompletion(accessId) {
+  db.prepare("UPDATE projects SET completed_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+export function getCommissionsByRep(repName) {
+  return db.prepare("SELECT access_id, customer, value, commission_rate, commission_status, sales_rep, stage FROM projects WHERE sales_rep=? COLLATE NOCASE ORDER BY id DESC").all(repName).map(r => ({ ...r }));
+}
+
+export function setProjectAttention(accessId, needsAttention, note) {
+  db.prepare("UPDATE projects SET needs_attention = ?, attention_note = ? WHERE access_id = ? COLLATE NOCASE")
+    .run(needsAttention ? 1 : 0, note ? String(note).trim() : null, String(accessId));
+}
+
+export function markProjectLost(accessId, reason) {
+  db.prepare("UPDATE projects SET lost_reason = ?, lost_at = datetime('now') WHERE access_id = ? COLLATE NOCASE")
+    .run(String(reason), String(accessId));
+}
+
+export function setProjectCustomerPin(accessId, pin) {
+  db.prepare("UPDATE projects SET customer_pin = ? WHERE access_id = ? COLLATE NOCASE").run(String(pin), String(accessId));
+}
+
+export function updateProjectContact(accessId, fields) {
+  const COLS = ["company_name","contact_name","contact_phone","contact_email","address","contact_message"];
+  const keys = COLS.filter(k => k in fields);
+  if (!keys.length) return;
+  db.prepare(`UPDATE projects SET ${keys.map(k=>`${k}=?`).join(",")} WHERE access_id=?`)
+    .run(...keys.map(k => fields[k]||null), accessId);
+}
+
+// ---- Inventory ----
+const decorateInv = (r) => ({
+  ...r,
+  total_value:  (r.quantity || 0) * (r.unit_cost || 0),
+  qty_for_project: r.qty_for_project || 0,
+  qty_used:        r.qty_used        || 0,
+});
+
+export function getInventory() {
+  return db.prepare(`
+    SELECT i.*, p.customer AS project_customer
+    FROM inventory i
+    LEFT JOIN projects p ON p.access_id = i.project_access_id COLLATE NOCASE
+    ORDER BY i.category, i.name
+  `).all().map(decorateInv);
+}
+
+export function getInventoryStats() {
+  const rows = db.prepare("SELECT quantity, unit_cost, project_access_id FROM inventory").all();
+  let units = 0, inStock = 0, deployed = 0, value = 0;
+  for (const r of rows) {
+    const q = r.quantity || 0;
+    units += q;
+    value += q * (r.unit_cost || 0);
+    if (r.project_access_id) deployed += q; else inStock += q;
+  }
+  return { units, inStock, deployed, value, skus: rows.length };
+}
+
+export function addInventoryItem({ name, category, sku, quantity, unit_cost, location, project_access_id }) {
+  const info = db.prepare(
+    "INSERT INTO inventory (name, category, sku, quantity, unit_cost, location, project_access_id) VALUES (?,?,?,?,?,?,?)"
+  ).run(
+    String(name || "").trim() || "Item",
+    category ? String(category).trim() : null,
+    sku ? String(sku).trim() : null,
+    Number(quantity) || 0,
+    Number(unit_cost) || 0,
+    location ? String(location).trim() : null,
+    project_access_id ? String(project_access_id).trim() : null
+  );
+  return Number(info.lastInsertRowid);
+}
+
+export function assignInventory(id, projectAccessId, qtyForProject) {
+  db.prepare("UPDATE inventory SET project_access_id = ?, qty_for_project = ? WHERE id = ?")
+    .run(
+      projectAccessId ? String(projectAccessId).trim() : null,
+      projectAccessId ? (Number(qtyForProject) || 0) : 0,
+      Number(id)
+    );
+}
+
+export function updateQtyForProject(id, qty) {
+  db.prepare("UPDATE inventory SET qty_for_project = ? WHERE id = ?").run(Math.max(0, Number(qty) || 0), Number(id));
+}
+
+export function markInventoryUsed(id, qtyUsed) {
+  db.prepare("UPDATE inventory SET qty_used = ? WHERE id = ?").run(Math.max(0, Number(qtyUsed) || 0), Number(id));
+}
+
+export function getProjectInventoryShortages() {
+  const rows = db.prepare(`
+    SELECT i.project_access_id, p.customer,
+           COUNT(*) AS item_count,
+           SUM(CASE WHEN i.qty_for_project > i.quantity THEN 1 ELSE 0 END) AS over_allocated,
+           SUM(CASE WHEN i.qty_for_project > 0 AND i.qty_used < i.qty_for_project THEN 1 ELSE 0 END) AS pending_install
+    FROM inventory i
+    JOIN projects p ON p.access_id = i.project_access_id COLLATE NOCASE
+    WHERE i.project_access_id IS NOT NULL
+    GROUP BY i.project_access_id
+  `).all();
+  return rows;
+}
+
+export function deleteInventoryItem(id) {
+  db.prepare("DELETE FROM inventory WHERE id = ?").run(Number(id));
+}
+
+// ---- Tickets ----
+const decorateTicket = (t) => ({ ...t, audienceList: (t.audience || "").split(",").map((s) => s.trim()).filter(Boolean) });
+
+export function getTickets() {
+  return db.prepare(`
+    SELECT t.*, p.customer AS project_customer,
+           (SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id = t.id) AS message_count
+    FROM tickets t
+    LEFT JOIN projects p ON p.access_id = t.access_id COLLATE NOCASE
+    ORDER BY (t.status = 'closed') ASC, t.updated_at DESC, t.id DESC
+  `).all().map(decorateTicket);
+}
+
+export function getTicketById(id) {
+  const t = db.prepare(`
+    SELECT t.*, p.customer AS project_customer, p.contact_email AS project_email
+    FROM tickets t LEFT JOIN projects p ON p.access_id = t.access_id COLLATE NOCASE
+    WHERE t.id = ?
+  `).get(Number(id));
+  if (!t) return null;
+  const messages = db.prepare("SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC").all(Number(id)).map((r) => ({ ...r }));
+  return { ...decorateTicket(t), messages };
+}
+
+export function createTicket({ access_id, subject, priority, opened_by_id, opened_by_name, opened_by_role, assignee_id, assignee_name, audience, body }) {
+  const info = db.prepare(`
+    INSERT INTO tickets (access_id, subject, priority, opened_by_id, opened_by_name, opened_by_role, assignee_id, assignee_name, audience)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `).run(
+    access_id || null, String(subject || "").trim() || "Ticket", priority || "medium",
+    opened_by_id || null, opened_by_name || null, opened_by_role || null,
+    assignee_id || null, assignee_name || null,
+    audience || "admin,manager,tech,customer"
+  );
+  const id = Number(info.lastInsertRowid);
+  if (body && String(body).trim()) addTicketMessage(id, { author_id: opened_by_id, author_name: opened_by_name, author_role: opened_by_role, body });
+  return id;
+}
+
+export function updateTicket(id, fields) {
+  const sets = [], vals = [];
+  for (const k of ["subject", "status", "priority", "assignee_id", "assignee_name", "audience"]) {
+    if (fields[k] !== undefined) { sets.push(`${k} = ?`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  sets.push("updated_at = datetime('now')");
+  vals.push(Number(id));
+  db.prepare(`UPDATE tickets SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+}
+
+// Archive a ticket (with its messages folded into the payload) then remove it. Admin/manager only —
+// enforced in the action. Kept recoverable in the archive rather than hard-deleted.
+export function deleteTicket(id, actor) {
+  const t = db.prepare("SELECT * FROM tickets WHERE id=?").get(Number(id));
+  if (!t) return { ok: false, error: "Ticket not found." };
+  const msgs = db.prepare("SELECT * FROM ticket_messages WHERE ticket_id=? ORDER BY id").all(Number(id));
+  db.prepare(`INSERT INTO archive (entity_type, source_table, entity_id, label, detail, payload, archived_by_id, archived_by_name)
+              VALUES ('ticket','tickets',?,?,?,?,?,?)`)
+    .run(Number(id), t.subject || "Ticket", [t.status, t.priority].filter(Boolean).join(" · ") || null,
+         JSON.stringify({ ...t, messages: msgs }), actor?.id ?? null, actor?.name ?? null);
+  db.prepare("DELETE FROM ticket_messages WHERE ticket_id=?").run(Number(id));
+  db.prepare("DELETE FROM tickets WHERE id=?").run(Number(id));
+  return { ok: true };
+}
+
+export function addTicketMessage(ticketId, { author_id, author_name, author_role, body }) {
+  db.prepare("INSERT INTO ticket_messages (ticket_id, author_id, author_name, author_role, body) VALUES (?,?,?,?,?)")
+    .run(Number(ticketId), author_id || null, author_name || null, author_role || null, String(body || "").trim());
+  db.prepare("UPDATE tickets SET updated_at = datetime('now') WHERE id = ?").run(Number(ticketId));
+}
+
+// ---- Notifications ----
+export function getNotifications(userId, limit = 100) {
+  return db.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT ?").all(Number(userId), Number(limit)).map((r) => ({ ...r }));
+}
+export function getUnreadCount(userId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0").get(Number(userId)).n;
+}
+export function markAllRead(userId) {
+  db.prepare("UPDATE notifications SET read = 1 WHERE user_id = ?").run(Number(userId));
+}
+export function markNotificationRead(id, userId) {
+  db.prepare("UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?").run(Number(id), Number(userId));
+}
+// A notification is a per-user transient — dismissing it is a true delete (nothing to audit).
+export function deleteNotification(id, userId) {
+  db.prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?").run(Number(id), Number(userId));
+}
+export function clearNotifications(userId) {
+  db.prepare("DELETE FROM notifications WHERE user_id = ?").run(Number(userId));
+}
+export function createNotification({ user_id, type, title, body, link }) {
+  db.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?,?,?,?,?)")
+    .run(Number(user_id), type || null, String(title || "").trim(), body || null, link || null);
+}
+export function notifyRoles(roles, { type, title, body, link }, excludeUserId = null) {
+  if (!roles.length) return;
+  const placeholders = roles.map(() => "?").join(",");
+  const users = db.prepare(`SELECT id FROM users WHERE role IN (${placeholders})`).all(...roles);
+  for (const u of users) {
+    if (excludeUserId && Number(u.id) === Number(excludeUserId)) continue;
+    createNotification({ user_id: u.id, type, title, body, link });
+  }
+}
+
+// ---- Expenses ----
+export function getExpenses() {
+  return db.prepare(`
+    SELECT e.*, p.customer AS project_customer
+    FROM expenses e LEFT JOIN projects p ON p.access_id = e.access_id COLLATE NOCASE
+    ORDER BY COALESCE(e.spent_on, e.created_at) DESC, e.id DESC
+  `).all().map((r) => ({ ...r }));
+}
+export function getExpenseStats() {
+  const rows = db.prepare("SELECT category, amount FROM expenses").all();
+  let total = 0; const byCat = {};
+  for (const r of rows) { total += r.amount || 0; byCat[r.category || "Other"] = (byCat[r.category || "Other"] || 0) + (r.amount || 0); }
+  return { total, count: rows.length, byCat };
+}
+export function addExpense({ description, category, amount, vendor, access_id, spent_on }) {
+  const info = db.prepare("INSERT INTO expenses (description, category, amount, vendor, access_id, spent_on) VALUES (?,?,?,?,?,?)")
+    .run(String(description || "").trim() || "Expense", category || null, Number(amount) || 0, vendor || null, access_id || null, spent_on || null);
+  return Number(info.lastInsertRowid);
+}
+export function deleteExpense(id) {
+  db.prepare("DELETE FROM expenses WHERE id = ?").run(Number(id));
+}
+export function getProjectExpenses(accessId) {
+  return db.prepare("SELECT * FROM expenses WHERE access_id=? COLLATE NOCASE ORDER BY created_at DESC").all(accessId).map(r=>({...r}));
+}
+export function submitProjectExpense(accessId, {description, category, amount, vendor, submittedById, submittedByName}) {
+  const info = db.prepare("INSERT INTO expenses (description, category, amount, vendor, access_id, spent_on, submitted_by_id, submitted_by_name, status) VALUES (?,?,?,?,?,date('now','localtime'),?,?,'pending')")
+    .run(String(description||"").trim()||"Expense", category||null, Number(amount)||0, vendor||null, accessId, submittedById??null, submittedByName||null);
+  return {id: Number(info.lastInsertRowid)};
+}
+export function payProjectExpense(id, {reviewedById, reviewedByName, paymentDate, paymentMethod}) {
+  db.prepare("UPDATE expenses SET status='paid',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),payment_date=?,payment_method=? WHERE id=?")
+    .run(reviewedById??null, reviewedByName||null, paymentDate||null, paymentMethod||null, Number(id));
+}
+export function declineProjectExpense(id, {reviewedById, reviewedByName, reviewNotes}) {
+  db.prepare("UPDATE expenses SET status='declined',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=? WHERE id=?")
+    .run(reviewedById??null, reviewedByName||null, reviewNotes||null, Number(id));
+}
+export function updateExpenseStatus(id, {status, paymentDate, paymentMethod, reviewNotes, reviewedById, reviewedByName}) {
+  if (status === 'paid') {
+    db.prepare("UPDATE expenses SET status='paid',payment_date=?,payment_method=?,reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=NULL WHERE id=?")
+      .run(paymentDate||null, paymentMethod||null, reviewedById??null, reviewedByName||null, Number(id));
+  } else if (status === 'declined') {
+    db.prepare("UPDATE expenses SET status='declined',review_notes=?,reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),payment_date=NULL,payment_method=NULL WHERE id=?")
+      .run(reviewNotes||null, reviewedById??null, reviewedByName||null, Number(id));
+  } else {
+    db.prepare("UPDATE expenses SET status='pending',reviewed_by_id=NULL,reviewed_by_name=NULL,reviewed_at=NULL,review_notes=NULL,payment_date=NULL,payment_method=NULL WHERE id=?")
+      .run(Number(id));
+  }
+}
+
+export function getProjectRequests(accessId) {
+  return db.prepare("SELECT * FROM requests WHERE project_access_id=? COLLATE NOCASE ORDER BY created_at DESC").all(accessId).map(r=>({...r}));
+}
+export function submitRequest(accessId, {requestType, description, notes, submittedById, submittedByName}) {
+  const info = db.prepare("INSERT INTO requests (project_access_id,request_type,description,notes,submitted_by_id,submitted_by_name) VALUES (?,?,?,?,?,?)")
+    .run(accessId, requestType||"equipment", String(description||"").trim()||"Request", notes||null, submittedById??null, submittedByName||null);
+  return {id: Number(info.lastInsertRowid)};
+}
+export function approveRequest(id, {reviewedById, reviewedByName}) {
+  db.prepare("UPDATE requests SET status='approved',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime') WHERE id=?").run(reviewedById??null, reviewedByName||null, Number(id));
+}
+export function rejectRequest(id, {reviewedById, reviewedByName, reviewNotes}) {
+  db.prepare("UPDATE requests SET status='rejected',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=? WHERE id=?").run(reviewedById??null, reviewedByName||null, reviewNotes||null, Number(id));
+}
+
+// ---- Dev Roadmap tracker ----
+export function getDevTasks() {
+  // Incomplete first (by priority), completed sink to the bottom (most-recently-done first)
+  return db.prepare(`
+    SELECT * FROM dev_tasks
+    ORDER BY done ASC,
+             CASE WHEN done=0 THEN priority END ASC,
+             CASE WHEN done=1 THEN done_at END DESC,
+             id ASC
+  `).all().map(r => ({ ...r }));
+}
+export function toggleDevTask(id, done) {
+  db.prepare("UPDATE dev_tasks SET done=?, done_at=CASE WHEN ?=1 THEN datetime('now','localtime') ELSE NULL END WHERE id=?")
+    .run(done ? 1 : 0, done ? 1 : 0, Number(id));
+}
+export function addDevTask({ category, title, detail, route, routeStatus }) {
+  const info = db.prepare(
+    "INSERT INTO dev_tasks (category, title, detail, route, route_status, priority, done, is_custom) VALUES (?,?,?,?,?,?,0,1)"
+  ).run(
+    String(category || "Custom").trim() || "Custom",
+    String(title || "").trim() || "Untitled task",
+    detail ? String(detail).trim() : null,
+    route ? String(route).trim() : null,
+    routeStatus || "missing",
+    50
+  );
+  return { id: Number(info.lastInsertRowid) };
+}
+export function deleteDevTask(id) {
+  // Only user-added custom tasks may be removed; seeded roadmap items are protected.
+  db.prepare("DELETE FROM dev_tasks WHERE id=? AND is_custom=1").run(Number(id));
+}
+
+// ---- Archive / soft-delete system ----------------------------------------
+// Every archivable entity declares its source table + how to summarize a row.
+const ARCHIVABLE = {
+  expense:   { table: "expenses",   label: (r) => r.description || "Expense", detail: (r) => [r.category, r.amount ? "$" + Number(r.amount).toLocaleString() : null].filter(Boolean).join(" · ") },
+  user:      { table: "users",      label: (r) => r.name || r.email || r.username || "User", detail: (r) => r.role || "" },
+  inventory: { table: "inventory",  label: (r) => r.name || "Inventory item", detail: (r) => [r.sku, r.quantity != null ? `qty ${r.quantity}` : null].filter(Boolean).join(" · ") },
+  dev_task:  { table: "dev_tasks",  label: (r) => r.title || "Task", detail: (r) => r.category || "", guard: (r) => r.is_custom === 1 },
+  payment:   { table: "project_payments", label: (r) => "$" + Number(r.amount || 0).toLocaleString() + " " + (r.kind || "payment"), detail: (r) => [r.project_access_id, r.method, r.source].filter(Boolean).join(" · ") },
+};
+const ARCHIVE_TABLES = new Set(Object.values(ARCHIVABLE).map((c) => c.table));
+
+// Move a row into the archive, then remove it from its source table. Returns {ok}.
+export function archiveAndDelete(entityType, id, actor) {
+  const cfg = ARCHIVABLE[entityType];
+  if (!cfg) throw new Error("Unknown archivable type: " + entityType);
+  const row = db.prepare(`SELECT * FROM ${cfg.table} WHERE id=?`).get(Number(id));
+  if (!row) return { ok: false, error: "Record not found." };
+  if (cfg.guard && !cfg.guard(row)) return { ok: false, error: "This item is protected and cannot be deleted." };
+  db.prepare(`INSERT INTO archive (entity_type, source_table, entity_id, label, detail, payload, archived_by_id, archived_by_name)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(entityType, cfg.table, Number(id), cfg.label(row) || "(untitled)", cfg.detail(row) || null,
+         JSON.stringify(row), actor?.id ?? null, actor?.name ?? null);
+  db.prepare(`DELETE FROM ${cfg.table} WHERE id=?`).run(Number(id));
+  return { ok: true };
+}
+
+export function getArchives() {
+  return db.prepare("SELECT id, entity_type, source_table, entity_id, label, detail, archived_by_name, archived_at FROM archive ORDER BY archived_at DESC, id DESC")
+    .all().map((r) => ({ ...r }));
+}
+export function getArchiveCount() {
+  return db.prepare("SELECT COUNT(*) AS n FROM archive").get().n;
+}
+
+// Re-insert an archived row back into its source table, then drop the archive entry.
+export function restoreArchive(archiveId) {
+  const a = db.prepare("SELECT * FROM archive WHERE id=?").get(Number(archiveId));
+  if (!a) return { ok: false, error: "Archive entry not found." };
+  if (!ARCHIVE_TABLES.has(a.source_table)) return { ok: false, error: "Unknown source table." };
+  let payload;
+  try { payload = JSON.parse(a.payload); } catch (_) { return { ok: false, error: "Corrupt archive payload." }; }
+  const cols = Object.keys(payload);
+  if (!cols.length) return { ok: false, error: "Empty archive payload." };
+  const colSql = cols.map((c) => `"${c}"`).join(",");
+  const ph = cols.map(() => "?").join(",");
+  db.prepare(`INSERT OR REPLACE INTO ${a.source_table} (${colSql}) VALUES (${ph})`).run(...cols.map((c) => payload[c]));
+  db.prepare("DELETE FROM archive WHERE id=?").run(Number(archiveId));
+  return { ok: true, entityType: a.entity_type };
+}
+
+export function purgeArchive(archiveId) {
+  db.prepare("DELETE FROM archive WHERE id=?").run(Number(archiveId));
+  return { ok: true };
+}
+export function purgeAllArchives() {
+  const n = getArchiveCount();
+  db.prepare("DELETE FROM archive").run();
+  return { ok: true, count: n };
+}
+
+// ---- Proposal view tracking ----
+export function recordProposalView(accessId, { role, name, ip }) {
+  if (!accessId || !role) return;
+  // Dedupe: don't log the same viewer (role+ip) more than once per 2 minutes.
+  const recent = db.prepare(
+    `SELECT id FROM proposal_views WHERE project_access_id=? AND viewer_role=?
+       AND ifnull(ip,'')=ifnull(?,'') AND viewed_at > datetime('now','localtime','-2 minutes') LIMIT 1`
+  ).get(String(accessId), role, ip || null);
+  if (recent) return;
+  db.prepare("INSERT INTO proposal_views (project_access_id, viewer_role, viewer_name, ip) VALUES (?,?,?,?)")
+    .run(String(accessId), role, name || null, ip || null);
+}
+export function getProposalViews(accessId) {
+  return db.prepare(
+    "SELECT id, viewer_role, viewer_name, ip, viewed_at FROM proposal_views WHERE project_access_id=? ORDER BY viewed_at DESC, id DESC LIMIT 200"
+  ).all(String(accessId)).map((r) => ({ ...r }));
+}
+
+// ---- Proposals (versioned; see table DDL in init) ----
+// Active = newest non-superseded row for the project.
+export function getActiveProposal(accessId) {
+  const r = db.prepare(
+    "SELECT * FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
+  ).get(String(accessId));
+  return r ? { ...r } : null;
+}
+export function getProposalHistory(accessId) {
+  return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at FROM proposals WHERE project_access_id=? ORDER BY version DESC")
+    .all(String(accessId)).map((r) => ({ ...r }));
+}
+// Insert a fresh draft, or update the payload of the current draft in place.
+// Sent rows are immutable — callers must reviseProposal() first.
+export function saveProposalDraft(accessId, { payload, taxRate, depositPct }, byName) {
+  const cur = getActiveProposal(accessId);
+  const json = JSON.stringify(payload);
+  if (cur && cur.status === "draft") {
+    db.prepare("UPDATE proposals SET payload=?, tax_rate=?, deposit_pct=?, updated_at=datetime('now','localtime') WHERE id=?")
+      .run(json, +taxRate || 0, +depositPct || 0, cur.id);
+    return getActiveProposal(accessId);
+  }
+  if (cur && cur.status !== "draft") return null; // must revise first
+  db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), 1, json, +taxRate || 0, +depositPct || 0, byName || null);
+  return getActiveProposal(accessId);
+}
+// Update ONLY the technician pricing on the active proposal, in place — no version bump,
+// works even on a sent/accepted row. `techMap` is { itemId: techPrice }. Internal admin edit;
+// the customer-facing payload (names, qty, customer price) is left untouched.
+export function setProposalTechPricing(accessId, techMap) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  let payload;
+  try { payload = JSON.parse(cur.payload); } catch { return null; }
+  const apply = (it) => {
+    if (it.id in techMap) it.techPrice = Math.max(0, Math.min(1000000, +techMap[it.id] || 0));
+    (it.sub || []).forEach((x) => { if (x.id in techMap) x.techPrice = Math.max(0, Math.min(1000000, +techMap[x.id] || 0)); });
+  };
+  (payload.options || []).forEach((o) => (o.services || []).forEach((s) => (s.items || []).forEach(apply)));
+  db.prepare("UPDATE proposals SET payload=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(JSON.stringify(payload), cur.id);
+  return getActiveProposal(accessId);
+}
+export function markProposalSent(accessId, byName) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status !== "draft") return null;
+  db.prepare("UPDATE proposals SET status='sent', sent_at=datetime('now','localtime'), sent_by_name=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(byName || null, cur.id);
+  return getActiveProposal(accessId);
+}
+// Clone the sent/changes_requested version into a new editable draft; supersede the old row.
+export function reviseProposal(accessId, byName) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status === "draft") return cur;
+  db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), cur.version + 1, cur.payload, cur.tax_rate, cur.deposit_pct, byName || null);
+  db.prepare("UPDATE proposals SET status='superseded', updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  return getActiveProposal(accessId);
+}
+// Accepting and declining are tracked as two INDEPENDENT per-option sets so a customer can
+// accept Option A while declining Option B without one undoing the other:
+//   accepted_options  = ["A", ...]           (JSON array)
+//   declined_options  = { "B": "reason", … } (JSON object → per-option decline reason)
+// The proposal-level status is "accepted" when ≥1 option is accepted, else "declined" when
+// ≥1 is declined, else "sent". selected_option mirrors the first accepted for back-compat.
+function _readOptSets(cur) {
+  let acc; try { acc = JSON.parse(cur.accepted_options || "[]"); } catch { acc = []; }
+  if (!Array.isArray(acc)) acc = [];
+  let dec; try { dec = JSON.parse(cur.declined_options || "{}"); } catch { dec = {}; }
+  if (!dec || typeof dec !== "object" || Array.isArray(dec)) dec = {};
+  return { acc, dec };
+}
+function _writeOptSets(cur, acc, dec) {
+  const any = acc.length > 0;
+  const anyDec = Object.keys(dec).length > 0;
+  const status = any ? "accepted" : (anyDec ? "declined" : "sent");
+  const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const firstReason = anyDec ? String(Object.values(dec)[0] || "") : null;
+  db.prepare("UPDATE proposals SET accepted_options=?, declined_options=?, selected_option=?, selected_at=?, status=?, declined_reason=?, declined_at=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(JSON.stringify(acc), JSON.stringify(dec), any ? acc[0] : null, any ? now : null,
+      status, firstReason, anyDec ? now : null, cur.id);
+  return getActiveProposal(accessId_of(cur));
+}
+function accessId_of(cur) { return cur.project_access_id; }
+// Toggle an option in the ACCEPTED set. Accepting also clears any prior decline of that same option.
+export function selectProposalOption(accessId, optKey) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || !["sent", "changes_requested", "accepted", "declined"].includes(cur.status)) return null;
+  const { acc, dec } = _readOptSets(cur);
+  const k = String(optKey);
+  const i = acc.indexOf(k);
+  if (i >= 0) acc.splice(i, 1);          // un-accept
+  else { acc.push(k); delete dec[k]; }   // accept → drop any decline of the same option
+  return _writeOptSets(cur, acc, dec);
+}
+// Toggle an option in the DECLINED set (per option, with a reason). Declining also removes that
+// option from the accepted set, but leaves every OTHER accepted option untouched.
+export function declineOption(accessId, optKey, reason) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || !["sent", "changes_requested", "accepted", "declined"].includes(cur.status)) return null;
+  const { acc, dec } = _readOptSets(cur);
+  const k = String(optKey);
+  if (dec[k] !== undefined) delete dec[k];              // un-decline
+  else { dec[k] = String(reason || "").slice(0, 300); const i = acc.indexOf(k); if (i >= 0) acc.splice(i, 1); }
+  return _writeOptSets(cur, acc, dec);
+}
+// Staff resolve one customer change-request flag (Mark done / Discard both clear it).
+export function resolveCustomerFlag(accessId, itemId) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  let flags;
+  try { flags = JSON.parse(cur.customer_flags || "{}"); } catch { flags = {}; }
+  delete flags[String(itemId)];
+  const remaining = Object.keys(flags).length;
+  db.prepare("UPDATE proposals SET customer_flags=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(JSON.stringify(flags), cur.id);
+  return getActiveProposal(accessId);
+}
+export function requestProposalChanges(accessId, note) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || !["sent", "accepted"].includes(cur.status)) return null;
+  db.prepare("UPDATE proposals SET status='changes_requested', change_note=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(note || "").slice(0, 2000), cur.id);
+  return getActiveProposal(accessId);
+}
+// Per-line customer revision flags: { itemId: { type:"remove"|"change", note } }. Stored on
+// the active proposal and flips it to changes_requested so staff know to revise. The line
+// items themselves are NOT modified — a flag is just a customer request for us to act on.
+export function setProposalCustomerFlags(accessId, flags, note) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || !["sent", "accepted", "changes_requested"].includes(cur.status)) return null;
+  const clean = {};
+  Object.entries(flags || {}).forEach(([id, f]) => {
+    if (!f || !["remove", "change"].includes(f.type)) return;
+    clean[String(id)] = { type: f.type, note: String(f.note || "").slice(0, 500) };
+  });
+  const anyFlags = Object.keys(clean).length > 0;
+  db.prepare("UPDATE proposals SET customer_flags=?, status=?, change_note=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(JSON.stringify(clean), anyFlags ? "changes_requested" : cur.status, note != null ? String(note).slice(0, 2000) : cur.change_note, cur.id);
+  return getActiveProposal(accessId);
+}
+
+// ---- Signature + payments + stage acceptances (Approval & Deposit stage) ----
+// Customer signs the accepted proposal (typed name, optional drawn signature data URL).
+export function signProposal(accessId, name, signatureData) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status !== "accepted") return null;
+  db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, cur.id);
+  return getActiveProposal(accessId);
+}
+// Technician accepts the (customer-accepted) work order: records the tech's signature on the
+// proposal AND assigns them to the project (projects.tech = name). Only allowed once the
+// customer has accepted — a tech can't accept a work order that isn't live.
+export function acceptWorkOrder(accessId, name, signatureData) {
+  const cur = getActiveProposal(accessId);
+  // The tech can sign as soon as the proposal has been SENT — they don't wait on the customer.
+  if (!cur || !cur.sent_at) return null;
+  db.prepare("UPDATE proposals SET tech_signed_name=?, tech_signed_at=datetime('now','localtime'), tech_signature_data=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, cur.id);
+  db.prepare("UPDATE projects SET tech=? WHERE access_id=?").run(String(name || "").slice(0, 120), String(accessId));
+  return getActiveProposal(accessId);
+}
+export function getProjectPayments(accessId) {
+  return db.prepare("SELECT * FROM project_payments WHERE project_access_id=? ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
+}
+export function addProjectPayment(accessId, { amount, method, kind, source, note }, byName) {
+  // Customer submissions await staff confirmation of receipt; staff entries are money-in-hand.
+  const src = source === "customer" ? "customer" : "staff";
+  db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status) VALUES (?,?,?,?,?,?,?,?)")
+    .run(String(accessId), Math.max(0, +amount || 0), String(method || "").slice(0, 60) || null,
+      ["deposit", "final", "partial", "other"].includes(kind) ? kind : "deposit",
+      src, String(note || "").slice(0, 500) || null, byName || null,
+      src === "customer" ? "pending" : "confirmed");
+  return getProjectPayments(accessId);
+}
+// Staff confirm a customer-submitted payment once the money is actually received.
+export function confirmProjectPayment(accessId, id) {
+  db.prepare("UPDATE project_payments SET status='confirmed' WHERE id=? AND project_access_id=?").run(+id, String(accessId));
+  return getProjectPayments(accessId);
+}
+export function deleteProjectPayment(accessId, id, actor) {
+  // Archive before removing — a deleted payment stays recoverable for the money trail.
+  const row = db.prepare("SELECT * FROM project_payments WHERE id=? AND project_access_id=?").get(+id, String(accessId));
+  if (!row) return getProjectPayments(accessId);
+  archiveAndDelete("payment", +id, actor);
+  return getProjectPayments(accessId);
+}
+
+// Void a customer signature on the active proposal (admin/manager correction path). The proposal
+// record is preserved; only the signature fields are cleared so it can be re-signed.
+export function voidProposalSignature(accessId) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  return getActiveProposal(accessId);
+}
+// Confirmed money only — the number the balance and stage gates trust.
+export function confirmedPaymentTotal(accessId, kind) {
+  const rows = db.prepare("SELECT amount, kind FROM project_payments WHERE project_access_id=? AND status='confirmed'").all(String(accessId));
+  return rows.filter((r) => !kind || r.kind === kind).reduce((s, r) => s + (+r.amount || 0), 0);
+}
+// ---- Browser-tool data backup (survey / mockup / schedule JSON blobs) ----
+// "tracking" = equipment shipment info for the Schedule stage ({number, carrier, note}) —
+// staff set it, the customer's scheduling page displays it.
+export const TOOL_KEYS = new Set(["survey", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
+export function getToolData(accessId, tool) {
+  const r = db.prepare("SELECT data, updated_by, updated_at FROM project_tool_data WHERE project_access_id=? AND tool=?")
+    .get(String(accessId), String(tool));
+  return r ? { data: r.data, updated_by: r.updated_by, updated_at: r.updated_at } : null;
+}
+export function saveToolData(accessId, tool, data, byName) {
+  db.prepare(`
+    INSERT INTO project_tool_data (project_access_id, tool, data, updated_by, updated_at)
+    VALUES (?,?,?,?,datetime('now','localtime'))
+    ON CONFLICT(project_access_id, tool)
+    DO UPDATE SET data=excluded.data, updated_by=excluded.updated_by, updated_at=excluded.updated_at
+  `).run(String(accessId), String(tool), String(data), byName || null);
+  return getToolData(accessId, tool);
+}
+
+// Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
+export function getApprovedAddons(accessId) {
+  const rec = getToolData(accessId, "addendum");
+  let list = [];
+  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "approved"); } catch { list = []; }
+  const each = list.map((a) => {
+    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
+    const discount = +a.discount || 0;
+    return {
+      id: a.id, title: a.title || "Job-site add-on", signedName: a.signedName || null, signedAt: a.signedAt || null,
+      discount, total: Math.max(0, sub - discount), // customer owes the discounted total
+      items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 1, price: +it.price || 0 })),
+    };
+  });
+  return { total: each.reduce((s, a) => s + a.total, 0), list: each };
+}
+
+// ---- Inquiry notes + appointment point-of-contact ----
+export function getProjectNotes(accessId) {
+  return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? ORDER BY id DESC LIMIT 100").all(String(accessId)).map((r) => ({ ...r }));
+}
+export function addProjectNote(accessId, { role, name, body }) {
+  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body) VALUES (?,?,?,?)")
+    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000));
+  return getProjectNotes(accessId);
+}
+export function setProjectPoc(accessId, { name, phone }) {
+  db.prepare("UPDATE projects SET poc_name=?, poc_phone=? WHERE access_id=?")
+    .run(String(name || "").slice(0, 120) || null, String(phone || "").slice(0, 40) || null, String(accessId));
+  return getJobByAccessId(accessId);
+}
+
+export function getStageAcceptances(accessId) {
+  const rows = db.prepare("SELECT stage, accepted_by, created_at, fingerprint FROM stage_acceptances WHERE project_access_id=?").all(String(accessId));
+  const out = {};
+  rows.forEach((r) => { out[r.stage] = { by: r.accepted_by, at: r.created_at, fingerprint: r.fingerprint || null }; });
+  return out;
+}
+// Re-approving with a new fingerprint UPDATES the record (INSERT OR IGNORE would keep the stale
+// one), so a fresh approval after a change captures the current data's fingerprint.
+export function acceptStage(accessId, stage, byName, fingerprint) {
+  db.prepare(`
+    INSERT INTO stage_acceptances (project_access_id, stage, accepted_by, fingerprint, created_at)
+    VALUES (?,?,?,?,datetime('now','localtime'))
+    ON CONFLICT(project_access_id, stage)
+    DO UPDATE SET accepted_by=excluded.accepted_by, fingerprint=excluded.fingerprint, created_at=excluded.created_at
+  `).run(String(accessId), String(stage), byName || null, fingerprint || null);
+  return getStageAcceptances(accessId);
+}
+// Server-authoritative per-tool meta: does the tool have data, and its current fingerprint.
+// Uses the project_tool_data backup + lib/tool-data.js so the gate agrees with what the customer sees.
+export function getToolMeta(accessId) {
+  const surveyRow = getToolData(accessId, "survey");
+  const mockupRow = getToolData(accessId, "mockup");
+  return {
+    survey: { has: toolHasData("survey", surveyRow?.data), fingerprint: toolFingerprint("survey", surveyRow?.data) },
+    mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
+  };
+}
+// The survey stage is satisfied when every tool that HAS data has a current (fingerprint-matching)
+// approval. No data on either tool → nothing to approve → satisfied.
+export function surveyStageSatisfied(accessId) {
+  const meta = getToolMeta(accessId);
+  const acc = getStageAcceptances(accessId);
+  const ok = (metaTool, accKey) => !metaTool.has || !!(acc[accKey] && acc[accKey].fingerprint === metaTool.fingerprint);
+  return ok(meta.survey, "site_survey") && ok(meta.mockup, "mockup");
+}
+export function unacceptStage(accessId, stage) {
+  db.prepare("DELETE FROM stage_acceptances WHERE project_access_id=? AND stage=?").run(String(accessId), String(stage));
+  return getStageAcceptances(accessId);
+}
+
+// ---- Company-wide default price book (single row) ----
+// Shape: { prices: {name:price}, names: {name:renamedTo}, hidden: {service:[name,...]},
+// custom: {service:[{name,price},...]} }. Stored in the same `prices` column (legacy name);
+// old rows that are just a flat {name:price} map still parse fine (falls back to prices only).
+export function getPriceBook() {
+  const r = db.prepare("SELECT prices FROM price_book WHERE id=1").get();
+  try {
+    const d = JSON.parse(r?.prices || "{}") || {};
+    const looksStructured = d && (d.prices || d.names || d.hidden || d.custom);
+    return looksStructured
+      ? { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {} }
+      : { prices: d || {}, names: {}, hidden: {}, custom: {} }; // legacy flat map
+  } catch { return { prices: {}, names: {}, hidden: {}, custom: {} }; }
+}
+export function setPriceBook(book, byName) {
+  const cleanPrices = {};
+  Object.entries(book?.prices || {}).forEach(([k, v]) => { if (v != null && v !== "" && +v >= 0) cleanPrices[String(k)] = +v; });
+  const cleanNames = {};
+  Object.entries(book?.names || {}).forEach(([k, v]) => { if (v) cleanNames[String(k)] = String(v).slice(0, 120); });
+  const cleanHidden = {};
+  Object.entries(book?.hidden || {}).forEach(([svc, arr]) => { if (Array.isArray(arr) && arr.length) cleanHidden[svc] = arr.map(String); });
+  const cleanCustom = {};
+  Object.entries(book?.custom || {}).forEach(([svc, arr]) => {
+    if (!Array.isArray(arr)) return;
+    const items = arr.filter((c) => c?.name).map((c) => ({ name: String(c.name).slice(0, 120), price: +c.price >= 0 ? +c.price : 0 }));
+    if (items.length) cleanCustom[svc] = items;
+  });
+  const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom };
+  db.prepare("UPDATE price_book SET prices=?, updated_by=?, updated_at=datetime('now','localtime') WHERE id=1")
+    .run(JSON.stringify(clean), byName || null);
+  return clean;
+}
+
+// ---- Technician work-order rate library ----
+// Valid rate keys — per-step labor payouts for the install work order.
+export const RATE_KEYS = ["cam_drop", "cam_mgmt", "cam_term", "cam_mount", "pos_drop", "pos_mgmt", "pos_term", "pos_install", "nvr_setup"];
+// Company defaults (used when a scope hasn't set a key). $52/camera & /POS device, $10 NVR.
+export const DEFAULT_RATES = { cam_drop: 10, cam_mgmt: 18, cam_term: 12, cam_mount: 12, pos_drop: 10, pos_mgmt: 18, pos_term: 12, pos_install: 12, nvr_setup: 10 };
+function cleanRates(data) {
+  const out = {};
+  RATE_KEYS.forEach((k) => { const v = data?.[k]; if (v != null && v !== "" && +v >= 0) out[k] = Math.round(+v * 100) / 100; });
+  return out;
+}
+// Full library: { default:{...}, techs:{ "Devon Carter":{...} } } — raw stored overrides only.
+export function getRateBook() {
+  const rows = db.prepare("SELECT scope, data FROM rate_book").all();
+  const book = { default: {}, techs: {} };
+  rows.forEach((r) => {
+    let d = {}; try { d = JSON.parse(r.data || "{}") || {}; } catch { d = {}; }
+    if (r.scope === "default") book.default = cleanRates(d);
+    else if (r.scope.startsWith("tech:")) book.techs[r.scope.slice(5)] = cleanRates(d);
+  });
+  return book;
+}
+export function saveRateScope(scope, data, byName) {
+  const sc = String(scope || "").slice(0, 130);
+  if (sc !== "default" && !sc.startsWith("tech:")) return false;
+  db.prepare("INSERT INTO rate_book (scope, data, updated_by, updated_at) VALUES (?,?,?,datetime('now','localtime')) ON CONFLICT(scope) DO UPDATE SET data=excluded.data, updated_by=excluded.updated_by, updated_at=excluded.updated_at")
+    .run(sc, JSON.stringify(cleanRates(data)), byName || null);
+  return true;
+}
+// Effective rates for a technician: company defaults ← default-scope overrides ← this tech's overrides.
+export function getEffectiveRates(techName) {
+  const book = getRateBook();
+  const tech = techName && book.techs[techName] ? book.techs[techName] : {};
+  return { ...DEFAULT_RATES, ...book.default, ...tech };
+}
+
+// ---- Action Center: cross-project pending items needing a decision ----
+export function getPendingExpenses() {
+  return db.prepare("SELECT * FROM expenses WHERE status='pending' ORDER BY created_at DESC").all().map(r => ({ ...r }));
+}
+export function getPendingRequests() {
+  return db.prepare("SELECT * FROM requests WHERE status='pending' ORDER BY created_at DESC").all().map(r => ({ ...r }));
+}
+export function getPendingWorkOrders() {
+  return db.prepare("SELECT * FROM work_orders WHERE status='pending' ORDER BY submitted_at DESC").all().map(r => ({ ...r }));
+}
+
+export function getWorkOrdersByProject(accessId) {
+  return db.prepare("SELECT * FROM work_orders WHERE project_access_id=? ORDER BY submitted_at DESC").all(accessId).map(r=>({...r}));
+}
+export function createWorkOrder(accessId, {submittedById, submittedByName, notes}) {
+  const r = db.prepare("INSERT INTO work_orders (project_access_id,submitted_by_id,submitted_by_name,notes) VALUES (?,?,?,?)").run(accessId, submittedById??null, submittedByName??null, notes??null);
+  return {id: r.lastInsertRowid};
+}
+export function updateWorkOrderNotes(id, notes) {
+  db.prepare("UPDATE work_orders SET notes=? WHERE id=?").run(notes??null, id);
+}
+export function approveWorkOrder(id, {reviewedById, reviewedByName}) {
+  db.prepare("UPDATE work_orders SET status='approved',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime') WHERE id=?").run(reviewedById??null, reviewedByName??null, id);
+}
+export function rejectWorkOrder(id, {reviewedById, reviewedByName, reviewNotes}) {
+  db.prepare("UPDATE work_orders SET status='rejected',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=? WHERE id=?").run(reviewedById??null, reviewedByName??null, reviewNotes??null, id);
+}
+
+export function getProjectAssignments(accessId) {
+  return db.prepare("SELECT * FROM project_assignments WHERE project_access_id=? ORDER BY granted_at ASC").all(accessId).map(r=>({...r}));
+}
+// Auto-grant base access to a project (once each). All current managers and the inquiry customer
+// are added as removable assignments; the *_granted flags ensure we never re-add someone the team
+// has removed. (Admins are NOT stored — they always have access, enforced live in the UI.)
+export function ensureBaseAccess(accessId) {
+  const p = db.prepare("SELECT id, contact_email, contact_name, customer, customer_granted, managers_granted FROM projects WHERE access_id=? COLLATE NOCASE").get(String(accessId));
+  if (!p) return;
+  const ins = db.prepare("INSERT INTO project_assignments (project_access_id, user_id, user_name, user_email, role, granted_by) VALUES (?,?,?,?,?,?)");
+
+  // Managers — auto-add every current manager once (removable thereafter)
+  if (!p.managers_granted) {
+    const managers = db.prepare("SELECT id, name, email FROM users WHERE role='manager' AND (disabled IS NULL OR disabled=0)").all();
+    for (const m of managers) {
+      const dup = db.prepare("SELECT id FROM project_assignments WHERE project_access_id=? AND user_id=?").get(String(accessId), m.id);
+      if (!dup) ins.run(String(accessId), m.id, m.name || null, m.email || null, "manager", null);
+    }
+    db.prepare("UPDATE projects SET managers_granted=1 WHERE id=?").run(p.id);
+  }
+
+  // Customer — auto-add the inquiry contact once, when a contact email exists (removable thereafter)
+  if (!p.customer_granted) {
+    const email = p.contact_email ? String(p.contact_email).trim() : null;
+    if (email) {
+      const dup = db.prepare("SELECT id FROM project_assignments WHERE project_access_id=? AND LOWER(user_email)=LOWER(?)").get(String(accessId), email);
+      if (!dup) ins.run(String(accessId), null, p.contact_name || p.customer || "Customer", email, "customer", null);
+      db.prepare("UPDATE projects SET customer_granted=1 WHERE id=?").run(p.id);
+    }
+  }
+}
+
+export function addProjectAssignment(accessId, {userId, userName, userEmail, role, grantedBy}) {
+  const dup = db.prepare("SELECT id FROM project_assignments WHERE project_access_id=? AND ((user_id IS NOT NULL AND user_id=?) OR (user_email IS NOT NULL AND user_email=?))").get(accessId, userId??null, userEmail??null);
+  if (dup) return {id: dup.id, existed: true};
+  const r = db.prepare("INSERT INTO project_assignments (project_access_id,user_id,user_name,user_email,role,granted_by) VALUES (?,?,?,?,?,?)").run(accessId, userId??null, userName??null, userEmail??null, role, grantedBy??null);
+  return {id: r.lastInsertRowid};
+}
+export function removeProjectAssignment(id) {
+  db.prepare("DELETE FROM project_assignments WHERE id=?").run(id);
+}
+export function getStaffUsers() {
+  // Returns all active users (staff + customers) so the project add-member search can find anyone.
+  return db.prepare("SELECT id, name, email, role, phone, username FROM users WHERE (disabled IS NULL OR disabled != 1) ORDER BY role, name").all().map(r=>({...r}));
+}
+
+export function getProjectsForUser(userId) {
+  return db.prepare(`
+    SELECT p.access_id, p.customer, p.address, p.stage, p.service_code, p.project_type, p.value,
+           pa.role AS assignment_role
+    FROM projects p
+    JOIN project_assignments pa ON pa.project_access_id = p.access_id
+    WHERE pa.user_id = ?
+    ORDER BY p.id DESC
+  `).all(Number(userId)).map(r => ({ ...r, service: SERVICE_CODES[r.service_code] || r.service_code || "General" }));
+}

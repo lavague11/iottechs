@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOT TECHS — Control Panel</title>
+<script>window.IOT_REQUIRE='admin'</script><script src="/auth.js"></script>
+<style>
+  :root{ --cream:#FAF8F4; --ink:#0B0F1A; --ink-2:#121726; --slate:#2C3347; --slate-2:#363E54; --gold:#C9A96E; --gold-dim:#9c7f48; --line:#2a3247;
+    --green:#1f6b4f; --red:#7a2f33; --cust:#6E8FB0; --tech:#7FA98C; --admin:#B08C6E; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{background:var(--ink);min-height:100%;}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--cream);min-height:100vh;
+    background:radial-gradient(900px 500px at 80% -5%, rgba(201,169,110,.10), transparent 60%), var(--ink);
+    -webkit-font-smoothing:antialiased;line-height:1.5;padding-bottom:80px;}
+  header{background:linear-gradient(180deg,var(--slate) 0%, #232a3b 100%);border-bottom:3px solid var(--gold);padding:30px 0 26px;}
+  .hwrap{max-width:1060px;margin:0 auto;padding:0 22px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:18px;}
+  .brand h1{font-size:24px;letter-spacing:4px;font-weight:700;color:#fff;}
+  .brand .tag{color:var(--gold);letter-spacing:3px;font-size:10px;margin-top:6px;text-transform:uppercase;}
+  .topnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .navbtn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-decoration:none;border:1px solid var(--gold);color:var(--gold);background:transparent;}
+  .navbtn.active{background:var(--gold);color:var(--ink);}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px;}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0 6px;}
+  .stat{background:var(--ink-2);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:12px;padding:15px 16px;}
+  .stat.admin{border-top-color:var(--admin);} .stat.tech{border-top-color:var(--tech);} .stat.cust{border-top-color:var(--cust);}
+  .stat .lab{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8b93a5;font-weight:700;}
+  .stat .val{font-size:26px;font-weight:800;color:#fff;margin-top:4px;}
+  .section-h{display:flex;align-items:center;gap:14px;margin:28px 0 14px;}
+  .section-h h2{font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#fff;font-weight:800;}
+  .section-h .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--gold),transparent);}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:16px;}
+  .frm{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;}
+  .fld label{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8b93a5;font-weight:700;margin-bottom:5px;}
+  input,select{width:100%;background:var(--ink);border:1px solid var(--line);color:#fff;border-radius:8px;padding:10px 11px;font-size:13px;outline:none;font-family:inherit;}
+  input:focus,select:focus{border-color:var(--gold);}
+  .btn{background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;letter-spacing:.04em;cursor:pointer;white-space:nowrap;}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:#aab2c4;}
+  .hint{font-size:11.5px;color:#8b93a5;margin-top:10px;}
+  .ulist{display:flex;flex-direction:column;gap:9px;margin-top:6px;}
+  .urow{display:flex;align-items:center;gap:12px;background:var(--ink-2);border:1px solid var(--line);border-left:3px solid var(--gold-dim);border-radius:10px;padding:12px 14px;flex-wrap:wrap;}
+  .urow.admin{border-left-color:var(--admin);} .urow.tech{border-left-color:var(--tech);} .urow.customer{border-left-color:var(--cust);} .urow.off{opacity:.5;}
+  .urow .un{font-weight:700;color:#fff;font-size:14px;}
+  .urow .um{font-size:12px;color:#9aa3b5;}
+  .rbadge{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:12px;}
+  .rbadge.admin{background:#3a2e20;color:#e3c39a;border:1px solid var(--admin);}
+  .rbadge.tech{background:#1d2f24;color:#a7d3b5;border:1px solid var(--tech);}
+  .rbadge.customer{background:#1e2a36;color:#a9c6e0;border:1px solid var(--cust);}
+  .rbadge.manager{background:#2a2e3a;color:#bcc6e0;border:1px solid #6E76B0;}
+  .rolechk{display:flex;align-items:center;gap:7px;font-size:13px;color:#cfd5e0;cursor:pointer;}
+  .rolechk input{width:16px;height:16px;accent-color:var(--gold);}
+  .urow.manager{border-left-color:#6E76B0;}
+  .iconbtn{background:none;border:1px solid var(--line);color:#aab2c4;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;}
+  .iconbtn.del{border-color:#5a2b2e;color:#d98a8e;} .iconbtn.edit{border-color:var(--gold-dim);color:var(--gold);}
+  .right{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;}
+  footer{margin-top:50px;border-top:1px solid var(--line);padding-top:20px;text-align:center;color:#6b7385;font-size:11px;letter-spacing:1.5px;}
+  footer .g{color:var(--gold);}
+</style>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <div class="brand"><h1>IOT&nbsp;TECHS</h1><div class="tag">Admin · Control Panel</div></div>
+    <div class="topnav">
+      <a class="navbtn" href="/home.html">Home</a>
+      <a class="navbtn" href="/dashboard.html">Dashboard</a>
+      <a class="navbtn" href="/dispatch.html">Dispatch</a>
+      <a class="navbtn active" href="/admin.html">Control Panel</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+
+  <div class="section-h"><h2>Add a Login</h2><div class="ln"></div></div>
+  <div class="card">
+    <div class="frm">
+      <div class="fld"><label>Display name</label><input id="f-name" placeholder="e.g. Jane Doe"></div>
+      <div class="fld"><label>Username *</label><input id="f-user" autocomplete="off" placeholder="username"></div>
+      <div class="fld"><label>Password</label><input id="f-pass" type="password" autocomplete="new-password" placeholder="6+ chars"></div>
+      <div class="fld"><label>Google email</label><input id="f-email" autocomplete="off" placeholder="for Google sign-in"></div>
+      <div class="fld" style="grid-column:1/-1;"><label>Roles (one or more)</label>
+        <div id="f-roles" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">
+          <label class="rolechk"><input type="checkbox" value="admin" onchange="onRoles()"> Admin</label>
+          <label class="rolechk"><input type="checkbox" value="manager" onchange="onRoles()"> Manager</label>
+          <label class="rolechk"><input type="checkbox" value="tech" onchange="onRoles()"> Technician</label>
+          <label class="rolechk"><input type="checkbox" value="customer" onchange="onRoles()"> Customer</label>
+        </div>
+      </div>
+      <div class="fld" id="tech-wrap" style="display:none;"><label>Link technician</label><select id="f-tech"><option value="">—</option></select></div>
+      <div class="fld" id="cust-wrap" style="display:none;"><label>Link customer / project *</label><select id="f-cust"><option value="">—</option></select></div>
+      <div class="fld" style="flex:0 0 auto;"><label>&nbsp;</label><button class="btn" id="saveBtn" onclick="saveUser()">+ Create Login</button></div>
+    </div>
+    <div class="hint">Password OR Google email is required. Assign any combination of roles — a person can be e.g. Manager + Customer. Customer role must be linked to a project. Everyone signs in at <b style="color:#cfd5e0;">/login.html</b>.</div>
+  </div>
+
+  <div class="section-h"><h2>All Logins</h2><div class="ln"></div></div>
+  <div class="ulist" id="ulist"><div class="hint">Loading…</div></div>
+
+  <footer><span class="g">IOT TECHS / La Vague Inc.</span> &nbsp;·&nbsp; Control Panel · VAULT DARK</footer>
+</div>
+
+<script>
+let users=[], techs=[], customers=[], editId=null;
+const $=id=>document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg){ let t=$('t'); if(!t){t=document.createElement('div');t.id='t';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--slate);border:1px solid var(--gold);color:var(--cream);padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;z-index:99;opacity:0;transition:opacity .25s;';document.body.appendChild(t);} t.textContent=msg;t.style.opacity='1';clearTimeout(t._x);t._x=setTimeout(()=>t.style.opacity='0',2200); }
+
+async function loadAll(){
+  try{
+    users = (await (await fetch('/api/users')).json()).users||[];
+    techs = await (await fetch('/api/technicians')).json();
+    customers = await (await fetch('/api/customers')).json();
+  }catch(e){ return; }
+  fillLinks(); onRoles(); renderStats(); renderUsers();
+}
+function rolesOf(u){ return u.rolesList && u.rolesList.length ? u.rolesList : (u.role?[u.role]:[]); }
+function renderStats(){
+  const n=r=>users.filter(u=>rolesOf(u).includes(r)).length;
+  $('stats').innerHTML =
+    '<div class="stat admin"><div class="lab">Admins</div><div class="val">'+n('admin')+'</div></div>'+
+    '<div class="stat tech"><div class="lab">Managers · Techs</div><div class="val">'+n('manager')+' · '+n('tech')+'</div></div>'+
+    '<div class="stat cust"><div class="lab">Customers</div><div class="val">'+n('customer')+'</div></div>';
+}
+function selectedRoles(){ return [...document.querySelectorAll('#f-roles input:checked')].map(c=>c.value); }
+function onRoles(){
+  const roles=selectedRoles();
+  $('tech-wrap').style.display = roles.includes('tech')?'':'none';
+  $('cust-wrap').style.display = roles.includes('customer')?'':'none';
+}
+function fillLinks(){
+  $('f-tech').innerHTML='<option value="">— roster (optional) —</option>'+techs.map(t=>'<option value="'+t.id+'">'+esc(t.name)+'</option>').join('');
+  $('f-cust').innerHTML='<option value="">— choose project —</option>'+customers.map(c=>'<option value="'+c.id+'">'+esc(c.business||c.name||('#'+c.id))+'</option>').join('');
+}
+function renderUsers(){
+  const host=$('ulist');
+  if(!users.length){ host.innerHTML='<div class="hint">No logins yet.</div>'; return; }
+  host.innerHTML=users.map(u=>{
+    const roles=rolesOf(u);
+    const badges=(roles.length?roles:['pending']).map(r=>'<span class="rbadge '+r+'">'+r+'</span>').join(' ');
+    const primary=roles[0]||'pending';
+    const link=[u.email, u.technician_name?('tech: '+esc(u.technician_name)):'', u.customer_name?('project: '+esc(u.customer_name)):'', u.has_password?'':'Google-only'].filter(Boolean).map(esc).join(' · ');
+    return '<div class="urow '+primary+(u.active?'':' off')+'">'+
+      '<div style="min-width:0;"><div class="un">'+esc(u.name||u.username)+' '+badges+'</div>'+
+        '<div class="um">@'+esc(u.username)+(link?' · '+link:'')+'</div></div>'+
+      '<div class="right">'+
+        (roles.includes('customer')&&u.customer_id?'<a class="iconbtn" href="/project.html?customer='+u.customer_id+'&view=customer" target="_blank">Project ↗</a>':'')+
+        '<button class="iconbtn" onclick="resetPass('+u.id+',\''+esc(u.username).replace(/\x27/g,"\\x27")+'\')">Reset pw</button>'+
+        '<button class="iconbtn edit" onclick="editUser('+u.id+')">Edit</button>'+
+        '<button class="iconbtn del" onclick="delUser('+u.id+',\''+esc(u.username).replace(/\x27/g,"\\x27")+'\')">×</button>'+
+      '</div></div>';
+  }).join('');
+}
+window.saveUser=async function(){
+  const roles=selectedRoles(), username=$('f-user').value.trim(), password=$('f-pass').value, email=$('f-email').value.trim();
+  if(!roles.length){ toast('Pick at least one role'); return; }
+  const body={ name:$('f-name').value.trim(), username, password, email, roles };
+  if(roles.includes('tech')) body.technician_id=$('f-tech').value||null;
+  if(roles.includes('customer')){ const cv=$('f-cust').value; if(!cv){ toast('Choose a project for the Customer role'); return; } body.customer_id=cv; }
+  if(editId){ body.id=editId; body.active=1; if(!password) delete body.password; }
+  else { if(!username){ toast('Username required'); return; } if(!email && password.length<6){ toast('Password (6+) or Google email required'); return; } }
+  const r=await (await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  if(r.ok){ clearForm(); toast(editId?'Saved':'Login created'); loadAll(); }
+  else toast(r.error||'Failed');
+};
+function clearForm(){ ['f-name','f-user','f-pass','f-email'].forEach(id=>$(id).value=''); document.querySelectorAll('#f-roles input').forEach(c=>c.checked=false); onRoles(); editId=null; $('saveBtn').textContent='+ Create Login'; $('f-user').disabled=false; }
+window.editUser=function(id){
+  const u=users.find(x=>x.id===id); if(!u)return; editId=id;
+  $('f-name').value=u.name||''; $('f-user').value=u.username||''; $('f-user').disabled=true; $('f-pass').value=''; $('f-email').value=u.email||'';
+  const roles=rolesOf(u);
+  document.querySelectorAll('#f-roles input').forEach(c=>c.checked=roles.includes(c.value));
+  onRoles(); $('f-tech').value=u.technician_id||''; $('f-cust').value=u.customer_id||'';
+  $('saveBtn').textContent='Save Changes'; window.scrollTo({top:0,behavior:'smooth'});
+};
+window.resetPass=async function(id,username){ const p=prompt('New password for "'+username+'" (6+ chars):'); if(!p)return; if(p.length<6){toast('Too short');return;} const u=users.find(x=>x.id===id); await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:p,active:1,role:u.role,name:u.name})}); toast('Password reset'); };
+window.delUser=async function(id,username){ if(!confirm('Remove login "'+username+'"?'))return; const r=await (await fetch('/api/users/'+id,{method:'DELETE'})).json(); if(r.ok){ toast('Removed'); loadAll(); } else toast(r.error||'Failed'); };
+loadAll();
+</script>
+</body>
+</html>

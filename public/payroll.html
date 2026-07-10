@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOT TECHS — Payroll</title>
+<style>
+  :root{ --cream:#FAF8F4; --slate:#2C3347; --slate-2:#363E54; --gold:#C9A96E; --gold-dim:#9c7f48;
+    --ink:#0B0F1A; --ink-2:#121726; --line:#2a3247; --green:#1f6b4f; --green-l:#4ADE80; --red:#7a2f33;
+    --cust:#6E8FB0; --tech:#7FA98C; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{background:var(--ink);min-height:100%;}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--cream);min-height:100vh;
+    background:radial-gradient(900px 500px at 80% -5%, rgba(74,222,128,.07), transparent 60%),
+               radial-gradient(700px 600px at -10% 30%, rgba(201,169,110,.06), transparent 55%), var(--ink);
+    -webkit-font-smoothing:antialiased;line-height:1.5;padding-bottom:80px;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px;}
+  header{background:linear-gradient(180deg,var(--slate) 0%, #232a3b 100%);border-bottom:3px solid var(--gold);padding:30px 0 26px;}
+  .hwrap{max-width:1180px;margin:0 auto;padding:0 22px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:18px;}
+  .brand h1{font-size:24px;letter-spacing:4px;font-weight:700;color:#fff;}
+  .brand .tag{color:var(--gold);letter-spacing:3px;font-size:10px;margin-top:6px;text-transform:uppercase;}
+  .topnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .navbtn{display:inline-flex;align-items:center;padding:9px 14px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-decoration:none;border:1px solid var(--gold);color:var(--gold);background:transparent;}
+  .navbtn.active{background:var(--gold);color:var(--ink);}
+  .navbtn.calc{border-color:var(--green-l);color:var(--green-l);}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0 6px;}
+  .stat{background:var(--ink-2);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:12px;padding:16px 16px;}
+  .stat .lab{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8b93a5;font-weight:700;}
+  .stat .val{font-size:26px;font-weight:800;color:#fff;margin-top:4px;font-variant-numeric:tabular-nums;}
+  .stat .sub{font-size:11px;color:#9aa3b5;margin-top:2px;}
+  .stat.pending{border-top-color:#a85;} .stat.pending .val{color:#e8cf9d;}
+  .stat.paid{border-top-color:var(--green);} .stat.paid .val{color:var(--green-l);}
+  .stat.week{border-top-color:var(--tech);}
+
+  .section-h{display:flex;align-items:center;gap:14px;margin:30px 0 14px;}
+  .section-h h2{font-size:14px;letter-spacing:3px;text-transform:uppercase;color:#fff;font-weight:700;}
+  .section-h .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--gold),transparent);}
+
+  .techgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:8px;}
+  .tcard{background:linear-gradient(180deg,var(--slate-2),var(--slate));border:1px solid var(--line);border-left:3px solid var(--tech);border-radius:10px;padding:13px 15px;}
+  .tcard .tn{font-size:15px;font-weight:700;color:#fff;}
+  .tcard .tt{font-size:22px;font-weight:800;color:var(--green-l);font-variant-numeric:tabular-nums;margin-top:4px;}
+  .tcard .tp{font-size:11px;color:#e8cf9d;margin-top:2px;}
+  .tcard button{margin-top:9px;width:100%;background:var(--green);border:none;color:#fff;border-radius:7px;padding:7px;font-size:11px;font-weight:800;letter-spacing:.04em;cursor:pointer;}
+  .tcard button:disabled{opacity:.4;cursor:default;}
+
+  .plist{display:flex;flex-direction:column;gap:10px;}
+  .pay{background:linear-gradient(180deg,var(--slate-2),var(--slate));border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:11px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .pay.paid{border-left-color:var(--green);opacity:.82;}
+  .pay .who{font-size:15px;font-weight:700;color:#fff;}
+  .pay .meta{font-size:12px;color:#9aa3b5;margin-top:2px;}
+  .pay .amt{font-size:19px;font-weight:800;color:var(--green-l);font-variant-numeric:tabular-nums;margin-left:auto;}
+  .badge{font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:5px 10px;border-radius:20px;font-weight:800;}
+  .badge.Pending{background:#3a3220;border:1px solid var(--gold-dim);color:#e8cf9d;}
+  .badge.Paid{background:#143524;border:1px solid var(--green);color:var(--green-l);}
+  .iconbtn{background:none;border:1px solid var(--line);color:#aab2c4;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;}
+  .iconbtn.pay{border-color:var(--green);color:var(--green-l);}
+  .iconbtn.del{border-color:#5a2b2e;color:#d98a8e;}
+  .empty{text-align:center;color:#8b93a5;padding:44px 0;font-size:14px;}
+  footer{margin-top:50px;border-top:1px solid var(--line);padding-top:20px;text-align:center;color:#6b7385;font-size:11px;letter-spacing:1.5px;}
+  footer .g{color:var(--gold);}
+  @media(max-width:760px){ .stats{grid-template-columns:1fr 1fr;} .pay .amt{margin-left:0;} }
+</style>
+<script>window.IOT_REQUIRE='manager'</script><script src="/auth.js"></script>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <div class="brand"><h1>IOT&nbsp;TECHS</h1><div class="tag">Payroll · Technician Pay</div></div>
+    <div class="topnav">
+      <a class="navbtn" href="/">Workspace</a>
+      <a class="navbtn" href="/dashboard.html">Dashboard</a>
+      <a class="navbtn" href="/dispatch.html">Dispatch</a>
+      <a class="navbtn active" href="/payroll.html">Payroll</a>
+      <a class="navbtn calc" href="/tpc.html">+ Pay Calc</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+
+  <div class="section-h"><h2>Weekly Run — by Technician</h2><div class="ln"></div></div>
+  <div class="techgrid" id="techgrid"></div>
+
+  <div class="section-h"><h2>All Pay Records</h2><div class="ln"></div></div>
+  <div class="plist" id="plist"><div class="empty">Loading…</div></div>
+
+  <footer><span class="g">IOT TECHS / La Vague Inc.</span> &nbsp;·&nbsp; Payroll · VAULT DARK</footer>
+</div>
+
+<script>
+let payroll = [], stats = null;
+function money(n){ return (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function money0(n){ return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtDate(s){ if(!s) return ''; try{ return new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return s;} }
+function toast(msg){
+  let t=document.getElementById('t'); if(!t){t=document.createElement('div');t.id='t';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--slate);border:1px solid var(--gold);color:var(--cream);padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;z-index:99;opacity:0;transition:opacity .25s;';document.body.appendChild(t);}
+  t.textContent=msg; t.style.opacity='1'; clearTimeout(t._x); t._x=setTimeout(()=>t.style.opacity='0',2200);
+}
+
+function renderStats(){
+  if(!stats) return;
+  const wkLabel = stats.week.start ? (fmtDate(stats.week.start)+' – '+fmtDate(stats.week.end)) : 'this week';
+  document.getElementById('stats').innerHTML =
+    card('pending','Pending', '$'+money0(stats.pending.v), stats.pending.n+' record'+(stats.pending.n!==1?'s':'')) +
+    card('paid','Paid Out', '$'+money0(stats.paid.v), stats.paid.n+' record'+(stats.paid.n!==1?'s':'')) +
+    card('week','This Week', '$'+money0(stats.week.v), wkLabel) +
+    card('','Total Records', payroll.length, 'all time');
+  // by-tech weekly run
+  const tg=document.getElementById('techgrid');
+  if(!stats.byTech.length){ tg.innerHTML='<div class="empty" style="grid-column:1/-1;">No pay records yet. Save one from the Pay Calculator.</div>'; return; }
+  tg.innerHTML = stats.byTech.map(t=>''+
+    '<div class="tcard">'+
+      '<div class="tn">'+esc(t.name)+'</div>'+
+      '<div class="tt">$'+money0(t.total)+'</div>'+
+      '<div class="tp">'+(t.pending>0?'$'+money0(t.pending)+' pending':'all paid')+' · '+t.n+' job'+(t.n!==1?'s':'')+'</div>'+
+      '<button onclick="payAll(\''+esc(t.name).replace(/\x27/g,"\\x27")+'\')" '+(t.pending>0?'':'disabled')+'>Mark all paid</button>'+
+    '</div>').join('');
+}
+function card(cls,lab,val,sub){ return '<div class="stat '+cls+'"><div class="lab">'+lab+'</div><div class="val">'+val+'</div><div class="sub">'+sub+'</div></div>'; }
+
+function renderList(){
+  const host=document.getElementById('plist');
+  if(!payroll.length){ host.innerHTML='<div class="empty">No pay records yet. Open the <a href="/tpc.html" style="color:var(--green-l);">Pay Calculator</a> and hit "Save to Payroll".</div>'; return; }
+  host.innerHTML = payroll.map(p=>{
+    const meta=[esc(p.client||''), p.work_order_id?'WO '+esc(p.work_order_id):'', esc(p.vehicle||''), fmtDate(p.job_date)].filter(Boolean).join('  ·  ');
+    return '<div class="pay'+(p.status==='Paid'?' paid':'')+'">'+
+      '<div style="min-width:0;">'+
+        '<div class="who">'+esc(p.technician_name||'(unnamed)')+'</div>'+
+        (meta?'<div class="meta">'+meta+'</div>':'')+
+        (p.location?'<div class="meta">'+esc(p.location)+'</div>':'')+
+      '</div>'+
+      '<span class="amt">$'+money(p.amount)+'</span>'+
+      '<span class="badge '+(p.status||'Pending')+'">'+esc(p.status||'Pending')+'</span>'+
+      '<button class="iconbtn" onclick="editPay('+p.id+')" title="Open in the Pay Calculator to revise">Edit</button>'+
+      '<button class="iconbtn" onclick="histPay('+p.id+')" title="Change history">History</button>'+
+      (p.status==='Paid'
+        ? '<button class="iconbtn" onclick="setStatus('+p.id+',\'Pending\')">Unpay</button>'
+        : '<button class="iconbtn pay" onclick="setStatus('+p.id+',\'Paid\')">Mark Paid</button>')+
+      '<button class="iconbtn del" onclick="delPay('+p.id+')">×</button>'+
+    '</div>';
+  }).join('');
+}
+
+window.setStatus = async function(id,s){ await fetch('/api/payroll/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})}); toast('Marked '+s); loadAll(); };
+window.payAll = async function(name){
+  const ids = payroll.filter(p=>(p.technician_name||'')===name && p.status!=='Paid').map(p=>p.id);
+  for(const id of ids){ await fetch('/api/payroll/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'Paid'})}); }
+  toast(name+' — '+ids.length+' marked paid'); loadAll();
+};
+window.delPay = async function(id){ if(!confirm('Delete this pay record?'))return; await fetch('/api/payroll/'+id,{method:'DELETE'}); toast('Deleted'); loadAll(); };
+window.editPay = function(id){ location.href='/tpc.html?payroll='+id; };
+window.histPay = async function(id){
+  let vs=[];
+  try{ vs=(await (await fetch('/api/versions/payroll/'+id)).json()).versions||[]; }catch(e){ toast('Could not load history'); return; }
+  const m=document.createElement('div'); m.id='hist-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(11,15,26,.78);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:40px 18px;overflow-y:auto;';
+  m.innerHTML='<div style="background:#121726;border:2px solid var(--gold);border-radius:14px;max-width:540px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.5);">'+
+    '<div style="background:#0B0F1A;color:var(--gold);padding:14px 18px;font-weight:800;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;"><span>CHANGE HISTORY</span><button onclick="document.getElementById(\'hist-modal\').remove()" style="background:none;border:none;color:var(--gold);font-size:22px;cursor:pointer;">×</button></div>'+
+    '<div style="max-height:70vh;overflow-y:auto;">'+
+      (vs.length?vs.map(v=>'<div style="padding:12px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;"><div style="flex:1;"><div style="font-weight:700;color:#fff;">v'+v.version_no+' · $'+money(v.total)+'</div><div style="font-size:11px;color:#9aa3b5;">'+new Date(v.created_at).toLocaleString()+(v.edited_by?' · '+esc(v.edited_by):'')+(v.note?' · '+esc(v.note):'')+'</div></div></div>').join(''):'<div style="padding:30px;text-align:center;color:#8b93a5;">No versions yet — they\'re logged each time the record is saved from the Pay Calculator.</div>')+
+    '</div></div>';
+  m.onclick=function(e){ if(e.target===m) m.remove(); };
+  document.body.appendChild(m);
+};
+
+let _sig='';
+function sig(){ return JSON.stringify(payroll.map(p=>[p.id,p.status,p.amount,p.technician_name,p.client,p.job_date])); }
+async function loadAll(){
+  payroll = (await (await fetch('/api/payroll')).json()).payroll || [];
+  stats = await (await fetch('/api/payroll/stats')).json();
+  _sig=sig(); renderStats(); renderList();
+}
+async function poll(){
+  let p,s;
+  try{ p=(await (await fetch('/api/payroll')).json()).payroll||[]; s=await (await fetch('/api/payroll/stats')).json(); }catch(e){ return; }
+  const prev=payroll; payroll=p;
+  if(sig()===_sig){ payroll=prev; return; }
+  _sig=sig(); stats=s; renderStats(); renderList();
+}
+setInterval(poll, 3500);
+window.addEventListener('focus', poll);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) poll(); });
+
+loadAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOT TECHS — Home</title>
+<script>window.IOT_REQUIRE='staff'</script><script src="/auth.js"></script>
+<style>
+  :root{ --cream:#FAF8F4; --ink:#0B0F1A; --ink-2:#121726; --slate:#2C3347; --gold:#C9A96E; --gold-dim:#9c7f48; --line:#2a3247;
+    --green:#1f6b4f; --cust:#6E8FB0; --tech:#7FA98C; --admin:#B08C6E; --sales:#B0768F; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{background:var(--ink);min-height:100%;}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--cream);min-height:100vh;
+    background:radial-gradient(1000px 540px at 50% -8%, rgba(201,169,110,.12), transparent 60%),
+               radial-gradient(700px 600px at 110% 20%, rgba(127,169,140,.06), transparent 55%), var(--ink);
+    -webkit-font-smoothing:antialiased;line-height:1.5;padding-bottom:70px;}
+  header{background:linear-gradient(180deg,var(--slate) 0%, #232a3b 100%);border-bottom:3px solid var(--gold);padding:40px 0 34px;}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px;}
+  .brand h1{font-size:30px;letter-spacing:7px;font-weight:700;color:#fff;}
+  .brand .tag{color:var(--gold);letter-spacing:4px;font-size:11px;margin-top:8px;text-transform:uppercase;}
+  .hello{margin-top:22px;font-size:15px;color:#cfd5e0;}
+  .hello b{color:#fff;}
+  h2.sec{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#8b93a5;font-weight:800;margin:30px 0 14px;display:flex;align-items:center;gap:12px;}
+  h2.sec .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--gold),transparent);}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  a.tile{display:block;text-decoration:none;background:var(--ink-2);border:1px solid var(--line);border-top:3px solid var(--gold);
+    border-radius:14px;padding:20px 20px 18px;transition:.15s ease;color:var(--cream);}
+  a.tile:hover{transform:translateY(-2px);border-color:var(--gold-dim);box-shadow:0 16px 40px rgba(0,0,0,.35);}
+  a.tile .ic{font-size:26px;line-height:1;}
+  a.tile .tt{font-size:16px;font-weight:700;color:#fff;margin-top:12px;}
+  a.tile .ds{font-size:12.5px;color:#9aa3b5;margin-top:4px;}
+  a.tile.cust{border-top-color:var(--cust);} a.tile.tech{border-top-color:var(--tech);}
+  a.tile.admin{border-top-color:var(--admin);} a.tile.sales{border-top-color:var(--sales);} a.tile.green{border-top-color:var(--green);}
+  footer{margin-top:46px;text-align:center;color:#6b7385;font-size:11px;letter-spacing:1.5px;}
+  footer .g{color:var(--gold);}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand"><h1>IOT&nbsp;TECHS</h1><div class="tag">La Vague Inc. · Secure Tomorrow. Today.</div></div>
+    <div class="hello" id="hello"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <h2 class="sec" id="secHead">Workspace <div class="ln"></div></h2>
+  <div class="tiles" id="tiles"></div>
+  <footer><span class="g">IOT TECHS / La Vague Inc.</span> &nbsp;·&nbsp; (646) 396-0775 · support@iot-techs.com</footer>
+</div>
+
+<script>
+const ADMIN_TILES = [
+  { href:'/index.html',     ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/></svg>', cls:'sales', tt:'New Proposal',        ds:'Build a camera/security proposal' },
+  { href:'/surveys.html',   ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M3 17 17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg>', cls:'tech',  tt:'Site Surveys',        ds:'All floor plans + start a new survey' },
+  { href:'/dashboard.html', ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>', cls:'',      tt:'Dashboard',           ds:'Analytics, leads & pipeline' },
+  { href:'/dispatch.html',  ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M2 7h11l4 4h5v5h-2"/><path d="M2 7v9h2"/><line x1="9" y1="16" x2="15" y2="16"/><circle cx="6.5" cy="16.5" r="1.8"/><circle cx="17.5" cy="16.5" r="1.8"/></svg>', cls:'admin', tt:'Dispatch',            ds:'Work orders, technicians & logins' },
+  { href:'/payroll.html',   ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', cls:'green', tt:'Payroll',             ds:'Technician pay & commissions' },
+  { href:'/portal.html',    ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.8 2.8-2.2-2.2z"/></svg>', cls:'tech',  tt:'Technician Portal',   ds:'Field tools & job tiles' },
+  { href:'/toast.html',     ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M4 9a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4 2 2 0 0 1-2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7a2 2 0 0 1-2-2z"/></svg>', cls:'cust',  tt:'Toast Drop',          ds:'Toast drop service calculator' },
+  { href:'/admin.html',     ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 2.6 1.6 1.6 0 0 0 8 1.1V1a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 14 2.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>', cls:'admin', tt:'Control Panel',       ds:'Manage logins, roles & access' },
+];
+const TECH_TILES = [
+  { href:'/portal.html',    ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.8 2.8-2.2-2.2z"/></svg>', cls:'tech',  tt:'Technician Portal',   ds:'Your field tools' },
+  { href:'/tpc.html',       ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/></svg>', cls:'green', tt:'Pay Calculator',      ds:'Calculate your job pay' },
+  { href:'/toast.html',     ic:'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M4 9a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4 2 2 0 0 1-2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7a2 2 0 0 1-2-2z"/></svg>', cls:'cust',  tt:'Toast Drop',          ds:'Toast drop service calculator' },
+];
+function render(user){
+  const role = user ? user.role : 'admin';
+  const isTech = role==='tech';
+  const roleName = role==='admin'?'Admin':role==='manager'?'Manager':role==='tech'?'Technician':role==='customer'?'Customer':'';
+  document.getElementById('hello').innerHTML = user ? ('Welcome back, <b>'+esc(user.name||user.username)+'</b>'+(roleName?' · '+roleName:'')) : 'Welcome';
+  document.getElementById('secHead').firstChild.textContent = isTech ? 'Your Tools ' : 'Workspace ';
+  let tiles = isTech ? TECH_TILES : ADMIN_TILES.filter(t=> t.href!=='/admin.html' || role==='admin');
+  document.getElementById('tiles').innerHTML = tiles.map(t=>
+    '<a class="tile '+t.cls+'" href="'+t.href+'"><div class="ic">'+t.ic+'</div><div class="tt">'+t.tt+'</div><div class="ds">'+t.ds+'</div></a>').join('');
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+// auth.js fires 'iot-auth' with the user; also handle the open (no-account) case
+document.addEventListener('iot-auth', e=>render(e.detail&&e.detail.user));
+fetch('/api/me').then(r=>r.json()).then(d=>render(d.user)).catch(()=>render(null));
+</script>
+</body>
+</html>

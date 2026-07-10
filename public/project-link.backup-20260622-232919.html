@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<!--
+  PROJECT LINK · Smart Access Gateway (prototype)
+  Spec §03–06: ONE project URL, gated by LOGIN or PIN, loads the view for that role.
+  Roles: AD Admin · MG Manager · SA Sales · TX Technician · CX Customer.
+  Rules: LOGIN ALWAYS WINS over PIN · PINs map to VIEW TYPES (not accounts) ·
+         Admin/Manager get a "View As" preview switcher · one record, role-filtered views.
+
+  Standalone (no server): logins are simulated (you pick the role you'd be signed in as),
+  PINs are demo codes shown on the gateway. Wire the gateway resolver to your real
+  session + PIN table later — the routing logic is the part that matters.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project 1001 · IOT Techs</title>
+<style>
+  :root{ --ink:#0B0F1A; --slate:#1A1F2E; --slate2:#222838; --line:#333B50; --cream:#F4EFE6;
+    --gold:#C9A96E; --gold-dim:#8A6A10; --muted:#8A93A8; --green:#7FA98C; --red:#D98E8E; --blue:#6CA0F0; }
+  /* Light / Day mode — same layout, warm cream surfaces + dark ink text */
+  /* Vault Auto Professional — toast.html palette: cream sheet, slate ink, gold accents */
+  body.light{ --ink:#ECE5D8; --slate:#FFFFFF; --slate2:#FAF8F4; --line:#E2DDD3; --cream:#2C3347;
+    --gold:#A6814A; --gold-dim:#8A6A10; --muted:#6B7280; --green:#13371F; --red:#8C2F2F; --blue:#3A6EA0;
+    background:#ECE5D8; color:#2C3347; }
+  body.light .topbar{ background:var(--ink); border-bottom:1px solid var(--line); }
+  body.light .topbar .who{ color:#2C3347; }
+  body.light .card h2{ color:var(--gold); }
+  body.light .lc-label,body.light .li-group-h{ color:var(--gold); }
+  body.light .topbar{ box-shadow:0 1px 0 rgba(0,0,0,.04); }
+  body.light .card,body.light .tile,body.light .rrow,body.light .optcard{ box-shadow:0 1px 3px rgba(120,100,60,.07); }
+  /* PIN error + shake */
+  @keyframes pinshake{ 0%,100%{transform:translateX(0);} 18%,54%{transform:translateX(-7px);} 36%,72%{transform:translateX(7px);} }
+  #pincode.shake{ animation:pinshake .42s; border-color:var(--red)!important; }
+  #pin-err{ transition:color .15s; }
+  #pin-err.show{ color:var(--red)!important; font-weight:700; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; background:var(--ink); color:var(--cream);
+    font-family:'Helvetica Neue',Helvetica,-apple-system,'Segoe UI',Arial,sans-serif; font-size:14px; }
+  h1,h2,h3{ margin:0; font-weight:800; }
+  button{ font-family:inherit; cursor:pointer; }
+  input,select{ font-family:inherit; font-size:14px; background:var(--slate2); color:var(--cream); border:1px solid var(--line); border-radius:9px; padding:10px 12px; outline:none; }
+  input:focus{ border-color:var(--gold); }
+  .muted{ color:var(--muted); } .gold{ color:var(--gold); } .green{ color:var(--green); }
+  .btn{ background:var(--slate2); border:1px solid var(--line); color:var(--cream); border-radius:10px; padding:10px 16px; font-size:13.5px; font-weight:700; display:inline-flex; align-items:center; gap:8px; }
+  .btn:hover{ border-color:var(--gold); }
+  .btn.gold{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .btn.ghost{ background:transparent; } .btn.sm{ padding:6px 11px; font-size:12px; }
+  .wrap{ max-width:920px; margin:0 auto; padding:20px; }
+  .card{ background:var(--slate); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:14px; }
+  .card h2{ font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:var(--gold); margin-bottom:12px; }
+  .pill{ display:inline-block; font-size:10px; font-weight:800; letter-spacing:.1em; border-radius:20px; padding:3px 10px; }
+  .pill.gold{ background:var(--gold); color:var(--ink); } .pill.slate{ background:var(--slate2); color:var(--cream); border:1px solid var(--line); }
+
+  /* ── Gateway ── */
+  .gw{ max-width:430px; margin:7vh auto; padding:20px; }
+  .gw .logo{ text-align:center; margin-bottom:22px; }
+  .gw .logo h1{ font-size:26px; letter-spacing:.04em; }
+  .gw .logo .t{ font-size:10px; letter-spacing:3px; color:var(--gold); margin-top:4px; }
+  .gw .proj{ text-align:center; color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .gwtabs{ display:flex; background:var(--slate2); border:1px solid var(--line); border-radius:11px; padding:4px; margin-bottom:16px; }
+  .gwtabs button{ flex:1; background:transparent; border:0; color:var(--muted); padding:9px; border-radius:8px; font-weight:800; }
+  .gwtabs button.on{ background:var(--gold); color:var(--ink); }
+  .gwpane{ display:none; } .gwpane.on{ display:block; }
+  .gwpane input{ width:100%; margin-bottom:10px; }
+  .pinrow{ display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
+  .pinrow input{ width:54px; height:60px; text-align:center; font-size:26px; font-weight:800; margin:0; }
+  .demo{ margin-top:18px; font-size:11.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  .demo b{ color:var(--cream); } .demo code{ color:var(--gold); }
+  .rolebtns{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+  /* ── Banner ── */
+  .topbar{ display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--slate); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; flex-wrap:wrap; }
+  .topbar .who{ font-weight:800; } .topbar .spacer{ flex:1; }
+  .viewas{ display:flex; align-items:center; gap:6px; }
+  .preview-banner{ background:linear-gradient(90deg,rgba(201,169,110,.18),transparent); border:1px solid var(--gold); color:var(--gold); border-radius:10px; padding:8px 14px; margin-bottom:14px; font-weight:700; font-size:12.5px; }
+
+  /* progress */
+  .steps{ display:flex; gap:4px; flex-wrap:wrap; }
+  .step{ flex:1; min-width:70px; text-align:center; }
+  .step .dot{ height:6px; border-radius:4px; background:var(--line); margin-bottom:6px; }
+  .step.done .dot{ background:var(--green); } .step.cur .dot{ background:var(--gold); }
+  .step .lb{ font-size:10px; color:var(--muted); } .step.cur .lb{ color:var(--gold); font-weight:800; }
+  /* lifecycle bar with inline forward/back icon controls */
+  .lc-head{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .lc-label{ font-size:10px; letter-spacing:1.6px; color:var(--muted); }
+  .lc-cur{ font-size:18px; font-weight:800; display:flex; align-items:center; gap:9px; margin-top:2px; }
+  .lc-bucket{ font-size:9px; font-weight:800; letter-spacing:.1em; padding:3px 9px; border-radius:20px; }
+  .b-OPEN{ background:rgba(108,160,240,.18); color:var(--blue); }
+  .b-INPROGRESS{ background:rgba(201,169,110,.18); color:var(--gold); }
+  .b-CLOSED{ background:rgba(127,169,140,.18); color:var(--green); }
+  .lc-meta{ color:var(--muted); font-size:12px; font-weight:700; }
+  .lc-nav{ display:flex; gap:8px; }
+  .navbtn{ width:38px; height:38px; border-radius:50%; background:var(--slate2); border:1px solid var(--line); color:var(--cream); display:inline-flex; align-items:center; justify-content:center; }
+  .navbtn:hover:not(:disabled){ border-color:var(--gold); color:var(--gold); }
+  .navbtn.gold{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .navbtn.gold:hover{ color:var(--ink); filter:brightness(1.05); }
+  .navbtn:disabled{ opacity:.3; cursor:not-allowed; }
+  .navbtn svg{ width:18px; height:18px; }
+  .lc-track{ display:flex; gap:3px; }
+  .lc-step{ flex:1; min-width:0; text-align:center; }
+  .lc-step .seg{ display:block; height:5px; border-radius:3px; background:var(--line); margin-bottom:6px; transition:.15s; }
+  .lc-step.done .seg{ background:var(--green); }
+  .lc-step.cur .seg{ background:var(--gold); box-shadow:0 0 0 2px rgba(201,169,110,.25); }
+  .lc-step .lb{ font-size:9px; line-height:1.2; color:var(--muted); display:block; }
+  .lc-step.cur .lb{ color:var(--gold); font-weight:800; } .lc-step.done .lb{ color:var(--cream); }
+  /* management dashboard tiles */
+  .dash-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  .dash-head h1{ font-size:22px; }
+  .dash-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
+  .tile{ background:var(--slate); border:1px solid var(--line); border-radius:16px; padding:18px; cursor:pointer; transition:.15s; display:flex; flex-direction:column; gap:8px; min-height:150px; }
+  .tile:hover{ border-color:var(--gold); transform:translateY(-2px); }
+  .tile .ti{ width:44px; height:44px; border-radius:12px; background:var(--slate2); display:flex; align-items:center; justify-content:center; color:var(--gold); }
+  .tile .ti svg{ width:22px; height:22px; }
+  .tile .tt{ font-weight:800; font-size:15px; } .tile .ts{ font-size:12px; color:var(--muted); }
+  .tile .tstat{ margin-top:auto; font-size:13px; color:var(--gold); font-weight:800; }
+  /* status segmented control + completed/cancelled buckets + terminal row */
+  .b-COMPLETED{ background:rgba(127,169,140,.22); color:var(--green); }
+  .b-CLOSED{ background:rgba(138,147,168,.22); color:var(--muted); }
+  .b-CANCELLED{ background:rgba(217,142,142,.20); color:var(--red); }
+  .statrow{ display:flex; gap:6px; margin:4px 0 14px; flex-wrap:wrap; }
+  .statseg{ flex:1; min-width:96px; background:var(--slate2); border:1px solid var(--line); color:var(--muted); border-radius:9px; padding:9px 8px; font-weight:800; font-size:12px; letter-spacing:.02em; }
+  .statseg.done{ color:var(--cream); border-color:var(--line); }
+  .statseg.on{ color:var(--cream); border-width:1.5px; }
+  .statseg.on.b-OPEN{ border-color:var(--blue); } .statseg.on.b-INPROGRESS{ border-color:var(--gold); }
+  .statseg.on.b-COMPLETED{ border-color:var(--green); } .statseg.on.b-CLOSED{ border-color:var(--muted); } .statseg.on.b-CANCELLED{ border-color:var(--red); }
+  .statseg:not([disabled]):hover{ border-color:var(--gold); color:var(--cream); }
+  .term-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .term-row .btn{ margin-left:auto; } .term-row .btn + .btn{ margin-left:0; }
+  /* dashboard sub-screen tables/rows */
+  .subhead{ display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .subhead h1{ font-size:21px; } .subhead .spacer{ flex:1; }
+  .search{ width:100%; margin-bottom:14px; }
+  .rows{ display:flex; flex-direction:column; gap:8px; }
+  .rrow{ display:flex; align-items:center; gap:12px; background:var(--slate); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .rrow.click{ cursor:pointer; } .rrow.click:hover{ border-color:var(--gold); }
+  .rrow .rtitle{ font-weight:800; } .rrow .rsub{ font-size:12px; color:var(--muted); }
+  .rrow .rright{ margin-left:auto; text-align:right; }
+  .rrow .ramt{ font-weight:800; color:var(--gold); }
+  .sbadge{ font-size:10px; font-weight:800; letter-spacing:.05em; border-radius:20px; padding:3px 9px; background:var(--slate2); border:1px solid var(--line); }
+  .sbadge.due{ color:var(--gold); border-color:rgba(201,169,110,.4); } .sbadge.overdue{ color:var(--red); border-color:rgba(217,142,142,.4); }
+  .sbadge.paid{ color:var(--green); border-color:rgba(127,169,140,.4); }
+  .calperson{ margin-bottom:12px; } .calperson .cpname{ font-weight:800; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+  .calev{ display:flex; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .calev .cd{ color:var(--gold); font-weight:800; width:38px; } .calev .ct{ color:var(--muted); width:56px; }
+  /* multi-service tabs + proposal builder + stage panels */
+  .svctabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; border-bottom:1px solid var(--line); }
+  .svctab{ background:transparent; border:1px solid var(--line); border-bottom:0; color:var(--muted); border-radius:9px 9px 0 0; padding:8px 14px; font-weight:800; font-size:12.5px; position:relative; top:1px; }
+  .svctab.on{ background:var(--slate2); color:var(--gold); border-color:var(--gold); }
+  .svctab-x{ margin-left:9px; opacity:.5; font-size:11px; font-weight:700; }
+  .svctab-x:hover{ opacity:1; color:var(--red); }
+  .pill-pres{ background:#1c8a45; color:#fff; }   /* "Presented" — readable in both themes */
+  .optedit{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .optedit .oname{ flex:1; } .optedit .oprice{ width:110px; text-align:right; }
+  .optedit.sel .pill{ background:var(--gold); }
+  .kv input{ width:100%; }
+  .kvlink{ color:var(--gold); text-decoration:none; border-bottom:1px solid transparent; font-weight:700; }
+  .kvlink:hover{ border-bottom-color:var(--gold); }
+  .inq-svc{ margin-top:14px; padding:12px 14px; background:var(--slate2); border:1px solid var(--line); border-radius:12px; }
+  /* proposal builder: option blocks + line-item tables */
+  .optblock{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  .optblock.sel{ border-color:var(--gold); }
+  .optblock-head{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .optblock-head .oname{ flex:1; font-weight:700; }
+  .li-table{ width:100%; border-collapse:collapse; }
+  .li-table th{ text-align:left; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:4px 5px; border-bottom:1px solid var(--line); }
+  .li-table th.r,.li-table td.r{ text-align:right; }
+  .li-table td{ padding:4px 5px; border-bottom:1px solid rgba(255,255,255,.05); }
+  .li-table input{ width:100%; padding:6px 8px; font-size:12.5px; }
+  .li-table input.qty{ width:58px; text-align:center; } .li-table input.price{ width:90px; text-align:right; }
+  .li-table td.amt{ font-weight:700; white-space:nowrap; }
+  .opttot{ text-align:right; font-size:13px; margin-top:8px; } .opttot b{ color:var(--gold); }
+  /* Equipment / Labor groups in the builder */
+  .li-group{ margin-top:10px; }
+  .li-group-h{ display:flex; align-items:center; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); font-weight:800; padding:6px 2px 3px; border-bottom:1px solid var(--line); }
+  .li-add{ margin-top:6px; width:100%; font-size:12px; }
+  /* customer: line items revealed under the selected option */
+  .li-list{ margin:10px 0; border-top:1px solid var(--line); padding-top:8px; }
+  .li-row{ display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding:4px 0; }
+  .li-grouphdr{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:10px 0 2px; }
+  /* price-book portal modal */
+  .pb-scrim{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; }
+  .pb-modal{ background:var(--slate); border:1px solid var(--line); border-radius:16px; max-width:660px; width:100%; padding:20px; box-shadow:0 30px 80px rgba(0,0,0,.5); }
+  .pb-row{ display:flex; align-items:center; gap:9px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+  .pb-row input{ padding:7px 9px; font-size:13px; }
+  .link-row{ display:flex; gap:8px; margin-top:6px; }
+  .link-row input{ flex:1; font-size:12.5px; color:var(--gold); }
+  .logrow{ display:flex; gap:10px; padding:8px 0; border-bottom:1px solid rgba(127,127,127,.12); }
+  .logdot{ width:8px; height:8px; border-radius:50%; background:var(--gold); margin-top:5px; flex:none; }
+  .logtext{ font-size:13px; } .logmeta{ font-size:11px; color:var(--muted); margin-top:2px; }
+  .cxstepinfo{ margin-top:12px; padding:12px 14px; background:var(--slate2); border:1px solid var(--line); border-radius:12px; }
+  /* Dark "vault" proposal document (always dark, regardless of theme) */
+  .vaultdoc{ background:#0B0F1A; border:1px solid #333B50; border-top:3px solid #C9A96E; border-radius:14px; padding:22px; color:#F4EFE6; margin-bottom:14px; box-shadow:0 24px 60px -34px rgba(0,0,0,.7); }
+  .vaultdoc .vd-head{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #333B50; padding-bottom:13px; margin-bottom:16px; }
+  .vaultdoc .vd-brand{ font-weight:900; letter-spacing:3px; font-size:16px; color:#fff; }
+  .vaultdoc .vd-sub{ color:#C9A96E; font-size:10.5px; letter-spacing:1.5px; margin-top:4px; text-transform:uppercase; }
+  .vaultdoc .vd-no{ color:#C9A96E; font-weight:800; font-size:12.5px; }
+  .vaultdoc .optcard{ background:#161b2a; border-color:#333B50; }
+  .vaultdoc .optcard.sel{ border-color:#C9A96E; box-shadow:0 0 0 3px rgba(201,169,110,.16); }
+  .vaultdoc .optcard .nm{ color:#F4EFE6; } .vaultdoc .optcard .pr{ color:#C9A96E; }
+  .vaultdoc .li-row{ color:#cdd2dc; } .vaultdoc .li-grouphdr{ color:#8A93A8; }
+  .vaultdoc .li-list{ border-top-color:#333B50; }
+  .vaultdoc .muted{ color:#8A93A8; }
+  .vaultdoc .btn.ghost{ background:transparent; color:#F4EFE6; border-color:#3a4258; }
+  .vaultdoc .btn.gold{ background:linear-gradient(145deg,#C9A96E,#b08f4f); color:#0B0F1A; border-color:#C9A96E; }
+  .vd-total{ text-align:right; font-size:14px; margin-top:14px; color:#cdd2dc; } .vd-total b{ color:#C9A96E; font-size:18px; }
+  .vd-sign{ margin-top:22px; border-top:1px dashed #333B50; padding-top:16px; }
+  .vd-sig-name{ font-family:'Brush Script MT','Segoe Script','Snell Roundhand',cursive; font-size:32px; line-height:1; color:#C9A96E; min-height:36px; }
+  .vd-sig-line{ border-bottom:1.5px solid #C9A96E; margin:4px 0 0; }
+  .vd-sig-meta{ font-size:11px; color:#8A93A8; margin-top:7px; }
+  .step:hover .lb{ color:var(--gold); } .step.open .lb{ color:var(--gold); font-weight:800; }
+  body.light .pb-modal{ box-shadow:0 30px 80px -30px rgba(14,19,32,.4); }
+  .kvs{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .kv .k{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .kv .v{ font-size:15px; font-weight:700; }
+  .optcards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .optcard{ background:var(--slate2); border:1.5px solid var(--line); border-radius:14px; padding:16px; }
+  .optcard.sel{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,169,110,.14); }
+  .optcard .nm{ font-weight:900; } .optcard .pr{ font-size:26px; font-weight:900; color:var(--gold); margin:6px 0; }
+  .check{ display:flex; align-items:center; gap:9px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .toggle{ width:40px; height:22px; border-radius:20px; background:var(--line); position:relative; flex:none; cursor:pointer; transition:.15s; }
+  .toggle.on{ background:var(--green); } .toggle .k{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:.15s; }
+  .toggle.on .k{ left:20px; }
+  .lock{ opacity:.5; pointer-events:none; }
+  /* collapsible Access Settings header */
+  .acc-head{ display:flex; align-items:center; gap:10px; cursor:pointer; color:var(--gold); }
+  .acc-head h2{ margin:0; } .acc-head svg{ width:18px; height:18px; flex:none; }
+  .acc-head .chev{ margin-left:auto; color:var(--muted); transition:transform .15s; }
+  .acc-head .chev.open{ transform:rotate(180deg); }
+  .acc-head:hover .chev{ color:var(--gold); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  var $=function(s,r){ return (r||document).querySelector(s); };
+  function money(n){ return '$'+(Math.round((+n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function nowStr(){ var d=new Date(); return todayStr()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function last4(phone){ var d=String(phone||'').replace(/\D/g,''); return d.length>=4 ? d.slice(-4) : ''; }
+
+  // ── Lifecycle: 5 top-level STATUSES; the detailed stages live as SUB-steps within ──
+  var STATUSES={
+    open:       { label:'Open',        cls:'b-OPEN',        subs:['Inquiry','Services & Survey','Mockup','Proposal','Approval','Deposit'] },
+    inprogress: { label:'In Progress', cls:'b-INPROGRESS',  subs:['Work Order','Schedule','Install','Tech QC','Customer QC'] },
+    completed:  { label:'Completed',   cls:'b-COMPLETED',   subs:['Payment','Completion'] },
+    closed:     { label:'Closed',      cls:'b-CLOSED',      subs:['Closed & archived'] },
+    cancelled:  { label:'Cancelled',   cls:'b-CANCELLED',   subs:['Cancelled'] }
+  };
+  var STATUS_KEYS=['open','inprogress','completed','closed','cancelled'];
+  var FLOW=['open','inprogress','completed','closed'];   // forward chain (Cancelled is a side action)
+  var CX_STEPS=['Inquiry','Design','Approval','Scheduling','Installation','Quality Check','Complete'];
+  function isTerminal(){ return P.status==='closed'||P.status==='cancelled'; }
+  function stMove(dir){
+    var subs=STATUSES[P.status].subs, fi=FLOW.indexOf(P.status);
+    if(dir>0){ if(P.sub<subs.length-1)P.sub++; else if(fi>-1&&fi<FLOW.length-1){ P.status=FLOW[fi+1]; P.sub=0; } }
+    else { if(P.sub>0)P.sub--; else if(fi>0){ P.status=FLOW[fi-1]; P.sub=STATUSES[FLOW[fi-1]].subs.length-1; } }
+  }
+  function setStatus(k){ P.status=k; P.sub=0; if(k!=='closed'&&k!=='cancelled')P.reopenRequested=false; }
+  function cxStepIndex(){
+    if(P.status==='open'){ var s=STATUSES.open.subs[P.sub];
+      if(s==='Inquiry') return 0;                       // Inquiry
+      if(s==='Services & Survey'||s==='Mockup') return 1;  // Design
+      return 2;                                         // Proposal / Approval / Deposit → Approval
+    }
+    if(P.status==='inprogress') return P.sub===0?3:(P.sub<=2?4:5); // Scheduling / Installation / Quality Check
+    return 6;                                                    // completed / closed / cancelled
+  }
+
+  // ── Services: a project can hold several service lines, each its own tab ─────
+  var SERVICE_CATALOG=[
+    {key:'camera', label:'Security Cameras'},
+    {key:'sound',  label:'Sound System'},
+    {key:'toast',  label:'Toast POS'},
+    {key:'alarm',  label:'Alarm System'},
+    {key:'access', label:'Access Control'},
+    {key:'wiring', label:'Wiring / Low-Voltage'}
+  ];
+  function svcLabel(key){ var s=SERVICE_CATALOG.filter(function(x){return x.key===key;})[0]; return s?s.label:key; }
+  // Sophisticated project ID — IOT-<2 letters from business><4-digit hash of name/addr/phone>-<YYMMDD>
+  // e.g. IOT-ZZ4821-260622 (matches the IOT-MN2503-260617 house format).
+  function projId(business,name,address,phone){
+    var biz=String(business||name||'').replace(/[^A-Za-z]/g,'').toUpperCase(), initials=(biz.slice(0,2)||'XX');
+    var raw=String(name||'')+String(address||'')+String(phone||''), h=0;
+    for(var i=0;i<raw.length;i++){ h=(h*31+raw.charCodeAt(i))>>>0; }
+    var seq=String(h%10000); while(seq.length<4) seq='0'+seq;
+    var d=new Date(), ymd=String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+    return 'IOT-'+initials+seq+'-'+ymd;
+  }
+  // The shareable job link — a branded portal URL.
+  var PORTAL_HOST='portal.iot-techs.com';
+  function projLink(){ return 'https://'+PORTAL_HOST+'/p/'+P.no; }
+  // Price book — editable in the portal. Items flagged def:true auto-populate new proposals.
+  var PRICEBOOK={
+    camera:{ equipment:[
+        {desc:'NVR (8-Channel)',price:150,def:true},{desc:'4K Camera',price:70,def:true},
+        {desc:'4TB Hard Drive',price:200,def:true},{desc:'Junction Box',price:20,def:true},{desc:'Monitor & Mount',price:200,def:true},
+        {desc:'Smart NVR',price:265},
+        {desc:'Face Recognition',price:40},{desc:'Facial Recognition + LPR',price:75},
+        {desc:'NVR (16-Channel)',price:300},{desc:'NVR (32-Channel)',price:600},
+        {desc:'6TB Hard Drive',price:300},{desc:'8TB Hard Drive',price:400},
+        {desc:'PoE Switch',price:100},{desc:'Server Rack',price:200} ],
+      labor:[ {desc:'Cat6 Drop',price:150,def:true},{desc:'Termination',price:20,def:true},{desc:'Camera Mounting',price:20,def:true},{desc:'Camera Programming',price:20},{desc:'Camera Waterproofing',price:20} ] },
+    sound:{ equipment:[ {desc:'Speaker',price:75,def:true},{desc:'Amplifier',price:250,def:true},{desc:'Amplifier (5–8 speakers)',price:350},{desc:'Amplifier (9+ speakers)',price:450} ],
+      labor:[ {desc:'Speaker Wire Run',price:150,def:true},{desc:'Drilling Mount',price:75,def:true} ] },
+    toast:{ equipment:[ {desc:'Toast Terminal',price:0},{desc:'Kitchen Display (KDS)',price:0} ],
+      labor:[ {desc:'Price per Drop',price:200,def:true},{desc:'Mounting',price:60,def:true},{desc:'Test Tone',price:30},{desc:'System Setup',price:300,def:true},{desc:'Per Diem (Map & Test)',price:700} ] },
+    alarm:{ equipment:[ {desc:'Control Panel / Hub',price:0,def:true},{desc:'Door / Window Sensor',price:0,def:true},{desc:'Motion Sensor',price:0},{desc:'Glass Break Sensor',price:0},{desc:'Keypad',price:0,def:true},{desc:'Smoke / CO Detector',price:0},{desc:'Indoor Camera',price:0} ],
+      labor:[ {desc:'Installation (per device)',price:0,def:true},{desc:'Monitoring (per month)',price:0} ] },
+    access:{ equipment:[ {desc:'Card Reader',price:260,def:true},{desc:'Electric Strike',price:180,def:true},{desc:'Door Controller',price:340},{desc:'Maglock',price:210},{desc:'REX / Exit Button',price:60} ],
+      labor:[ {desc:'Wiring & mount',price:120,def:true},{desc:'Programming',price:80,def:true} ] },
+    wiring:{ equipment:[ {desc:'Patch Panel',price:160,def:true},{desc:'Network Switch',price:140} ],
+      labor:[ {desc:'Cat6 Drop',price:95,def:true},{desc:'Conduit Run (per ft)',price:8},{desc:'Rack & Dress',price:240,def:true} ] }
+  };
+  // Returns a service's price book, creating a blank one for ad-hoc service keys so the portal can edit it.
+  function pbFor(key){ if(!PRICEBOOK[key]) PRICEBOOK[key]={ equipment:[{desc:'Equipment',price:0,def:true}], labor:[{desc:'Labor',price:0,def:true}] }; return PRICEBOOK[key]; }
+  // An option is a named tier of LINE ITEMS; each item is kind:'equipment'|'labor'. Option price = sum of items.
+  function newOption(id,name,lineItems){ return { id:id, name:name||('Option '+id), lineItems:lineItems||[] }; }
+  function optTotal(o){ return (o.lineItems||[]).reduce(function(t,li){ return t+(+li.qty||0)*(+li.price||0); },0); }
+  function groupTotal(o,kind){ return (o.lineItems||[]).filter(function(li){return (li.kind||'equipment')===kind;}).reduce(function(t,li){ return t+(+li.qty||0)*(+li.price||0); },0); }
+  function optDeposit(o){ return Math.round(optTotal(o)/2*100)/100; }
+  function newService(key){ var pb=pbFor(key);
+    // Seed the first option from the price book's DEFAULT items (Equipment first, then Labor), in catalog order.
+    var eq=pb.equipment.filter(function(x){return x.def;}).map(function(x){ return {kind:'equipment',desc:x.desc,qty:1,price:x.price}; });
+    var lb=pb.labor.filter(function(x){return x.def;}).map(function(x){ return {kind:'labor',desc:x.desc,qty:1,price:x.price}; });
+    return { key:key, label:svcLabel(key),
+      options:[ newOption('A','Essential', eq.concat(lb)) ],
+      selected:'A', signed:null,
+      wo:{ tech:'Unassigned', checklist:[ {t:'Site prep',done:false},{t:'Run cabling',done:false},{t:'Install equipment',done:false},{t:'Configure & test',done:false} ], qc:'Pending' } }; }
+
+  // ── Single shared record (every view is a filtered render of THIS) ──────────
+  var P = {
+    no:'', business:'ZZ Demo Cafe', contact:'Jane Owner', phone:'(201) 555-0143', email:'jane@zzdemo.co', address:'2503 Jay Pl, Union NJ',
+    status:'open', sub:0, reopenRequested:false, appointment:'',   // → Open · Inquiry
+    availability:'', mockupUploaded:false, proposalSubmitted:false,
+    inquiry:{ service:'Security Cameras', note:'~6 cameras for the storefront; wants to view live on her phone, plus a couple inside.', source:'Web form', date:'Jun 16' },
+    services:[ newService('camera') ],
+    activeService:'camera', projectCreated:true,
+    payments:[ {label:'Deposit to start', amount:1300, status:'Due'} ],
+    documents:[ {name:'Site Survey – Floor Plan', from:1}, {name:'Proposal.pdf', from:2} ],   // from = CX step index when it becomes available
+    access:{ pinEnabled:true, loginEnabled:true, allowSignature:true, allowPayment:true, allowDownloads:true,
+             pins:{ '8965':'AD', '0000':'CX', '1111':'TX', '2222':'MG', '3333':'SA' }, expires:'' }
+  };
+  P.services[0].wo.tech='Charlie Hugo';
+  P.no=projId(P.business, P.contact, P.address, P.phone);   // sophisticated project id
+  P.log=[ {t:'2026-06-16 09:12', text:'Inquiry received via Web form', who:''} ];   // activity log (newest first)
+  // Default customer PIN = last 4 of the phone number
+  (function(){ var l4=last4(P.phone); if(l4){ delete P.access.pins['0000']; P.access.pins[l4]='CX'; } })();
+  function curService(){ return P.services.filter(function(s){return s.key===P.activeService;})[0] || P.services[0]; }
+  function hasService(key){ return P.services.some(function(s){return s.key===key;}); }
+  function presentedTotal(){ return P.services.reduce(function(t,s){ var o=s.options.filter(function(x){return x.id===s.selected;})[0]; return t+(o?optTotal(o):0); },0); }
+  // ── Technician pay: each LABOR line item earns the tech a pay rate (editable via the WO gear). ──
+  var TECH_PAYBOOK={ 'Cat6 Drop':28,'Termination':12,'Camera Mounting':12,'Camera Programming':15,'Camera Waterproofing':10,'Speaker Wire Run':30,'Drilling Mount':15,'Price per Drop':40,'Mounting':12,'Test Tone':8,'System Setup':60,'Per Diem (Map & Test)':150,'Wiring & mount':25,'Programming':20,'Conduit Run (per ft)':2,'Rack & Dress':50,'Installation (per device)':10,'Monitoring (per month)':0 };
+  function techRate(desc){ return TECH_PAYBOOK[desc]!=null ? TECH_PAYBOOK[desc] : 0; }
+  // Transfer the presented proposal into the work order: equipment → gear needed, labor → tech pay line items.
+  function buildWO(s){ var o=s.options.filter(function(x){return x.id===s.selected;})[0]||s.options[0]; var li=(o&&o.lineItems)||[];
+    s.wo.equipment=li.filter(function(l){return (l.kind||'equipment')==='equipment';}).map(function(l){return {desc:l.desc,qty:l.qty};});
+    s.wo.tasks=li.filter(function(l){return l.kind==='labor';}).map(function(l){return {desc:l.desc,qty:l.qty,pay:techRate(l.desc)};}); }
+  function woTechTotal(s){ return ((s.wo&&s.wo.tasks)||[]).reduce(function(t,x){return t+(+x.qty||0)*(+x.pay||0);},0); }
+  function projectTechPay(){ return P.services.reduce(function(t,s){ return t+woTechTotal(s); },0); }
+  // Payroll period = Friday → Thursday (Friday = day 5).
+  function payWeek(){ var d=new Date(), diff=(d.getDay()-5+7)%7, start=new Date(d); start.setDate(d.getDate()-diff); var end=new Date(start); end.setDate(start.getDate()+6); function f(x){return (x.getMonth()+1)+'/'+x.getDate();} return {start:f(start),end:f(end)}; }
+
+  // session = who is logged in (LOGIN WINS).  pinView = view type unlocked by a PIN.
+  var session=null, pinView=null, viewAs=null, accOpen=false;   // accOpen: Access Settings panel collapsed by default
+  var theme='light';                      // 'light' = Vault Auto Professional (default) · 'dark'
+  var custOpen=false;                     // collapsible Customer info card (top of the project page)
+  // Each tool on the project page is its own collapsible panel.
+  var panelOpen={ life:true, proposal:true, mockup:true, floor:true, pay:true, wo:true, log:false };
+  var payForm=false;                      // Add-Payment form open?
+  var pbPortal=false;                     // Price-book / defaults portal open?
+  var techPbOpen=false;                   // Technician pay-rate portal open?
+  var cxDocsOpen=false, cxStepInfo=null;  // customer: collapsible docs + which progress step is expanded
+  var CX_STEP_DESC=[
+    'We’ve received your inquiry and will reach out to learn exactly what you need.',
+    'We design your system — a site survey maps your space and we draft the layout & mockup.',
+    'Review your proposal options, pick the one you want, and sign to approve.',
+    'We schedule your installation and confirm a date and time with you.',
+    'Our technicians install everything — clean, on schedule, by our own team.',
+    'We run a quality check together and you sign off that everything works.',
+    'Your project is complete — certificate, warranty, and ongoing support.'
+  ];
+  var MY_PROJECTS=[ {id:'P1', name:'ZZ Demo Cafe — Cameras'}, {id:'P2', name:'ZZ Demo Cafe — 2nd location'} ];   // customer's projects (drives the Add-Payment project picker)
+  var PIN_MAX=4, pinAttempts=PIN_MAX, pinCooldown=false;   // 4 tries → "3 more attempts" on first miss, then lock+reset
+  var screen='project';   // 'project' | 'dashboard' (management hub, AD/MG only)
+  var dashView='home';    // which dashboard sub-screen: home | projects | crm | tech | sales | schedule | finance
+  var projSearch='', crmSearch='', crmForm=false;
+  var ROLE_VIEW={ AD:'AD', MG:'MG', SA:'SA', TX:'TX', CX:'CX' };
+  var ROLE_LABEL={ AD:'Admin', MG:'Manager', SA:'Sales', TX:'Technician', CX:'Customer' };
+
+  function activeView(){
+    if(session){ return viewAs || ROLE_VIEW[session]; }   // LOGIN ALWAYS WINS (View As is a preview on top of login)
+    if(pinView) return pinView;
+    return null;                                            // → gateway
+  }
+
+  // ───────────────────────── Theme (light / dark) ─────────────────────────
+  function applyTheme(){ document.body.classList.toggle('light', theme==='light'); }
+  function toggleTheme(){ theme = (theme==='dark') ? 'light' : 'dark'; applyTheme(); render(); }
+  function themeBtn(){
+    var sun='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.2" y1="4.2" x2="5.6" y2="5.6"/><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.2" y1="19.8" x2="5.6" y2="18.4"/><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"/>';
+    var moon='<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    return '<button class="btn ghost sm" id="themetoggle" title="'+(theme==='dark'?'Switch to light mode':'Switch to dark mode')+'"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(theme==='dark'?sun:moon)+'</svg></button>';
+  }
+
+  // ───────────────────────── Gateway ─────────────────────────
+  function renderGateway(){
+    var app=$('#app');
+    app.innerHTML =
+    '<div class="gw" style="position:relative;">'+
+      '<div style="position:absolute;top:0;right:0;">'+themeBtn()+'</div>'+
+      '<div class="logo"><h1>IOT&nbsp;TECHS</h1><div class="t">PROJECT ACCESS</div></div>'+
+      '<div class="proj">Project #'+esc(P.no)+' · '+esc(P.business)+'<br>'+esc(P.address)+'</div>'+
+      // Standard: PIN first, Log In as the fallback.
+      '<div class="gwtabs"><button id="t-pin" class="on">Enter PIN</button><button id="t-login">Log In</button></div>'+
+      '<div class="gwpane on" id="p-pin">'+
+        '<div class="muted" style="font-size:12px;margin-bottom:12px;">Enter the PIN shared with you — it submits automatically at 4 digits.</div>'+
+        '<div class="pinrow"><input inputmode="numeric" maxlength="6" id="pincode" placeholder="• • • •" style="width:200px;height:60px;text-align:center;font-size:26px;font-weight:800;letter-spacing:.3em;"></div>'+
+        '<button class="btn gold" id="pin-go" style="width:100%;">Unlock</button>'+
+        '<div id="pin-err" class="muted" style="text-align:center;margin-top:8px;min-height:16px;font-size:12.5px;"></div>'+
+      '</div>'+
+      '<div class="gwpane" id="p-login">'+
+        '<div class="muted" style="font-size:12px;margin-bottom:10px;">No PIN? Sign in and we load the view for your role. (Demo: choose the role you\'d be signed in as.)</div>'+
+        '<div class="rolebtns">'+
+          ['AD','MG','SA','TX','CX'].map(function(r){ return '<button class="btn ghost" data-login="'+r+'">'+r+' · '+ROLE_LABEL[r]+'</button>'; }).join('')+
+        '</div>'+
+      '</div>'+
+      '<div class="demo"><b>Demo PINs</b> — Admin <code>8965</code> · Customer <code>'+esc(pinForView('CX'))+'</code> (last 4 of phone) · Technician <code>1111</code> · Manager <code>2222</code> · Sales <code>3333</code>. '+
+        '<b>Login wins:</b> sign in, and a PIN can’t override your role view.</div>'+
+    '</div>';
+
+    $('#t-login').onclick=function(){ tab('login'); }; $('#t-pin').onclick=function(){ tab('pin'); };
+    function tab(w){ $('#t-login').classList.toggle('on',w==='login'); $('#t-pin').classList.toggle('on',w==='pin');
+      $('#p-login').classList.toggle('on',w==='login'); $('#p-pin').classList.toggle('on',w==='pin'); }
+    [].forEach.call(app.querySelectorAll('[data-login]'),function(b){ b.onclick=function(){ session=b.getAttribute('data-login'); pinView=null; viewAs=null; screen='project'; dashView='home'; render(); }; });
+    var tt=$('#themetoggle'); if(tt) tt.onclick=toggleTheme;
+    var pc=$('#pincode'); try{ pc.focus(); }catch(e){}   // PIN is the default — focus it
+    pc.oninput=function(){ pc.value=pc.value.replace(/\D/g,''); clearPinErr(); if(pc.value.length===4) tryPin(); };   // auto-submit at 4 digits
+    pc.onkeydown=function(e){ if(e.key==='Enter') tryPin(); };
+    $('#pin-go').onclick=tryPin;
+    function pinErr(msg){ var e=$('#pin-err'); if(e){ e.textContent=msg; e.classList.add('show'); } }
+    function clearPinErr(){ var e=$('#pin-err'); if(e){ e.textContent=''; e.classList.remove('show'); } }
+    function tryPin(){ var inp=$('#pincode'); if(!inp||pinCooldown) return; var code=inp.value.trim();
+      if(!P.access.pinEnabled){ pinErr('PIN access is disabled for this project.'); return; }
+      if(!code) return;
+      var v=P.access.pins[code];
+      if(v){ pinAttempts=PIN_MAX; pinView=v; session=null; render(); return; }
+      // wrong PIN — shake red, clear, count down, lock+reset at zero
+      pinAttempts--;
+      inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+      inp.value='';
+      if(pinAttempts<=0){
+        pinCooldown=true; inp.disabled=true;
+        pinErr('Too many attempts — locked. Resetting in 5s…');
+        setTimeout(function(){ pinCooldown=false; pinAttempts=PIN_MAX; var i=$('#pincode'); if(i){ i.disabled=false; i.value=''; i.focus(); } clearPinErr(); }, 5000);
+      } else {
+        pinErr('Incorrect PIN — '+pinAttempts+' more attempt'+(pinAttempts===1?'':'s')+'.');
+      }
+    }
+  }
+
+  // ───────────────────────── Shells ─────────────────────────
+  function topbar(){
+    var v=activeView(), viaPin=!session && pinView;
+    var who = session ? (ROLE_LABEL[session]+' · signed in') : ('PIN access · '+ROLE_LABEL[pinView]+' view');
+    var h='<div class="topbar">'+
+      '<span class="pill gold">'+esc(P.no)+'</span><span class="who">'+esc(P.business)+'</span>'+
+      '<span class="pill slate">'+(screen==='dashboard'&&!viewAs?'Management':ROLE_LABEL[v]+' view')+'</span>'+
+      '<span class="spacer"></span>';
+    if(activeView()){   // every role gets a Dashboard button → their own dashboard
+      h+= (screen==='dashboard')
+        ? '<button class="btn ghost sm" id="goproj">'+arrowL()+' Project</button>'
+        : '<button class="btn ghost sm" id="godash">'+dashIcon()+' Dashboard</button>';
+    }
+    if(session==='AD'||session==='MG'){
+      h+='<span class="viewas"><span class="muted" style="font-size:12px;">View As</span><select id="viewas">'+
+         '<option value="">— off —</option>'+
+         ['AD','MG','SA','TX','CX'].map(function(r){ return '<option value="'+r+'"'+(viaPin?'':(viewAs===r?' selected':''))+'>'+ROLE_LABEL[r]+'</option>'; }).join('')+
+         '</select></span>';
+    }
+    h+=themeBtn();
+    h+='<button class="btn ghost sm" id="signout">'+(session?'Sign out':'Exit')+'</button>';
+    h+='</div>';
+    return h;
+  }
+  function wireShell(){
+    var tt=$('#themetoggle'); if(tt) tt.onclick=toggleTheme;
+    var so=$('#signout'); if(so) so.onclick=function(){ session=null; pinView=null; viewAs=null; screen='project'; render(); };
+    var va=$('#viewas'); if(va) va.onchange=function(){ viewAs=va.value||null; if(viewAs)screen='project'; render(); };
+    var gd=$('#godash'); if(gd) gd.onclick=function(){ screen='dashboard'; dashView='home'; dashConfirm=''; render(); };
+    var gp=$('#goproj'); if(gp) gp.onclick=function(){ screen='project'; render(); };
+  }
+  function previewBanner(){
+    if(session&&viewAs&&viewAs!==session) return '<div class="preview-banner">👁 Preview — viewing as '+ROLE_LABEL[viewAs]+'. Read-only; you are still '+ROLE_LABEL[session]+'.</div>';
+    return '';
+  }
+
+  // ───────────────────────── Shared view fragments ─────────────────────────
+  // ── Management dashboard (AD/MG) ────────────────────────────────────────────
+  var ICO={
+    grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    projects:'<path d="M19 3h-4M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M8 12h8M8 16h5"/>',
+    crm:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>',
+    tech:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.1-.5-.5-2.1z"/>',
+    sales:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/>',
+    schedule:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+    finance:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    reports:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    automation:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    access:'<path d="M21 2l-2 2"/><path d="M12.5 7.5a4.5 4.5 0 1 0-3 3L13 14l2 2 4-4-2-2 2-2-2-2z"/>',
+    plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.7 2.34a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.74-1.27a2 2 0 0 1 2.11-.45c.74.34 1.53.57 2.34.7A2 2 0 0 1 22 16.92z"/>',
+    check:'<polyline points="20 6 9 17 4 12"/>',
+    receipt:'<path d="M5 2v20l2-1 2 1 2-1 2 1 2-1 2 1 1-.5V2l-1 .5-2-1-2 1-2-1-2 1-2-1z"/><line x1="8" y1="8" x2="15" y2="8"/><line x1="8" y1="12" x2="15" y2="12"/>',
+    ticket:'<path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><line x1="9" y1="5" x2="9" y2="19"/>',
+    activity:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    layout:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>'
+  };
+  function ico(n){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(ICO[n]||'')+'</svg>'; }
+  function dashIcon(){ return ico('grid'); }
+  var TILES=[
+    {k:'projects',  i:'projects',  t:'Projects',         s:'Active jobs & lifecycle',     stat:'1 active'},
+    {k:'crm',       i:'crm',       t:'Customers · CRM',  s:'Leads, contacts, pipeline',   stat:'—'},
+    {k:'tech',      i:'tech',      t:'Technicians',      s:'Dispatch & work orders',      stat:'1 on job'},
+    {k:'sales',     i:'sales',     t:'Sales',            s:'Proposals & close rate',      stat:'—'},
+    {k:'schedule',  i:'schedule',  t:'Scheduling',       s:'Calendar & appointments',     stat:'—'},
+    {k:'finance',   i:'finance',   t:'Finances',         s:'Invoices, payments, payroll', stat:'$1,490 due'},
+    {k:'reports',   i:'reports',   t:'Reports',          s:'KPIs & performance',          stat:'—'},
+    {k:'automation',i:'automation',t:'Automation',       s:'Stage triggers & rules',      stat:'—'},
+    {k:'access',    i:'access',    t:'Access & PINs',    s:'Links, PINs, permissions',    stat:'5 roles'}
+  ];
+  // Per-role dashboards — each role gets a Dashboard button → only their own tools.
+  var CX_TILES=[
+    {k:'cx-projects',    i:'projects', t:'My Projects',       s:'View your active projects',    stat:'1 active'},
+    {k:'cx-new',         i:'plus',     t:'Start New Project',  s:'Begin a new install',          stat:''},
+    {k:'cx-servicecall', i:'phone',    t:'Service Call',       s:'Request a repair or visit',    stat:''}
+  ];
+  var TX_TILES=[
+    {k:'tx-workorders',  i:'projects', t:'Assigned Work Orders', s:'Your active jobs',           stat:'2 jobs'},
+    {k:'tx-completed',   i:'check',    t:'Completed Projects',   s:'Your finished installs',     stat:''},
+    {k:'tx-payroll',     i:'finance',  t:'Payroll',              s:'Your pay & history',         stat:''},
+    {k:'tx-expense',     i:'receipt',  t:'Submit Expense',       s:'Log a job expense',          stat:''},
+    {k:'tx-ticket',      i:'ticket',   t:'Submit Ticket',        s:'Report an issue',            stat:''}
+  ];
+  var SA_TILES=[
+    {k:'crm',      i:'crm',     t:'Leads · CRM',   s:'Pipeline & contacts',  stat:''},
+    {k:'sales',    i:'sales',   t:'Web Orders',    s:'Online orders',        stat:''},
+    {k:'projects', i:'projects',t:'Proposals',     s:'Active proposals',     stat:''}
+  ];
+  function tileGrid(title,subtitle,tiles){
+    return topbar()+'<div class="wrap">'+
+      '<div class="dash-head"><h1>'+esc(title)+'</h1><span class="muted">'+esc(subtitle)+'</span></div>'+
+      '<div class="dash-grid">'+ tiles.map(function(t){
+        return '<div class="tile" data-tile="'+t.k+'"><div class="ti">'+ico(t.i)+'</div>'+
+          '<div class="tt">'+esc(t.t)+'</div><div class="ts">'+esc(t.s)+'</div><div class="tstat">'+esc(t.stat||'')+'</div></div>';
+      }).join('') +'</div></div>';
+  }
+  var dashConfirm='';   // shows a success message after a CX/TX form submit
+  // ── Demo datasets for the management drill-downs ────────────────────────────
+  var DEMO_PROJECTS=[
+    {no:'1001', business:'ZZ Demo Cafe',    service:'Security Cameras',     status:'open',       sub:'Approval',   value:2980, tech:'Charlie Hugo'},
+    {no:'1002', business:'Brooklyn Bodega', service:'Alarm + Access',       status:'inprogress', sub:'Install',    value:5400, tech:'Maria Lopez'},
+    {no:'1003', business:'Astoria Grill',   service:'Toast POS + Sound',    status:'inprogress', sub:'Schedule',   value:8200, tech:'Sam Patel'},
+    {no:'1004', business:'Union Deli',      service:'Security Cameras',     status:'completed',  sub:'Completion', value:3450, tech:'Charlie Hugo'},
+    {no:'1005', business:'Jersey Lounge',   service:'Sound System',         status:'closed',     sub:'Closed & archived', value:6100, tech:'Maria Lopez'}
+  ];
+  var DEMO_CUSTOMERS=[
+    {name:'Jane Owner', biz:'ZZ Demo Cafe',    phone:'(201) 555-0143', email:'jane@zzdemo.co',     address:'2503 Jay Pl, Union NJ',     pid:'91J088FIO', stage:'Proposal',  value:2980},
+    {name:'Ali R.',     biz:'Brooklyn Bodega', phone:'(718) 555-0199', email:'ali@bkbodega.com',    address:'661 Blake Ave, Brooklyn NY', pid:'7K2M55QX1', stage:'Deposit',   value:5400},
+    {name:'Nick S.',    biz:'Astoria Grill',   phone:'(917) 555-0177', email:'nick@astoriagrill.com',address:'31-05 Broadway, Astoria NY', pid:'3P9L20ZA4', stage:'Install',   value:8200},
+    {name:'Dana W.',    biz:'Union Deli',      phone:'(908) 555-0122', email:'dana@uniondeli.com',  address:'1820 Morris Ave, Union NJ',  pid:'5R7T44WB2', stage:'Completed', value:3450},
+    {name:'Marco T.',   biz:'Jersey Lounge',   phone:'(201) 555-0188', email:'marco@jerseylounge.com',address:'480 Main St, Hackensack NJ',pid:'8N1C77YD6', stage:'New lead',  value:0}
+  ];
+  var DEMO_TECHS=[
+    {name:'Charlie Hugo', role:'Lead Installer', jobs:2, today:'Astoria Grill — Install',  status:'On job'},
+    {name:'Maria Lopez',  role:'Installer',      jobs:1, today:'Brooklyn Bodega — Wiring',  status:'On job'},
+    {name:'Sam Patel',    role:'Installer',      jobs:1, today:'Survey — Jersey Lounge',    status:'Available'},
+    {name:'Devon K.',     role:'Apprentice',     jobs:0, today:'—',                          status:'Off'}
+  ];
+  var DEMO_ORDERS=[
+    {id:'WO-3301', customer:'ZZ Demo Cafe',    items:'2× 4K Camera',  total:520,  status:'New',       date:'Jun 16'},
+    {id:'WO-3302', customer:'Brooklyn Bodega', items:'Access kit',    total:980,  status:'Processing',date:'Jun 15'},
+    {id:'WO-3303', customer:'Walk-in',         items:'NVR 16-Channel',total:1100, status:'Shipped',   date:'Jun 14'},
+    {id:'WO-3304', customer:'Astoria Grill',   items:'4× Speaker',    total:480,  status:'New',       date:'Jun 17'},
+    {id:'WO-3305', customer:'Union Deli',      items:'Cat6 box',      total:160,  status:'Fulfilled', date:'Jun 12'}
+  ];
+  var DEMO_CAL=[
+    {name:'Charlie Hugo', ev:[{d:'Tue',t:'9:00a',w:'Astoria Grill — Install'},{d:'Thu',t:'1:00p',w:'Union Deli — QC'}]},
+    {name:'Maria Lopez',  ev:[{d:'Tue',t:'10:30a',w:'Brooklyn Bodega — Wiring'}]},
+    {name:'Sam Patel',    ev:[{d:'Wed',t:'8:00a',w:'Survey — Jersey Lounge'}]},
+    {name:'Office',       ev:[{d:'Mon',t:'4:00p',w:'Team sync'},{d:'Fri',t:'12:00p',w:'Payroll cutoff'}]}
+  ];
+  var DEMO_PAY_RECORDS=[
+    {date:'Jun 14', who:'ZZ Demo Cafe',    label:'Deposit',       amount:1490, method:'Zelle', status:'Paid'},
+    {date:'Jun 10', who:'Union Deli',      label:'Final payment', amount:3450, method:'Card',  status:'Paid'},
+    {date:'Jun 8',  who:'Brooklyn Bodega', label:'Deposit',       amount:2700, method:'Check', status:'Paid'}
+  ];
+  var DEMO_PAY_DUE=[
+    {due:'Jun 20', who:'ZZ Demo Cafe',    label:'Final payment', amount:1490, status:'Due'},
+    {due:'Jun 22', who:'Astoria Grill',   label:'Deposit',       amount:4100, status:'Due'},
+    {due:'Jun 25', who:'Brooklyn Bodega', label:'Final payment', amount:2700, status:'Overdue'}
+  ];
+  function subHead(title,extra){ return '<div class="subhead"><button class="btn ghost sm" id="hub-back">'+arrowL()+' Dashboard</button><h1>'+esc(title)+'</h1><span class="spacer"></span>'+(extra||'')+'</div>'; }
+
+  function renderDashboard(){
+    if(dashView!=='home') return renderDashSub(dashView);
+    var role = viewAs || session || pinView;   // the effective role gets its OWN dashboard
+    if(role==='CX') return tileGrid('My Dashboard','Your projects & requests', CX_TILES);
+    if(role==='TX') return tileGrid('Tech Dashboard','Your jobs, pay & tickets', TX_TILES);
+    if(role==='SA') return tileGrid('Sales Dashboard','Leads, orders & proposals', SA_TILES);
+    return tileGrid('Management', ROLE_LABEL[role]+' portal · oversight of every module', TILES);   // AD / MG
+  }
+  function renderDashSub(v){
+    var body='';
+    if(v==='projects'){
+      body=subHead('Projects','<span class="muted" style="font-size:12px;">'+DEMO_PROJECTS.length+' projects</span>')+
+        '<input class="search" id="projsearch" placeholder="Search by name, project #, or service…" value="'+esc(projSearch)+'">'+
+        '<div class="rows" id="projrows">'+ DEMO_PROJECTS.map(function(p){ var s=STATUSES[p.status];
+          return '<div class="rrow click" data-proj="'+p.no+'" data-search="'+esc((p.no+' '+p.business+' '+p.service).toLowerCase())+'">'+
+            '<div><div class="rtitle">#'+esc(p.no)+' · '+esc(p.business)+'</div><div class="rsub">'+esc(p.service)+' · '+esc(p.tech)+'</div></div>'+
+            '<div class="rright"><span class="lc-bucket '+s.cls+'">'+esc(s.label)+' · '+esc(p.sub)+'</span><div class="ramt">'+money(p.value)+'</div></div></div>';
+        }).join('') +'</div>';
+    } else if(v==='crm'){
+      body=subHead('Customers · CRM','<button class="btn gold sm" id="crm-add">+ Add Customer</button>')+
+        '<input class="search" id="crmsearch" placeholder="Search by name, business, phone, email, address, or project ID…" value="'+esc(crmSearch)+'">'+
+        (crmForm? ('<div class="card" style="margin-bottom:12px;"><h2>New Customer</h2>'+
+          '<div class="row" style="gap:10px;"><div style="flex:1;"><label class="lc-label">BUSINESS</label><input id="nc-biz" style="width:100%;margin-top:6px;"></div>'+
+            '<div style="flex:1;"><label class="lc-label">CONTACT</label><input id="nc-name" style="width:100%;margin-top:6px;"></div></div>'+
+          '<div class="row" style="gap:10px;margin-top:10px;"><div style="flex:1;"><label class="lc-label">PHONE</label><input id="nc-phone" style="width:100%;margin-top:6px;"></div>'+
+            '<div style="flex:1;"><label class="lc-label">EMAIL</label><input id="nc-email" style="width:100%;margin-top:6px;"></div></div>'+
+          '<label class="lc-label" style="margin-top:10px;display:block;">ADDRESS</label><input id="nc-addr" style="width:100%;margin-top:6px;">'+
+          '<div class="term-row"><button class="btn ghost sm" id="nc-cancel">Cancel</button><button class="btn gold sm" id="nc-save">Add customer</button></div></div>') : '')+
+        '<div class="muted" style="font-size:12px;margin-bottom:8px;" id="crm-count">'+DEMO_CUSTOMERS.length+' contacts</div>'+
+        '<div class="rows" id="crmrows">'+ DEMO_CUSTOMERS.map(function(c){
+          var hay=(c.name+' '+c.biz+' '+c.phone+' '+(c.email||'')+' '+(c.address||'')+' '+(c.pid||'')).toLowerCase();
+          return '<div class="rrow click" data-crm-search="'+esc(hay)+'" data-crm-open="'+esc(c.biz)+'"><div><div class="rtitle">'+esc(c.biz)+'</div>'+
+            '<div class="rsub">'+esc(c.name)+' · '+esc(c.phone)+(c.email?(' · '+esc(c.email)):'')+'</div>'+
+            '<div class="rsub" style="font-size:11px;">'+esc(c.address||'')+(c.pid?(' · <span class="gold">#'+esc(c.pid)+'</span>'):'')+'</div></div>'+
+            '<div class="rright"><span class="sbadge">'+esc(c.stage)+'</span><div class="ramt">'+(c.value?money(c.value):'—')+'</div></div></div>'; }).join('') +'</div>';
+    } else if(v==='tech'){
+      body=subHead('Technicians','<span class="muted" style="font-size:12px;">'+DEMO_TECHS.length+' on the team</span>')+
+        '<div class="rows">'+ DEMO_TECHS.map(function(t){ var cls=t.status==='On job'?'due':t.status==='Available'?'paid':''; return '<div class="rrow"><div><div class="rtitle">'+esc(t.name)+'</div><div class="rsub">'+esc(t.role)+' · today: '+esc(t.today)+'</div></div>'+
+          '<div class="rright"><span class="sbadge '+cls+'">'+esc(t.status)+'</span><div class="rsub">'+t.jobs+' job'+(t.jobs===1?'':'s')+'</div></div></div>'; }).join('') +'</div>';
+    } else if(v==='sales'){
+      body=subHead('Sales · Web Orders','<span class="muted" style="font-size:12px;">'+DEMO_ORDERS.length+' orders</span>')+
+        '<div class="rows">'+ DEMO_ORDERS.map(function(o){ var cls=o.status==='New'?'due':(o.status==='Fulfilled'||o.status==='Shipped')?'paid':''; return '<div class="rrow"><div><div class="rtitle">'+esc(o.id)+' · '+esc(o.customer)+'</div><div class="rsub">'+esc(o.items)+' · '+esc(o.date)+'</div></div>'+
+          '<div class="rright"><span class="sbadge '+cls+'">'+esc(o.status)+'</span><div class="ramt">'+money(o.total)+'</div></div></div>'; }).join('') +'</div>';
+    } else if(v==='schedule'){
+      body=subHead('Scheduling · Company Calendars')+
+        '<div class="card"><h2>This week · by person</h2>'+ DEMO_CAL.map(function(p){ return '<div class="calperson"><div class="cpname">'+ico('schedule')+esc(p.name)+'</div>'+
+          p.ev.map(function(e){ return '<div class="calev"><span class="cd">'+esc(e.d)+'</span><span class="ct">'+esc(e.t)+'</span><span>'+esc(e.w)+'</span></div>'; }).join('') +'</div>'; }).join('') +'</div>';
+    } else if(v==='finance'){
+      var due=DEMO_PAY_DUE.reduce(function(s,p){return s+p.amount;},0), paid=DEMO_PAY_RECORDS.reduce(function(s,p){return s+p.amount;},0);
+      body=subHead('Finances')+
+        '<div class="card"><h2>Payments due · '+money(due)+'</h2><div class="rows">'+ DEMO_PAY_DUE.map(function(p){ return '<div class="rrow"><div><div class="rtitle">'+esc(p.who)+'</div><div class="rsub">'+esc(p.label)+' · due '+esc(p.due)+'</div></div>'+
+          '<div class="rright"><span class="sbadge '+(p.status==='Overdue'?'overdue':'due')+'">'+esc(p.status)+'</span><div class="ramt">'+money(p.amount)+'</div></div></div>'; }).join('') +'</div></div>'+
+        '<div class="card"><h2>Payment records · '+money(paid)+' collected</h2><div class="rows">'+ DEMO_PAY_RECORDS.map(function(p){ return '<div class="rrow"><div><div class="rtitle">'+esc(p.who)+'</div><div class="rsub">'+esc(p.label)+' · '+esc(p.method)+' · '+esc(p.date)+'</div></div>'+
+          '<div class="rright"><span class="sbadge paid">Paid</span><div class="ramt">'+money(p.amount)+'</div></div></div>'; }).join('') +'</div></div>';
+    } else if(v==='cx-projects'){
+      body=subHead('My Projects')+
+        '<div class="rows"><div class="rrow click" id="cx-openproj"><div><div class="rtitle">#'+esc(P.no)+' · '+esc(P.business)+'</div><div class="rsub">'+esc(P.services.map(function(s){return s.label;}).join(' · '))+'</div></div>'+
+          '<div class="rright"><span class="lc-bucket '+STATUSES[P.status].cls+'">'+esc(STATUSES[P.status].label)+'</span></div></div></div>';
+    } else if(v==='cx-new'){
+      body=subHead('Start New Project')+(dashConfirm==='cx-new'
+        ? '<div class="card"><div class="green" style="font-weight:700;">✓ Request received — our team will reach out to schedule a survey.</div></div>'
+        : '<div class="card"><div class="muted" style="font-size:12.5px;margin-bottom:12px;">Tell us what you need installed and we’ll get started.</div>'+
+          '<label class="lc-label">SERVICE</label><select id="cx-svc" style="width:100%;margin:6px 0 12px;">'+SERVICE_CATALOG.map(function(s){return '<option>'+esc(s.label)+'</option>';}).join('')+'</select>'+
+          '<label class="lc-label">SITE ADDRESS</label><input id="cx-addr" placeholder="Where is the install?" style="width:100%;margin:6px 0 12px;">'+
+          '<label class="lc-label">DETAILS</label><input id="cx-note" placeholder="Anything we should know?" style="width:100%;margin:6px 0 14px;">'+
+          '<button class="btn gold" id="cx-new-submit" style="width:100%;">Submit request</button></div>');
+    } else if(v==='cx-servicecall'){
+      body=subHead('Request a Service Call')+(dashConfirm==='cx-servicecall'
+        ? '<div class="card"><div class="green" style="font-weight:700;">✓ Service call requested — we’ll call to confirm a time.</div></div>'
+        : '<div class="card"><div class="muted" style="font-size:12.5px;margin-bottom:12px;">Something not working? Book a technician visit.</div>'+
+          '<label class="lc-label">ISSUE</label><input id="sc-issue" placeholder="What’s the problem?" style="width:100%;margin:6px 0 12px;">'+
+          '<label class="lc-label">URGENCY</label><select id="sc-urg" style="width:100%;margin:6px 0 14px;"><option>Standard</option><option>Urgent</option></select>'+
+          '<button class="btn gold" id="sc-submit" style="width:100%;">Request service call</button></div>');
+    } else if(v==='tx-workorders'){
+      var mine=DEMO_PROJECTS.filter(function(p){return p.status==='inprogress'||p.status==='open';});
+      body=subHead('Assigned Work Orders','<span class="muted" style="font-size:12px;">'+mine.length+' jobs</span>')+
+        '<div class="rows">'+ mine.map(function(p){ return '<div class="rrow click" data-proj="'+p.no+'"><div><div class="rtitle">#'+esc(p.no)+' · '+esc(p.business)+'</div><div class="rsub">'+esc(p.service)+' · '+esc(p.tech)+'</div></div>'+
+          '<div class="rright"><span class="sbadge due">'+esc(p.sub)+'</span></div></div>'; }).join('') +'</div>';
+    } else if(v==='tx-completed'){
+      var done=DEMO_PROJECTS.filter(function(p){return p.status==='completed'||p.status==='closed';});
+      body=subHead('Completed Projects')+
+        '<div class="rows">'+ done.map(function(p){ return '<div class="rrow"><div><div class="rtitle">#'+esc(p.no)+' · '+esc(p.business)+'</div><div class="rsub">'+esc(p.service)+'</div></div>'+
+          '<div class="rright"><span class="sbadge paid">'+esc(STATUSES[p.status].label)+'</span></div></div>'; }).join('') +'</div>';
+    } else if(v==='tx-payroll'){
+      P.services.forEach(function(s){ if(!s.wo.tasks) buildWO(s); });
+      var pw=payWeek(), periodPay=projectTechPay();
+      body=subHead('Payroll')+
+        '<div class="card"><div class="muted" style="font-size:11px;letter-spacing:.08em;">PAY PERIOD · FRI → THU</div>'+
+          '<div style="font-size:18px;font-weight:800;margin-top:4px;">'+pw.start+' – '+pw.end+'</div>'+
+          '<div class="kvs" style="margin-top:12px;">'+ kv('This period',money(periodPay))+kv('Paid YTD','$18,600')+kv('Auto','From closed work orders') +'</div></div>'+
+        '<div class="card"><h2>Closed work orders → payroll</h2><div class="rows">'+
+          P.services.map(function(s){ return '<div class="rrow"><div><div class="rtitle">'+esc(P.business)+' — '+esc(s.label)+'</div><div class="rsub">'+((s.wo.tasks||[]).length)+' line items · '+(s.wo.qc==='Passed'?'QC passed':'in progress')+'</div></div><div class="rright"><div class="ramt">'+money(woTechTotal(s))+'</div></div></div>'; }).join('')+
+          '<div class="rrow"><div><div class="rtitle">Union Deli — Final QC</div><div class="rsub">Closed · Jun 12</div></div><div class="rright"><div class="ramt">$180</div></div></div>'+
+        '</div></div>';
+    } else if(v==='tx-expense'){
+      body=subHead('Submit Expense')+(dashConfirm==='tx-expense'
+        ? '<div class="card"><div class="green" style="font-weight:700;">✓ Expense submitted for approval.</div></div>'
+        : '<div class="card">'+
+          '<label class="lc-label">JOB</label><select id="ex-job" style="width:100%;margin:6px 0 12px;">'+DEMO_PROJECTS.map(function(p){return '<option>#'+esc(p.no)+' · '+esc(p.business)+'</option>';}).join('')+'</select>'+
+          '<label class="lc-label">CATEGORY</label><select id="ex-cat" style="width:100%;margin:6px 0 12px;"><option>Materials</option><option>Fuel / mileage</option><option>Tools</option><option>Other</option></select>'+
+          '<label class="lc-label">AMOUNT</label><input id="ex-amt" type="number" placeholder="0.00" style="width:100%;margin:6px 0 14px;">'+
+          '<button class="btn gold" id="ex-submit" style="width:100%;">Submit expense</button></div>');
+    } else if(v==='tx-ticket'){
+      body=subHead('Submit Ticket')+(dashConfirm==='tx-ticket'
+        ? '<div class="card"><div class="green" style="font-weight:700;">✓ Ticket submitted — dispatch will follow up.</div></div>'
+        : '<div class="card">'+
+          '<label class="lc-label">TYPE</label><select id="tk-type" style="width:100%;margin:6px 0 12px;"><option>Equipment issue</option><option>Schedule conflict</option><option>Need parts</option><option>Other</option></select>'+
+          '<label class="lc-label">DESCRIPTION</label><input id="tk-desc" placeholder="Describe the issue" style="width:100%;margin:6px 0 14px;">'+
+          '<button class="btn gold" id="tk-submit" style="width:100%;">Submit ticket</button></div>');
+    } else {
+      body=subHead(v==='reports'?'Reports':v==='automation'?'Automation':'Module')+'<div class="card"><div class="muted">Coming soon — this module is a placeholder in the prototype.</div></div>';
+    }
+    return topbar()+'<div class="wrap">'+body+'</div>';
+  }
+  function wireDash(){
+    var hb=$('#hub-back'); if(hb) hb.onclick=function(){ dashView='home'; dashConfirm=''; render(); };
+    [].forEach.call(document.querySelectorAll('[data-tile]'),function(el){ el.onclick=function(){
+      var k=el.getAttribute('data-tile');
+      if(k==='access'){ screen='project'; accOpen=true; render(); }      // jump to the project's Access Settings
+      else { dashView=k; dashConfirm=''; render(); }                     // any tile → its sub-screen
+    }; });
+    // project search (filter rows in place — no re-render so focus is kept)
+    var ps=$('#projsearch'); if(ps) ps.oninput=function(){ projSearch=ps.value; var q=ps.value.trim().toLowerCase();
+      [].forEach.call(document.querySelectorAll('#projrows [data-search]'),function(r){ r.style.display = (!q || r.getAttribute('data-search').indexOf(q)>=0)?'':'none'; }); };
+    // CRM: search (name/business/phone/email/address/project-id) + add customer
+    var cs=$('#crmsearch'); if(cs) cs.oninput=function(){ crmSearch=cs.value; var q=cs.value.trim().toLowerCase(), shown=0;
+      [].forEach.call(document.querySelectorAll('#crmrows [data-crm-search]'),function(r){ var hit=(!q||r.getAttribute('data-crm-search').indexOf(q)>=0); r.style.display=hit?'':'none'; if(hit)shown++; });
+      var cc=$('#crm-count'); if(cc) cc.textContent=shown+' of '+DEMO_CUSTOMERS.length+' contacts'; };
+    var ca=$('#crm-add'); if(ca) ca.onclick=function(){ crmForm=true; render(); };
+    var ncx=$('#nc-cancel'); if(ncx) ncx.onclick=function(){ crmForm=false; render(); };
+    // open a CRM contact → load their project (matched by business)
+    [].forEach.call(document.querySelectorAll('[data-crm-open]'),function(el){ el.onclick=function(){ var biz=el.getAttribute('data-crm-open');
+      var pr=DEMO_PROJECTS.filter(function(p){return p.business===biz;})[0]; if(pr) openDemoProject(pr.no); else { P.business=biz; screen='project'; render(); } }; });
+    var ncs=$('#nc-save'); if(ncs) ncs.onclick=function(){
+      var biz=($('#nc-biz')||{}).value||'', name=($('#nc-name')||{}).value||'', phone=($('#nc-phone')||{}).value||'', email=($('#nc-email')||{}).value||'', addr=($('#nc-addr')||{}).value||'';
+      if(!biz.trim() && !name.trim()){ alert('Enter a business or contact name.'); return; }
+      DEMO_CUSTOMERS.unshift({ name:name.trim(), biz:biz.trim()||name.trim(), phone:phone.trim(), email:email.trim(), address:addr.trim(), pid:projId(name||biz, addr, phone), stage:'New lead', value:0 });
+      crmForm=false; crmSearch=''; render();
+    };
+    // open a demo project into the project view (mgmt + tech work-order lists)
+    [].forEach.call(document.querySelectorAll('[data-proj]'),function(el){ el.onclick=function(){ openDemoProject(el.getAttribute('data-proj')); }; });
+    // CX: open their current project
+    var co=$('#cx-openproj'); if(co) co.onclick=function(){ screen='project'; render(); };
+    // CX/TX form submits → inline confirmation (dashConfirm matches the current sub-view)
+    ['cx-new-submit','sc-submit','ex-submit','tk-submit'].forEach(function(id){ var b=$('#'+id); if(b) b.onclick=function(){ dashConfirm=dashView; render(); }; });
+  }
+  function openDemoProject(no){
+    var p=DEMO_PROJECTS.filter(function(x){return x.no===no;})[0]; if(!p) return;
+    P.no=p.no; P.business=p.business; P.status=p.status; P.inquiry.service=p.service;
+    var subs=STATUSES[p.status].subs; P.sub=Math.max(0,subs.indexOf(p.sub)); P.reopenRequested=false;
+    // Rebuild service lines from the demo's service string ("Toast POS + Sound" → two tabs)
+    P.services=p.service.split('+').map(function(lbl,i){ var s=newService('camera'); s.key='svc'+i; s.label=lbl.trim(); s.wo.tech=p.tech; return s; });
+    P.activeService=P.services[0].key;
+    screen='project'; dashView='home'; render();
+  }
+
+  function arrowL(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'; }
+  function arrowR(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'; }
+  function progressBody(controls){
+    var st=STATUSES[P.status], term=isTerminal();
+    // top: the 5 status options as a segmented control
+    var statusRow = STATUS_KEYS.map(function(k){ var on=(k===P.status), done=(FLOW.indexOf(k)>-1 && FLOW.indexOf(P.status)>-1 && FLOW.indexOf(k)<FLOW.indexOf(P.status));
+      return '<button class="statseg'+(on?' on '+STATUSES[k].cls:'')+(done?' done':'')+'"'+(controls?' data-status="'+k+'"':' disabled')+'>'+esc(STATUSES[k].label)+'</button>'; }).join('');
+    var h='<div class="lc-head">'+
+      '<div style="margin-right:auto;"><div class="lc-cur">'+esc(st.label)+' <span class="lc-bucket '+st.cls+'">'+esc(st.subs[Math.min(P.sub,st.subs.length-1)])+'</span></div></div>';
+    if(controls && !term) h+='<div class="lc-meta">Step '+(P.sub+1)+' / '+st.subs.length+'</div>'+
+      '<div class="lc-nav"><button class="navbtn" id="back" title="Back"'+((P.status==='open'&&P.sub===0)?' disabled':'')+'>'+arrowL()+'</button>'+
+      '<button class="navbtn gold" id="fwd" title="Advance">'+arrowR()+'</button></div>';
+    h+='</div><div class="statrow">'+statusRow+'</div>';
+    if(!term){
+      h+='<div class="lc-track">'+ st.subs.map(function(s,i){ var cls=i<P.sub?'done':i===P.sub?'cur':''; return '<div class="lc-step '+cls+'"><span class="seg"></span><span class="lb">'+esc(s)+'</span></div>'; }).join('') +'</div>';
+      if(controls) h+='<div class="term-row"><button class="btn sm" id="closeproj">Close project</button><button class="btn sm ghost danger" id="cancelproj">Cancel project</button></div>';
+    } else {
+      h+='<div class="term-row"><span class="muted">This project is <b>'+esc(st.label.toLowerCase())+'</b>.'+(P.reopenRequested?' <span class="gold">· Reopen requested</span>':'')+'</span>'+
+        (controls?'<button class="btn gold sm" id="reopen">Reopen project</button>':'')+'</div>';
+    }
+    return h;
+  }
+  function progressCustomer(){
+    var cur=cxStepIndex();
+    var h='<div class="card"><h2>Your Project</h2><div class="muted" style="font-size:11.5px;margin-bottom:8px;">Tap any step to learn what happens.</div><div class="steps">'+
+      CX_STEPS.map(function(s,i){ var cls=i<cur?'done':i===cur?'cur':''; return '<div class="step '+cls+(i===cxStepInfo?' open':'')+'" data-cxstep="'+i+'" style="cursor:pointer;"><div class="dot"></div><div class="lb">'+esc(s)+'</div></div>'; }).join('')+
+      '</div>';
+    if(cxStepInfo!=null && CX_STEP_DESC[cxStepInfo]){ h+='<div class="cxstepinfo"><div class="lc-label">'+esc(CX_STEPS[cxStepInfo])+(cxStepInfo<cur?' · done':cxStepInfo===cur?' · current':'')+'</div>'+
+      '<div style="font-size:13px;margin-top:5px;">'+esc(CX_STEP_DESC[cxStepInfo])+'</div></div>'; }
+    if(isTerminal()) h+='<div class="term-row" style="margin-top:12px;"><span class="muted">This project is '+esc(STATUSES[P.status].label.toLowerCase())+'.'+(P.reopenRequested?' <span class="gold">Reopen requested — we’ll be in touch.</span>':'')+'</span>'+
+      (P.reopenRequested?'':'<button class="btn sm" id="cx-reopen">Request to reopen</button>')+'</div>';
+    return h+'</div>';
+  }
+  // Customer documents — collapsible, and only the docs available at the current step (hidden if none yet).
+  function cxDocsCard(){
+    var avail=P.documents.filter(function(d){ return cxStepIndex() >= (d.from||0); });
+    if(!avail.length) return '';
+    return '<div class="card"><div class="acc-head" id="cxdocs-toggle">'+ico('layout')+'<h2>Documents</h2>'+
+        (cxDocsOpen?'':'<span class="muted" style="font-size:11.5px;margin-left:4px;font-weight:600;">'+avail.length+' available</span>')+chevIcon(cxDocsOpen)+'</div>'+
+      (cxDocsOpen ? ('<div style="margin-top:14px;">'+avail.map(function(d){ return '<div class="check"><div class="grow">'+esc(d.name)+'</div>'+(P.access.allowDownloads?'<button class="btn ghost sm">Download</button>':'<span class="muted" style="font-size:12px;">Download off</span>')+'</div>'; }).join('')+'</div>') : '')+
+    '</div>';
+  }
+  function optionCards(s, interactive){
+    if(!s) return '';
+    return '<div class="optcards">'+ s.options.map(function(o){ var sel=s.selected===o.id, tot=optTotal(o);
+      return '<div class="optcard '+(sel?'sel':'')+'"><span class="pill gold">OPTION '+o.id+'</span>'+
+        '<div class="nm" style="margin-top:8px;">'+esc(o.name)+'</div><div class="pr">'+money(tot)+'</div>'+
+        '<div class="muted" style="font-size:12px;">'+money(optDeposit(o))+' deposit</div>'+
+        // selecting an option reveals its FULL line items, grouped Equipment then Labor
+        (sel ? ('<div class="li-list">'+ ['equipment','labor'].map(function(kind){
+            var its=(o.lineItems||[]).filter(function(li){return (li.kind||'equipment')===kind;}); if(!its.length) return '';
+            return '<div class="li-grouphdr">'+(kind==='equipment'?'Equipment':'Labor')+' · '+money(groupTotal(o,kind))+'</div>'+
+              its.map(function(li){ return '<div class="li-row"><span>'+esc(li.desc)+((+li.qty||1)>1?(' <span class="muted">×'+(+li.qty)+'</span>'):'')+'</span><span>'+money((+li.qty||0)*(+li.price||0))+'</span></div>'; }).join('');
+          }).join('') + ((o.lineItems||[]).length?'':'<div class="muted" style="font-size:12px;">No line items yet</div>') +'</div>')
+              : '<div class="muted" style="font-size:11px;margin:10px 0;">Select to see the full line items</div>')+
+        (interactive&&!s.signed?'<button class="btn '+(sel?'gold':'ghost')+' sm" data-pick="'+s.key+','+o.id+'" style="width:100%;margin-top:8px;">'+(sel?'✓ Selected':'Choose this option')+'</button>':'')+
+      '</div>'; }).join('') +'</div>';
+  }
+  function kv(k,v){ return '<div class="kv"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v||'—')+'</div></div>'; }
+  function kvLink(k,v,href,attrs){ return '<div class="kv"><div class="k">'+esc(k)+'</div><div class="v">'+(v?('<a class="kvlink" href="'+href+'"'+(attrs||'')+'>'+esc(v)+'</a>'):'—')+'</div></div>'; }
+  function serviceTabs(){
+    if(P.services.length<=1) return P.services.length?'<div class="muted" style="font-size:12px;margin-bottom:12px;">Service: <b>'+esc(P.services[0].label)+'</b></div>':'';
+    return '<div class="svctabs">'+ P.services.map(function(s){ return '<button class="svctab'+(s.key===P.activeService?' on':'')+'" data-stab="'+s.key+'">'+esc(s.label)+'<span class="svctab-x" data-stabx="'+s.key+'" title="Close &amp; delete this service">✕</span></button>'; }).join('') +'</div>';
+  }
+  function curSub(){ return (P.status==='open'||P.status==='inprogress'||P.status==='completed') ? STATUSES[P.status].subs[P.sub] : null; }
+  // ── Stage-contextual panel for the Admin/Manager view ──
+  function stagePanel(ctrl){
+    var sub=curSub();
+    if(sub==='Inquiry') return inquiryPanel(ctrl);
+    if(sub==='Service'||sub==='Project') return serviceSelectPanel(ctrl);
+    if(sub==='Site Survey'||sub==='Mockup') return surveyMockPanel();
+    if(sub==='Proposal'||sub==='Approval'||sub==='Deposit') return proposalEditor(ctrl);
+    return woSummaryPanel();   // In Progress / Completed → work-order roll-up
+  }
+  function surveyMockPanel(){
+    return '<div class="card"><h2>Site Survey &amp; Mockup</h2>'+
+      '<div class="kvs">'+ kv('Survey','Floor plan captured · 12 devices placed')+kv('Mockup','Coverage map drafted')+kv('Status','Awaiting customer review') +'</div>'+
+      '<div class="muted" style="font-size:12.5px;margin-top:12px;">Floor plans, device layout, and coverage mockups are captured here. The survey draw-tool plugs into this step; the customer can review and approve the mockup before the proposal.</div>'+
+      '<div class="term-row"><button class="btn sm">Open survey tool</button><button class="btn sm ghost">View mockup</button></div></div>';
+  }
+  function inquiryPanel(ctrl){
+    return '<div class="card"><h2>Inquiry</h2>'+
+      '<div class="kvs">'+ kv('Business',P.business)+kv('Contact',P.contact)+kv('Phone',P.phone)+kv('Email',P.email)+kv('Address',P.address)+kv('Source',P.inquiry.source)+kv('Received',P.inquiry.date) +'</div>'+
+      '<div class="inq-svc"><div class="lc-label">SERVICE INQUIRED ABOUT</div>'+
+        '<div class="lc-cur" style="margin-top:4px;">'+esc(P.inquiry.service)+'</div>'+
+        '<div class="muted" style="font-size:13px;margin-top:8px;">'+esc(P.inquiry.note)+'</div></div>'+
+      (ctrl?'<div class="term-row"><button class="btn gold sm" id="toservices">Select services & create project '+'&rarr;</button></div>':'')+
+    '</div>';
+  }
+  function serviceSelectPanel(ctrl){
+    var inqKey=(SERVICE_CATALOG.filter(function(s){return s.label===P.inquiry.service;})[0]||{}).key;
+    return '<div class="card"><h2>Create project · select services</h2>'+
+      '<div class="muted" style="font-size:12.5px;margin-bottom:12px;">Pick the service lines for this project. Each becomes its own tab with its own proposal, work order, and timeline.</div>'+
+      SERVICE_CATALOG.map(function(s){ var on=hasService(s.key);
+        return '<div class="check"><div class="toggle '+(on?'on':'')+(ctrl?'':' lock')+'" data-svcpick="'+s.key+'"><div class="k"></div></div>'+
+          '<div class="grow">'+esc(s.label)+(s.key===inqKey?' <span class="muted" style="font-size:11px;">· inquired</span>':'')+'</div></div>'; }).join('')+
+      (ctrl?'<div class="term-row"><span class="muted" style="font-size:12px;">'+P.services.length+' service'+(P.services.length===1?'':'s')+' selected · presented '+money(presentedTotal())+'</span><button class="btn gold sm" id="createproj">Create project &rarr; Proposal</button></div>':'')+
+    '</div>';
+  }
+  // One Equipment/Labor group of an option's line items, with a price-book picker to add more.
+  function liGroup(s,o,kind,ctrl){
+    var rows=o.lineItems.map(function(li,i){ return {li:li,i:i}; }).filter(function(x){ return (x.li.kind||'equipment')===kind; });
+    var cat=pbFor(s.key)[kind]||[];
+    var h='<div class="li-group"><div class="li-group-h">'+(kind==='equipment'?'Equipment':'Labor')+'<span class="muted" style="margin-left:auto;">'+money(groupTotal(o,kind))+'</span></div>'+
+      '<table class="li-table"><tbody>'+
+        (rows.length? rows.map(function(x){ var li=x.li,i=x.i; return '<tr>'+
+          '<td><input data-li="'+s.key+','+o.id+','+i+',desc" value="'+esc(li.desc)+'"'+(ctrl?'':' disabled')+'></td>'+
+          '<td class="r"><input class="qty" type="number" min="0" data-li="'+s.key+','+o.id+','+i+',qty" value="'+(+li.qty||0)+'"'+(ctrl?'':' disabled')+'></td>'+
+          '<td class="r"><input class="price" type="number" min="0" data-li="'+s.key+','+o.id+','+i+',price" value="'+(+li.price||0)+'"'+(ctrl?'':' disabled')+'></td>'+
+          '<td class="r amt">'+money((+li.qty||0)*(+li.price||0))+'</td>'+
+          (ctrl?'<td class="r"><button class="btn sm ghost danger" data-delli="'+s.key+','+o.id+','+i+'">✕</button></td>':'')+
+        '</tr>'; }).join('') : '<tr><td colspan="'+(ctrl?5:4)+'" class="muted" style="padding:6px;">None</td></tr>')+
+      '</tbody></table>'+
+      (ctrl? '<select class="li-add" data-addcat="'+s.key+','+o.id+','+kind+'"><option value="">+ Add '+(kind==='equipment'?'equipment':'labor')+' from price book…</option>'+
+        cat.map(function(c){ return '<option value="'+esc(c.desc)+'|'+c.price+'">'+esc(c.desc)+' · '+money(c.price)+'</option>'; }).join('')+'<option value="__blank">+ Blank line</option></select>' : '')+
+    '</div>';
+    return h;
+  }
+  // Proposal builder: per-service tabs · Equipment then Labor (price-book prices) · Add Option B/C · the presented option is what the customer sees.
+  function proposalEditor(ctrl){ return '<div class="card"><h2>Proposal Builder'+(P.services.length>1?' · multi-service':'')+'</h2>'+ proposalBody(ctrl) +'</div>'; }
+  function proposalBody(ctrl){
+    var s=curService();
+    if(!s) return '<div class="muted">No services yet.</div>';
+    var notAdded=SERVICE_CATALOG.filter(function(c){return !hasService(c.key);});
+    var h=(ctrl?'<div style="display:flex;align-items:center;margin-bottom:10px;"><span class="muted" style="font-size:11.5px;font-weight:600;">Price book &amp; default line items</span>'+
+        '<button class="navbtn" id="pb-open" title="Edit price book &amp; defaults" style="margin-left:auto;width:34px;height:34px;">'+gearIcon()+'</button></div>':'')+
+      serviceTabs()+
+      (ctrl && notAdded.length ? '<select id="addsvc" style="width:100%;margin-bottom:12px;font-size:12px;"><option value="">+ Add a service line…</option>'+notAdded.map(function(c){return '<option value="'+c.key+'">'+esc(c.label)+'</option>';}).join('')+'</select>' : '');
+    s.options.forEach(function(o){ var sel=s.selected===o.id;
+      h+='<div class="optblock'+(sel?' sel':'')+'">'+
+        '<div class="optblock-head"><span class="pill gold">OPTION '+o.id+'</span>'+
+          '<input class="oname" data-sopt="'+s.key+','+o.id+',name" value="'+esc(o.name)+'"'+(ctrl?'':' disabled')+'>'+
+          (ctrl ? (sel?'<span class="pill pill-pres">★ Presented</span>':'<button class="btn sm ghost" data-spresent="'+s.key+','+o.id+'">Present</button>') : (sel?'<span class="pill pill-pres">★ Presented</span>':''))+
+          (ctrl && o.id!=='A' ? '<button class="btn sm ghost danger" data-delopt="'+s.key+','+o.id+'" title="Remove option">✕</button>':'')+
+        '</div>'+
+        liGroup(s,o,'equipment',ctrl)+      // Equipment first
+        liGroup(s,o,'labor',ctrl)+          // then Labor
+        '<div class="opttot">Option total <b>'+money(optTotal(o))+'</b></div>'+
+      '</div>';
+    });
+    if(ctrl && s.options.length<3){ var nextId=['A','B','C'][s.options.length];
+      h+='<div class="term-row"><button class="btn sm" data-addopt="'+s.key+'">+ Add Option '+nextId+'</button>'+
+         '<span class="muted" style="font-size:11.5px;">Build Good / Better / Best tiers — the customer picks one.</span></div>'; }
+    h+='<div class="term-row"><span class="muted" style="font-size:12px;">'+(s.signed?('Signed Option '+esc(s.signed.opt)+' by '+esc(s.signed.name)):'Customer chooses &amp; signs this service')+'</span>'+
+       '<span class="muted" style="font-size:12px;margin-left:auto;">Project total (presented): <b class="gold">'+money(presentedTotal())+'</b></span></div>';
+    if(ctrl) h+='<div class="term-row">'+(P.proposalSubmitted
+      ? '<span class="green" style="font-weight:700;">✓ Submitted to the customer — they can review &amp; sign</span><button class="btn ghost sm" id="proposal-unsubmit" style="margin-left:auto;">Unsubmit</button>'
+      : '<button class="btn gold sm" id="proposal-submit" style="margin-left:auto;">Submit proposal to customer &rarr;</button>')+'</div>';
+    if(ctrl && pbPortal) h+=pbPortalHtml(s);
+    return h;
+  }
+  // Price-book / defaults portal — edit prices, add/remove items, toggle which auto-populate new proposals.
+  function pbPortalHtml(s){
+    var pb=pbFor(s.key);
+    function grp(kind){
+      var items=pb[kind]||[];
+      return '<div class="li-group-h" style="margin-top:14px;display:flex;align-items:center;">'+(kind==='equipment'?'Equipment':'Labor')+
+        '<button class="btn sm ghost" data-pbadd="'+kind+'" style="margin-left:auto;">+ Add item</button></div>'+
+        items.map(function(it,i){ return '<div class="pb-row">'+
+          '<div class="toggle '+(it.def?'on':'')+'" data-pbdef="'+kind+','+i+'" title="Default — auto-added to new proposals"><div class="k"></div></div>'+
+          '<input data-pb="'+kind+','+i+',desc" value="'+esc(it.desc)+'" placeholder="Item name" style="flex:1;">'+
+          '<span class="muted" style="font-size:13px;">$</span><input data-pb="'+kind+','+i+',price" type="number" min="0" value="'+(+it.price||0)+'" style="width:88px;text-align:right;">'+
+          '<button class="btn sm ghost danger" data-pbdel="'+kind+','+i+'" title="Remove">✕</button>'+
+        '</div>'; }).join('');
+    }
+    return '<div class="pb-scrim" id="pb-scrim"><div class="pb-modal">'+
+      '<div class="acc-head" style="margin-bottom:8px;">'+gearIcon()+'<h2>Price Book · '+esc(s.label)+'</h2><button class="btn gold sm" id="pb-close" style="margin-left:auto;">Done</button></div>'+
+      '<div class="muted" style="font-size:12px;margin-bottom:4px;">Edit prices, add or remove items, and toggle the <b>switch</b> to mark an item as a <b>default</b> — defaults auto-populate every new proposal for this service.</div>'+
+      grp('equipment')+ grp('labor')+
+    '</div></div>';
+  }
+  function woSummaryPanel(){
+    return '<div class="card"><h2>Work Orders · one per service</h2>'+
+      P.services.map(function(s){ var done=s.wo.checklist.filter(function(c){return c.done;}).length;
+        return '<div class="check"><div class="grow"><b>'+esc(s.label)+'</b><div class="muted" style="font-size:12px;">Tech: '+esc(s.wo.tech)+' · QC: '+esc(s.wo.qc)+'</div></div><span class="pill slate">'+done+' / '+s.wo.checklist.length+'</span></div>'; }).join('')+
+    '</div>';
+  }
+
+  // ───────────────────────── Role views ─────────────────────────
+  function viewAdmin(){
+    var ctrl = !(session && viewAs && viewAs!==session);   // hide controls in read-only View-As preview
+    var lifeSum=STATUSES[P.status].label+' · '+STATUSES[P.status].subs[Math.min(P.sub,STATUSES[P.status].subs.length-1)];
+    // Customer + Lifecycle always on top; then ONLY the tools relevant to the current step; Access at the bottom.
+    return topbar()+'<div class="wrap">'+previewBanner()+
+      customerCard()+
+      panelCard('life', ico('activity'), 'Lifecycle', lifeSum, progressBody(ctrl))+
+      adminStageTools(ctrl)+
+      panelCard('log', ico('activity'), 'Project Log', (P.log?P.log.length:0)+' entries · notes & changes', logBody(ctrl))+
+      accessCard(ctrl)+
+    '</div>';
+  }
+  function paymentsPanel(ctrl){
+    var paid=P.payments.filter(function(p){return p.status==='Paid';}).reduce(function(t,p){return t+p.amount;},0);
+    var due=P.payments.filter(function(p){return p.status!=='Paid';}).reduce(function(t,p){return t+p.amount;},0);
+    return panelCard('pay', ico('finance'), 'Payments', (due?('$'+due+' due'):'')+(paid?(' · $'+paid+' paid'):'')||'No payments', paymentsBody(ctrl));
+  }
+  // Show the tool(s) for the project's CURRENT step.
+  function adminStageTools(ctrl){
+    if(isTerminal()) return '';
+    var sub=curSub();
+    if(sub==='Inquiry') return inquiryCard(ctrl);
+    if(sub==='Services & Survey') return servSurveyCard(ctrl);
+    if(sub==='Mockup') return panelCard('mockup',ico('image'),'Mockup','Coverage map & device layout',mockupBody())+panelCard('floor',ico('layout'),'Floor Plans','Site floor plans',floorBody());
+    if(sub==='Proposal'||sub==='Approval') return panelCard('proposal',ico('sales'),'Proposal Builder',presentedTotal()?('presented '+money(presentedTotal())):'build options',proposalBody(ctrl));
+    if(sub==='Deposit') return panelCard('proposal',ico('sales'),'Proposal Builder','presented '+money(presentedTotal()),proposalBody(ctrl))+paymentsPanel(ctrl);
+    // In Progress → Work Order builder (no customer-payments tab here); Completed → final payments
+    if(P.status==='inprogress') return panelCard('wo',ico('projects'),'Work Order','built from proposal · tech pay '+money(projectTechPay()),woBody(ctrl));
+    return paymentsPanel(ctrl);
+  }
+  function inquiryCard(ctrl){
+    return '<div class="card"><h2>Inquiry</h2>'+
+      '<div class="inq-svc"><div class="lc-label">SERVICE INQUIRED ABOUT</div>'+
+        '<div class="lc-cur" style="margin-top:4px;">'+esc(P.inquiry.service)+'</div>'+
+        '<div class="muted" style="font-size:13px;margin-top:8px;">'+esc(P.inquiry.note)+'</div></div>'+
+      '<div class="muted" style="font-size:12px;margin-top:10px;">Source: '+esc(P.inquiry.source)+' · Received '+esc(P.inquiry.date)+'</div>'+
+      (ctrl?'<div class="term-row"><button class="btn gold sm" id="sched-survey">Schedule Site Survey &rarr;</button></div>':'')+
+    '</div>';
+  }
+  function servSurveyCard(ctrl){
+    var inqKey=(SERVICE_CATALOG.filter(function(s){return s.label===P.inquiry.service;})[0]||{}).key;
+    return '<div class="card"><h2>Services &amp; Site Survey</h2>'+
+      '<div class="muted" style="font-size:12.5px;margin-bottom:12px;">Select the services for this project, then schedule the survey appointment. This creates the project.</div>'+
+      '<div class="li-group-h">Services</div>'+
+      SERVICE_CATALOG.map(function(s){ var on=hasService(s.key);
+        return '<div class="check"><div class="toggle '+(on?'on':'')+(ctrl?'':' lock')+'" data-svcpick="'+s.key+'"><div class="k"></div></div>'+
+          '<div class="grow">'+esc(s.label)+(s.key===inqKey?' <span class="muted" style="font-size:11px;">· inquired</span>':'')+'</div></div>'; }).join('')+
+      (P.availability? '<div class="li-group-h" style="margin-top:14px;">Customer availability</div><div class="muted" style="font-size:13px;margin-top:4px;">“'+esc(P.availability)+'”</div>' : '')+
+      '<div class="li-group-h" style="margin-top:14px;">Survey appointment</div>'+
+      '<div class="row" style="gap:10px;margin-top:8px;"><div style="flex:1;"><label class="lc-label">DATE</label><input id="appt-date" type="date" value="'+esc((P.appointment||'').split(' ')[0]||todayStr())+'" style="width:100%;margin-top:6px;"></div>'+
+        '<div style="flex:1;"><label class="lc-label">TIME</label><input id="appt-time" type="time" value="'+esc((P.appointment||'').split(' ')[1]||'10:00')+'" style="width:100%;margin-top:6px;"></div></div>'+
+      (P.appointment?'<div class="green" style="font-weight:700;margin-top:10px;">✓ Survey scheduled — '+esc(P.appointment)+'</div>':'')+
+      (ctrl?'<div class="term-row"><button class="btn sm" id="create-appt">Create appointment</button><button class="btn gold sm" id="createproj2">Create project &rarr; Proposal</button></div>':'')+
+    '</div>';
+  }
+  // Work Order Builder — transfers the proposal (equipment + labor) into the technician's job sheet.
+  function woBody(ctrl){
+    var h=(ctrl?'<div style="display:flex;align-items:center;margin-bottom:10px;"><span class="muted" style="font-size:11.5px;font-weight:600;">Built from the proposal · edit technician pay rates</span>'+
+        '<button class="navbtn" id="techpb-open" title="Edit technician pay rates" style="margin-left:auto;width:34px;height:34px;">'+gearIcon()+'</button></div>':'');
+    h+= P.services.map(function(s){ if(!s.wo.tasks) buildWO(s);   // auto-build the first time
+      var done=s.wo.checklist.filter(function(c){return c.done;}).length;
+      return '<div class="optblock">'+
+        '<div class="optblock-head"><span class="pill gold">'+esc(s.label)+'</span>'+
+          '<span class="muted" style="font-size:12px;">Tech: '+esc(s.wo.tech)+' · QC: '+esc(s.wo.qc)+' · '+done+'/'+s.wo.checklist.length+'</span>'+
+          (ctrl?'<button class="btn sm ghost" data-worebuild="'+s.key+'" style="margin-left:auto;" title="Re-pull from the current proposal">↻ From proposal</button>':'')+
+        '</div>'+
+        '<div class="li-group-h">Equipment needed</div>'+
+          ((s.wo.equipment&&s.wo.equipment.length)? s.wo.equipment.map(function(e){return '<div class="li-row"><span>'+esc(e.desc)+'</span><span class="muted">×'+(+e.qty||1)+'</span></div>';}).join('') : '<div class="muted" style="font-size:12px;">—</div>')+
+        '<div class="li-group-h" style="margin-top:10px;">Technician line items <span class="muted" style="margin-left:auto;">pay</span></div>'+
+        '<table class="li-table"><tbody>'+
+          ((s.wo.tasks&&s.wo.tasks.length)? s.wo.tasks.map(function(tk,i){ return '<tr><td>'+esc(tk.desc)+'</td><td class="r muted" style="width:48px;">×'+(+tk.qty||1)+'</td>'+
+            '<td class="r" style="width:96px;"><span class="muted">$</span><input class="price" type="number" min="0" data-wotask="'+s.key+','+i+',pay" value="'+(+tk.pay||0)+'"'+(ctrl?'':' disabled')+'></td>'+
+            '<td class="r amt">'+money((+tk.qty||0)*(+tk.pay||0))+'</td></tr>'; }).join('') : '<tr><td colspan="4" class="muted" style="padding:6px;">No labor items</td></tr>')+
+        '</tbody></table>'+
+        '<div class="opttot">Technician pay <b>'+money(woTechTotal(s))+'</b></div>'+
+      '</div>'; }).join('');
+    h+='<div class="term-row"><span class="muted" style="font-size:12px;margin-left:auto;">Total technician pay (this project): <b class="gold">'+money(projectTechPay())+'</b></span></div>';
+    if(ctrl && techPbOpen) h+=techPbPortalHtml();
+    return h;
+  }
+  function techPbPortalHtml(){
+    var keys=Object.keys(TECH_PAYBOOK);
+    return '<div class="pb-scrim" id="techpb-scrim"><div class="pb-modal">'+
+      '<div class="acc-head" style="margin-bottom:8px;">'+gearIcon()+'<h2>Technician Pay Rates</h2><button class="btn gold sm" id="techpb-close" style="margin-left:auto;">Done</button></div>'+
+      '<div class="muted" style="font-size:12px;margin-bottom:6px;">Default pay per labor line item. Used when a work order is built from the proposal.</div>'+
+      keys.map(function(k){ return '<div class="pb-row"><input value="'+esc(k)+'" data-techpb-k="'+esc(k)+'" style="flex:1;"><span class="muted" style="font-size:13px;">$</span><input type="number" min="0" value="'+(+TECH_PAYBOOK[k]||0)+'" data-techpb="'+esc(k)+'" style="width:88px;text-align:right;"><button class="btn sm ghost danger" data-techpb-del="'+esc(k)+'">✕</button></div>'; }).join('')+
+      '<div class="term-row"><button class="btn sm" id="techpb-add">+ Add pay rate</button></div>'+
+    '</div></div>';
+  }
+  function curSubLabel(){ var st=STATUSES[P.status]; return st.subs[Math.min(P.sub,st.subs.length-1)]; }
+  function logEvent(text){ if(!P.log) P.log=[]; P.log.unshift({ t:nowStr(), text:text, who:(viewAs||session||pinView||'') }); }
+  function logBody(ctrl){
+    var h=(ctrl?'<div class="row" style="gap:8px;margin-bottom:12px;"><input id="log-note" placeholder="Add a note…" style="flex:1;"><button class="btn gold sm" id="log-add">Add note</button></div>':'');
+    h+= (P.log&&P.log.length) ? P.log.map(function(e){ return '<div class="logrow"><div class="logdot"></div><div class="grow"><div class="logtext">'+esc(e.text)+'</div><div class="logmeta">'+esc(e.t)+(e.who?(' · '+(ROLE_LABEL[e.who]||e.who)):'')+'</div></div></div>'; }).join('') : '<div class="muted" style="font-size:12px;">No activity yet.</div>';
+    return h;
+  }
+  function nextSubLabel(){
+    if(isTerminal()) return null;
+    var st=STATUSES[P.status];
+    if(P.sub < st.subs.length-1) return st.subs[P.sub+1];
+    var fi=FLOW.indexOf(P.status); return (fi>-1 && fi<FLOW.length-1) ? STATUSES[FLOW[fi+1]].subs[0] : null;
+  }
+  function accessCard(ctrl){
+    var a=P.access, link=projLink(), next=nextSubLabel();
+    return '<div class="card"><div class="acc-head" id="acc-toggle">'+
+        gearIcon()+'<h2>Access Settings</h2>'+
+        (accOpen?'':'<span class="muted" style="font-size:11.5px;margin-left:4px;font-weight:600;">project link · PIN · signing · payments</span>')+
+        chevIcon(accOpen)+
+      '</div>'+
+      (accOpen ? ('<div style="margin-top:14px;">'+
+        '<div class="lc-label">PROJECT LINK</div>'+
+        '<div class="link-row"><input id="proj-link" readonly value="'+esc(link)+'"><button class="btn sm" id="copy-link">Copy</button></div>'+
+        '<div class="muted" style="font-size:11px;margin:4px 0 14px;">The one link the customer opens — they sign in or enter their PIN to view this project.</div>'+
+        accToggle('Secure customer link','loginEnabled',a.loginEnabled)+
+        accToggle('Allow PIN access','pinEnabled',a.pinEnabled)+
+        accToggle('Allow signature','allowSignature',a.allowSignature)+
+        accToggle('Allow payment','allowPayment',a.allowPayment)+
+        accToggle('Allow file downloads','allowDownloads',a.allowDownloads)+
+        '<div class="check"><div class="grow"><b>Customer PIN</b><div class="muted" style="font-size:12px;">Click to edit · shared separately from the link</div></div>'+
+          '<input id="cxpin-edit" value="'+esc(pinForView('CX'))+'" maxlength="6" inputmode="numeric" title="Edit the customer PIN" style="width:86px;text-align:center;font-weight:800;color:var(--gold);font-size:16px;letter-spacing:.15em;">'+
+          '<button class="btn sm ghost" id="regen">Regenerate</button></div>'+
+        (ctrl && next ? '<div class="term-row"><button class="btn gold sm" id="acc-next">Submit &amp; continue &rarr; '+esc(next)+'</button></div>' : '')+
+      '</div>') : '')+
+    '</div>';
+  }
+  function personIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'; }
+  // Collapsible Customer info card — sits at the very top, above the lifecycle.
+  function customerCard(){
+    var summary=[P.business||P.contact, P.no?('#'+P.no):''].filter(Boolean).join(' · ');
+    return '<div class="card"><div class="acc-head" id="cust-toggle">'+
+        personIcon()+'<h2>Customer</h2>'+
+        (custOpen?'':'<span class="muted" style="font-size:11.5px;margin-left:4px;font-weight:600;">'+esc(summary)+'</span>')+
+        chevIcon(custOpen)+
+      '</div>'+
+      (custOpen ? ('<div style="margin-top:14px;"><div class="kvs">'+
+        kvLink('Project ID', P.no, projLink(), ' target="_blank" rel="noopener"')+
+        '<div class="kv"><div class="k">Business</div><div class="v"><a class="kvlink" href="#" data-custprofile="1">'+esc(P.business||'—')+'</a></div></div>'+
+        '<div class="kv"><div class="k">Contact</div><div class="v"><a class="kvlink" href="#" data-custprofile="1">'+esc(P.contact||'—')+'</a></div></div>'+
+        kvLink('Phone', P.phone, 'tel:'+String(P.phone||'').replace(/[^0-9+]/g,''), '')+
+        kvLink('Email', P.email, 'mailto:'+esc(P.email||''), '')+
+        kvLink('Address', P.address, 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(P.address||''), ' target="_blank" rel="noopener"')+
+        kv('Service',P.inquiry.service)+kv('Source',P.inquiry.source)+
+        '</div></div>') : '')+
+    '</div>';
+  }
+  // Generic collapsible tool panel (icon header + chevron + collapsed summary + body).
+  function panelCard(name,iconHtml,title,summary,bodyHtml){
+    var open=panelOpen[name];
+    return '<div class="card"><div class="acc-head" data-panel="'+name+'">'+
+        iconHtml+'<h2>'+esc(title)+'</h2>'+
+        (open?'':'<span class="muted" style="font-size:11.5px;margin-left:4px;font-weight:600;">'+esc(summary||'')+'</span>')+
+        chevIcon(open)+
+      '</div>'+ (open ? ('<div style="margin-top:14px;">'+bodyHtml+'</div>') : '') +'</div>';
+  }
+  function mockupBody(){
+    return '<div class="kvs">'+ kv('Coverage','12 devices placed')+kv('Status',P.mockupUploaded?'Uploaded — visible to customer':'Drafted') +'</div>'+
+      '<div class="muted" style="font-size:12.5px;margin:10px 0;">Device layout &amp; coverage mockup the customer reviews before approving the proposal.</div>'+
+      '<div class="term-row"><button class="btn sm">Open mockup tool</button>'+
+        (P.mockupUploaded? '<span class="green" style="font-weight:700;margin-left:auto;">✓ Uploaded &amp; shared with customer</span>' : '<button class="btn gold sm" id="mockup-upload" style="margin-left:auto;">Upload &amp; share mockup</button>')+'</div>';
+  }
+  function floorBody(){
+    var plans=P.documents.filter(function(d){return /floor|survey/i.test(d.name);});
+    return (plans.length? plans.map(function(d){ return '<div class="check"><div class="grow">'+esc(d.name)+'</div><button class="btn ghost sm">View</button></div>'; }).join('') : '<div class="muted" style="font-size:12px;">No floor plans yet.</div>')+
+      '<div class="term-row"><button class="btn sm">Open floor-plan tool</button><button class="btn sm ghost">Upload</button></div>';
+  }
+  function paymentsBody(ctrl){
+    var multi=MY_PROJECTS.length>1, dep=Math.round(presentedTotal()/2);
+    var h = P.payments.length
+      ? P.payments.map(function(p,i){ return '<div class="check"><div class="grow">'+esc(p.label)+(p.project?(' <span class="muted" style="font-size:11px;">· '+esc(p.project)+'</span>'):'')+'</div><b>'+money(p.amount)+'</b>'+
+          (p.status==='Paid' ? '<span class="pill gold">Paid'+(p.date?(' · '+esc(p.date)):'')+'</span>' : (ctrl?'<button class="btn ghost sm" data-paymark="'+i+'">Mark paid</button>':'<span class="muted" style="font-size:11.5px;">'+esc(p.date||p.status||'Due')+'</span>'))+
+        '</div>'; }).join('')
+      : '<div class="muted" style="font-size:12px;">No payments yet.</div>';
+    if(ctrl){
+      if(payForm){
+        h+='<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px;">'+
+          (multi? '<label class="lc-label">PROJECT</label><select id="pay-proj" style="width:100%;margin:6px 0 10px;">'+MY_PROJECTS.map(function(p){return '<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>';}).join('')+'</select>' : '')+
+          '<label class="lc-label">DESCRIPTION</label><input id="pay-label" value="Deposit to start" style="width:100%;margin:6px 0 10px;">'+
+          '<div class="row" style="gap:10px;"><div style="flex:1;"><label class="lc-label">AMOUNT</label><input id="pay-amt" type="number" value="'+dep+'" style="width:100%;margin-top:6px;"></div>'+
+            '<div style="flex:1;"><label class="lc-label">DATE</label><input id="pay-date" type="date" value="'+todayStr()+'" style="width:100%;margin-top:6px;"></div></div>'+
+          '<div class="term-row"><button class="btn ghost sm" id="pay-cancel">Cancel</button><button class="btn gold sm" id="pay-add">Add payment</button></div>'+
+        '</div>';
+      } else {
+        h+='<div class="term-row"><button class="btn gold sm" id="add-pay-btn">+ Add Payment</button></div>';
+      }
+    }
+    return h;
+  }
+  function accToggle(label,key,on){ return '<div class="check"><div class="grow">'+esc(label)+'</div><div class="toggle '+(on?'on':'')+'" data-acc="'+key+'"><div class="k"></div></div></div>'; }
+  function pinForView(v){ for(var k in P.access.pins) if(P.access.pins[k]===v) return k; return '— none —'; }
+  function gearIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'; }
+  function chevIcon(open){ return '<svg class="chev'+(open?' open':'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'; }
+
+  function viewSales(){
+    var s=curService();
+    return topbar()+'<div class="wrap">'+previewBanner()+
+      '<div class="muted" style="font-size:12px;margin:2px 2px 12px;">Sales builds the proposal options (Add Option B/C, line items) but cannot move project stages.</div>'+
+      proposalEditor(true)+
+      '<div class="card"><h2>Customer preview · '+esc(s?s.label:'')+'</h2>'+optionCards(s,false)+
+        '<div class="muted" style="font-size:12px;margin-top:10px;">Project total (all services): <b class="gold">'+money(presentedTotal())+'</b></div></div>'+
+    '</div>';
+  }
+  function viewTech(){
+    var ro=(session&&viewAs), s=curService();   // preview = read-only
+    if(P.status==='open'){   // not in installation yet — no work order for the tech
+      return topbar()+'<div class="wrap">'+previewBanner()+
+        '<div class="card" style="text-align:center;"><div class="muted" style="font-size:11px;letter-spacing:.1em;">WORK ORDER</div>'+
+        '<div style="font-size:18px;font-weight:800;margin-top:4px;">No active job yet</div>'+
+        '<div class="muted" style="font-size:13px;margin-top:8px;">This project is still in the proposal / design phase. Your work order opens once it’s approved and scheduled.</div></div>'+
+      '</div>';
+    }
+    if(!s.wo.tasks) buildWO(s);
+    return topbar()+'<div class="wrap">'+previewBanner()+
+      '<div class="card"><h2>Work Order · '+esc(P.no)+'</h2>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:10px;">No customer pricing is shown — only the gear you need and your own pay. One work order per service line.</div>'+
+        serviceTabs()+
+        '<div class="kvs">'+ kv('Service',s.label)+kv('Site',P.address)+kv('Assigned',s.wo.tech) +'</div></div>'+
+      '<div class="card"><h2>Equipment needed · '+esc(s.label)+'</h2>'+
+        ((s.wo.equipment&&s.wo.equipment.length)? s.wo.equipment.map(function(e){return '<div class="check"><div class="grow">'+esc(e.desc)+'</div><span class="pill slate">×'+(+e.qty||1)+'</span></div>';}).join('') : '<div class="muted" style="font-size:12px;">—</div>')+'</div>'+
+      '<div class="card"><h2>Your line items &amp; pay</h2>'+
+        '<table class="li-table"><tbody>'+((s.wo.tasks&&s.wo.tasks.length)? s.wo.tasks.map(function(tk){return '<tr><td>'+esc(tk.desc)+'</td><td class="r muted">×'+(+tk.qty||1)+'</td><td class="r amt">'+money((+tk.qty||0)*(+tk.pay||0))+'</td></tr>';}).join('') : '<tr><td class="muted">No tasks</td></tr>')+'</tbody></table>'+
+        '<div class="opttot">Your pay for this service <b class="gold">'+money(woTechTotal(s))+'</b></div>'+
+        (P.services.length>1?'<div class="muted" style="font-size:12px;margin-top:6px;">All your services this job: <b class="gold">'+money(projectTechPay())+'</b></div>':'')+'</div>'+
+      '<div class="card '+(ro?'lock':'')+'"><h2>Checklist · '+esc(s.label)+'</h2>'+
+        s.wo.checklist.map(function(c,i){ return '<div class="check"><div class="toggle '+(c.done?'on':'')+'" data-chk="'+i+'"><div class="k"></div></div><div class="grow">'+esc(c.t)+'</div></div>'; }).join('')+
+      '</div>'+
+      '<div class="card '+(ro?'lock':'')+'"><h2>Quality Check</h2><div class="check"><div class="grow">Mark '+esc(s.label)+' complete</div>'+
+        '<button class="btn '+(s.wo.qc==='Passed'?'gold':'ghost')+' sm" id="qc">'+(s.wo.qc==='Passed'?'✓ QC Passed':'Pass QC')+'</button></div></div>'+
+    '</div>';
+  }
+  function cxMsg(title,body){ return '<div class="card" style="text-align:center;"><div style="font-size:17px;font-weight:800;">'+esc(title)+'</div><div class="muted" style="font-size:13px;margin-top:6px;">'+esc(body)+'</div></div>'; }
+  function viewCustomer(){
+    var a=P.access, ro=(session&&viewAs);
+    var sub=curSub(), preProposal = (P.status==='open' && ['Inquiry','Services & Survey','Mockup'].indexOf(sub)>=0);
+    var unsigned=P.services.filter(function(s){return !s.signed;}).length;
+    var nextAction = preProposal ? (sub==='Inquiry'?'We’ve received your inquiry':sub==='Services & Survey'?'Scheduling your site survey':'Designing your system')
+                    : (unsigned ? ('Review & sign your '+(P.services.length>1?(P.services.length+' services'):'proposal')) : 'Pay your deposit to start');
+    var h=topbar()+'<div class="wrap">'+previewBanner()+
+      '<div class="card" style="text-align:center;"><div class="muted" style="font-size:11px;letter-spacing:.1em;">NEXT STEP</div><div style="font-size:18px;font-weight:800;margin-top:4px;">'+esc(nextAction)+'</div></div>'+
+      progressCustomer();
+    // Pre-proposal stages: show a status message instead of the proposal.
+    if(preProposal){
+      if(sub==='Inquiry'){
+        h+=cxMsg('Inquiry received', P.appointment?('Your site survey is scheduled for '+P.appointment+'.') : (P.availability?'Thanks! Someone will reach out to confirm your site survey based on your availability.':'We’ve received your inquiry — share your availability and we’ll reach out to schedule your site survey.'));
+        if(!P.appointment){
+          h+='<div class="card"><h2>Your availability</h2>'+
+            (P.availability ? '<div class="green" style="font-weight:700;">✓ Submitted: '+esc(P.availability)+'</div><div class="muted" style="font-size:12px;margin-top:6px;">We’ll confirm a time shortly.</div>'
+              : '<div class="muted" style="font-size:12.5px;margin-bottom:8px;">When works best for a site survey?</div><textarea id="cx-avail" placeholder="e.g. Weekday mornings, or Tue/Thu after 2pm" style="width:100%;min-height:62px;"></textarea><button class="btn gold '+(ro?'lock':'')+'" id="cx-avail-submit" style="margin-top:10px;">Submit availability</button>')+
+          '</div>';
+        }
+      }
+      else if(sub==='Services & Survey') h+=cxMsg('Scheduling your survey', P.appointment?('Your site survey is scheduled for '+P.appointment+'.'):'Your site survey appointment is being scheduled — we’ll confirm a time with you.');
+      else h+=cxMsg('Designing your system', P.mockupUploaded?'Your coverage mockup is ready — review it in Documents below.':'We’re preparing your coverage mockup for you to review before the proposal.');
+      h+=cxDocsCard();
+      return h+'</div>';
+    }
+    // Proposal not yet submitted by the team → customer waits.
+    if(!P.proposalSubmitted){
+      h+=cxMsg('Proposal in progress','Your proposal is being prepared — we’ll notify you when it’s ready to review and sign.');
+      h+=cxDocsCard();
+      return h+'</div>';
+    }
+    // one proposal section per service — a dark "vault" document the customer signs at the bottom
+    P.services.forEach(function(s){
+      var sel=s.options.filter(function(o){return o.id===s.selected;})[0];
+      h+='<div class="vaultdoc">'+
+        '<div class="vd-head"><div><div class="vd-brand">IOT&nbsp;TECHS</div><div class="vd-sub">Proposal · '+esc(s.label)+'</div></div>'+
+          '<div style="text-align:right;"><div class="vd-no">#'+esc(P.no)+'</div><div class="vd-sub">'+esc(P.business)+'</div></div></div>'+
+        optionCards(s, a.allowSignature && !ro)+
+        (sel?('<div class="vd-total">Total <b>'+money(optTotal(sel))+'</b> &middot; '+money(optDeposit(sel))+' deposit</div>'):'')+
+        (a.allowSignature ? ('<div class="vd-sign">'+
+          (s.signed
+            ? '<div class="vd-sig-name">'+esc(s.signed.name)+'</div><div class="vd-sig-line"></div><div class="vd-sig-meta">✓ Accepted &amp; signed · Option '+esc(s.signed.opt)+' · '+money(optTotal(sel))+'</div>'
+            : '<div class="vd-sig-name">&nbsp;</div><div class="vd-sig-line"></div><div class="vd-sig-meta">Authorized signature — sign to accept <b style="color:#C9A96E;">Option '+esc(s.selected)+'</b> at '+money(optTotal(sel))+'</div>'+
+              '<button class="btn gold '+(ro?'lock':'')+'" data-csign="'+s.key+'" style="margin-top:14px;">Accept &amp; sign '+esc(s.label)+'</button>')+
+        '</div>') : '')+
+      '</div>';
+    });
+    // payments
+    if(a.allowPayment){
+      h+='<div class="card"><h2>Payments</h2>'+P.payments.map(function(p){ return '<div class="check"><div class="grow">'+esc(p.label)+'</div><b>'+money(p.amount)+'</b>'+
+        (p.status==='Paid'?'<span class="pill gold">Paid</span>':'<button class="btn gold sm '+(ro?'lock':'')+'" data-pay="'+esc(p.label)+'">Pay '+money(p.amount)+'</button>')+'</div>'; }).join('')+'</div>';
+    }
+    // documents — collapsible, only what's available so far (hidden if none)
+    h+=cxDocsCard();
+    h+='</div>';
+    return h;
+  }
+
+  // ───────────────────────── Render + wiring ─────────────────────────
+  function render(){
+    applyTheme();
+    var v=activeView();
+    if(!v){ screen='project'; renderGateway(); return; }
+    if(screen==='dashboard'){ $('#app').innerHTML=renderDashboard(); wireShell(); wireDash(); return; }   // every role has a dashboard
+    var html = v==='AD'||v==='MG' ? viewAdmin() : v==='SA' ? viewSales() : v==='TX' ? viewTech() : viewCustomer();
+    $('#app').innerHTML=html;
+    wireShell();
+    var at=$('#acc-toggle'); if(at) at.onclick=function(){ accOpen=!accOpen; render(); };   // collapse is UI-only, works in preview too
+    var ct=$('#cust-toggle'); if(ct) ct.onclick=function(){ custOpen=!custOpen; render(); };
+    [].forEach.call(document.querySelectorAll('[data-panel]'),function(el){ el.onclick=function(){ var n=el.getAttribute('data-panel'); panelOpen[n]=!panelOpen[n]; render(); }; });
+    // Customer progress: tap a step to expand its description; collapsible documents
+    [].forEach.call(document.querySelectorAll('[data-cxstep]'),function(el){ el.onclick=function(){ var i=+el.getAttribute('data-cxstep'); cxStepInfo=(cxStepInfo===i?null:i); render(); }; });
+    var cxd=$('#cxdocs-toggle'); if(cxd) cxd.onclick=function(){ cxDocsOpen=!cxDocsOpen; render(); };
+    // Business / contact name → open the customer's profile (CRM, filtered to them)
+    [].forEach.call(document.querySelectorAll('[data-custprofile]'),function(el){ el.onclick=function(e){ e.preventDefault(); var name=P.business||P.contact||'';
+      screen='dashboard'; dashView='crm'; dashConfirm=''; crmSearch=name; render();
+      var cs=$('#crmsearch'); if(cs){ cs.value=name; cs.oninput(); } }; });
+    var ro = session && viewAs && viewAs!==session;     // preview is read-only
+    if(ro) return;                                       // don't wire mutations in preview
+
+    // Admin — lifecycle: forward/back through sub-steps, jump status, close/cancel/reopen (each logged)
+    var fwd=$('#fwd'); if(fwd) fwd.onclick=function(){ stMove(1); logEvent('Advanced to '+curSubLabel()); render(); };
+    var back=$('#back'); if(back) back.onclick=function(){ stMove(-1); logEvent('Moved back to '+curSubLabel()); render(); };
+    [].forEach.call(document.querySelectorAll('[data-status]'),function(b){ b.onclick=function(){ var k=b.getAttribute('data-status'); setStatus(k); logEvent('Status set to '+STATUSES[k].label); render(); }; });
+    var cp=$('#closeproj'); if(cp) cp.onclick=function(){ setStatus('closed'); logEvent('Project closed'); render(); };
+    var xp=$('#cancelproj'); if(xp) xp.onclick=function(){ setStatus('cancelled'); logEvent('Project cancelled'); render(); };
+    var ro2=$('#reopen'); if(ro2) ro2.onclick=function(){ setStatus('completed'); P.sub=STATUSES.completed.subs.length-1; logEvent('Project reopened'); render(); };
+    var cxr=$('#cx-reopen'); if(cxr) cxr.onclick=function(){ P.reopenRequested=true; logEvent('Customer requested to reopen'); render(); };
+    [].forEach.call(document.querySelectorAll('[data-acc]'),function(t){ t.onclick=function(){ var k=t.getAttribute('data-acc'); P.access[k]=!P.access[k]; render(); }; });
+    var rg=$('#regen'); if(rg) rg.onclick=function(){ var old=pinForView('CX'); var n=String(Math.floor(1000+Math.random()*9000)); delete P.access.pins[old]; P.access.pins[n]='CX'; logEvent('Customer PIN regenerated'); render(); };
+    var ce=$('#cxpin-edit'); if(ce){ ce.oninput=function(){ ce.value=ce.value.replace(/\D/g,''); }; ce.onchange=function(){ var nw=ce.value.replace(/\D/g,''), old=pinForView('CX'); if(!nw||nw===old){ ce.value=old; return; }
+      if(P.access.pins[nw]&&P.access.pins[nw]!=='CX'){ alert('That PIN is already used by another role.'); ce.value=old; return; }
+      delete P.access.pins[old]; P.access.pins[nw]='CX'; logEvent('Customer PIN changed to '+nw); render(); }; }
+    var cl=$('#copy-link'); if(cl) cl.onclick=function(){ var i=$('#proj-link'); if(!i)return; i.select(); try{ navigator.clipboard.writeText(i.value); }catch(e){ try{document.execCommand('copy');}catch(_){} } cl.textContent='Copied!'; setTimeout(function(){ if($('#copy-link'))$('#copy-link').textContent='Copy'; },1400); };
+    var an=$('#acc-next'); if(an) an.onclick=function(){ stMove(1); logEvent('Advanced to '+curSubLabel()); render(); };   // Submit & continue → next step
+    // Project Log: add a manual note
+    var la=$('#log-add'); if(la) la.onclick=function(){ var n=($('#log-note')||{}).value||''; if(!n.trim())return; logEvent('Note: '+n.trim()); render(); };
+    // Stage flow: Inquiry → (schedule survey) → Services & Survey → (create project) → Proposal
+    var ss=$('#sched-survey'); if(ss) ss.onclick=function(){ P.sub=STATUSES.open.subs.indexOf('Services & Survey'); logEvent('Moved to Services & Survey'); render(); };
+    var ca=$('#create-appt'); if(ca) ca.onclick=function(){ var d=($('#appt-date')||{}).value||'', t=($('#appt-time')||{}).value||''; P.appointment=(d+' '+t).trim(); logEvent('Survey appointment scheduled — '+P.appointment); render(); };
+    var cpj2=$('#createproj2'); if(cpj2) cpj2.onclick=function(){ if(!P.services.length){ alert('Select at least one service.'); return; } P.projectCreated=true; P.sub=STATUSES.open.subs.indexOf('Proposal'); logEvent('Project created — proposal started ('+P.services.map(function(s){return s.label;}).join(', ')+')'); render(); };
+    [].forEach.call(document.querySelectorAll('[data-svcpick]'),function(el){ el.onclick=function(){ var k=el.getAttribute('data-svcpick');
+      if(hasService(k)){ if(P.services.length<=1) return; P.services=P.services.filter(function(s){return s.key!==k;}); if(P.activeService===k)P.activeService=P.services[0].key; logEvent('Service removed: '+svcLabel(k)); }
+      else { P.services.push(newService(k)); P.activeService=k; logEvent('Service added: '+svcLabel(k)); }
+      render(); }; });
+    // Service tabs (shared: admin builder, sales, tech)
+    [].forEach.call(document.querySelectorAll('[data-stab]'),function(b){ b.onclick=function(){ P.activeService=b.getAttribute('data-stab'); render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-stabx]'),function(x){ x.onclick=function(e){ e.stopPropagation(); var k=x.getAttribute('data-stabx');
+      if(P.services.length<=1) return;
+      if(!confirm('Are you sure you want to close out and delete this service tab? This removes its proposal and work order.')) return;
+      var lbl=(P.services.filter(function(s){return s.key===k;})[0]||{}).label||'service';
+      P.services=P.services.filter(function(s){return s.key!==k;}); if(P.activeService===k)P.activeService=P.services[0].key; logEvent('Service tab deleted: '+lbl); render(); }; });
+    // Add a service line from the proposal builder
+    var as=$('#addsvc'); if(as) as.onchange=function(){ var k=as.value; if(!k||hasService(k))return; P.services.push(newService(k)); P.activeService=k; logEvent('Service added: '+svcLabel(k)); render(); };
+    // Payments: open the Add-Payment form, add (with project pick if multiple), or cancel
+    var apb=$('#add-pay-btn'); if(apb) apb.onclick=function(){ payForm=true; render(); };
+    var pc2=$('#pay-cancel'); if(pc2) pc2.onclick=function(){ payForm=false; render(); };
+    var pad=$('#pay-add'); if(pad) pad.onclick=function(){
+      var label=($('#pay-label')||{}).value||'Deposit to start', amt=+(($('#pay-amt')||{}).value)||0, date=($('#pay-date')||{}).value||todayStr(),
+          proj=$('#pay-proj')?$('#pay-proj').value:'';
+      P.payments.push({label:label, amount:amt, date:date, project:proj||''});
+      logEvent('Payment added: '+label+' '+money(amt)+(date?(' · '+date):''));
+      payForm=false; render();
+    };
+    [].forEach.call(document.querySelectorAll('[data-paymark]'),function(b){ b.onclick=function(){ var p=P.payments[+b.getAttribute('data-paymark')]; if(p){ p.status='Paid'; p.date=p.date||todayStr(); logEvent('Payment recorded: '+p.label+' '+money(p.amount)); render(); } }; });
+    // Proposal builder (admin + sales): option name, line items, add/remove option & line items, present
+    function findOpt(key,id){ var s=P.services.filter(function(x){return x.key===key;})[0]; return s? s.options.filter(function(x){return x.id===id;})[0] : null; }
+    [].forEach.call(document.querySelectorAll('[data-sopt]'),function(el){ el.oninput=function(){ var a=el.getAttribute('data-sopt').split(','), o=findOpt(a[0],a[1]); if(o&&a[2]==='name') o.name=el.value; }; });
+    [].forEach.call(document.querySelectorAll('[data-li]'),function(el){
+      el.oninput=function(){ var a=el.getAttribute('data-li').split(','), o=findOpt(a[0],a[1]); if(!o)return; var li=o.lineItems[+a[2]]; if(!li)return;
+        if(a[3]==='desc') li.desc=el.value; else li[a[3]]=+el.value||0; };
+      if(el.type==='number') el.onchange=function(){ render(); };   // refresh amounts + totals on blur
+    });
+    // Add a line item from the price book (or a blank line) into the Equipment/Labor group
+    [].forEach.call(document.querySelectorAll('[data-addcat]'),function(sel){ sel.onchange=function(){ var a=sel.getAttribute('data-addcat').split(','), o=findOpt(a[0],a[1]), kind=a[2], v=sel.value; if(!o||!v)return;
+      if(v==='__blank') o.lineItems.push({kind:kind,desc:'',qty:1,price:0});
+      else { var p=v.split('|'); o.lineItems.push({kind:kind,desc:p[0],qty:1,price:+p[1]||0}); }
+      render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-delli]'),function(b){ b.onclick=function(){ var a=b.getAttribute('data-delli').split(','), o=findOpt(a[0],a[1]); if(o){ o.lineItems.splice(+a[2],1); render(); } }; });
+    [].forEach.call(document.querySelectorAll('[data-addopt]'),function(b){ b.onclick=function(){ var s=P.services.filter(function(x){return x.key===b.getAttribute('data-addopt');})[0]; if(!s||s.options.length>=3)return;
+      var id=['A','B','C'][s.options.length], names={A:'Essential',B:'Recommended',C:'Premium'};
+      // a new tier starts as a copy of the last option (keeps Equipment/Labor kinds) so you tweak instead of rebuild
+      var base=s.options[s.options.length-1], items=base.lineItems.map(function(li){return {kind:li.kind||'equipment',desc:li.desc,qty:li.qty,price:li.price};});
+      s.options.push(newOption(id,names[id],items)); render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-delopt]'),function(b){ b.onclick=function(){ var a=b.getAttribute('data-delopt').split(','), s=P.services.filter(function(x){return x.key===a[0];})[0]; if(!s||s.options.length<=1)return;
+      s.options=s.options.filter(function(o){return o.id!==a[1];});
+      // re-letter A/B/C and keep a valid presented option
+      s.options.forEach(function(o,i){ o.id=['A','B','C'][i]; });
+      if(!s.options.some(function(o){return o.id===s.selected;})) s.selected=s.options[0].id;
+      render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-spresent]'),function(b){ b.onclick=function(){ var a=b.getAttribute('data-spresent').split(','), s=P.services.filter(function(x){return x.key===a[0];})[0]; if(s){ s.selected=a[1]; render(); } }; });
+    // Price-book portal: open/close + edit prices, add/remove items, toggle defaults
+    var pbo=$('#pb-open'); if(pbo) pbo.onclick=function(){ pbPortal=true; render(); };
+    var pbc=$('#pb-close'); if(pbc) pbc.onclick=function(){ pbPortal=false; render(); };
+    var pbs=$('#pb-scrim'); if(pbs) pbs.onclick=function(e){ if(e.target===pbs){ pbPortal=false; render(); } };
+    [].forEach.call(document.querySelectorAll('[data-pb]'),function(el){ el.oninput=function(){ var a=el.getAttribute('data-pb').split(','), pb=pbFor(curService().key), it=pb[a[0]][+a[1]]; if(!it)return; if(a[2]==='desc') it.desc=el.value; else it.price=+el.value||0; }; });
+    [].forEach.call(document.querySelectorAll('[data-pbdef]'),function(t){ t.onclick=function(){ var a=t.getAttribute('data-pbdef').split(','), pb=pbFor(curService().key), it=pb[a[0]][+a[1]]; if(it){ it.def=!it.def; render(); } }; });
+    [].forEach.call(document.querySelectorAll('[data-pbdel]'),function(b){ b.onclick=function(){ var a=b.getAttribute('data-pbdel').split(','), pb=pbFor(curService().key); pb[a[0]].splice(+a[1],1); render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-pbadd]'),function(b){ b.onclick=function(){ var kind=b.getAttribute('data-pbadd'), pb=pbFor(curService().key); pb[kind].push({desc:'',price:0,def:false}); render(); }; });
+    // Work Order builder: edit per-task tech pay, re-pull from proposal
+    [].forEach.call(document.querySelectorAll('[data-wotask]'),function(el){ el.oninput=function(){ var a=el.getAttribute('data-wotask').split(','), s=P.services.filter(function(x){return x.key===a[0];})[0]; if(!s||!s.wo.tasks)return; var tk=s.wo.tasks[+a[1]]; if(tk)tk.pay=+el.value||0; }; if(el.type==='number') el.onchange=function(){ render(); }; });
+    [].forEach.call(document.querySelectorAll('[data-worebuild]'),function(b){ b.onclick=function(){ var s=P.services.filter(function(x){return x.key===b.getAttribute('data-worebuild');})[0]; if(s){ buildWO(s); logEvent('Work order rebuilt from proposal: '+s.label); render(); } }; });
+    // Technician pay-rate portal
+    var tpo=$('#techpb-open'); if(tpo) tpo.onclick=function(){ techPbOpen=true; render(); };
+    var tpc=$('#techpb-close'); if(tpc) tpc.onclick=function(){ techPbOpen=false; render(); };
+    var tps=$('#techpb-scrim'); if(tps) tps.onclick=function(e){ if(e.target===tps){ techPbOpen=false; render(); } };
+    [].forEach.call(document.querySelectorAll('[data-techpb]'),function(el){ el.oninput=function(){ TECH_PAYBOOK[el.getAttribute('data-techpb')]=+el.value||0; }; });
+    [].forEach.call(document.querySelectorAll('[data-techpb-k]'),function(el){ el.onchange=function(){ var old=el.getAttribute('data-techpb-k'), nw=el.value.trim(); if(!nw||nw===old)return; if(TECH_PAYBOOK[nw]==null){ TECH_PAYBOOK[nw]=TECH_PAYBOOK[old]; delete TECH_PAYBOOK[old]; render(); } }; });
+    [].forEach.call(document.querySelectorAll('[data-techpb-del]'),function(b){ b.onclick=function(){ delete TECH_PAYBOOK[b.getAttribute('data-techpb-del')]; render(); }; });
+    var tpa=$('#techpb-add'); if(tpa) tpa.onclick=function(){ var n='New labor item',i=1; while(TECH_PAYBOOK[n]!=null){ n='New labor item '+(++i); } TECH_PAYBOOK[n]=0; render(); };
+    // Tech checklist / QC (active service's work order)
+    [].forEach.call(document.querySelectorAll('[data-chk]'),function(t){ t.onclick=function(){ var c=curService().wo.checklist[+t.getAttribute('data-chk')]; c.done=!c.done; render(); }; });
+    var qc=$('#qc'); if(qc) qc.onclick=function(){ var s=curService(); s.wo.qc = s.wo.qc==='Passed'?'Pending':'Passed'; render(); };
+    // Customer: choose option + sign PER service
+    [].forEach.call(document.querySelectorAll('[data-pick]'),function(b){ b.onclick=function(){ var a=b.getAttribute('data-pick').split(','), s=P.services.filter(function(x){return x.key===a[0];})[0]; if(s){ s.selected=a[1]; render(); } }; });
+    [].forEach.call(document.querySelectorAll('[data-csign]'),function(b){ b.onclick=function(){ var s=P.services.filter(function(x){return x.key===b.getAttribute('data-csign');})[0]; if(!s)return; var n=prompt('Type your full legal name to accept & sign '+s.label+':'); if(n&&n.trim()){
+      s.signed={name:n.trim(),opt:s.selected,at:new Date().toISOString()}; logEvent('Customer signed '+s.label+' — Option '+s.selected+' by '+n.trim());
+      // When every service is signed → advance to Approval and auto-request the deposit.
+      if(P.services.every(function(x){return x.signed;})){
+        if(STATUSES.open.subs[P.sub]==='Proposal'){ P.sub=STATUSES.open.subs.indexOf('Approval'); logEvent('All proposals signed — advanced to Approval'); }
+        if(!P.payments.some(function(p){return p.deposit;})){ var dep=Math.round(presentedTotal()/2); P.payments.push({label:'Deposit to start', amount:dep, date:'', status:'Due', deposit:true}); logEvent('Deposit requested: '+money(dep)); }
+      }
+      render();
+    } }; });
+    // Inquiry availability (customer) · mockup upload + proposal submit (admin)
+    var av=$('#cx-avail-submit'); if(av) av.onclick=function(){ var v=($('#cx-avail')||{}).value||''; if(!v.trim())return; P.availability=v.trim(); logEvent('Customer submitted availability'); render(); };
+    var mu=$('#mockup-upload'); if(mu) mu.onclick=function(){ P.mockupUploaded=true; if(!P.documents.some(function(d){return d.name==='Coverage Mockup';})) P.documents.push({name:'Coverage Mockup', from:1}); logEvent('Mockup uploaded & shared with customer'); render(); };
+    var psb=$('#proposal-submit'); if(psb) psb.onclick=function(){ P.proposalSubmitted=true; logEvent('Proposal submitted to customer'); render(); };
+    var pus=$('#proposal-unsubmit'); if(pus) pus.onclick=function(){ P.proposalSubmitted=false; render(); };
+    [].forEach.call(document.querySelectorAll('[data-pay]'),function(b){ b.onclick=function(){ var lbl=b.getAttribute('data-pay'); var p=P.payments.filter(function(x){return x.label===lbl;})[0]; if(p){ p.status='Paid'; p.date=p.date||todayStr(); logEvent('Customer paid: '+p.label+' '+money(p.amount)); render(); } }; });
+  }
+
+  window.ProjectLink={ get state(){return {session:session,pin:pinView,viewAs:viewAs,screen:screen,dashView:dashView,record:P};}, loginAs:function(r){session=r;pinView=null;viewAs=null;screen='project';dashView='home';render();}, enterPin:function(c){var v=P.access.pins[c];if(v){pinView=v;session=null;screen='project';dashView='home';render();return v;}return null;}, reset:function(){session=null;pinView=null;viewAs=null;screen='project';dashView='home';render();} };
+  render();
+})();
+</script>
+</body>
+</html>

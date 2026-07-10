@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome — IOT TECHS</title>
+<style>
+  :root{ --cream:#FAF8F4; --slate:#2C3347; --gold:#C9A96E; --gold-dim:#9c7f48; --ink:#0B0F1A; --ink-2:#121726; --line:#2a3247; --green-l:#4ADE80; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{background:var(--ink);min-height:100%;}
+  body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--cream);min-height:100vh;line-height:1.6;
+    background:radial-gradient(900px 500px at 80% -5%, rgba(201,169,110,.12), transparent 60%), var(--ink);padding-bottom:70px;-webkit-font-smoothing:antialiased;}
+  header{background:linear-gradient(180deg,var(--slate) 0%, #232a3b 100%);border-bottom:3px solid var(--gold);padding:26px 0;}
+  .wrap{max-width:760px;margin:0 auto;padding:0 22px;}
+  .brand h1{font-size:22px;letter-spacing:4px;font-weight:700;color:#fff;}
+  .brand .tag{color:var(--gold);letter-spacing:3px;font-size:10px;margin-top:5px;text-transform:uppercase;}
+  .hero{margin-top:28px;background:linear-gradient(180deg,rgba(201,169,110,.13),rgba(201,169,110,.04));border:1px solid var(--gold-dim);border-radius:16px;padding:30px 26px;text-align:center;}
+  .hero .em{font-size:40px;}
+  .hero h2{font-size:25px;font-weight:800;color:#fff;margin-top:8px;}
+  .hero p{color:#c4cbd9;font-size:14px;margin-top:8px;}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-top:18px;}
+  .card h3{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:12px;}
+  .step{display:flex;gap:13px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #1c2230;}
+  .step:last-child{border-bottom:none;}
+  .step .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:#23314a;border:1px solid var(--gold-dim);color:var(--gold);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;}
+  .step .b b{color:#fff;font-weight:700;} .step .b{font-size:13.5px;color:#c4cbd9;}
+  .tip{font-size:13px;color:#c4cbd9;padding:7px 0;}
+  .tip b{color:#fff;}
+  .contact{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
+  .contact a{flex:1 1 200px;text-decoration:none;background:#23314a;border:1px solid var(--gold-dim);border-radius:10px;padding:13px 15px;color:var(--cream);font-size:13px;font-weight:600;}
+  .contact a b{display:block;color:var(--gold);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;}
+  footer{text-align:center;color:#7e879a;font-size:11px;margin-top:30px;}
+  .back{display:inline-block;margin-top:18px;color:var(--gold);text-decoration:none;font-size:13px;font-weight:700;}
+</style>
+</head>
+<body>
+<header><div class="wrap brand"><h1>IOT TECHS</h1><div class="tag">Security Camera Systems</div></div></header>
+<div class="wrap">
+  <div class="hero">
+    <div class="em"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M2 22l4.5-13.5L15.5 17.5z"/><path d="M14 3c1.5 1 1.5 3 0 4M18 6c1.5 1 1.5 3 0 4M20 13h.01M16 2h.01M11 4h.01"/></svg></div>
+    <h2 id="welcomeTitle">Welcome to your new system!</h2>
+    <p id="welcomeSub">Your installation is complete. Here's everything you need to get the most out of it.</p>
+  </div>
+
+  <div class="card">
+    <h3>Getting started</h3>
+    <div class="step"><div class="n">1</div><div class="b"><b>Download the viewing app.</b> Your technician installed and linked your cameras to the mobile app on-site. Search your app store for the NVR brand shown on your recorder, or ask us and we'll send the exact link.</div></div>
+    <div class="step"><div class="n">2</div><div class="b"><b>Sign in.</b> Use the username and password set up during installation. If you didn't write it down, contact us and we'll help you recover it.</div></div>
+    <div class="step"><div class="n">3</div><div class="b"><b>View live & recorded footage.</b> Tap any camera for a live feed; scrub the timeline to review recordings. Most systems retain ~30 days of footage.</div></div>
+    <div class="step"><div class="n">4</div><div class="b"><b>Set up motion alerts.</b> Enable push notifications in the app so you're alerted to motion in the zones that matter.</div></div>
+  </div>
+
+  <div class="card">
+    <h3>Good to know</h3>
+    <div class="tip"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> <b>Your recorder needs power & internet.</b> Keep the NVR and router plugged in — remote viewing relies on both.</div>
+    <div class="tip"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M5 16l.8 2L8 19l-2.2.9L5 22l-.8-2L2 19l2.2-1z"/></svg> <b>Clean lenses occasionally.</b> A soft, dry cloth keeps the picture sharp; avoid harsh cleaners.</div>
+    <div class="tip"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5z"/></svg> <b>Workmanship warranty.</b> Your installation is covered — if anything isn't working right, reach out and we'll make it right.</div>
+    <div class="tip"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> <b>Want to expand?</b> Adding cameras later is easy. Start another project from your dashboard any time.</div>
+  </div>
+
+  <div class="card">
+    <h3>We're here to help</h3>
+    <div class="contact">
+      <a href="tel:+16463960775"><b>Call / Text</b>(646) 396-0775</a>
+      <a href="mailto:support@iot-techs.com"><b>Email</b>support@iot-techs.com</a>
+    </div>
+    <a class="back" id="backLink" href="#">← Back to my project dashboard</a>
+  </div>
+
+  <footer>IOT TECHS / La Vague Inc. &nbsp;·&nbsp; Thank you for your business.</footer>
+</div>
+<script>
+(async function(){
+  function qs(k){ try{ return new URLSearchParams(location.search).get(k); }catch(e){ return null; } }
+  const cid=qs('customer'), tok=qs('token');
+  if(cid){
+    const back=document.getElementById('backLink');
+    back.href='/project.html?customer='+cid+'&view=customer'+(tok?'&token='+encodeURIComponent(tok):'');
+    try{
+      const q='/api/project/'+cid+(tok?'?scope=external&token='+encodeURIComponent(tok):'');
+      const p=await (await fetch(q)).json();
+      if(p && !p.error){
+        const name=p.business||p.name||'';
+        if(name) document.getElementById('welcomeTitle').textContent='Welcome, '+name+'!';
+      }
+    }catch(e){}
+  } else { document.getElementById('backLink').style.display='none'; }
+})();
+</script>
+</body>
+</html>

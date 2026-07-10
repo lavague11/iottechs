@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<!--
+  Standalone Floor-Plan Draw Tool  —  self-contained (no dependencies, no server needed).
+  Extracted/condensed from the IOT site-survey board engine so it can be reused anywhere.
+
+  HOW TO ADD IT LATER — three ways:
+    1. Open this file directly in a browser, or serve it (e.g. /drawtool.html).
+    2. Embed in another page:   <iframe src="/drawtool.html" style="width:100%;height:640px;border:0"></iframe>
+    3. Inline it: copy the <style>, the #dt-root markup, and the <script> into your page,
+       then call  DrawTool.mount('dt-root').
+
+  PUBLIC API (window.DrawTool):
+    DrawTool.mount(rootElOrId, opts?)   -> start the tool inside an element
+    DrawTool.serialize()                -> returns a plain JSON object (save it on your server)
+    DrawTool.restore(json)              -> load a previously serialized drawing
+    DrawTool.exportPNG(cb)              -> cb(dataUrl) with a flattened PNG (background + strokes)
+    DrawTool.setBackground(dataUrl)     -> set/replace the background image
+    DrawTool.clear()                    -> wipe the board
+    opts: { feetWide:Number }           -> known real width in feet, enables measurements on the Wall tool
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floor-Plan Draw Tool</title>
+<style>
+  :root{ --ink:#0B0F1A; --slate:#2C3347; --line:#3A4257; --cream:#F4EFE6; --gold:#C9A96E; --muted:#8A93A8; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--ink); color:var(--cream);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+  #dt-root{ display:flex; flex-direction:column; height:100%; padding:12px; gap:10px; }
+
+  .dt-toolbar{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .dt-tool,.dt-btn{ background:var(--slate); border:1px solid var(--line); color:var(--cream);
+    border-radius:8px; padding:7px 11px; font-size:12.5px; font-weight:600; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap; user-select:none; }
+  .dt-tool:hover,.dt-btn:hover{ border-color:var(--gold); }
+  .dt-tool.active{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .dt-sep{ width:1px; align-self:stretch; background:var(--line); margin:2px 4px; }
+  .dt-toolbar input[type=color]{ width:30px; height:30px; padding:0; border:1px solid var(--line);
+    border-radius:8px; background:var(--slate); cursor:pointer; }
+  .dt-toolbar input[type=range]{ width:90px; accent-color:var(--gold); }
+  .dt-toolbar label{ font-size:11px; color:var(--muted); display:inline-flex; align-items:center; gap:5px; }
+  .dt-w{ font-size:11px; color:var(--gold); min-width:28px; text-align:center; }
+
+  .dt-stage{ position:relative; flex:1; min-height:300px; border:1px solid var(--line);
+    border-radius:12px; overflow:hidden; background:
+      linear-gradient(0deg,rgba(255,255,255,.03) 1px,transparent 1px) 0 0/100% 24px,
+      linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px) 0 0/24px 100%,
+      #161b2a; }
+  #dt-bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:none; }
+  #dt-canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+
+  .dt-badge{ position:absolute; transform:translate(-50%,-140%); background:var(--ink); color:var(--gold);
+    border:1px solid var(--gold); border-radius:6px; padding:2px 7px; font-size:11px; font-weight:700;
+    pointer-events:none; white-space:nowrap; z-index:5; display:none; }
+  .dt-hint{ font-size:11px; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="dt-root">
+  <div class="dt-toolbar" id="dt-toolbar">
+    <button class="dt-tool active" data-tool="pen" title="Freehand draw">✎ Pen</button>
+    <button class="dt-tool" data-tool="line" title="Straight wall — snaps to 0/45/90°">／ Wall</button>
+    <button class="dt-tool" data-tool="rect" title="Rectangle / room">▭ Room</button>
+    <button class="dt-tool" data-tool="text" title="Place a label">T Text</button>
+    <button class="dt-tool" data-tool="erase" title="Click a shape to delete it">⌫ Erase</button>
+    <span class="dt-sep"></span>
+    <input type="color" id="dt-color" value="#C9A96E" title="Stroke color">
+    <label>W <input type="range" id="dt-width" min="1" max="14" value="3"><span class="dt-w" id="dt-wval">3</span></label>
+    <span class="dt-sep"></span>
+    <button class="dt-btn" id="dt-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button class="dt-btn" id="dt-bgbtn" title="Set a background floor plan / photo">🖼 Background</button>
+    <button class="dt-btn" id="dt-clear" title="Clear everything">Clear</button>
+    <span class="dt-sep"></span>
+    <button class="dt-btn" id="dt-save" title="Download the drawing as JSON">Save JSON</button>
+    <button class="dt-btn" id="dt-load" title="Load a drawing from JSON">Load JSON</button>
+    <button class="dt-btn" id="dt-png" title="Export a flattened PNG">Export PNG</button>
+    <input type="file" id="dt-bgfile" accept="image/*" hidden>
+    <input type="file" id="dt-loadfile" accept="application/json,.json" hidden>
+  </div>
+
+  <div class="dt-stage" id="dt-stage">
+    <img id="dt-bg" alt="">
+    <canvas id="dt-canvas"></canvas>
+    <div class="dt-badge" id="dt-badge"></div>
+  </div>
+
+  <div class="dt-hint" id="dt-hint">Pen draws freehand · Wall snaps to clean angles · double-tap empty space to finish a wall · Erase clicks a shape to remove it.</div>
+</div>
+
+<script>
+(function(){
+  // ── State ────────────────────────────────────────────────────────────────
+  // Strokes store coordinates as PERCENTAGES of the stage (0–100), so the drawing
+  // scales with the container and survives resize/zoom. type: pen|line|rect|text.
+  var state = { strokes: [], bg: null, feetWide: 0 };
+  var tool = 'pen', color = '#C9A96E', width = 3;
+  var cur = null;          // stroke being drawn
+  var undoStack = [];
+  var stage, canvas, ctx, bgImg, badge, dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function $(id){ return document.getElementById(id); }
+
+  // ── Geometry helpers ──────────────────────────────────────────────────────
+  function pct(e){ var r = stage.getBoundingClientRect();
+    return { x:(e.clientX - r.left)/r.width*100, y:(e.clientY - r.top)/r.height*100 }; }
+  function toPx(p){ return { x:p.x/100*canvas.width, y:p.y/100*canvas.height }; }
+  var lw = function(w){ return w * dpr; };           // stroke width in device px
+
+  // Snap a segment to the nearest 45° when it's within ~7° of one.
+  function snapLine(a, b){
+    var dx = b.x - a.x, dy = b.y - a.y, deg = Math.atan2(dy, dx) * 180/Math.PI;
+    var snapped = Math.round(deg/45)*45, dev = Math.abs(deg - snapped);
+    if (dev <= 7){
+      var len = Math.hypot(dx, dy), rad = snapped*Math.PI/180;
+      return { end:{ x:a.x + Math.cos(rad)*len, y:a.y + Math.sin(rad)*len }, deg:((snapped%360)+360)%360, snapped:true };
+    }
+    return { end:b, deg:((Math.round(deg)%360)+360)%360, snapped:false };
+  }
+  function segLenPx(a, b){ var pa = toPx(a), pb = toPx(b); return Math.hypot(pb.x-pa.x, pb.y-pa.y); }
+  function feetLabel(a, b){
+    if (!state.feetWide) return null;
+    var feet = segLenPx(a,b) / canvas.width * state.feetWide;     // px → feet via known stage width
+    var ft = Math.floor(feet), inch = Math.round((feet-ft)*12);
+    if (inch === 12){ ft++; inch = 0; }
+    return ft + "'" + (inch ? ' ' + inch + '"' : '');
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+  function sizeCanvas(){
+    var r = stage.getBoundingClientRect();
+    canvas.width  = Math.max(1, Math.round(r.width  * dpr));
+    canvas.height = Math.max(1, Math.round(r.height * dpr));
+    redraw();
+  }
+  function drawStroke(s){
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = s.color; ctx.fillStyle = s.color; ctx.lineWidth = lw(s.w);
+    if (s.type === 'text'){
+      var p = toPx(s.pts[0]);
+      ctx.font = '700 ' + lw(s.w*4.5) + 'px sans-serif';
+      ctx.textBaseline = 'middle'; ctx.fillText(s.text || '', p.x, p.y);
+      return;
+    }
+    if (s.type === 'rect'){
+      var a = toPx(s.pts[0]), b = toPx(s.pts[1]);
+      ctx.strokeRect(Math.min(a.x,b.x), Math.min(a.y,b.y), Math.abs(b.x-a.x), Math.abs(b.y-a.y));
+      return;
+    }
+    // pen + line: polyline through the points
+    ctx.beginPath();
+    s.pts.forEach(function(pt, i){ var q = toPx(pt); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+    ctx.stroke();
+  }
+  function redraw(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    state.strokes.forEach(drawStroke);
+    if (cur) drawStroke(cur);
+  }
+
+  // ── Undo ──────────────────────────────────────────────────────────────────
+  function snap(){ undoStack.push(JSON.stringify(state.strokes)); if (undoStack.length > 60) undoStack.shift(); }
+  function undo(){ if (!undoStack.length) return; state.strokes = JSON.parse(undoStack.pop()); cur = null; redraw(); }
+
+  // ── Badge (live length/angle readout) ─────────────────────────────────────
+  function showBadge(e, txt){ var r = stage.getBoundingClientRect();
+    badge.textContent = txt; badge.style.display = 'block';
+    badge.style.left = (e.clientX - r.left) + 'px'; badge.style.top = (e.clientY - r.top) + 'px'; }
+  function hideBadge(){ badge.style.display = 'none'; }
+
+  // ── Eraser hit-test ───────────────────────────────────────────────────────
+  function distToSeg(p, a, b){
+    var A = toPx(a), B = toPx(b), P = toPx(p);
+    var dx = B.x-A.x, dy = B.y-A.y, l2 = dx*dx + dy*dy;
+    var t = l2 ? Math.max(0, Math.min(1, ((P.x-A.x)*dx + (P.y-A.y)*dy)/l2)) : 0;
+    return Math.hypot(P.x - (A.x+t*dx), P.y - (A.y+t*dy));
+  }
+  function hitStroke(p){
+    var tol = Math.max(8, lw(6));
+    for (var i = state.strokes.length-1; i >= 0; i--){
+      var s = state.strokes[i];
+      if (s.type === 'text'){ if (Math.hypot(toPx(s.pts[0]).x-toPx(p).x, toPx(s.pts[0]).y-toPx(p).y) < lw(s.w*6)) return i; continue; }
+      if (s.type === 'rect'){
+        var a = s.pts[0], b = s.pts[1], edges = [[{x:a.x,y:a.y},{x:b.x,y:a.y}],[{x:b.x,y:a.y},{x:b.x,y:b.y}],[{x:b.x,y:b.y},{x:a.x,y:b.y}],[{x:a.x,y:b.y},{x:a.x,y:a.y}]];
+        for (var k=0;k<4;k++) if (distToSeg(p, edges[k][0], edges[k][1]) < tol) return i;
+        continue;
+      }
+      for (var j = 0; j < s.pts.length-1; j++) if (distToSeg(p, s.pts[j], s.pts[j+1]) < tol) return i;
+    }
+    return -1;
+  }
+
+  // ── Pointer handling ──────────────────────────────────────────────────────
+  var drawing = false, lastTap = 0;
+  function onDown(e){
+    canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+    var p = pct(e);
+    if (tool === 'erase'){ var hit = hitStroke(p); if (hit >= 0){ snap(); state.strokes.splice(hit,1); redraw(); } return; }
+    if (tool === 'text'){ var t = prompt('Label text:'); if (t){ snap(); state.strokes.push({ type:'text', color:color, w:width, text:t, pts:[p] }); redraw(); } return; }
+    if (tool === 'pen'){ snap(); cur = { type:'pen', color:color, w:width, pts:[p] }; drawing = true; return; }
+    if (tool === 'rect'){ snap(); cur = { type:'rect', color:color, w:width, pts:[p, p] }; drawing = true; return; }
+    if (tool === 'line'){
+      // double-tap empty space finishes a multi-point wall run
+      var now = Date.now();
+      if (cur && cur.type === 'line' && now - lastTap < 320){ commitCur(); lastTap = 0; return; }
+      lastTap = now;
+      if (!cur){ snap(); cur = { type:'line', color:color, w:width, pts:[p, p] }; }
+      else { var sl = snapLine(cur.pts[cur.pts.length-2], p); cur.pts[cur.pts.length-1] = sl.end; cur.pts.push({ x:sl.end.x, y:sl.end.y }); }
+      drawing = true; redraw(); return;
+    }
+  }
+  function onMove(e){
+    var p = pct(e);
+    if (tool === 'line' && cur){
+      var prev = cur.pts[cur.pts.length-2], sl = snapLine(prev, p);
+      cur.pts[cur.pts.length-1] = sl.end;
+      var lbl = feetLabel(prev, sl.end); showBadge(e, (lbl ? lbl + ' · ' : '') + Math.round(sl.deg) + '°' + (sl.snapped ? ' ⟂' : ''));
+      redraw(); return;
+    }
+    if (!drawing || !cur) return;
+    if (cur.type === 'pen'){ cur.pts.push(p); redraw(); }
+    else if (cur.type === 'rect'){ cur.pts[1] = p; redraw(); }
+  }
+  function onUp(){
+    if (tool === 'line'){ drawing = false; return; }   // line is click-to-click; finished on double-tap
+    if (!drawing) return;
+    drawing = false; commitCur();
+  }
+  function commitCur(){
+    if (cur){
+      var ok = cur.type === 'pen' ? cur.pts.length > 1
+             : cur.type === 'line' ? cur.pts.length >= 2
+             : true;
+      if (ok) state.strokes.push(cur);
+    }
+    cur = null; hideBadge(); redraw();
+  }
+
+  // ── Toolbar wiring ────────────────────────────────────────────────────────
+  function setTool(t){ if (cur) commitCur(); tool = t;
+    [].forEach.call(document.querySelectorAll('.dt-tool'), function(b){ b.classList.toggle('active', b.dataset.tool === t); }); }
+
+  function wire(){
+    [].forEach.call(document.querySelectorAll('.dt-tool'), function(b){ b.addEventListener('click', function(){ setTool(b.dataset.tool); }); });
+    $('dt-color').addEventListener('input', function(e){ color = e.target.value; });
+    $('dt-width').addEventListener('input', function(e){ width = +e.target.value; $('dt-wval').textContent = width; });
+    $('dt-undo').addEventListener('click', undo);
+    $('dt-clear').addEventListener('click', function(){ if (confirm('Clear the whole drawing?')){ snap(); state.strokes = []; cur = null; redraw(); } });
+    $('dt-bgbtn').addEventListener('click', function(){ $('dt-bgfile').click(); });
+    $('dt-bgfile').addEventListener('change', function(e){ var f = e.target.files[0]; if (!f) return;
+      var rd = new FileReader(); rd.onload = function(){ setBackground(rd.result); }; rd.readAsDataURL(f); e.target.value = ''; });
+    $('dt-save').addEventListener('click', function(){
+      var blob = new Blob([JSON.stringify(serialize())], { type:'application/json' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'floor-plan.json'; a.click(); URL.revokeObjectURL(a.href); });
+    $('dt-load').addEventListener('click', function(){ $('dt-loadfile').click(); });
+    $('dt-loadfile').addEventListener('change', function(e){ var f = e.target.files[0]; if (!f) return;
+      var rd = new FileReader(); rd.onload = function(){ try { restore(JSON.parse(rd.result)); } catch(err){ alert('Not a valid drawing file'); } }; rd.readAsText(f); e.target.value = ''; });
+    $('dt-png').addEventListener('click', function(){ exportPNG(function(url){ var a = document.createElement('a'); a.href = url; a.download = 'floor-plan.png'; a.click(); }); });
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('resize', sizeCanvas);
+    document.addEventListener('keydown', function(e){ if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); } });
+  }
+
+  // ── Background ────────────────────────────────────────────────────────────
+  function setBackground(dataUrl){ state.bg = dataUrl || null; bgImg.src = dataUrl || ''; }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  function serialize(){ return { v:1, feetWide: state.feetWide, bg: state.bg, strokes: state.strokes }; }
+  function restore(json){ json = json || {};
+    state.strokes = Array.isArray(json.strokes) ? json.strokes : [];
+    state.feetWide = +json.feetWide || 0;
+    setBackground(json.bg || null);
+    undoStack = []; cur = null; redraw(); }
+  function exportPNG(cb){
+    var out = document.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
+    var octx = out.getContext('2d'); octx.fillStyle = '#ffffff'; octx.fillRect(0,0,out.width,out.height);
+    function paintStrokes(){ octx.drawImage(canvas, 0, 0); cb(out.toDataURL('image/png')); }
+    if (state.bg){ var im = new Image(); im.onload = function(){
+        // object-fit: contain
+        var ar = im.width/im.height, car = out.width/out.height, w, h, x, y;
+        if (ar > car){ w = out.width; h = w/ar; } else { h = out.height; w = h*ar; }
+        x = (out.width-w)/2; y = (out.height-h)/2; octx.drawImage(im, x, y, w, h); paintStrokes();
+      }; im.onerror = paintStrokes; im.src = state.bg; }
+    else paintStrokes();
+  }
+  function mount(rootElOrId, opts){
+    var root = typeof rootElOrId === 'string' ? document.getElementById(rootElOrId) : rootElOrId;
+    stage = root.querySelector('#dt-stage') || $('dt-stage');
+    canvas = root.querySelector('#dt-canvas') || $('dt-canvas');
+    bgImg  = root.querySelector('#dt-bg') || $('dt-bg');
+    badge  = root.querySelector('#dt-badge') || $('dt-badge');
+    ctx = canvas.getContext('2d');
+    state.feetWide = (opts && +opts.feetWide) || 0;
+    wire(); sizeCanvas();
+    return window.DrawTool;
+  }
+
+  window.DrawTool = { mount:mount, serialize:serialize, restore:restore, exportPNG:exportPNG, setBackground:setBackground,
+    clear:function(){ snap(); state.strokes=[]; cur=null; redraw(); }, setTool:setTool, state:state };
+
+  // auto-mount when used as a standalone page
+  if (document.getElementById('dt-stage')) document.addEventListener('DOMContentLoaded', function(){ mount('dt-root'); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+node_modules/
+data/
+*.log
+.DS_Store
+config.json
+
+# Secrets — never commit env files (API keys live here)
+.env
+.env.*
+!.env.example
+
+# Build output
+.next/
+dist/
+
+# Local databases (customer data stays local)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Tooling / session state — generated, not source
+.claude/
+.claude-flow/
+.swarm/
+graphify-out/
+*.jsonl
