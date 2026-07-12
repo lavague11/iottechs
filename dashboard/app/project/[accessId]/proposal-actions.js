@@ -16,6 +16,7 @@ import {
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
 import { fetchTracking } from "../../../lib/tracking";
+import { emailProposalReady } from "../../../lib/email";
 
 const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
@@ -118,6 +119,9 @@ export async function sendProposalAction(accessId) {
   const hasItems = payload.options?.some((o) => o.services?.some((s) => s.items?.length));
   if (!hasItems) return { error: "Add at least one line item first." };
   const row = markProposalSent(accessId, tok.name || tok.email || tok.role);
+  // Notify the customer their proposal is ready — fire-and-forget so a slow/failed
+  // email never blocks or fails the send. No-op until RESEND_API_KEY is configured.
+  emailProposalReady(accessId).catch(() => {});
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }

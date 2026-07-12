@@ -4,6 +4,7 @@ import { headers, cookies } from "next/headers";
 import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
+import { emailStageAdvance } from "../../../lib/email";
 
 export async function getPreviewTokenAction(accessId, role) {
   // Preview tokens grant a role's view of a project. Scope minting by who's asking:
@@ -140,8 +141,12 @@ export async function setStage(accessId, viewRole, stageKey) {
     return { ok: false, error: "That stage does not apply to this project." };
   }
 
+  const changed = p.stage !== stageKey;
   const updated = updateStage(accessId, stageKey);
   if (!updated) return { ok: false, error: "Could not update the project." };
+  // Notify the customer when they've entered a stage that needs their action — only on a real
+  // move (not re-setting the same stage). Fire-and-forget; no-op until email is configured.
+  if (changed) emailStageAdvance(accessId, stageKey).catch(() => {});
   // Bust the cached render so a reload reflects the new stage (not just the in-session update).
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
