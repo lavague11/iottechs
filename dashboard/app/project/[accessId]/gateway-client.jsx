@@ -2224,6 +2224,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           role={cView}
           readOnly={!!previewRole || cView === "tech"}
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+          onBrowseStage={(s) => browse(s)}
           onCompletedChange={(ts) => setLocalProj((p) => ({ ...p, completed_at: ts }))}
         />
       ) : viewingStage === "qc" ? (

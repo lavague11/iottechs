@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { completeProjectAction, setCommissionAction, setPayoutAction } from "./actions";
+import { getApprovalDataAction } from "./proposal-actions";
+import { optionTotals } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -24,11 +26,35 @@ function addMonths(d, m) {
   catch { return null; }
 }
 
-export default function CompletionPanel({ project, proposal, role, readOnly, onStageChange, onCompletedChange }) {
+export default function CompletionPanel({ project, proposal, role, readOnly, onStageChange, onCompletedChange, onBrowseStage }) {
   const isCustomer = role === "customer";
   const isStaff = ["admin", "manager"].includes(role);
   const canWrap = isStaff && !readOnly;
   const assignedTech = proposal?.tech_signed_name || project.tech || null;
+
+  // Final-payment gate: the customer's certificate, warranty, welcome guide and app access only
+  // unlock once the balance is paid in full. Staff always see everything. We pull the same
+  // payments + add-ons the approval panel uses and compute the balance against the accepted option.
+  const [payData, setPayData] = useState(null);   // null = not loaded yet
+  useEffect(() => {
+    let live = true;
+    getApprovalDataAction(project.access_id).then((r) => { if (live && r?.ok) setPayData(r); }).catch(() => {});
+    return () => { live = false; };
+  }, [project.access_id]);
+
+  const acceptedOpt = proposal?.payload?.options?.find((o) => o.id === proposal.selected_option) || proposal?.payload?.options?.[0] || null;
+  const grand = acceptedOpt
+    ? optionTotals(acceptedOpt, proposal.tax_rate, proposal.payload.discount, proposal.deposit_pct, proposal.payload.pcp_credit).grand
+    : 0;
+  const addonsTotal = +payData?.addons?.total || 0;
+  const owed = grand + addonsTotal;
+  const paidTotal = (payData?.payments || []).filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const balance = Math.max(0, owed - paidTotal);
+  const payLoaded = payData !== null;
+  const paidInFull = owed <= 0 || (payLoaded && balance <= 0.01);
+  // Gate the customer until we've loaded payments AND they're paid in full. While loading we hold
+  // the deliverables back (safer than flashing them, then hiding).
+  const gated = isCustomer && !paidInFull;
 
   // Device count from the accepted option (cameras + recorder + other equipment; skip labour).
   const deviceCount = (() => {
@@ -89,11 +115,29 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>
         </div>
         <div>
-          <div className="cmp-hero-title">{isCustomer ? "Your system is live." : "Project complete."}</div>
-          <div className="cmp-hero-sub">{isCustomer ? "Installation is complete and your cameras are online. Here's everything you need." : `${deviceCount} device${deviceCount === 1 ? "" : "s"} installed and verified in QC.`}</div>
+          <div className="cmp-hero-title">{gated ? "Installation complete." : isCustomer ? "Your system is live." : "Project complete."}</div>
+          <div className="cmp-hero-sub">{gated ? "One last step — settle your final balance to unlock your certificate, warranty, and app access." : isCustomer ? "Installation is complete and your cameras are online. Here's everything you need." : `${deviceCount} device${deviceCount === 1 ? "" : "s"} installed and verified in QC.`}</div>
         </div>
       </div>
 
+      {/* Final-payment gate (customer, unpaid) — withholds the deliverables until settled */}
+      {gated && (
+        <div className="cmp-gate">
+          <div className="cmp-gate-ic">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div className="cmp-gate-body">
+            <div className="cmp-gate-title">Final balance {payLoaded ? "due" : "…"}</div>
+            <div className="cmp-gate-amt">{payLoaded ? money(balance) : "Checking payment status…"}</div>
+            <div className="cmp-gate-sub">Your completion certificate, warranty document, and camera app access unlock the moment your final payment is recorded.</div>
+            {onBrowseStage && payLoaded && (
+              <button type="button" className="cmp-gate-btn" onClick={() => onBrowseStage("payment")}>Go to Payment</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!gated && (<>
       {/* Certificate */}
       <div className="cmp-cert" id="cmp-cert">
         <div className="cmp-cert-head">
@@ -135,6 +179,8 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
         </div>
       )}
 
+      </>)}
+
       {/* Internal wrap-up */}
       {isStaff && (
         <div className="cmp-wrap">
@@ -174,10 +220,12 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
 
       {err && <div className="cmp-err">{err}</div>}
 
-      <div className="cmp-actions">
-        <button type="button" className="cmp-dl" onClick={() => downloadCompletionPdf(project, { deviceCount, completedAt, warrantyMonths: WARRANTY_MONTHS })}>Download PDF</button>
-        <button type="button" className="cmp-print" onClick={() => window.print()}>Print</button>
-      </div>
+      {!gated && (
+        <div className="cmp-actions">
+          <button type="button" className="cmp-dl" onClick={() => downloadCompletionPdf(project, { deviceCount, completedAt, warrantyMonths: WARRANTY_MONTHS })}>Download PDF</button>
+          <button type="button" className="cmp-print" onClick={() => window.print()}>Print</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -220,6 +268,13 @@ const CMP_CSS = `
 .cmp-payout-dollar{display:inline-flex;align-items:center;gap:2px;font-size:.86rem;font-weight:700;color:#0B0F1A}
 .cmp-payout-in{width:74px;height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.86rem;font-family:inherit;text-align:right}
 .cmp-err{font-size:.82rem;color:#a8442f;background:#fdeceb;border:1px solid #e0b0a8;border-radius:8px;padding:8px 10px}
+.cmp-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid #C9A96E;border-radius:12px;padding:18px 20px}
+.cmp-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
+.cmp-gate-title{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#9a8a5f}
+.cmp-gate-amt{font-family:'Bricolage Grotesque',sans-serif;font-size:1.7rem;font-weight:800;color:#0B0F1A;line-height:1.1;margin:2px 0 6px}
+.cmp-gate-sub{font-size:.83rem;color:#6f7686;line-height:1.45;max-width:520px}
+.cmp-gate-btn{margin-top:12px;height:38px;padding:0 20px;border:none;border-radius:9px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
+.cmp-gate-btn:hover{filter:brightness(1.04)}
 .cmp-actions{display:flex;gap:8px}
 .cmp-dl{height:36px;padding:0 16px;border:none;border-radius:8px;background:#0B0F1A;color:#fff;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit}
 .cmp-dl:hover{background:#1d2230}
