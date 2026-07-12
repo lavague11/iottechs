@@ -14,6 +14,7 @@ import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
 import ApprovalPanel     from "./approval-panel";
 import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied } from "./survey-approve";
+import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
@@ -2141,6 +2142,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 />
                 <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
                   acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
+                <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
               </div>
             )}
           </div>

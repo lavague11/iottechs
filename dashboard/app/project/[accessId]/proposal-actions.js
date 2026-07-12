@@ -9,7 +9,7 @@ import {
   confirmProjectPayment, voidProposalSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
-  getProjectNotes, addProjectNote, setProjectPoc, maybeAutoAdvance,
+  getProjectNotes, getScopedNotes, addProjectNote, setProjectPoc, maybeAutoAdvance,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -477,6 +477,24 @@ export async function addNoteAction(accessId, body) {
   const notes = addProjectNote(accessId, { role: tok.role, name: tok.name || tok.email || tok.role, body: body.trim() });
   await revalidate(accessId);
   return { ok: true, notes };
+}
+// Survey comments — a customer can't edit the read-only survey, but they can leave quick notes
+// ("move this", "remove that"). Scoped to 'survey' so they show under the survey for staff.
+export async function addSurveyNoteAction(accessId, body) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const text = String(body || "").trim();
+  if (!text) return { error: "Write a note first." };
+  const notes = addProjectNote(accessId, { role: tok.role, name: tok.name || tok.email || tok.role, body: text, scope: "survey" });
+  await revalidate(accessId);
+  return { ok: true, notes };
+}
+export async function getSurveyNotesAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok) return { notes: [] };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { notes: [] };
+  return { notes: getScopedNotes(accessId, "survey") };
 }
 export async function setPocAction(accessId, { name, phone }) {
   const tok = await getSessionRole();

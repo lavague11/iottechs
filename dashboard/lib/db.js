@@ -621,6 +621,10 @@ function init() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_project ON project_notes(project_access_id)`);
+  // scope tags a note to a surface (survey / mockup / general) so a customer's "change this"
+  // comment on the site survey shows under the survey, not mixed into general project notes.
+  const noteCols = db.prepare("PRAGMA table_info(project_notes)").all().map((c) => c.name);
+  if (!noteCols.includes("scope")) db.exec("ALTER TABLE project_notes ADD COLUMN scope TEXT DEFAULT 'general'");
 
   // ---- Server copy of the browser tools' working data (survey / mockup / schedule) ----
   // These tools draft in localStorage for speed; this table is the authoritative backup so a
@@ -709,7 +713,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v30";
+const DB_VER = "v31";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -1895,10 +1899,15 @@ export function getApprovedAddons(accessId) {
 export function getProjectNotes(accessId) {
   return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? ORDER BY id DESC LIMIT 100").all(String(accessId)).map((r) => ({ ...r }));
 }
-export function addProjectNote(accessId, { role, name, body }) {
-  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body) VALUES (?,?,?,?)")
-    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000));
-  return getProjectNotes(accessId);
+// Notes for one surface (e.g. 'survey'). Legacy rows have scope NULL → treated as 'general'.
+export function getScopedNotes(accessId, scope) {
+  return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? AND COALESCE(scope,'general')=? ORDER BY id DESC LIMIT 100")
+    .all(String(accessId), String(scope)).map((r) => ({ ...r }));
+}
+export function addProjectNote(accessId, { role, name, body, scope }) {
+  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body, scope) VALUES (?,?,?,?,?)")
+    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20));
+  return scope ? getScopedNotes(accessId, scope) : getProjectNotes(accessId);
 }
 export function setProjectPoc(accessId, { name, phone }) {
   db.prepare("UPDATE projects SET poc_name=?, poc_phone=? WHERE access_id=?")
