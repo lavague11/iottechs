@@ -138,8 +138,10 @@
   <button class="tbtn" id="uploadBtn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
     Upload Photos</button>
-  <input type="file" id="file" accept="image/*" multiple style="display:none"/>
-  <input type="file" id="slotFile" accept="image/*" style="display:none"/>
+  <input type="file" id="file" accept="image/*,.heic,.heif" multiple style="display:none"/>
+  <input type="file" id="slotFile" accept="image/*,.heic,.heif" style="display:none"/>
+  <!-- iPhone photos are HEIC and won't decode in most browsers — convert them to JPEG on upload. -->
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
   <div class="tgroup"><label>Cameras</label>
     <input class="num" type="number" id="count" min="1" max="64" value="9"/></div>
@@ -337,7 +339,7 @@ function bindCanvas(canvas,page){
       if(prev!=null&&prev!==page)renderPage(prev);renderPage(page);}});
   canvas.addEventListener('dragleave',()=>{if(S.hover.p===page){S.hover={p:null,i:null};renderPage(page);}});
   canvas.addEventListener('drop',e=>{e.preventDefault();const h=tileAt(e,canvas,page);S.hover={p:null,i:null};
-    const f=[...(e.dataTransfer.files||[])].find(x=>x.type.startsWith('image/'));
+    const f=[...(e.dataTransfer.files||[])].find(okImg);
     if(h&&f)loadInto(h.i,f);else renderPage(page);});
 }
 slotFile.onchange=e=>{const f=e.target.files[0];if(f&&pendingSlot!=null)loadInto(pendingSlot,f);};
@@ -348,13 +350,20 @@ nameEdit.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();c
 nameEdit.addEventListener('blur',commitName);
 
 /* ===== image loading ===== */
-function loadImageFile(f){return new Promise(res=>{const rd=new FileReader();rd.onload=()=>{const img=new Image();
-  img.onload=()=>res({img,url:rd.result});img.src=rd.result;};rd.readAsDataURL(f);});}
+// iPhone HEIC/HEIF (often with an empty MIME type) — treat as an image and convert to JPEG first.
+function isHeic(f){return /image\/hei[cf]/i.test(f.type||'')||/\.(heic|heif)$/i.test(f.name||'');}
+function okImg(f){return (f.type||'').startsWith('image/')||isHeic(f);}
+async function loadImageFile(f){
+  if(isHeic(f)&&window.heic2any){
+    try{const out=await heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}catch(_){/* fall through — some browsers decode HEIC natively */}
+  }
+  return new Promise(res=>{const rd=new FileReader();rd.onload=()=>{const img=new Image();
+    img.onload=()=>res({img,url:rd.result});img.onerror=()=>res(undefined);img.src=rd.result;};rd.readAsDataURL(f);});}
 function loadImageURL(u){return new Promise(res=>{const img=new Image();img.onload=()=>res({img,url:u});
   img.onerror=()=>res(undefined);img.src=u;});}
-function loadInto(i,f){loadImageFile(f).then(p=>{S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}refreshAll();});}
-function bulkAdd(list){const files=[...list].filter(f=>f.type.startsWith('image/'));if(!files.length)return;
-  Promise.all(files.map(loadImageFile)).then(ps=>{ps.forEach(p=>{
+function loadInto(i,f){loadImageFile(f).then(p=>{if(!p)return;S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}refreshAll();});}
+function bulkAdd(list){const files=[...list].filter(okImg);if(!files.length)return;
+  Promise.all(files.map(loadImageFile)).then(ps=>{ps.forEach(p=>{if(!p)return;
     let i=0;while(i<S.count&&S.slots[i])i++;if(i>=S.count){S.count=i+1;syncCount();}S.slots[i]=p;});refreshAll();});}
 const fileInput=document.getElementById('file');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
