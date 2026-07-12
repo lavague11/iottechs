@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
+import EmailTestButton from "./email-test-button";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 
@@ -143,6 +144,9 @@ export default function OperationsClient({ user, alerts, expenses, requests, wor
             </div>
           ))}
         </Section>
+
+        {/* System — email delivery diagnostic (admin only) */}
+        {user.role === "admin" && <EmailTestButton />}
 
       </div>
     </AdminShell>
