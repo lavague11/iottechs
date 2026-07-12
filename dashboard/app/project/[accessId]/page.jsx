@@ -111,6 +111,17 @@ export default async function ProjectLinkPage({ params, searchParams }) {
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
 
+  // Techs coordinate through the office, never the customer directly — so they must NEVER receive
+  // the customer's personal contact channels (phone, email, private message) or the point-of-contact
+  // phone. Strip these server-side (not just hidden in the UI) so nothing leaks in the payload/DevTools.
+  // The job-site address and business name stay, so the tech still knows where to go and for whom.
+  if (initialView === "tech") {
+    project.contact_phone   = null;
+    project.contact_email   = null;
+    project.contact_message = null;
+    project.poc_phone       = null;
+  }
+
   // Who's logged in — so the scheduling tool can invite "me" and so we can auto-add whoever
   // is booking. Derived from the session token (staff) — PIN visitors have no user row.
   let currentUser = null;
@@ -151,7 +162,12 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   project.deposit_recorded = getProjectPayments(p.access_id).some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"); // ≥1 CONFIRMED payment
   project.tech_accepted = !!proposalRow?.tech_signed_name;              // technician accepted the work order
   project.survey_accepted = surveyStageSatisfied(p.access_id); // data-aware: only tools with data need a current approval
-  const assignments  = getProjectAssignments(p.access_id).map(r=>({...r}));
+  let assignments    = getProjectAssignments(p.access_id).map(r=>({...r}));
+  // The access roster carries each grantee's email — including the customer's. A tech must never
+  // receive the customer's contact channel, so null it out of the customer rows for tech views.
+  if (initialView === "tech") {
+    assignments = assignments.map(a => a.role === "customer" ? { ...a, user_email: null } : a);
+  }
   const staffUsers   = getStaffUsers().map(r=>({...r}));
   const workOrders   = getWorkOrdersByProject(p.access_id).map(r=>({...r}));
   const expenses     = getProjectExpenses(p.access_id).map(r=>({...r}));
