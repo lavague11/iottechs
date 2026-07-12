@@ -1478,6 +1478,46 @@ export function notifyRoles(roles, { type, title, body, link }, excludeUserId = 
   }
 }
 
+// Unified notification feed — one place to see every kind of alert. Combines the persistent
+// per-user notifications (read/unread, dismissible) with live, click-through events pulled from
+// across the system (approvals waiting, tickets, new inquiries, activity). Staff see the aggregate;
+// others just get their own persistent notifications.
+export function getNotificationFeed(userId, role) {
+  const $ = (n) => "$" + Number(n || 0).toLocaleString("en-US");
+  const out = [];
+  // 1) Persistent per-user notifications.
+  for (const n of getNotifications(userId, 200)) {
+    const grp = n.type === "ticket" ? "tickets" : n.type === "payment" || n.type === "signature" ? "projects" : "activity";
+    out.push({ key: "n" + n.id, source: "notif", id: n.id, group: grp, icon: n.type === "ticket" ? "red" : n.type === "payment" ? "green" : "gold", title: n.title, body: n.body || "", link: n.link || null, at: n.created_at, read: !!n.read });
+  }
+  if (["admin", "manager"].includes(role)) {
+    // 2) Approvals waiting on the office.
+    for (const e of getPendingExpenses().slice(0, 40))
+      out.push({ key: "e" + e.id, source: "live", group: "action", icon: "amber", title: `Expense awaiting approval — ${$(e.amount)}`, body: [e.description, e.submitted_by_name].filter(Boolean).join(" · "), link: "/expenses", at: e.created_at });
+    for (const r of getPendingRequests().slice(0, 40))
+      out.push({ key: "r" + r.id, source: "live", group: "action", icon: "purple", title: `Material request — ${r.request_type || "Request"}`, body: [r.description, r.submitted_by_name].filter(Boolean).join(" · "), link: r.project_access_id ? `/project/${r.project_access_id}` : "/operations", at: r.created_at });
+    for (const w of getPendingWorkOrders().slice(0, 40))
+      out.push({ key: "w" + w.id, source: "live", group: "action", icon: "blue", title: `Work order to review — #${w.project_access_id}`, body: w.submitted_by_name ? `Submitted by ${w.submitted_by_name}` : "", link: `/project/${w.project_access_id}`, at: w.created_at });
+    // 3) Open tickets.
+    for (const t of getTickets().filter((t) => t.status !== "closed" && t.status !== "resolved").slice(0, 40))
+      out.push({ key: "t" + t.id, source: "live", group: "tickets", icon: "red", title: `${t.priority === "urgent" ? "Urgent ticket" : "Ticket"} — ${t.subject}`, body: [t.project_customer, t.assignee_name ? `→ ${t.assignee_name}` : "Unassigned"].filter(Boolean).join(" · "), link: `/tickets/${t.id}`, at: t.updated_at || t.created_at });
+    // 4) Recent activity — logins, new inquiries, PIN access.
+    for (const a of getActivityLog(40)) {
+      const who = a.user_name || "System";
+      const proj = a.project_customer || a.project_access_id || null;
+      let title, group = "activity", icon = "blue";
+      if (a.event_type === "login") title = `${who} signed in`;
+      else if (a.event_type === "logout") { title = `${who} signed out`; icon = "amber"; }
+      else if (a.event_type === "demo") { title = `New inquiry${proj ? ` — ${proj}` : ""}`; group = "projects"; icon = "green"; }
+      else if (a.event_type === "pin_access") { title = a.notes || `PIN access${proj ? ` — ${proj}` : ""}`; icon = "gold"; }
+      else { title = a.notes || a.event_type; icon = "gold"; }
+      out.push({ key: "a" + a.id, source: "live", group, icon, title, body: a.user_role || "", link: a.project_access_id ? `/project/${a.project_access_id}` : null, at: a.login_at });
+    }
+  }
+  out.sort((x, y) => String(y.at || "").localeCompare(String(x.at || "")));
+  return out;
+}
+
 // ---- Expenses ----
 export function getExpenses() {
   return db.prepare(`

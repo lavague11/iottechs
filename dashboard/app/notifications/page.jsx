@@ -1,10 +1,10 @@
-import { getNotifications } from "../../lib/db";
+import { getNotificationFeed } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import NotificationsClient from "./notifications-client";
 
 export default async function NotificationsPage() {
   const user   = await getSessionUser();
   const alerts  = getNotifSummary(user.id);
-  const items  = user.id ? getNotifications(user.id, 200) : [];
+  const items  = user.id ? getNotificationFeed(user.id, user.role) : [];
   return <NotificationsClient user={user} alerts={alerts} items={items} />;
 }
