@@ -358,15 +358,27 @@ export async function setPayoutAction(accessId, { amount, status }) {
 }
 
 // Stamp / clear the completion date (job closed & handed off). Admin/manager only.
-export async function completeProjectAction(accessId, done = true) {
+export async function completeProjectAction(accessId, done = true, date = null) {
   const tok = await getSessionTok();
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
   const { markProjectCompleted, reopenProjectCompletion } = await import("../../../lib/db");
-  const row = done ? markProjectCompleted(accessId) : reopenProjectCompletion(accessId);
+  const row = done ? markProjectCompleted(accessId, date) : reopenProjectCompletion(accessId);
   if (!row) return { error: "Project not found." };
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, completed_at: row.completed_at || null };
+}
+
+// Warranty term (6 / 12 / 24 months). Admin/manager only.
+export async function setWarrantyAction(accessId, months) {
+  const tok = await getSessionTok();
+  if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
+  const { setWarrantyMonths } = await import("../../../lib/db");
+  const row = setWarrantyMonths(accessId, months);
+  if (!row) return { error: "Project not found." };
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, warranty_months: row.warranty_months || 6 };
 }
 
 export async function closeProjectAction(accessId, reason) {

@@ -177,6 +177,8 @@ function init() {
   if (!cols.includes("customer_granted"))   db.exec("ALTER TABLE projects ADD COLUMN customer_granted INTEGER DEFAULT 0");
   if (!cols.includes("managers_granted"))   db.exec("ALTER TABLE projects ADD COLUMN managers_granted INTEGER DEFAULT 0");
   if (!cols.includes("completed_at"))       db.exec("ALTER TABLE projects ADD COLUMN completed_at TEXT");
+  if (!cols.includes("warranty_months"))    db.exec("ALTER TABLE projects ADD COLUMN warranty_months INTEGER DEFAULT 6");
+  if (!cols.includes("system_qr"))          db.exec("ALTER TABLE projects ADD COLUMN system_qr TEXT");
   if (!cols.includes("payout_amount"))      db.exec("ALTER TABLE projects ADD COLUMN payout_amount REAL DEFAULT 0");
   if (!cols.includes("payout_status"))      db.exec("ALTER TABLE projects ADD COLUMN payout_status TEXT DEFAULT 'pending'");
 
@@ -713,7 +715,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v31";
+const DB_VER = "v32";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -1243,8 +1245,22 @@ export function setProjectPayout(accessId, { amount, status }) {
   return getJobByAccessId(accessId);
 }
 // Stamp the project complete (job closed & handed off). Idempotent — keeps the first stamp.
-export function markProjectCompleted(accessId) {
-  db.prepare("UPDATE projects SET completed_at = COALESCE(completed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+export function markProjectCompleted(accessId, date) {
+  // An explicit YYYY-MM-DD sets that completion date; otherwise keep any existing stamp or use now.
+  const d = date && /^\d{4}-\d{2}-\d{2}/.test(String(date)) ? String(date).slice(0, 10) + " 00:00:00" : null;
+  if (d) db.prepare("UPDATE projects SET completed_at = ? WHERE access_id = ? COLLATE NOCASE").run(d, String(accessId));
+  else db.prepare("UPDATE projects SET completed_at = COALESCE(completed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+// Warranty term in months — 6 / 12 / 24 (default 6). Anything else falls back to 6.
+export function setWarrantyMonths(accessId, months) {
+  const m = [6, 12, 24].includes(+months) ? +months : 6;
+  db.prepare("UPDATE projects SET warranty_months = ? WHERE access_id = ? COLLATE NOCASE").run(m, String(accessId));
+  return getJobByAccessId(accessId);
+}
+// Store the system QR (the verified branded-card data URL / payload) uploaded at install.
+export function setSystemQr(accessId, data) {
+  db.prepare("UPDATE projects SET system_qr = ? WHERE access_id = ? COLLATE NOCASE").run(data ? String(data) : null, String(accessId));
   return getJobByAccessId(accessId);
 }
 // Re-open a completed project (clears the completion stamp) — admin correction path.

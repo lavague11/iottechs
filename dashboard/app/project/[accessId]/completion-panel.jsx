@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { completeProjectAction, setCommissionAction, setPayoutAction } from "./actions";
+import { completeProjectAction, setCommissionAction, setPayoutAction, setWarrantyAction } from "./actions";
 import { getApprovalDataAction } from "./proposal-actions";
 import { optionTotals } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
@@ -14,7 +14,15 @@ const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("e
 //     project complete (which closes it). "Print" produces a clean certificate for records.
 // Warranty is a standard 1-year parts & labour term running from the completion (or install) date.
 
-const WARRANTY_MONTHS = 12;
+const WARRANTY_TERMS = [{ m: 6, label: "6 months" }, { m: 12, label: "12 months" }, { m: 24, label: "2 years" }];
+
+// Local date as YYYY-MM-DD (for the date input default), from a stamp or now.
+function toDateInput(d) {
+  try {
+    if (d) { const m = String(d).match(/^(\d{4}-\d{2}-\d{2})/); if (m) return m[1]; }
+    const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  } catch { return ""; }
+}
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -71,6 +79,9 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
   })();
 
   const [completedAt, setCompletedAt] = useState(project.completed_at || null);
+  const [warrantyMonths, setWarrantyMonths] = useState(+project.warranty_months || 6);
+  // Completion date defaults to the existing stamp, else the job/install date, else today.
+  const [completeDate, setCompleteDate] = useState(toDateInput(project.completed_at || project.install_date || project.date));
   const [commStatus, setCommStatus] = useState(project.commission_status || "pending");
   const [payoutAmt, setPayoutAmt] = useState(project.payout_amount ? String(project.payout_amount) : "");
   const [payoutStatus, setPayoutStatus] = useState(project.payout_status || "pending");
@@ -78,16 +89,22 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
   const [err, setErr] = useState(null);
 
   const doneDate = completedAt || project.install_date || project.date || null;
-  const warrantyEnd = doneDate ? addMonths(doneDate, WARRANTY_MONTHS) : null;
+  const warrantyEnd = doneDate ? addMonths(doneDate, warrantyMonths) : null;
+  const warrantyLabel = WARRANTY_TERMS.find((t) => t.m === warrantyMonths)?.label || `${warrantyMonths} months`;
   const hasRep = isStaff && project.sales_rep && (+project.commission_rate > 0);
 
   async function markComplete(done) {
     setBusy(true); setErr(null);
-    const r = await completeProjectAction(project.access_id, done);
+    const r = await completeProjectAction(project.access_id, done, done ? completeDate : null);
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setCompletedAt(r.completed_at);
     onCompletedChange?.(r.completed_at || null);
+  }
+  async function saveWarranty(m) {
+    setWarrantyMonths(m);   // optimistic
+    const r = await setWarrantyAction(project.access_id, m);
+    if (r?.warranty_months) setWarrantyMonths(r.warranty_months);
   }
   async function approveCommission() {
     setBusy(true); setErr(null);
@@ -160,7 +177,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <div className="cmp-card-body">
-          <div className="cmp-card-title">{WARRANTY_MONTHS}-Month Warranty · Parts &amp; Labour</div>
+          <div className="cmp-card-title">{warrantyLabel} Warranty · Parts &amp; Labour</div>
           <div className="cmp-card-sub">{doneDate ? <>In effect {fmtDate(doneDate)} → <b>{fmtDate(warrantyEnd)}</b>. Covered issues are serviced at no charge.</> : "Coverage begins on the completion date."}</div>
         </div>
       </div>
@@ -210,10 +227,26 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
               ) : <span className="cmp-wrap-meta">{payoutStatus === "approved" ? `Approved ${money(payoutAmt)}` : "Pending"}</span>}
           </div>
           <div className="cmp-wrap-row">
-            <div><div className="cmp-wrap-lbl">Job completion</div><div className="cmp-wrap-meta">{completedAt ? `Completed ${fmtDate(completedAt)}` : "Not marked complete yet"}</div></div>
+            <div><div className="cmp-wrap-lbl">Warranty term</div><div className="cmp-wrap-meta">Coverage runs from the completion date</div></div>
+            {canWrap ? (
+              <select className="cmp-sel" value={warrantyMonths} onChange={(e) => saveWarranty(+e.target.value)} disabled={busy}>
+                {WARRANTY_TERMS.map((t) => <option key={t.m} value={t.m}>{t.label}</option>)}
+              </select>
+            ) : <span className="cmp-wrap-meta">{warrantyLabel}</span>}
+          </div>
+          <div className="cmp-wrap-row">
+            <div style={{ flex: 1 }}>
+              <div className="cmp-wrap-lbl">Job completion</div>
+              <div className="cmp-wrap-meta">{completedAt ? `Completed ${fmtDate(completedAt)}` : "Not marked complete yet"}</div>
+            </div>
             {canWrap && (completedAt
               ? <button className="cmp-btn ghost" disabled={busy} onClick={() => markComplete(false)}>Reopen</button>
-              : <button className="cmp-btn" disabled={busy} onClick={() => markComplete(true)}>Mark Complete</button>)}
+              : (
+                <div className="cmp-complete-ctrl">
+                  <input type="date" className="cmp-date-in" value={completeDate} onChange={(e) => setCompleteDate(e.target.value)} disabled={busy} />
+                  <button className="cmp-btn" disabled={busy || !completeDate} onClick={() => markComplete(true)}>Mark Complete</button>
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -222,7 +255,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
 
       {!gated && (
         <div className="cmp-actions">
-          <button type="button" className="cmp-dl" onClick={() => downloadCompletionPdf(project, { deviceCount, completedAt, warrantyMonths: WARRANTY_MONTHS })}>Download PDF</button>
+          <button type="button" className="cmp-dl" onClick={() => downloadCompletionPdf(project, { deviceCount, completedAt, warrantyMonths })}>Download PDF</button>
           <button type="button" className="cmp-print" onClick={() => window.print()}>Print</button>
         </div>
       )}
@@ -267,6 +300,9 @@ const CMP_CSS = `
 .cmp-payout-ctrl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .cmp-payout-dollar{display:inline-flex;align-items:center;gap:2px;font-size:.86rem;font-weight:700;color:#0B0F1A}
 .cmp-payout-in{width:74px;height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.86rem;font-family:inherit;text-align:right}
+.cmp-sel{height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.82rem;font-weight:700;font-family:inherit;background:#fff;color:#0B0F1A;cursor:pointer}
+.cmp-complete-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.cmp-date-in{height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.82rem;font-family:inherit;color:#0B0F1A}
 .cmp-err{font-size:.82rem;color:#a8442f;background:#fdeceb;border:1px solid #e0b0a8;border-radius:8px;padding:8px 10px}
 .cmp-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid #C9A96E;border-radius:12px;padding:18px 20px}
 .cmp-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
