@@ -69,7 +69,7 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-function renderEmail({ heading, intro, lines = [], ctaLabel, ctaUrl, footNote }) {
+export function renderEmail({ heading, intro, lines = [], ctaLabel, ctaUrl, footNote }) {
   const bodyLines = lines.filter(Boolean).map(
     (l) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#2a2f3a;">${esc(l)}</p>`
   ).join("");
@@ -153,7 +153,7 @@ export async function sendCustomerEmail(accessId, content) {
 // ---- Event copy -------------------------------------------------------------
 // Customer-facing stages only — internal churn (qc, install scheduling, payout) never emails
 // the customer. Keyed by the master stage key from lib/spec.js.
-const STAGE_EMAIL = {
+export const STAGE_EMAIL = {
   site_survey: {
     subject: "Your site survey is ready to review",
     heading: "Your site survey is ready",
