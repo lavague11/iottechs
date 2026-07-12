@@ -20,12 +20,16 @@ export async function getPreviewTokenAction(accessId, role) {
 // Auto-disabled in production so they can never become a live backdoor.
 const DEV_PINS_ENABLED = process.env.NODE_ENV !== "production";
 const GLOBAL_PINS = DEV_PINS_ENABLED ? {
-  "8965": "admin",
   "1111": "customer",
   "2222": "manager",
   "3333": "tech",
   "4444": "sales",
 } : {};
+
+// Master admin PIN — grants admin on ANY project, in production too (unlike the dev PINs above).
+// Configurable via ADMIN_MASTER_PIN; defaults to 8965. NOTE: a short numeric PIN is brute-forceable,
+// so set a longer ADMIN_MASTER_PIN in production for real security.
+const ADMIN_MASTER_PIN = String(process.env.ADMIN_MASTER_PIN || "8965").trim();
 
 async function getRequestMeta() {
   const hdrs = await headers();
@@ -75,6 +79,12 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
 
   if (pin != null && pin !== "") {
     const entered = String(pin).trim();
+    // Master admin PIN — works everywhere, including production.
+    if (ADMIN_MASTER_PIN && entered === ADMIN_MASTER_PIN) {
+      recordEvent("pin_access", null, ip, ua, p.id, `Master admin PIN on ${p.access_id}`);
+      await grantPin("admin");
+      return { ok: true, view: LOGIN_VIEW.admin || "admin", via: "pin" };
+    }
     if (GLOBAL_PINS[entered]) {
       const role = GLOBAL_PINS[entered];
       recordEvent("pin_access", null, ip, ua, p.id, `Global PIN → ${role} on ${p.access_id}`);
