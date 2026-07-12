@@ -11,6 +11,7 @@ const TYPE_META = {
   dev_task:  { label: "Dev Task",  icon: "D",  cls: "ar-purple" },
   ticket:    { label: "Ticket",    icon: "T",  cls: "ar-blue" },
   payment:   { label: "Payment",   icon: "$",  cls: "ar-red" },
+  project:   { label: "Customer",  icon: "C",  cls: "ar-gray" },
 };
 
 function timeAgo(s) {

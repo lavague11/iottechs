@@ -1565,6 +1565,7 @@ const ARCHIVABLE = {
   inventory: { table: "inventory",  label: (r) => r.name || "Inventory item", detail: (r) => [r.sku, r.quantity != null ? `qty ${r.quantity}` : null].filter(Boolean).join(" · ") },
   dev_task:  { table: "dev_tasks",  label: (r) => r.title || "Task", detail: (r) => r.category || "", guard: (r) => r.is_custom === 1 },
   payment:   { table: "project_payments", label: (r) => "$" + Number(r.amount || 0).toLocaleString() + " " + (r.kind || "payment"), detail: (r) => [r.project_access_id, r.method, r.source].filter(Boolean).join(" · ") },
+  project:   { table: "projects",   label: (r) => r.customer || r.access_id || "Project", detail: (r) => [r.access_id, r.stage].filter(Boolean).join(" · ") },
 };
 const ARCHIVE_TABLES = new Set(Object.values(ARCHIVABLE).map((c) => c.table));
 
@@ -1615,6 +1616,22 @@ export function purgeAllArchives() {
   const n = getArchiveCount();
   db.prepare("DELETE FROM archive").run();
   return { ok: true, count: n };
+}
+
+// A "customer" is every project sharing a customer name — archive them all (soft/recoverable).
+export function archiveCustomer(customerName, actor) {
+  const rows = db.prepare("SELECT id FROM projects WHERE customer = ?").all(String(customerName));
+  if (!rows.length) return { ok: false, error: "No projects for that customer." };
+  let count = 0;
+  for (const r of rows) if (archiveAndDelete("project", r.id, actor).ok) count++;
+  return { ok: true, count };
+}
+// Wipe every project into the archive (recoverable) — the "start from scratch" action.
+export function archiveAllProjects(actor) {
+  const rows = db.prepare("SELECT id FROM projects").all();
+  let count = 0;
+  for (const r of rows) if (archiveAndDelete("project", r.id, actor).ok) count++;
+  return { ok: true, count };
 }
 
 // ---- Proposal view tracking ----

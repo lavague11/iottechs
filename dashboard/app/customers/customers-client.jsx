@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
+import { archiveCustomerAction, wipeAllCustomersAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 const SERVICES = ["Security Cameras / CCTV", "Commercial Audio", "Networking & Cat6", "Access Control / Door Entry", "NVR & Storage", "Other"];
@@ -54,8 +55,29 @@ function AddCustomerModal({ onClose, onAdded }) {
 export default function CustomersClient({ user, alerts, customers }) {
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
+  const [pending, setPending] = useState(null);   // customer name awaiting archive confirm
+  const [wipeArm, setWipeArm] = useState(false);   // wipe-all awaiting confirm
+  const [busy, startBusy] = useTransition();
   const router = useRouter();
   const q = query.trim().toLowerCase();
+
+  const canArchive = ["admin", "manager"].includes(user.role);
+  const canWipe    = user.role === "admin";
+
+  function archive(name) {
+    startBusy(async () => {
+      const r = await archiveCustomerAction(name);
+      setPending(null);
+      if (r?.ok) router.refresh();
+    });
+  }
+  function wipeAll() {
+    startBusy(async () => {
+      const r = await wipeAllCustomersAction();
+      setWipeArm(false);
+      if (r?.ok) router.refresh();
+    });
+  }
 
   const filtered = q
     ? customers.filter((c) =>
@@ -70,8 +92,21 @@ export default function CustomersClient({ user, alerts, customers }) {
       <div className="apx-wrap">
         <div className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
           <div><h1>Customers</h1><div className="ph-sub">{customers.length} on file · click a customer to open their profile</div></div>
-          <button className="btn btn-gold" onClick={() => setAdding(true)}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> Add Customer</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {canWipe && customers.length > 0 && (
+              wipeArm ? (
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <button className="btn" style={{ background: "var(--red)", color: "#fff" }} disabled={busy} onClick={wipeAll}>{busy ? "Wiping…" : "Confirm wipe"}</button>
+                  <button className="btn btn-ghost" disabled={busy} onClick={() => setWipeArm(false)}>Cancel</button>
+                </span>
+              ) : (
+                <button className="btn btn-ghost" onClick={() => setWipeArm(true)}>Wipe all</button>
+              )
+            )}
+            <button className="btn btn-gold" onClick={() => setAdding(true)}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> Add Customer</button>
+          </div>
         </div>
+        {canWipe && wipeArm && <div className="wipe-note">This archives <b>all {customers.length} customers</b> (recoverable from Archives). A ticket will log it.</div>}
 
         <div className="sec-head">
           <input className="apx-input" style={{ maxWidth: 420 }} placeholder="Search by name, address, email, or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -96,6 +131,18 @@ export default function CustomersClient({ user, alerts, customers }) {
                 {c.completed_count > 0 && <span className="chip done">{c.completed_count} done</span>}
                 <span className="chip value">{money(c.total_value)}</span>
               </div>
+              {canArchive && (
+                <span className="c-arch" onClick={(e) => e.stopPropagation()}>
+                  {pending === c.customer ? (
+                    <>
+                      <button className="arch-btn confirm" disabled={busy} onClick={() => archive(c.customer)}>{busy ? "…" : "Confirm"}</button>
+                      <button className="arch-btn cancel" disabled={busy} onClick={() => setPending(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <button className="arch-btn" title="Archive this customer" onClick={() => setPending(c.customer)}>Archive</button>
+                  )}
+                </span>
+              )}
               <span className="c-arr">→</span>
             </div>
           ))}
@@ -122,6 +169,14 @@ export default function CustomersClient({ user, alerts, customers }) {
         .apx .cm-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
         .apx .cm-submit:disabled{opacity:.6;cursor:not-allowed}
         @media(max-width:620px){.apx .cm-row2{grid-template-columns:1fr}}
+        .apx .wipe-note{background:var(--red-soft);color:var(--red);font-size:.82rem;font-weight:600;padding:9px 14px;border-radius:9px;margin:0 0 12px}
+        .apx .c-arch{display:inline-flex;gap:6px;margin-left:6px;flex-shrink:0}
+        .apx .arch-btn{font-family:inherit;font-size:.74rem;font-weight:700;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;transition:.15s;white-space:nowrap}
+        .apx .arch-btn:hover{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+        .apx .arch-btn.confirm{background:var(--red);border-color:var(--red);color:#fff}
+        .apx .arch-btn.confirm:hover{filter:brightness(1.05);color:#fff}
+        .apx .arch-btn.cancel{color:var(--muted)}
+        .apx .arch-btn:disabled{opacity:.55;cursor:default}
       `}</style>
     </AdminShell>
   );
