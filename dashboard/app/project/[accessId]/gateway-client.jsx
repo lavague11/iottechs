@@ -13,7 +13,7 @@ import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
 import ApprovalPanel     from "./approval-panel";
-import { ToolApproveBar, SmoothSailing, surveySatisfied } from "./survey-approve";
+import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied } from "./survey-approve";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
@@ -2117,15 +2117,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {/* Site Survey tool */}
           {showSurvey && (
           <div className="pv-tool-panel" style={{ "--tool-c": "#C9A96E" }}>
-            <button className="pv-tool-head" onClick={()=>setSsOpen(v=>!v)}>
-              <span className="pv-tool-icon">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-              </span>
-              <span className="pv-tool-title">Site Survey</span>
-              <span className="pv-tool-sub">Floor plans · Device placement · Multi-floor · Auto-save</span>
-              {svMeta.has && <span className="pv-tool-chip go">{isCust ? "Review &amp; approve" : "Has data"}</span>}
-              <span className="pv-tool-chev">{ssOpen?"▲":"▼"}</span>
-            </button>
+            <div className="pv-tool-head">
+              <button type="button" className="pv-tool-toggle" onClick={()=>setSsOpen(v=>!v)}>
+                <span className="pv-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </span>
+                <span className="pv-tool-title">Site Survey</span>
+                <span className="pv-tool-sub">Floor plans · Device placement · Multi-floor · Auto-save</span>
+                {svMeta.has && isCust && <span className="pv-tool-chip go">Review &amp; approve</span>}
+              </button>
+              <ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
+              <button type="button" className="pv-tool-chev-btn" onClick={()=>setSsOpen(v=>!v)}>{ssOpen?"▲":"▼"}</button>
+            </div>
             {ssOpen && (
               <div className="pv-tool-body">
                 <SiteSurveyWidget
@@ -2145,15 +2149,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {/* Camera Mockup — Admin/Manager/Sales build it; every other role (Customer, Technician, …) sees it read-only. */}
           {showMockup && (
           <div className="pv-tool-panel" style={{ "--tool-c": "#B084E0" }}>
-            <button className="pv-tool-head" onClick={()=>setMockupOpen(v=>!v)}>
-              <span className="pv-tool-icon">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              </span>
-              <span className="pv-tool-title">Mockups</span>
-              <span className="pv-tool-sub">System diagrams · Product photos · Design references</span>
-              {mkMeta.has && <span className="pv-tool-chip go">{isCust ? "Review &amp; approve" : "Has data"}</span>}
-              <span className="pv-tool-chev">{mockupOpen?"▲":"▼"}</span>
-            </button>
+            <div className="pv-tool-head">
+              <button type="button" className="pv-tool-toggle" onClick={()=>setMockupOpen(v=>!v)}>
+                <span className="pv-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </span>
+                <span className="pv-tool-title">Mockups</span>
+                <span className="pv-tool-sub">System diagrams · Product photos · Design references</span>
+                {mkMeta.has && isCust && <span className="pv-tool-chip go">Review &amp; approve</span>}
+              </button>
+              <ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
+                acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
+              <button type="button" className="pv-tool-chev-btn" onClick={()=>setMockupOpen(v=>!v)}>{mockupOpen?"▲":"▼"}</button>
+            </div>
             {mockupOpen && (
               <div className="pv-tool-body">
                 <MockupWidget
@@ -3328,6 +3336,12 @@ const PV_CSS = `
 .pvx .pv-tool-panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .pvx .pv-tool-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 18px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .pvx .pv-tool-head:hover{background:var(--bg-soft)}
+.pvx .pv-tool-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
+.pvx .pv-tool-chev-btn{flex-shrink:0;background:none;border:none;cursor:pointer;padding:2px 4px;font-size:.7rem;color:var(--muted)}
+.pvx .pv-tool-submit{flex-shrink:0;height:30px;padding:0 15px;border:none;border-radius:8px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pvx .pv-tool-submit:hover{filter:brightness(1.04)}
+.pvx .pv-tool-submit:disabled{opacity:.5;cursor:default}
+.pvx .pv-tool-chip.sent{background:#eef2fb;color:#2b4a86;border-color:#c5d5f0}
 .pvx .pv-tool-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
   color:var(--tool-c,var(--slate));background:color-mix(in srgb,var(--tool-c,var(--slate)) 14%,#fff);
   border:1px solid color-mix(in srgb,var(--tool-c,var(--slate)) 30%,transparent)}

@@ -122,6 +122,32 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
   );
 }
 
+// Compact header affordance so office roles see the Submit action WITHOUT expanding the tool.
+// Mirrors ToolApproveBar's office logic but as a single pill: Submit → Submitted → Approved.
+// The full bar (below the tool) still handles unsubmit / re-submit / detail.
+export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const isOffice = ["admin", "manager", "sales"].includes(role);
+  if (!isOffice || !meta?.has) return null;            // customers approve; nothing to submit yet
+  const label = LABEL[stageKey] || "item";
+  if (toolAccepted(meta, acceptance))  return <span className="pv-tool-chip go">Approved</span>;
+  if (toolAccepted(meta, submission))  return <span className="pv-tool-chip sent">Submitted</span>;
+  async function go(e) {
+    e.stopPropagation();                                // don't toggle the accordion
+    if (busy || preview) return;
+    setBusy(true);
+    const r = await submitToolAction(accessId, stageKey, true);
+    setBusy(false);
+    if (!r?.error) onChange?.(r.acceptances);
+  }
+  return (
+    <button type="button" className="pv-tool-submit" disabled={busy || preview}
+      onClick={go} title={`Submit ${label} for customer review`}>
+      {busy ? "…" : "Submit"}
+    </button>
+  );
+}
+
 export function SmoothSailing({ onContinue, preview }) {
   return (
     <div className="ssl-root">
