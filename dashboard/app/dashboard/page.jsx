@@ -1,6 +1,12 @@
+import { redirect } from "next/navigation";
 import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import AdminClient from "./admin-client";
+
+// The main dashboard is the admin/manager command center. Other roles must never land here —
+// a tech or sales rep who reached it (e.g. via a stale link) would see users, payroll, inventory
+// and every customer. Bounce them to their own home instead.
+const ROLE_HOME = { tech: "/tech", sales: "/sales", customer: "/login" };
 
 const CLOSED = new Set(["payment", "completion"]);
 const URGENT_RE = /offline|down|not\s+(working|record)|no\s+signal|dead|fail/i;
@@ -12,6 +18,7 @@ function initials(name) {
 
 export default async function DashboardPage() {
   const user   = await getSessionUser();
+  if (!["admin", "manager"].includes(user.role)) redirect(ROLE_HOME[user.role] || "/login");
   const alerts = getNotifSummary(user.id);
 
   const jobs     = getAllJobs();
@@ -63,6 +70,7 @@ export default async function DashboardPage() {
     title:     t.subject,
     customer:  t.project_customer || t.opened_by_name || "—",
     date:      t.updated_at,
+    opened:    t.created_at,        // for the "open N days" age on the dashboard
     priority:  t.priority,
   }));
 

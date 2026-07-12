@@ -29,6 +29,18 @@ function relTime(ts) {
   const d = Math.round(h / 24);
   return d === 1 ? "Yesterday" : `${d}d ago`;
 }
+// Whole days since a ticket was opened — the age the office cares about for SLA.
+function daysOpen(ts) {
+  if (!ts) return null;
+  const then = new Date(ts.includes("T") ? ts : ts.replace(" ", "T") + "Z").getTime();
+  if (isNaN(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / 86400000));
+}
+function openLabel(d) {
+  if (d == null) return null;
+  if (d === 0) return "opened today";
+  return `open ${d} day${d === 1 ? "" : "s"}`;
+}
 
 export default function AdminClient({ user, alerts, kpis, projects, tickets, technicians, payroll, activity, customers }) {
   const [now, setNow]     = useState("");
@@ -90,9 +102,7 @@ export default function AdminClient({ user, alerts, kpis, projects, tickets, tec
         <div className="actions">
           <Link className="action a-blue" href="/projects"><span className="ic"><svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 0 2-2h2a2 2 0 0 0 2 2M9 12h6M9 16h4"/></svg></span><h3>Work Orders</h3></Link>
           <Link className="action a-gold" href="/customers"><span className="ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span><h3>Customers</h3></Link>
-          <Link className="action a-purple" href="/users"><span className="ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><h3>Users</h3></Link>
           <Link className="action a-red" href="/tickets"><span className="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></span><h3>Tickets</h3></Link>
-          <Link className="action a-green" href="/inventory"><span className="ic"><svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></span><h3>Inventory</h3></Link>
           <Link className="action a-gold" href="/activity"><span className="ic"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><h3>Activity Log</h3></Link>
         </div>
 
@@ -134,7 +144,13 @@ export default function AdminClient({ user, alerts, kpis, projects, tickets, tec
             ) : tickets.map((t) => (
               <Link className="ticket" key={t.id} href={`/tickets/${t.id}`}>
                 <span className={`t-dot ${t.priority}`} />
-                <div className="t-body"><div className="t-title">{t.title}</div><div className="t-meta">{t.customer} · {relTime(t.date)}</div></div>
+                <div className="t-body">
+                  <div className="t-title">{t.title}</div>
+                  <div className="t-meta">
+                    {t.customer}
+                    {(() => { const d = daysOpen(t.opened); return d == null ? null : <> · <span style={d >= 7 ? { color: "var(--red)", fontWeight: 700 } : undefined}>{openLabel(d)}</span></>; })()}
+                  </div>
+                </div>
                 <span className={`tbadge ${t.priority}`}>{t.priority[0].toUpperCase() + t.priority.slice(1)}</span>
               </Link>
             ))}

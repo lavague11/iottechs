@@ -244,11 +244,13 @@ export default function AdminShell({ user, alerts, active, children }) {
   function onSearchKey(e) {
     if (e.key === "Enter" && q.trim()) r.push(`/portal?q=${encodeURIComponent(q.trim())}`);
   }
-  const TECH_TABS  = ["tech", "tickets", "expenses"];
   const SALES_TABS = ["sales", "customers", "tickets"];
   const tabsByKey  = Object.fromEntries(TABS.map(t => [t.key, t]));
+  // Techs don't approve expenses (that page is admin/manager only). Their "Expenses" tab points
+  // to their own jobs, where they submit reimbursements per project — never the dead admin page.
+  const TECH_NAV = [tabsByKey.tech, tabsByKey.tickets, { key: "expenses", label: "Expenses", href: "/tech" }];
   const allowed = user?.role === "tech"
-    ? TECH_TABS.map(k => tabsByKey[k]).filter(Boolean)
+    ? TECH_NAV.filter(Boolean)
     : user?.role === "sales"
       ? SALES_TABS.map(k => tabsByKey[k]).filter(Boolean)
       : user?.role === "manager"
@@ -485,7 +487,7 @@ const CSS = `
 .apx .filters button:hover{color:var(--ink)}
 .apx .filters button.on{background:var(--ink);color:#fff}
 
-.apx .actions{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:24px}
+.apx .actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
 .apx .action{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 15px;cursor:pointer;transition:transform .15s,box-shadow .18s,border-color .18s}
 .apx .action:hover{transform:translateY(-3px);box-shadow:0 14px 30px -16px rgba(14,19,32,.35);border-color:rgba(201,169,110,.5)}
 .apx .action .ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
@@ -688,4 +690,28 @@ const CSS = `
 
 @media(max-width:1100px){.apx .kpi-row,.apx .kpi-row.k5{grid-template-columns:repeat(3,1fr)}.apx .kpi-row.k4{grid-template-columns:repeat(2,1fr)}.apx .two-col{grid-template-columns:1fr}.apx .three-col{grid-template-columns:1fr 1fr}}
 @media(max-width:720px){.apx .actions{grid-template-columns:1fr 1fr}.apx .three-col{grid-template-columns:1fr}.apx .kpi-row,.apx .kpi-row.k4,.apx .kpi-row.k5{grid-template-columns:1fr 1fr}.apx .nav-search{display:none}.apx .edit-grid{grid-template-columns:1fr}}
+@media(max-width:560px){
+  .apx-wrap{padding:0 14px}
+  .apx .welcome{padding:22px 0 0}
+  .apx .kpi-row,.apx .kpi-row.k4,.apx .kpi-row.k5{gap:10px}
+  .apx .kpi{padding:13px 14px 12px;border-radius:13px}
+  .apx .kpi .k-val{font-size:1.5rem}
+  .apx .actions{gap:9px;margin-bottom:18px}
+  .apx .action{padding:12px 13px}
+  .apx .nav-top{height:58px;gap:10px}
+  .apx-brand .name{font-size:1.05rem}
+  .apx-brand .mark{width:32px;height:32px}
+  .apx .nav-right{gap:7px}
+  .apx .btn-primary{padding:9px 11px}
+  .apx .tabbar{height:44px}
+  .apx .tab{padding:0 12px;font-size:.82rem}
+  .apx .panel-head{padding:13px 14px}
+  .apx .ticket,.apx .act-row,.apx .tech-row,.apx .crow,.apx .pr-row,.apx .pt-row{padding-left:14px;padding-right:14px}
+  /* project + payroll rows: drop the mid column so the name isn't crushed on a phone */
+  .apx .pt-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
+  .apx .pt-row > div:nth-child(3),.apx .pt-row .col-lbl:nth-child(3){display:none}
+  .apx .pr-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
+  .apx .pr-row .pr-bonus{display:none}
+  .apx .crow .c-chips{flex-direction:column;gap:4px;align-items:flex-end}
+}
 `;
