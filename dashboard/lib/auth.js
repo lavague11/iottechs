@@ -1,8 +1,11 @@
 // Auth token utilities — safe to import from both middleware (edge) and server actions.
 // Uses only Web Crypto API so it works on the edge runtime.
 
-const SECRET = "iot_techs_session_secret_2026";
-const PREVIEW_SECRET = "iot_preview_2026";
+// In production set SESSION_SECRET (and optionally PREVIEW_SECRET) to long random strings via the
+// host's env vars — never commit them. The literals below are dev-only fallbacks. Changing the
+// production secret invalidates existing login tokens (fine at launch; nobody's signed in yet).
+const SECRET = process.env.SESSION_SECRET || "iot_techs_session_secret_2026";
+const PREVIEW_SECRET = process.env.PREVIEW_SECRET || "iot_preview_2026";
 
 async function hmac(payload) {
   const enc = new TextEncoder();

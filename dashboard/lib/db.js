@@ -100,7 +100,9 @@ const SEED = [
 ];
 
 function init() {
-  const dir = path.join(process.cwd(), "data");
+  // DB lives on disk. Locally that's ./data; in production point DB_DIR at a PERSISTENT mounted
+  // volume (e.g. Render disk at /data) so the database survives deploys and restarts.
+  const dir = process.env.DB_DIR || path.join(process.cwd(), "data");
   mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(path.join(dir, "dashboard.db"));
   db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");

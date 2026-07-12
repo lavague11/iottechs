@@ -1,0 +1,32 @@
+# Render Blueprint — one-click infra for the IOT TECHS dashboard.
+# In Render: New → Blueprint → connect this repo. It reads this file.
+# The Next.js app lives in dashboard/, and the SQLite DB is kept on a persistent disk.
+services:
+  - type: web
+    name: iot-techs
+    runtime: node
+    rootDir: dashboard
+    plan: starter            # ~$7/mo; needed for a persistent disk (free plan has none)
+    buildCommand: npm install && npm run build
+    startCommand: npm start  # next start — honors the PORT Render assigns
+    healthCheckPath: /api/health
+    autoDeploy: true         # every push to the connected branch redeploys
+    disk:
+      name: iot-data
+      mountPath: /data       # the SQLite file persists here across deploys
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_DIR
+        value: /data         # point the app at the mounted disk
+      - key: SESSION_SECRET
+        generateValue: true  # Render generates a strong random value
+      - key: PREVIEW_SECRET
+        generateValue: true
+      - key: TRACKING_PROVIDER
+        value: aftership
+      - key: TRACKING_API_KEY
+        sync: false          # set in the dashboard (secret) — rotate the old one first
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false          # set in the dashboard (secret)
