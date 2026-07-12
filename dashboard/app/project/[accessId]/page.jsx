@@ -170,8 +170,15 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   }
   const staffUsers   = getStaffUsers().map(r=>({...r}));
   const workOrders   = getWorkOrdersByProject(p.access_id).map(r=>({...r}));
-  const expenses     = getProjectExpenses(p.access_id).map(r=>({...r}));
-  const requests     = getProjectRequests(p.access_id).map(r=>({...r}));
+  let   expenses     = getProjectExpenses(p.access_id).map(r=>({...r}));
+  let   requests     = getProjectRequests(p.access_id).map(r=>({...r}));
+  // A tech has no management authority — they only see their OWN submissions, never their
+  // crewmates' or the office's expenses/requests. Filter server-side (payload-safe).
+  if (initialView === "tech") {
+    const meId = currentUser?.id ?? -1;
+    expenses = expenses.filter((e) => Number(e.submitted_by_id) === Number(meId));
+    requests = requests.filter((r) => Number(r.submitted_by_id) === Number(meId));
+  }
 
   // ---- Proposal view tracking: log a view when someone opens a project at the proposal stage ----
   let proposalViews = [];
