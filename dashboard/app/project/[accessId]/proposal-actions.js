@@ -12,7 +12,7 @@ import {
   getProjectNotes, addProjectNote, setProjectPoc, maybeAutoAdvance,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
-  getApprovedAddons,
+  getApprovedAddons, submitRequest,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
 import { fetchTracking } from "../../../lib/tracking";
@@ -241,17 +241,43 @@ export async function signProposalAction(accessId, name, signatureData) {
 // Technician accepts the work order (signs the same way the customer does). On success the tech
 // is assigned to the project. Only techs (via PIN or a tech-role session) may accept, and only
 // their own project when PIN-scoped.
+const firstName = (s) => String(s || "").trim().split(/\s+/)[0].replace(/[()]/g, "").toLowerCase();
+
 export async function acceptWorkOrderAction(accessId, name, signatureData) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role !== "tech") return { error: "Only the assigned technician can accept this work order." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your work order." };
   if (!String(name || "").trim()) return { error: "A name is required to sign." };
+  // A tech may accept only an UNASSIGNED job or one already assigned to them — never claim a job
+  // the office assigned to a different technician. That path is a Request Assignment instead.
+  const proj = getJobByAccessId(accessId);
+  if (proj?.tech && firstName(proj.tech) !== firstName(name)) {
+    return { error: `This job is assigned to ${proj.tech}. Request assignment instead.` };
+  }
   const row = acceptWorkOrder(accessId, name, signatureData);
   if (!row) return { error: "This work order isn't available to accept yet." };
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, proposal: sanitizeProposal(row, "tech") };
+}
+
+// A tech who isn't the assigned technician asks the office to assign them this job. Logged as a
+// pending request the office can approve from the project's Requests panel.
+export async function requestAssignmentAction(accessId, techName) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "tech") return { error: "Only a technician can request assignment." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const who = String(techName || "").trim() || "A technician";
+  submitRequest(accessId, {
+    requestType: "assignment",
+    description: `${who} requests to be assigned this job.`,
+    notes: null,
+    submittedById: null,
+    submittedByName: who,
+  });
+  await revalidate(accessId);
+  return { ok: true };
 }
 
 // Staff record a received payment; customer records an acknowledgement (source tags who).
@@ -472,6 +498,26 @@ export async function acceptStageAction(accessId, stage, on = true) {
   const newStage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage: newStage, acceptances };
+}
+
+// Office submits the survey / mockup for the customer to review. Recorded under a `submit_<tool>`
+// key (reusing the acceptance store) with the tool's current fingerprint — so if the office edits
+// the tool afterward, the fingerprint changes and the submission reads as "changed, re-submit",
+// and the customer can't approve a draft that hasn't been submitted at its current state.
+export async function submitToolAction(accessId, tool, on = true) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Only the office can submit this for review." };
+  if (!["site_survey", "mockup"].includes(tool)) return { error: "Bad tool." };
+  const meta = getToolMeta(accessId);
+  const has  = tool === "site_survey" ? meta.survey.has : meta.mockup.has;
+  if (on && !has) return { error: "Add something to the tool before submitting it." };
+  const fp   = tool === "site_survey" ? meta.survey.fingerprint : meta.mockup.fingerprint;
+  const key  = `submit_${tool}`;
+  const acceptances = on
+    ? acceptStage(accessId, key, tok.name || tok.email || tok.role, fp)
+    : unacceptStage(accessId, key);
+  await revalidate(accessId);
+  return { ok: true, acceptances };
 }
 
 // Staff create the work order (advance approval → schedule) once a deposit is on file.

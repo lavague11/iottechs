@@ -9,5 +9,6 @@ export async function GET(request) {
   const parsed = token ? await parseToken(token) : null;
   if (parsed?.id) recordLogout(Number(parsed.id));
   jar.delete("iot_session");
+  jar.delete("iot_access"); // also drop any project-PIN grant — logout means logged out everywhere
   return NextResponse.redirect(new URL("/", request.url));
 }

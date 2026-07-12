@@ -17,9 +17,15 @@ function Section({ title, count, accent, href, viewLabel, empty, children }) {
   );
 }
 
-export default function OperationsClient({ user, alerts, expenses, requests, workOrders, tickets }) {
+const ageClass = (d) => d == null ? "op-age-grey" : d >= 7 ? "op-age-red" : d >= 3 ? "op-age-amber" : "op-age-grey";
+
+export default function OperationsClient({ user, alerts, expenses, requests, workOrders, tickets, stalled = [] }) {
   const urgentTickets = tickets.filter(t => t.priority === "urgent");
   const totalActions = expenses.length + requests.length + workOrders.length + tickets.length;
+
+  const custWaiting = stalled.filter(j => j.who === "customer").length;
+  const usWaiting   = stalled.filter(j => j.who !== "customer").length;
+  const staleCount  = stalled.filter(j => (j.age_days ?? 0) >= 7).length;
 
   const first = (user.name || "there").split(/\s+/)[0].replace(/\(.*\)/, "").trim();
 
@@ -38,9 +44,11 @@ export default function OperationsClient({ user, alerts, expenses, requests, wor
         <div className="welcome">
           <h1>Action <em>Center</em></h1>
           <p className="op-sub">
-            {totalActions === 0
-              ? `All clear, ${first}. Nothing is waiting on a decision right now.`
-              : `${totalActions} item${totalActions === 1 ? "" : "s"} need a decision, ${first}. Everything operational that's waiting on you, in one place.`}
+            {stalled.length === 0 && totalActions === 0
+              ? `All clear, ${first}. Nothing's stalled and nothing needs a decision right now.`
+              : stalled.length > 0
+                ? `${first}, ${custWaiting} job${custWaiting === 1 ? "" : "s"} ${custWaiting === 1 ? "is" : "are"} waiting on the customer and ${usWaiting} on your team${staleCount > 0 ? ` — ${staleCount} stalled 7+ days` : ""}. Everything that needs to move, in one place.`
+                : `${totalActions} item${totalActions === 1 ? "" : "s"} need a decision, ${first}. Everything operational that's waiting on you, in one place.`}
           </p>
         </div>
 
@@ -51,6 +59,33 @@ export default function OperationsClient({ user, alerts, expenses, requests, wor
               <div className="k-val">{k.val}</div>
             </div>
           ))}
+        </div>
+
+        {/* Stalled jobs — the throughput view: every active job's blocker, whose court, how long */}
+        <div className="panel mb">
+          <div className="panel-head">
+            <h3>Stalled Jobs {stalled.length > 0 && <span className="op-badge op-red">{stalled.length}</span>}</h3>
+          </div>
+          {stalled.length === 0 ? (
+            <div className="op-clear">Everything's moving — no active jobs are waiting.</div>
+          ) : (
+            <>
+              <div className="op-stall-sum">
+                <b>{custWaiting}</b> waiting on the customer · <b>{usWaiting}</b> on our team{staleCount > 0 ? <> · <span className="op-stall-red">{staleCount} stalled 7+ days</span></> : null}
+              </div>
+              {stalled.slice(0, 20).map(j => (
+                <Link href={`/project/${j.access_id}`} className="op-row op-stall-row" key={j.access_id}>
+                  <span className={`op-age ${ageClass(j.age_days)}`}>{j.age_days == null ? "—" : `${j.age_days}d`}</span>
+                  <div className="op-row-main">
+                    <div className="op-row-name">{j.customer} <span className="op-stall-stage">· {j.stageLabel}</span></div>
+                    <div className="op-row-sub">{j.blocker}</div>
+                  </div>
+                  <span className={`op-who ${j.who === "customer" ? "op-who-cust" : "op-who-us"}`}>{j.who === "customer" ? "Waiting on customer" : "On our team"}</span>
+                </Link>
+              ))}
+              {stalled.length > 20 && <div className="op-more">+{stalled.length - 20} more active jobs</div>}
+            </>
+          )}
         </div>
 
         {/* Work Orders awaiting review */}
@@ -135,4 +170,17 @@ const OP_CSS = `
 .apx .op-pri-medium{background:rgba(224,154,58,.13);color:#8a5f00}
 .apx .op-pri-low{background:rgba(99,117,155,.1);color:#5a6d8a}
 .apx .op-urgent-note{padding:10px 18px;font-size:.8rem;font-weight:600;color:#c0392b;background:rgba(231,76,60,.05);border-bottom:1px solid var(--line)}
+.apx .op-stall-sum{padding:11px 18px;font-size:.82rem;color:var(--muted);border-bottom:1px solid var(--line);background:var(--bg-soft)}
+.apx .op-stall-sum b{color:var(--ink)}
+.apx .op-stall-red{color:#c0392b;font-weight:700}
+.apx .op-stall-row{text-decoration:none;color:inherit}
+.apx .op-age{flex-shrink:0;width:42px;text-align:center;font-size:.78rem;font-weight:800;padding:4px 0;border-radius:7px}
+.apx .op-age-grey{background:var(--bg-tint);color:#5a6d8a}
+.apx .op-age-amber{background:rgba(224,154,58,.14);color:#8a5f00}
+.apx .op-age-red{background:rgba(231,76,60,.12);color:#c0392b}
+.apx .op-stall-stage{color:var(--muted);font-weight:600}
+.apx .op-who{flex-shrink:0;font-size:.7rem;font-weight:700;padding:4px 10px;border-radius:100px;white-space:nowrap}
+.apx .op-who-cust{background:rgba(75,106,155,.12);color:#3a5480}
+.apx .op-who-us{background:rgba(201,169,110,.16);color:#7a5f1f}
+.apx .op-more{padding:11px 18px;font-size:.8rem;color:var(--muted)}
 `;

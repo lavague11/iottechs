@@ -6,9 +6,12 @@ import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../.
 import { makePreviewToken } from "../../../lib/auth";
 
 export async function getPreviewTokenAction(accessId, role) {
-  // Preview tokens grant a role's view of a project — only staff sessions may mint them.
+  // Preview tokens grant a role's view of a project. Scope minting by who's asking:
+  // admin/manager → any role; sales → the customer view only (never admin/manager/tech).
   const tok = await getAnyTok();
-  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return null;
+  if (!tok) return null;
+  const can = ["admin", "manager"].includes(tok.role) || (tok.role === "sales" && role === "customer");
+  if (!can) return null;
   return makePreviewToken(accessId, role);
 }
 
@@ -63,6 +66,9 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
     const { makeToken } = await import("../../../lib/auth");
     const jar = await cookies();
     jar.set("iot_session", await makeToken(user), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+    // A fresh login is the newest explicit grant — drop any lingering project PIN cookie so
+    // the page doesn't keep rendering a previously-PIN'd role ("view keeps flipping" bug).
+    jar.delete("iot_access");
     return { ok: true, view, via: "login", name: user.name };
   }
 

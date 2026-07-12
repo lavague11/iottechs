@@ -1,7 +1,7 @@
 import { cookies, headers } from "next/headers";
-import { getJobByAccessId, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied } from "../../../lib/db";
+import { getJobByAccessId, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
-import { parseToken, verifyPreviewToken } from "../../../lib/auth";
+import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
 import Masthead from "../../components/Masthead";
 import GatewayClient from "./gateway-client";
@@ -22,20 +22,39 @@ async function resolveSessionView(project, previewRole, previewToken) {
   const jar  = await cookies();
   const tok  = jar.get("iot_session")?.value;
   const user = tok ? await parseToken(tok) : null;
-  if (!user) return null;
 
-  // Staff can preview as any role via ?preview= when they have a session cookie
-  if (previewRole && STAFF_ROLES.has(user.role)) {
-    return previewRole;
-  }
+  // Project-scoped PIN grant (iot_access). This is what the PIN gate mints — without reading it
+  // here, a PIN visitor was bounced back to the gate on every reload, and a staff member who
+  // deliberately entered a project PIN flipped back to their login role mid-flow. The PIN is
+  // the most RECENT explicit grant for this project, so it wins; every login path clears it.
+  const accessRaw = jar.get("iot_access")?.value;
+  const access    = accessRaw ? await parseAccessToken(accessRaw) : null;
+  const pinView   = access && String(access.accessId) === String(project.access_id)
+    ? (LOGIN_VIEW[access.role] || access.role)
+    : null;
 
-  if (user.role && user.role !== "customer") {
-    return LOGIN_VIEW[user.role] || null;
+  if (user) {
+    // ?preview= is a view projection, not an auth grant — scope it tightly:
+    // admin/manager may preview any role; sales only the customer view; tech none.
+    if (previewRole) {
+      if (["admin", "manager"].includes(user.role)) return previewRole;
+      if (user.role === "sales" && previewRole === "customer") return previewRole;
+    }
+    if (user.role && user.role !== "customer") {
+      return pinView || LOGIN_VIEW[user.role] || null;
+    }
+    // Customer session — owns the project when their email OR phone matches the contact.
+    // (The session token only carries id/role/email, so pull the row for the phone.)
+    const row = user.id ? getUserById(user.id) : null;
+    const emailOwns = user.email && project.contact_email &&
+      String(user.email).trim().toLowerCase() === String(project.contact_email).trim().toLowerCase();
+    const digits = (s) => String(s || "").replace(/\D/g, "");
+    const phoneOwns = digits(row?.phone).length >= 7 &&
+      digits(row?.phone) === digits(project.contact_phone);
+    if (emailOwns || phoneOwns) return "customer";
+    return pinView; // logged-in customer who unlocked someone else's project with its PIN
   }
-  const owns = user.email &&
-    project.contact_email &&
-    String(user.email).trim().toLowerCase() === String(project.contact_email).trim().toLowerCase();
-  return owns ? "customer" : null;
+  return pinView;   // PIN-only visitor — survives reloads and navigation
 }
 
 export default async function ProjectLinkPage({ params, searchParams }) {
@@ -112,6 +131,13 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   if (["admin", "manager", "tech"].includes(initialView)) {
     project.payout_amount = p.payout_amount ?? 0;
     project.payout_status = p.payout_status || "pending";
+  }
+  // Days in the current stage — an internal ops/aging signal. Staff only (a customer shouldn't see
+  // "you've been stuck here 19 days"). Computed from the stage-transition log.
+  if (["admin", "manager", "sales", "tech"].includes(initialView)) {
+    const enteredAt = stageEnteredAt(p.access_id, p.stage);
+    const ms = enteredAt ? new Date(String(enteredAt).replace(" ", "T")).getTime() : NaN;
+    project.days_in_stage = Number.isFinite(ms) ? Math.max(0, Math.floor((Date.now() - ms) / 86400000)) : null;
   }
   ensureBaseAccess(p.access_id); // auto-grant managers + inquiry customer (once each, removable)
 

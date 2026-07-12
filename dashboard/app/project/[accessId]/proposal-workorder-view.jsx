@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
-import { getProposalAction, acceptWorkOrderAction } from "./proposal-actions";
+import { getProposalAction, acceptWorkOrderAction, requestAssignmentAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,16 +20,23 @@ function itemNameNode(name, outdoor) {
 // internal labor/equipment doc: every line is valued at its TECH price (set by admin at the
 // install stage), never the customer price. Server strips customer price/cost before this ever
 // reaches a tech (see sanitizeProposal role "tech"); this component only ever reads techPrice.
-export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName }) {
+const firstName = (s) => String(s || "").trim().split(/\s+/)[0].replace(/[()]/g, "").toLowerCase();
+
+export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null }) {
   const [fetched, setFetched] = useState(null);
   const p = fetched || proposal;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
   const [signOpen, setSignOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [reqSent, setReqSent] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const showToast = (m) => { setToast(m); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2600); };
+
+  // This job is claimable by the viewing tech only when it's unassigned or already theirs. If the
+  // office assigned it to a DIFFERENT technician, they can't accept — they request assignment.
+  const isAnotherTechsJob = !!assignedTech && !!signerName && firstName(assignedTech) !== firstName(signerName);
 
   async function acceptWO(sign) {
     setBusy(true); setErr(null);
@@ -40,6 +47,15 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
     onProposalChange?.(r.proposal);   // propagate to the gateway so Install unlocks without reload
     setSignOpen(false);
     showToast("Work order accepted — you're assigned");
+  }
+
+  async function requestAssign() {
+    setBusy(true); setErr(null);
+    const r = await requestAssignmentAction(accessId, signerName || "");
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    setReqSent(true);
+    showToast("Assignment request sent to the office");
   }
 
   // Pull current server state on mount so a work order that became available (proposal sent) or
@@ -225,6 +241,21 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
             <span className="pwo-sign-cap">Technician Signature</span>
           </div>
         </div>
+      ) : isAnotherTechsJob ? (
+        <div className="pwo-accept-box">
+          <div className="pwo-assigned-other">
+            <span>This job is assigned to <b>{assignedTech}</b>. You can request to be assigned instead — the office will review.</span>
+          </div>
+          {err && <div className="pwo-err">{err}</div>}
+          {reqSent ? (
+            <div className="pwo-req-sent">Assignment request sent — the office will get back to you.</div>
+          ) : (
+            <button type="button" className="pwo-request-btn" disabled={busy || preview} onClick={requestAssign}>
+              Request Assignment
+            </button>
+          )}
+          {preview && <span className="pwo-preview-note">Requesting is disabled in preview.</span>}
+        </div>
       ) : (
         <div className="pwo-accept-box">
           <p>Review the scope above, then accept this work order to be assigned the job.</p>
@@ -338,6 +369,12 @@ const PWO_CSS = `
 .pwo-accept-btn:hover{filter:brightness(1.08)}
 .pwo-accept-btn:disabled{opacity:.5;cursor:default}
 .pwo-preview-note{font-size:.72rem;color:#6f7686}
+.pwo-assigned-other{font-size:.82rem;color:#4a5270;line-height:1.5}
+.pwo-assigned-other b{color:#0B0F1A;font-weight:800}
+.pwo-request-btn{height:44px;padding:0 22px;border:1px solid #C9A96E;border-radius:9px;background:#fff;color:#7a5f1f;font-size:.86rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pwo-request-btn:hover{background:#fbf7ee}
+.pwo-request-btn:disabled{opacity:.5;cursor:default}
+.pwo-req-sent{font-size:.82rem;font-weight:700;color:#1d7a3a;background:#f2f9f4;border:1px solid #bfe0c9;border-radius:8px;padding:9px 12px}
 .pwo-err{font-size:.78rem;font-weight:600;color:#a8442f;background:#FBE6E4;border:1px solid #e0b0a8;border-radius:8px;padding:8px 10px}
 .pwo-accepted-box{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:2px solid #2f7d5a;
   padding:16px 18px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}

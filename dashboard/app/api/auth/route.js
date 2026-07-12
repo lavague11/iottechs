@@ -17,6 +17,7 @@ export async function POST(request) {
     const token = await makeToken(user);
     const jar = await cookies();
     jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: remember ? 60 * 60 * 24 * 7 : 60 * 60 * 8 });
+    jar.delete("iot_access"); // a fresh login supersedes any lingering project-PIN grant
 
     const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
     return Response.json({ ok: true, user: { name: user.name, role: user.role, home: ROLE_HOME[user.role] || "/dashboard" } });

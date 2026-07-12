@@ -1125,6 +1125,10 @@
         document.getElementById('projectLink').href=projectHref;
         document.getElementById('dm-success-view').classList.add('hidden');
         document.getElementById('dm-done-view').classList.remove('hidden');
+      } else if(json.existingAccount){
+        // Account already exists (caught here as a fallback) — send them to log in / reset, not an error.
+        document.getElementById('dm-success-view').classList.add('hidden');
+        document.getElementById('dm-existing-view').classList.remove('hidden');
       } else {
         errEl.textContent=json.error||'Something went wrong.';
         errEl.style.display='block';
@@ -1363,13 +1367,16 @@
         <a id="projectLink" class="btn btn-gold" href="#" style="display:inline-flex;margin-top:20px;padding:14px 28px;">Log In to View My Project →</a>
       </div>
     </div>
-    <!-- Existing account: skip password setup -->
+    <!-- Existing account: skip password setup, offer log in OR reset -->
     <div id="dm-existing-view" class="hidden">
       <div class="sv-head" style="text-align:center">
         <div class="sv-check sv-check--gold"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
-        <h3>Request Received!</h3>
-        <p class="sv-sub">You already have an account. Log in to view the status of your project.</p>
-        <button class="btn btn-gold" onclick="closeDemoModal();openLoginModal('signin')" style="margin-top:20px;padding:14px 28px;">Log In to My Account</button>
+        <h3>You already have an account</h3>
+        <p class="sv-sub">Your request is in — we've got it. Log in to track your project, or reset your password if you've forgotten it.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:20px">
+          <button class="btn btn-gold" onclick="closeDemoModal();openLoginModal('signin')" style="padding:13px 24px;">Log In</button>
+          <a class="btn btn-ghost" href="/forgot" style="padding:13px 24px;">Reset Password</a>
+        </div>
       </div>
     </div>
   </div>

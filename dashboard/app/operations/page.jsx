@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getPendingExpenses, getPendingRequests, getPendingWorkOrders, getTickets } from "../../lib/db";
+import { getPendingExpenses, getPendingRequests, getPendingWorkOrders, getTickets, getStalledJobs } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import OperationsClient from "./operations-client";
 
@@ -12,6 +12,7 @@ export default async function OperationsPage() {
   const requests = getPendingRequests().map(r => ({ ...r }));
   const workOrders = getPendingWorkOrders().map(r => ({ ...r }));
   const tickets  = getTickets().filter(t => t.status !== "closed").map(r => ({ ...r }));
+  const stalled  = getStalledJobs();
 
   return (
     <OperationsClient
@@ -21,6 +22,7 @@ export default async function OperationsPage() {
       requests={requests}
       workOrders={workOrders}
       tickets={tickets}
+      stalled={stalled}
     />
   );
 }

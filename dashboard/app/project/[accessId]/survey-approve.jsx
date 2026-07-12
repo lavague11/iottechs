@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { acceptStageAction } from "./proposal-actions";
+import { acceptStageAction, submitToolAction } from "./proposal-actions";
 
 // Survey-stage approval, data-aware:
 //  - ToolApproveBar sits UNDER a tool (survey / mockup). It only appears when that tool has
@@ -21,16 +21,21 @@ export function surveySatisfied(toolMeta, acceptances) {
 const LABEL = { site_survey: "site survey", mockup: "mockup" };
 const fmt = (s) => { try { return new Date(String(s).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return s; } };
 
-export function ToolApproveBar({ accessId, stageKey, meta, acceptance, role, preview, onChange }) {
+export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  if (!meta?.has) return null;                       // nothing to approve for this tool
+  if (!meta?.has) return null;                       // nothing here yet for this tool
 
   const approved = !!acceptance;
   const current  = toolAccepted(meta, acceptance);   // approved AND matches the live data
   const voided   = approved && !current;             // approved but the tool changed since
   const isCustomer = role === "customer";
+  const isOffice   = ["admin", "manager", "sales"].includes(role);
   const label = LABEL[stageKey] || "item";
+
+  // Submitted for review = the office pushed it AND the tool hasn't changed since.
+  const submittedCurrent = toolAccepted(meta, submission);
+  const submittedStale   = !!submission && !submittedCurrent;
 
   async function approve() {
     if (busy || preview) return;
@@ -40,13 +45,62 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, role, pre
     if (r?.error) { setErr(r.error); return; }
     onChange?.(r.acceptances, r.stage);
   }
+  async function submit(on) {
+    if (busy || preview) return;
+    setBusy(true); setErr(null);
+    const r = await submitToolAction(accessId, stageKey, on);
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    onChange?.(r.acceptances);
+  }
 
+  // ---- Office: Submit for review (and re-submit when edited after submitting) ----
+  if (isOffice) {
+    return (
+      <div className={`tab-root${current ? " ok" : submittedCurrent ? " ok" : ""}`}>
+        {current ? (
+          <div className="tab-row">
+            <span className="tab-check">✓</span>
+            <span className="tab-msg">Customer approved this {label}{acceptance.by ? ` — ${acceptance.by}` : ""}{acceptance.at ? ` · ${fmt(acceptance.at)}` : ""}.</span>
+          </div>
+        ) : submittedCurrent ? (
+          <div className="tab-row">
+            <span className="tab-check">✓</span>
+            <span className="tab-msg">Submitted for review{submission.at ? ` · ${fmt(submission.at)}` : ""} — awaiting customer approval.</span>
+            <button className="tab-btn ghost" disabled={busy || preview} onClick={() => submit(false)}>Unsubmit</button>
+          </div>
+        ) : submittedStale ? (
+          <div className="tab-row">
+            <span className="tab-warn">!</span>
+            <span className="tab-msg"><b>You've changed this {label}</b> since submitting — re-submit so the customer reviews the latest.</span>
+            <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>
+          </div>
+        ) : (
+          <div className="tab-row">
+            <span className="tab-dot" />
+            <span className="tab-msg">When this {label} is ready, submit it for the customer to review.</span>
+            <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>
+          </div>
+        )}
+        {err && <div className="tab-err">{err}</div>}
+        {preview && <div className="tab-preview">Submitting is disabled in preview.</div>}
+        <style>{TAB_CSS}</style>
+      </div>
+    );
+  }
+
+  // ---- Customer: can only approve once the office has submitted the current version ----
   return (
     <div className={`tab-root${current ? " ok" : voided ? " void" : ""}`}>
       {current ? (
         <div className="tab-row">
           <span className="tab-check">✓</span>
           <span className="tab-msg">You approved this {label}{acceptance.by ? ` — ${acceptance.by}` : ""}{acceptance.at ? ` · ${fmt(acceptance.at)}` : ""}.</span>
+        </div>
+      ) : !submittedCurrent ? (
+        <div className="tab-row">
+          <span className="tab-dot" />
+          <span className="tab-msg">Your {label} is being prepared — we'll let you know the moment it's ready to review.</span>
         </div>
       ) : voided ? (
         <div className="tab-row">
@@ -57,7 +111,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, role, pre
       ) : (
         <div className="tab-row">
           <span className="tab-dot" />
-          <span className="tab-msg">{isCustomer ? `Reviewed everything? Approve this ${label} to continue.` : `Awaiting customer approval of the ${label}.`}</span>
+          <span className="tab-msg">Reviewed everything? Approve this {label} to continue.</span>
           {isCustomer && <button className="tab-btn" disabled={busy || preview} onClick={approve}>{busy ? "Saving…" : `Approve ${label}`}</button>}
         </div>
       )}
@@ -96,7 +150,7 @@ export function SmoothSailing({ onContinue, preview }) {
           <path d="M0 14 Q 20 6 40 14 T 80 14 T 120 14 T 160 14 T 200 14 T 240 14 V24 H0 Z" fill="#2C3347" opacity=".9" />
         </svg>
       </div>
-      <h3 className="ssl-title">No survey — smooth sailing from here ⛵</h3>
+      <h3 className="ssl-title">No survey — smooth sailing from here</h3>
       <p className="ssl-sub">There's nothing to review on this step. You're all set to move ahead.</p>
       <button className="ssl-btn" disabled={preview} onClick={() => onContinue?.()}>Go on to the Next Step →</button>
       {preview && <div className="ssl-preview">Navigation is disabled in preview.</div>}
@@ -118,6 +172,8 @@ const TAB_CSS = `
 .tab-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .tab-btn:hover{filter:brightness(1.04)}
 .tab-btn:disabled{opacity:.5;cursor:default}
+.tab-btn.ghost{background:#fff;border:1px solid var(--line,#d9d4ca);color:#6f7686;font-weight:700}
+.tab-btn.ghost:hover{filter:none;border-color:#b9b3a6;color:#41485a}
 .tab-err{margin-top:8px;font-size:.78rem;font-weight:600;color:#a8442f}
 .tab-preview{margin-top:6px;font-size:.72rem;color:var(--muted,#6f7686)}
 `;

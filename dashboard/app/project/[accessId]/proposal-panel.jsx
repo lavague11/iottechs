@@ -8,7 +8,7 @@ import ProposalWorkOrderView from "./proposal-workorder-view";
 // (tech prices only); customer (and staff previewing as customer) get the review surface.
 // Data arrives server-sanitized per role from page.jsx (lib/proposal.js sanitizeProposal) —
 // cost/margin never reach non-staff, and the customer price never reaches a tech.
-export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName }) {
+export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech }) {
   const staffBuilder = ["admin", "manager", "sales"].includes(cView);
   return (
     <div className="prop-wrap">
@@ -16,7 +16,7 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
       {staffBuilder ? (
         <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} />
       ) : cView === "tech" ? (
-        <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} />
+        <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} />
       ) : (
         <ProposalCustomerView
           accessId={accessId} proposal={proposal} preview={custView} customerName={customerName}

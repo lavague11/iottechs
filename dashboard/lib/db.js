@@ -651,6 +651,30 @@ function init() {
   const saCols = db.prepare("PRAGMA table_info(stage_acceptances)").all().map(c => c.name);
   if (!saCols.includes("fingerprint")) db.exec("ALTER TABLE stage_acceptances ADD COLUMN fingerprint TEXT");
 
+  // ---- Stage transition log — one row each time a project enters a stage, so we can report
+  // "days in current stage" (real per-stage aging) instead of guessing off last activity. ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stage_transitions (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      stage             TEXT NOT NULL,
+      entered_at        TEXT DEFAULT (datetime('now','localtime')),
+      by_name           TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_stage_trans ON stage_transitions(project_access_id, id)");
+  // Backfill: seed a transition for every project's CURRENT stage so aging has a start point on
+  // day one. The true historical entry time is unknown, so we estimate with the project's start
+  // (created_at); every future move is logged exactly at the moment it happens.
+  {
+    const need = db.prepare(`
+      SELECT p.access_id, p.stage, p.created_at FROM projects p
+      WHERE NOT EXISTS (SELECT 1 FROM stage_transitions t WHERE t.project_access_id = p.access_id AND t.stage = p.stage)
+    `).all();
+    const ins = db.prepare("INSERT INTO stage_transitions (project_access_id, stage, entered_at, by_name) VALUES (?,?,?,'backfill')");
+    for (const r of need) ins.run(r.access_id, r.stage, r.created_at || null);
+  }
+
   // ---- Company-wide default price book (single row) — the proposal gear "Default pricing" ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS price_book (
@@ -683,7 +707,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v29";
+const DB_VER = "v30";
 const g = globalThis;
 if (!g.__iotDb || g.__iotDbVer !== DB_VER) {
   try { if (g.__iotDb) g.__iotDb.close(); } catch (_) {}
@@ -700,6 +724,61 @@ const decorate = (r) => ({
 
 export function getAllJobs() {
   return db.prepare("SELECT * FROM projects ORDER BY id DESC").all().map(decorate);
+}
+
+// Most-recent activity timestamp across the project's real events — the honest basis for "how
+// long has this been sitting" (vs faking it off created_at). Timestamps are local 'YYYY-MM-DD
+// HH:MM:SS' strings, which sort lexically = chronologically.
+function lastActivityAt(accessId, createdAt) {
+  const q = (sql) => { try { return db.prepare(sql).get(String(accessId))?.v || null; } catch { return null; } };
+  const stamps = [
+    createdAt,
+    q("SELECT MAX(updated_at) v FROM proposals WHERE project_access_id=?"),
+    q("SELECT MAX(created_at) v FROM project_payments WHERE project_access_id=?"),
+    q("SELECT MAX(created_at) v FROM stage_acceptances WHERE project_access_id=?"),
+    q("SELECT MAX(created_at) v FROM project_notes WHERE project_access_id=?"),
+    q("SELECT MAX(created_at) v FROM requests WHERE project_access_id=?"),
+  ].filter(Boolean).map(String).sort();
+  return stamps.length ? stamps[stamps.length - 1] : null;
+}
+
+// Cross-project throughput view: every active job's current blocker, whose court it's in, and how
+// long it's been sitting. A pure projection of the stage-flow matrix (missingReqs) — no new state.
+// Sorted oldest-first so the most stalled float to the top.
+export function getStalledJobs() {
+  const jobs = db.prepare(
+    "SELECT * FROM projects WHERE completed_at IS NULL AND lost_at IS NULL AND stage != 'completion' ORDER BY id DESC"
+  ).all();
+  const now = Date.now();
+  const parseTs = (s) => { const t = new Date(String(s).replace(" ", "T")).getTime(); return Number.isFinite(t) ? t : NaN; };
+  const out = [];
+  for (const p of jobs) {
+    const facts = buildStageFacts(p.access_id);
+    if (!facts) continue;
+    const missing = missingReqs(facts.stage, facts, getProjectAssignments(p.access_id));
+    if (!missing.length) continue;              // nothing blocking — mid auto-advance / ready to move
+    const primary = missing[0];                 // the first unmet requirement is the live blocker
+    // Age = days in the CURRENT stage (from the transition log); fall back to last activity if a
+    // project somehow has no transition row.
+    const enteredAt = stageEnteredAt(p.access_id, p.stage) || lastActivityAt(p.access_id, p.created_at);
+    const ms        = enteredAt ? parseTs(enteredAt) : NaN;
+    const ageDays   = Number.isFinite(ms) ? Math.max(0, Math.floor((now - ms) / 86400000)) : null;
+    out.push({
+      access_id:     p.access_id,
+      customer:      p.company_name || p.customer,
+      stage:         p.stage,
+      stageLabel:    stageLabel(p.stage),
+      blocker:       primary.label,
+      who:           primary.who || "internal",   // "customer" | "internal"
+      blocker_count: missing.length,
+      sales_rep:     p.sales_rep || null,
+      tech:          p.tech || null,
+      age_days:      ageDays,
+      value:         p.value || 0,
+    });
+  }
+  out.sort((a, b) => (b.age_days ?? -1) - (a.age_days ?? -1));
+  return out;
 }
 
 // For roles that aren't admin/manager: exclude restricted projects unless the user is assigned
@@ -733,9 +812,31 @@ export function getJobByAccessId(accessId) {
   return r ? decorate(r) : null;
 }
 
-export function updateStage(accessId, stage) {
-  const info = db.prepare("UPDATE projects SET stage = ? WHERE access_id = ? COLLATE NOCASE").run(String(stage), String(accessId || "").trim());
+// Log every entry into a stage. This is THE choke point all stage moves flow through
+// (setStage, tech advance, maybeAutoAdvance, create-work-order), so nothing changes stage
+// without being recorded — no scattered call sites to keep in sync.
+function recordStageTransition(accessId, stage, byName) {
+  try {
+    db.prepare("INSERT INTO stage_transitions (project_access_id, stage, by_name) VALUES (?,?,?)")
+      .run(String(accessId), String(stage), byName || null);
+  } catch { /* transitions are advisory — a logging failure must never block the move */ }
+}
+
+// When the project entered its CURRENT stage — the latest transition INTO it (handles loops like
+// proposal → approval → back to proposal, where the newest entry is what "days in stage" means).
+export function stageEnteredAt(accessId, stage) {
+  const r = db.prepare(
+    "SELECT entered_at FROM stage_transitions WHERE project_access_id=? AND stage=? ORDER BY id DESC LIMIT 1"
+  ).get(String(accessId), String(stage));
+  return r?.entered_at || null;
+}
+
+export function updateStage(accessId, stage, byName) {
+  const id   = String(accessId || "").trim();
+  const prev = db.prepare("SELECT stage FROM projects WHERE access_id = ? COLLATE NOCASE").get(id);
+  const info = db.prepare("UPDATE projects SET stage = ? WHERE access_id = ? COLLATE NOCASE").run(String(stage), id);
   if (!info.changes) return null;
+  if (!prev || prev.stage !== String(stage)) recordStageTransition(id, stage, byName); // only real moves
   return getJobByAccessId(accessId);
 }
 

@@ -19,6 +19,8 @@ import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
+import CustomerActionCard from "./customer-action-card";
+import { customerAction } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
 import ScheduleTrackingPanel from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
@@ -106,6 +108,17 @@ const ROLE_PILL = {
   sales:    { bg: "#7a5ea8", fg: "#fff" },
   vendor:   { bg: "#2f7d5a", fg: "#fff" },
   readonly: { bg: "#6f7686", fg: "#fff" },
+};
+
+// Progress-bar tint per role — so the bar's color tells you at a glance whose view you're in
+// (gold = office, blue = customer, green = tech, purple = sales). Same hues as the role pill.
+// c = main, cd = deep (gradient/text), glow = translucent ring for the current node.
+const ROLE_BAR = {
+  admin:    { c: "#0B0F1A", cd: "#2C3347", glow: "rgba(11,15,26,.16)" },
+  manager:  { c: "#C9A96E", cd: "#b08f4f", glow: "rgba(201,169,110,.18)" },
+  customer: { c: "#4b6a9b", cd: "#37547e", glow: "rgba(75,106,155,.18)" },
+  tech:     { c: "#2f7d5a", cd: "#245f45", glow: "rgba(47,125,90,.18)" },
+  sales:    { c: "#7a5ea8", cd: "#5f4884", glow: "rgba(122,94,168,.18)" },
 };
 
 // ---- Notification bell ----
@@ -265,10 +278,11 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
-                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved }) {
+                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage }) {
 
   let stages = stagesProp || stagesForType(type);
   if (!stagesProp && !stages.some((s) => s.key === projectStage)) stages = STAGES;
+  const rbar = ROLE_BAR[role] || ROLE_BAR.admin;   // bar tint follows the effective role
 
   const projectIdx  = stages.findIndex((s) => s.key === projectStage);
   const fillPct     = Math.max(10, (projectIdx / (stages.length - 1)) * 100);
@@ -301,7 +315,7 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
 
   return (
     <>
-      <div className="pbar-wrap">
+      <div className="pbar-wrap" style={{ "--role-c": rbar.c, "--role-cd": rbar.cd, "--role-glow": rbar.glow }}>
         <div className="pbar" ref={pbarRef} style={{ "--stage-count": stages.length }}>
           <div className="pbar-track">
             <div className="pbar-fill" style={{ width: `${trackFillPct}%` }} />
@@ -338,6 +352,13 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
             <b>{Math.round(fillPct)}%</b> complete
             {projectStage !== "completion" && (
               <span className="pbar-pct-cur"> · {stageShortLabel(projectStage)}</span>
+            )}
+            {/* Internal ops signal — how long this stage has been sitting. Never shown to customers. */}
+            {role !== "customer" && daysInStage != null && (
+              <span className={`pbar-age${daysInStage >= 7 ? " red" : daysInStage >= 3 ? " amber" : ""}`}
+                    title="Days in the current stage">
+                {daysInStage}d in stage
+              </span>
             )}
           </span>
         </div>
@@ -376,7 +397,8 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
               </button>
             );
           }
-          if (!missingFor || !["admin", "manager", "sales", "customer"].includes(role)) return null;
+          // Customer's next-step banner is superseded by the hero action card — don't double up.
+          if (!missingFor || !["admin", "manager", "sales"].includes(role)) return null;
           const remaining = missingFor(projectStage) || [];   // [{ label, who }]
           const isCust = role === "customer";
           const mine   = remaining.filter((r) => (r.who === "customer") === isCust);
@@ -1468,6 +1490,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // silently re-edited. Admin/manager can Reopen from the Completion panel to make changes.
   const locked = !!lp.completed_at;
 
+  // Customer hero: the single next step, derived from the same flow-matrix facts that gate stages.
+  const custAction = cView === "customer" ? customerAction(projectStage, {
+    appt_date:         lp.date,
+    survey_accepted:   lp.survey_accepted,
+    survey_submitted:  !!acceptances?.submit_site_survey,
+    proposal_status:   lp.proposal_status,
+    proposal_signed:   lp.proposal_signed,
+    deposit_submitted: lp.deposit_submitted,
+    deposit_recorded:  lp.deposit_recorded,
+    install_date:      lp.install_date || lp.date,
+    install_date_fmt:  fmtDate(lp.install_date || lp.date),
+  }) : null;
+
   // One-time clamp: a real customer (not admin preview) who lands ahead of their acceptance
   // progress is pulled back to the gate they still owe. Runs only after acceptances load so a
   // customer who already accepted is never bounced.
@@ -1818,6 +1853,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         role={cView}
         techSigned={!!proposalData?.tech_signed_name}
         custApproved={proposalData?.status === "accepted" || (proposalData?.accepted_options?.length > 0)}
+        daysInStage={cView !== "customer" ? lp.days_in_stage : null}
         busy={busy}
         toast={jumpToast}
         setToast={setJumpToast}
@@ -1832,6 +1868,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
       {(view === "admin" || view === "manager" || view === "tech") && projectStage === "qc" && (
         <WorkOrderPanel accessId={project.access_id} workOrders={workOrders} view={view} />
+      )}
+      {/* Customer hero: the ONE next step (or a status), promoted above the stage tools. Reads the
+          same flow-matrix facts that gate the lifecycle; the CTA routes to the stage with the control. */}
+      {cView === "customer" && custAction && (
+        <CustomerActionCard action={custAction} preview={!!previewRole}
+          onGo={(t) => { if (t && t !== viewingStage) browse(t); }} />
       )}
       {locked && !previewRole && cView !== "customer" && (
         <div className="pv-lockbanner">
@@ -2094,7 +2136,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   customerName={lp.contact_name || lp.customer}
                 />
                 <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
-                  acceptance={acceptances.site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
+                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
               </div>
             )}
           </div>
@@ -2122,7 +2164,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   customerName={lp.contact_name || lp.customer}
                 />
                 <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
-                  acceptance={acceptances.mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
+                  acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
               </div>
             )}
           </div>
@@ -2161,6 +2203,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             customerPhone={lp.contact_phone}
             customerEmail={lp.contact_email}
             signerName={currentUser?.name || currentUser?.email || ""}
+            assignedTech={lp.tech || null}
           />
         </>
       ) : viewingStage === "completion" ? (
@@ -2988,21 +3031,24 @@ const PV_CSS = `
 /* Progress bar → light card + stepper */
 .pvx .pbar-wrap{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(14,19,32,.04);padding:22px 20px 16px}
 .pvx .pbar-track{background:var(--line)}
-.pvx .pbar-fill{background:linear-gradient(90deg,var(--gold),var(--gold-deep))}
+.pvx .pbar-fill{background:linear-gradient(90deg,var(--role-c,var(--gold)),var(--role-cd,var(--gold-deep)))}
 .pvx .pstage-num{background:#fff;border:1.5px solid var(--line);color:var(--muted)}
-.pvx .pstage.done .pstage-num{background:var(--gold);border-color:var(--gold);color:#fff}
-.pvx .pstage.current .pstage-num{background:#fff;border-color:var(--gold);border-width:2px;color:var(--gold-deep);box-shadow:0 0 0 3px rgba(201,169,110,.18)}
-.pvx .pstage.viewing .pstage-num{background:rgba(201,169,110,.08);border-color:var(--gold);color:var(--gold-deep)}
+.pvx .pstage.done .pstage-num{background:var(--role-c,var(--gold));border-color:var(--role-c,var(--gold));color:#fff}
+.pvx .pstage.current .pstage-num{background:#fff;border-color:var(--role-c,var(--gold));border-width:2px;color:var(--role-cd,var(--gold-deep));box-shadow:0 0 0 3px var(--role-glow,rgba(201,169,110,.18))}
+.pvx .pstage.viewing .pstage-num{background:var(--role-glow,rgba(201,169,110,.18));border-color:var(--role-c,var(--gold));color:var(--role-cd,var(--gold-deep))}
 .pvx .plabel{color:var(--muted)}
-.pvx .pstage.done .plabel{color:var(--gold-deep)}
+.pvx .pstage.done .plabel{color:var(--role-cd,var(--gold-deep))}
 .pvx .pstage.current .plabel{color:var(--ink)}
 .pvx .pstage.future .plabel{color:#c2c7d2}
-.pvx .pstage.clickable:hover .pstage-num{border-color:var(--gold);color:var(--gold-deep)}
-.pvx .pstage.clickable:hover .plabel{color:var(--gold-deep)}
+.pvx .pstage.clickable:hover .pstage-num{border-color:var(--role-c,var(--gold));color:var(--role-cd,var(--gold-deep))}
+.pvx .pstage.clickable:hover .plabel{color:var(--role-cd,var(--gold-deep))}
 .pvx .pbar-pct-row{background:var(--bg-tint);border:1px solid var(--line)}
-.pvx .pbar-pct-bar{background:repeating-linear-gradient(-55deg,rgba(201,169,110,.18) 0,rgba(201,169,110,.18) 6px,transparent 6px,transparent 14px),linear-gradient(90deg,rgba(201,169,110,.35),rgba(201,169,110,.18));border-right:2px solid var(--gold)}
+.pvx .pbar-pct-bar{background:repeating-linear-gradient(-55deg,var(--role-glow,rgba(201,169,110,.18)) 0,var(--role-glow,rgba(201,169,110,.18)) 6px,transparent 6px,transparent 14px),linear-gradient(90deg,var(--role-glow,rgba(201,169,110,.35)),var(--role-glow,rgba(201,169,110,.18)));border-right:2px solid var(--role-c,var(--gold))}
 .pvx .pbar-pct-label{color:var(--muted)}
-.pvx .pbar-pct-label b{color:var(--gold-deep)}
+.pvx .pbar-pct-label b{color:var(--role-cd,var(--gold-deep))}
+.pvx .pbar-age{margin-left:8px;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;background:var(--bg-tint);color:#5a6d8a;vertical-align:middle}
+.pvx .pbar-age.amber{background:rgba(224,154,58,.14);color:#8a5f00}
+.pvx .pbar-age.red{background:rgba(231,76,60,.12);color:#c0392b}
 .pvx .pbar-pct-cur{color:var(--muted)}
 .pvx .stage-expand-inner{background:#faf4e8;border:1px solid rgba(201,169,110,.3);border-top:none}
 .pvx .stage-toast-msg{color:var(--slate)}.pvx .stage-toast-msg b{color:var(--gold-deep)}
