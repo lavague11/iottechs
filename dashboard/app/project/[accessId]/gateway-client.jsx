@@ -18,6 +18,7 @@ import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
+import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerActionCard from "./customer-action-card";
@@ -2239,7 +2240,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
         />
       ) : viewingStage === "install" && cView === "tech" ? (
-        (() => {
+        <><SystemQrTool accessId={lp.access_id} />{(() => {
           // Install work order — only after the tech accepts, and only on/after the install date.
           const woAccepted = !!proposalData?.tech_signed_name;
           const iDate = lp.install_date || lp.date || null;
@@ -2253,10 +2254,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           }
           return (<><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
             <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} /></>);
-        })()
+        })()}</>
       ) : viewingStage === "install" && ["admin", "manager"].includes(cView) ? (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
-        <><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
+        <><SystemQrTool accessId={lp.access_id} />
+          <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
           <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} /></>
       ) : viewingStage === "install" && cView === "customer" ? (
         // Customer just watches the install progress — no editing, no pricing.
