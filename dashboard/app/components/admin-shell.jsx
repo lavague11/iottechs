@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "../login/actions";
+import { attachAutocomplete } from "../../lib/places";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -151,6 +152,16 @@ function NewProjectModal({ onClose }) {
   const [done, setDone] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
+  // Google Places autofill: typing a business into Company fills the name + address; the Address
+  // field autocompletes street addresses. No-op if no Maps key is configured.
+  const companyRef = useRef(null);
+  const addressRef = useRef(null);
+  useEffect(() => {
+    const c1 = attachAutocomplete(companyRef.current, { types: ["establishment"], onPlace: (p) => setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })) });
+    const c2 = attachAutocomplete(addressRef.current, { types: ["address"], onPlace: (p) => setF((f) => ({ ...f, address: p.address || f.address })) });
+    return () => { c1?.(); c2?.(); };
+  }, []);
+
   async function submit(e) {
     e.preventDefault();
     setErr(""); setBusy(true);
@@ -192,13 +203,13 @@ function NewProjectModal({ onClose }) {
             <form className="np-form" onSubmit={submit}>
               <div className="np-row2">
                 <div className="np-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><input className="apx-input" value={f.company} onChange={(e) => set("company", e.target.value)} placeholder="Used as the customer name" /></div>
+                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><input ref={companyRef} className="apx-input" value={f.company} onChange={(e) => set("company", e.target.value)} placeholder="Start typing a business name…" /></div>
               </div>
               <div className="np-row2">
                 <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
                 <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
               </div>
-              <div className="np-f"><label>Service Address</label><input className="apx-input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="123 Main St, City, NJ" /></div>
+              <div className="np-f"><label>Service Address</label><input ref={addressRef} className="apx-input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="123 Main St, City, NJ" /></div>
               <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
               <div className="np-f"><label>Notes <span className="np-opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}

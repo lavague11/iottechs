@@ -889,3 +889,6 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 .role-sales    { background: #e8f5ec; color: #1a5e30; border: 1px solid #b0d8c0; }
 .role-tech     { background: #e5f5f0; color: #1a5e48; border: 1px solid #a0d8c8; }
 .role-customer { background: #f0f0f0; color: #444; border: 1px solid #ddd; }
+
+/* Google Places Autocomplete dropdown — above modal overlays (z-index 200). */
+.pac-container{z-index:100000 !important;border-radius:10px;box-shadow:0 12px 32px rgba(14,19,32,.18);font-family:inherit}

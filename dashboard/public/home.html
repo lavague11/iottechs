@@ -1597,5 +1597,33 @@
     </div>
   </div>
 </div>
+<!-- Google Places autofill for the address + business-name fields. No-op if no Maps key. -->
+<style>.pac-container{z-index:100000!important;border-radius:10px;margin-top:2px;box-shadow:0 12px 32px rgba(0,0,0,.18)}</style>
+<script>
+(function(){
+  var loaded=false;
+  function attach(){
+    if(!(window.google&&google.maps&&google.maps.places))return;
+    var addr=document.getElementById('address');
+    var comp=document.getElementById('company');
+    if(addr){
+      var a=new google.maps.places.Autocomplete(addr,{types:['address'],fields:['formatted_address']});
+      a.addListener('place_changed',function(){var p=a.getPlace();if(p&&p.formatted_address){addr.value=p.formatted_address;addr.dispatchEvent(new Event('input',{bubbles:true}));}});
+      addr.setAttribute('autocomplete','off');
+    }
+    if(comp){
+      var c=new google.maps.places.Autocomplete(comp,{types:['establishment'],fields:['name','formatted_address']});
+      c.addListener('place_changed',function(){var p=c.getPlace();if(!p)return;if(p.name){comp.value=p.name;comp.dispatchEvent(new Event('input',{bubbles:true}));}if(addr&&p.formatted_address){addr.value=p.formatted_address;addr.dispatchEvent(new Event('input',{bubbles:true}));}});
+      comp.setAttribute('autocomplete','off');
+    }
+  }
+  fetch('/api/config').then(function(r){return r.json();}).then(function(cfg){
+    var key=cfg&&cfg.googleMapsApiKey;if(!key||loaded)return;loaded=true;
+    var s=document.createElement('script');
+    s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&libraries=places&loading=async';
+    s.async=true;s.onload=attach;document.head.appendChild(s);
+  }).catch(function(){});
+})();
+</script>
 </body>
 </html>
