@@ -711,12 +711,30 @@ function makePins(accessId) {
 
 const DB_VER = "v30";
 const g = globalThis;
-if (!g.__iotDb || g.__iotDbVer !== DB_VER) {
-  try { if (g.__iotDb) g.__iotDb.close(); } catch (_) {}
-  g.__iotDb = init();
-  g.__iotDbVer = DB_VER;
+
+// Open (and migrate/seed) the database on first real use — NOT at import time. During
+// `next build` the module is imported to collect page data, but the persistent disk (DB_DIR,
+// e.g. Render's /data) isn't mounted yet, so opening here would crash the build with
+// ENOENT mkdir '/data'. Deferring to the first query means init() only runs at runtime, when
+// the disk exists. Cached on globalThis so it survives HMR and is shared across the module graph.
+function getDb() {
+  if (!g.__iotDb || g.__iotDbVer !== DB_VER) {
+    try { if (g.__iotDb) g.__iotDb.close(); } catch (_) {}
+    g.__iotDb = init();
+    g.__iotDbVer = DB_VER;
+  }
+  return g.__iotDb;
 }
-const db = g.__iotDb;
+
+// A lazy proxy so every existing `db.prepare(...)` / `db.exec(...)` call site works unchanged,
+// while the underlying connection is created on first property access rather than at import.
+const db = new Proxy({}, {
+  get(_t, prop) {
+    const real = getDb();
+    const v = real[prop];
+    return typeof v === "function" ? v.bind(real) : v;
+  },
+});
 
 const decorate = (r) => ({
   ...r,
