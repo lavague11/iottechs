@@ -10552,5 +10552,40 @@ downloadSvg.addEventListener('click', () => {
   });
 });
 </script>
+<!-- IOT platform integration: prefill customer from the URL, compact embed mode, and hand the
+     finished branded card back to the host page so it can be saved to the project. -->
+<script>
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    var cn = document.getElementById('customerName');
+    var customer = q.get('customer');
+    if (customer && cn){ cn.value = customer; cn.dispatchEvent(new Event('input',{bubbles:true})); }
+    if (q.get('embed')){
+      var s = document.createElement('style');
+      s.textContent =
+        'body.iot-embed header p{display:none}' +
+        'body.iot-embed h1{font-size:17px;margin:0 0 12px}' +
+        'body.iot-embed label,body.iot-embed #payloadText,body.iot-embed #credWarn,' +
+        'body.iot-embed #customerName,body.iot-embed #generateBtn,body.iot-embed #downloadSvg{display:none!important}';
+      document.head.appendChild(s);
+      document.body.classList.add('iot-embed');
+    }
+    var dlRow = document.getElementById('dlRow');
+    var card = document.getElementById('cardCanvas');
+    if (dlRow && card){
+      var lastSent = null;
+      var send = function(){
+        if (!dlRow.classList.contains('show')) return;
+        try {
+          var url = card.toDataURL('image/png');
+          if (url && url !== lastSent){ lastSent = url; window.parent.postMessage({ type:'iotSystemQr', dataUrl:url }, '*'); }
+        } catch(e){}
+      };
+      new MutationObserver(send).observe(dlRow, { attributes:true, attributeFilter:['class'] });
+    }
+  } catch(e){}
+})();
+</script>
 </body>
 </html>

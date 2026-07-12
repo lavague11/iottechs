@@ -2240,7 +2240,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
         />
       ) : viewingStage === "install" && cView === "tech" ? (
-        <><SystemQrTool accessId={lp.access_id} />{(() => {
+        <><SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />{(() => {
           // Install work order — only after the tech accepts, and only on/after the install date.
           const woAccepted = !!proposalData?.tech_signed_name;
           const iDate = lp.install_date || lp.date || null;
@@ -2257,7 +2257,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         })()}</>
       ) : viewingStage === "install" && ["admin", "manager"].includes(cView) ? (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
-        <><SystemQrTool accessId={lp.access_id} />
+        <><SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
           <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
           <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} /></>
       ) : viewingStage === "install" && cView === "customer" ? (

@@ -369,6 +369,20 @@ export async function completeProjectAction(accessId, done = true, date = null) 
   return { ok: true, completed_at: row.completed_at || null };
 }
 
+// Save the branded system QR card (PNG data URL) to the project. Admin/manager/tech.
+export async function setSystemQrAction(accessId, dataUrl) {
+  const tok = await getSessionTok();
+  if (!["admin", "manager", "tech"].includes(tok?.role)) return { error: "Unauthorized." };
+  const s = String(dataUrl || "");
+  if (s && !(s.startsWith("data:image/") && s.length < 3000000)) return { error: "Bad image." };
+  const { setSystemQr } = await import("../../../lib/db");
+  const row = setSystemQr(accessId, s || null);
+  if (!row) return { error: "Project not found." };
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true };
+}
+
 // Warranty term (6 / 12 / 24 months). Admin/manager only.
 export async function setWarrantyAction(accessId, months) {
   const tok = await getSessionTok();

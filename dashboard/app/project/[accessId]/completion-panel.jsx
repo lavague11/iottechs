@@ -4,6 +4,7 @@ import { completeProjectAction, setCommissionAction, setPayoutAction, setWarrant
 import { getApprovalDataAction } from "./proposal-actions";
 import { optionTotals } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
+import SystemQrModal from "./system-qr-modal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
@@ -87,6 +88,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
   const [payoutStatus, setPayoutStatus] = useState(project.payout_status || "pending");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const doneDate = completedAt || project.install_date || project.date || null;
   const warrantyEnd = doneDate ? addMonths(doneDate, warrantyMonths) : null;
@@ -182,6 +184,20 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
         </div>
       </div>
 
+      {/* System QR — the branded activation card, saved from the install step */}
+      {project.system_qr && (
+        <div className="cmp-card cmp-qrcard">
+          <div className="cmp-card-ic">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h1"/></svg>
+          </div>
+          <div className="cmp-card-body">
+            <div className="cmp-card-title">System QR · Activate your app</div>
+            <div className="cmp-card-sub">Scan this in the ANNKE Vision app (tap +, top-right) to connect to your cameras.</div>
+            <button type="button" className="cmp-btn cmp-qr-btn" onClick={() => setQrOpen(true)}>View System QR</button>
+          </div>
+        </div>
+      )}
+
       {/* Customer welcome guide */}
       {isCustomer && (
         <div className="cmp-card cmp-guide">
@@ -259,6 +275,8 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           <button type="button" className="cmp-print" onClick={() => window.print()}>Print</button>
         </div>
       )}
+
+      {qrOpen && <SystemQrModal src={project.system_qr} onClose={() => setQrOpen(false)} />}
     </div>
   );
 }
@@ -285,6 +303,8 @@ const CMP_CSS = `
 .cmp-card-title{font-size:.9rem;font-weight:800;color:#0B0F1A}
 .cmp-card-sub{font-size:.8rem;color:#6f7686;margin-top:2px}
 .cmp-guide{border-left:4px solid #C9A96E}
+.cmp-qrcard{border-left:4px solid #C9A96E}
+.cmp-qr-btn{margin-top:10px;align-self:flex-start;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A}
 .cmp-guide-list{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
 .cmp-guide-list li{font-size:.82rem;color:#41485a;line-height:1.45}
 .cmp-wrap{background:#fbfaf8;border:1px solid #e2ddd2;border-radius:12px;padding:12px 16px}
