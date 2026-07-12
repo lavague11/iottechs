@@ -36,6 +36,27 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     return () => { live = false; };
   }, [accessId]);
 
+  // Prefill the payment amount with what's still owed (deposit due, or the remaining balance),
+  // once the data loads — staff/customer usually pay exactly that. Still fully editable.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !data?.proposal) return;
+    const pp = data.proposal;
+    if (!(pp.payload && pp.status === "accepted")) return;
+    const ids = (pp.accepted_options?.length) ? pp.accepted_options : (pp.selected_option ? [pp.selected_option] : []);
+    const opts = pp.payload.options.filter((o) => ids.includes(o.id));
+    const sh = opts.length ? opts : [pp.payload.options[0]];
+    const grand = sh.reduce((s, o) => s + optionTotals(o, pp.tax_rate, pp.payload.discount, pp.deposit_pct, pp.payload.pcp_credit).grand, 0);
+    const conf = (data.payments || []).filter((x) => x.status !== "pending");
+    const paid = conf.reduce((s, x) => s + (+x.amount || 0), 0);
+    const depPaid = conf.filter((x) => x.kind === "deposit").reduce((s, x) => s + (+x.amount || 0), 0);
+    const depDue = Math.max(0, grand * (+pp.deposit_pct || 50) / 100 - depPaid);
+    const bal = Math.max(0, grand + (+data.addons?.total || 0) - paid);
+    const due = isFinal ? bal : (depDue > 0 ? depDue : bal);
+    prefilled.current = true;
+    if (due > 0) setPay((v) => ({ ...v, amount: due.toFixed(2), kind: isFinal ? "final" : (depDue > 0 ? "deposit" : "final") }));
+  }, [data, isFinal]);
+
   if (!data) {
     return <div className="apv-root"><style>{APV_CSS}</style><div className="apv-empty">Loading approval…</div></div>;
   }
@@ -302,16 +323,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                 <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
               </select>
             </label>
-            {isStaff && (
-              <label className="apv-fld">
-                <span>Type</span>
-                <select className="apv-input" value={pay.kind} onChange={(e) => setPay((v) => ({ ...v, kind: e.target.value }))}>
-                  <option value="deposit">Deposit</option><option value="partial">Partial</option><option value="final">Final</option><option value="other">Other</option>
-                </select>
-              </label>
-            )}
             <label className="apv-fld apv-fld-wide">
-              <span>Note <em>(optional)</em></span>
+              <span>Note / reference <em>(optional)</em></span>
               <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
             </label>
           </div>

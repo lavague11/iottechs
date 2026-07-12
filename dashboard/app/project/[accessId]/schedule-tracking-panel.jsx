@@ -337,6 +337,9 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
       // Just registered with the carrier — data isn't ingested yet. Show "fetching" and retry once.
       setLiveState((s) => ({ ...s, [ship.number]: "pending" }));
       if (!retried) setTimeout(() => refreshLive(ship, persist, true), 6000);
+    } else if (r?.reason === "rate_limit") {
+      // Free-tier daily quota hit — stop hitting the API; show last known status.
+      setLiveState((s) => ({ ...s, [ship.number]: "limit" }));
     } else {
       setLiveState((s) => ({ ...s, [ship.number]: r?.reason === "no_key" ? "nokey" : "err" }));
     }
@@ -445,6 +448,7 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
                     : st === "pending" ? "Carrier is fetching this shipment — refresh in a moment"
                     : st === "ok" ? (lv?.lastLocation ? `Live · last scan ${lv.lastLocation}` : "Live from carrier")
                     : st === "nokey" ? "Showing the status set by our team"
+                    : st === "limit" ? "Daily carrier-lookup limit reached — showing last known status"
                     : st === "err" ? "Couldn't reach the carrier — showing last known status"
                     : "Tracking"}
                 </span>
@@ -662,7 +666,7 @@ const STP_CSS = `
 .stp-livedot{width:9px;height:9px;border-radius:50%;background:#c2bcae;flex-shrink:0}
 .stp-livedot.ok{background:#2f7d5a;box-shadow:0 0 0 3px rgba(47,125,90,.16);animation:stpNow 1.8s ease-in-out infinite}
 .stp-livedot.loading,.stp-livedot.pending{background:#C9A96E;animation:stpPulse 1s ease-in-out infinite}
-.stp-livedot.err,.stp-livedot.nokey{background:#c99a6e}
+.stp-livedot.err,.stp-livedot.nokey,.stp-livedot.limit{background:#c99a6e}
 .stp-livetxt{flex:1;min-width:0;font-size:.76rem;font-weight:700;color:#4a5270;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stp-scan{border:1px solid #ece8e0;border-radius:10px;background:#fcfbf8;padding:10px 12px;display:flex;flex-direction:column;gap:9px}
 .stp-scan-hd{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a6d2f}

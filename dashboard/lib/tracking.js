@@ -36,18 +36,38 @@ function tagToStage(tag) {
   return 0;
 }
 
+// The free AfterShip tier is only 100 lookups/day, and each refresh is 2 calls (register + get).
+// Cache results server-side (per number) so repeat views don't hit the API, and remember which
+// numbers are already registered so we skip the register POST after the first time. Kept on
+// globalThis so it survives Next HMR / route re-eval.
+const g = globalThis;
+g.__trkCache = g.__trkCache || new Map();        // num -> { at, ttl, result }
+g.__trkRegistered = g.__trkRegistered || new Set();
+const TRK_TTL_OK = 15 * 60 * 1000;   // fresh live result — 15 min
+const TRK_TTL_LIMIT = 60 * 60 * 1000; // rate-limited — back off an hour before trying again
+const TRK_TTL_PENDING = 60 * 1000;    // registered but not ingested — retry in a minute
+const TRK_TTL_ERR = 5 * 60 * 1000;
+
 export async function fetchTracking(number, carrier) {
   const key = process.env.TRACKING_API_KEY;
   const provider = (process.env.TRACKING_PROVIDER || "aftership").toLowerCase();
   const num = String(number || "").trim().replace(/\s+/g, "");
   if (!num) return { ok: false, reason: "no_number" };
   if (!key) return { ok: false, reason: "no_key" };
+  const cached = g.__trkCache.get(num);
+  if (cached && (Date.now() - cached.at) < cached.ttl) return { ...cached.result, cached: true };
+  let result;
   try {
-    if (provider === "trackingmore") return await viaTrackingMore(num, carrier, key);
-    return await viaAftership(num, carrier, key);
+    result = provider === "trackingmore" ? await viaTrackingMore(num, carrier, key) : await viaAftership(num, carrier, key);
   } catch (e) {
-    return { ok: false, reason: "error", detail: String(e?.message || e) };
+    result = { ok: false, reason: "error", detail: String(e?.message || e) };
   }
+  const ttl = result.ok ? TRK_TTL_OK
+    : result.reason === "rate_limit" ? TRK_TTL_LIMIT
+    : result.reason === "pending" ? TRK_TTL_PENDING
+    : TRK_TTL_ERR;
+  g.__trkCache.set(num, { at: Date.now(), ttl, result });
+  return result;
 }
 
 // ---- AfterShip ----
@@ -62,12 +82,18 @@ async function viaAftership(num, carrier, key) {
 async function viaAftershipV2(num, slug, key) {
   const base = `https://api.aftership.com/tracking/${AFTERSHIP_VERSION}`;
   const headers = { "as-api-key": key, "Content-Type": "application/json" };
-  // Register the number (flat body, no wrapper). Already-exists is fine and ignored.
-  await fetch(`${base}/trackings`, {
-    method: "POST", headers,
-    body: JSON.stringify(slug ? { tracking_number: num, slug } : { tracking_number: num }),
-  }).catch(() => {});
+  // Register the number once (flat body). Skip if we've already registered it this process —
+  // saves half the daily quota. Already-exists is fine and ignored.
+  if (!g.__trkRegistered.has(num)) {
+    const reg = await fetch(`${base}/trackings`, {
+      method: "POST", headers,
+      body: JSON.stringify(slug ? { tracking_number: num, slug } : { tracking_number: num }),
+    }).catch(() => null);
+    if (reg && reg.status === 429) return { ok: false, reason: "rate_limit" };
+    if (reg && (reg.ok || reg.status === 409)) g.__trkRegistered.add(num); // 409 = already exists
+  }
   const r = await fetch(`${base}/trackings?tracking_numbers=${encodeURIComponent(num)}`, { headers });
+  if (r.status === 429) return { ok: false, reason: "rate_limit" };
   if (!r.ok) return { ok: false, reason: `http_${r.status}` };
   const j = await r.json().catch(() => null);
   const t = (j?.data?.trackings || [])[0];
@@ -94,7 +120,7 @@ async function viaAftershipV4(num, slug, key) {
     lastStatus = r2.status;
     if (r2.ok) { const j2 = await r2.json().catch(() => null); t = j2?.data?.trackings?.[0] || null; }
   }
-  if (!t) return { ok: false, reason: lastStatus && lastStatus !== 200 ? `http_${lastStatus}` : "pending" };
+  if (!t) return { ok: false, reason: lastStatus === 429 ? "rate_limit" : (lastStatus && lastStatus !== 200 ? `http_${lastStatus}` : "pending") };
   return normalizeAftership(t);
 }
 // Shared normalizer — both AfterShip API generations return the same tracking shape.
@@ -127,6 +153,7 @@ async function viaTrackingMore(num, carrier, key) {
     body: JSON.stringify({ tracking_number: num, courier_code: slug || undefined }),
   }).catch(() => {});
   const res = await fetch(`${base}/get?tracking_numbers=${encodeURIComponent(num)}${slug ? `&courier_code=${slug}` : ""}`, { headers });
+  if (res.status === 429) return { ok: false, reason: "rate_limit" };
   if (!res.ok) return { ok: false, reason: `http_${res.status}` };
   const j = await res.json();
   const t = j?.data?.[0];
