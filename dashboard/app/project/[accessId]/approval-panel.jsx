@@ -11,9 +11,13 @@ const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("e
 // The step trail up top shows exactly where things stand; each section below completes one step.
 // Customer signs (same signature tool as accepting) and acknowledges payments; staff record
 // actual received payments and create the work order once it's signed AND a deposit is on file.
-export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage }) {
+export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage, stage = "approval_deposit" }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
+  // Two portals share this component: the Deposit portal (approval stage) and the Final Payment
+  // portal (payment stage). Final skips the signature/work-order pipeline — those are already done —
+  // and focuses on the remaining balance.
+  const isFinal = stage === "payment";
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -21,7 +25,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const toastTimer = useRef(null);
   const showToast = (m) => { setToast(m); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2600); };
   const [signOpen, setSignOpen] = useState(false);
-  const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: "deposit", note: "" });
+  const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "" });
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
@@ -101,12 +105,12 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setData((d) => ({ ...d, payments: r.payments }));
-    setPay({ amount: "", method: pay.method, kind: "deposit", note: "" });
+    setPay({ amount: "", method: pay.method, kind: isFinal ? "final" : "deposit", note: "" });
     showToast(isCustomer ? "Payment submitted — here's what happens next" : "Payment recorded");
     followStage(r.stage);
-    // The customer's natural next step after paying is the scheduling page — take them there
-    // (view navigation only; the project stage itself moves when staff confirm the money).
-    if (isCustomer) setTimeout(() => onBrowseStage?.("schedule"), 900);
+    // On the deposit portal, a customer's natural next step after paying is scheduling — take them
+    // there (view only; the stage moves when staff confirm). The final portal just stays put.
+    if (isCustomer && !isFinal) setTimeout(() => onBrowseStage?.("schedule"), 900);
   }
   async function delPayment(id) {
     setBusy(true); setErr(null);
@@ -154,19 +158,21 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           <span className="apv-brand">IOT TECHS</span>
           <span className="apv-tagline">Secure Tomorrow. Today.</span>
         </div>
-        <span className="apv-doctag">Approval &amp; Deposit</span>
+        <span className="apv-doctag">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
       </div>
 
-      {/* Step trail — where this approval stands, at a glance */}
-      <div className="apv-steps">
-        {steps.map((s, i) => (
-          <div key={s.label} className={`apv-step${s.done ? " done" : ""}${i === nextIdx ? " next" : ""}`}>
-            <span className="apv-step-dot">{s.done ? "✓" : i + 1}</span>
-            <span className="apv-step-lbl">{s.label}</span>
-            {i < steps.length - 1 && <span className="apv-step-line" />}
-          </div>
-        ))}
-      </div>
+      {/* Step trail — where this approval stands, at a glance (deposit portal only) */}
+      {!isFinal && (
+        <div className="apv-steps">
+          {steps.map((s, i) => (
+            <div key={s.label} className={`apv-step${s.done ? " done" : ""}${i === nextIdx ? " next" : ""}`}>
+              <span className="apv-step-dot">{s.done ? "✓" : i + 1}</span>
+              <span className="apv-step-lbl">{s.label}</span>
+              {i < steps.length - 1 && <span className="apv-step-line" />}
+            </div>
+          ))}
+        </div>
+      )}
 
       {err && <div className="apv-note err">{err}</div>}
 
@@ -189,7 +195,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         <div className="apv-sum-note">Zelle preferred. Balance due upon completion. Proposal terms apply.</div>
       </div>
 
-      {/* ② Signature */}
+      {/* ② Signature (deposit portal only — the agreement is already signed by final payment) */}
+      {!isFinal && (<>
       <div className="apv-section-hd">Signature</div>
       <div className="apv-card">
         {signed ? (
@@ -217,69 +224,116 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           <div className="apv-await">Awaiting customer signature.</div>
         )}
       </div>
+      </>)}
 
-      {/* ③ Deposit / payments */}
-      <div className="apv-section-hd">Deposit &amp; Payments</div>
-      <div className="apv-card">
+      {/* ③ Payments — deposit on the approval portal, remaining balance on the final portal */}
+      <div className="apv-section-hd">{isFinal ? "Final Payment" : "Deposit &amp; Payments"}</div>
+      <div className="apv-card apv-pay-card">
+        {/* Balance banner — the one number that matters, with the money picture beside it */}
+        {(() => {
+          const dueLabel = isFinal ? "Balance due" : (depositDue > 0 ? "Deposit due" : "Balance due");
+          const dueAmt   = isFinal ? balance : (depositDue > 0 ? depositDue : balance);
+          return (
+            <div className={`apv-bal${dueAmt <= 0 ? " paid" : ""}`}>
+              <div className="apv-bal-main">
+                <span className="apv-bal-lbl">{dueAmt <= 0 ? "Paid in full" : dueLabel}</span>
+                <span className="apv-bal-amt">{money(Math.max(0, dueAmt))}</span>
+              </div>
+              <div className="apv-bal-side">
+                <span>Total <b>{money(grandWithAddons)}</b></span>
+                <span className="apv-ok">Received <b>{money(paidTotal)}</b></span>
+                {pendingTotal > 0 && <span className="apv-pend">Pending <b>{money(pendingTotal)}</b></span>}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* History */}
         {payments.length > 0 ? (
-          <div className="apv-pay-list">
+          <div className="apv-hist">
+            <div className="apv-hist-hd">Payment history</div>
             {payments.map((x) => (
-              <div key={x.id} className={`apv-pay-row${x.status === "pending" ? " pending" : ""}`}>
-                <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
-                <span className="apv-pay-amt">{money(x.amount)}</span>
-                <span className="apv-pay-meta">
-                  {x.kind}{x.method ? ` · ${x.method}` : ""}{x.note ? ` · ${x.note}` : ""}
-                  {x.status === "pending" && <span className="apv-pay-pending">Pending confirmation</span>}
-                </span>
-                <span className="apv-pay-when">{x.created_at ? String(x.created_at).slice(0, 10) : ""}</span>
-                {isStaff && x.status === "pending" && delPayId !== x.id && (
-                  <button className="apv-pay-ok" title="Confirm received" disabled={busy} onClick={() => confirmPayment(x.id)}>✓ Confirm</button>
-                )}
-                {isStaff && (delPayId === x.id ? (
-                  <span className="apv-pay-confirm">
-                    <button className="apv-pay-yes" disabled={busy} onClick={() => delPayment(x.id)}>Remove</button>
-                    <button className="apv-pay-no" onClick={() => setDelPayId(null)}>Keep</button>
+              <div key={x.id} className={`apv-hrow${x.status === "pending" ? " pending" : ""}`}>
+                <div className="apv-hrow-main">
+                  <span className="apv-hrow-amt">{money(x.amount)}</span>
+                  <span className="apv-hrow-meta">
+                    <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
+                    <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
+                    {x.note ? <span className="apv-hrow-note">{x.note}</span> : null}
+                    {x.created_at && <span className="apv-hrow-when">{String(x.created_at).slice(0, 10)}</span>}
                   </span>
-                ) : (
-                  <button className="apv-pay-x" title="Remove" onClick={() => setDelPayId(x.id)}>✕</button>
-                ))}
+                </div>
+                <div className="apv-hrow-acts">
+                  {x.status === "pending"
+                    ? <span className="apv-pay-pending">Pending</span>
+                    : <span className="apv-hrow-ok">✓ Received</span>}
+                  {isStaff && x.status === "pending" && delPayId !== x.id && (
+                    <button className="apv-pay-ok" title="Confirm received" disabled={busy} onClick={() => confirmPayment(x.id)}>Confirm</button>
+                  )}
+                  {isStaff && (delPayId === x.id ? (
+                    <span className="apv-pay-confirm">
+                      <button className="apv-pay-yes" disabled={busy} onClick={() => delPayment(x.id)}>Remove</button>
+                      <button className="apv-pay-no" onClick={() => setDelPayId(null)}>Keep</button>
+                    </span>
+                  ) : (
+                    <button className="apv-pay-x" title="Remove" onClick={() => setDelPayId(x.id)}>✕</button>
+                  ))}
+                </div>
               </div>
             ))}
-            <div className="apv-pay-total"><span>Total received</span><b>{money(paidTotal)}</b></div>
-            {pendingTotal > 0 && (
-              <div className="apv-pay-total pending"><span>Awaiting confirmation</span><b>{money(pendingTotal)}</b></div>
-            )}
           </div>
         ) : (
-          <div className="apv-await">No payments recorded yet{depositDue > 0 ? ` — deposit of ${money(depositDue)} due to get started.` : "."}</div>
+          <div className="apv-await">No payments recorded yet.</div>
         )}
 
-        <div className="apv-pay-form">
-          <input className="apv-input num" type="number" min="0" step="0.01" placeholder="Amount"
-                 value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} />
-          {depositDue > 0 && !pay.amount && (
-            <button type="button" className="apv-chip-btn" onClick={() => setPay((v) => ({ ...v, amount: depositDue.toFixed(2), kind: "deposit" }))}>
-              Use deposit {money(depositDue)}
-            </button>
-          )}
-          <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-            <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
-          </select>
-          {isStaff && (
-            <select className="apv-input" value={pay.kind} onChange={(e) => setPay((v) => ({ ...v, kind: e.target.value }))}>
-              <option value="deposit">Deposit</option><option value="partial">Partial</option><option value="final">Final</option><option value="other">Other</option>
-            </select>
-          )}
-          <input className="apv-input" placeholder="Note (optional)" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
-          <button className="apv-btn gold" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
+        {/* Record a payment — a clean, labeled form (no more cramped single row) */}
+        {(isCustomer ? balance > 0 : true) && (
+        <div className="apv-payform">
+          <div className="apv-payform-hd">{isCustomer ? "Make a payment" : "Record a payment"}</div>
+          <div className="apv-payform-grid">
+            <label className="apv-fld">
+              <span>Amount</span>
+              <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00"
+                     value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} />
+            </label>
+            <label className="apv-fld">
+              <span>Method</span>
+              <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
+                <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
+              </select>
+            </label>
+            {isStaff && (
+              <label className="apv-fld">
+                <span>Type</span>
+                <select className="apv-input" value={pay.kind} onChange={(e) => setPay((v) => ({ ...v, kind: e.target.value }))}>
+                  <option value="deposit">Deposit</option><option value="partial">Partial</option><option value="final">Final</option><option value="other">Other</option>
+                </select>
+              </label>
+            )}
+            <label className="apv-fld apv-fld-wide">
+              <span>Note <em>(optional)</em></span>
+              <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
+            </label>
+          </div>
+          {(() => {
+            const quick = isFinal ? balance : (depositDue > 0 ? depositDue : balance);
+            const qLbl  = isFinal ? "Pay full balance" : (depositDue > 0 ? "Use deposit" : "Pay full balance");
+            return quick > 0 && !(+pay.amount) ? (
+              <button type="button" className="apv-chip-btn" onClick={() => setPay((v) => ({ ...v, amount: quick.toFixed(2), kind: isFinal ? "final" : (depositDue > 0 ? "deposit" : "final") }))}>
+                {qLbl} · {money(quick)}
+              </button>
+            ) : null;
+          })()}
+          <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
             {isCustomer ? "I Paid This" : "Record Payment"}
           </button>
         </div>
+        )}
         {isCustomer && <div className="apv-fine">Your submission shows as pending until our team confirms receipt — the balance updates once confirmed.</div>}
       </div>
 
-      {/* ④ Staff: create the work order once signed + deposit on file */}
-      {isStaff && (
+      {/* ④ Staff: create the work order once signed + deposit on file (deposit portal only) */}
+      {isStaff && !isFinal && (
         <>
           <div className="apv-section-hd">Work Order</div>
           <div className="apv-card apv-wo">
@@ -411,6 +465,45 @@ select.apv-input{cursor:pointer}
 .apv-pay-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .apv-pay-form .apv-input.num{width:110px}
 .apv-pay-form .apv-input:not(.num):not(select){flex:1;min-width:130px}
+
+/* ---- Redesigned payments card ---- */
+.apv-pay-card{gap:16px}
+.apv-bal{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+  background:#0B0F1A;border-radius:12px;padding:16px 18px;color:#FAF8F4}
+.apv-bal.paid{background:#12321f}
+.apv-bal-main{display:flex;flex-direction:column;gap:2px}
+.apv-bal-lbl{font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#C9A96E}
+.apv-bal.paid .apv-bal-lbl{color:#7fe0ab}
+.apv-bal-amt{font-size:1.9rem;font-weight:800;line-height:1;letter-spacing:-.01em}
+.apv-bal-side{display:flex;flex-direction:column;gap:3px;text-align:right;font-size:.78rem;color:#aab0bd}
+.apv-bal-side b{color:#fff;font-weight:800;margin-left:5px}
+.apv-bal-side .apv-ok{color:#8fe0b0}.apv-bal-side .apv-ok b{color:#8fe0b0}
+.apv-bal-side .apv-pend{color:#e6c982}.apv-bal-side .apv-pend b{color:#e6c982}
+
+.apv-hist{display:flex;flex-direction:column;gap:0;border:1px solid #ece8e0;border-radius:10px;overflow:hidden}
+.apv-hist-hd{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a8378;background:#f7f4ee;padding:8px 12px;border-bottom:1px solid #ece8e0}
+.apv-hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #f3efe8}
+.apv-hrow:last-child{border-bottom:none}
+.apv-hrow.pending{background:#fdf9ef}
+.apv-hrow-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.apv-hrow-amt{font-size:1rem;font-weight:800;color:#0B0F1A}
+.apv-hrow-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.74rem;color:#6f7686}
+.apv-hrow-kind{text-transform:capitalize}
+.apv-hrow-note{font-style:italic;color:#8a8378}
+.apv-hrow-when{color:#a7a094}
+.apv-hrow-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.apv-hrow-ok{font-size:.68rem;font-weight:800;color:#1d7a3a;white-space:nowrap}
+
+.apv-payform{border:1px dashed #d9d0bd;border-radius:12px;background:#fcfaf5;padding:14px;display:flex;flex-direction:column;gap:12px}
+.apv-payform-hd{font-size:.8rem;font-weight:800;color:#0B0F1A}
+.apv-payform-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.apv-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.apv-fld>span{font-size:.7rem;font-weight:700;color:#6f7686;text-transform:uppercase;letter-spacing:.03em}
+.apv-fld>span em{font-style:normal;font-weight:500;text-transform:none;color:#a7a094}
+.apv-fld .apv-input{width:100%;height:40px}
+.apv-fld-wide{grid-column:1 / -1}
+.apv-payform-btn{align-self:flex-start;height:42px;padding:0 26px}
+@media(max-width:560px){.apv-payform-grid{grid-template-columns:1fr}}
 
 .apv-wo{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 .apv-footer{margin-top:18px;background:#0B0F1A;border-top:2px solid #C9A96E;color:#9aa1af;font-size:.7rem;text-align:center;padding:11px 22px}

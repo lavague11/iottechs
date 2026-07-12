@@ -2264,10 +2264,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Customer just watches the install progress — no editing, no pricing.
         <><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly />
           <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} /></>
-      ) : viewingStage === "approval_deposit" && ["admin", "manager", "customer"].includes(cView) ? (
+      ) : ["approval_deposit", "payment"].includes(viewingStage) && ["admin", "manager", "customer"].includes(cView) ? (
         <ApprovalPanel
           accessId={lp.access_id}
           role={cView}
+          stage={viewingStage}
           customerName={lp.contact_name || lp.customer}
           customerAddress={lp.address}
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
