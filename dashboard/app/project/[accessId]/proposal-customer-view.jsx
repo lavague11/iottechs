@@ -118,7 +118,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const opt = p.payload.options.find((o) => o.id === viewingOpt) || p.payload.options[0];
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
-  const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct);
+  const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
   const camSvc = opt.services.find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
   const depositPct = +p.deposit_pct || 50;
@@ -270,7 +270,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             // Colour each option by its dominant service so A/B/C read like the item palette
             // (cameras gold, toast orange, alarm blue, sound purple…).
             const oc = serviceColor(o.services?.[0]?.key) || OPTION_TABCOLORS[o.id] || "#C9A96E";
-            const ot = optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct);
+            const ot = optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
             const on = o.id === opt.id;
             return (
               <button key={o.id} type="button" className={`pcv-opt-card${on ? " on" : ""}`} style={{ "--oc": oc }} onClick={() => setViewingOpt(o.id)}>
@@ -361,6 +361,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
       <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>
       {t.discount > 0 && <div className="pcv-subtotal-row main"><span>Discount</span><span>−{money(t.discount)}</span></div>}
+      {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit</span><span>−{money(t.pcpCredit)}</span></div>}
       {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}
       <div className="pcv-grand"><span>Grand Total</span><span>{money(t.grand)}</span></div>
 
@@ -458,7 +459,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <ProposalSignModal
         open={!!signFor}
         heading={signFor ? `Accept & Sign — Option ${signFor}` : "Accept & Sign"}
-        subheading={signFor ? `${optName(signFor)} · ${money(optionTotals(p.payload.options.find((o) => o.id === signFor), p.tax_rate, p.payload.discount, p.deposit_pct).grand)}` : ""}
+        subheading={signFor ? `${optName(signFor)} · ${money(optionTotals(p.payload.options.find((o) => o.id === signFor), p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand)}` : ""}
         reference={propNum}
         defaultName={p.signed_name || customerName || ""}
         agreeText="I have reviewed and agree to the scope, terms, and pricing of this proposal, and I authorize it to proceed."

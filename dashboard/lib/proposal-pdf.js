@@ -237,11 +237,21 @@ export function downloadProposalPdf(p, meta = {}) {
       y += 4;
     });
 
-    const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct);
+    const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
     y = ensureRoom(y, 40);
     y += 4;
     y = subtotalRow("PROJECT SUBTOTAL", "$" + money(t.sub), y);
     y += 4;
+    if (t.discount > 0) {
+      y = ensureRoom(y, 20);
+      y = tableRow("", "Discount", "", "", "-$" + money(t.discount), y);
+      y += 4;
+    }
+    if (t.pcpCredit > 0) {
+      y = ensureRoom(y, 20);
+      y = tableRow("", "PCP Credit", "", "", "-$" + money(t.pcpCredit), y);
+      y += 4;
+    }
     if (t.tax > 0) {
       y = ensureRoom(y, 20);
       y = tableRow("", `Sales Tax (${p.tax_rate}%)`, "", "", "+$" + money(t.tax), y);

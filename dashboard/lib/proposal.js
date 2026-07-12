@@ -232,7 +232,7 @@ export function blankOption(i) {
   return { id: OPTION_LETTERS[i], name: OPTION_NAMES[i] || "Option " + OPTION_LETTERS[i], services: [], note: "", includeMockup: false, includeSurvey: false };
 }
 export function blankPayload() {
-  return { options: [blankOption(0)], discount: { type: "flat", value: 0 } };
+  return { options: [blankOption(0)], discount: { type: "flat", value: 0 }, pcp_credit: 0 };
 }
 
 // ---- Survey import ---------------------------------------------------------
@@ -409,13 +409,15 @@ const lineTotal = (it) => (+it.qty || 0) * (+it.price || 0);
 // An item's full total includes its sub-items (a camera block = camera + drop + labor).
 export const itemTotal = (it) => lineTotal(it) + (it.sub || []).reduce((s, x) => s + lineTotal(x), 0);
 export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + itemTotal(it), 0);
-export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50) {
+export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50, pcpCredit = 0) {
   const sub = (opt.services || []).reduce((s, svc) => s + svcSubtotal(svc), 0);
   const disc = discount?.type === "pct" ? sub * (+discount.value || 0) / 100 : (+discount?.value || 0);
-  const taxable = Math.max(0, sub - disc);
+  const credit = Math.max(0, +pcpCredit || 0);
+  // Discount and PCP credit both reduce the taxable base (tax is charged on the net).
+  const taxable = Math.max(0, sub - disc - credit);
   const tax = taxable * (+taxRate || 0) / 100;
   const grand = taxable + tax;
-  return { sub: r2(sub), discount: r2(disc), tax: r2(tax), grand: r2(grand), deposit: r2(grand * (+depositPct || 0) / 100) };
+  return { sub: r2(sub), discount: r2(disc), pcpCredit: r2(credit), tax: r2(tax), grand: r2(grand), deposit: r2(grand * (+depositPct || 0) / 100) };
 }
 const itemCost = (it) => (+it.qty || 0) * (+it.cost || 0) + (it.sub || []).reduce((s, x) => s + (+x.qty || 0) * (+x.cost || 0), 0);
 export const optionCost = (opt) =>
@@ -533,5 +535,6 @@ export function validatePayload(payload) {
   }
   const d = payload.discount;
   if (d && !(["flat", "pct"].includes(d.type) && +d.value >= 0)) return "Bad discount.";
+  if (payload.pcp_credit != null && !(+payload.pcp_credit >= 0 && +payload.pcp_credit <= 1000000)) return "Bad PCP credit.";
   return null;
 }

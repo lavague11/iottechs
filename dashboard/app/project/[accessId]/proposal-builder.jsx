@@ -211,7 +211,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     adopt(r.proposal);
   }
 
-  const totals = optionTotals(opt, taxRate, payload.discount, depositPct);
+  const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
+  const disc = payload.discount || { type: "flat", value: 0 };
+  function setDiscount(patch) { patchPayload({ ...payload, discount: { ...disc, ...patch } }); }
+  function setPcp(v) { patchPayload({ ...payload, pcp_credit: Math.max(0, +v || 0) }); }
 
   return (
     <div className="prop-card">
@@ -298,6 +301,30 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       {/* Totals */}
       <div className="prop-totals">
         <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
+        {(!readOnly || totals.discount > 0) && (
+          <div className="prop-trow">
+            <span>Discount</span>
+            {readOnly ? <b>−{money(totals.discount)}</b> : (
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button type="button" className={`prop-tax-btn${disc.type === "flat" ? " on" : ""}`} onClick={() => setDiscount({ type: "flat" })}>$</button>
+                <button type="button" className={`prop-tax-btn${disc.type === "pct" ? " on" : ""}`} onClick={() => setDiscount({ type: "pct" })}>%</button>
+                <input className="tin" type="number" min="0" step="0.01" value={disc.value || 0} onChange={(e) => setDiscount({ value: e.target.value })} />
+                {totals.discount > 0 && <b style={{ color: "var(--green,#1c8a45)", whiteSpace: "nowrap" }}>−{money(totals.discount)}</b>}
+              </span>
+            )}
+          </div>
+        )}
+        {(!readOnly || totals.pcpCredit > 0) && (
+          <div className="prop-trow">
+            <span>PCP Credit</span>
+            {readOnly ? <b>−{money(totals.pcpCredit)}</b> : (
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input className="tin" type="number" min="0" step="0.01" value={payload.pcp_credit || 0} onChange={(e) => setPcp(e.target.value)} />
+                {totals.pcpCredit > 0 && <b style={{ color: "var(--green,#1c8a45)", whiteSpace: "nowrap" }}>−{money(totals.pcpCredit)}</b>}
+              </span>
+            )}
+          </div>
+        )}
         <div className="prop-trow">
           <span>Tax %</span>
           {readOnly ? <b>{taxRate}%</b> : (

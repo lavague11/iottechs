@@ -52,7 +52,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const acceptedOpts = p.payload.options.filter((o) => acceptedIds.includes(o.id));
   const shown = acceptedOpts.length ? acceptedOpts : [p.payload.options[0]];
   const t = shown.reduce((acc, o) => {
-    const tt = optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct);
+    const tt = optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
     return { sub: acc.sub + tt.sub, grand: acc.grand + tt.grand };
   }, { sub: 0, grand: 0 });
   const optLabel = shown.map((o) => `Option ${o.id} (${o.name})`).join(" + ");
