@@ -29,6 +29,37 @@ function gcalUrl({ title, date, time, duration, location, notes }, guestEmails =
   } catch(_) { return "#"; }
 }
 
+// .ics (iCalendar) — the universal format Apple Calendar / iCloud (and Outlook) import. Times are
+// written as floating local time (no timezone), so the appointment shows at the hour it was booked.
+function icsFor(ev) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const [h, m]       = (ev.time || "09:00").split(":").map(Number);
+  const [y, mo, day] = (ev.date || "2026-01-01").split("-").map(Number);
+  const startLocal = `${y}${pad(mo)}${pad(day)}T${pad(h)}${pad(m)}00`;
+  const end = new Date(y, mo - 1, day, h, m + (Number(ev.duration) || 60));
+  const endLocal = `${end.getFullYear()}${pad(end.getMonth() + 1)}${pad(end.getDate())}T${pad(end.getHours())}${pad(end.getMinutes())}00`;
+  const esc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, "\\n");
+  return [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//IOT TECHS//Scheduling//EN", "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${ev.id || Date.now()}@iottechs`,
+    `DTSTART:${startLocal}`, `DTEND:${endLocal}`,
+    `SUMMARY:${esc(ev.title || "IOT TECHS Visit")}`,
+    ev.location ? `LOCATION:${esc(ev.location)}` : null,
+    ev.notes ? `DESCRIPTION:${esc(ev.notes)}` : null,
+    "END:VEVENT", "END:VCALENDAR",
+  ].filter(Boolean).join("\r\n");
+}
+function downloadIcs(ev) {
+  if (!ev?.date) return;
+  const blob = new Blob([icsFor(ev)], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `iot-techs-${ev.date || "visit"}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 function tomorrowISO() {
   const d = new Date(); d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -60,6 +91,7 @@ const Ico = {
   pin:    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
   people: <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   gcal:   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  apple:  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .7 1.1 1.6 2.3 2.7 2.3 1.1 0 1.5-.7 2.8-.7 1.3 0 1.6.7 2.8.7 1.2 0 1.9-1.1 2.6-2.2.5-.7.7-1.4.9-1.9-.1 0-2.3-.9-2.3-3.5zM14.3 5.8c.6-.7 1-1.7.9-2.8-.9 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6 1 .1 1.9-.5 2.5-1.1z"/></svg>,
   dir:    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
   copy:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
   check:  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
@@ -275,6 +307,12 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                 Add to Google Calendar
               </a>
             )}
+            {form.date && (
+              <button type="button" className="sched-gcal-btn" onClick={() => downloadIcs(form)}>
+                {Ico.apple}
+                Add to Apple Calendar
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -297,6 +335,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                     <div className="sched-ev-acts">
                       {ev.location && <a className="sched-ev-ico" href={mapsDir(ev.location)} target="_blank" rel="noopener noreferrer" title="Get directions">{Ico.dir}</a>}
                       <a className="sched-ev-ico" href={gcalUrl(ev, emailsFor(ev))} target="_blank" rel="noopener noreferrer" title="Add to Google Calendar">{Ico.gcal}</a>
+                      <button className="sched-ev-ico" onClick={()=>downloadIcs(ev)} title="Add to Apple / iCloud Calendar">{Ico.apple}</button>
                       <button className="sched-ev-ico" onClick={()=>copyInvite(ev)} title="Copy details">{copied===ev.id ? Ico.check : Ico.copy}</button>
                       {!isReadOnly && <button className="sched-ev-ico sched-ev-del" onClick={()=>deleteEvent(ev.id)} title="Remove">{Ico.x}</button>}
                     </div>
