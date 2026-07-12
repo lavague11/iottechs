@@ -1431,6 +1431,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       .finally(() => { if (live) setAcceptLoaded(true); });
     return () => { live = false; };
   }, [project.access_id]);
+  // While viewing the survey stage, poll the tool meta so the Submit button enables shortly after
+  // the office draws/uploads (the widget autosyncs to the server; this picks the change up).
+  useEffect(() => {
+    if (viewingStage !== "site_survey") return;
+    const id = setInterval(() => { refreshAcceptances(); }, 8000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingStage, project.access_id]);
   const [hCollapsed, setHCollapsed]     = useState(true);
   const [mapHidden, setMapHidden]       = useState(true);
   const [hEditing,   setHEditing]       = useState(false);

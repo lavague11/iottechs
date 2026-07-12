@@ -128,21 +128,24 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
 export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
   const [busy, setBusy] = useState(false);
   const isOffice = ["admin", "manager", "sales"].includes(role);
-  if (!isOffice || !meta?.has) return null;            // customers approve; nothing to submit yet
+  if (!isOffice) return null;                           // customers approve; only office submits
   const label = LABEL[stageKey] || "item";
-  if (toolAccepted(meta, acceptance))  return <span className="pv-tool-chip go">Approved</span>;
-  if (toolAccepted(meta, submission))  return <span className="pv-tool-chip sent">Submitted</span>;
+  const hasData = !!meta?.has;
+  // Once there's data, reflect the state; otherwise keep a visible (disabled) Submit so office
+  // always know where the control is — it enables the moment the tool has something to send.
+  if (hasData && toolAccepted(meta, acceptance))  return <span className="pv-tool-chip go">Approved</span>;
+  if (hasData && toolAccepted(meta, submission))  return <span className="pv-tool-chip sent">Submitted</span>;
   async function go(e) {
     e.stopPropagation();                                // don't toggle the accordion
-    if (busy || preview) return;
+    if (busy || preview || !hasData) return;
     setBusy(true);
     const r = await submitToolAction(accessId, stageKey, true);
     setBusy(false);
     if (!r?.error) onChange?.(r.acceptances);
   }
   return (
-    <button type="button" className="pv-tool-submit" disabled={busy || preview}
-      onClick={go} title={`Submit ${label} for customer review`}>
+    <button type="button" className="pv-tool-submit" disabled={busy || preview || !hasData}
+      onClick={go} title={hasData ? `Submit ${label} for customer review` : `Add to the ${label} first, then submit`}>
       {busy ? "…" : "Submit"}
     </button>
   );
