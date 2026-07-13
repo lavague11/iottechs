@@ -323,6 +323,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                         {reviseMode && <span className="pcv-flagdot">⚑</span>}
                         {!reviseMode && hasSub && <span className="pcv-chev">{expanded ? "▾" : "▸"}</span>}
                         {itemNameNode(it.name, it.outdoor)}{it.slot ? ` · Slot ${it.slot}` : ""}
+                        {it.waived && <span className="pcv-waived-chip">Waived</span>}
                         {flags[it.id] && (
                           <span className={`pcv-flag-chip ${flags[it.id].type}`}>
                             {flags[it.id].type === "remove" ? "Remove" : "Change"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
@@ -330,8 +331,8 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                         )}
                       </span>
                       <span className="r">{hasSub ? "1" : (it.qty ?? 1)}</span>
-                      <span className="r">{money(hasSub ? itemTotal(it) : it.price)}</span>
-                      <span className="r b">{money(itemTotal(it))}</span>
+                      <span className="r">{it.waived ? <s>{money(hasSub ? itemTotal({ ...it, waived: false }) : it.price)}</s> : money(hasSub ? itemTotal(it) : it.price)}</span>
+                      <span className="r b">{it.waived ? <span className="pcv-waived">Waived</span> : money(itemTotal(it))}</span>
                     </div>
 
                     {reviseMode && menuFor === it.id && (
@@ -571,6 +572,8 @@ const PCV_CSS = `
   color:#0B0F1A;background:#F0ECE8;border-bottom:1px solid #ece8e0;align-items:center}
 .pcv-pay-row.first{background:#fff8ee;border-left:3px solid #C9A96E}
 .pcv-pay-row.first span:first-child{color:#8a6d2f;font-weight:700}
+.pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a6d2f;background:#faf4e8;border:1px solid #d8c79a;border-radius:100px;padding:1px 7px;vertical-align:middle}
+.pcv-waived{color:#8a6d2f;font-weight:800}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:#2a3050;font-weight:600;line-height:1.45;border-left:3px solid var(--gold,#b08f4f);padding-left:12px}
 .pcv-fineprint{margin:6px 22px 0;font-size:.7rem;color:#4a5270;font-style:italic}
 

@@ -226,10 +226,10 @@ export function downloadProposalPdf(p, meta = {}) {
         secTotal += tot;
         const hasSub = (it.sub || []).length > 0;
         y = tableRow(
-          String(lineNum), titleCase(it.name),
+          String(lineNum), titleCase(it.name) + (it.waived ? "  (Waived)" : ""),
           hasSub ? "1" : String(it.qty ?? 1),
-          "$" + money(hasSub ? tot : it.price),
-          "$" + money(tot), y
+          it.waived ? "Waived" : "$" + money(hasSub ? tot : it.price),
+          it.waived ? "$0.00" : "$" + money(tot), y
         );
         lineNum++;
       });

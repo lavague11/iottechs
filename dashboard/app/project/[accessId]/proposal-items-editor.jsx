@@ -281,7 +281,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                title="Internal cost — never shown to sales or customers"
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { cost: e.target.value }) : patchItem(it.id, { cost: e.target.value }))} />
       ))}
-      <span className="prop-line-total">{hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it))}</span>
+      <span className="prop-line-total">
+        {!parent && it.waived
+          ? <span className="prop-waived-tag" title="Comped off the invoice">Waived</span>
+          : hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it))}
+      </span>
       {!readOnly ? (
         <button className="prop-item-x" title="Remove"
                 onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
@@ -415,7 +419,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       )}
 
       {visibleItems.map((it, idx) => (
-        <div key={it.id} className={`prop-block${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}`} style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}>
+        <div key={it.id} className={`prop-block${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}`} style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}>
           {row(it, null)}
           {open[it.id] && (it.sub || []).map((x, si) => row(x, it, si))}
           {open[it.id] && !readOnly && (

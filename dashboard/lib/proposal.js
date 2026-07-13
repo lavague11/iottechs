@@ -419,7 +419,8 @@ export function surveyToImport(survey, floorIndex) {
 const r2 = (n) => Math.round((+n || 0) * 100) / 100;
 const lineTotal = (it) => (+it.qty || 0) * (+it.price || 0);
 // An item's full total includes its sub-items (a camera block = camera + drop + labor).
-export const itemTotal = (it) => lineTotal(it) + (it.sub || []).reduce((s, x) => s + lineTotal(x), 0);
+// A waived item is comped off the invoice — it still appears, but contributes $0.
+export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + lineTotal(x), 0);
 export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + itemTotal(it), 0);
 export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50, pcpCredit = 0) {
   const sub = (opt.services || []).reduce((s, svc) => s + svcSubtotal(svc), 0);

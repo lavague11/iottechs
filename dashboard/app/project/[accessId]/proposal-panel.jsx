@@ -142,6 +142,10 @@ const PROP_CSS = `
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
 .pvx .prop-block.alt{background:var(--bg-soft)}
+/* Waived block: comped off the invoice — name dimmed, a "Waived" chip in the total column */
+.pvx .prop-block.prop-waived{border-left-color:var(--gold)}
+.pvx .prop-block.prop-waived>.prop-item>span:first-child input{color:var(--muted);text-decoration:line-through}
+.pvx .prop-waived-tag{font-size:.66rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--gold-deep);background:var(--bg-tint);border:1px solid var(--gold);border-radius:100px;padding:2px 8px}
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:800}
 .pvx .prop-item.prop-parent .prop-line-total{font-weight:800;color:var(--ink)}
@@ -167,6 +171,22 @@ const PROP_CSS = `
 .pvx .prop-mini.gold:hover{background:var(--gold-deep)}
 .pvx .prop-mini:disabled{opacity:.45;cursor:default}
 .pvx .prop-svc-note{padding:8px 12px;border-top:1px solid var(--line);font-size:.74rem;color:var(--muted);white-space:pre-wrap}
+.pvx .prop-waiver{width:100%;margin-top:14px;border:1px solid var(--line);border-radius:11px;background:var(--bg-soft);overflow:hidden}
+.pvx .prop-waiver-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 14px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:800;color:var(--ink)}
+.pvx .prop-waiver-head .prop-chev{color:var(--gold-deep)}
+.pvx .prop-waiver-count{margin-left:auto;font-size:.72rem;font-weight:800;color:var(--gold-deep);background:var(--bg-tint);border:1px solid var(--gold);border-radius:100px;padding:2px 9px}
+.pvx .prop-waiver-body{border-top:1px solid var(--line);padding:10px 14px;display:flex;flex-direction:column;gap:3px}
+.pvx .prop-waiver-bulk{display:flex;gap:8px;margin-bottom:6px}
+.pvx .prop-waiver-bulk button{height:26px;padding:0 11px;border:1px solid var(--line);border-radius:7px;background:var(--card,#fff);color:var(--muted);font-size:.7rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pvx .prop-waiver-bulk button:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .prop-waiver-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:.82rem}
+.pvx .prop-waiver-row:hover{background:var(--bg-tint)}
+.pvx .prop-waiver-row.on .prop-waiver-name{text-decoration:line-through;color:var(--muted)}
+.pvx .prop-waiver-row input{width:16px;height:16px;accent-color:var(--gold-deep);cursor:pointer}
+.pvx .prop-waiver-name{flex:1;min-width:0;font-weight:700;color:var(--ink);display:flex;align-items:baseline;gap:8px}
+.pvx .prop-waiver-svc{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.pvx .prop-waiver-amt{font-weight:800;white-space:nowrap;color:var(--ink)}
+.pvx .prop-waiver-row.on .prop-waiver-amt{color:var(--gold-deep);text-decoration:none}
 .pvx .prop-totals{display:flex;flex-direction:column;gap:9px;width:100%;margin-top:16px;border-top:2px solid var(--line);padding-top:16px}
 .pvx .prop-trow{display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:.82rem;color:var(--muted);font-weight:600;min-height:28px}
 .pvx .prop-trow b{color:var(--ink)}

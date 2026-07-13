@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankOption,
-  optionTotals, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
+  optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
   toastBaselineItems, loadPriceBook, PAYMENT_PLANS,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
@@ -39,6 +39,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [pricingOpen, setPricingOpen] = useState(null);
   const [priceBookVersion, setPriceBookVersion] = useState(0);
   const [surveyFloors, setSurveyFloors] = useState([]); // [{index, name, count}] for the import picker
+  const [waiveOpen, setWaiveOpen] = useState(false);     // waiver tool panel
 
   // Refresh with a role-appropriate copy on mount (covers PIN-resolved sessions that got
   // the customer-safe variant from the server render). If the draft is still empty and
@@ -223,6 +224,20 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     if (pp && pp.depositPct != null) { setDepositPct(pp.depositPct); setDirty(true); }
   }
 
+  // ---- Waiver tool: comp a whole line item off the invoice (keeps it visible at $0) ----
+  // A line is "waivable" if it carries real value (or is already waived). NVR/drives/displays
+  // live in the camera sysbar (slot/displaySlot) and aren't individually waivable here.
+  const canWaive = (it) => it.slot == null && it.displaySlot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
+  const waivable = [];
+  opt.services.forEach((s) => (s.items || []).forEach((it) => { if (canWaive(it)) waivable.push({ svcLabel: s.label, it }); }));
+  const waivedCount = waivable.filter((w) => w.it.waived).length;
+  function setWaived(id, waived) {
+    patchOption({ services: opt.services.map((s) => ({ ...s, items: (s.items || []).map((it) => (it.id === id ? { ...it, waived } : it)) })) });
+  }
+  function waiveAll(v) {
+    patchOption({ services: opt.services.map((s) => ({ ...s, items: (s.items || []).map((it) => (canWaive(it) ? { ...it, waived: v } : it)) })) });
+  }
+
   return (
     <div className="prop-card">
       <div className="prop-head">
@@ -304,6 +319,32 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         </div>
       )}
 
+
+      {/* Waiver tool — comp select line items off the invoice. Only shows items that carry value. */}
+      {!readOnly && waivable.length > 0 && (
+        <div className="prop-waiver">
+          <button type="button" className="prop-waiver-head" onClick={() => setWaiveOpen((v) => !v)}>
+            <span className="prop-chev">{waiveOpen ? "▾" : "▸"}</span>
+            <span>Waive items</span>
+            {waivedCount > 0 && <span className="prop-waiver-count">{waivedCount} waived</span>}
+          </button>
+          {waiveOpen && (
+            <div className="prop-waiver-body">
+              <div className="prop-waiver-bulk">
+                <button type="button" onClick={() => waiveAll(true)}>Waive all</button>
+                <button type="button" onClick={() => waiveAll(false)}>Reset all</button>
+              </div>
+              {waivable.map(({ svcLabel, it }) => (
+                <label key={it.id} className={`prop-waiver-row${it.waived ? " on" : ""}`}>
+                  <input type="checkbox" checked={!!it.waived} onChange={(e) => setWaived(it.id, e.target.checked)} />
+                  <span className="prop-waiver-name">{it.name || "Untitled item"}<span className="prop-waiver-svc">{svcLabel}</span></span>
+                  <span className="prop-waiver-amt">{it.waived ? "Waived" : money(itemTotal({ ...it, waived: false }))}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Totals — full-width summary at the bottom */}
       <div className="prop-totals">
