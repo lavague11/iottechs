@@ -33,6 +33,8 @@ function detectCarrier(raw) {
 }
 const plus4days = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d.toISOString().slice(0, 10); };
 const last4 = (n) => String(n || "").slice(-4);
+// Fallback ONLY for shipments that never got a live carrier lookup — the staff dropdown always
+// writes one of the exact SHIP_STAGES strings, so this narrow regex match is safe there.
 function deriveStage(status) {
   const s = (status || "").toLowerCase();
   if (/delivered/.test(s)) return 4;
@@ -41,6 +43,11 @@ function deriveStage(status) {
   if (/picked up/.test(s)) return 1;
   return 0;
 }
+// The authoritative stage (0-4) comes straight from the carrier's raw tag (see lib/tracking.js
+// tagToStage) and is far more reliable than re-guessing from the humanized status text — e.g. an
+// AfterShip "AttemptFail" tag becomes the display text "Delivery Attempted", which doesn't match
+// any of deriveStage's patterns and would silently reset the truck to the start of the road.
+function stageOf(s) { return typeof s?.stage === "number" ? s.stage : deriveStage(s?.status); }
 // deterministic pseudo-random so the stars don't reshuffle every render
 function seeded(i, salt) { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return x - Math.floor(x); }
 const fmtEta = (d) => { try { return new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); } catch { return d; } };
@@ -49,7 +56,7 @@ const fmtScan = (t) => { if (!t) return ""; try { return new Date(t).toLocaleStr
 
 // ---- The night-drive scene ---------------------------------------------------------------
 function CinematicTracking({ tracking }) {
-  const stage = deriveStage(tracking.status);
+  const stage = stageOf(tracking);
   const leftPct = STAGE_PCT[stage];
   const moving = stage < 4;
   const [arrived, setArrived] = useState(false);
@@ -249,8 +256,8 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   }, [accessId]);
 
   const activeShip = shipments[Math.min(active, shipments.length - 1)] || null;
-  const shipped = shipments.some((s) => deriveStage(s.status) >= 1);
-  const deliveredNow = shipments.length > 0 && shipments.every((s) => deriveStage(s.status) === 4);
+  const shipped = shipments.some((s) => stageOf(s) >= 1);
+  const deliveredNow = shipments.length > 0 && shipments.every((s) => stageOf(s) === 4);
   // The tracker only appears once a real tracking number exists. Staff (not previewing) always see
   // it so they can paste one in; the customer sees nothing until a package is actually posted.
   const showTracking = shipments.length > 0 || (isStaff && !preview);
@@ -292,8 +299,8 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
     if (r?.ok) {
       setLive((l) => ({ ...l, [ship.number]: r }));
       setLiveState((s) => ({ ...s, [ship.number]: "ok" }));
-      if (persist && isStaff && !preview && r.status && (r.status !== ship.status || (r.eta && r.eta !== ship.eta))) {
-        saveShipments(shipments.map((x) => (x.number === ship.number ? { ...x, status: r.status, eta: r.eta || x.eta } : x)));
+      if (persist && isStaff && !preview && r.status && (r.status !== ship.status || r.stage !== ship.stage || (r.eta && r.eta !== ship.eta))) {
+        saveShipments(shipments.map((x) => (x.number === ship.number ? { ...x, status: r.status, stage: r.stage, eta: r.eta || x.eta } : x)));
       }
     } else if (r?.reason === "pending") {
       // Just registered with the carrier — data isn't ingested yet. Show "fetching" and retry once.
@@ -335,7 +342,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
         {shipments.length > 1 && (
           <div className="stp-pkgs">
             {shipments.map((s, i) => {
-              const st = deriveStage(s.status);
+              const st = stageOf(s);
               return (
                 <button key={s.number + i} type="button" className={`stp-pkg${i === active ? " on" : ""}${st === 4 ? " done" : ""}`} onClick={() => setActive(i)}>
                   <span className="stp-pkg-n">{st === 4 ? "✓" : i + 1}</span>
@@ -348,7 +355,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
 
         {activeShip ? (() => {
           const lv = live[activeShip.number] || null;
-          const shown = lv ? { ...activeShip, status: lv.status || activeShip.status, eta: lv.eta || activeShip.eta } : activeShip;
+          const shown = lv ? { ...activeShip, status: lv.status || activeShip.status, eta: lv.eta || activeShip.eta, stage: typeof lv.stage === "number" ? lv.stage : activeShip.stage } : activeShip;
           const st = liveState[activeShip.number];
           return (
             <>
@@ -401,12 +408,12 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
                   <span className="stp-quick-carrier">{s.carrier}</span>
                   <span className="stp-ship-num">{s.number}</span>
                   <select className="stp-input slim" value={s.status || "Order Placed"} disabled={busy}
-                          onChange={(e) => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: e.target.value } : x)))}>
+                          onChange={(e) => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: e.target.value, stage: deriveStage(e.target.value) } : x)))}>
                     {SHIP_STAGES.map((st) => <option key={st}>{st}</option>)}
                   </select>
-                  {deriveStage(s.status) !== 4 && (
+                  {stageOf(s) !== 4 && (
                     <button type="button" className="stp-mini stp-delivered" disabled={busy} title="Mark this package delivered"
-                            onClick={() => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: "Delivered" } : x)))}>✓ Delivered</button>
+                            onClick={() => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: "Delivered", stage: 4 } : x)))}>✓ Delivered</button>
                   )}
                   <button type="button" className="stp-mini" onClick={() => { setConfirmRemove(false); editIdx === i ? setEditIdx(null) : openEdit(i); }}>{editIdx === i ? "Close" : "Details"}</button>
                 </div>
