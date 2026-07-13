@@ -161,7 +161,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // matching the right option even after a rename in the pricing gear.
   function setSlotDisplay(n, baseName) {
     let items = svc.items.filter((it) => it.displaySlot !== n);
-    if (baseName) {
+    if (baseName === "__custom__") {
+      // Custom display: blank name for the office to type, price starts at 0. baseName "__custom__"
+      // keeps it from being renamed/repriced by the price book (it's a one-off).
+      items = [...items, { id: newItemId(), name: "", baseName: "__custom__", qty: 1, price: 0, cost: 0, displaySlot: n }];
+    } else if (baseName) {
       const d = displayOptions.find((x) => x.baseName === baseName) || displayOptions[0];
       items = [...items, { id: newItemId(), name: d.name, baseName: d.baseName, qty: 1, price: d.price, cost: 0, displaySlot: n }];
     }
@@ -424,9 +428,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                       {displayOptions.map((x) => (
                         <option key={x.baseName} value={x.baseName}>{x.name}</option>
                       ))}
+                      <option value="__custom__">Custom…</option>
                     </select>
                     {d ? (
                       <>
+                        {d.baseName === "__custom__" && (
+                          <input className="prop-slot-name" type="text" placeholder="Custom display…" value={d.name} disabled={readOnly}
+                                 title="Custom display name" onChange={(e) => setDisplayField(n, { name: e.target.value })} />
+                        )}
                         <input className="prop-slot-price" type="number" min="0" step="0.01" value={d.price} disabled={readOnly}
                                title="Price" onChange={(e) => setDisplayField(n, { price: e.target.value })} />
                         {showCost && (

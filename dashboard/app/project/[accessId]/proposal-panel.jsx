@@ -93,6 +93,8 @@ const PROP_CSS = `
 .pvx .prop-slot-lbl{font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .pvx .prop-slot select{height:30px;border:1px solid var(--line);border-radius:7px;background:#fff;font-size:.76rem;font-weight:700;padding:0 8px;font-family:inherit;outline:none;color:var(--ink)}
 .pvx .prop-slot select:focus{border-color:var(--gold)}
+.pvx .prop-slot-name{width:100%;box-sizing:border-box;height:28px;border:1px solid var(--line);border-radius:6px;font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;color:var(--ink);background:#fff}
+.pvx .prop-slot-name:focus{border-color:var(--gold)}
 /* Bays beyond the selected NVR's capacity — visible but locked, not just hidden */
 .pvx .prop-slot-locked{opacity:.45}
 .pvx .prop-slot-locked select{background:var(--bg-soft);cursor:not-allowed}
