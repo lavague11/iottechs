@@ -3712,10 +3712,10 @@ const PV_CSS = `
 .pvx .flow-step.upcoming .flow-card{opacity:.5}
 .pvx .flow-step.upcoming .flow-card:hover{opacity:1}
 .pvx .flow-next-tag{flex-shrink:0;font-size:.6rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:100px;background:var(--tool-c,var(--gold));color:#fff;white-space:nowrap}
-/* Shaded = done / marked complete — the whole header turns green so it reads "done & ready". */
-.pvx .flow-step.shaded .flow-bare-head,.pvx .flow-step.shaded .pv-tool-head{background:#e9f6ee;border-color:#bfe0c9;border-left-color:#2f7d5a}
-.pvx .flow-step.shaded .pv-tool-title{color:#155e33}
-.pvx .pv-tool-icon.done{background:#2f7d5a;color:#fff}
+/* Shaded = done / marked complete — background stays white (matches System QR); only the left
+   border + icon + sub-label flip green, so it reads "done & ready" without a full color fill. */
+.pvx .flow-step.shaded .flow-bare-head,.pvx .flow-step.shaded .pv-tool-head{border-left-color:#2f7d5a}
+.pvx .pv-tool-icon.done{background:#e7f6ec;color:#2f7d5a}
 .pvx .pv-tool-sub.done{color:#1c8a45;font-weight:800}
 /* "Mark as complete" footer at the bottom of an expanded tool. */
 .pvx .flow-complete-row{display:flex;justify-content:flex-end;padding-top:4px;border-top:1px dashed var(--line);margin-top:2px}
