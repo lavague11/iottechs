@@ -3651,10 +3651,12 @@ const PV_CSS = `
 .pvx .flow-bare{display:flex;flex-direction:column;gap:12px}
 @keyframes flowPulse{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.16)}50%{box-shadow:0 0 0 6px rgba(201,169,110,0)}}
 .pvx .flow-card{flex:1;min-width:0;transition:opacity .3s,box-shadow .3s}
-.pvx .flow-step.active .flow-card{box-shadow:0 0 0 2px var(--tool-c,var(--gold)),0 8px 22px -10px rgba(201,169,110,.45)}
-.pvx .flow-step.upcoming .flow-card{opacity:.55}
+/* Active step reads as "here" from the pulsing node + "Your next step" tag — no ring wrapping the
+   whole card. The rest recede: upcoming dimmed, done backgrounded with its green check. */
+.pvx .flow-step.upcoming .flow-card{opacity:.5}
 .pvx .flow-step.upcoming .flow-card:hover{opacity:1}
-.pvx .flow-step.done .flow-card{opacity:.92}
+.pvx .flow-step.done .flow-card{opacity:.72}
+.pvx .flow-step.done .flow-card:hover{opacity:1}
 .pvx .flow-next-tag{flex-shrink:0;font-size:.6rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:100px;background:var(--tool-c,var(--gold));color:#fff;white-space:nowrap}
 .pvx .pv-tool-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 18px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .pvx .pv-tool-head:hover{background:var(--bg-soft)}
