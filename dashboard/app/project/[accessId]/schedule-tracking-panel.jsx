@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from "react";
 import { getToolDataAction, saveToolDataAction, trackPackageAction } from "./proposal-actions";
 import ReceivingChecklist from "./receiving-checklist";
-import { TaglinePill } from "../../components/brand";
 
 // Fulfillment-stage panel. For the customer it's the "what happens next" page right after
 // their deposit: the next appointment, the equipment timeline (1–2 days processing, 3–5 days
@@ -237,8 +236,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState({});             // { number: liveRecord } from the carrier API
   const [liveState, setLiveState] = useState({});   // { number: "loading"|"ok"|"nokey"|"err" }
-  const [open, setOpen] = useState(true);
-  const [marked, setMarked] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -336,18 +333,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
   return (
     <div className="stp-root">
       <style>{STP_CSS}</style>
-      <div className={`stp-header${marked ? " shaded" : ""}`}>
-        <button type="button" className="stp-hd-toggle" onClick={() => setOpen((v) => !v)}>
-          <div className="stp-hd-left">
-            <span className="stp-brand">IOT TECHS</span>
-            <TaglinePill tone="dark" className="stp-brand-pill" />
-          </div>
-          {marked ? <span className="stp-complete-pill">✓ Complete</span> : <span className="stp-doctag">Fulfillment &amp; Equipment</span>}
-        </button>
-        <button type="button" className="stp-chev" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
-      </div>
-
-      {open && (<>
       {/* Next appointment */}
       <div className="stp-section-hd">Your Next Appointment</div>
       {next ? (
@@ -506,46 +491,19 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
           </div>
         </div>
       )}
-      </>)}
-
-      <div className="stp-complete-row">
-        {marked ? (
-          <button type="button" className="stp-reopen" onClick={() => setMarked(false)}>↺ Reopen</button>
-        ) : (
-          <button type="button" className="stp-complete-btn" onClick={() => { setMarked(true); setOpen(false); }}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-            Mark as complete
-          </button>
-        )}
-      </div>
-
-      <div className="stp-footer">IOT TECHS · (646) 396-0775 · support@iot-techs.com</div>
     </div>
   );
 }
 
 const STP_CSS = `
-.stp-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;overflow:hidden;margin:0 0 16px;
-  box-shadow:0 10px 30px rgba(11,15,26,.08);font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
-.stp-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #C9A96E}
-.stp-hd-left{display:flex;flex-direction:column;gap:2px}
-.stp-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.stp-brand-pill{margin:2px 0}
-.stp-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9fc0e8;border:1px solid rgba(75,106,155,.55);border-radius:100px;padding:5px 13px}
-.stp-hd-toggle{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
-.stp-chev{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:.7rem;color:#9aa1af;padding:4px 6px;font-family:inherit}
-.stp-chev:hover{color:#fff}
-.stp-header.shaded{background:#0f2418;border-top-color:#2f7d5a}
-.stp-complete-pill{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#7ee0a4;border:1px solid rgba(126,224,164,.4);border-radius:100px;padding:5px 13px}
-.stp-complete-row{margin:16px 22px 0;display:flex;justify-content:flex-end}
-.stp-complete-btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid #bfe0c9;border-radius:9px;background:#eef7f0;color:#1d5a2e;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
-.stp-complete-btn:hover{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.stp-reopen{height:34px;padding:0 14px;border:1px solid #d9d4ca;border-radius:9px;background:#fff;color:#4a5270;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
-.stp-reopen:hover{border-color:#C9A96E;color:#0B0F1A}
-.stp-section-hd{margin:16px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.74rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #4b6a9b}
-.stp-footer{margin-top:18px;background:#0B0F1A;border-top:2px solid #4b6a9b;color:#9aa1af;font-size:.7rem;text-align:center;padding:11px 22px}
+.stp-root{background:#FAF8F4;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:14px;padding:16px 16px 18px;
+  font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;box-shadow:0 10px 30px rgba(11,15,26,.06)}
+.stp-section-hd{margin:14px 0 8px;font-size:.7rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a6d2f}
+.stp-section-hd:first-child{margin-top:0}
+.stp-addmini{height:26px;padding:0 12px;border-radius:100px;border:1px solid #e2d3ad;background:#f8f0e0;color:#8a6d2f;font-size:.72rem;font-weight:800;letter-spacing:.03em;cursor:pointer;font-family:inherit}
+.stp-addmini:hover{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
 
-.stp-appt{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;padding:14px 16px;display:flex;gap:14px;align-items:center}
+.stp-appt{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:14px 16px;display:flex;gap:14px;align-items:center}
 .stp-appt.empty{display:block;font-size:.84rem;color:#4a5270}
 .stp-appt-tile{width:56px;height:56px;flex-shrink:0;border-radius:11px;background:#0B0F1A;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .stp-appt-mon{font-size:.6rem;font-weight:800;letter-spacing:.08em;color:#C9A96E}
@@ -556,7 +514,7 @@ const STP_CSS = `
 .stp-appt-loc{color:#6f7686}
 .stp-appt-note{font-size:.72rem;color:#8a6d2f;font-style:italic}
 
-.stp-gather{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.stp-gather{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
 .stp-anim{display:flex;align-items:flex-end;gap:7px;height:34px}
 .stp-box{width:13px;height:13px;border-radius:3px;background:#C9A96E;opacity:.25;animation:stpPulse 1.5s ease-in-out infinite}
 .stp-box.b2{animation-delay:.25s}
@@ -582,7 +540,7 @@ const STP_CSS = `
 .stp-tl-lbl em{display:block;font-style:normal;font-weight:600;color:#8a93a8;font-size:.64rem}
 .stp-tl-line{flex:1;height:1.5px;background:#e6e1d6;margin-top:12px;min-width:12px}
 
-.stp-track{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.stp-track{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .stp-track-wait{display:flex;flex-direction:column;gap:5px}
 .stp-track-ph{font-family:ui-monospace,Consolas,monospace;font-size:.9rem;color:#c2bcae;letter-spacing:.08em;animation:stpShimmer 2.2s ease-in-out infinite}
 @keyframes stpShimmer{0%,100%{opacity:.45}50%{opacity:1}}
@@ -600,8 +558,6 @@ const STP_CSS = `
 .stp-btn.danger:hover{background:#fbeceb}
 
 .stp-track-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.stp-addmini{height:26px;padding:0 12px;border-radius:100px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:.72rem;font-weight:800;letter-spacing:.03em;cursor:pointer;font-family:inherit}
-.stp-addmini:hover{background:rgba(255,255,255,.2)}
 .stp-modal-bg{position:fixed;inset:0;z-index:12000;background:rgba(11,15,26,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
 .stp-modal{width:min(440px,96vw);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 24px 70px rgba(11,15,26,.4)}
 .stp-modal-hd{display:flex;align-items:center;justify-content:space-between;background:#0B0F1A;color:#fff;padding:13px 16px;font-size:.9rem}

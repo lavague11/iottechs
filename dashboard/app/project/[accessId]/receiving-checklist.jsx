@@ -114,7 +114,7 @@ export default function ReceivingChecklist({ accessId, proposal, role, preview }
 }
 
 const RCV_CSS = `
-.rcv-root{margin:16px 22px 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.rcv-root{margin:14px 0 0;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .rcv-root.done{border-top-color:#2f7d5a}
 .rcv-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .rcv-title{display:block;font-size:.94rem;font-weight:800;color:#0B0F1A}
