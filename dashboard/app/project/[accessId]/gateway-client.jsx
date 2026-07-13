@@ -307,20 +307,35 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 // A rail bubble (✓ when done, else the step number) beside the tool card, so a stage's tools read
 // as a guided 1-2-3 rhythm anyone can follow: done → collapsed check, active → open with a "Your
 // next step" glow, upcoming → dimmed & collapsed. Re-flows automatically as steps complete.
-function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, children }) {
+// status: "done" (✓, collapsed) · "active" (open, glow, "Your next step") · "upcoming" (dimmed,
+//   collapsed) · "open" (neutral numbered, available, no glow/dim — for work steps with no clean
+//   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
+//   their own header) — just the numbered rail, no FlowStep header or collapse.
+function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, children }) {
   const [open, setOpen] = useState(status === "active");
   useEffect(() => { setOpen(status === "active"); }, [status]);   // a completed step collapses, the next opens
   const isDone = status === "done";
+  const rail = (
+    <div className="flow-rail">
+      <span className="flow-node">
+        {isDone
+          ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          : n}
+      </span>
+      {n < total && <span className="flow-line" />}
+    </div>
+  );
+  if (bare) {
+    return (
+      <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
+        {rail}
+        <div className="flow-card flow-bare">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
-      <div className="flow-rail">
-        <span className="flow-node">
-          {isDone
-            ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            : n}
-        </span>
-        {n < total && <span className="flow-line" />}
-      </div>
+      {rail}
       <div className="flow-card pv-tool-panel">
         <div className="pv-tool-head">
           <button type="button" className="pv-tool-toggle" onClick={() => setOpen((v) => !v)}>
@@ -1633,7 +1648,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [attentionNote,  setAttentionNote]  = useState(project.attention_note || "");
   const [showNoteBox,    setShowNoteBox]    = useState(false);
   const [attSaving,      setAttSaving]      = useState(false);
-  const [schedOpen,  setSchedOpen]  = useState(true);
+  // Inquiry scheduling open/collapse now lives in its <FlowStep> (open while unbooked, done once set).
   // Survey/mockup tool open state now lives inside each <FlowStep> (driven by its done/active status).
   // null | "customer" | "tech" — admin/manager can preview the page as either role. Lifted to
   // GatewayClient so the masthead pill and this subheader eye share one source of truth.
@@ -2298,32 +2313,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {/* Inquiry stage tools — survey scheduling lives HERE (booked at intake, before the
           survey visit), plus point-of-contact + a notes thread. All roles see them. */}
       {viewingStage === "inquiry" && (
-        <div className="pv-survey-tools" style={{ marginBottom: 14 }}>
-          <div className="pv-tool-panel" style={{ "--tool-c": "#4b6a9b" }}>
-            <button className="pv-tool-head" onClick={()=>setSchedOpen(v=>!v)}>
-              <span className="pv-tool-icon">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              </span>
-              <span className="pv-tool-title">Survey Scheduling</span>
-              <span className="pv-tool-sub">Book the visit · Pick a time window</span>
-              {lp.date && <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span>}
-              <span className="pv-tool-chev">{schedOpen?"▲":"▼"}</span>
-            </button>
-            {schedOpen && (
-              <div className="pv-tool-body">
-                <SchedulingWidget
-                  accessId={lp.access_id}
-                  assignments={localAssignments}
-                  staffUsers={staffUsers}
-                  currentUser={currentUser}
-                  project={lp}
-                  view={view}
-                  customerView={!!previewRole}
-                />
-              </div>
-            )}
-          </div>
-          <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
+        <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
+          {/* ① Book the survey visit (done once a date is set) → ② capture notes / point of contact */}
+          <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#4b6a9b"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+            title="Survey Scheduling" sub="Book the visit · Pick a time window"
+            chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null}>
+            <SchedulingWidget
+              accessId={lp.access_id}
+              assignments={localAssignments}
+              staffUsers={staffUsers}
+              currentUser={currentUser}
+              project={lp}
+              view={view}
+              customerView={!!previewRole}
+            />
+          </FlowStep>
+          <FlowStep n={2} total={2} status="open" color="#7a8aa5" bare>
+            <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
+          </FlowStep>
         </div>
       )}
 
@@ -2463,30 +2471,61 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
         />
       ) : viewingStage === "install" && cView === "tech" ? (
-        <><SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />{(() => {
-          // Install work order — only after the tech accepts, and only on/after the install date.
+        // Numbered flow: ① System QR → ② Equipment checklist (locked until WO accepted + install day) → ③ Addendum.
+        (() => {
           const woAccepted = !!proposalData?.tech_signed_name;
           const iDate = lp.install_date || lp.date || null;
           const today = new Date(); today.setHours(0, 0, 0, 0);
           const dOpen = iDate ? (new Date(iDate + "T00:00:00") <= today) : false;
-          if (!woAccepted) {
-            return <div className="pv-lockcard"><b>Accept the work order first.</b><span>Head back to <a onClick={() => browse("proposal")}>Work Order Created</a> and sign to accept — the equipment checklist unlocks after that.</span></div>;
-          }
-          if (!dOpen) {
-            return <div className="pv-lockcard"><b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b><span>Your equipment checklist becomes available the day of the install.</span></div>;
-          }
-          return (<><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
-            <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} /></>);
-        })()}</>
+          const unlocked = woAccepted && dOpen;
+          const total = unlocked ? 3 : 2;
+          return (
+            <div className="pv-survey-tools flow-wrap">
+              <FlowStep n={1} total={total} status={lp.system_qr ? "done" : "open"} color="#3aa0a0" bare>
+                <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
+              </FlowStep>
+              {!unlocked ? (
+                <FlowStep n={2} total={total} status="upcoming" color="#C9A96E" bare>
+                  {!woAccepted
+                    ? <div className="pv-lockcard"><b>Accept the work order first.</b><span>Head back to <a onClick={() => browse("proposal")}>Work Order Created</a> and sign to accept — the equipment checklist unlocks after that.</span></div>
+                    : <div className="pv-lockcard"><b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b><span>Your equipment checklist becomes available the day of the install.</span></div>}
+                </FlowStep>
+              ) : (
+                <>
+                  <FlowStep n={2} total={3} status="active" color="#C9A96E" bare>
+                    <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
+                  </FlowStep>
+                  <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
+                    <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
+                  </FlowStep>
+                </>
+              )}
+            </div>
+          );
+        })()
       ) : viewingStage === "install" && ["admin", "manager"].includes(cView) ? (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
-        <><SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
-          <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
-          <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} /></>
+        <div className="pv-survey-tools flow-wrap">
+          <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" bare>
+            <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
+          </FlowStep>
+          <FlowStep n={2} total={3} status={lp.system_qr ? "active" : "open"} color="#C9A96E" bare>
+            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
+          </FlowStep>
+          <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
+            <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
+          </FlowStep>
+        </div>
       ) : viewingStage === "install" && cView === "customer" ? (
         // Customer just watches the install progress — no editing, no pricing.
-        <><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly />
-          <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} /></>
+        <div className="pv-survey-tools flow-wrap">
+          <FlowStep n={1} total={2} status="active" color="#C9A96E" bare>
+            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly />
+          </FlowStep>
+          <FlowStep n={2} total={2} status="open" color="#B084E0" bare>
+            <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
+          </FlowStep>
+        </div>
       ) : ["approval_deposit", "payment"].includes(viewingStage) && ["admin", "manager", "customer"].includes(cView) ? (
         <ApprovalPanel
           accessId={lp.access_id}
@@ -3606,7 +3645,9 @@ const PV_CSS = `
 .pvx .flow-line{flex:1;width:2px;background:var(--line);margin:8px 0 0;min-height:14px;border-radius:1px}
 .pvx .flow-step.done .flow-node{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
 .pvx .flow-step.active .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold));animation:flowPulse 1.9s ease-in-out infinite}
+.pvx .flow-step.open .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold))}
 .pvx .flow-step.upcoming .flow-node{opacity:.45}
+.pvx .flow-bare{display:flex;flex-direction:column;gap:12px}
 @keyframes flowPulse{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.16)}50%{box-shadow:0 0 0 6px rgba(201,169,110,0)}}
 .pvx .flow-card{flex:1;min-width:0;transition:opacity .3s,box-shadow .3s}
 .pvx .flow-step.active .flow-card{box-shadow:0 0 0 2px var(--tool-c,var(--gold)),0 8px 22px -10px rgba(201,169,110,.45)}
