@@ -157,10 +157,11 @@ const PROP_CSS = `
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
 .pvx .prop-block.alt{background:var(--bg-soft)}
-/* Waived block: comped off the invoice — name dimmed, a "Waived" chip in the total column */
-.pvx .prop-block.prop-waived{border-left-color:var(--gold)}
-.pvx .prop-block.prop-waived>.prop-item>span:first-child input{color:var(--muted);text-decoration:line-through}
-.pvx .prop-waived-tag{font-size:.66rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--gold-deep);background:var(--bg-tint);border:1px solid var(--gold);border-radius:100px;padding:2px 8px}
+/* Waived block: comped off the invoice — a green "Waived" banner on the left, and the
+   original price struck through on the right so you can still see the amount waived. */
+.pvx .prop-block.prop-waived{border-left-color:var(--green,#1c8a45)}
+.pvx .prop-waived-banner{font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--green,#1c8a45);border-radius:100px;padding:2px 9px;white-space:nowrap}
+.pvx .prop-waived-strike{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--green,#1c8a45)}
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:800}
 .pvx .prop-item.prop-parent .prop-line-total{font-weight:800;color:var(--ink)}

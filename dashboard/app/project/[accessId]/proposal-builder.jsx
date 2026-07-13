@@ -370,8 +370,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
                 {totals.pcpCredit > 0 && <b className="prop-minus">−{money(totals.pcpCredit)}</b>}
                 <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 5 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 5 })}>5%</button>
                 <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 10 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 10 })}>10%</button>
-                <button type="button" className={`prop-tax-btn${!(pcp.type === "pct" && (+pcp.value === 5 || +pcp.value === 10)) ? " on" : ""}`} onClick={() => setPcp({ type: "pct" })}>Custom</button>
-                <input className="tin" type="number" min="0" max="100" step="0.1" title="Credit %" value={pcp.value || 0} onChange={(e) => setPcp({ type: "pct", value: e.target.value })} />
+                <input className="tin" type="number" min="0" max="10" step="0.5" title="Credit % (2–10%)" value={pcp.value || 0} onChange={(e) => setPcp({ type: "pct", value: e.target.value })} />
               </span>
             )}
           </div>

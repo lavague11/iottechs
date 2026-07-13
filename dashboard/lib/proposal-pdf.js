@@ -223,13 +223,14 @@ export function downloadProposalPdf(p, meta = {}) {
       svc.items.forEach((it) => {
         y = ensureRoom(y, 30);
         const tot = itemTotal(it);
+        const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
         const hasSub = (it.sub || []).length > 0;
         y = tableRow(
-          String(lineNum), titleCase(it.name) + (it.waived ? "  (Waived)" : ""),
+          String(lineNum), titleCase(it.name) + (it.waived ? "  — WAIVED" : ""),
           hasSub ? "1" : String(it.qty ?? 1),
-          it.waived ? "Waived" : "$" + money(hasSub ? tot : it.price),
-          it.waived ? "$0.00" : "$" + money(tot), y
+          "$" + money(hasSub ? gross : it.price),
+          it.waived ? "$0.00 (waived $" + money(gross) + ")" : "$" + money(tot), y
         );
         lineNum++;
       });
