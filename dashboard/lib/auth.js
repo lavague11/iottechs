@@ -38,9 +38,22 @@ export async function parseToken(token) {
 }
 
 // PIN-scoped access token — a customer/tech who unlocks a project with its PIN gets no login
-// session, so this signed cookie (accessId:role) authorizes their writes on THAT project only.
+// session, so this signed cookie (accessId:role:issuedAt) authorizes their writes on THAT
+// project only, for a limited window. Different roles get different leashes: a customer's
+// grant is short (they may be on a shared/borrowed device), staff get more room to work.
+// ACCESS_TTL_MS is exported so callers can size the cookie's own maxAge to match.
+export const ACCESS_TTL_MS = {
+  customer: 5 * 60 * 1000,          // 5 min — re-checked on every request, so a refresh past this re-gates
+  tech:     4 * 60 * 60 * 1000,     // 4 hours — a technician is on-site working a job, not idly browsing
+  admin:    60 * 60 * 1000,         // 1 hour
+  manager:  60 * 60 * 1000,
+  sales:    60 * 60 * 1000,
+};
+const DEFAULT_ACCESS_TTL_MS = 15 * 60 * 1000;
+export function accessTtlFor(role) { return ACCESS_TTL_MS[role] || DEFAULT_ACCESS_TTL_MS; }
+
 export async function makeAccessToken(accessId, role) {
-  const payload = `${accessId}:${role}`;
+  const payload = `${accessId}:${role}:${Date.now()}`;
   const sig = await hmac(payload);
   return btoa(`${payload}:${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
@@ -48,9 +61,10 @@ export async function parseAccessToken(token) {
   try {
     const raw = atob(token.replace(/-/g, "+").replace(/_/g, "/"));
     const parts = raw.split(":");
-    if (parts.length < 3) return null;
-    const [accessId, role, sig] = parts;
-    if ((await hmac(`${accessId}:${role}`)) !== sig) return null;
+    if (parts.length < 4) return null;
+    const [accessId, role, issuedAt, sig] = parts;
+    if ((await hmac(`${accessId}:${role}:${issuedAt}`)) !== sig) return null;
+    if (Date.now() - Number(issuedAt) > accessTtlFor(role)) return null;   // expired — re-gate
     return { accessId, role };
   } catch {
     return null;

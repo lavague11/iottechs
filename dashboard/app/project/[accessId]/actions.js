@@ -48,9 +48,11 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
   // always agree — without this the shell can show "admin" while actions see no token and reject
   // every write ("Only Admin & Manager can move steps").
   const grantPin = async (role) => {
-    const { makeAccessToken } = await import("../../../lib/auth");
+    const { makeAccessToken, accessTtlFor } = await import("../../../lib/auth");
     const jar = await cookies();
-    jar.set("iot_access", await makeAccessToken(p.access_id, role), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 12 });
+    // Cookie maxAge mirrors the token's own role-based expiry (lib/auth.js ACCESS_TTL_MS) —
+    // no point letting the browser hold onto a cookie longer than the token inside it is valid.
+    jar.set("iot_access", await makeAccessToken(p.access_id, role), { httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.ceil(accessTtlFor(role) / 1000) });
   };
 
   // Dev-only quick role switch (no credentials) — must never work in production.
@@ -110,6 +112,20 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
   }
 
   return { ok: false, error: "Enter a PIN or log in." };
+}
+
+// Proactively drop the PIN-scoped grant for a project — the client-side inactivity timer
+// calls this after the idle window elapses so a customer who leaves the tab open (rather
+// than reloading, which the token's own expiry already catches) is re-gated immediately.
+export async function lockProjectAction(accessId) {
+  const jar = await cookies();
+  const raw = jar.get("iot_access")?.value;
+  if (raw) {
+    const { parseAccessToken } = await import("../../../lib/auth");
+    const grant = await parseAccessToken(raw);
+    if (grant && String(grant.accessId) === String(accessId)) jar.delete("iot_access");
+  }
+  return { ok: true };
 }
 
 export async function updateProjectInfoAction(accessId, fields) {

@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, TECH_STAGES, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
@@ -1535,6 +1535,30 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     return () => { live = false; clearInterval(id); document.removeEventListener("visibilitychange", poll); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.access_id]);
+
+  // ---- Customer inactivity auto-lock ----
+  // A customer's PIN grant already expires server-side 5 minutes after issuance (lib/auth.js
+  // ACCESS_TTL_MS) — that catches them on their next reload/request. This covers the gap where
+  // they leave the tab open without reloading: 15 minutes with no mouse/keyboard/touch/scroll
+  // activity drops the grant and reloads, which lands them back on the PIN gate. Staff previewing
+  // the customer view are exempt — this only fires for an actual PIN/session-authenticated customer.
+  useEffect(() => {
+    if (view !== "customer" || previewRole) return;
+    let idleTimer;
+    const IDLE_MS = 15 * 60 * 1000;
+    const resetIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(async () => {
+        await lockProjectAction(project.access_id).catch(() => {});
+        window.location.reload();
+      }, IDLE_MS);
+    };
+    const EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    EVENTS.forEach((e) => document.addEventListener(e, resetIdle, { passive: true }));
+    resetIdle();
+    return () => { clearTimeout(idleTimer); EVENTS.forEach((e) => document.removeEventListener(e, resetIdle)); };
+  }, [view, previewRole, project.access_id]);
+
   const [hCollapsed, setHCollapsed]     = useState(true);
   const [mapHidden, setMapHidden]       = useState(true);
   const [hEditing,   setHEditing]       = useState(false);

@@ -68,9 +68,11 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     return (
       <>
         <Masthead docType="Project Access" tag="Secure Link" date="Gated" showNav={false} />
-        <div className="wrap">
-          <div className="section-head"><span className="sh-num">!</span> Link not found</div>
-          <p className="empty">No project matches <span className="mono">{accessId}</span>.</p>
+        <div className="wrap" style={{ textAlign: "center", padding: "60px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚠️</div>
+          <h1 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 6 }}>Project link is invalid</h1>
+          <p className="empty" style={{ marginBottom: 22 }}>There are no projects found.</p>
+          <a href="/" style={{ display: "inline-flex", background: "#C9A96E", color: "#0B0F1A", fontWeight: 700, fontSize: ".9rem", padding: "10px 22px", borderRadius: 10, textDecoration: "none" }}>Go back home</a>
         </div>
       </>
     );
