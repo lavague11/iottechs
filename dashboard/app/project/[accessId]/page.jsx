@@ -106,9 +106,12 @@ export default async function ProjectLinkPage({ params, searchParams }) {
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
 
-  // A closed/lost project, seen by the customer → the "missed your train" reopen screen instead
-  // of the normal gateway. Staff still open it fully (they need to manage/reopen it themselves).
-  if (p.lost_at && initialView === "customer" && !previewRole) {
+  // A project closed BEFORE approval (still in inquiry / survey / proposal — the customer never
+  // accepted an option), seen by the customer → the "missed your train" reopen screen. Projects
+  // closed after approval have real work/money attached, so they open normally instead. Staff
+  // always open it fully (they manage/reopen it themselves).
+  const PRE_APPROVAL_STAGES = new Set(["inquiry", "site_survey", "proposal"]);
+  if (p.lost_at && initialView === "customer" && !previewRole && PRE_APPROVAL_STAGES.has(p.stage)) {
     return <ClosedProject accessId={p.access_id} />;
   }
 
