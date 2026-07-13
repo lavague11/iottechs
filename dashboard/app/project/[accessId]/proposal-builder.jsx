@@ -354,10 +354,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <span>Discount</span>
             {readOnly ? <b>{totals.discount > 0 ? `−${money(totals.discount)}` : "—"}</b> : (
               <span className="prop-adj">
+                {totals.discount > 0 && <b className="prop-minus">−{money(totals.discount)}</b>}
                 <button type="button" className={`prop-tax-btn${disc.type === "flat" ? " on" : ""}`} onClick={() => setDiscount({ type: "flat" })}>$</button>
                 <button type="button" className={`prop-tax-btn${disc.type === "pct" ? " on" : ""}`} onClick={() => setDiscount({ type: "pct" })}>%</button>
                 <input className="tin" type="number" min="0" step="0.01" value={disc.value || 0} onChange={(e) => setDiscount({ value: e.target.value })} />
-                {totals.discount > 0 && <b className="prop-minus">−{money(totals.discount)}</b>}
               </span>
             )}
           </div>
@@ -367,11 +367,11 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <span>PCP Credit</span>
             {readOnly ? <b>{totals.pcpCredit > 0 ? `−${money(totals.pcpCredit)}` : "—"}</b> : (
               <span className="prop-adj">
+                {totals.pcpCredit > 0 && <b className="prop-minus">−{money(totals.pcpCredit)}</b>}
                 <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 5 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 5 })}>5%</button>
                 <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 10 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 10 })}>10%</button>
-                <button type="button" className={`prop-tax-btn${pcp.type === "flat" ? " on" : ""}`} onClick={() => setPcp({ type: "flat" })}>$</button>
-                <input className="tin" type="number" min="0" step="0.01" value={pcp.value || 0} onChange={(e) => setPcp({ value: e.target.value })} />
-                {totals.pcpCredit > 0 && <b className="prop-minus">−{money(totals.pcpCredit)}</b>}
+                <button type="button" className={`prop-tax-btn${!(pcp.type === "pct" && (+pcp.value === 5 || +pcp.value === 10)) ? " on" : ""}`} onClick={() => setPcp({ type: "pct" })}>Custom</button>
+                <input className="tin" type="number" min="0" max="100" step="0.1" title="Credit %" value={pcp.value || 0} onChange={(e) => setPcp({ type: "pct", value: e.target.value })} />
               </span>
             )}
           </div>

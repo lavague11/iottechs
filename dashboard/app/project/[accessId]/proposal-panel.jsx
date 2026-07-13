@@ -211,14 +211,15 @@ const PROP_CSS = `
 .pvx .prop-total-big span{font-size:.9rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .pvx .prop-total-big b{font-size:1.7rem;font-weight:800;color:var(--gold-deep);letter-spacing:-.01em}
 .pvx .prop-plan-terms{font-size:.76rem;color:var(--muted);line-height:1.4;background:var(--bg-soft);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:8px 12px;margin:-2px 0 2px}
-.pvx .prop-plan-btn{height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--muted);font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
-.pvx .prop-plan-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
-.pvx .prop-plan-btn.on{background:var(--gold);border-color:var(--gold);color:#fff}
-.pvx .prop-trow .tin{width:64px;height:26px;border:1px solid var(--line);border-radius:6px;text-align:right;padding:0 6px;font-size:.76rem;font-weight:700;font-family:inherit;outline:none;color:var(--ink)}
+/* Uniform preset buttons + input across Discount / PCP / Tax / Payment-plan rows.
+   Same height, same min-width, centered — inputs flush right so every row lines up. */
+.pvx .prop-adj{gap:7px}
+.pvx .prop-tax-btn,.pvx .prop-plan-btn{height:30px;min-width:54px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--muted);font-size:.73rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-tax-btn:hover,.pvx .prop-plan-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .prop-tax-btn.on,.pvx .prop-plan-btn.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.pvx .prop-trow .tin{width:72px;height:30px;border:1px solid var(--line);border-radius:8px;text-align:right;padding:0 8px;font-size:.76rem;font-weight:700;font-family:inherit;outline:none;color:var(--ink)}
 .pvx .prop-trow .tin:focus{border-color:var(--gold)}
-.pvx .prop-tax-btn{height:26px;padding:0 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-soft);color:var(--muted);font-size:.7rem;font-weight:800;cursor:pointer;font-family:inherit}
-.pvx .prop-tax-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
-.pvx .prop-tax-btn.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.pvx .prop-minus{margin-right:2px}
 .pvx .prop-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:13px}
 .pvx .prop-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:11000;background:var(--ink);color:#fff;font-size:.82rem;font-weight:700;padding:11px 20px;border-radius:100px;box-shadow:0 12px 34px rgba(0,0,0,.32);display:flex;align-items:center;gap:8px}
 .pvx .prop-toast svg{color:var(--green,#3DD68C)}
