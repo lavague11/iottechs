@@ -50,4 +50,11 @@ const CAC_CSS = `
 .cac-btn:disabled{opacity:.55;cursor:default}
 .cac-preview{font-size:.74rem;color:#8a93a8}
 .cac-donecheck{position:absolute;top:20px;right:22px;width:34px;height:34px;border-radius:50%;background:#2f7d5a;color:#fff;display:flex;align-items:center;justify-content:center}
+/* Done/status is a quiet confirmation, not a hero — keep it a slim strip: check + headline inline
+   with the kicker, sub on the same compact block, minimal height. */
+.cac-done, .cac-status{padding:11px 16px}
+.cac-done .cac-kicker, .cac-status .cac-kicker{margin-bottom:0;margin-right:10px;vertical-align:middle}
+.cac-done .cac-headline, .cac-status .cac-headline{display:inline;font-size:1rem}
+.cac-done .cac-sub, .cac-status .cac-sub{font-size:.82rem;line-height:1.4;margin-top:3px}
+.cac-done .cac-donecheck{top:50%;transform:translateY(-50%);right:14px;width:28px;height:28px}
 `;
