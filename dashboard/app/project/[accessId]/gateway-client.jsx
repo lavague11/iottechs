@@ -9,6 +9,7 @@ import { startPinCanvas } from "./gateway-pin-canvas";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
+import LeadInfoStep      from "./lead-info-step";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
@@ -1626,6 +1627,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
+  const [leadConfirmed, setLeadConfirmed]   = useState(false); // customer confirmed/edited their lead info (Survey step ①)
   const [restricted, setRestricted]     = useState(!!project.restricted);
   const [pendingMove, setPendingMove]   = useState(null);
   const [taOpen, setTaOpen]             = useState(false);
@@ -2294,10 +2296,32 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
 
       {/* ============ SURVEY phase (inquiry + site_survey merged) ============
-          Inquiry tools (survey scheduling booked at intake + point-of-contact / notes) render
-          first, then the Site Survey + Mockup flow below (further down, also gated on ph_survey). */}
-      {vPhase === "ph_survey" && cView === "customer" && <CustomerInquiryPanel project={project} accessId={lp.access_id} />}
-      {vPhase === "ph_survey" && (
+          Customer flow: ① confirm/edit their info → ② schedule the appointment → then the Site
+          Survey + Mockup review below. Staff keep the scheduling + notes/POC tools. */}
+      {vPhase === "ph_survey" && cView === "customer" && (
+        <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
+          <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#4b6a9b"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
+            title="Your Information" sub="Confirm the details we have — or fix anything that's wrong.">
+            <LeadInfoStep accessId={lp.access_id} project={lp} preview={!!previewRole} onConfirmed={() => setLeadConfirmed(true)} />
+          </FlowStep>
+          <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#4b6a9b"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+            title="Schedule Your Appointment" sub="Pick a time for your free walkthrough & demo."
+            chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null}>
+            <SchedulingWidget
+              accessId={lp.access_id}
+              assignments={localAssignments}
+              staffUsers={staffUsers}
+              currentUser={currentUser}
+              project={lp}
+              view={view}
+              customerView={!!previewRole}
+            />
+          </FlowStep>
+        </div>
+      )}
+      {vPhase === "ph_survey" && cView !== "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
           <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#4b6a9b"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
