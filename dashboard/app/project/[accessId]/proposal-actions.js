@@ -214,6 +214,40 @@ export async function submitProposalFlagsAction(accessId, flags, note) {
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
+// Lightweight polling endpoint — a compact, diffable snapshot of everything that can change
+// out from under whoever's looking at this page (staff moves the stage, or the other party
+// signs / pays / approves while it's open). The client polls this on an interval and diffs it
+// against its last snapshot to auto-refresh state and surface a toast — no full page reload,
+// no dependence on a real activity-log table (the project doesn't have one).
+export async function getLiveSnapshotAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Not authenticated." };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const p = getJobByAccessId(accessId);
+  if (!p) return { error: "Not found." };
+  const proposal = getActiveProposal(accessId);
+  const payments = getProjectPayments(accessId);
+  const acceptances = getStageAcceptances(accessId);
+  const confirmed = payments.filter((x) => x.status !== "pending");
+  return {
+    ok: true,
+    stage: p.stage,
+    completed_at: p.completed_at || null,
+    proposal: proposal ? {
+      status: proposal.status,
+      signed_name: proposal.signed_name,
+      signed_at: proposal.signed_at,
+      pcp_status: proposal.pcp_status,
+      pcp_agreed_at: proposal.pcp_agreed_at,
+      accepted_options: (() => { try { return JSON.parse(proposal.accepted_options || "[]"); } catch { return []; } })(),
+      tech_signed_name: proposal.tech_signed_name,
+    } : null,
+    paymentsCount: payments.length,
+    paymentsConfirmedTotal: confirmed.reduce((s, x) => s + (+x.amount || 0), 0),
+    acceptances: Object.fromEntries(Object.entries(acceptances || {}).map(([k, v]) => [k, !!v])),
+  };
+}
+
 // ---- PCP (Performance Credit Program) ----
 // Customer acknowledges the PCP agreement in one click (records their signature). Staff
 // previewing the customer view may also trigger it. Credit stays pending until admin finalizes.

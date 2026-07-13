@@ -26,7 +26,7 @@ import { customerAction } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
 import ScheduleTrackingPanel from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
-import { getAcceptancesAction } from "./proposal-actions";
+import { getAcceptancesAction, getLiveSnapshotAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
 
@@ -1464,6 +1464,77 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingStage, project.access_id]);
+
+  // ---- Live updates: poll for changes made by the OTHER party (staff moves the stage, or the
+  // customer signs/pays/approves) while this page is open, and surface them without a manual
+  // reload. No real activity-log table exists for the project, so this diffs a compact snapshot
+  // against the previous poll instead of consuming an event feed. Runs for every role; pauses
+  // while the tab is hidden so it doesn't burn cycles/requests in a backgrounded tab.
+  const [liveToast, setLiveToast] = useState(null);
+  const liveToastTimer = useRef(null);
+  const showLiveToast = (msg) => {
+    setLiveToast(msg);
+    if (liveToastTimer.current) clearTimeout(liveToastTimer.current);
+    liveToastTimer.current = setTimeout(() => setLiveToast(null), 4200);
+  };
+  const lastSnapshot = useRef(null);   // null until the first poll lands (baseline — never toasts)
+  useEffect(() => {
+    let live = true;
+    async function poll() {
+      if (document.visibilityState === "hidden") return;
+      const snap = await getLiveSnapshotAction(project.access_id).catch(() => null);
+      if (!live || !snap?.ok) return;
+      const prev = lastSnapshot.current;
+      lastSnapshot.current = snap;
+      if (!prev) return;   // first poll just establishes the baseline
+
+      if (snap.stage !== prev.stage) {
+        onProjectStage(snap.stage);
+        // Only follow along automatically if they were viewing the live stage (not off browsing
+        // an earlier one on purpose) — otherwise just toast and let them keep looking around.
+        setViewingStage((vs) => (vs === prev.stage ? snap.stage : vs));
+        showLiveToast(`Stage moved to ${stageLabel(snap.stage)}`);
+      }
+      if (snap.proposal && prev.proposal) {
+        if (snap.proposal.signed_at && !prev.proposal.signed_at) {
+          setProposalData((p) => (p ? { ...p, signed_name: snap.proposal.signed_name, signed_at: snap.proposal.signed_at } : p));
+          showLiveToast(`Agreement signed${snap.proposal.signed_name ? ` by ${snap.proposal.signed_name}` : ""}`);
+        }
+        if (snap.proposal.accepted_options.length > prev.proposal.accepted_options.length) {
+          showLiveToast("Proposal option accepted");
+        }
+        if (snap.proposal.pcp_agreed_at && !prev.proposal.pcp_agreed_at) {
+          showLiveToast("PCP agreement approved");
+        }
+        if (snap.proposal.tech_signed_name && !prev.proposal.tech_signed_name) {
+          showLiveToast(`Work order accepted by ${snap.proposal.tech_signed_name}`);
+        }
+      }
+      if (snap.paymentsCount > prev.paymentsCount) {
+        const added = snap.paymentsConfirmedTotal - prev.paymentsConfirmedTotal;
+        showLiveToast(added > 0 ? `Payment received — ${money(added)}` : "Payment submitted, awaiting confirmation");
+      } else if (snap.paymentsConfirmedTotal > prev.paymentsConfirmedTotal) {
+        showLiveToast("Payment confirmed — balance updated");
+      }
+      let acceptanceChanged = false;
+      for (const key of Object.keys(snap.acceptances || {})) {
+        if (snap.acceptances[key] && !prev.acceptances?.[key]) {
+          acceptanceChanged = true;
+          showLiveToast(`${key === "site_survey" ? "Site survey" : key === "mockup" ? "Mockup" : key} approved`);
+        }
+      }
+      if (acceptanceChanged) refreshAcceptances();
+      if (snap.completed_at && !prev.completed_at) {
+        setLocalProj((p) => ({ ...p, completed_at: snap.completed_at }));
+        showLiveToast("Project marked complete 🎉");
+      }
+    }
+    poll();
+    const id = setInterval(poll, 8000);
+    document.addEventListener("visibilitychange", poll);
+    return () => { live = false; clearInterval(id); document.removeEventListener("visibilitychange", poll); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.access_id]);
   const [hCollapsed, setHCollapsed]     = useState(true);
   const [mapHidden, setMapHidden]       = useState(true);
   const [hEditing,   setHEditing]       = useState(false);
@@ -2412,6 +2483,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       />
       {/* Activity Log hidden per owner (2026-07-07) — it's demo data anyway; bring back once
           the real per-project event feed exists. Component + styles kept: <ActivityLog view={view} /> */}
+
+      {/* Live-update toast — something changed on the other end (staff moved the stage, the
+          customer signed/paid/approved) while this page was open. Picked up by the poll above. */}
+      {liveToast && (
+        <div className="live-toast">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {liveToast}
+        </div>
+      )}
     </>
   );
 }
@@ -3102,6 +3182,12 @@ const PV_CSS = `
 .pvx .stage-toast-cancel:hover{color:var(--ink);border-color:var(--gold)}
 .pvx .stage-toast-missing{background:#faf4e8;border:1px solid rgba(201,169,110,.3);border-top:none;padding:8px 14px 11px;font-size:.8rem;color:#8a5f00;line-height:1.5}
 .pvx .stage-toast-missing .stm-label{font-weight:700;color:#c0392b}
+
+/* Live-update toast — a remote change (staff or the other party) picked up by the poll */
+.pvx .live-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:11000;background:#0B0F1A;color:#fff;font-size:.82rem;font-weight:700;padding:11px 20px;border-radius:100px;box-shadow:0 12px 34px rgba(0,0,0,.32);display:flex;align-items:center;gap:8px;max-width:90vw}
+.pvx .live-toast svg{color:#5FB88A;flex-shrink:0}
+@keyframes liveToastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+.pvx .live-toast{animation:liveToastIn .22s ease}
 
 /* Progress bar — mobile snap-scroll (≤640px only, desktop untouched) */
 @media(max-width:640px){

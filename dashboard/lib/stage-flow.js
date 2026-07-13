@@ -11,9 +11,10 @@ export const MASTER_ORDER = [
   "schedule", "install", "qc", "payment", "completion",
 ];
 
-// Stages the server may auto-advance out of once every requirement passes. Later stages
-// (install/qc/payment/completion) involve field work and stay manual on purpose.
-export const AUTO_STAGES = new Set(["inquiry", "site_survey", "proposal", "approval_deposit"]);
+// Stages the server may auto-advance out of once every requirement passes. `schedule`/
+// `install`/`qc` involve field work a human must verify and stay manual on purpose. `payment`
+// is a pure financial fact (balance is $0 or it isn't) so it auto-advances to completion too.
+export const AUTO_STAGES = new Set(["inquiry", "site_survey", "proposal", "approval_deposit", "payment"]);
 
 export const STAGE_FLOW = {
   inquiry: [
@@ -46,7 +47,7 @@ export const STAGE_FLOW = {
     { label: "Customer walkthrough / acceptance signed", who: "customer" },
   ],
   payment: [
-    { label: "Final balance paid", who: "customer" },
+    { label: "Final balance paid", who: "customer", check: (p) => !!p.final_balance_paid },
   ],
   completion: [
     { label: "Completion documents generated", who: "internal" },

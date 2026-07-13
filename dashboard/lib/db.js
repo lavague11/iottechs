@@ -5,6 +5,7 @@ import path from "node:path";
 import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES } from "./stage-flow.js";
 import { toolHasData, toolFingerprint } from "./tool-data.js";
+import { optionTotals } from "./proposal.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
 // Legacy accounts were a single unsalted SHA-256; verifyPw still accepts those so existing
@@ -915,9 +916,27 @@ export function buildStageFacts(accessId) {
   const p = db.prepare("SELECT * FROM projects WHERE access_id=?").get(String(accessId));
   if (!p) return null;
   const prop = db.prepare(
-    "SELECT status, signed_name, tech_signed_name FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
+    "SELECT * FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
   ).get(String(accessId));
   const pays = db.prepare("SELECT amount, status FROM project_payments WHERE project_access_id=?").all(String(accessId));
+  const confirmedTotal = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+
+  // Final balance paid — same math as the payment portal (accepted option(s) total + approved
+  // add-ons vs. confirmed payments). Lets `payment` auto-advance once the balance is truly $0,
+  // without needing a human to eyeball it.
+  let finalBalancePaid = false;
+  if (prop?.payload && prop.status === "accepted") {
+    try {
+      const payload = typeof prop.payload === "string" ? JSON.parse(prop.payload) : prop.payload;
+      const acceptedIds = (() => { try { const a = JSON.parse(prop.accepted_options || "[]"); return a.length ? a : (prop.selected_option ? [prop.selected_option] : []); } catch { return prop.selected_option ? [prop.selected_option] : []; } })();
+      const acceptedOpts = (payload.options || []).filter((o) => acceptedIds.includes(o.id));
+      const shown = acceptedOpts.length ? acceptedOpts : [payload.options[0]];
+      const grand = shown.reduce((s, o) => s + optionTotals(o, prop.tax_rate, payload.discount, prop.deposit_pct, payload.pcp_credit).grand, 0);
+      const addons = getApprovedAddons(accessId);
+      finalBalancePaid = confirmedTotal >= (grand + addons.total) - 0.01;   // cent-rounding slack
+    } catch { finalBalancePaid = false; }
+  }
+
   return {
     stage: p.stage,
     date: p.date,
@@ -931,6 +950,7 @@ export function buildStageFacts(accessId) {
     tech_accepted: !!prop?.tech_signed_name,
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
     deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
+    final_balance_paid: finalBalancePaid,
   };
 }
 // When every requirement of the current stage passes (customer's AND ours), move the
