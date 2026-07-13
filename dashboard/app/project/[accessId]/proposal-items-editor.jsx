@@ -104,6 +104,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const [dragId, setDragId] = useState(null);   // line item being dragged
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
+  // Camera recording system: NVR (+drives) and Displays each collapse to a compact, expandable
+  // summary line via a "Done" button. Start collapsed when already configured (cleaner reopen).
+  const [nvrDone, setNvrDone] = useState(() => (svc.items || []).some((it) => !it.sub && /^NVR/.test(it.name || "")));
+  const [dispDone, setDispDone] = useState(() => (svc.items || []).some((it) => it.displaySlot != null));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   void priceBookVersion; // referenced only to force a recompute of `catalog` above on save
 
@@ -223,9 +227,31 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // not just the ones with a sub-item breakdown (a camera block) but flat rows too (Network
   // Switch, ISP, Control Panel…). NVR/drives are excluded — they live in the sysbar, not here.
   const visibleItems = svc.items.filter((it) => !inSysbar(it));
-  const blockNumOf = {};
-  visibleItems.forEach((it, i) => { blockNumOf[it.id] = i + 1; });
   const svcColor = serviceColor(svc.key);
+
+  // Recording-system groups (camera service only). Each collapses to one numbered summary line.
+  const camMode = svc.key === "camera";
+  const driveItems = camMode ? svc.items.filter((it) => it.slot != null) : [];
+  const displayItems = camMode ? svc.items.filter((it) => it.displaySlot != null) : [];
+  const nvrGroupTotal = nvrItem ? itemTotal(nvrItem) + driveItems.reduce((s, it) => s + itemTotal(it), 0) : 0;
+  const displaysTotal = displayItems.reduce((s, it) => s + itemTotal(it), 0);
+  const nvrCollapsed = camMode && nvrDone && !!nvrItem;
+  const dispCollapsed = camMode && dispDone && displayItems.length > 0;
+  const showNvrPickers = camMode && !nvrCollapsed;              // NVR select + HDD bays
+  const showDispPickers = camMode && !!nvrItem && !dispCollapsed; // Display slots
+  const showSysbar = camMode && (showNvrPickers || showDispPickers);
+  // Collapsed recording-system lines that render as numbered items 1..leadCount above the cameras.
+  const leadRows = [];
+  if (nvrCollapsed) leadRows.push({ key: "nvr", title: `NVR · ${nvrShort(nvrItem.name)}`,
+    sub: driveItems.length ? `${driveItems.length} drive${driveItems.length !== 1 ? "s" : ""}` : "No drives",
+    total: nvrGroupTotal, edit: () => setNvrDone(false) });
+  if (dispCollapsed) leadRows.push({ key: "disp", title: "Displays",
+    sub: `${displayItems.length} display${displayItems.length !== 1 ? "s" : ""}`,
+    total: displaysTotal, edit: () => setDispDone(false) });
+  const leadCount = leadRows.length;
+  // Camera location blocks number AFTER the collapsed recording-system lines (1, 2, then cameras).
+  const blockNumOf = {};
+  visibleItems.forEach((it, i) => { blockNumOf[it.id] = leadCount + i + 1; });
 
   // Drag-to-reorder the numbered line-item blocks. Sysbar items (NVR/drives/displays) keep
   // their spots — only the visible blocks reorder, then the sysbar items are re-appended.
@@ -327,8 +353,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {/* First things first — the recording system: NVR model + a drive picker per HDD bay.
           NVR and each drive show their editable price (and cost, for admin/manager) below the picker. */}
-      {svc.key === "camera" && (
+      {showSysbar && (
         <div className="prop-sysbar">
+          {showNvrPickers && <>
           <div className="prop-slot">
             <span className="prop-slot-lbl">NVR</span>
             <select value={nvrItem?.name || ""} onChange={pickNvr} disabled={readOnly}>
@@ -379,7 +406,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               })}
             </div>
           )}
-          {nvrItem && (
+          {nvrItem && !readOnly && (
+            <button type="button" className="prop-sys-done" onClick={() => setNvrDone(true)}>Done</button>
+          )}
+          </>}
+          {showDispPickers && <>
             <div className="prop-slots">
               {Array.from({ length: 4 }, (_, i) => {
                 const n = i + 1;
@@ -407,7 +438,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 );
               })}
             </div>
+          {displayItems.length > 0 && !readOnly && (
+            <button type="button" className="prop-sys-done" onClick={() => setDispDone(true)}>Done</button>
           )}
+          </>}
           {!nvrItem && camCount > 0 && (
             <span className="prop-sys-hint">Recommended: {camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel</span>
           )}
@@ -432,6 +466,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <span className="r hcell-lt">Total</span><span />
         </div>
       )}
+
+      {/* Collapsed recording-system lines (NVR, Displays) — numbered, expandable via Edit */}
+      {leadRows.map((lr, i) => (
+        <div key={lr.key} className="prop-block prop-sysline">
+          <span className="prop-block-num" style={{ background: svcColor }}>{i + 1}</span>
+          <span className="prop-sysline-name">{lr.title}</span>
+          <span className="prop-sysline-sub">{lr.sub}</span>
+          <span className="prop-sysline-total">{money(lr.total)}</span>
+          {!readOnly && <button type="button" className="prop-mini prop-sysline-edit" onClick={lr.edit}>Edit</button>}
+        </div>
+      ))}
 
       {visibleItems.map((it, idx) => (
         <div key={it.id}

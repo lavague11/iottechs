@@ -145,6 +145,14 @@ const PROP_CSS = `
 .pvx .prop-block:hover .prop-drag-handle{opacity:.7}
 .pvx .prop-block.prop-dragging{opacity:.45}
 .pvx .prop-block.prop-dragover{border-top:2px solid var(--gold);background:var(--bg-tint)}
+/* Recording-system "Done" button + collapsed NVR/Displays summary lines */
+.pvx .prop-sys-done{align-self:center;height:30px;padding:0 16px;border:1px solid var(--gold);border-radius:8px;background:var(--gold);color:#fff;font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pvx .prop-sys-done:hover{background:var(--gold-deep);border-color:var(--gold-deep)}
+.pvx .prop-block.prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}
+.pvx .prop-sysline-name{font-size:.86rem;font-weight:800;color:var(--ink)}
+.pvx .prop-sysline-sub{font-size:.74rem;font-weight:600;color:var(--muted)}
+.pvx .prop-sysline-total{margin-left:auto;font-size:.82rem;font-weight:800;color:var(--ink)}
+.pvx .prop-sysline-edit{flex-shrink:0}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
