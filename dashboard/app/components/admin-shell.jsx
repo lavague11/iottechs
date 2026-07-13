@@ -36,6 +36,7 @@ const NAV_GROUPS = [
   { key: "mgmt-grp", label: "Management", items: [
     { key: "finances",  label: "Finances",  href: "/finances" },
     { key: "expenses",  label: "Expenses",  href: "/expenses" },
+    { key: "pcp",       label: "PCP Ledger", href: "/pcp" },
   ]},
   { key: "cust-grp", label: "Customers", items: [
     { key: "customers", label: "Customers", href: "/customers" },

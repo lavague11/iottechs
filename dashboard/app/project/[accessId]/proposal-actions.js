@@ -13,6 +13,7 @@ import {
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
+  approvePcpAgreement, finalizePcp,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
 import { fetchTracking } from "../../../lib/tracking";
@@ -209,6 +210,28 @@ export async function submitProposalFlagsAction(accessId, flags, note) {
   }
   const row = setProposalCustomerFlags(accessId, flags || {}, note);
   if (!row) return { error: "Proposal isn't open for change requests." };
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+}
+
+// ---- PCP (Performance Credit Program) ----
+// Customer acknowledges the PCP agreement in one click (records their signature). Staff
+// previewing the customer view may also trigger it. Credit stays pending until admin finalizes.
+export async function approvePcpAction(accessId, name, signature) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const row = approvePcpAgreement(accessId, name, signature);
+  if (!row) return { error: "No proposal to attach the PCP agreement to." };
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+}
+// Admin/manager finalizes or adjusts the discretionary credit (approve + attribute grant source).
+export async function finalizePcpAction(accessId, patch) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Unauthorized." };
+  const row = finalizePcp(accessId, patch || {});
+  if (!row) return { error: "No proposal." };
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }

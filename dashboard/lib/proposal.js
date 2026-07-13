@@ -478,6 +478,8 @@ export function sanitizeProposal(row, role) {
     sent_at: row.sent_at, sent_by_name: row.sent_by_name, created_by_name: row.created_by_name,
     change_note: row.change_note, updated_at: row.updated_at, customerFlags,
     signed_name: row.signed_name, signed_at: row.signed_at, signature_data: row.signature_data,
+    pcp_status: row.pcp_status, pcp_agreed_at: row.pcp_agreed_at, pcp_agreement_no: row.pcp_agreement_no,
+    pcp_grant_source: row.pcp_grant_source, pcp_approved_at: row.pcp_approved_at,
     tech_signed_name: row.tech_signed_name, tech_signed_at: row.tech_signed_at,
     accepted_options: (() => { try { return JSON.parse(row.accepted_options || "[]"); } catch { return []; } })(),
     declined_options: (() => { try { return JSON.parse(row.declined_options || "{}"); } catch { return {}; } })(),

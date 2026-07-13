@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction } from "./proposal-actions";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -96,6 +96,17 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     showToast(flagCount ? "Revision requests sent to our team" : "Requests updated");
   }
 
+  async function approvePcp() {
+    if (busy) return;
+    if (preview) { showToast("Preview mode — approval disabled"); return; }
+    setBusy(true); setErr(null);
+    const r = await approvePcpAction(accessId, customerName);
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    if (r.proposal) setP(r.proposal);
+    showToast("PCP agreement approved — thank you");
+  }
+
   if (!p || !p.payload) {
     return (
       <div className="pcv-root">
@@ -130,6 +141,11 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     ? [["Deposit", "Before we begin", 50], ["Final", "Upon completion", 50]]
     : [["Deposit", "Before project start", depositPct], ["Final", "Upon completion", finalPct]];
   const payTerms = PAYMENT_PLANS[payPlan]?.terms || "";
+  // PCP (Performance Credit Program) — a pending, discretionary labor-subtotal credit.
+  const pcpRaw = p.payload.pcp_credit;
+  const pcpPct = (pcpRaw && typeof pcpRaw === "object" && pcpRaw.type === "pct") ? +pcpRaw.value || 0 : 0;
+  const pcpAgreed = !!p.pcp_agreed_at;
+  const pcpApproved = p.pcp_status === "approved";
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
   const propDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   // Customer can accept / decline / request changes while the proposal is out (not a draft
@@ -369,7 +385,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
       <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>
       {t.discount > 0 && <div className="pcv-subtotal-row main"><span>Discount</span><span>−{money(t.discount)}</span></div>}
-      {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit</span><span>−{money(t.pcpCredit)}</span></div>}
+      {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit{pcpApproved ? "" : " (pending)"}</span><span>−{money(t.pcpCredit)}</span></div>}
       {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}
       <div className="pcv-grand"><span>Grand Total</span><span>{money(t.grand)}</span></div>
 
@@ -398,6 +414,35 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       </div>
       {payTerms && <div className="pcv-pay-terms">{payTerms}</div>}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
+
+      {t.pcpCredit > 0 && (
+        <>
+          <div className="pcv-section-hd">Performance Credit Program</div>
+          <div className="pcv-pcp-box">
+            <div className="pcv-pcp-head">
+              <div>
+                <div className="pcv-pcp-title">Pending Performance Credit{pcpPct ? ` · ${pcpPct}%` : ""} <span className="pcv-pcp-amt">−{money(t.pcpCredit)}</span></div>
+                <div className="pcv-pcp-sub">A discretionary job‑performance credit of 2–10% on the labor subtotal, rewarding jobs that run efficiently — fewer visits, prompt payment, easy access, added value to IOT TECHS.</div>
+              </div>
+              <span className={`pcv-pcp-badge ${pcpAgreed ? "ok" : "pending"}`}>{pcpAgreed ? "✓ Agreement approved" : "Pending your approval"}</span>
+            </div>
+            <ul className="pcv-pcp-terms">
+              <li>Shown as a <b>transparent line‑item deduction</b> — never baked into pricing.</li>
+              <li>Must be agreed <b>before work begins</b>; it is not applied retroactively.</li>
+              <li>The credit is <b>pending and discretionary</b> — the final amount is confirmed at completion and may be adjusted if job performance, payment timing, or site conditions differ from what was committed. You'll be notified of any change before final invoicing.</li>
+              <li>Applies to the labor subtotal only. Deposit due before work; balance due on completion.</li>
+            </ul>
+            {pcpAgreed ? (
+              <div className="pcv-pcp-agreed">
+                ✓ Approved{p.pcp_agreement_no ? ` · ${p.pcp_agreement_no}` : ""}{p.pcp_agreed_at ? ` · ${new Date(p.pcp_agreed_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                <span className="pcv-pcp-agreed-note">{pcpApproved ? "Credit confirmed by IOT TECHS." : "Credit remains pending final confirmation at completion."}</span>
+              </div>
+            ) : (
+              <button className="pcv-select pcv-pcp-approve" disabled={busy} onClick={approvePcp}>Approve PCP Agreement</button>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
@@ -575,6 +620,20 @@ const PCV_CSS = `
 .pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:#1c8a45;border-radius:100px;padding:2px 8px;vertical-align:middle}
 .pcv-waived-strike{color:#8a94ad;text-decoration:line-through;text-decoration-color:#1c8a45}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:#2a3050;font-weight:600;line-height:1.45;border-left:3px solid var(--gold,#b08f4f);padding-left:12px}
+.pcv-pcp-box{margin:0 22px;border:1px solid #d8e6dd;background:#f4faf6;border-radius:14px;padding:16px 18px}
+.pcv-pcp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pcv-pcp-title{font-size:.98rem;font-weight:800;color:#12331f}
+.pcv-pcp-amt{color:#1c8a45;font-weight:800}
+.pcv-pcp-sub{font-size:.8rem;color:#3a5346;margin-top:3px;line-height:1.45;max-width:460px}
+.pcv-pcp-badge{flex-shrink:0;font-size:.68rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:4px 11px;border-radius:100px;white-space:nowrap}
+.pcv-pcp-badge.pending{color:#7a4f00;background:#faf0da;border:1px solid #e5cf95}
+.pcv-pcp-badge.ok{color:#fff;background:#1c8a45}
+.pcv-pcp-terms{margin:12px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.pcv-pcp-terms li{font-size:.79rem;color:#2a3f33;line-height:1.4}
+.pcv-pcp-approve{margin-top:14px;background:#1c8a45!important;border-color:#1c8a45!important}
+.pcv-pcp-approve:hover:not(:disabled){background:#166e37!important}
+.pcv-pcp-agreed{margin-top:12px;font-size:.82rem;font-weight:700;color:#12331f;display:flex;flex-direction:column;gap:2px}
+.pcv-pcp-agreed-note{font-size:.76rem;font-weight:500;color:#3a5346}
 .pcv-fineprint{margin:6px 22px 0;font-size:.7rem;color:#4a5270;font-style:italic}
 
 .pcv-accept-box{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:2px solid #C9A96E;

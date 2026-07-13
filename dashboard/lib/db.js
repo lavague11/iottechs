@@ -622,6 +622,14 @@ function init() {
   if (!propCols.includes("tech_signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_name TEXT");    // technician who accepted the work order
   if (!propCols.includes("tech_signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_at TEXT");
   if (!propCols.includes("tech_signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN tech_signature_data TEXT");
+  // Performance Credit Program (PCP): a pending, discretionary labor-subtotal credit that the
+  // customer acknowledges (agreement) and admin finalizes at payment. See lib/proposal PCP.
+  if (!propCols.includes("pcp_status"))       db.exec("ALTER TABLE proposals ADD COLUMN pcp_status TEXT");        // null | pending | approved
+  if (!propCols.includes("pcp_agreed_at"))    db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreed_at TEXT");    // customer acknowledged the agreement
+  if (!propCols.includes("pcp_agreed_sig"))   db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreed_sig TEXT");
+  if (!propCols.includes("pcp_agreement_no")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreement_no TEXT");
+  if (!propCols.includes("pcp_grant_source")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_grant_source TEXT");  // performance | donor | community | company
+  if (!propCols.includes("pcp_approved_at"))  db.exec("ALTER TABLE proposals ADD COLUMN pcp_approved_at TEXT");   // admin finalized
 
   // ---- Payments / deposits recorded against a project (approval & deposit stage) ----
   db.exec(`
@@ -749,7 +757,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v33";
+const DB_VER = "v34";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -1839,6 +1847,45 @@ export function getActiveProposal(accessId) {
 export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
+}
+
+// ---- PCP (Performance Credit Program) ----
+// Customer acknowledges the PCP agreement in one click — records their signature + issues
+// an agreement number. Leaves the credit itself PENDING until admin finalizes at payment.
+export function approvePcpAgreement(accessId, name, signatureData) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  const agrNo = cur.pcp_agreement_no || ("AGR-PCP-" + String(cur.id).padStart(4, "0"));
+  db.prepare(`UPDATE proposals SET pcp_agreed_at=datetime('now','localtime'), pcp_agreed_sig=?, pcp_agreement_no=?,
+              pcp_status=COALESCE(NULLIF(pcp_status,''),'pending'), updated_at=datetime('now','localtime') WHERE id=?`)
+    .run(signatureData || name || null, agrNo, cur.id);
+  return getActiveProposal(accessId);
+}
+// Admin finalizes / adjusts the discretionary credit at the payment stage (status + grant source).
+export function finalizePcp(accessId, { status, grantSource } = {}) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  const st = ["pending", "approved"].includes(status) ? status : (cur.pcp_status || "pending");
+  const gs = grantSource != null ? String(grantSource) : cur.pcp_grant_source;
+  if (st === "approved") {
+    db.prepare("UPDATE proposals SET pcp_status='approved', pcp_grant_source=?, pcp_approved_at=COALESCE(pcp_approved_at, datetime('now','localtime')), updated_at=datetime('now','localtime') WHERE id=?").run(gs, cur.id);
+  } else {
+    db.prepare("UPDATE proposals SET pcp_status=?, pcp_grant_source=?, updated_at=datetime('now','localtime') WHERE id=?").run(st, gs, cur.id);
+  }
+  return getActiveProposal(accessId);
+}
+// Every active proposal carrying a PCP credit — raw rows for the ledger page (amounts computed there).
+export function getPcpLedger() {
+  return db.prepare(`
+    SELECT pr.id, pr.project_access_id, pr.payload, pr.tax_rate, pr.deposit_pct, pr.selected_option,
+           pr.pcp_status, pr.pcp_agreed_at, pr.pcp_agreement_no, pr.pcp_grant_source, pr.pcp_approved_at,
+           pr.status AS proposal_status, pr.updated_at,
+           p.customer, p.stage
+    FROM proposals pr
+    LEFT JOIN projects p ON p.access_id = pr.project_access_id COLLATE NOCASE
+    WHERE pr.status != 'superseded'
+    ORDER BY pr.updated_at DESC
+  `).all().map((r) => ({ ...r }));
 }
 // Insert a fresh draft, or update the payload of the current draft in place.
 // Sent rows are immutable — callers must reviseProposal() first.
