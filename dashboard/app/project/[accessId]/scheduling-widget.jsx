@@ -100,7 +100,7 @@ const Ico = {
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
-export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView }) {
+export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey" }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -116,7 +116,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   }, [accessId]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm]         = useState({
-    title: "IOT TECHS — Site Survey", date:"", time:"10:00",
+    title: defaultTitle, date:"", time:"10:00",
     duration:"60", location: project?.address||"", notes:"", invitees:[],
   });
   const [saving, setSaving]     = useState(false);

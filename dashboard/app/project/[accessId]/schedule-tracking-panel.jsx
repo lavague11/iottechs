@@ -227,8 +227,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   // are normalized into a one-element list on load).
   const [shipments, setShipments] = useState([]);
   const [active, setActive] = useState(0);          // which package the scene shows
-  const [quick, setQuick] = useState("");           // paste-and-go input
-  const [addOpen, setAddOpen] = useState(false);    // "add tracking number" popup
+  const [quick, setQuick] = useState("");           // paste-and-go input, always visible top-right
   const [editIdx, setEditIdx] = useState(null);     // shipment whose details are open
   const [editBuf, setEditBuf] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false); // shipment remove pending confirm
@@ -272,7 +271,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
     // Neutral defaults — the live carrier lookup (or staff) fills the real status/ETA, so we never
     // show a made-up "In Transit" for a package that may already be delivered.
     const ship = { number, carrier: detectCarrier(number), status: "Order Placed", eta: "", note: "" };
-    if (await saveShipments([...shipments, ship])) { setQuick(""); setActive(shipments.length); setAddOpen(false); }
+    if (await saveShipments([...shipments, ship])) { setQuick(""); setActive(shipments.length); }
   }
   function openEdit(i) { setEditIdx(i); setEditBuf({ ...shipments[i] }); }
   async function saveEdit() {
@@ -322,7 +321,11 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
         <div className="stp-track-topbar">
           {shipments.length > 1 && <span className="stp-pkgcount">{shipments.length} Packages</span>}
           {isStaff && !preview && (
-            <button type="button" className="stp-addmini" onClick={() => { setQuick(""); setAddOpen(true); }} title="Add a tracking number">+ Add</button>
+            <div className="stp-quickadd">
+              <input className="stp-quickadd-in" placeholder="Paste tracking #…" value={quick}
+                     onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => e.key === "Enter" && quickAdd()} />
+              <button type="button" className="stp-quickadd-btn" disabled={busy || !quick.trim()} onClick={quickAdd}>{busy ? "…" : "+ Add"}</button>
+            </div>
           )}
         </div>
       )}
@@ -437,23 +440,6 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
       {/* Equipment receiving checklist — imported from the proposal. Shown to everyone (the customer
           gets a read-only view), so it lives outside the staff-only tracking gate. */}
       <ReceivingChecklist accessId={accessId} proposal={proposal} role={role} preview={preview} />
-
-      {/* Add-tracking popup — a tiny modal instead of an always-on paste box. */}
-      {addOpen && (
-        <div className="stp-modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setAddOpen(false); }}>
-          <div className="stp-modal" role="dialog" aria-modal="true">
-            <div className="stp-modal-hd"><b>Add Tracking Number</b><button type="button" className="stp-modal-x" onClick={() => setAddOpen(false)}>✕</button></div>
-            <div className="stp-modal-bd">
-              <input className="stp-input stp-quick-in" autoFocus placeholder="Paste a tracking number…" value={quick}
-                     onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => e.key === "Enter" && quickAdd()} />
-              <div className="stp-modal-row">
-                {quick.trim() ? <span className="stp-quick-carrier">{detectCarrier(quick)}</span> : <span className="stp-modal-hint">We auto-detect the carrier.</span>}
-                <button type="button" className="stp-btn" disabled={busy || !quick.trim()} onClick={quickAdd}>{busy ? "Adding…" : "Add"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -485,16 +471,12 @@ const STP_CSS = `
 .stp-btn.danger{color:#a8442f;border-color:#e0b0a8}
 .stp-btn.danger:hover{background:#fbeceb}
 
-.stp-modal-bg{position:fixed;inset:0;z-index:12000;background:rgba(11,15,26,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
-.stp-modal{width:min(440px,96vw);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 24px 70px rgba(11,15,26,.4)}
-.stp-modal-hd{display:flex;align-items:center;justify-content:space-between;background:#0B0F1A;color:#fff;padding:13px 16px;font-size:.9rem}
-.stp-modal-x{background:none;border:none;color:#9aa1af;font-size:1rem;cursor:pointer}
-.stp-modal-x:hover{color:#fff}
-.stp-modal-bd{padding:16px;display:flex;flex-direction:column;gap:11px}
-.stp-modal-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.stp-modal-hint{font-size:.76rem;color:#8a8f9c}
-.stp-quick{display:flex;gap:8px;align-items:center;background:#f4f7fb;border:1.5px dashed #b9c8de;border-radius:10px;padding:9px 10px}
-.stp-quick-in{flex:1;min-width:150px;font-family:ui-monospace,Consolas,monospace}
+.stp-quickadd{display:flex;gap:6px;align-items:center}
+.stp-quickadd-in{height:30px;width:180px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#0B0F1A;padding:0 10px;font-size:.78rem;font-family:ui-monospace,Consolas,monospace;outline:none}
+.stp-quickadd-in:focus{border-color:#4b6a9b}
+.stp-quickadd-btn{height:30px;padding:0 13px;border:none;border-radius:8px;background:#4b6a9b;color:#fff;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.stp-quickadd-btn:hover{filter:brightness(1.08)}
+.stp-quickadd-btn:disabled{opacity:.5;cursor:default}
 .stp-quick-carrier{flex-shrink:0;font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;border-radius:100px;padding:4px 10px}
 .stp-pkgs{display:flex;gap:8px;flex-wrap:wrap}
 .stp-pkg{display:flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:100px;border:1.5px solid #d9d4ca;background:#fff;color:#4a5270;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
