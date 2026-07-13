@@ -102,6 +102,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
+  const [dragId, setDragId] = useState(null);   // line item being dragged
+  const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
   // eslint-disable-next-line react-hooks/exhaustive-deps
   void priceBookVersion; // referenced only to force a recompute of `catalog` above on save
 
@@ -224,6 +226,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const blockNumOf = {};
   visibleItems.forEach((it, i) => { blockNumOf[it.id] = i + 1; });
   const svcColor = serviceColor(svc.key);
+
+  // Drag-to-reorder the numbered line-item blocks. Sysbar items (NVR/drives/displays) keep
+  // their spots — only the visible blocks reorder, then the sysbar items are re-appended.
+  function moveItem(fromId, toId) {
+    if (!fromId || fromId === toId) return;
+    const vis = visibleItems.slice();
+    const from = vis.findIndex((x) => x.id === fromId);
+    const to = vis.findIndex((x) => x.id === toId);
+    if (from < 0 || to < 0) return;
+    const [m] = vis.splice(from, 1);
+    vis.splice(to, 0, m);
+    patchItems([...vis, ...svc.items.filter(inSysbar)]);
+  }
 
   const row = (it, parent, subIdx) => {
     // Every top-level item is expandable (even a flat $0 line like ISP or Pronto/Meraki) so
@@ -419,7 +434,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       )}
 
       {visibleItems.map((it, idx) => (
-        <div key={it.id} className={`prop-block${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}`} style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}>
+        <div key={it.id}
+             className={`prop-block${!readOnly ? " has-drag" : ""}${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}${dragId === it.id ? " prop-dragging" : ""}${overId === it.id && dragId && dragId !== it.id ? " prop-dragover" : ""}`}
+             style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}
+             onDragOver={!readOnly && dragId ? (e) => { e.preventDefault(); if (overId !== it.id) setOverId(it.id); } : undefined}
+             onDrop={!readOnly && dragId ? (e) => { e.preventDefault(); moveItem(dragId, it.id); setDragId(null); setOverId(null); } : undefined}>
+          {!readOnly && (
+            <span className="prop-drag-handle" draggable title="Drag to reorder"
+                  onDragStart={(e) => { setDragId(it.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", it.id); } catch {} }}
+                  onDragEnd={() => { setDragId(null); setOverId(null); }}>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            </span>
+          )}
           {row(it, null)}
           {open[it.id] && (it.sub || []).map((x, si) => row(x, it, si))}
           {open[it.id] && !readOnly && (

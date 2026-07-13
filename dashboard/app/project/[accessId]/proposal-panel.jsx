@@ -137,7 +137,14 @@ const PROP_CSS = `
 .pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--muted)}
 .pvx .prop-item.sub input:focus{border-color:var(--gold);background:#fff}
 .pvx .prop-item.sub .prop-line-total{color:var(--muted);font-weight:600}
-.pvx .prop-block{border-left:3px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--line)}
+.pvx .prop-block{border-left:3px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--line);position:relative}
+/* Drag-to-reorder line items */
+.pvx .prop-block.has-drag{padding-left:17px}
+.pvx .prop-drag-handle{position:absolute;left:0;top:0;bottom:0;width:17px;display:flex;align-items:center;justify-content:center;color:var(--muted);opacity:.35;cursor:grab}
+.pvx .prop-drag-handle:active{cursor:grabbing}
+.pvx .prop-block:hover .prop-drag-handle{opacity:.7}
+.pvx .prop-block.prop-dragging{opacity:.45}
+.pvx .prop-block.prop-dragover{border-top:2px solid var(--gold);background:var(--bg-tint)}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
