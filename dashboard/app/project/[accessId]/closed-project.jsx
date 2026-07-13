@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import WarpScreen from "../../components/warp-screen";
 import { requestProjectReopenAction } from "./actions";
 
@@ -11,6 +11,13 @@ export default function ClosedProject({ accessId }) {
   const [pending, startTx] = useTransition();
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
+  const [home, setHome] = useState("/");   // logged-in viewers head to their dashboard, not marketing home
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/me").then((r) => r.json()).then((d) => { if (live && d?.user?.home) setHome(d.user.home); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
 
   function reopen() {
     setErr("");
@@ -27,12 +34,12 @@ export default function ClosedProject({ accessId }) {
       subtitle={done ? "Reopen request sent — our team will be in touch to get you moving again." : "This project is closed. Would you like to reopen it?"}
     >
       {done ? (
-        <a href="/" className="warp-btn ghost">Back home</a>
+        <a href={home} className="warp-btn ghost">Back to my dashboard</a>
       ) : (
         <>
           <button className="warp-btn" onClick={reopen} disabled={pending}>{pending ? "Sending…" : "Reopen this project"}</button>
           {err && <div className="warp-note" style={{ color: "#f2a3a3" }}>{err}</div>}
-          <a href="/" className="warp-btn ghost">Not now</a>
+          <a href={home} className="warp-btn ghost">Not now</a>
         </>
       )}
     </WarpScreen>

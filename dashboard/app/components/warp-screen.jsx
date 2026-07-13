@@ -7,9 +7,11 @@ import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 // on "access granted" (gateway-pin-canvas startWarp): the starfield spirals into a gold-ringed
 // black hole, flashes, and drops to a black void. Once the warp lands, the message + actions
 // fade in over it. Used for the wrong-dimension 404 and the closed-project "missed your train".
-export default function WarpScreen({ eyebrow, title, subtitle, children }) {
+export default function WarpScreen({ eyebrow, title, subtitle, children, onArrive }) {
   const canvasRef = useRef(null);
   const ctrlRef = useRef(null);
+  const arriveRef = useRef(onArrive);
+  arriveRef.current = onArrive;
   const [arrived, setArrived] = useState(false);
 
   useEffect(() => {
@@ -17,8 +19,9 @@ export default function WarpScreen({ eyebrow, title, subtitle, children }) {
     ctrlRef.current = ctrl;
     // Let the network breathe for a beat, then fall into the black hole.
     const t1 = setTimeout(() => ctrl.startWarp && ctrl.startWarp(), 500);
-    // The warp resolves to a black void around ~1.6s — reveal the message then.
-    const t2 = setTimeout(() => setArrived(true), 1900);
+    // The warp resolves to a black void around ~1.6s — reveal the message then, and let the
+    // caller kick off anything timed to the arrival (e.g. the 404's countdown-to-dashboard).
+    const t2 = setTimeout(() => { setArrived(true); arriveRef.current && arriveRef.current(); }, 1900);
     return () => { clearTimeout(t1); clearTimeout(t2); ctrl.cleanup && ctrl.cleanup(); };
   }, []);
 
