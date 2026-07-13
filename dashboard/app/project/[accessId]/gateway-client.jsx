@@ -13,7 +13,7 @@ import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
 import ApprovalPanel     from "./approval-panel";
-import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied } from "./survey-approve";
+import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted } from "./survey-approve";
 import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
@@ -302,6 +302,42 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
   );
 }
 
+
+// ---- One step in a stage's numbered tool flow ----
+// A rail bubble (✓ when done, else the step number) beside the tool card, so a stage's tools read
+// as a guided 1-2-3 rhythm anyone can follow: done → collapsed check, active → open with a "Your
+// next step" glow, upcoming → dimmed & collapsed. Re-flows automatically as steps complete.
+function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, children }) {
+  const [open, setOpen] = useState(status === "active");
+  useEffect(() => { setOpen(status === "active"); }, [status]);   // a completed step collapses, the next opens
+  const isDone = status === "done";
+  return (
+    <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
+      <div className="flow-rail">
+        <span className="flow-node">
+          {isDone
+            ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            : n}
+        </span>
+        {n < total && <span className="flow-line" />}
+      </div>
+      <div className="flow-card pv-tool-panel">
+        <div className="pv-tool-head">
+          <button type="button" className="pv-tool-toggle" onClick={() => setOpen((v) => !v)}>
+            <span className="pv-tool-icon">{icon}</span>
+            <span className="pv-tool-title">{title}</span>
+            <span className="pv-tool-sub">{sub}</span>
+            {status === "active" && <span className="flow-next-tag">Your next step</span>}
+            {chip}
+          </button>
+          {headerAction}
+          <button type="button" className="pv-tool-chev-btn" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
+        </div>
+        {open && <div className="pv-tool-body">{children}</div>}
+      </div>
+    </div>
+  );
+}
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
@@ -1598,8 +1634,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [showNoteBox,    setShowNoteBox]    = useState(false);
   const [attSaving,      setAttSaving]      = useState(false);
   const [schedOpen,  setSchedOpen]  = useState(true);
-  const [ssOpen,     setSsOpen]     = useState(false);
-  const [mockupOpen, setMockupOpen] = useState(false);
+  // Survey/mockup tool open state now lives inside each <FlowStep> (driven by its done/active status).
   // null | "customer" | "tech" — admin/manager can preview the page as either role. Lifted to
   // GatewayClient so the masthead pill and this subheader eye share one source of truth.
   const setPreviewRole = onPreviewRole || (() => {});
@@ -2311,71 +2346,62 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           if (isCust && acceptLoaded && !svMeta.has && !mkMeta.has) {
             return <SmoothSailing preview={!!previewRole} onContinue={() => browse("proposal")} />;
           }
+          // Numbered tool flow: survey → mockup, each a step that's done / active / upcoming.
+          // "Done" = customer approved (or, for staff building, submitted) AND the tool hasn't
+          // changed since — toolAccepted() is fingerprint-aware, so editing a tool after approval
+          // re-opens its step (matches the "review & approve again" gate).
+          const order = [];
+          if (showSurvey) order.push("survey");
+          if (showMockup) order.push("mockup");
+          const doneMap = {
+            survey: isCust ? toolAccepted(svMeta, acceptances.site_survey) : toolAccepted(svMeta, acceptances.submit_site_survey),
+            mockup: isCust ? toolAccepted(mkMeta, acceptances.mockup)      : toolAccepted(mkMeta, acceptances.submit_mockup),
+          };
+          const firstActive = order.find((k) => !doneMap[k]);
+          const stepStatus  = (k) => (doneMap[k] ? "done" : k === firstActive ? "active" : "upcoming");
+          const stepNum     = (k) => order.indexOf(k) + 1;
+          const stepTotal   = order.length;
           return (
-        <div className="pv-survey-tools">
+        <div className="pv-survey-tools flow-wrap">
           {/* Site Survey tool */}
           {showSurvey && (
-          <div className="pv-tool-panel" style={{ "--tool-c": "#C9A96E" }}>
-            <div className="pv-tool-head">
-              <button type="button" className="pv-tool-toggle" onClick={()=>setSsOpen(v=>!v)}>
-                <span className="pv-tool-icon">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                </span>
-                <span className="pv-tool-title">Site Survey</span>
-                <span className="pv-tool-sub">Floor plans · Device placement · Multi-floor · Auto-save</span>
-                {svMeta.has && isCust && <span className="pv-tool-chip go">Review &amp; approve</span>}
-              </button>
-              <ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
+            <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E"
+              icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
+              title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
+              chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
+              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />}>
+              <SiteSurveyWidget
+                accessId={lp.access_id}
+                view={view}
+                customerView={!!previewRole}
+                noApproval
+                customerName={lp.contact_name || lp.customer}
+              />
+              <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
-              <button type="button" className="pv-tool-chev-btn" onClick={()=>setSsOpen(v=>!v)}>{ssOpen?"▲":"▼"}</button>
-            </div>
-            {ssOpen && (
-              <div className="pv-tool-body">
-                <SiteSurveyWidget
-                  accessId={lp.access_id}
-                  view={view}
-                  customerView={!!previewRole}
-                  noApproval
-                  customerName={lp.contact_name || lp.customer}
-                />
-                <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
-                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
-                <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
-              </div>
-            )}
-          </div>
+              <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
+            </FlowStep>
           )}
 
           {/* Camera Mockup — Admin/Manager/Sales build it; every other role (Customer, Technician, …) sees it read-only. */}
           {showMockup && (
-          <div className="pv-tool-panel" style={{ "--tool-c": "#B084E0" }}>
-            <div className="pv-tool-head">
-              <button type="button" className="pv-tool-toggle" onClick={()=>setMockupOpen(v=>!v)}>
-                <span className="pv-tool-icon">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                </span>
-                <span className="pv-tool-title">Mockups</span>
-                <span className="pv-tool-sub">System diagrams · Product photos · Design references</span>
-                {mkMeta.has && isCust && <span className="pv-tool-chip go">Review &amp; approve</span>}
-              </button>
-              <ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
+            <FlowStep n={stepNum("mockup")} total={stepTotal} status={stepStatus("mockup")} color="#B084E0"
+              icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
+              title="Mockups" sub="System diagrams · Product photos · Design references"
+              chip={mkMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
+              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
+                acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />}>
+              <MockupWidget
+                accessId={lp.access_id}
+                view={view}
+                customerView={!!previewRole}
+                noApproval
+                customerName={lp.contact_name || lp.customer}
+              />
+              <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
                 acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
-              <button type="button" className="pv-tool-chev-btn" onClick={()=>setMockupOpen(v=>!v)}>{mockupOpen?"▲":"▼"}</button>
-            </div>
-            {mockupOpen && (
-              <div className="pv-tool-body">
-                <MockupWidget
-                  accessId={lp.access_id}
-                  view={view}
-                  customerView={!!previewRole}
-                  noApproval
-                  customerName={lp.contact_name || lp.customer}
-                />
-                <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
-                  acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
-              </div>
-            )}
-          </div>
+            </FlowStep>
           )}
 
           {/* Continue — customer only, once everything with data is approved */}
@@ -3572,6 +3598,22 @@ const PV_CSS = `
 .pvx .pv-continue-btn:disabled{opacity:.5;cursor:default}
 .pvx .pv-continue-hint{text-align:center;font-size:.82rem;color:var(--muted);padding:12px;background:var(--bg-tint);border:1px dashed var(--line);border-radius:10px}
 .pvx .pv-tool-panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+/* Numbered tool flow (FlowStep) — the guided 1-2-3 rhythm on a stage. */
+.pvx .flow-wrap{display:flex;flex-direction:column;gap:14px;margin:16px 0}
+.pvx .flow-step{display:flex;gap:14px;align-items:stretch}
+.pvx .flow-rail{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:30px}
+.pvx .flow-node{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.9rem;background:#fff;border:2px solid var(--line);color:var(--muted);margin-top:12px;transition:background .3s,border-color .3s,color .3s;font-family:Menlo,Consolas,monospace}
+.pvx .flow-line{flex:1;width:2px;background:var(--line);margin:8px 0 0;min-height:14px;border-radius:1px}
+.pvx .flow-step.done .flow-node{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
+.pvx .flow-step.active .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold));animation:flowPulse 1.9s ease-in-out infinite}
+.pvx .flow-step.upcoming .flow-node{opacity:.45}
+@keyframes flowPulse{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.16)}50%{box-shadow:0 0 0 6px rgba(201,169,110,0)}}
+.pvx .flow-card{flex:1;min-width:0;transition:opacity .3s,box-shadow .3s}
+.pvx .flow-step.active .flow-card{box-shadow:0 0 0 2px var(--tool-c,var(--gold)),0 8px 22px -10px rgba(201,169,110,.45)}
+.pvx .flow-step.upcoming .flow-card{opacity:.55}
+.pvx .flow-step.upcoming .flow-card:hover{opacity:1}
+.pvx .flow-step.done .flow-card{opacity:.92}
+.pvx .flow-next-tag{flex-shrink:0;font-size:.6rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:100px;background:var(--tool-c,var(--gold));color:#fff;white-space:nowrap}
 .pvx .pv-tool-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 18px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .pvx .pv-tool-head:hover{background:var(--bg-soft)}
 .pvx .pv-tool-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
