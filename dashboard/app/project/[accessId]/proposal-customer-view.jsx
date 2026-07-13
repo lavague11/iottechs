@@ -74,27 +74,30 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   }, [menuFor]);
 
   const flagCount = Object.keys(flags).length;
-  const flagsDirty = savedFlagsKey !== JSON.stringify(flags);
   function openMenu(id) { setMenuFor(id); setMenuNote(flags[id]?.note || ""); }
-  function applyFlag(id, type) {
-    setFlags((f) => ({ ...f, [id]: { type, note: menuNote.trim() } }));
-    setMenuFor(null); setMenuNote("");
-    showToast(type === "remove" ? "Flagged to remove — send when ready" : "Change requested — send when ready");
-  }
-  function clearFlag(id) {
-    setFlags((f) => { const n = { ...f }; delete n[id]; return n; });
-    setMenuFor(null); setMenuNote("");
-    showToast("Flag cleared");
-  }
-  async function sendFlags() {
-    if (busy) return;
+  // A per-line request (removal or relocation) files immediately — mark it, then send to the team.
+  // The customer never deletes anything; staff review each request and action it on the proposal.
+  async function submitFlags(next, toast) {
+    setFlags(next); setMenuFor(null); setMenuNote("");   // optimistic mark
+    if (preview) { showToast("Preview mode — requests disabled"); return; }
     setBusy(true); setErr(null);
-    const r = await submitProposalFlagsAction(accessId, flags);
+    const r = await submitProposalFlagsAction(accessId, next);
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);
-    setReviseMode(false); setMenuFor(null);
-    showToast(flagCount ? "Revision requests sent to our team" : "Requests updated");
+    setFlags(r.proposal?.customerFlags || {});   // adopt the server-stored set as the new base
+    showToast(toast);
+  }
+  // Base each edit on the server-confirmed set (p.customerFlags), never a possibly-stale render
+  // closure — so a request never silently wipes the other flags.
+  function applyFlag(id, type) {
+    const base = { ...(p.customerFlags || {}) };
+    submitFlags({ ...base, [id]: { type, note: menuNote.trim() } },
+      type === "remove" ? "Removal request sent to our team" : "Relocation request sent to our team");
+  }
+  function clearFlag(id) {
+    const n = { ...(p.customerFlags || {}) }; delete n[id];
+    submitFlags(n, "Request withdrawn");
   }
 
   async function approvePcp() {
@@ -156,6 +159,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // reduces to the next-step button (the signature block below is the record).
   const locked = !!p.signed_name && acceptedSet.size > 0;
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
+  // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
+  // ✕ on each line), or a signed one they've put into "Request Modification" mode.
+  const canReq = canAct || reviseMode;
 
   // Accept toggles an option; customers may accept more than one (A + C, etc.). Accepting opens
   // the signature pop-up first (acceptance must be signed); removing an already-accepted option
@@ -343,8 +349,16 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                         {it.waived && <span className="pcv-waived-chip">Waived</span>}
                         {flags[it.id] && (
                           <span className={`pcv-flag-chip ${flags[it.id].type}`}>
-                            {flags[it.id].type === "remove" ? "Remove" : "Change"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
+                            {flags[it.id].type === "remove" ? "Removal requested" : "Relocation requested"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
                           </span>
+                        )}
+                        {/* Direct per-line request control — the customer can't delete; the ✕ files a
+                            removal/relocation request for the team. Shows a ↩ once a request is on. */}
+                        {canReq && (
+                          <button type="button" className={`pcv-x${flags[it.id] ? " on" : ""}`} title="Request removal or relocation"
+                                  aria-label="Request removal or relocation" onClick={(e) => { e.stopPropagation(); openMenu(it.id); }}>
+                            {flags[it.id] ? "↩" : "✕"}
+                          </button>
                         )}
                       </span>
                       <span className="r">{hasSub ? "1" : (it.qty ?? 1)}</span>
@@ -352,16 +366,17 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                       <span className="r b">{it.waived ? <s className="pcv-waived-strike">{money(itemTotal({ ...it, waived: false }))}</s> : money(itemTotal(it))}</span>
                     </div>
 
-                    {reviseMode && menuFor === it.id && (
+                    {menuFor === it.id && (
                       <div className="pcv-linemenu" onClick={(e) => e.stopPropagation()}>
                         <div className="pcv-linemenu-title">{titleCase(it.name)}</div>
                         <textarea className="pcv-linemenu-note" rows={2} placeholder="Add a note for our team (optional)…"
                                   value={menuNote} onChange={(e) => setMenuNote(e.target.value)} />
                         <div className="pcv-linemenu-actions">
-                          <button type="button" className="pcv-lm-btn change" onClick={() => applyFlag(it.id, "change")}>Request Change</button>
-                          <button type="button" className="pcv-lm-btn remove" onClick={() => applyFlag(it.id, "remove")}>Remove Item</button>
-                          {flags[it.id] && <button type="button" className="pcv-lm-btn clear" onClick={() => clearFlag(it.id)}>Clear</button>}
+                          <button type="button" className="pcv-lm-btn remove" onClick={() => applyFlag(it.id, "remove")}>Request Removal</button>
+                          <button type="button" className="pcv-lm-btn change" onClick={() => applyFlag(it.id, "change")}>Request Relocation</button>
+                          {flags[it.id] && <button type="button" className="pcv-lm-btn clear" onClick={() => clearFlag(it.id)}>Withdraw</button>}
                         </div>
+                        <div className="pcv-linemenu-foot">Nothing is deleted — our team reviews and updates the proposal.</div>
                       </div>
                     )}
 
@@ -451,11 +466,8 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-accept-box">
         {reviseMode ? (
           <div className="pcv-send-bar">
-            <span className="pcv-send-count">{flagCount} item{flagCount !== 1 ? "s" : ""} flagged for revision</span>
-            <button className="pcv-btn" onClick={() => { setReviseMode(false); setFlags(p.customerFlags || {}); setMenuFor(null); }}>Cancel</button>
-            <button className="pcv-select" disabled={busy || !flagsDirty} onClick={sendFlags}>
-              {flagCount ? `Send ${flagCount} Request${flagCount !== 1 ? "s" : ""} →` : "No changes"}
-            </button>
+            <span className="pcv-send-count">{flagCount ? `${flagCount} item${flagCount !== 1 ? "s" : ""} requested — our team is reviewing.` : "Tap ✕ on any line to request its removal or relocation."}</span>
+            <button className="pcv-select" onClick={() => { setReviseMode(false); setMenuFor(null); }}>Done</button>
           </div>
         ) : (
           <>
@@ -698,7 +710,7 @@ const PCV_CSS = `
 .pcv-row.flagged.flag-remove .pcv-rowdesc{color:#8c2f2f}
 .pcv-row.flagged.flag-remove{background:#fbeceb}
 .pcv-row.flagged.flag-change{background:#fdf5e3}
-.pcv-flag-chip{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:100px;font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle}
+.pcv-flag-chip{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:100px;font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-flag-chip.remove{background:#8c2f2f;color:#fff}
 .pcv-flag-chip.change{background:#C9A96E;color:#0B0F1A}
 
@@ -712,6 +724,11 @@ const PCV_CSS = `
 .pcv-lm-btn.remove{background:#8c2f2f;border-color:#8c2f2f;color:#fff}
 .pcv-lm-btn.clear{color:#6f7686}
 .pcv-lm-btn:hover{filter:brightness(1.05)}
+.pcv-linemenu-foot{font-size:.68rem;color:#8a8578;line-height:1.4}
+/* Per-line request control — a quiet ✕ that files a request (never a real delete); flips to ↩ once set. */
+.pcv-x{margin-left:auto;flex-shrink:0;width:22px;height:22px;border-radius:6px;border:1px solid #d9d4ca;background:#fff;color:#8c2f2f;font-size:.8rem;font-weight:800;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;transition:background .12s,border-color .12s}
+.pcv-x:hover{background:#fbeceb;border-color:#8c2f2f}
+.pcv-x.on{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
 
 .pcv-accept-actions{display:flex;gap:10px;flex-wrap:wrap}
 .pcv-accept-actions .pcv-select{flex:1;min-width:200px}
