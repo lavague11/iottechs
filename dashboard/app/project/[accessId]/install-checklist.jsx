@@ -33,7 +33,7 @@ const CAMERA_BULK = [
 let _cid = 0;
 const newId = () => `c${Date.now().toString(36)}${_cid++}`;
 
-export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName }) {
+export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress }) {
   const isCustomer = role === "customer";
   const canEdit  = !readOnly && !isCustomer;   // tech / admin / manager may mark + add + delete
   const canPrice = !isCustomer;                // can SEE pricing (tech + office)
@@ -255,6 +255,10 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const doneSteps  = items.reduce((a, it) => a + doneOf(it), 0);
   const stepPct = totalSteps ? Math.round((doneSteps / totalSteps) * 100) : 0;
   const allDone = totalSteps > 0 && doneSteps === totalSteps;
+  // Report completion up so the stage's tool-flow step can flip to a green check when every
+  // device is fully installed (raw step completion — role-independent, unlike the pay %).
+  const onProgRef = useRef(onProgress); onProgRef.current = onProgress;
+  useEffect(() => { onProgRef.current?.({ allDone, pct: stepPct, items: items.length }); }, [allDone, stepPct, items.length]);
   // Pay-weighted progress: every step is worth its slice of the line's payout, so progress tracks
   // dollars earned, not raw step count. This is the % the tech and office see.
   const payTotalItems = items.reduce((a, it) => a + (payoutOf(it) || 0), 0);

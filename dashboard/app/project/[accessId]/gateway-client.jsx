@@ -1631,6 +1631,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [hSaving,    setHSaving]        = useState(false);
   const [localProj,  setLocalProj]      = useState(project);
   const [localAssignments, setLocalAssignments] = useState(assignments);
+  const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
   const [restricted, setRestricted]     = useState(!!project.restricted);
   const [pendingMove, setPendingMove]   = useState(null);
   const [taOpen, setTaOpen]             = useState(false);
@@ -2492,8 +2493,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={2} total={3} status="active" color="#C9A96E" bare>
-                    <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
+                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" bare>
+                    <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
                   </FlowStep>
                   <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
@@ -2509,8 +2510,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" bare>
             <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
           </FlowStep>
-          <FlowStep n={2} total={3} status={lp.system_qr ? "active" : "open"} color="#C9A96E" bare>
-            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} />
+          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" bare>
+            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
           <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
@@ -2519,8 +2520,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       ) : viewingStage === "install" && cView === "customer" ? (
         // Customer just watches the install progress — no editing, no pricing.
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep n={1} total={2} status="active" color="#C9A96E" bare>
-            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly />
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" bare>
+            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
           <FlowStep n={2} total={2} status="open" color="#B084E0" bare>
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
