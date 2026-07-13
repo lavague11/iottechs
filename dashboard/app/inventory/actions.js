@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { parseToken } from "../../lib/auth";
-import { addInventoryItem, assignInventory, archiveAndDelete, updateQtyForProject, markInventoryUsed } from "../../lib/db";
+import { addInventoryItem, assignInventory, archiveAndDelete, updateQtyForProject, markInventoryUsed, batchReceiveSerials, getItemHistory } from "../../lib/db";
 
 async function requireStaff() {
   const jar   = await cookies();
@@ -13,10 +13,11 @@ async function requireStaff() {
 }
 
 export async function addItemAction(fields) {
-  if (!(await requireStaff())) return { error: "Unauthorized." };
+  const actor = await requireStaff();
+  if (!actor) return { error: "Unauthorized." };
   if (!String(fields?.name || "").trim()) return { error: "Name is required." };
   try {
-    addInventoryItem(fields);
+    addInventoryItem(fields, actor);
     revalidatePath("/inventory");
     return { ok: true };
   } catch {
@@ -24,10 +25,43 @@ export async function addItemAction(fields) {
   }
 }
 
-export async function assignItemAction(id, projectAccessId, qtyForProject) {
+// Scan a batch of serials into an existing item, or into a new item created on the spot.
+export async function batchReceiveAction({ itemId, newItem, serials, sku, tracking }) {
+  const actor = await requireStaff();
+  if (!actor) return { error: "Unauthorized." };
+  const lines = String(serials || "").split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean);
+  if (!lines.length) return { error: "Scan at least one serial." };
+  try {
+    let id = itemId ? Number(itemId) : null;
+    if (!id) {
+      if (!String(newItem?.name || "").trim()) return { error: "Pick an item or name a new one." };
+      id = addInventoryItem({ ...newItem, quantity: 0 }, actor);
+    }
+    const r = batchReceiveSerials(id, lines, { sku, tracking }, actor);
+    if (r.error) return { error: r.error };
+    revalidatePath("/inventory");
+    return { ok: true, added: r.added, skipped: r.skipped };
+  } catch {
+    return { error: "Could not scan in items." };
+  }
+}
+
+export async function getItemHistoryAction(itemId, since) {
   if (!(await requireStaff())) return { error: "Unauthorized." };
   try {
-    assignInventory(id, projectAccessId || null, qtyForProject);
+    const h = getItemHistory(itemId, since || null);
+    if (!h) return { error: "Item not found." };
+    return { ok: true, history: h };
+  } catch {
+    return { error: "Could not load history." };
+  }
+}
+
+export async function assignItemAction(id, projectAccessId, qtyForProject) {
+  const actor = await requireStaff();
+  if (!actor) return { error: "Unauthorized." };
+  try {
+    assignInventory(id, projectAccessId || null, qtyForProject, actor);
     revalidatePath("/inventory");
     return { ok: true };
   } catch {
@@ -47,9 +81,10 @@ export async function updateQtyForProjectAction(id, qty) {
 }
 
 export async function markUsedAction(id, qtyUsed) {
-  if (!(await requireStaff())) return { error: "Unauthorized." };
+  const actor = await requireStaff();
+  if (!actor) return { error: "Unauthorized." };
   try {
-    markInventoryUsed(id, qtyUsed);
+    markInventoryUsed(id, qtyUsed, actor);
     revalidatePath("/inventory");
     return { ok: true };
   } catch {

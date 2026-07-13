@@ -5,63 +5,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
-import { addItemAction, assignItemAction, deleteItemAction, updateQtyForProjectAction, markUsedAction } from "./actions";
+import AddInventoryModal from "./inventory-add-modal";
+import InventoryHistoryModal from "./inventory-history-modal";
+import { assignItemAction, deleteItemAction, updateQtyForProjectAction, markUsedAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
-const CATEGORIES = ["Camera", "NVR", "Storage", "Cabling", "Networking", "Access", "Audio", "Other"];
 
-function AddModal({ projects, onClose, onAdded }) {
-  const [f, setF] = useState({ name: "", category: "Camera", sku: "", quantity: "", unit_cost: "", location: "Warehouse A", project_access_id: "", qty_for_project: "" });
-  const [err, setErr] = useState("");
-  const [pending, startTx] = useTransition();
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-
-  function submit(e) {
-    e.preventDefault();
-    setErr("");
-    startTx(async () => {
-      const res = await addItemAction({ ...f, quantity: Number(f.quantity) || 0, unit_cost: Number(f.unit_cost) || 0, project_access_id: f.project_access_id || null });
-      if (res.error) setErr(res.error);
-      else onAdded();
-    });
-  }
-
-  return (
-    <div className="am-overlay" onClick={(e) => { if (e.target.classList.contains("am-overlay")) onClose(); }}>
-      <div className="am-box">
-        <button className="am-x" onClick={onClose}>×</button>
-        <div className="am-head"><h2>Add Inventory Item</h2><p>Add stock to the warehouse or assign it straight to a project.</p></div>
-        <form className="am-form" onSubmit={submit}>
-          <div className="am-field"><label>Item Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Hikvision 4MP Dome" required /></div>
-          <div className="am-row2">
-            <div className="am-field"><label>Category</label><select className="apx-input" value={f.category} onChange={(e) => set("category", e.target.value)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
-            <div className="am-field"><label>SKU <span className="am-opt">(optional)</span></label><input className="apx-input" value={f.sku} onChange={(e) => set("sku", e.target.value)} placeholder="HK-2143G2" /></div>
-          </div>
-          <div className="am-row2">
-            <div className="am-field"><label>Quantity</label><input className="apx-input" type="number" min="0" value={f.quantity} onChange={(e) => set("quantity", e.target.value)} placeholder="0" required /></div>
-            <div className="am-field"><label>Unit Cost ($)</label><input className="apx-input" type="number" min="0" value={f.unit_cost} onChange={(e) => set("unit_cost", e.target.value)} placeholder="0" /></div>
-          </div>
-          <div className="am-row2">
-            <div className="am-field"><label>Location</label><input className="apx-input" value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="Warehouse A" /></div>
-            <div className="am-field"><label>Assign to Project <span className="am-opt">(optional)</span></label>
-              <select className="apx-input" value={f.project_access_id} onChange={(e) => set("project_access_id", e.target.value)}>
-                <option value="">— In stock —</option>
-                {projects.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer} ({p.access_id})</option>)}
-              </select>
-            </div>
-          </div>
-          {f.project_access_id && (
-            <div className="am-field"><label>Qty for Project <span className="am-opt">(how many go to this project)</span></label>
-              <input className="apx-input" type="number" min="0" value={f.qty_for_project} onChange={(e) => set("qty_for_project", e.target.value)} placeholder="0" />
-            </div>
-          )}
-          {err && <div className="am-err">{err}</div>}
-          <button className="am-submit" type="submit" disabled={pending}>{pending ? "Adding…" : "Add Item"}</button>
-        </form>
-      </div>
-    </div>
-  );
-}
+// Sort options — label + comparator. "assigned"/used pull the project + install progress up.
+const SORTS = {
+  name_az:  { label: "Name A → Z",   cmp: (a, b) => a.name.localeCompare(b.name) },
+  name_za:  { label: "Name Z → A",   cmp: (a, b) => b.name.localeCompare(a.name) },
+  category: { label: "Category",     cmp: (a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name) },
+  qty:      { label: "Quantity ↓",   cmp: (a, b) => (b.quantity || 0) - (a.quantity || 0) },
+  unit:     { label: "Unit cost ↓",  cmp: (a, b) => (b.unit_cost || 0) - (a.unit_cost || 0) },
+  value:    { label: "Value ↓",      cmp: (a, b) => (b.total_value || 0) - (a.total_value || 0) },
+  assigned: { label: "Assigned",     cmp: (a, b) => (a.project_customer || "~").localeCompare(b.project_customer || "~") },
+  used:     { label: "Used / installed ↓", cmp: (a, b) => (b.qty_used || 0) - (a.qty_used || 0) },
+};
 
 function AssignCell({ item, projects }) {
   const [pending, startTx] = useTransition();
@@ -185,15 +145,22 @@ function ShortageAlert({ shortages }) {
 
 export default function InventoryClient({ user, alerts, items, stats, projects, shortages = [] }) {
   const [filter, setFilter] = useState("all");
+  const [cat, setCat]       = useState("all");
+  const [sort, setSort]     = useState("category");
   const [query, setQuery]   = useState("");
   const [adding, setAdding] = useState(false);
+  const [histItem, setHistItem] = useState(null);
   const [pending, startTx]  = useTransition();
   const router = useRouter();
 
+  const categories = Array.from(new Set(items.map((i) => i.category).filter(Boolean))).sort();
   const q = query.trim().toLowerCase();
   const visible = items
     .filter((i) => filter === "all" ? true : filter === "stock" ? !i.project_access_id : !!i.project_access_id)
-    .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q) || (i.project_customer || "").toLowerCase().includes(q));
+    .filter((i) => cat === "all" ? true : (i.category || "") === cat)
+    .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q) || (i.project_customer || "").toLowerCase().includes(q) || (i.serials_blob || "").toLowerCase().includes(q))
+    .slice()
+    .sort((SORTS[sort] || SORTS.category).cmp);
 
   const [delItem, setDelItem] = useState(null);
   function confirmRemoveItem() {
@@ -224,13 +191,22 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
 
         <ShortageAlert shortages={shortages} />
 
-        <div className="sec-head">
+        <div className="sec-head inv-toolbar">
           <div className="filters">
             {[["all", `All (${items.length})`], ["stock", "In Stock"], ["deployed", "Deployed"]].map(([k, lbl]) => (
               <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{lbl}</button>
             ))}
           </div>
-          <input className="apx-input" style={{ maxWidth: 320 }} placeholder="Search item, SKU, project…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="inv-controls">
+            <select className="apx-input inv-sel" value={cat} onChange={(e) => setCat(e.target.value)} title="Filter by category">
+              <option value="all">All categories</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select className="apx-input inv-sel" value={sort} onChange={(e) => setSort(e.target.value)} title="Sort by">
+              {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+            </select>
+            <input className="apx-input inv-search" placeholder="Search item, SKU, serial, project…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
         </div>
 
         <div className="panel mb">
@@ -243,7 +219,10 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
                   return (
                     <tr key={i.id} style={shortage ? { background: "rgba(231,76,60,.03)" } : undefined}>
                       <td>
-                        <div className="name-cell">{i.name}</div>
+                        <button className="inv-name-btn" onClick={() => setHistItem(i)} title="View item history">
+                          {i.name}
+                          {i.serial_count > 0 && <span className="inv-serial-badge" title={`${i.serial_count} serial${i.serial_count !== 1 ? "s" : ""} on file`}>{i.serial_count} SN</span>}
+                        </button>
                         {i.sku && <div className="mono" style={{ color: "var(--muted)", fontSize: ".76rem" }}>{i.sku}{i.location ? ` · ${i.location}` : ""}</div>}
                         {shortage && <div style={{ fontSize: ".72rem", color: "#e74c3c", fontWeight: 700, marginTop: 2 }}>⚠ Qty needed exceeds stock</div>}
                       </td>
@@ -267,7 +246,8 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
         </div>
       </div>
 
-      {adding && <AddModal projects={projects} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); router.refresh(); }} />}
+      {adding && <AddInventoryModal items={items} projects={projects} onClose={() => setAdding(false)} onDone={() => { setAdding(false); router.refresh(); }} />}
+      {histItem && <InventoryHistoryModal item={histItem} onClose={() => setHistItem(null)} />}
 
       <ConfirmDialog
         open={!!delItem}
@@ -302,6 +282,29 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
         .apx .am-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
         .apx .am-submit:disabled{opacity:.6;cursor:not-allowed}
         @media(max-width:620px){.apx .am-row2{grid-template-columns:1fr}}
+        /* Toolbar: category + sort + search */
+        .apx .inv-toolbar{align-items:center;gap:12px;flex-wrap:wrap}
+        .apx .inv-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+        .apx .inv-sel{width:auto;padding:7px 10px;font-size:.82rem;font-weight:600}
+        .apx .inv-search{width:250px;max-width:100%}
+        /* Clickable item name → history */
+        .apx .inv-name-btn{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:0;font-family:inherit;font-size:.9rem;font-weight:700;color:var(--ink);cursor:pointer;text-align:left}
+        .apx .inv-name-btn:hover{color:var(--gold-deep,#8a6d2f)}
+        .apx .inv-serial-badge{font-size:.62rem;font-weight:800;letter-spacing:.03em;color:#3257ff;background:#e8f0fe;border-radius:100px;padding:1px 7px;white-space:nowrap}
+        /* Add modal: Single / Batch tabs + scan box */
+        .apx .am-tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--bg-soft);padding:4px;border-radius:11px}
+        .apx .am-tabs button{flex:1;height:34px;border:none;border-radius:8px;background:none;font-family:inherit;font-size:.85rem;font-weight:800;color:var(--muted);cursor:pointer}
+        .apx .am-tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(14,19,32,.12)}
+        .apx .am-scan{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84rem;line-height:1.5;resize:vertical}
+        .apx .am-scan-meta{display:flex;align-items:center;gap:12px;font-size:.78rem;color:var(--muted);margin-top:5px}
+        .apx .am-scan-meta strong{color:var(--ink)}
+        .apx .am-dup{color:#b45309}
+        .apx .am-clear{margin-left:auto;background:none;border:none;color:var(--muted);font-family:inherit;font-size:.76rem;font-weight:700;cursor:pointer;text-decoration:underline}
+        .apx .am-ok{font-size:.85rem;color:#1c8a45;background:rgba(28,138,69,.08);padding:8px 12px;border-radius:8px;font-weight:600}
+        .apx .am-batch-actions{display:flex;gap:10px}
+        .apx .am-batch-actions .am-submit{flex:1}
+        .apx .am-done{padding:12px 20px;background:var(--bg-soft);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer}
+        .apx .am-done:hover{background:var(--line)}
       `}</style>
     </AdminShell>
   );

@@ -299,6 +299,40 @@ function init() {
   if (!invCols.includes("qty_for_project")) db.exec("ALTER TABLE inventory ADD COLUMN qty_for_project INTEGER DEFAULT 0");
   if (!invCols.includes("qty_used"))        db.exec("ALTER TABLE inventory ADD COLUMN qty_used INTEGER DEFAULT 0");
 
+  // Serialized units — one row per physical unit scanned in (serial/QR), kept forever.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_units (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id           INTEGER NOT NULL,
+      serial            TEXT,
+      sku               TEXT,
+      tracking          TEXT,
+      status            TEXT DEFAULT 'in_stock',   -- in_stock | assigned | installed | removed
+      project_access_id TEXT,
+      received_at       TEXT DEFAULT (datetime('now')),
+      installed_at      TEXT,
+      note              TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_inv_units_item ON inventory_units(item_id)");
+  // Permanent movement log — every receive/assign/install/remove, never pruned.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_events (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id           INTEGER NOT NULL,
+      unit_id           INTEGER,
+      type              TEXT NOT NULL,             -- created | received | assigned | unassigned | installed | adjusted | removed
+      qty               INTEGER DEFAULT 1,
+      serial            TEXT,
+      project_access_id TEXT,
+      actor_id          INTEGER,
+      actor_name        TEXT,
+      note              TEXT,
+      at                TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_inv_events_item ON inventory_events(item_id)");
+
   const invCount = db.prepare("SELECT COUNT(*) AS n FROM inventory").get().n;
   if (!invCount) {
     const projIds = db.prepare("SELECT access_id FROM projects ORDER BY id LIMIT 3").all().map((r) => r.access_id);
@@ -715,7 +749,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v32";
+const DB_VER = "v33";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -1304,7 +1338,10 @@ const decorateInv = (r) => ({
 
 export function getInventory() {
   return db.prepare(`
-    SELECT i.*, p.customer AS project_customer
+    SELECT i.*, p.customer AS project_customer,
+           (SELECT COUNT(*) FROM inventory_units u WHERE u.item_id = i.id) AS serial_count,
+           (SELECT GROUP_CONCAT(u.serial, ' ') FROM inventory_units u WHERE u.item_id = i.id AND u.serial IS NOT NULL) AS serials_blob,
+           (SELECT MAX(at) FROM inventory_events e WHERE e.item_id = i.id) AS last_activity
     FROM inventory i
     LEFT JOIN projects p ON p.access_id = i.project_access_id COLLATE NOCASE
     ORDER BY i.category, i.name
@@ -1323,36 +1360,115 @@ export function getInventoryStats() {
   return { units, inStock, deployed, value, skus: rows.length };
 }
 
-export function addInventoryItem({ name, category, sku, quantity, unit_cost, location, project_access_id }) {
+// Append to the permanent movement log. Never pruned — this is the "forever" history.
+function logInvEvent({ item_id, unit_id = null, type, qty = 1, serial = null, project_access_id = null, actor = {}, note = null }) {
+  db.prepare(`INSERT INTO inventory_events (item_id, unit_id, type, qty, serial, project_access_id, actor_id, actor_name, note)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(Number(item_id), unit_id, String(type), Number(qty) || 0, serial, project_access_id,
+         actor?.id || null, actor?.name || actor?.email || null, note);
+}
+
+export function addInventoryItem({ name, category, sku, quantity, unit_cost, location, project_access_id }, actor = {}) {
+  const qty = Number(quantity) || 0;
   const info = db.prepare(
     "INSERT INTO inventory (name, category, sku, quantity, unit_cost, location, project_access_id) VALUES (?,?,?,?,?,?,?)"
   ).run(
     String(name || "").trim() || "Item",
     category ? String(category).trim() : null,
     sku ? String(sku).trim() : null,
-    Number(quantity) || 0,
+    qty,
     Number(unit_cost) || 0,
     location ? String(location).trim() : null,
     project_access_id ? String(project_access_id).trim() : null
   );
-  return Number(info.lastInsertRowid);
+  const id = Number(info.lastInsertRowid);
+  logInvEvent({ item_id: id, type: "created", qty, actor, note: qty ? `Added with ${qty} on hand` : null });
+  return id;
 }
 
-export function assignInventory(id, projectAccessId, qtyForProject) {
+// Scan a batch of serial/QR codes into an item: one unit per non-blank line. Duplicates
+// (already on this item, or repeated in the same batch) are skipped. Stock qty grows by
+// the number actually added, and every unit gets a permanent "received" event.
+export function batchReceiveSerials(itemId, serials, opts = {}, actor = {}) {
+  const id = Number(itemId);
+  const item = db.prepare("SELECT * FROM inventory WHERE id = ?").get(id);
+  if (!item) return { error: "Item not found." };
+  const sku      = opts.sku      != null && String(opts.sku).trim()      ? String(opts.sku).trim()      : null;
+  const tracking = opts.tracking != null && String(opts.tracking).trim() ? String(opts.tracking).trim() : null;
+  const existing = new Set(
+    db.prepare("SELECT serial FROM inventory_units WHERE item_id = ? AND serial IS NOT NULL").all(id)
+      .map((r) => String(r.serial).toLowerCase())
+  );
+  const clean = [];
+  const seen = new Set();
+  let raw = 0;
+  for (const s0 of (serials || [])) {
+    const s = String(s0 || "").trim();
+    if (!s) continue;
+    raw++;
+    const key = s.toLowerCase();
+    if (existing.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    clean.push(s);
+  }
+  const insUnit = db.prepare("INSERT INTO inventory_units (item_id, serial, sku, tracking, status) VALUES (?,?,?,?, 'in_stock')");
+  for (const s of clean) {
+    const u = insUnit.run(id, s, sku, tracking);
+    logInvEvent({ item_id: id, unit_id: Number(u.lastInsertRowid), type: "received", qty: 1, serial: s,
+                  actor, note: tracking ? `Tracking ${tracking}` : null });
+  }
+  if (clean.length) db.prepare("UPDATE inventory SET quantity = quantity + ? WHERE id = ?").run(clean.length, id);
+  if (sku && !item.sku) db.prepare("UPDATE inventory SET sku = ? WHERE id = ?").run(sku, id);
+  return { ok: true, added: clean.length, skipped: raw - clean.length };
+}
+
+// Full, date-filterable history for one item — unit list + event timeline + roll-ups.
+export function getItemHistory(itemId, since = null) {
+  const id = Number(itemId);
+  const item = db.prepare(`
+    SELECT i.*, p.customer AS project_customer
+    FROM inventory i LEFT JOIN projects p ON p.access_id = i.project_access_id COLLATE NOCASE
+    WHERE i.id = ?`).get(id);
+  if (!item) return null;
+  const args = [id];
+  let where = "WHERE item_id = ?";
+  if (since) { where += " AND at >= ?"; args.push(String(since)); }
+  // node:sqlite rows have a null prototype — spread into plain objects so they can cross
+  // the server→client boundary (React refuses to serialize null-prototype objects).
+  const events = db.prepare(`
+    SELECT e.*, p.customer AS project_customer
+    FROM inventory_events e LEFT JOIN projects p ON p.access_id = e.project_access_id COLLATE NOCASE
+    ${where} ORDER BY e.at DESC, e.id DESC`).all(...args).map((r) => ({ ...r }));
+  const units = db.prepare(`
+    SELECT u.*, p.customer AS project_customer
+    FROM inventory_units u LEFT JOIN projects p ON p.access_id = u.project_access_id COLLATE NOCASE
+    WHERE u.item_id = ? ORDER BY u.received_at DESC, u.id DESC`).all(id).map((r) => ({ ...r }));
+  const received  = db.prepare("SELECT COALESCE(SUM(qty),0) AS n FROM inventory_events WHERE item_id = ? AND type='received'").get(id).n;
+  const installed = db.prepare("SELECT COUNT(*) AS n FROM inventory_units WHERE item_id = ? AND status='installed'").get(id).n;
+  return { item: decorateInv(item), events, units, totals: { received, installed, serials: units.length, used: item.qty_used || 0 } };
+}
+
+export function assignInventory(id, projectAccessId, qtyForProject, actor = {}) {
+  const pid = projectAccessId ? String(projectAccessId).trim() : null;
+  const qty = pid ? (Number(qtyForProject) || 0) : 0;
   db.prepare("UPDATE inventory SET project_access_id = ?, qty_for_project = ? WHERE id = ?")
-    .run(
-      projectAccessId ? String(projectAccessId).trim() : null,
-      projectAccessId ? (Number(qtyForProject) || 0) : 0,
-      Number(id)
-    );
+    .run(pid, qty, Number(id));
+  logInvEvent({ item_id: Number(id), type: pid ? "assigned" : "unassigned", qty, project_access_id: pid, actor });
 }
 
 export function updateQtyForProject(id, qty) {
   db.prepare("UPDATE inventory SET qty_for_project = ? WHERE id = ?").run(Math.max(0, Number(qty) || 0), Number(id));
 }
 
-export function markInventoryUsed(id, qtyUsed) {
-  db.prepare("UPDATE inventory SET qty_used = ? WHERE id = ?").run(Math.max(0, Number(qtyUsed) || 0), Number(id));
+export function markInventoryUsed(id, qtyUsed, actor = {}) {
+  const prev = db.prepare("SELECT qty_used, project_access_id FROM inventory WHERE id = ?").get(Number(id));
+  const next = Math.max(0, Number(qtyUsed) || 0);
+  db.prepare("UPDATE inventory SET qty_used = ? WHERE id = ?").run(next, Number(id));
+  const delta = next - (prev?.qty_used || 0);
+  if (delta !== 0) {
+    logInvEvent({ item_id: Number(id), type: "installed", qty: delta, project_access_id: prev?.project_access_id || null,
+                  actor, note: `Installed count → ${next}` });
+  }
 }
 
 export function getProjectInventoryShortages() {
