@@ -123,15 +123,21 @@ function init() {
   `);
 
   const uCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
-  if (!uCols.includes("phone"))    db.exec("ALTER TABLE users ADD COLUMN phone TEXT");
-  if (!uCols.includes("username")) db.exec("ALTER TABLE users ADD COLUMN username TEXT");
-  if (!uCols.includes("disabled")) db.exec("ALTER TABLE users ADD COLUMN disabled INTEGER DEFAULT 0");
+  if (!uCols.includes("phone"))        db.exec("ALTER TABLE users ADD COLUMN phone TEXT");
+  if (!uCols.includes("username"))     db.exec("ALTER TABLE users ADD COLUMN username TEXT");
+  if (!uCols.includes("disabled"))     db.exec("ALTER TABLE users ADD COLUMN disabled INTEGER DEFAULT 0");
+  // Lead-capture flows (quick-start, demo request) stamp a placeholder password (phone digits,
+  // or "customer") on the account so it can be PIN-accessed immediately — that's never a password
+  // the customer actually chose. password_set distinguishes "has SOME hash" from "has a password
+  // the account owner deliberately set" so userHasPassword() can tell registration it's still safe
+  // to write their real chosen password, instead of bouncing them with "you already have an account."
+  if (!uCols.includes("password_set")) db.exec("ALTER TABLE users ADD COLUMN password_set INTEGER DEFAULT 0");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
 
   // Seed staff — DO NOTHING if email already exists so admin edits are never overwritten
   const userStmt = db.prepare(
-    "INSERT INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?) ON CONFLICT(email) DO NOTHING"
+    "INSERT INTO users (name, username, email, phone, password_hash, role, password_set) VALUES (?,?,?,?,?,?,1) ON CONFLICT(email) DO NOTHING"
   );
   for (const u of STAFF) {
     userStmt.run(u.name, u.username, u.email, u.phone || null, hashPw(u.password), u.role);
@@ -758,7 +764,7 @@ function makePins(accessId) {
   return { customer, tech };
 }
 
-const DB_VER = "v34";
+const DB_VER = "v35";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -1014,6 +1020,21 @@ export function setUserDisabled(targetId, disabled) {
   db.prepare("UPDATE users SET disabled = ? WHERE id = ?").run(disabled ? 1 : 0, Number(targetId));
 }
 
+// Auto-derive a username from an email's local-part (before @) — the customer's starting
+// handle, editable later via updateUser. Sanitized to lowercase alphanumeric/underscore;
+// de-duplicated with a numeric suffix if another account already claimed it.
+function usernameFromEmail(email) {
+  if (!email) return null;
+  const base = String(email).split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24);
+  if (!base) return null;
+  let candidate = base, n = 1;
+  while (db.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").get(candidate)) {
+    n++;
+    candidate = `${base}${n}`;
+  }
+  return candidate;
+}
+
 function checkUserDuplicates(excludeId, { username, email, phone }) {
   if (username) {
     const row = db.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").get(String(username).trim());
@@ -1034,7 +1055,7 @@ export function createStaffUser({ name, username, email, phone, role, password }
   const normalEmail = email ? String(email).trim().toLowerCase() : null;
   checkUserDuplicates(null, { username, email: normalEmail, phone });
   const info = db.prepare(
-    "INSERT INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)"
+    "INSERT INTO users (name, username, email, phone, password_hash, role, password_set) VALUES (?,?,?,?,?,?,1)"
   ).run(
     String(name || "").trim() || "New User",
     username ? String(username).trim() : null,
@@ -1065,8 +1086,8 @@ export function getUserById(id) {
 // True when the account already has a password set — registration must never overwrite it
 // (that would let anyone take over an existing account by "registering" with its email).
 export function userHasPassword(userId) {
-  const r = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(Number(userId));
-  return !!(r && r.password_hash);
+  const r = db.prepare("SELECT password_set FROM users WHERE id = ?").get(Number(userId));
+  return !!(r && r.password_set);
 }
 
 export function getUserByEmail(email) {
@@ -1150,7 +1171,7 @@ export function updateUser(userId, { name, username, email, phone, password }) {
   if (username !== undefined) { sets.push("username = ?");      vals.push(username || null); }
   if (email    !== undefined) { sets.push("email = ?");         vals.push(normalEmail); }
   if (phone    !== undefined) { sets.push("phone = ?");         vals.push(phone || null); }
-  if (password)               { sets.push("password_hash = ?"); vals.push(hashPw(String(password))); }
+  if (password)               { sets.push("password_hash = ?", "password_set = 1"); vals.push(hashPw(String(password))); }
   if (!sets.length) return;
   vals.push(Number(userId));
   db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
@@ -1217,10 +1238,11 @@ export function createCustomerUser(name, email, phone) {
   const normalPhone = phone ? String(phone).trim() : null;
   const digits = normalPhone ? normalPhone.replace(/\D/g, "") : null;
   const initialPw = digits && digits.length >= 7 ? digits : "customer";
+  // No password_set here either — same placeholder-vs-chosen distinction as createLeadProject.
   try {
     db.prepare(
-      "INSERT OR IGNORE INTO users (name, email, phone, password_hash, role) VALUES (?,?,?,?,?)"
-    ).run(name || "Customer", normalEmail, normalPhone, hashPw(initialPw), "customer");
+      "INSERT OR IGNORE INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)"
+    ).run(name || "Customer", usernameFromEmail(normalEmail), normalEmail, normalPhone, hashPw(initialPw), "customer");
   } catch (_) {}
 }
 
@@ -1239,9 +1261,11 @@ export function createLeadProject(name, email, phone, address, service, company)
   if (!user) {
     const digits = normalPhone ? normalPhone.replace(/\D/g, "") : null;
     const initialPw = digits && digits.length >= 7 ? digits : "customer";
+    // No password_set here — this is a lead-capture placeholder, not the customer's chosen
+    // password. userHasPassword() stays false so registration can still write their real one.
     const info = db.prepare(
-      "INSERT OR IGNORE INTO users (name, email, phone, password_hash, role) VALUES (?,?,?,?,?)"
-    ).run(name || "Customer", normalEmail, normalPhone, hashPw(initialPw), "customer");
+      "INSERT OR IGNORE INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)"
+    ).run(name || "Customer", usernameFromEmail(normalEmail), normalEmail, normalPhone, hashPw(initialPw), "customer");
     user = info.lastInsertRowid
       ? db.prepare("SELECT * FROM users WHERE id = ?").get(Number(info.lastInsertRowid))
       : normalEmail
