@@ -500,7 +500,11 @@
   var SKEY='iottechs_sitesurvey_v2_'+__PID;
   function surveyItems(){try{tagAll();var out=[];floors.forEach(function(f){(f.markers||[]).forEach(function(m){
     out.push({id:'m'+m.id,tag:m._tag,name:titleCase(m.name||TL[m.kind]||m.kind),floor:f.name});});});return out;}catch(e){return [];}}
-  function saveState(){if(__RO)return;try{snapFloor();var d={curFloor:curFloor,theme:theme,pinScale:pinScale,surveyTitle:surveyTitle,floors:floors.map(function(f){return{name:f.name,B:f.B,markers:f.markers,uid:f.uid};})};localStorage.setItem(SKEY,JSON.stringify(d));try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurvey',project:__PID,floorCount:floors.length,items:surveyItems()},'*');}catch(_e){}}catch(e){}}
+  // Any real content on the survey — mirrors the server's surveyHasData() (lib/tool-data.js) so the
+  // client/server agree: a device, an uploaded/satellite background, a room/stroke/note, or 2+ floors.
+  // NB: B.bg defaults to 'blank', so it is NOT content — only B.img/imgSource/sat count as a background.
+  function surveyHasContent(){try{snapFloor();if(floors.length>1)return true;return floors.some(function(f){var b=f.B||{};return (f.markers&&f.markers.length)||b.img||b.imgSource||b.sat||(b.rooms&&b.rooms.length)||(b.strokes&&b.strokes.length)||(b.notes&&b.notes.length);});}catch(e){return false;}}
+  function saveState(){if(__RO)return;try{snapFloor();var d={curFloor:curFloor,theme:theme,pinScale:pinScale,surveyTitle:surveyTitle,floors:floors.map(function(f){return{name:f.name,B:f.B,markers:f.markers,uid:f.uid};})};localStorage.setItem(SKEY,JSON.stringify(d));try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurvey',project:__PID,floorCount:floors.length,items:surveyItems(),hasContent:surveyHasContent()},'*');}catch(_e){}}catch(e){}}
   var _saveT=null;function autoSave(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(saveState,450);}
   function loadState(){try{var s=localStorage.getItem(SKEY);if(!s)return false;var d=JSON.parse(s);if(!d.floors||!d.floors.length)return false;
     floors=d.floors.map(function(f){return{name:(f.name==='Ground Floor'?'Floor Plan 1':f.name),B:f.B,markers:f.markers||[],uid:f.uid||1};});
@@ -1512,7 +1516,7 @@
     }
     __buildTabs();
     // saveState() no-ops in read-only mode, so push the items snapshot separately for the customer approval panel.
-    try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurvey',project:__PID,floorCount:floors.length,items:surveyItems()},'*');}catch(_e){}
+    try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurvey',project:__PID,floorCount:floors.length,items:surveyItems(),hasContent:surveyHasContent()},'*');}catch(_e){}
   }
   (function(){var st=document.createElement('style');
     st.textContent='.iot-embed .ss-trigger,.iot-embed .card-head{display:none!important}'

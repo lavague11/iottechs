@@ -356,7 +356,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
-                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage, pctOverride, justDone }) {
+                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, pctOverride, justDone }) {
 
   let stages = stagesProp || stagesForType(type);
   if (!stagesProp && !stages.some((s) => s.key === projectStage)) stages = STAGES;
@@ -435,13 +435,6 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
               // Use the current step's own label from the (possibly condensed) bar — stageShortLabel
               // only knows master keys, so a phase key like "cx_install" would render raw.
               <span className="pbar-pct-cur"> · {stages[projectIdx]?.short || stages[projectIdx]?.label || stageShortLabel(projectStage)}</span>
-            )}
-            {/* Internal ops signal — how long this stage has been sitting. Never shown to customers. */}
-            {role !== "customer" && daysInStage != null && (
-              <span className={`pbar-age${daysInStage >= 7 ? " red" : daysInStage >= 3 ? " amber" : ""}`}
-                    title="Days in the current stage">
-                {daysInStage}d in stage
-              </span>
             )}
           </span>
         </div>
@@ -1632,6 +1625,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [localProj,  setLocalProj]      = useState(project);
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
+  const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
   const [restricted, setRestricted]     = useState(!!project.restricted);
   const [pendingMove, setPendingMove]   = useState(null);
   const [taOpen, setTaOpen]             = useState(false);
@@ -1982,6 +1976,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {attention && attentionNote && !showNoteBox && (
             <span className="sh-note-preview" title={attentionNote}>"{attentionNote}"</span>
           )}
+          {/* Internal aging signal — how long this stage has sat. Staff only; lives here (not on the
+              progress bar) so it informs without distracting. Amber ≥3d, red ≥7d. */}
+          {cView !== "customer" && !isBrowsing && lp.days_in_stage != null && (
+            <span className={`sh-age${lp.days_in_stage >= 7 ? " red" : lp.days_in_stage >= 3 ? " amber" : ""}`}
+                  title="Days in the current stage">
+              {lp.days_in_stage}d in stage
+            </span>
+          )}
         </div>
         <div className="sh-actions">
           {["admin","manager","tech"].includes(cView) && (
@@ -2103,7 +2105,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         role={cView}
         techSigned={!!proposalData?.tech_signed_name}
         custApproved={proposalData?.status === "accepted" || (proposalData?.accepted_options?.length > 0)}
-        daysInStage={cView !== "customer" ? lp.days_in_stage : null}
         busy={busy}
         toast={jumpToast}
         setToast={setJumpToast}
@@ -2349,6 +2350,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const isCust = cView === "customer";
           const svMeta = toolMeta?.survey || { has: false };
           const mkMeta = toolMeta?.mockup || { has: false };
+          // The office's Submit gates on "has data". Server tool-meta lags a poll behind an edit, so
+          // fold in the widget's live signal — Submit lights up the instant a device/background lands.
+          const svMetaEff = { ...svMeta, has: svMeta.has || surveyHasLocal };
           const showSurvey = isCust ? svMeta.has : true;   // staff always see both to build them
           const showMockup = isCust ? mkMeta.has : true;
           const onApprove = (a) => { setAcceptances(a); setGateMsg(null); refreshAcceptances(); };
@@ -2378,7 +2382,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
               title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
               chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
-              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
+              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />}>
               <SiteSurveyWidget
                 accessId={lp.access_id}
@@ -2386,8 +2390,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerView={!!previewRole}
                 noApproval
                 customerName={lp.contact_name || lp.customer}
+                onHasData={setSurveyHasLocal}
               />
-              <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMeta}
+              <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
               <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
             </FlowStep>
@@ -3349,9 +3354,10 @@ const PV_CSS = `
 .pvx .pbar-pct-bar{background:repeating-linear-gradient(-55deg,var(--role-glow,rgba(201,169,110,.18)) 0,var(--role-glow,rgba(201,169,110,.18)) 6px,transparent 6px,transparent 14px),linear-gradient(90deg,var(--role-glow,rgba(201,169,110,.35)),var(--role-glow,rgba(201,169,110,.18)));border-right:2px solid var(--role-c,var(--gold))}
 .pvx .pbar-pct-label{color:var(--muted)}
 .pvx .pbar-pct-label b{color:var(--role-cd,var(--gold-deep))}
-.pvx .pbar-age{margin-left:8px;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;background:var(--bg-tint);color:#5a6d8a;vertical-align:middle}
-.pvx .pbar-age.amber{background:rgba(224,154,58,.14);color:#8a5f00}
-.pvx .pbar-age.red{background:rgba(231,76,60,.12);color:#c0392b}
+/* Days-in-stage aging chip — lives in the section header (staff only), not on the progress bar. */
+.pvx .sh-age{font-size:.68rem;font-weight:800;padding:2px 9px;border-radius:100px;background:var(--bg-tint);color:#5a6d8a;white-space:nowrap}
+.pvx .sh-age.amber{background:rgba(224,154,58,.14);color:#8a5f00}
+.pvx .sh-age.red{background:rgba(231,76,60,.12);color:#c0392b}
 .pvx .pbar-pct-cur{color:var(--muted)}
 .pvx .stage-expand-inner{background:#faf4e8;border:1px solid rgba(201,169,110,.3);border-top:none}
 .pvx .stage-toast-msg{color:var(--slate)}.pvx .stage-toast-msg b{color:var(--gold-deep)}
