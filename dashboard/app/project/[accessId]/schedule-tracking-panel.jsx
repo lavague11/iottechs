@@ -235,9 +235,8 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   const [shipments, setShipments] = useState([]);
   const [active, setActive] = useState(0);          // which package the scene shows
   const [quick, setQuick] = useState("");           // paste-and-go input, always visible top-right
-  const [editIdx, setEditIdx] = useState(null);     // shipment whose details are open
-  const [editBuf, setEditBuf] = useState(null);
-  const [confirmRemove, setConfirmRemove] = useState(false); // shipment remove pending confirm
+  const [rowEdit, setRowEdit] = useState({});       // per-row in-progress tracking-number edits {i: text}
+  const [confirmRemove, setConfirmRemove] = useState(null); // index of the row pending remove confirm
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState({});             // { number: liveRecord } from the carrier API
   const [liveState, setLiveState] = useState({});   // { number: "loading"|"ok"|"nokey"|"err" }
@@ -280,14 +279,17 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
     const ship = { number, carrier: detectCarrier(number), status: "Order Placed", eta: "", note: "" };
     if (await saveShipments([...shipments, ship])) { setQuick(""); setActive(shipments.length); }
   }
-  function openEdit(i) { setEditIdx(i); setEditBuf({ ...shipments[i] }); }
-  async function saveEdit() {
-    const list = shipments.map((s, i) => (i === editIdx ? { ...editBuf, number: String(editBuf.number || "").trim() } : s));
-    if (await saveShipments(list)) { setEditIdx(null); setEditBuf(null); }
+  // Save an edited tracking number — carrier is re-detected from the number's shape (no manual
+  // carrier/status/date fields; the live lookup fills status + ETA automatically).
+  async function saveRow(i, number) {
+    const num = String(number || "").trim().replace(/\s+/g, "");
+    if (!num || busy) return;
+    const list = shipments.map((s, x) => (x === i ? { ...s, number: num, carrier: detectCarrier(num) } : s));
+    if (await saveShipments(list)) setRowEdit((m) => { const n = { ...m }; delete n[i]; return n; });
   }
   async function removeShipment(i) {
     const list = shipments.filter((_, x) => x !== i);
-    if (await saveShipments(list)) { setEditIdx(null); setEditBuf(null); setActive(0); }
+    if (await saveShipments(list)) { setConfirmRemove(null); setActive(0); }
   }
 
   // Pull the REAL carrier status for a package. Updates the in-memory live record for display and,
@@ -399,45 +401,32 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
           </div>
         )}
 
-        {/* Staff: per-package status rows with inline details */}
+        {/* Staff: one simple editable row per package — carrier badge (auto-detected) + the tracking
+            number (editable) + Save + Remove. Status/ETA come automatically from the carrier. */}
         {isStaff && !preview && shipments.length > 0 && (
           <div className="stp-shiplist">
-            {shipments.map((s, i) => (
-              <div key={s.number + i} className="stp-shiprow-wrap">
-                <div className="stp-shiprow">
-                  <span className="stp-quick-carrier">{s.carrier}</span>
-                  <span className="stp-ship-num">{s.number}</span>
-                  <select className="stp-input slim" value={s.status || "Order Placed"} disabled={busy}
-                          onChange={(e) => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: e.target.value, stage: deriveStage(e.target.value) } : x)))}>
-                    {SHIP_STAGES.map((st) => <option key={st}>{st}</option>)}
-                  </select>
-                  {stageOf(s) !== 4 && (
-                    <button type="button" className="stp-mini stp-delivered" disabled={busy} title="Mark this package delivered"
-                            onClick={() => saveShipments(shipments.map((x, xi) => (xi === i ? { ...x, status: "Delivered", stage: 4 } : x)))}>✓ Delivered</button>
+            {shipments.map((s, i) => {
+              const draft = rowEdit[i] ?? s.number;
+              const dirty = draft.trim().replace(/\s+/g, "") !== s.number;
+              const carrier = detectCarrier(draft) === "Other" ? (s.carrier || "Pkg") : detectCarrier(draft);
+              return (
+                <div key={i} className="stp-shiprow">
+                  <span className="stp-quick-carrier">{carrier}</span>
+                  <input className="stp-input" value={draft}
+                         onChange={(e) => setRowEdit((m) => ({ ...m, [i]: e.target.value }))}
+                         onKeyDown={(e) => { if (e.key === "Enter" && dirty) saveRow(i, draft); }} />
+                  <button type="button" className="stp-btn" disabled={busy || !draft.trim() || !dirty} onClick={() => saveRow(i, draft)}>Save</button>
+                  {confirmRemove === i ? (
+                    <>
+                      <button type="button" className="stp-btn ghost danger" disabled={busy} onClick={() => removeShipment(i)}>Confirm</button>
+                      <button type="button" className="stp-btn ghost" onClick={() => setConfirmRemove(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <button type="button" className="stp-btn ghost danger" disabled={busy} onClick={() => setConfirmRemove(i)}>Remove</button>
                   )}
-                  <button type="button" className="stp-mini" onClick={() => { setConfirmRemove(false); editIdx === i ? setEditIdx(null) : openEdit(i); }}>{editIdx === i ? "Close" : "Details"}</button>
                 </div>
-                {editIdx === i && editBuf && (
-                  <div className="stp-track-edit">
-                    <input className="stp-input" placeholder="Tracking number" value={editBuf.number} onChange={(e) => setEditBuf((v) => ({ ...v, number: e.target.value }))} />
-                    <select className="stp-input" value={editBuf.carrier} onChange={(e) => setEditBuf((v) => ({ ...v, carrier: e.target.value }))}>
-                      <option>UPS</option><option>FedEx</option><option>USPS</option><option>Amazon</option><option>Freight</option><option>Other</option>
-                    </select>
-                    <input className="stp-input" type="date" title="Estimated delivery" value={editBuf.eta || ""} onChange={(e) => setEditBuf((v) => ({ ...v, eta: e.target.value }))} />
-                    <input className="stp-input" placeholder="Note (optional)" value={editBuf.note || ""} onChange={(e) => setEditBuf((v) => ({ ...v, note: e.target.value }))} />
-                    <button type="button" className="stp-btn" disabled={busy} onClick={saveEdit}>Save</button>
-                    {confirmRemove ? (
-                      <>
-                        <button type="button" className="stp-btn ghost danger" disabled={busy} onClick={() => { removeShipment(i); setConfirmRemove(false); }}>Confirm</button>
-                        <button type="button" className="stp-btn ghost" onClick={() => setConfirmRemove(false)}>Cancel</button>
-                      </>
-                    ) : (
-                      <button type="button" className="stp-btn ghost danger" disabled={busy} onClick={() => setConfirmRemove(true)}>Remove</button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -466,8 +455,6 @@ const STP_CSS = `
 .stp-track-ph{font-family:ui-monospace,Consolas,monospace;font-size:.9rem;color:#c2bcae;letter-spacing:.08em;animation:stpShimmer 2.2s ease-in-out infinite}
 @keyframes stpShimmer{0%,100%{opacity:.45}50%{opacity:1}}
 .stp-track-wait span{font-size:.8rem;color:#4a5270}
-.stp-track-edit{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.stp-track-edit .stp-input:first-child{flex:2;min-width:180px}
 .stp-input{height:38px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#0B0F1A;padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
 .stp-input:focus{border-color:#4b6a9b}
 .stp-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:#4b6a9b;color:#fff;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit}
@@ -493,15 +480,11 @@ const STP_CSS = `
 .stp-pkg-n{width:18px;height:18px;border-radius:50%;background:#e6e1d6;color:#4a5270;display:flex;align-items:center;justify-content:center;font-size:.64rem;font-weight:800}
 .stp-pkg.on .stp-pkg-n{background:#C9A96E;color:#0B0F1A}
 .stp-shiplist{display:flex;flex-direction:column;gap:8px}
-.stp-shiprow-wrap{border:1px solid #ece8e0;border-radius:10px;padding:8px 10px;background:#fcfbf8}
-.stp-shiprow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.stp-ship-num{font-family:ui-monospace,Consolas,monospace;font-size:.78rem;color:#0B0F1A;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stp-input.slim{height:30px;font-size:.74rem;padding:0 8px}
+.stp-shiprow{display:flex;align-items:center;gap:8px;border:1px solid #ece8e0;border-radius:10px;padding:8px 10px;background:#fcfbf8}
+.stp-shiprow .stp-input{flex:1;min-width:120px;height:34px;font-family:ui-monospace,Consolas,monospace;font-size:.78rem}
+.stp-shiprow .stp-btn{height:34px;padding:0 14px;font-size:.76rem}
 .stp-mini{height:28px;padding:0 12px;border-radius:100px;border:1px solid #d9d4ca;background:#fff;color:#4a5270;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit}
 .stp-mini:hover{border-color:#4b6a9b;color:#3a4a72}
-.stp-delivered{border-color:#bfe0c9;color:#1d7a3a;font-weight:800}
-.stp-delivered:hover{border-color:#2f7d5a;background:#f2f9f4;color:#1d7a3a}
-.stp-track-edit{margin-top:9px}
 .stp-liverow{display:flex;align-items:center;gap:9px}
 .stp-livedot{width:9px;height:9px;border-radius:50%;background:#c2bcae;flex-shrink:0}
 .stp-livedot.ok{background:#2f7d5a;box-shadow:0 0 0 3px rgba(47,125,90,.16);animation:stpNow 1.8s ease-in-out infinite}
