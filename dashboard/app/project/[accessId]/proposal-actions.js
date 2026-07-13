@@ -302,20 +302,14 @@ export async function signProposalAction(accessId, name, signatureData) {
 // Technician accepts the work order (signs the same way the customer does). On success the tech
 // is assigned to the project. Only techs (via PIN or a tech-role session) may accept, and only
 // their own project when PIN-scoped.
-const firstName = (s) => String(s || "").trim().split(/\s+/)[0].replace(/[()]/g, "").toLowerCase();
-
 export async function acceptWorkOrderAction(accessId, name, signatureData) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
-  if (tok.role !== "tech") return { error: "Only the assigned technician can accept this work order." };
+  if (tok.role !== "tech") return { error: "Only a technician can accept a work order." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your work order." };
   if (!String(name || "").trim()) return { error: "A name is required to sign." };
-  // A tech may accept only an UNASSIGNED job or one already assigned to them — never claim a job
-  // the office assigned to a different technician. That path is a Request Assignment instead.
-  const proj = getJobByAccessId(accessId);
-  if (proj?.tech && firstName(proj.tech) !== firstName(name)) {
-    return { error: `This job is assigned to ${proj.tech}. Request assignment instead.` };
-  }
+  // Any tech may accept — no pre-assignment needed (owner, 2026-07-13). Accepting IS what
+  // assigns them the job; a prior office assignment is simply superseded by whoever signs.
   const row = acceptWorkOrder(accessId, name, signatureData);
   if (!row) return { error: "This work order isn't available to accept yet." };
   const stage = maybeAutoAdvance(accessId);

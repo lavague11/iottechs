@@ -85,11 +85,13 @@ export const masterToCustomerKey = (masterKey) =>
 // status: the word shown in the project-header pill for each phase (Consulting=Pending,
 // Proposal=Reviewing, Install=In Progress, Completion=Finalizing). "Complete"/100% is a
 // separate terminal state reached only once the balance is paid and the system is released.
+// `techLabel` — the technician's wording for the same bar (their phase 2 is accepting the work
+// order, not building the proposal): Survey → Accept → Install → Completion.
 export const PHASES = [
-  { key: "ph_survey",   label: "Consulting",  short: "Consulting",  status: "Pending",     members: ["inquiry", "site_survey"],       primary: "site_survey" },
-  { key: "ph_proposal", label: "Proposal",    short: "Proposal",    status: "Reviewing",   members: ["proposal", "approval_deposit"], primary: "proposal" },
-  { key: "ph_install",  label: "Install",     short: "Install",     status: "In Progress", members: ["schedule", "install"],          primary: "install" },
-  { key: "ph_wrap",     label: "Completion",  short: "Completion",  status: "Finalizing",  members: ["qc", "payment", "completion"],  primary: "qc" },
+  { key: "ph_survey",   label: "Consulting",  short: "Consulting",  techLabel: "Survey",     status: "Pending",     members: ["inquiry", "site_survey"],       primary: "site_survey" },
+  { key: "ph_proposal", label: "Proposal",    short: "Proposal",    techLabel: "Accept",     status: "Reviewing",   members: ["proposal", "approval_deposit"], primary: "proposal" },
+  { key: "ph_install",  label: "Install",     short: "Install",     techLabel: "Install",    status: "In Progress", members: ["schedule", "install"],          primary: "install" },
+  { key: "ph_wrap",     label: "Completion",  short: "Completion",  techLabel: "Completion", status: "Finalizing",  members: ["qc", "payment", "completion"],  primary: "qc" },
 ];
 export const phaseStatusWord = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.status || "Pending";
 export const phaseLabelOf    = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.label || phaseKey;

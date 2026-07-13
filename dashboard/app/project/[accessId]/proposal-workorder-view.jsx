@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
-import { getProposalAction, acceptWorkOrderAction, requestAssignmentAction } from "./proposal-actions";
+import { getProposalAction, acceptWorkOrderAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { TaglinePill } from "../../components/brand";
 
@@ -21,8 +21,6 @@ function itemNameNode(name, outdoor) {
 // internal labor/equipment doc: every line is valued at its TECH price (set by admin at the
 // install stage), never the customer price. Server strips customer price/cost before this ever
 // reaches a tech (see sanitizeProposal role "tech"); this component only ever reads techPrice.
-const firstName = (s) => String(s || "").trim().split(/\s+/)[0].replace(/[()]/g, "").toLowerCase();
-
 export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null }) {
   const [fetched, setFetched] = useState(null);
   const p = fetched || proposal;
@@ -30,15 +28,11 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
   const [signOpen, setSignOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const [reqSent, setReqSent] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const showToast = (m) => { setToast(m); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2600); };
 
-  // This job is claimable by the viewing tech only when it's unassigned or already theirs. If the
-  // office assigned it to a DIFFERENT technician, they can't accept — they request assignment.
-  const isAnotherTechsJob = !!assignedTech && !!signerName && firstName(assignedTech) !== firstName(signerName);
-
+  // Any tech can accept — no pre-assignment gate (owner, 2026-07-13). Signing IS the assignment.
   async function acceptWO(sign) {
     setBusy(true); setErr(null);
     const r = await acceptWorkOrderAction(accessId, sign.name, sign.data);
@@ -48,15 +42,6 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
     onProposalChange?.(r.proposal);   // propagate to the gateway so Install unlocks without reload
     setSignOpen(false);
     showToast("Work order accepted — you're assigned");
-  }
-
-  async function requestAssign() {
-    setBusy(true); setErr(null);
-    const r = await requestAssignmentAction(accessId, signerName || "");
-    setBusy(false);
-    if (r?.error) { setErr(r.error); return; }
-    setReqSent(true);
-    showToast("Assignment request sent to the office");
   }
 
   // Pull current server state on mount so a work order that became available (proposal sent) or
@@ -241,21 +226,6 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
             <span className="pwo-sign-rule" />
             <span className="pwo-sign-cap">Technician Signature</span>
           </div>
-        </div>
-      ) : isAnotherTechsJob ? (
-        <div className="pwo-accept-box">
-          <div className="pwo-assigned-other">
-            <span>This job is assigned to <b>{assignedTech}</b>. You can request to be assigned instead — the office will review.</span>
-          </div>
-          {err && <div className="pwo-err">{err}</div>}
-          {reqSent ? (
-            <div className="pwo-req-sent">Assignment request sent — the office will get back to you.</div>
-          ) : (
-            <button type="button" className="pwo-request-btn" disabled={busy || preview} onClick={requestAssign}>
-              Request Assignment
-            </button>
-          )}
-          {preview && <span className="pwo-preview-note">Requesting is disabled in preview.</span>}
         </div>
       ) : (
         <div className="pwo-accept-box">

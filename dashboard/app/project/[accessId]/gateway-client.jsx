@@ -1744,7 +1744,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // The current-dot marker maps the master projectStage into its phase.
   const masterStages    = stagesForType(project.project_type);   // the real per-type master lifecycle
   const phaseList       = phasesForType(project.project_type);   // the 4 phases present for this type
-  const stageList       = phaseList;                             // the bar renders phases for everyone
+  // The bar renders phases for everyone; technicians get their own wording for the same dots
+  // (Survey → Accept → Install → Completion) since their phase-2 job is accepting the work order.
+  const stageList       = cView === "tech"
+    ? phaseList.map((p) => ({ ...p, label: p.techLabel || p.label, short: p.techLabel || p.short }))
+    : phaseList;
   const barProjectStage = masterToPhaseKey(projectStage);
   const vPhase          = masterToPhaseKey(viewingStage);        // which phase's tools are on screen
   // browse()/gating validate against real master keys; a phase-dot click resolves to a master landing.
@@ -3790,6 +3794,7 @@ const PV_CSS = `
   background:color-mix(in srgb,var(--tool-c,var(--gold)) 14%,#fff);color:color-mix(in srgb,var(--tool-c,var(--gold)) 75%,#000);
   border:1px solid color-mix(in srgb,var(--tool-c,var(--gold)) 35%,transparent);white-space:nowrap}
 .pvx .pv-tool-chip.go{background:#eef7f0;color:#1d5a2e;border-color:#bfe0c9}
+.pvx .pv-tool-chip.warn{background:#fdf0ef;color:#a8442f;border-color:#e0b0a8;cursor:help}
 .pvx .pv-tool-chev{font-size:.7rem;color:var(--muted);flex-shrink:0}
 .pvx .pv-tool-body{border-top:1px solid var(--line);padding:16px 18px}
 /* Customer view toggle */

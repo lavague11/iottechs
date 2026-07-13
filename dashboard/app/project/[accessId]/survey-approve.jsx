@@ -1,6 +1,22 @@
 "use client";
 import { useState } from "react";
-import { acceptStageAction, submitToolAction } from "./proposal-actions";
+import { acceptStageAction, submitToolAction, saveToolDataAction } from "./proposal-actions";
+
+// The tools write to localStorage and mirror to the server on a ~5s poll (tool-sync.js). A Submit
+// clicked inside that window would be rejected server-side ("no data yet") — so before submitting,
+// push the CURRENT local draft up. Makes Submit deterministic instead of racing the autosync.
+const DRAFT_STORE = {
+  site_survey: { tool: "survey", key: (id) => `iottechs_sitesurvey_v2_${id}` },
+  mockup:      { tool: "mockup", key: (id) => `iot_cctv_${id}` },
+};
+async function flushDraft(accessId, stageKey) {
+  const d = DRAFT_STORE[stageKey];
+  if (!d) return;
+  try {
+    const raw = localStorage.getItem(d.key(accessId));
+    if (raw != null) await saveToolDataAction(accessId, d.tool, raw);
+  } catch { /* no localStorage / no access — the server copy is whatever the autosync managed */ }
+}
 
 // Survey-stage approval, data-aware:
 //  - ToolApproveBar sits UNDER a tool (survey / mockup). It only appears when that tool has
@@ -48,6 +64,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
   async function submit(on) {
     if (busy || preview) return;
     setBusy(true); setErr(null);
+    if (on) await flushDraft(accessId, stageKey);   // make sure the server has the latest draft
     const r = await submitToolAction(accessId, stageKey, on);
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
@@ -127,6 +144,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
 // The full bar (below the tool) still handles unsubmit / re-submit / detail.
 export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
   const isOffice = ["admin", "manager", "sales"].includes(role);
   if (!isOffice) return null;                           // customers approve; only office submits
   const label = LABEL[stageKey] || "item";
@@ -138,16 +156,23 @@ export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submiss
   async function go(e) {
     e.stopPropagation();                                // don't toggle the accordion
     if (busy || preview || !hasData) return;
-    setBusy(true);
+    setBusy(true); setErr(null);
+    // The tool's draft may still be local-only (autosync polls every ~5s) — push it up first so
+    // the server sees the same data the office is looking at.
+    await flushDraft(accessId, stageKey);
     const r = await submitToolAction(accessId, stageKey, true);
     setBusy(false);
-    if (!r?.error) onChange?.(r.acceptances);
+    if (r?.error) { setErr(r.error); return; }          // never swallow — show why it didn't submit
+    onChange?.(r.acceptances);
   }
   return (
-    <button type="button" className="pv-tool-submit" disabled={busy || preview || !hasData}
-      onClick={go} title={hasData ? `Submit ${label} for customer review` : `Add to the ${label} first, then submit`}>
-      {busy ? "…" : "Submit"}
-    </button>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      {err && <span className="pv-tool-chip warn" title={err}>!</span>}
+      <button type="button" className="pv-tool-submit" disabled={busy || preview || !hasData}
+        onClick={go} title={err || (hasData ? `Submit ${label} for customer review` : `Add to the ${label} first, then submit`)}>
+        {busy ? "…" : err ? "Retry" : "Submit"}
+      </button>
+    </span>
   );
 }
 
