@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankOption,
   optionTotals, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, loadPriceBook,
+  toastBaselineItems, loadPriceBook, PAYMENT_PLANS,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -213,8 +213,15 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
   const disc = payload.discount || { type: "flat", value: 0 };
+  const pcp = (payload.pcp_credit && typeof payload.pcp_credit === "object") ? payload.pcp_credit : { type: "flat", value: +payload.pcp_credit || 0 };
+  const plan = payload.payment_plan || "custom";
   function setDiscount(patch) { patchPayload({ ...payload, discount: { ...disc, ...patch } }); }
-  function setPcp(v) { patchPayload({ ...payload, pcp_credit: Math.max(0, +v || 0) }); }
+  function setPcp(patch) { patchPayload({ ...payload, pcp_credit: { ...pcp, ...patch } }); }
+  function setPlan(key) {
+    patchPayload({ ...payload, payment_plan: key });
+    const pp = PAYMENT_PLANS[key];
+    if (pp && pp.depositPct != null) { setDepositPct(pp.depositPct); setDirty(true); }
+  }
 
   return (
     <div className="prop-card">
@@ -298,18 +305,18 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       )}
 
 
-      {/* Totals */}
+      {/* Totals — full-width summary at the bottom */}
       <div className="prop-totals">
         <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
         {(!readOnly || totals.discount > 0) && (
           <div className="prop-trow">
             <span>Discount</span>
-            {readOnly ? <b>−{money(totals.discount)}</b> : (
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {readOnly ? <b>{totals.discount > 0 ? `−${money(totals.discount)}` : "—"}</b> : (
+              <span className="prop-adj">
                 <button type="button" className={`prop-tax-btn${disc.type === "flat" ? " on" : ""}`} onClick={() => setDiscount({ type: "flat" })}>$</button>
                 <button type="button" className={`prop-tax-btn${disc.type === "pct" ? " on" : ""}`} onClick={() => setDiscount({ type: "pct" })}>%</button>
                 <input className="tin" type="number" min="0" step="0.01" value={disc.value || 0} onChange={(e) => setDiscount({ value: e.target.value })} />
-                {totals.discount > 0 && <b style={{ color: "var(--green,#1c8a45)", whiteSpace: "nowrap" }}>−{money(totals.discount)}</b>}
+                {totals.discount > 0 && <b className="prop-minus">−{money(totals.discount)}</b>}
               </span>
             )}
           </div>
@@ -317,34 +324,42 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         {(!readOnly || totals.pcpCredit > 0) && (
           <div className="prop-trow">
             <span>PCP Credit</span>
-            {readOnly ? <b>−{money(totals.pcpCredit)}</b> : (
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input className="tin" type="number" min="0" step="0.01" value={payload.pcp_credit || 0} onChange={(e) => setPcp(e.target.value)} />
-                {totals.pcpCredit > 0 && <b style={{ color: "var(--green,#1c8a45)", whiteSpace: "nowrap" }}>−{money(totals.pcpCredit)}</b>}
+            {readOnly ? <b>{totals.pcpCredit > 0 ? `−${money(totals.pcpCredit)}` : "—"}</b> : (
+              <span className="prop-adj">
+                <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 5 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 5 })}>5%</button>
+                <button type="button" className={`prop-tax-btn${pcp.type === "pct" && +pcp.value === 10 ? " on" : ""}`} onClick={() => setPcp({ type: "pct", value: 10 })}>10%</button>
+                <button type="button" className={`prop-tax-btn${pcp.type === "flat" ? " on" : ""}`} onClick={() => setPcp({ type: "flat" })}>$</button>
+                <input className="tin" type="number" min="0" step="0.01" value={pcp.value || 0} onChange={(e) => setPcp({ value: e.target.value })} />
+                {totals.pcpCredit > 0 && <b className="prop-minus">−{money(totals.pcpCredit)}</b>}
               </span>
             )}
           </div>
         )}
         <div className="prop-trow">
-          <span>Tax %</span>
+          <span>Tax</span>
           {readOnly ? <b>{taxRate}%</b> : (
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`}
-                      onClick={() => { setTaxRate(6.625); setDirty(true); }}>NJ</button>
-              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`}
-                      onClick={() => { setTaxRate(8.875); setDirty(true); }}>NY</button>
-              <input className="tin" type="number" min="0" max="30" step="0.01" value={taxRate}
-                     onChange={(e) => { setTaxRate(e.target.value); setDirty(true); }} />
+            <span className="prop-adj">
+              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => { setTaxRate(6.625); setDirty(true); }}>NJ</button>
+              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => { setTaxRate(8.875); setDirty(true); }}>NY</button>
+              <input className="tin" type="number" min="0" max="30" step="0.01" value={taxRate} onChange={(e) => { setTaxRate(e.target.value); setDirty(true); }} />
             </span>
           )}
         </div>
-        <div className="prop-trow grand"><span>Total</span><b>{money(totals.grand)}</b></div>
-        <div className="prop-trow">
-          <span>Deposit %</span>
-          {readOnly ? <b>{depositPct}%</b> :
-            <input className="tin" type="number" min="0" max="100" value={depositPct}
-                   onChange={(e) => { setDepositPct(e.target.value); setDirty(true); }} />}
+
+        <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
+
+        <div className="prop-trow prop-plan-row">
+          <span>Payment plan</span>
+          {readOnly ? <b>{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b> : (
+            <span className="prop-adj">
+              <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
+              <button type="button" className={`prop-plan-btn${plan === "50_30_20" ? " on" : ""}`} onClick={() => setPlan("50_30_20")}>50 / 30 / 20</button>
+              <button type="button" className={`prop-plan-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
+              {plan === "custom" && <input className="tin" type="number" min="0" max="100" value={depositPct} title="Deposit %" onChange={(e) => { setDepositPct(e.target.value); setDirty(true); }} />}
+            </span>
+          )}
         </div>
+        {PAYMENT_PLANS[plan]?.terms && <div className="prop-plan-terms">{PAYMENT_PLANS[plan].terms}</div>}
         <div className="prop-trow"><span>Deposit due</span><b>{money(totals.deposit)}</b></div>
       </div>
 

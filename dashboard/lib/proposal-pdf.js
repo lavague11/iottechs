@@ -1,6 +1,6 @@
 "use client";
 import { jsPDF } from "jspdf";
-import { optionTotals, itemTotal, titleCase, fmtSignStamp } from "./proposal";
+import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS } from "./proposal";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -300,10 +300,22 @@ export function downloadProposalPdf(p, meta = {}) {
 
     const depositPct = +p.deposit_pct || 50;
     const finalPct = 100 - depositPct;
-    const payments = [
-      ["Deposit", "Before project start", depositPct + "%", "$" + money(t.grand * depositPct / 100)],
-      ["Final", "Upon completion", finalPct + "%", "$" + money(t.grand * finalPct / 100)],
-    ];
+    const payPlan = p.payload.payment_plan || "custom";
+    const payments = payPlan === "50_30_20"
+      ? [
+          ["Deposit", "To begin", "50%", "$" + money(t.grand * 0.5)],
+          ["Progress", "At project midpoint", "30%", "$" + money(t.grand * 0.3)],
+          ["Final", "Upon completion (or Net 30)", "20%", "$" + money(t.grand * 0.2)],
+        ]
+      : payPlan === "50_50"
+      ? [
+          ["Deposit", "Before we begin", "50%", "$" + money(t.grand * 0.5)],
+          ["Final", "Upon completion", "50%", "$" + money(t.grand * 0.5)],
+        ]
+      : [
+          ["Deposit", "Before project start", depositPct + "%", "$" + money(t.grand * depositPct / 100)],
+          ["Final", "Upon completion", finalPct + "%", "$" + money(t.grand * finalPct / 100)],
+        ];
     payments.forEach(([phase, trigger, pct, amt], i) => {
       const bg = i % 2 === 0 ? [255, 251, 242] : MIST;
       doc.setFillColor(...bg);
@@ -322,6 +334,12 @@ export function downloadProposalPdf(p, meta = {}) {
       y += 20;
     });
     y += 7.2;
+    const planTerms = PAYMENT_PLANS[payPlan]?.terms;
+    if (planTerms) {
+      doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+      doc.text(doc.splitTextToSize(planTerms, rw), lm, y);
+      y += 12;
+    }
     doc.setFontSize(7.5); doc.setFont("helvetica", "oblique"); doc.setTextColor(74, 82, 112);
     doc.text("Price subject to applicable sales tax. Proposal valid 7 days from issue.", lm, y);
 

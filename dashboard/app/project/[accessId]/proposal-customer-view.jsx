@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
@@ -123,6 +123,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
   const depositPct = +p.deposit_pct || 50;
   const finalPct = 100 - depositPct;
+  const payPlan = p.payload.payment_plan || "custom";
+  const payPhases = payPlan === "50_30_20"
+    ? [["Deposit", "To begin", 50], ["Progress", "At project midpoint", 30], ["Final", "Upon completion (or Net 30)", 20]]
+    : payPlan === "50_50"
+    ? [["Deposit", "Before we begin", 50], ["Final", "Upon completion", 50]]
+    : [["Deposit", "Before project start", depositPct], ["Final", "Upon completion", finalPct]];
+  const payTerms = PAYMENT_PLANS[payPlan]?.terms || "";
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
   const propDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   // Customer can accept / decline / request changes while the proposal is out (not a draft
@@ -382,13 +389,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-section-hd">Payment Terms</div>
       <div className="pcv-pay-table">
         <div className="pcv-pay-head"><span>Phase</span><span>Trigger</span><span className="r">%</span><span className="r">Amount</span></div>
-        <div className="pcv-pay-row first">
-          <span>Deposit</span><span>Before project start</span><span className="r">{depositPct}%</span><span className="r b">{money(t.grand * depositPct / 100)}</span>
-        </div>
-        <div className="pcv-pay-row">
-          <span>Final</span><span>Upon completion</span><span className="r">{finalPct}%</span><span className="r b">{money(t.grand * finalPct / 100)}</span>
-        </div>
+        {payPhases.map(([ph, trig, pct], i) => (
+          <div key={ph} className={"pcv-pay-row" + (i === 0 ? " first" : "")}>
+            <span>{ph}</span><span>{trig}</span><span className="r">{pct}%</span><span className="r b">{money(t.grand * pct / 100)}</span>
+          </div>
+        ))}
       </div>
+      {payTerms && <div className="pcv-pay-terms">{payTerms}</div>}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
 
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
@@ -564,6 +571,7 @@ const PCV_CSS = `
   color:#0B0F1A;background:#F0ECE8;border-bottom:1px solid #ece8e0;align-items:center}
 .pcv-pay-row.first{background:#fff8ee;border-left:3px solid #C9A96E}
 .pcv-pay-row.first span:first-child{color:#8a6d2f;font-weight:700}
+.pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:#2a3050;font-weight:600;line-height:1.45;border-left:3px solid var(--gold,#b08f4f);padding-left:12px}
 .pcv-fineprint{margin:6px 22px 0;font-size:.7rem;color:#4a5270;font-style:italic}
 
 .pcv-accept-box{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:2px solid #C9A96E;

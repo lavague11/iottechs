@@ -167,11 +167,18 @@ const PROP_CSS = `
 .pvx .prop-mini.gold:hover{background:var(--gold-deep)}
 .pvx .prop-mini:disabled{opacity:.45;cursor:default}
 .pvx .prop-svc-note{padding:8px 12px;border-top:1px solid var(--line);font-size:.74rem;color:var(--muted);white-space:pre-wrap}
-.pvx .prop-totals{display:flex;flex-direction:column;gap:5px;margin-left:auto;min-width:250px}
-.pvx .prop-trow{display:flex;justify-content:space-between;gap:18px;font-size:.8rem;color:var(--muted);font-weight:600}
+.pvx .prop-totals{display:flex;flex-direction:column;gap:9px;width:100%;margin-top:16px;border-top:2px solid var(--line);padding-top:16px}
+.pvx .prop-trow{display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:.82rem;color:var(--muted);font-weight:600;min-height:28px}
 .pvx .prop-trow b{color:var(--ink)}
-.pvx .prop-trow.grand{font-size:.94rem;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
-.pvx .prop-trow.grand b{color:var(--gold-deep)}
+.pvx .prop-adj{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pvx .prop-minus{color:var(--green,#1c8a45);white-space:nowrap}
+.pvx .prop-total-big{display:flex;justify-content:space-between;align-items:baseline;gap:18px;margin:6px 0;padding:14px 16px;border-radius:12px;background:var(--bg-soft);border:1px solid var(--line)}
+.pvx .prop-total-big span{font-size:.9rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.pvx .prop-total-big b{font-size:1.7rem;font-weight:800;color:var(--gold-deep);letter-spacing:-.01em}
+.pvx .prop-plan-terms{font-size:.76rem;color:var(--muted);line-height:1.4;background:var(--bg-soft);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:8px 12px;margin:-2px 0 2px}
+.pvx .prop-plan-btn{height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--muted);font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-plan-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .prop-plan-btn.on{background:var(--gold);border-color:var(--gold);color:#fff}
 .pvx .prop-trow .tin{width:64px;height:26px;border:1px solid var(--line);border-radius:6px;text-align:right;padding:0 6px;font-size:.76rem;font-weight:700;font-family:inherit;outline:none;color:var(--ink)}
 .pvx .prop-trow .tin:focus{border-color:var(--gold)}
 .pvx .prop-tax-btn{height:26px;padding:0 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-soft);color:var(--muted);font-size:.7rem;font-weight:800;cursor:pointer;font-family:inherit}

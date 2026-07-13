@@ -232,7 +232,19 @@ export function blankOption(i) {
   return { id: OPTION_LETTERS[i], name: OPTION_NAMES[i] || "Option " + OPTION_LETTERS[i], services: [], note: "", includeMockup: false, includeSurvey: false };
 }
 export function blankPayload() {
-  return { options: [blankOption(0)], discount: { type: "flat", value: 0 }, pcp_credit: 0 };
+  return { options: [blankOption(0)], discount: { type: "flat", value: 0 }, pcp_credit: { type: "flat", value: 0 }, payment_plan: "50_50" };
+}
+
+// Deposit / payment schedules the office picks as presets. `terms` prints on the proposal.
+export const PAYMENT_PLANS = {
+  "50_50":    { label: "50 / 50",      depositPct: 50, terms: "50% due before we begin · 50% upon completion." },
+  "50_30_20": { label: "50 / 30 / 20", depositPct: 50, terms: "50% to begin · 30% at project midpoint · 20% upon completion (or Net 30)." },
+  "custom":   { label: "Custom",       depositPct: null, terms: "" },
+};
+// Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.
+function amountOf(v, base) {
+  if (v && typeof v === "object") return v.type === "pct" ? base * (+v.value || 0) / 100 : Math.max(0, +v.value || 0);
+  return Math.max(0, +v || 0);
 }
 
 // ---- Survey import ---------------------------------------------------------
@@ -412,7 +424,7 @@ export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + item
 export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50, pcpCredit = 0) {
   const sub = (opt.services || []).reduce((s, svc) => s + svcSubtotal(svc), 0);
   const disc = discount?.type === "pct" ? sub * (+discount.value || 0) / 100 : (+discount?.value || 0);
-  const credit = Math.max(0, +pcpCredit || 0);
+  const credit = amountOf(pcpCredit, sub);
   // Discount and PCP credit both reduce the taxable base (tax is charged on the net).
   const taxable = Math.max(0, sub - disc - credit);
   const tax = taxable * (+taxRate || 0) / 100;
@@ -535,6 +547,11 @@ export function validatePayload(payload) {
   }
   const d = payload.discount;
   if (d && !(["flat", "pct"].includes(d.type) && +d.value >= 0)) return "Bad discount.";
-  if (payload.pcp_credit != null && !(+payload.pcp_credit >= 0 && +payload.pcp_credit <= 1000000)) return "Bad PCP credit.";
+  const pc = payload.pcp_credit;
+  if (pc != null) {
+    const pv = (pc && typeof pc === "object") ? pc.value : pc;
+    if (!(+pv >= 0 && +pv <= 1000000)) return "Bad PCP credit.";
+  }
+  if (payload.payment_plan && !["50_50", "50_30_20", "custom"].includes(payload.payment_plan)) return "Bad payment plan.";
   return null;
 }
