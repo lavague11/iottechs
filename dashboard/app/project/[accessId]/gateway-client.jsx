@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
@@ -1251,6 +1251,9 @@ function InquiryCard({ project, view }) {
   );
 }
 
+// Project-header status pill → its color class per phase status word.
+const STATUS_CLASS = { "Pending": "sh-pending", "Reviewing": "sh-reviewing", "In Progress": "sh-inprogress", "Finalizing": "sh-finalizing" };
+
 // ---- Upcoming step lookup ----
 const UPCOMING = {
   inquiry:          { label: "Site Survey",       sub: "Pending scheduling"   },
@@ -1760,10 +1763,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     return phase.primary;
   }
   // Honest completion % based on real 9-stage position (not the 4 phases) — so "at payment" reads
-  // ~88%, not a misleading 100% just because it's the last phase.
+  // ~88%, not a misleading 100% just because it's the last phase. 100% is reserved for the true
+  // finish line: the balance is paid AND the system is released (completed_at is stamped).
   const phasePct = (() => {
+    if (lp.completed_at) return 100;
     const i = masterStages.findIndex((s) => s.key === projectStage);
-    return i >= 0 && masterStages.length > 1 ? Math.max(10, Math.round((i / (masterStages.length - 1)) * 100)) : 0;
+    const raw = i >= 0 && masterStages.length > 1 ? Math.round((i / (masterStages.length - 1)) * 100) : 0;
+    return Math.min(97, Math.max(10, raw));
   })();
 
   // Fire the celebration whenever the project moves forward into a NEW phase (the bar-level
@@ -1979,14 +1985,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
       <div className="section-head">
         <div className="sh-left">
-          {isBrowsing
-            ? <><span className="sh-status sh-reviewing">Reviewing</span><span className="sh-stage-name">{stageLabel(viewingStage)}</span></>
-            : attention
-              ? <span className="sh-status sh-attention">Needs Attention</span>
-              : projectStage === "completion"
-                ? <span className="sh-status sh-complete">Complete</span>
-                : <span className="sh-status sh-pending">Pending</span>
-          }
+          {(() => {
+            // Terminal state: balance paid + system released (completed_at) → Complete, whatever phase is on screen.
+            if (lp.completed_at) return <span className="sh-status sh-complete">Complete</span>;
+            // While browsing another phase, the pill describes THAT phase (its status word + phase name,
+            // e.g. "Finalizing · Completion" — not the internal "QC" sub-stage). Live view describes the
+            // project's real phase; attention overrides it.
+            if (isBrowsing) {
+              const w = phaseStatusWord(vPhase);
+              return <><span className={`sh-status ${STATUS_CLASS[w] || "sh-pending"}`}>{w}</span><span className="sh-stage-name">{phaseLabelOf(vPhase)}</span></>;
+            }
+            if (attention) return <span className="sh-status sh-attention">Needs Attention</span>;
+            const w = phaseStatusWord(barProjectStage);
+            return <span className={`sh-status ${STATUS_CLASS[w] || "sh-pending"}`}>{w}</span>;
+          })()}
           {attention && attentionNote && !showNoteBox && (
             <span className="sh-note-preview" title={attentionNote}>"{attentionNote}"</span>
           )}
@@ -3277,8 +3289,12 @@ const PV_CSS = `
 .pvx .sh-attention::before{background:#e74c3c}
 .pvx .sh-complete{background:#fff;color:#1c8a45;border-color:rgba(28,138,69,.25)}
 .pvx .sh-complete::before{background:#1c8a45}
-.pvx .sh-reviewing{background:#fff;color:var(--muted);border-color:var(--line)}
-.pvx .sh-reviewing::before{background:#94a3b8}
+.pvx .sh-reviewing{background:#fff;color:#8a6d2f;border-color:rgba(201,169,110,.35)}
+.pvx .sh-reviewing::before{background:#C9A96E}
+.pvx .sh-inprogress{background:#fff;color:#b06a1f;border-color:rgba(201,132,49,.3)}
+.pvx .sh-inprogress::before{background:#d68a2e}
+.pvx .sh-finalizing{background:#fff;color:#7c4dc4;border-color:rgba(124,77,196,.28)}
+.pvx .sh-finalizing::before{background:#8a5cd0}
 .pvx .sh-stage-name{font-size:.82rem;color:var(--muted);font-weight:500}
 .pvx .sh-note-preview{font-size:.78rem;color:var(--muted);font-style:italic;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pvx .sh-toggle{font-size:.75rem;font-weight:700;font-family:inherit;padding:4px 12px;border-radius:100px;cursor:pointer;border:1.5px solid rgba(231,76,60,.35);color:#e74c3c;background:#fff;transition:background .12s,border-color .12s,box-shadow .12s;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.06)}

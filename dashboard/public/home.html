@@ -1131,8 +1131,16 @@
         body:JSON.stringify({email:_demoEmail,phone:_demoPhone,name:_demoName,password:pw,pin,accessId:_demoAccessId})});
       const json=await res.json();
       if(json.ok){
-        const projectHref='/project/'+encodeURIComponent(_demoAccessId)+(pin?('?pin='+encodeURIComponent(pin)):'');
-        document.getElementById('projectLink').href=projectHref;
+        // Log them straight into their own dashboard (their project list) — from there they click
+        // into the project. Better than dropping them onto a single project page cold.
+        try{
+          const auth=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({identifier:_demoEmail||_demoPhone,password:pw,remember:true})});
+          const aj=await auth.json();
+          if(aj.ok){ window.location.href=aj.user&&aj.user.home?aj.user.home:'/my-projects'; return; }
+        }catch(_){}
+        // Fallback (auto-login didn't take): show the done view pointing at their dashboard.
+        document.getElementById('projectLink').href='/my-projects';
         document.getElementById('dm-success-view').classList.add('hidden');
         document.getElementById('dm-done-view').classList.remove('hidden');
       } else if(json.existingAccount){

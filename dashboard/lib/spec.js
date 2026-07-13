@@ -82,12 +82,17 @@ export const masterToCustomerKey = (masterKey) =>
 // a pure view grouping that merges them into 4 steps on the progress bar, and each phase co-renders
 // the tools of its member stages. `primary` is where a phase-dot click lands when the project isn't
 // currently inside that phase.
+// status: the word shown in the project-header pill for each phase (Consulting=Pending,
+// Proposal=Reviewing, Install=In Progress, Completion=Finalizing). "Complete"/100% is a
+// separate terminal state reached only once the balance is paid and the system is released.
 export const PHASES = [
-  { key: "ph_survey",   label: "Survey",   short: "Survey",   members: ["inquiry", "site_survey"],           primary: "site_survey" },
-  { key: "ph_proposal", label: "Proposal", short: "Proposal", members: ["proposal", "approval_deposit"],     primary: "proposal" },
-  { key: "ph_install",  label: "Install",  short: "Install",  members: ["schedule", "install"],              primary: "install" },
-  { key: "ph_wrap",     label: "Wrap-Up",  short: "Wrap-Up",  members: ["qc", "payment", "completion"],      primary: "qc" },
+  { key: "ph_survey",   label: "Consulting",  short: "Consulting",  status: "Pending",     members: ["inquiry", "site_survey"],       primary: "site_survey" },
+  { key: "ph_proposal", label: "Proposal",    short: "Proposal",    status: "Reviewing",   members: ["proposal", "approval_deposit"], primary: "proposal" },
+  { key: "ph_install",  label: "Install",     short: "Install",     status: "In Progress", members: ["schedule", "install"],          primary: "install" },
+  { key: "ph_wrap",     label: "Completion",  short: "Completion",  status: "Finalizing",  members: ["qc", "payment", "completion"],  primary: "qc" },
 ];
+export const phaseStatusWord = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.status || "Pending";
+export const phaseLabelOf    = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.label || phaseKey;
 export function phasesForType(type) {
   const present = new Set(stagesForType(type).map((s) => s.key));
   return PHASES
