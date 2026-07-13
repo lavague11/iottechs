@@ -130,7 +130,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
         setPayoutOverride(d.payoutOverride ?? null); setDayLogs(d.dayLogs || []); setRequests(d.requests || []); setStepLog(d.stepLog || []);
       } catch { /* bad blob */ }
     }).catch(() => {});
-    return () => { live = false; if (saveTimer.current) clearTimeout(saveTimer.current); };
+    return () => { live = false; };
   }, [accessId]);
 
   // Approved job-site add-ons become installable lines in the checklist (expanded by quantity).
@@ -401,7 +401,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   };
 
   return (
-    <div className="icl-root">
+    <div className={`icl-root${allDone ? " done" : ""}`}>
       <style>{ICL_CSS}</style>
       <div className="icl-head">
         <div className="icl-head-l">
@@ -422,7 +422,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
           )}
           <div className="icl-progress">
             <span className={`icl-pct${allDone ? " done" : ""}`}>{allDone ? "✓ Complete" : `${pct}%`}</span>
-            <div className="icl-bar"><div className="icl-bar-fill" style={{ width: `${pct}%` }} /></div>
+            <div className="icl-bar"><div className={`icl-bar-fill${allDone ? " done" : ""}`} style={{ width: `${pct}%` }} /></div>
           </div>
         </div>
       </div>

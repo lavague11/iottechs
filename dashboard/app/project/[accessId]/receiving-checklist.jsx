@@ -70,7 +70,7 @@ export default function ReceivingChecklist({ accessId, proposal, role, preview }
   const allIn = totalUnits > 0 && gotUnits === totalUnits;
 
   return (
-    <div className="rcv-root">
+    <div className={`rcv-root${allIn ? " done" : ""}`}>
       <style>{RCV_CSS}</style>
       <div className="rcv-hd">
         <div><span className="rcv-title">Equipment Received</span><span className="rcv-sub">{canEdit ? "Check off gear as it arrives from the proposal" : "Your equipment, tracked as it arrives"}</span></div>
@@ -114,11 +114,12 @@ export default function ReceivingChecklist({ accessId, proposal, role, preview }
 }
 
 const RCV_CSS = `
-.rcv-root{margin:16px 22px 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #4b6a9b;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.rcv-root{margin:16px 22px 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.rcv-root.done{border-top-color:#2f7d5a}
 .rcv-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .rcv-title{display:block;font-size:.94rem;font-weight:800;color:#0B0F1A}
 .rcv-sub{font-size:.76rem;color:#6f7686}
-.rcv-badge{background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}
+.rcv-badge{background:#f8f0e0;border:1px solid #e2d3ad;color:#8a6d2f;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}
 .rcv-badge.done{background:#f2f9f4;border-color:#bfe0c9;color:#1d7a3a}
 .rcv-list{display:flex;flex-direction:column;gap:7px}
 .rcv-row{display:flex;align-items:center;gap:11px;background:#fbfaf8;border:1px solid #e2ddd2;border-left:3px solid #4b6a9b;border-radius:10px;padding:9px 12px}

@@ -527,7 +527,7 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
 const STP_CSS = `
 .stp-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;overflow:hidden;margin:0 0 16px;
   box-shadow:0 10px 30px rgba(11,15,26,.08);font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
-.stp-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #4b6a9b}
+.stp-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #C9A96E}
 .stp-hd-left{display:flex;flex-direction:column;gap:2px}
 .stp-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
 .stp-brand-pill{margin:2px 0}

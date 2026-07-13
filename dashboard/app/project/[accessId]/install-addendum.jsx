@@ -206,7 +206,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
 }
 
 const ADN_CSS = `
-.adn-root{background:#fff;border:1px solid #d9d4ca;border-top:4px solid #7c3aed;border-radius:14px;padding:16px;margin:16px 0 0;
+.adn-root{background:#fff;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:14px;padding:16px;margin:16px 0 0;
   font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;box-shadow:0 10px 30px rgba(11,15,26,.06)}
 .adn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .adn-title{display:block;font-size:1rem;font-weight:800;color:#0B0F1A}

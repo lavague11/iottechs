@@ -2,8 +2,9 @@
 // (rendered via <style>{ICL_CSS}</style>). Kept as a JS template string so it stays scoped to the
 // component rather than becoming global CSS.
 export const ICL_CSS = `
-.icl-root{background:#FAF8F4;border:1px solid #d9d4ca;border-top:4px solid #2f7d5a;border-radius:14px;padding:16px 16px 18px;
+.icl-root{background:#FAF8F4;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:14px;padding:16px 16px 18px;
   font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;box-shadow:0 10px 30px rgba(11,15,26,.06)}
+.icl-root.done{border-top-color:#2f7d5a}
 .icl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px}
 .icl-title{display:block;font-size:1rem;font-weight:800;color:#0B0F1A}
 .icl-sub{font-size:.8rem;color:#4a5270}
@@ -109,10 +110,11 @@ export const ICL_CSS = `
 .icl-req-no{height:32px;padding:0 12px;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#a8442f;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
 .icl-req-wait{font-size:.74rem;font-weight:800;color:#8a6d2f;background:#f3e6c8;border-radius:100px;padding:4px 11px;white-space:nowrap}
 .icl-progress{display:flex;align-items:center;gap:10px;min-width:150px}
-.icl-pct{font-size:.86rem;font-weight:800;color:#2f7d5a;white-space:nowrap}
+.icl-pct{font-size:.86rem;font-weight:800;color:#8a6d2f;white-space:nowrap}
 .icl-pct.done{color:#1d7a3a}
 .icl-bar{width:110px;height:8px;border-radius:100px;background:#e6e1d6;overflow:hidden}
-.icl-bar-fill{height:100%;background:linear-gradient(90deg,#5FB88A,#2f7d5a);transition:width .35s ease}
+.icl-bar-fill{height:100%;background:linear-gradient(90deg,#E8D5AE,#C9A96E);transition:width .35s ease}
+.icl-bar-fill.done{background:linear-gradient(90deg,#5FB88A,#2f7d5a)}
 .icl-payline{margin:0 0 10px;background:#0B0F1A;color:#fff;border-radius:9px;padding:9px 13px;font-size:.82rem;font-weight:600}
 .icl-payline b{color:#C9A96E;font-weight:800}
 .icl-sec{margin:14px 0 8px;font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#4a5270;display:flex;align-items:center;gap:8px}

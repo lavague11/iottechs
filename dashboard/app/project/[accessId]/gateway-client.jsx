@@ -2327,12 +2327,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           Survey + Mockup review below. Staff keep the scheduling + notes/POC tools. */}
       {vPhase === "ph_survey" && cView === "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
-          <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#4b6a9b"
+          <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#C9A96E"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
             title="Your Information" sub="Confirm the details we have — or fix anything that's wrong.">
             <LeadInfoStep accessId={lp.access_id} project={lp} preview={!!previewRole} onConfirmed={() => setLeadConfirmed(true)} />
           </FlowStep>
-          <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#4b6a9b"
+          <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#C9A96E"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             title="Schedule Your Appointment" sub="Pick a time for your free walkthrough & demo."
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
@@ -2350,7 +2350,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
       {vPhase === "ph_survey" && cView !== "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
-          <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#4b6a9b"
+          <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#C9A96E"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             title="Survey Scheduling" sub="Book the visit · Pick a time window"
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
@@ -2364,7 +2364,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               customerView={!!previewRole}
             />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#7a8aa5" title="Details &amp; Notes" completable bare>
+          <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Details &amp; Notes" completable bare>
             <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
           </FlowStep>
         </div>
@@ -2434,7 +2434,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
           {/* Camera Mockup — Admin/Manager/Sales build it; every other role (Customer, Technician, …) sees it read-only. */}
           {showMockup && (
-            <FlowStep n={stepNum("mockup")} total={stepTotal} status={stepStatus("mockup")} color="#B084E0"
+            <FlowStep n={stepNum("mockup")} total={stepTotal} status={stepStatus("mockup")} color="#C9A96E"
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
               title="Mockups" sub="System diagrams · Product photos · Design references"
               chip={mkMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
@@ -2573,7 +2573,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
                   </FlowStep>
-                  <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
+                  <FlowStep n={3} total={3} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
                   </FlowStep>
                 </>
@@ -2589,7 +2589,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
-          <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
+          <FlowStep n={3} total={3} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
@@ -2603,7 +2603,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
+          <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>

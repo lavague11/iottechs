@@ -28,12 +28,12 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
   }, [accessId]);
 
   const src = `/widgets/qr-cleaner.html?embed=1&project=${encodeURIComponent(accessId)}${customerName ? `&customer=${encodeURIComponent(customerName)}` : ""}`;
-  const accent = saved ? "#2f7d5a" : "#c0392b";
+  const accent = saved ? "#2f7d5a" : "#C9A96E";
 
   return (
     <div className="sqp" style={{ "--sq": accent }}>
       <div className="sqp-head">
-        <span className="sqp-ic" style={{ background: saved ? "#e7f6ec" : "#fdeaea", color: accent }}>
+        <span className="sqp-ic" style={{ background: saved ? "#e7f6ec" : "#f8f0e0", color: saved ? accent : "#8a6d2f" }}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h1"/></svg>
         </span>
         <div className="sqp-tt">
@@ -70,7 +70,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         .sqp-sub{font-size:.76rem;color:#6f7686}
         .sqp-flash{font-size:.76rem;font-weight:800;color:#1c8a45;white-space:nowrap}
         .sqp-btn{height:34px;padding:0 20px;border:none;border-radius:8px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
-        .sqp-btn.upload{background:#c0392b}
+        .sqp-btn.upload{background:#C9A96E;color:#0B0F1A}
         .sqp-btn.view{background:#2f7d5a}
         .sqp-btn.ghost{background:#fff;border:1px solid #d9d4ca;color:#41485a}
         .sqp-btn:hover{filter:brightness(1.06)}
