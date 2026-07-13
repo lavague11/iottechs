@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, TECH_STAGES, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, TECH_STAGES, customerStagesForType, masterToCustomerKey, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
@@ -305,14 +305,16 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
-                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage }) {
+                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage, pctOverride }) {
 
   let stages = stagesProp || stagesForType(type);
   if (!stagesProp && !stages.some((s) => s.key === projectStage)) stages = STAGES;
   const rbar = ROLE_BAR[role] || ROLE_BAR.admin;   // bar tint follows the effective role
 
   const projectIdx  = stages.findIndex((s) => s.key === projectStage);
-  const fillPct     = Math.max(10, (projectIdx / (stages.length - 1)) * 100);
+  // The connecting-line fill tracks the current dot; the % label can be overridden with an honest
+  // master-lifecycle figure (condensed customer bar), else it derives from the dot position.
+  const fillPct     = pctOverride != null ? pctOverride : Math.max(10, (projectIdx / (stages.length - 1)) * 100);
   const trackFillPct = projectStage === "completion"
     ? 100
     : stages.length > 1
@@ -377,8 +379,10 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
           <div className="pbar-pct-bar" style={{ width: `${fillPct}%` }} />
           <span className="pbar-pct-label">
             <b>{Math.round(fillPct)}%</b> complete
-            {projectStage !== "completion" && (
-              <span className="pbar-pct-cur"> · {stageShortLabel(projectStage)}</span>
+            {projectIdx >= 0 && projectIdx < stages.length - 1 && (
+              // Use the current step's own label from the (possibly condensed) bar — stageShortLabel
+              // only knows master keys, so a phase key like "cx_install" would render raw.
+              <span className="pbar-pct-cur"> · {stages[projectIdx]?.short || stages[projectIdx]?.label || stageShortLabel(projectStage)}</span>
             )}
             {/* Internal ops signal — how long this stage has been sitting. Never shown to customers. */}
             {role !== "customer" && daysInStage != null && (
@@ -1658,12 +1662,35 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     schedule: "install", install: "install", qc: "qc", payment: "payment", completion: "payment",
   }[k] || "proposal");
   const isTechView     = cView === "tech";
-  const stageList      = isTechView ? TECH_STAGES : stagesForType(project.project_type);
-  const barProjectStage = isTechView ? masterToTech(projectStage) : projectStage;
-  const typeKeys       = stageList.map((s) => s.key);
-  const projectIdx     = typeKeys.indexOf(barProjectStage);
+  // The customer sees a condensed 5-phase bar over the same master lifecycle (like the tech's
+  // 4-stage view). The bar dots are phases; browsing/gating still runs on real master stage keys.
+  const isCustomerView = cView === "customer" && !previewRole;
+  const masterStages   = stagesForType(project.project_type);   // the real per-type master lifecycle
+  const stageList      = isTechView ? TECH_STAGES : isCustomerView ? customerStagesForType(project.project_type) : masterStages;
+  const barProjectStage = isTechView ? masterToTech(projectStage) : isCustomerView ? masterToCustomerKey(projectStage) : projectStage;
+  // browse()/gating always validate against real master keys — even for the customer, whose dots
+  // are phases. So keep typeKeys on the master lifecycle for the customer (phase clicks resolve to
+  // a master landing key before reaching browse()).
+  const typeKeys       = isCustomerView ? masterStages.map((s) => s.key) : stageList.map((s) => s.key);
+  const projectIdx     = typeKeys.indexOf(isCustomerView ? projectStage : barProjectStage);
   const prevProjectKey = projectIdx > 0 ? typeKeys[projectIdx - 1] : null;
   const nextProjectKey = projectIdx >= 0 && projectIdx < typeKeys.length - 1 ? typeKeys[projectIdx + 1] : null;
+
+  // Which real master stage a customer phase-dot opens: the current stage when the project is
+  // inside that phase (so the active step — pay balance, review survey — is always reachable),
+  // otherwise the phase's primary/action step.
+  function customerLanding(phaseKey) {
+    const phase = stageList.find((p) => p.key === phaseKey);
+    if (!phase) return projectStage;
+    if (masterToCustomerKey(projectStage) === phaseKey) return projectStage;
+    return phase.primary;
+  }
+  // Honest completion % for the condensed customer bar: based on real position in the 9-stage
+  // lifecycle, not the 5 phases — so "at payment" reads ~88%, not a misleading 100%.
+  const custPct = (() => {
+    const i = masterStages.findIndex((s) => s.key === projectStage);
+    return i >= 0 && masterStages.length > 1 ? Math.max(10, Math.round((i / (masterStages.length - 1)) * 100)) : 0;
+  })();
 
   // When the effective viewing role changes (toggling the preview eye between customer/tech/
   // admin), snap the viewed stage to the CURRENT step of that role's own timeline. Without this,
@@ -1975,8 +2002,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         type={project.project_type}
         stages={stageList}
         projectStage={barProjectStage}
-        viewingStage={viewingStage}
-        onBrowse={browse}
+        viewingStage={isCustomerView ? masterToCustomerKey(viewingStage) : viewingStage}
+        onBrowse={isCustomerView ? (k) => browse(customerLanding(k)) : browse}
+        pctOverride={isCustomerView ? custPct : null}
         canControl={canControl && !previewRole}
         onJump={doMove}
         missingFor={(k) => missingReqsFor(k, lp, localAssignments)}

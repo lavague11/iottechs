@@ -48,6 +48,35 @@ export const TECH_STAGES = [
   { key: "payment",  label: "Payout" },
 ];
 
+// Customer's condensed 5-phase view of the master 9-stage lifecycle. The office still runs all 9
+// (survey, fulfillment, QC are real ops steps) — the customer just doesn't experience them as
+// separate life events, so we group them into the moments they actually track: reach out → review
+// quote → approve & deposit → watch it get built → paid & done. Same idea as TECH_STAGES: a pure
+// view mapping, no backend/data change. `members` are the master stages each phase covers; `primary`
+// is where a click lands when the phase isn't the current one (the phase's substantive/action step).
+export const CUSTOMER_PHASES = [
+  { key: "cx_start",    label: "Getting Started", short: "Getting Started", members: ["inquiry", "site_survey"],   primary: "site_survey" },
+  { key: "cx_proposal", label: "Your Proposal",   short: "Proposal",        members: ["proposal"],                  primary: "proposal" },
+  { key: "cx_approved", label: "Approved",        short: "Approved",        members: ["approval_deposit"],          primary: "approval_deposit" },
+  { key: "cx_install",  label: "Installation",    short: "Installation",    members: ["schedule", "install", "qc"], primary: "install" },
+  { key: "cx_done",     label: "Complete",        short: "Complete",        members: ["payment", "completion"],     primary: "payment" },
+];
+
+// The customer phases that actually apply to a project type — drop any phase whose master stages
+// don't exist for that type (e.g. a Service Call has no proposal/approval), and keep `primary`
+// pointing at a member that's really present.
+export function customerStagesForType(type) {
+  const present = new Set(stagesForType(type).map((s) => s.key));
+  return CUSTOMER_PHASES
+    .map((p) => ({ ...p, members: p.members.filter((m) => present.has(m)) }))
+    .filter((p) => p.members.length > 0)
+    .map((p) => ({ ...p, primary: p.members.includes(p.primary) ? p.primary : p.members[p.members.length - 1] }));
+}
+
+// Master lifecycle stage → the customer phase key that contains it (for the "current" bar marker).
+export const masterToCustomerKey = (masterKey) =>
+  (CUSTOMER_PHASES.find((p) => p.members.includes(masterKey)) || CUSTOMER_PHASES[0]).key;
+
 // Gateway access rules (spec §03). PINs map to view types, not accounts.
 // Login roles resolve to their own view; login ALWAYS wins over a PIN.
 export const PIN_VIEW = {
