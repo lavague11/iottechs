@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import AddInventoryModal from "./inventory-add-modal";
-import InventoryHistoryModal from "./inventory-history-modal";
 import { assignItemAction, deleteItemAction, updateQtyForProjectAction, markUsedAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
@@ -149,7 +148,6 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
   const [sort, setSort]     = useState("category");
   const [query, setQuery]   = useState("");
   const [adding, setAdding] = useState(false);
-  const [histItem, setHistItem] = useState(null);
   const [pending, startTx]  = useTransition();
   const router = useRouter();
 
@@ -219,10 +217,10 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
                   return (
                     <tr key={i.id} style={shortage ? { background: "rgba(231,76,60,.03)" } : undefined}>
                       <td>
-                        <button className="inv-name-btn" onClick={() => setHistItem(i)} title="View item history">
+                        <Link className="inv-name-btn" href={`/inventory/${i.id}`} title="Open item page & history">
                           {i.name}
                           {i.serial_count > 0 && <span className="inv-serial-badge" title={`${i.serial_count} serial${i.serial_count !== 1 ? "s" : ""} on file`}>{i.serial_count} SN</span>}
-                        </button>
+                        </Link>
                         {i.sku && <div className="mono" style={{ color: "var(--muted)", fontSize: ".76rem" }}>{i.sku}{i.location ? ` · ${i.location}` : ""}</div>}
                         {shortage && <div style={{ fontSize: ".72rem", color: "#e74c3c", fontWeight: 700, marginTop: 2 }}>⚠ Qty needed exceeds stock</div>}
                       </td>
@@ -247,7 +245,6 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
       </div>
 
       {adding && <AddInventoryModal items={items} projects={projects} onClose={() => setAdding(false)} onDone={() => { setAdding(false); router.refresh(); }} />}
-      {histItem && <InventoryHistoryModal item={histItem} onClose={() => setHistItem(null)} />}
 
       <ConfirmDialog
         open={!!delItem}
@@ -288,7 +285,7 @@ export default function InventoryClient({ user, alerts, items, stats, projects, 
         .apx .inv-sel{width:auto;padding:7px 10px;font-size:.82rem;font-weight:600}
         .apx .inv-search{width:250px;max-width:100%}
         /* Clickable item name → history */
-        .apx .inv-name-btn{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:0;font-family:inherit;font-size:.9rem;font-weight:700;color:var(--ink);cursor:pointer;text-align:left}
+        .apx .inv-name-btn{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:0;font-family:inherit;font-size:.9rem;font-weight:700;color:var(--ink);cursor:pointer;text-align:left;text-decoration:none}
         .apx .inv-name-btn:hover{color:var(--gold-deep,#8a6d2f)}
         .apx .inv-serial-badge{font-size:.62rem;font-weight:800;letter-spacing:.03em;color:#3257ff;background:#e8f0fe;border-radius:100px;padding:1px 7px;white-space:nowrap}
         /* Add modal: Single / Batch tabs + scan box */
