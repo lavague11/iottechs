@@ -43,19 +43,23 @@ function tagToStage(tag) {
 const g = globalThis;
 g.__trkCache = g.__trkCache || new Map();        // num -> { at, ttl, result }
 g.__trkRegistered = g.__trkRegistered || new Set();
-const TRK_TTL_OK = 15 * 60 * 1000;   // fresh live result — 15 min
-const TRK_TTL_LIMIT = 60 * 60 * 1000; // rate-limited — back off an hour before trying again
+// One real carrier lookup per number per day — the aggregator's free tier is tiny, so we never
+// want a page refresh to burn quota. A durable per-shipment lastFetch guard on the client stops
+// most calls before they leave the browser; this server cache is the backstop.
+const TRK_TTL_OK = 24 * 60 * 60 * 1000;   // fresh live result — hold for a full day
+const TRK_TTL_LIMIT = 6 * 60 * 60 * 1000; // rate-limited — back off before trying again
 const TRK_TTL_PENDING = 60 * 1000;    // registered but not ingested — retry in a minute
-const TRK_TTL_ERR = 5 * 60 * 1000;
+const TRK_TTL_ERR = 30 * 60 * 1000;
 
-export async function fetchTracking(number, carrier) {
+// `force` (a deliberate staff Refresh click) skips the cache read for one real lookup.
+export async function fetchTracking(number, carrier, { force = false } = {}) {
   const key = process.env.TRACKING_API_KEY;
   const provider = (process.env.TRACKING_PROVIDER || "aftership").toLowerCase();
   const num = String(number || "").trim().replace(/\s+/g, "");
   if (!num) return { ok: false, reason: "no_number" };
   if (!key) return { ok: false, reason: "no_key" };
   const cached = g.__trkCache.get(num);
-  if (cached && (Date.now() - cached.at) < cached.ttl) return { ...cached.result, cached: true };
+  if (!force && cached && (Date.now() - cached.at) < cached.ttl) return { ...cached.result, cached: true };
   let result;
   try {
     result = provider === "trackingmore" ? await viaTrackingMore(num, carrier, key) : await viaAftership(num, carrier, key);

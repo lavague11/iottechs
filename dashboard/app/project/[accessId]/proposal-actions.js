@@ -398,9 +398,9 @@ async function canReadProject(accessId) {
 // Live shipment status from the tracking aggregator. Anyone who can see the project can refresh
 // it (package status isn't sensitive); returns { ok:false, reason } when no API key is configured
 // so the caller falls back to the manually-set status.
-export async function trackPackageAction(accessId, number, carrier) {
+export async function trackPackageAction(accessId, number, carrier, force = false) {
   if (!(await canReadProject(accessId))) return { ok: false, reason: "unauthorized" };
-  return await fetchTracking(number, carrier);
+  return await fetchTracking(number, carrier, { force });
 }
 // Rate library — internal only (rates are technician payout figures, never shown to customers).
 export async function getRatesAction(accessId, techName) {

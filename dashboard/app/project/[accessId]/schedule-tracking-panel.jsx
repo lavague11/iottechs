@@ -53,6 +53,18 @@ function seeded(i, salt) { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.
 const fmtEta = (d) => { try { return new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); } catch { return d; } };
 // Checkpoint timestamps come back as ISO strings — show a compact "Jul 3, 2:14 PM".
 const fmtScan = (t) => { if (!t) return ""; try { return new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } };
+// One live carrier lookup per number per day — a shipment stamped with a lastFetch inside 24h is
+// considered current and never re-hits the API on a page load.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const fetchedToday = (s) => !!s?.lastFetch && (Date.now() - s.lastFetch) < DAY_MS;
+const fmtAgo = (ms) => {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+};
 
 // ---- The night-drive scene ---------------------------------------------------------------
 function CinematicTracking({ tracking }) {
@@ -239,7 +251,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   const [confirmRemove, setConfirmRemove] = useState(null); // index of the row pending remove confirm
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState({});             // { number: liveRecord } from the carrier API
-  const [liveState, setLiveState] = useState({});   // { number: "loading"|"ok"|"nokey"|"err" }
+  const [liveState, setLiveState] = useState({});   // { number: "loading"|"ok"|"nokey"|"stale"|"pending" }
 
   useEffect(() => {
     let live = true;
@@ -284,7 +296,12 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   async function saveRow(i, number) {
     const num = String(number || "").trim().replace(/\s+/g, "");
     if (!num || busy) return;
-    const list = shipments.map((s, x) => (x === i ? { ...s, number: num, carrier: detectCarrier(num) } : s));
+    const list = shipments.map((s, x) => {
+      if (x !== i) return s;
+      // A genuinely new number: clear the old package's cached snapshot so it re-fetches once.
+      const reset = num !== s.number ? { status: "Order Placed", stage: 0, eta: "", lastLocation: "", lastFetch: null } : {};
+      return { ...s, number: num, carrier: detectCarrier(num), ...reset };
+    });
     if (await saveShipments(list)) setRowEdit((m) => { const n = { ...m }; delete n[i]; return n; });
   }
   async function removeShipment(i) {
@@ -293,31 +310,39 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   }
 
   // Pull the REAL carrier status for a package. Updates the in-memory live record for display and,
-  // for staff, persists status/ETA back so the equipment timeline + customer view reflect reality.
-  async function refreshLive(ship, persist, retried) {
+  // for staff, persists the snapshot + a lastFetch stamp so no other page view re-hits the carrier
+  // before tomorrow. `force` (a deliberate Refresh click) bypasses the 24h server cache.
+  async function refreshLive(ship, persist, retried, force) {
     if (!ship?.number) return;
     setLiveState((s) => ({ ...s, [ship.number]: "loading" }));
-    const r = await trackPackageAction(accessId, ship.number, ship.carrier);
+    const r = await trackPackageAction(accessId, ship.number, ship.carrier, !!force);
     if (r?.ok) {
       setLive((l) => ({ ...l, [ship.number]: r }));
       setLiveState((s) => ({ ...s, [ship.number]: "ok" }));
-      if (persist && isStaff && !preview && r.status && (r.status !== ship.status || r.stage !== ship.stage || (r.eta && r.eta !== ship.eta))) {
-        saveShipments(shipments.map((x) => (x.number === ship.number ? { ...x, status: r.status, stage: r.stage, eta: r.eta || x.eta } : x)));
+      // Stamp lastFetch on every successful staff lookup (even if nothing changed) so the durable
+      // "already checked today" guard below stops repeat lookups from every page refresh.
+      if (persist && isStaff && !preview) {
+        saveShipments(shipments.map((x) => (x.number === ship.number
+          ? { ...x, status: r.status, stage: r.stage, eta: r.eta || x.eta, lastLocation: r.lastLocation || x.lastLocation, lastFetch: Date.now() }
+          : x)));
       }
     } else if (r?.reason === "pending") {
       // Just registered with the carrier — data isn't ingested yet. Show "fetching" and retry once.
       setLiveState((s) => ({ ...s, [ship.number]: "pending" }));
-      if (!retried) setTimeout(() => refreshLive(ship, persist, true), 6000);
-    } else if (r?.reason === "rate_limit") {
-      // Free-tier daily quota hit — stop hitting the API; show last known status.
-      setLiveState((s) => ({ ...s, [ship.number]: "limit" }));
+      if (!retried) setTimeout(() => refreshLive(ship, persist, true, force), 6000);
     } else {
-      setLiveState((s) => ({ ...s, [ship.number]: r?.reason === "no_key" ? "nokey" : "err" }));
+      // no_key / rate_limit / error — quietly fall back to the last known status (no banner).
+      setLiveState((s) => ({ ...s, [ship.number]: r?.reason === "no_key" ? "nokey" : "stale" }));
     }
   }
-  // Auto-fetch live status for the package on screen (once per number).
+  // Auto-fetch the on-screen package ONCE per day per number: skip entirely if we already have a
+  // fetch stamped within 24h (durable, shared across every viewer of this project) — a page refresh
+  // must never burn the tiny carrier-API quota.
   useEffect(() => {
-    if (activeShip?.number && liveState[activeShip.number] === undefined) refreshLive(activeShip, true);
+    if (!activeShip?.number) return;
+    if (liveState[activeShip.number] !== undefined) return;   // already tried this session
+    if (fetchedToday(activeShip)) return;                     // checked within the last 24h
+    refreshLive(activeShip, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeShip?.number]);
 
@@ -359,20 +384,23 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
           const lv = live[activeShip.number] || null;
           const shown = lv ? { ...activeShip, status: lv.status || activeShip.status, eta: lv.eta || activeShip.eta, stage: typeof lv.stage === "number" ? lv.stage : activeShip.stage } : activeShip;
           const st = liveState[activeShip.number];
+          const ago = shown.lastFetch ? fmtAgo(Date.now() - shown.lastFetch) : "";
+          const liveTxt = st === "loading" ? "Checking carrier…"
+            : st === "pending" ? "Carrier is fetching this shipment — refresh in a moment"
+            : st === "ok" ? (lv?.lastLocation ? `Live · last scan ${lv.lastLocation}` : "Live from carrier")
+            : st === "nokey" ? "Showing the status set by our team"
+            : shown.lastLocation ? `Last scan ${shown.lastLocation}${ago ? ` · ${ago}` : ""}`
+            : ago ? `Checked ${ago}`
+            : "Tracking";
           return (
             <>
               <div className="stp-liverow">
                 <span className={`stp-livedot ${st || ""}`} />
-                <span className="stp-livetxt">
-                  {st === "loading" ? "Checking carrier…"
-                    : st === "pending" ? "Carrier is fetching this shipment — refresh in a moment"
-                    : st === "ok" ? (lv?.lastLocation ? `Live · last scan ${lv.lastLocation}` : "Live from carrier")
-                    : st === "nokey" ? "Showing the status set by our team"
-                    : st === "limit" ? "Daily carrier-lookup limit reached — showing last known status"
-                    : st === "err" ? "Couldn't reach the carrier — showing last known status"
-                    : "Tracking"}
-                </span>
-                <button type="button" className="stp-mini" onClick={() => refreshLive(activeShip, true)} disabled={st === "loading" || st === "pending"}>↻ Refresh</button>
+                <span className="stp-livetxt">{liveTxt}</span>
+                {isStaff && !preview && (
+                  <button type="button" className="stp-mini" title="Check the carrier now (uses one lookup)"
+                          onClick={() => refreshLive(activeShip, true, false, true)} disabled={st === "loading" || st === "pending"}>↻ Refresh</button>
+                )}
               </div>
               <CinematicTracking tracking={shown} />
               {lv?.checkpoints?.length > 0 && (
@@ -489,7 +517,8 @@ const STP_CSS = `
 .stp-livedot{width:9px;height:9px;border-radius:50%;background:#c2bcae;flex-shrink:0}
 .stp-livedot.ok{background:#2f7d5a;box-shadow:0 0 0 3px rgba(47,125,90,.16);animation:stpNow 1.8s ease-in-out infinite}
 .stp-livedot.loading,.stp-livedot.pending{background:#C9A96E;animation:stpPulse 1s ease-in-out infinite}
-.stp-livedot.err,.stp-livedot.nokey,.stp-livedot.limit{background:#c99a6e}
+.stp-livedot.nokey{background:#c99a6e}
+.stp-livedot.stale{background:#c2bcae}
 .stp-livetxt{flex:1;min-width:0;font-size:.76rem;font-weight:700;color:#4a5270;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stp-scan{border:1px solid #ece8e0;border-radius:10px;background:#fcfbf8;padding:10px 12px;display:flex;flex-direction:column;gap:9px}
 .stp-scan-hd{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a6d2f}
