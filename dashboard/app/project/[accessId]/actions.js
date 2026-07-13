@@ -463,8 +463,9 @@ export async function setWarrantyAction(accessId, months) {
 }
 
 export async function closeProjectAction(accessId, reason) {
-  const tok = await getSessionTok();
+  const tok = await getAnyTok();   // real session OR master-PIN admin (iot_access)
   if (!["admin","manager","sales"].includes(tok?.role)) return { error: "Unauthorized." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   if (!reason) return { error: "Reason required." };
   markProjectLost(accessId, reason);
   const { revalidatePath } = await import("next/cache");
