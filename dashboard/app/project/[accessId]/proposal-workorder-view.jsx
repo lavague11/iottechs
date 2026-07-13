@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
 import { getProposalAction, acceptWorkOrderAction, requestAssignmentAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import { TaglinePill } from "../../components/brand";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -71,7 +72,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
       <div className="pwo-root">
         <style>{PWO_CSS}</style>
         <div className="pwo-header">
-          <div className="pwo-hd-left"><span className="pwo-brand">IOT TECHS</span><span className="pwo-tagline">Secure Tomorrow. Today.</span></div>
+          <div className="pwo-hd-left"><span className="pwo-brand">IOT TECHS</span><TaglinePill tone="dark" className="pwo-brand-pill" /></div>
           <span className="pwo-doctag">Work Order</span>
         </div>
         <div className="pwo-empty">No active work order yet — it builds out here once the office sends the proposal to the customer.</div>
@@ -133,7 +134,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
       <div className="pwo-header">
         <div className="pwo-hd-left">
           <span className="pwo-brand">IOT TECHS</span>
-          <span className="pwo-tagline">Secure Tomorrow. Today.</span>
+          <TaglinePill tone="dark" className="pwo-brand-pill" />
           <span className="pwo-contact">(646) 396-0775 · support@iot-techs.com</span>
         </div>
         <div className="pwo-hd-right">
@@ -301,8 +302,7 @@ const PWO_CSS = `
   align-items:flex-start;flex-wrap:wrap;gap:14px;border-top:4px solid #2f7d5a}
 .pwo-hd-left{display:flex;flex-direction:column;gap:3px}
 .pwo-brand{font-size:1.3rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.pwo-tagline{font-size:.68rem;font-weight:600;color:#C9A96E;letter-spacing:.03em;
-  padding-bottom:4px;border-bottom:1px solid rgba(201,169,110,.5);margin-bottom:2px;width:fit-content}
+.pwo-brand-pill{margin:2px 0}
 .pwo-contact{font-size:.7rem;color:#9aa1af}
 .pwo-hd-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .pwo-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;

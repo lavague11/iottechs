@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
 import { STAGES } from "../../lib/spec";
+import { TaglinePill } from "../components/brand";
 
 const STAGE_KEYS  = STAGES.map((s) => s.key);
 const STAGE_TOTAL = STAGES.length;
@@ -495,8 +496,6 @@ export default function MyProjectsClient({ user, projects }) {
         .cp-nav{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.9);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
         .cp-nav-inner{display:flex;align-items:center;justify-content:space-between;height:72px}
         .cp-brand{display:flex;align-items:center;gap:11px}
-        .cp-brand .mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,var(--slate),var(--ink));display:grid;place-items:center}
-        .cp-brand .mark svg{width:20px;height:20px;stroke:var(--gold);fill:none;stroke-width:1.8}
         .cp-brand .bname{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.25rem;letter-spacing:-.02em}
         .cp-brand .bname b{color:var(--gold-deep)}
 
@@ -673,7 +672,6 @@ export default function MyProjectsClient({ user, projects }) {
         <header className="cp-nav">
           <div className="cp-wrap cp-nav-inner">
             <Link href="/" className="cp-brand">
-              <span className="mark"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
               <span className="bname">IOT <b>TECHS</b></span>
             </Link>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -832,11 +830,11 @@ export default function MyProjectsClient({ user, projects }) {
 
         <footer className="cp-footer">
           <div className="cp-wrap cp-foot-inner">
-            <Link href="/" className="cp-brand">
-              <span className="mark"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+            <Link href="/" className="cp-brand" style={{ gap: 12 }}>
               <span className="bname">IOT <b>TECHS</b></span>
+              <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)" }} />
             </Link>
-            <div>© 2026 IOT TECHS · La Vague Inc. — Secure Tomorrow Today</div>
+            <div>© 2026 IOT TECHS · La Vague Inc.</div>
             <div><Link href="/">Help</Link> · <Link href="/">Privacy</Link></div>
           </div>
         </footer>

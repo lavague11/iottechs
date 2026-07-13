@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getToolDataAction, saveToolDataAction, trackPackageAction } from "./proposal-actions";
 import ReceivingChecklist from "./receiving-checklist";
+import { TaglinePill } from "../../components/brand";
 
 // Fulfillment-stage panel. For the customer it's the "what happens next" page right after
 // their deposit: the next appointment, the equipment timeline (1–2 days processing, 3–5 days
@@ -359,7 +360,7 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
       <div className="stp-header">
         <div className="stp-hd-left">
           <span className="stp-brand">IOT TECHS</span>
-          <span className="stp-tagline">Secure Tomorrow. Today.</span>
+          <TaglinePill tone="dark" className="stp-brand-pill" />
         </div>
         <span className="stp-doctag">Fulfillment &amp; Equipment</span>
       </div>
@@ -558,7 +559,7 @@ const STP_CSS = `
 .stp-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #4b6a9b}
 .stp-hd-left{display:flex;flex-direction:column;gap:2px}
 .stp-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.stp-tagline{font-size:.66rem;font-weight:600;color:#C9A96E;letter-spacing:.03em}
+.stp-brand-pill{margin:2px 0}
 .stp-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9fc0e8;border:1px solid rgba(75,106,155,.55);border-radius:100px;padding:5px 13px}
 .stp-section-hd{margin:16px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.74rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #4b6a9b}
 .stp-footer{margin-top:18px;background:#0B0F1A;border-top:2px solid #4b6a9b;color:#9aa1af;font-size:.7rem;text-align:center;padding:11px 22px}

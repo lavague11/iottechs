@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import { TaglinePill } from "../../components/brand";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -177,7 +178,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       <div className="apv-header">
         <div className="apv-hd-left">
           <span className="apv-brand">IOT TECHS</span>
-          <span className="apv-tagline">Secure Tomorrow. Today.</span>
+          <TaglinePill tone="dark" className="apv-brand-pill" />
         </div>
         <span className="apv-doctag">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
       </div>
@@ -398,7 +399,7 @@ const APV_CSS = `
 .apv-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #C9A96E}
 .apv-hd-left{display:flex;flex-direction:column;gap:2px}
 .apv-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.apv-tagline{font-size:.66rem;font-weight:600;color:#C9A96E;letter-spacing:.03em}
+.apv-brand-pill{margin:2px 0}
 .apv-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C9A96E;border:1px solid rgba(201,169,110,.4);border-radius:100px;padding:5px 13px}
 .apv-empty{padding:34px 22px;text-align:center;color:#6f7686;font-size:.86rem}
 .apv-note{margin:14px 22px 0;padding:9px 12px;border-radius:8px;font-size:.8rem;font-weight:600}

@@ -5,6 +5,7 @@ import { getApprovalDataAction } from "./proposal-actions";
 import { optionTotals } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
 import SystemQrModal from "./system-qr-modal";
+import { TaglinePill } from "../../components/brand";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
@@ -160,7 +161,10 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
       {/* Certificate */}
       <div className="cmp-cert" id="cmp-cert">
         <div className="cmp-cert-head">
-          <span className="cmp-cert-brand">IOT TECHS</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="cmp-cert-brand">IOT TECHS</span>
+            <TaglinePill tone="light" />
+          </div>
           <span className="cmp-cert-kicker">Certificate of Completion</span>
         </div>
         <div className="cmp-cert-grid">

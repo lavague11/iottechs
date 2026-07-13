@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "../login/actions";
 import { attachAutocomplete } from "../../lib/places";
+import { TaglinePill } from "./brand";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -291,7 +292,6 @@ export default function AdminShell({ user, alerts, active, children }) {
       <header className="nav">
         <div className="apx-wrap nav-top">
           <Link href="/dashboard" className="apx-brand">
-            <span className="mark"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
             <span className="name">IOT <b>TECHS</b></span>
             <span className="admin-badge" style={{ background: USER_ROLE_COLOR[user?.role] || "#C9A96E" }}>{ROLE_LABEL[user?.role] || "Staff"}</span>
           </Link>
@@ -364,7 +364,10 @@ export default function AdminShell({ user, alerts, active, children }) {
 
       <footer>
         <div className="apx-wrap foot-inner">
-          <Link href="/dashboard" className="apx-brand"><span className="mark"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><span className="name">IOT <b>TECHS</b></span></Link>
+          <Link href="/dashboard" className="apx-brand foot-brand">
+            <span className="name">IOT <b>TECHS</b></span>
+            <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)" }} />
+          </Link>
           <div>© 2026 IOT TECHS · La Vague Inc.</div>
           <div><Link href="/">Help</Link> · <Link href="/">Privacy</Link></div>
         </div>
@@ -395,8 +398,7 @@ const CSS = `
 .apx header.nav{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .apx .nav-top{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px}
 .apx-brand{display:flex;align-items:center;gap:11px}
-.apx-brand .mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,var(--slate),var(--ink));display:grid;place-items:center}
-.apx-brand .mark svg{width:20px;height:20px;stroke:var(--gold);fill:none;stroke-width:1.8}
+.apx-brand.foot-brand{gap:14px}
 .apx-brand .name{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.25rem;letter-spacing:-.02em}
 .apx-brand .name b{color:var(--gold-deep)}
 .apx-brand .admin-badge{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:#fff;border-radius:5px;padding:3px 7px;margin-left:4px}
@@ -712,7 +714,6 @@ const CSS = `
   .apx .action{padding:12px 13px}
   .apx .nav-top{height:58px;gap:10px}
   .apx-brand .name{font-size:1.05rem}
-  .apx-brand .mark{width:32px;height:32px}
   .apx .nav-right{gap:7px}
   .apx .btn-primary{padding:9px 11px}
   .apx .tabbar{height:44px}

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction } from "./proposal-actions";
+import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -114,7 +115,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         <div className="pcv-header">
           <div className="pcv-hd-left">
             <span className="pcv-brand">IOT TECHS</span>
-            <span className="pcv-tagline">Secure Tomorrow. Today.</span>
+            <TaglinePill tone="dark" className="pcv-pill" />
           </div>
           <span className="pcv-doctag">Proposal</span>
         </div>
@@ -540,8 +541,7 @@ const PCV_CSS = `
   align-items:flex-start;flex-wrap:wrap;gap:14px;border-top:4px solid #C9A96E}
 .pcv-hd-left{display:flex;flex-direction:column;gap:3px}
 .pcv-brand{font-size:1.3rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.pcv-tagline{font-size:.68rem;font-weight:600;color:#C9A96E;letter-spacing:.03em;
-  padding-bottom:4px;border-bottom:1px solid rgba(201,169,110,.5);margin-bottom:2px;width:fit-content}
+.pcv-pill{margin:2px 0}
 .pcv-contact{font-size:.7rem;color:#9aa1af}
 .pcv-hd-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .pcv-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;

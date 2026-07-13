@@ -1,4 +1,5 @@
 import NavBar from "./NavBar";
+import { TaglinePill } from "./brand";
 
 // VAULT DARK masthead — brand left, document tag right. Server component.
 export default function Masthead({ docType = "Project Dashboard", tag, date, showNav = true }) {
@@ -7,6 +8,7 @@ export default function Masthead({ docType = "Project Dashboard", tag, date, sho
       <div className="masthead-inner">
         <div className="brand">
           <div className="name">IOT TECHS</div>
+          <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "4px 0" }} />
           <div className="brand-tag">La Vague Inc. · Field Service Platform</div>
           <div className="brand-rule" />
           <div className="contact">support@iot-techs.com · NYC / NJ Metro</div>

@@ -33,7 +33,7 @@ export function downloadCompletionPdf(project, meta = {}) {
   doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...WHITE);
   doc.text("IOT TECHS", 61.2, 46.8);
   doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
-  doc.text("SECURE TOMORROW. TODAY.", 61.2, 60.48);
+  doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 60.48);
   doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.5); doc.line(61.2, 66.24, 216, 66.24);
   doc.setFontSize(7.5); doc.setTextColor(170, 170, 170);
   doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 79.2);

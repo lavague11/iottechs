@@ -47,7 +47,7 @@ export function downloadProposalPdf(p, meta = {}) {
     doc.text("IOT TECHS", 61.2, 46.8);
 
     doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
-    doc.text("SECURE TOMORROW. TODAY.", 61.2, 60.48);
+    doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 60.48);
     doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.5);
     doc.line(61.2, 66.24, 216, 66.24);
 

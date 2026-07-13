@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { loginAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
+import { TaglinePill } from "../components/brand";
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -112,12 +113,8 @@ export default function LoginClient({ next }) {
       <div className={`gw2-card${cardWarp ? " gw2-warp" : ""}`}>
         <div className="gw2-ring" />
         <div className="gw2-brand">
-          <div className="gw2-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#C9A96E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3"/><circle cx="12" cy="15.5" r="1.4"/>
-            </svg>
-          </div>
           <h1>IOT&nbsp;TECHS</h1>
+          <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "6px 0 4px" }} />
           <div className="gw2-subtag">Staff Portal</div>
         </div>
 
@@ -195,8 +192,6 @@ const CSS = `
 .gw2-ring{position:absolute;inset:-1px;border-radius:21px;background:conic-gradient(from 200deg,transparent 60%,rgba(201,169,110,.5) 75%,rgba(201,169,110,.8) 80%,rgba(201,169,110,.5) 85%,transparent 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;padding:1px;animation:gw2Rotate 3s linear infinite;pointer-events:none}
 @keyframes gw2Rotate{to{transform:rotate(360deg)}}
 .gw2-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-.gw2-mark{width:52px;height:52px;border-radius:14px;background:linear-gradient(145deg,rgba(201,169,110,.15),rgba(201,169,110,.05));border:1px solid rgba(201,169,110,.3);display:grid;place-items:center}
-.gw2-mark svg{width:26px;height:26px}
 .gw2-brand h1{color:#f0e8d6;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.45rem;font-weight:800;letter-spacing:2px}
 .gw2-subtag{color:rgba(201,169,110,.6);font-size:.7rem;letter-spacing:3px;font-weight:600}
 .lg-form{display:flex;flex-direction:column;gap:12px}

@@ -22,23 +22,27 @@ export default function OpengraphImage() {
           color: "#ffffff",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 26 }}>
-          <div
-            style={{
-              width: 84,
-              height: 84,
-              borderRadius: 20,
-              background: "#C9A96E",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div style={{ width: 30, height: 30, borderRadius: 30, background: "#0B0F1A" }} />
-          </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: 64, fontWeight: 800, letterSpacing: "0.06em", display: "flex" }}>
             <span>IOT&nbsp;</span>
             <span style={{ color: "#C9A96E" }}>TECHS</span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              marginTop: 22,
+              border: "2px solid rgba(255,255,255,.35)",
+              borderRadius: 100,
+              padding: "10px 26px",
+              width: "fit-content",
+              fontSize: 26,
+              fontWeight: 600,
+              letterSpacing: "0.02em",
+              color: "#ffffff",
+            }}
+          >
+            Make Tomorrow Safer Today
           </div>
         </div>
         <div style={{ fontSize: 46, marginTop: 46, color: "#e6e8ee", maxWidth: 940, lineHeight: 1.25 }}>

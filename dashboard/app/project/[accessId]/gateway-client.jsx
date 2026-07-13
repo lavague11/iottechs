@@ -49,6 +49,32 @@ function fmtPhone(v) {
   if (d.length === 7)  return `${d.slice(0,3)}-${d.slice(3)}`;
   return v;
 }
+// vCard escaping per RFC 6350 — commas, semicolons, and backslashes need escaping so a comma
+// in an address (e.g. "Bronx, NY") doesn't get parsed as a field separator.
+const vEsc = (v) => String(v ?? "").replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;");
+// Build + trigger a vCard download. iOS Safari's native "Add Contact" sheet only reliably
+// fires off a `data:` URI navigation — the blob-URL + <a download> pattern that works
+// everywhere else just saves an inert file to Files on iPhone instead of prompting to add it.
+function downloadVcard(lp) {
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `FN:${vEsc(lp.customer)}`, `N:${vEsc(lp.customer)};;;;`, "ORG:IOT TECHS"];
+  if (lp.contact_phone) lines.push(`TEL;TYPE=WORK,VOICE:${vEsc(lp.contact_phone)}`);
+  if (lp.contact_email) lines.push(`EMAIL;TYPE=PREF,INTERNET:${vEsc(lp.contact_email)}`);
+  if (lp.address) lines.push(`ADR;TYPE=WORK:;;${vEsc(lp.address)};;;;`);
+  lines.push(`NOTE:Project ${vEsc(lp.access_id)}`, "END:VCARD");
+  const vcard = lines.join("\r\n");
+  const isIOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
+  if (isIOS) {
+    window.location.href = "data:text/vcard;charset=utf-8," + encodeURIComponent(vcard);
+    return;
+  }
+  const blob = new Blob([vcard], { type: "text/vcard" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(lp.customer || "contact").replace(/\s+/g, "_")}.vcf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const LOGIN_ROLES = ["admin", "manager", "sales", "tech", "customer"];
 const BUCKET_LABELS = { OPEN: "Open", IN_PROGRESS: "In Progress", CLOSED: "Closed" };
@@ -217,7 +243,6 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
     <header className="masthead">
       <div className="masthead-inner">
         <Link href={homeHref || "/"} className="brand-link">
-          <span className="brand-mark"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
           <span className="brand-text">IOT <b>TECHS</b></span>
         </Link>
         <div className="doc-controls">
@@ -2849,8 +2874,6 @@ const PV_CSS = `
 .pvx .masthead{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:0;margin-bottom:8px}
 .pvx .masthead-inner{max-width:1180px;margin:0 auto;padding:12px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px}
 .pvx .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
-.pvx .brand-mark{width:32px;height:32px;border-radius:8px;background:linear-gradient(145deg,#2C3347,#0e1320);display:grid;place-items:center;flex-shrink:0}
-.pvx .brand-mark svg{width:16px;height:16px;stroke:#C9A96E;fill:none;stroke-width:1.8}
 .pvx .brand-text{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:-.02em}
 .pvx .brand-text b{color:#C9A96E}
 .pvx .brand .name{color:var(--ink);font-family:'Bricolage Grotesque',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:-.02em}
