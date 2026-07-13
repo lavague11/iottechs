@@ -423,7 +423,7 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 .pbar-pct-cur { color: rgba(255,255,255,.45); font-weight: 400; text-transform: none; letter-spacing: 0; }
 
 /* "This step is complete — continue" prompt under the % bar (shows when the current stage has no outstanding requirements) */
-.pbar-advance { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; padding: 10px 14px; border: 1px solid #bfe0c9; border-radius: 8px; background: #eef7f0; color: #1d5a2e; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; text-align: left; transition: background .15s, border-color .15s; animation: advanceIn .3s ease; }
+.pbar-advance { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 7px 12px; border: 1px solid #bfe0c9; border-radius: 100px; background: #eef7f0; color: #1d5a2e; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; text-align: left; transition: background .15s, border-color .15s; animation: advanceIn .3s ease; }
 .pbar-advance:hover { background: #e3f2e8; border-color: #5FB88A; }
 .pbar-advance:disabled { opacity: .6; cursor: default; }
 .pbar-advance.done { cursor: default; background: #f4f1ea; border-color: #e2ddd3; color: #6b6252; }
@@ -435,13 +435,25 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 .pba-check.todo { background: #C9A96E; color: #0B0F1A; }
 .pba-req { font-weight: 800; color: #a8442f; }
 .pbar-advance.todo .pba-arrow { color: #8a6d2f; }
-.pba-check { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: #2f7d5a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.pba-check { width: 17px; height: 17px; flex-shrink: 0; border-radius: 50%; background: #2f7d5a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
 .pba-msg { flex: 1; }
 .pba-msg b { color: #0B0F1A; font-weight: 800; }
-.pba-arrow { font-size: 15px; font-weight: 800; color: #2f7d5a; flex-shrink: 0; }
+.pba-arrow { font-size: 14px; font-weight: 800; color: #2f7d5a; flex-shrink: 0; }
+/* The "todo" arrow nudges to say "go here" — a gentle rhythm cue, not a jitter. */
+.pbar-advance.todo .pba-arrow { animation: nudgeArrow 1.5s ease-in-out infinite; }
+@keyframes nudgeArrow { 0%,100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 @keyframes advanceIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes pulseDot { 0%,100% { box-shadow: 0 0 0 0 rgba(201,169,110,.6); } 50% { box-shadow: 0 0 0 5px rgba(201,169,110,0); } }
 .pstage.current .pstage-num { animation: pulseDot 1.8s ease-in-out infinite; }
+/* Stage just completed → the dot pops its check, so you SEE the step click into place. */
+.pstage.just-done .pstage-num { animation: dotPop .7s cubic-bezier(.2,1.6,.3,1); }
+@keyframes dotPop { 0% { transform: scale(1); } 35% { transform: scale(1.45); } 100% { transform: scale(1); } }
+
+/* Stage-advance celebration pill — slides up from the bottom, a beat richer than a plain toast. */
+.stage-burst { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 11200; display: flex; align-items: center; gap: 10px; padding: 12px 22px 12px 14px; border-radius: 100px; background: linear-gradient(120deg, #C9A96E, #b6924f); color: #23180a; font-size: .9rem; font-weight: 800; box-shadow: 0 16px 40px -8px rgba(201,169,110,.6), 0 4px 14px rgba(0,0,0,.2); animation: burstIn .5s cubic-bezier(.2,1.4,.3,1); }
+.stage-burst .sbx-check { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: rgba(255,255,255,.9); color: #9a7a3e; display: grid; place-items: center; animation: dotPop .7s cubic-bezier(.2,1.6,.3,1) .12s both; }
+.stage-burst .sbx-msg b { font-weight: 900; }
+@keyframes burstIn { from { opacity: 0; transform: translate(-50%, 22px) scale(.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 
 /* Stage jump confirmation toast */
 /* stage expand panel — inline expansion attached to the progress bar */

@@ -305,7 +305,7 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
-                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage, pctOverride }) {
+                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, daysInStage, pctOverride, justDone }) {
 
   let stages = stagesProp || stagesForType(type);
   if (!stagesProp && !stages.some((s) => s.key === projectStage)) stages = STAGES;
@@ -364,7 +364,8 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
                 type="button"
                 key={s.key}
                 className={["pstage", isDone?"done":"", isCurrent?"current":"", isFuture?"future":"",
-                  (isViewing && s.key !== projectStage)?"viewing":"", isClickable?"clickable":""].filter(Boolean).join(" ")}
+                  (isViewing && s.key !== projectStage)?"viewing":"", isClickable?"clickable":"",
+                  (justDone && s.key === justDone)?"just-done":""].filter(Boolean).join(" ")}
                 disabled={(!isClickable || busy)}
                 onClick={isClickable ? () => handleClick(s, canBrowse, canConfirm) : undefined}
                 title={canConfirm ? `Set step to ${s.label}` : canBrowse ? `View ${s.label}` : s.label}
@@ -1481,6 +1482,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (liveToastTimer.current) clearTimeout(liveToastTimer.current);
     liveToastTimer.current = setTimeout(() => setLiveToast(null), 4200);
   };
+  // Stage-advance celebration — the "you moved forward" moment. A slim gold pill slides up and
+  // the just-finished dot pops a check, so every role FEELS the progress (not just sees a number
+  // change). Fires for local moves and remote ones alike; the plain "stage moved" toast is retired
+  // in favour of this. `celebrate` = the label to show; `justDone` = the bar key that just completed.
+  const [celebrate, setCelebrate] = useState(null);
+  const [justDone, setJustDone]   = useState(null);
+  const celebrateTimer = useRef(null);
+  const justDoneTimer  = useRef(null);
   const lastSnapshot = useRef(null);   // null until the first poll lands (baseline — never toasts)
   useEffect(() => {
     let live = true;
@@ -1497,7 +1506,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Only follow along automatically if they were viewing the live stage (not off browsing
         // an earlier one on purpose) — otherwise just toast and let them keep looking around.
         setViewingStage((vs) => (vs === prev.stage ? snap.stage : vs));
-        showLiveToast(`Stage moved to ${stageLabel(snap.stage)}`);
+        // The stage-advance celebration effect (keyed on projectStage) handles the toast/animation
+        // for both local and remote moves — no separate "stage moved" toast here (would double up).
       }
       if (snap.proposal && prev.proposal) {
         if (snap.proposal.signed_at && !prev.proposal.signed_at) {
@@ -1691,6 +1701,36 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const i = masterStages.findIndex((s) => s.key === projectStage);
     return i >= 0 && masterStages.length > 1 ? Math.max(10, Math.round((i / (masterStages.length - 1)) * 100)) : 0;
   })();
+
+  // Fire the celebration whenever the project moves FORWARD. The customer celebrates on a phase
+  // change (so intra-phase ops steps stay quiet); everyone else on a real stage change. A backward
+  // move (admin correcting course) gets a quiet neutral toast, never a party.
+  const prevStageRef = useRef(projectStage);
+  useEffect(() => {
+    const prev = prevStageRef.current;
+    if (prev === projectStage) return;
+    prevStageRef.current = projectStage;
+    const pIdx = STAGES.findIndex((s) => s.key === prev);
+    const cIdx = STAGES.findIndex((s) => s.key === projectStage);
+    if (cIdx < 0 || pIdx < 0) return;
+    const forward = cIdx > pIdx;
+    if (isCustomerView) {
+      const prevPhase = masterToCustomerKey(prev);
+      const curPhase  = masterToCustomerKey(projectStage);
+      if (prevPhase === curPhase) return;           // same phase — no milestone for the customer
+      if (!forward) { showLiveToast(`Back to ${stageList.find((p) => p.key === curPhase)?.label || "an earlier step"}`); return; }
+      const label = stageList.find((p) => p.key === curPhase)?.label || "the next step";
+      setCelebrate(label); setJustDone(prevPhase);
+    } else {
+      if (!forward) { showLiveToast(`Moved back to ${stageLabel(projectStage)}`); return; }
+      setCelebrate(stageLabel(projectStage)); setJustDone(prev);
+    }
+    if (celebrateTimer.current) clearTimeout(celebrateTimer.current);
+    if (justDoneTimer.current)  clearTimeout(justDoneTimer.current);
+    celebrateTimer.current = setTimeout(() => setCelebrate(null), 3600);
+    justDoneTimer.current  = setTimeout(() => setJustDone(null), 1100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectStage]);
 
   // When the effective viewing role changes (toggling the preview eye between customer/tech/
   // admin), snap the viewed stage to the CURRENT step of that role's own timeline. Without this,
@@ -2005,6 +2045,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         viewingStage={isCustomerView ? masterToCustomerKey(viewingStage) : viewingStage}
         onBrowse={isCustomerView ? (k) => browse(customerLanding(k)) : browse}
         pctOverride={isCustomerView ? custPct : null}
+        justDone={justDone}
         canControl={canControl && !previewRole}
         onJump={doMove}
         missingFor={(k) => missingReqsFor(k, lp, localAssignments)}
@@ -2553,6 +2594,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="live-toast">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           {liveToast}
+        </div>
+      )}
+
+      {/* Stage-advance celebration — the forward-motion moment, one notch above a plain toast. */}
+      {celebrate && (
+        <div className="stage-burst" key={celebrate}>
+          <span className="sbx-check"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span className="sbx-msg">{cView === "customer" ? "You've reached" : "Advanced to"} <b>{celebrate}</b></span>
         </div>
       )}
     </>
