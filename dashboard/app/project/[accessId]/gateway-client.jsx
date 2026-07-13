@@ -2887,7 +2887,7 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
               <button className="gw2-mclose" onClick={() => setShowHelp(false)}>✕</button>
             </div>
             <div className="gw2-mbd">
-              <p>Forgot your PIN or locked out? Reach our team and we&apos;ll get you back in fast.</p>
+              <p>Your PIN is the <strong>last 4 digits of your phone number</strong>. Still stuck? Reach our team and we&apos;ll get you back in fast.</p>
               <a className="gw2-hrow" href="mailto:support@iot-techs.com?subject=Login%20help%20-%20IOT%20TECHS">
                 <div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div>
                 <div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div>

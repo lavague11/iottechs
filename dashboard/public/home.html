@@ -1076,7 +1076,7 @@
 
   // demo form submit — creates a lead in Supabase (+ keeps Netlify capture as backup)
   // Demo form — step 1
-  let _demoEmail='', _demoPhone='', _demoName='', _demoAccessId='';
+  let _demoEmail='', _demoPhone='', _demoName='', _demoAccessId='', _demoPin='';
   const form=document.getElementById('demoForm');
   form.addEventListener('submit',async function(e){
     e.preventDefault();
@@ -1095,11 +1095,15 @@
         _demoPhone=data.get('phone')||'';
         _demoName=json.name||'';
         _demoAccessId=json.accessId||'';
+        _demoPin=json.customerPin||'';
         document.getElementById('dm-form-view').classList.add('hidden');
         if(json.existingAccount){
           document.getElementById('dm-existing-view').classList.remove('hidden');
         } else {
           document.getElementById('dmSvTitle').textContent='Request Submitted — '+json.name.split(' ')[0]+'!';
+          // PIN is auto-set to the last 4 of their phone — show it read-only instead of asking.
+          var pinShow=document.getElementById('svPinShow');
+          if(pinShow) pinShow.textContent=_demoPin||'—';
           document.getElementById('dm-success-view').classList.remove('hidden');
           document.getElementById('svPw').focus();
         }
@@ -1119,16 +1123,15 @@
     errEl.style.display='none';
     const pw=document.getElementById('svPw').value;
     const pw2=document.getElementById('svPw2').value;
-    const pin=document.getElementById('svPin').value.trim();
+    const pin=_demoPin; // auto-assigned last-4-of-phone; not a user field anymore
     if(pw!==pw2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
-    if(!/^\d{4}$/.test(pin)){errEl.textContent='PIN must be exactly 4 digits.';errEl.style.display='block';return;}
     btn.disabled=true; btn.textContent='Creating account…';
     try{
       const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({email:_demoEmail,phone:_demoPhone,name:_demoName,password:pw,pin,accessId:_demoAccessId})});
       const json=await res.json();
       if(json.ok){
-        const projectHref='/project/'+encodeURIComponent(_demoAccessId)+'?pin='+encodeURIComponent(pin);
+        const projectHref='/project/'+encodeURIComponent(_demoAccessId)+(pin?('?pin='+encodeURIComponent(pin)):'');
         document.getElementById('projectLink').href=projectHref;
         document.getElementById('dm-success-view').classList.add('hidden');
         document.getElementById('dm-done-view').classList.remove('hidden');
@@ -1346,7 +1349,7 @@
       <div class="sv-head">
         <div class="sv-check"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
         <h3 id="dmSvTitle">Request Submitted</h3>
-        <p class="sv-sub">Create a password and a 4-digit PIN so you can log in to view your project status.</p>
+        <p class="sv-sub">Create a password so you can log in and track your project.</p>
       </div>
       <form id="accountSetupForm">
         <div class="field">
@@ -1358,8 +1361,11 @@
           <input id="svPw2" type="password" placeholder="Confirm password" required>
         </div>
         <div class="field">
-          <label for="svPin">4-Digit Fast Login PIN</label>
-          <input id="svPin" type="text" inputmode="numeric" maxlength="4" placeholder="e.g. 4821" pattern="\d{4}" required>
+          <label>Your Fast-Login PIN</label>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line,#e4e7ee);border-radius:10px;background:var(--bg-soft,#f7f8fb)">
+            <span id="svPinShow" style="font-size:1.3rem;font-weight:800;letter-spacing:.28em;font-variant-numeric:tabular-nums">—</span>
+            <span style="font-size:.8rem;color:var(--muted,#6b7280)">Set automatically — the last 4 digits of your phone.</span>
+          </div>
         </div>
         <div id="svErr" class="pl-error" style="display:none;"></div>
         <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:6px;">Create Account &amp; View My Project →</button>

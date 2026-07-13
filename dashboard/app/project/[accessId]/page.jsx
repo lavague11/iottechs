@@ -3,8 +3,8 @@ import { getJobByAccessId, getProjectAssignments, getStaffUsers, getWorkOrdersBy
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
-import Masthead from "../../components/Masthead";
 import GatewayClient from "./gateway-client";
+import LinkNotFound from "./link-not-found";
 
 // A logged-in session can open a project without re-entering the PIN, as long as
 // the session is actually authorized for THIS project:
@@ -65,17 +65,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   const p = getJobByAccessId(accessId);
 
   if (!p) {
-    return (
-      <>
-        <Masthead docType="Project Access" tag="Secure Link" date="Gated" showNav={false} />
-        <div className="wrap" style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚠️</div>
-          <h1 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 6 }}>Project link is invalid</h1>
-          <p className="empty" style={{ marginBottom: 22 }}>There are no projects found.</p>
-          <a href="/" style={{ display: "inline-flex", background: "#C9A96E", color: "#0B0F1A", fontWeight: 700, fontSize: ".9rem", padding: "10px 22px", borderRadius: 10, textDecoration: "none" }}>Go back home</a>
-        </div>
-      </>
-    );
+    return <LinkNotFound />;
   }
 
   const project = {
@@ -134,6 +124,11 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     const stok = jar.get("iot_session")?.value;
     const su = stok ? await parseToken(stok) : null;
     if (su?.id) { const row = getUserById(su.id); if (row) currentUser = { id: row.id, name: row.name, email: row.email, role: row.role }; }
+  }
+  // PIN-only customer (a lead with no account yet) has no session → no currentUser. Surface the
+  // project's own contact name so they're identified as themselves, never a nameless "guest".
+  if (!currentUser && initialView === "customer") {
+    currentUser = { id: null, name: p.contact_name || p.customer || "Customer", email: p.contact_email || "", role: "customer" };
   }
 
   // Commission is internal finance — only staff browsers ever receive it. (It was previously

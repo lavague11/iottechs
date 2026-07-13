@@ -1083,6 +1083,24 @@ export function getUserById(id) {
   return db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE id = ?").get(Number(id));
 }
 
+// The customer account that owns a project — matched to the project's contact email, then
+// phone. Used to turn a correct project PIN into that customer's real login session (so a PIN
+// unlock also identifies them and reaches their dashboard), and to attribute PIN-access events.
+export function getCustomerUserForProject(project) {
+  if (!project) return null;
+  const email = project.contact_email ? String(project.contact_email).trim().toLowerCase() : null;
+  if (email) {
+    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE LOWER(email)=? AND role='customer'").get(email);
+    if (u) return u;
+  }
+  const digits = String(project.contact_phone || "").replace(/\D/g, "");
+  if (digits.length >= 7) {
+    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'(',''),')',''),'-',''),' ','')=? AND role='customer'").get(digits);
+    if (u) return u;
+  }
+  return null;
+}
+
 // True when the account already has a password set — registration must never overwrite it
 // (that would let anyone take over an existing account by "registering" with its email).
 export function userHasPassword(userId) {
@@ -1189,6 +1207,35 @@ export function searchProjects(q) {
     .prepare("SELECT * FROM projects WHERE customer LIKE ? OR access_id LIKE ? OR address LIKE ? OR issue LIKE ? ORDER BY id DESC")
     .all(like, like, like, like)
     .map(decorate);
+}
+
+// Self-service password reset. Identity is proven the same way the app already trusts identity
+// everywhere else — the last 4 digits of the phone on file (the customer's login PIN). Match the
+// account by username/email/phone, confirm the last-4, then set the new password. Deliberately
+// vague errors so it can't be used to enumerate which emails/phones have accounts.
+export function resetPasswordByPhoneLast4(identifier, last4, newPassword) {
+  const cred = String(identifier || "").trim().toLowerCase();
+  if (!cred) return { error: "Enter your email or phone." };
+  if (String(newPassword || "").length < 6) return { error: "Password must be at least 6 characters." };
+  const l4 = String(last4 || "").replace(/\D/g, "").slice(-4);
+  if (l4.length !== 4) return { error: "Enter the last 4 digits of your phone." };
+
+  const digits = cred.replace(/\D/g, "");
+  const where = ["LOWER(COALESCE(username,'')) = ?", "LOWER(COALESCE(email,'')) = ?"];
+  const params = [cred, cred];
+  if (digits.length >= 7) {
+    where.push("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'(',''),')',''),'-',''),' ',''),'+','') = ?");
+    params.push(digits);
+  }
+  const candidates = db.prepare(`SELECT * FROM users WHERE ${where.join(" OR ")}`).all(...params);
+  const user = candidates.find((u) => {
+    const pd = String(u.phone || "").replace(/\D/g, "");
+    return pd.length >= 4 && pd.slice(-4) === l4;
+  });
+  if (!user) return { error: "We couldn't verify those details. Check your email/phone and the last 4 digits." };
+  if (user.disabled) return { error: "This account is disabled — please contact support." };
+  updateUser(user.id, { password: newPassword });
+  return { ok: true, name: user.name };
 }
 
 export function verifyUser(email, password) {

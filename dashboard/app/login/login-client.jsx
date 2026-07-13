@@ -170,7 +170,8 @@ export default function LoginClient({ next }) {
           <div className="gw2-modal">
             <div className="gw2-mhd"><span>Need help signing in?</span><button className="gw2-mclose" onClick={() => setShowHelp(false)}>✕</button></div>
             <div className="gw2-mbd">
-              <p>Forgot your password or locked out? Reach our team and we&apos;ll get you back in fast.</p>
+              <p>Forgot your password? Reset it yourself, or reach our team and we&apos;ll get you back in fast.</p>
+              <a className="gw2-hrow" href="/forgot"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div><div className="gw2-hk">Reset my password</div><div className="gw2-hv">Verify with the last 4 of your phone</div></div></a>
               <a className="gw2-hrow" href="mailto:support@iot-techs.com?subject=Login%20help%20-%20IOT%20TECHS"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div><div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div></a>
               <a className="gw2-hrow" href="sms:+16463960775"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div><div><div className="gw2-hk">Text us</div><div className="gw2-hv">646-396-0775</div></div></a>
             </div>

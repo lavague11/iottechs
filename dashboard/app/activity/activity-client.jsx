@@ -140,6 +140,14 @@ export default function ActivityClient({ user, alerts, events }) {
                               <div style={{ fontSize: ".74rem", textTransform: "capitalize", color: USER_ROLE_COLOR[e.user_role] || "var(--muted)", fontWeight: 600 }}>{e.user_role || "—"}</div>
                             </div>
                           </div>
+                        ) : e.project_customer ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div className="uav" style={{ width: 30, height: 30, fontSize: ".74rem", background: "var(--gold-deep,#8a6d2f)", color: "#fff" }}>{initials(e.project_customer)}</div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: ".86rem" }}>{e.project_customer}</div>
+                              <div style={{ fontSize: ".74rem", color: "var(--muted)", fontWeight: 600 }}>via project PIN</div>
+                            </div>
+                          </div>
                         ) : <span style={{ color: "var(--muted)" }}>Guest</span>}
                       </td>
                       <td style={{ color: "var(--muted)" }}>{ipDisplay(e.ip_address)}</td>

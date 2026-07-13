@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -99,9 +99,22 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       return { ok: true, view, via: "pin" };
     }
     if (p.customer_pin && entered === String(p.customer_pin).trim()) {
-      recordEvent("pin_access", null, ip, ua, p.id, `Customer PIN on ${p.access_id}`);
+      // A correct project PIN is proof the visitor is this project's customer. If that customer
+      // has a real account, log them in fully (identity + dashboard access) — the PIN is a
+      // shortcut for logging in, not a lesser guest pass. Leads with no account yet keep the
+      // project-scoped PIN grant (short-lived; see lib/auth ACCESS_TTL_MS).
+      const owner = getCustomerUserForProject(p);
+      if (owner && !owner.disabled) {
+        recordEvent("pin_access", owner.id, ip, ua, p.id, `Customer PIN → ${owner.name} on ${p.access_id}`);
+        const { makeToken } = await import("../../../lib/auth");
+        const jar = await cookies();
+        jar.set("iot_session", await makeToken(owner), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+        jar.delete("iot_access");
+        return { ok: true, view: PIN_VIEW.customer, via: "pin", name: owner.name };
+      }
+      recordEvent("pin_access", null, ip, ua, p.id, `Customer PIN on ${p.access_id} (${p.contact_name || p.customer || "guest"})`);
       await grantPin("customer");
-      return { ok: true, view: PIN_VIEW.customer, via: "pin" };
+      return { ok: true, view: PIN_VIEW.customer, via: "pin", name: p.contact_name || p.customer || null };
     }
     if (p.tech_pin && entered === p.tech_pin) {
       recordEvent("pin_access", null, ip, ua, p.id, `Tech PIN on ${p.access_id}`);
