@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, TECH_STAGES, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
@@ -2417,12 +2417,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       </>
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (
-        <div className="pv-close-bar">
+        <div className="pv-close-bar" style={{ gap: 10 }}>
           <div className="pv-lost-notice">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Project closed · <strong>{lp.lost_reason}</strong>
             {lp.lost_at && <span className="pv-lost-when"> · {new Date(lp.lost_at + "Z").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>}
           </div>
+          {["admin","manager"].includes(view) && (
+            <button className="pv-reopen-btn" disabled={busy} onClick={async () => {
+              setBusy(true);
+              const r = await reactivateProjectAction(lp.access_id);
+              setBusy(false);
+              if (!r?.error) setLocalProj((p) => ({ ...p, lost_reason: null, lost_at: null }));
+            }}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Reopen project
+            </button>
+          )}
         </div>
       )}
 
@@ -3379,6 +3390,9 @@ const PV_CSS = `
 .pvx .pv-close-btn:hover{background:rgba(231,76,60,.06);border-color:#e74c3c}
 .pvx .pv-lost-notice{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;color:#e74c3c;font-weight:600;padding:6px 12px;background:rgba(231,76,60,.06);border:1px solid rgba(231,76,60,.2);border-radius:8px}
 .pvx .pv-lost-when{font-weight:400;color:var(--muted)}
+.pvx .pv-reopen-btn{display:inline-flex;align-items:center;gap:6px;background:var(--green,#1c8a45);border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s}
+.pvx .pv-reopen-btn:hover:not(:disabled){background:#166e37}
+.pvx .pv-reopen-btn:disabled{opacity:.55;cursor:default}
 .pvx .pv-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
 .pvx .pv-modal{background:#fff;border-radius:16px;padding:30px 28px 24px;max-width:420px;width:100%;position:relative;box-shadow:0 12px 40px rgba(0,0,0,.18)}
 .pvx .pv-modal-x{position:absolute;top:14px;right:14px;width:28px;height:28px;background:var(--bg-soft);border:none;border-radius:7px;cursor:pointer;font-size:1rem;color:var(--muted);display:flex;align-items:center;justify-content:center;line-height:1}

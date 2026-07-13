@@ -1414,6 +1414,13 @@ export function markProjectLost(accessId, reason) {
   db.prepare("UPDATE projects SET lost_reason = ?, lost_at = datetime('now') WHERE access_id = ? COLLATE NOCASE")
     .run(String(reason), String(accessId));
 }
+// Reactivate a closed/lost project — clears the lost stamp so it flows again. Also closes any
+// open "Reopen request" tickets so the queue reflects that the ask was actioned.
+export function reactivateProject(accessId) {
+  db.prepare("UPDATE projects SET lost_reason = NULL, lost_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  db.prepare("UPDATE tickets SET status = 'closed', updated_at = datetime('now') WHERE access_id = ? COLLATE NOCASE AND status NOT IN ('closed','resolved') AND subject LIKE 'Reopen request%'").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
 
 export function setProjectCustomerPin(accessId, pin) {
   db.prepare("UPDATE projects SET customer_pin = ? WHERE access_id = ? COLLATE NOCASE").run(String(pin), String(accessId));
@@ -1599,6 +1606,15 @@ export function getTickets() {
     LEFT JOIN projects p ON p.access_id = t.access_id COLLATE NOCASE
     ORDER BY (t.status = 'closed') ASC, t.updated_at DESC, t.id DESC
   `).all().map(decorateTicket);
+}
+
+// True when this project already has an open/unresolved "Reopen request" ticket — so a customer
+// tapping Reopen twice doesn't stack duplicates.
+export function hasOpenReopenTicket(accessId) {
+  const row = db.prepare(
+    "SELECT 1 FROM tickets WHERE access_id = ? COLLATE NOCASE AND status NOT IN ('closed','resolved') AND subject LIKE 'Reopen request%' LIMIT 1"
+  ).get(String(accessId));
+  return !!row;
 }
 
 export function getTicketById(id) {

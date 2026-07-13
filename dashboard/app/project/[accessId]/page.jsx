@@ -5,6 +5,7 @@ import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/a
 import { LOGIN_VIEW } from "../../../lib/spec";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
+import ClosedProject from "./closed-project";
 
 // A logged-in session can open a project without re-entering the PIN, as long as
 // the session is actually authorized for THIS project:
@@ -104,6 +105,12 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
+
+  // A closed/lost project, seen by the customer → the "missed your train" reopen screen instead
+  // of the normal gateway. Staff still open it fully (they need to manage/reopen it themselves).
+  if (p.lost_at && initialView === "customer" && !previewRole) {
+    return <ClosedProject accessId={p.access_id} />;
+  }
 
   // Techs coordinate through the office, never the customer directly — so they must NEVER receive
   // the customer's personal contact channels (phone, email, private message) or the point-of-contact

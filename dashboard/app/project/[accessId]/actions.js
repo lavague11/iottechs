@@ -245,6 +245,34 @@ async function getAnyTok() {
   return at?.role ? { role: at.role, accessId: at.accessId, viaPin: true } : null;
 }
 
+// Customer asks to reopen a closed/lost project — opens a ticket for the office to action,
+// rather than silently un-closing it. Any authenticated viewer of this project (session or PIN)
+// may file it. Deduped: if an open reopen ticket already exists, we don't stack another.
+export async function requestProjectReopenAction(accessId) {
+  const tok = await getAnyTok();
+  if (!tok) return { error: "Please unlock the project first." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const p = getJobByAccessId(accessId);
+  if (!p) return { error: "Project not found." };
+
+  const { createTicket, hasOpenReopenTicket } = await import("../../../lib/db");
+  if (hasOpenReopenTicket(accessId)) return { ok: true, already: true };
+
+  const who = p.contact_name || p.customer || "Customer";
+  createTicket({
+    access_id: accessId,
+    subject: `Reopen request — ${p.customer || accessId}`,
+    priority: "medium",
+    opened_by_name: who,
+    opened_by_role: "customer",
+    audience: "admin,manager",
+    body: `${who} requested to reopen this closed project${p.lost_reason ? ` (was closed: ${p.lost_reason})` : ""}. Review and reopen from the project if appropriate.`,
+  });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/tickets");
+  return { ok: true };
+}
+
 // Tech-only stage advances: schedule→install (accept) and install→qc (complete)
 const TECH_TRANSITIONS = { schedule: "install", install: "qc" };
 export async function techAdvanceStageAction(accessId, fromStage) {
@@ -441,5 +469,19 @@ export async function closeProjectAction(accessId, reason) {
   markProjectLost(accessId, reason);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
+  return { ok: true };
+}
+
+// Reactivate a closed/lost project (staff) — the other side of closeProjectAction, and where a
+// customer's reopen ticket gets actioned.
+export async function reactivateProjectAction(accessId) {
+  const tok = await getAnyTok();   // real session OR master-PIN admin (iot_access)
+  if (!["admin","manager","sales"].includes(tok?.role)) return { error: "Unauthorized." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const { reactivateProject } = await import("../../../lib/db");
+  reactivateProject(accessId);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  revalidatePath("/tickets");
   return { ok: true };
 }
