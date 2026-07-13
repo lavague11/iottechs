@@ -221,7 +221,7 @@ function CinematicTracking({ tracking }) {
 }
 
 // ---- Panel --------------------------------------------------------------------------------
-export default function ScheduleTrackingPanel({ accessId, role, project, preview, proposal, staffUsers = [] }) {
+export default function ScheduleTrackingPanel({ accessId, role, project, preview, proposal }) {
   const isStaff = ["admin", "manager"].includes(role);
   const [events, setEvents] = useState([]);
   // Shipments — a project's equipment usually arrives in several boxes. Record shape:
@@ -237,8 +237,8 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState({});             // { number: liveRecord } from the carrier API
   const [liveState, setLiveState] = useState({});   // { number: "loading"|"ok"|"nokey"|"err" }
-  const [techs, setTechs] = useState(null);         // assigned install crew (null = not loaded yet)
-  const [techAdd, setTechAdd] = useState("");       // add-technician input
+  const [open, setOpen] = useState(true);
+  const [marked, setMarked] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -301,27 +301,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
     if (await saveShipments(list)) { setEditIdx(null); setEditBuf(null); setActive(0); }
   }
 
-  // ---- Assigned install crew (multiple techs, add/remove) ----
-  useEffect(() => {
-    let live = true;
-    getToolDataAction(accessId, "techs").then((r) => {
-      if (!live || !r?.ok || !r.saved?.data) return;
-      try { setTechs(JSON.parse(r.saved.data).names || []); } catch { /* bad blob */ }
-    }).catch(() => {});
-    return () => { live = false; };
-  }, [accessId]);
-  const canAssign = !preview && ["admin", "manager", "sales"].includes(role);
-  const seedTechs = proposal?.tech_signed_name ? [proposal.tech_signed_name] : (project?.tech ? [project.tech] : []);
-  const crew = techs != null ? techs : seedTechs;   // seed from the WO-accepting tech until edited
-  const staffTechNames = [...new Set(staffUsers.filter((u) => u.role === "tech" && u.name).map((u) => u.name))];
-  async function persistTechs(next) { setTechs(next); if (!preview) await saveToolDataAction(accessId, "techs", JSON.stringify({ names: next })); }
-  function addTech(name) {
-    const n = String(name || "").trim(); if (!n) return;
-    if (crew.some((t) => t.toLowerCase() === n.toLowerCase())) { setTechAdd(""); return; }
-    persistTechs([...crew, n]); setTechAdd("");
-  }
-  const removeTech = (name) => persistTechs(crew.filter((t) => t !== name));
-
   // Pull the REAL carrier status for a package. Updates the in-memory live record for display and,
   // for staff, persists status/ETA back so the equipment timeline + customer view reflect reality.
   async function refreshLive(ship, persist, retried) {
@@ -357,14 +336,18 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
   return (
     <div className="stp-root">
       <style>{STP_CSS}</style>
-      <div className="stp-header">
-        <div className="stp-hd-left">
-          <span className="stp-brand">IOT TECHS</span>
-          <TaglinePill tone="dark" className="stp-brand-pill" />
-        </div>
-        <span className="stp-doctag">Fulfillment &amp; Equipment</span>
+      <div className={`stp-header${marked ? " shaded" : ""}`}>
+        <button type="button" className="stp-hd-toggle" onClick={() => setOpen((v) => !v)}>
+          <div className="stp-hd-left">
+            <span className="stp-brand">IOT TECHS</span>
+            <TaglinePill tone="dark" className="stp-brand-pill" />
+          </div>
+          {marked ? <span className="stp-complete-pill">✓ Complete</span> : <span className="stp-doctag">Fulfillment &amp; Equipment</span>}
+        </button>
+        <button type="button" className="stp-chev" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
       </div>
 
+      {open && (<>
       {/* Next appointment */}
       <div className="stp-section-hd">Your Next Appointment</div>
       {next ? (
@@ -387,30 +370,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
             : <>We're lining up your installation date — it will appear here as soon as it's booked.</>}
         </div>
       )}
-      {/* Assigned technicians — internal only (never shown to the customer). Office can add/remove. */}
-      {role !== "customer" && !preview && (
-        <div className="stp-appt-tech">
-          <div className="stp-crew-top">
-            <span className="stp-tech-lbl">Assigned Technician{crew.length !== 1 ? "s" : ""}</span>
-            <span className="stp-tech-int">Internal</span>
-          </div>
-          <div className="stp-crew-chips">
-            {crew.length ? crew.map((t) => (
-              <span key={t} className="stp-crew-chip">{t}{canAssign && <button type="button" className="stp-crew-x" title="Remove" onClick={() => removeTech(t)}>✕</button>}</span>
-            )) : <span className="stp-tech-none">Not yet assigned</span>}
-          </div>
-          {canAssign && (
-            <div className="stp-crew-add">
-              <input className="stp-crew-in" list="stp-tech-list" value={techAdd} placeholder="Add technician…"
-                     onChange={(e) => setTechAdd(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTech(techAdd)} />
-              <datalist id="stp-tech-list">{staffTechNames.map((n) => <option key={n} value={n} />)}</datalist>
-              <button type="button" className="stp-crew-addbtn" disabled={!techAdd.trim()} onClick={() => addTech(techAdd)}>+ Add</button>
-            </div>
-          )}
-        </div>
-      )}
-
-
       {/* Tracking — only rendered once a real number exists (or for staff, who can add one) */}
       {showTracking && (<>
       <div className="stp-section-hd stp-track-hd">
@@ -547,6 +506,18 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
           </div>
         </div>
       )}
+      </>)}
+
+      <div className="stp-complete-row">
+        {marked ? (
+          <button type="button" className="stp-reopen" onClick={() => setMarked(false)}>↺ Reopen</button>
+        ) : (
+          <button type="button" className="stp-complete-btn" onClick={() => { setMarked(true); setOpen(false); }}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+            Mark as complete
+          </button>
+        )}
+      </div>
 
       <div className="stp-footer">IOT TECHS · (646) 396-0775 · support@iot-techs.com</div>
     </div>
@@ -561,25 +532,21 @@ const STP_CSS = `
 .stp-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
 .stp-brand-pill{margin:2px 0}
 .stp-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9fc0e8;border:1px solid rgba(75,106,155,.55);border-radius:100px;padding:5px 13px}
+.stp-hd-toggle{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
+.stp-chev{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:.7rem;color:#9aa1af;padding:4px 6px;font-family:inherit}
+.stp-chev:hover{color:#fff}
+.stp-header.shaded{background:#0f2418;border-top-color:#2f7d5a}
+.stp-complete-pill{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#7ee0a4;border:1px solid rgba(126,224,164,.4);border-radius:100px;padding:5px 13px}
+.stp-complete-row{margin:16px 22px 0;display:flex;justify-content:flex-end}
+.stp-complete-btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid #bfe0c9;border-radius:9px;background:#eef7f0;color:#1d5a2e;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
+.stp-complete-btn:hover{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
+.stp-reopen{height:34px;padding:0 14px;border:1px solid #d9d4ca;border-radius:9px;background:#fff;color:#4a5270;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
+.stp-reopen:hover{border-color:#C9A96E;color:#0B0F1A}
 .stp-section-hd{margin:16px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.74rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #4b6a9b}
 .stp-footer{margin-top:18px;background:#0B0F1A;border-top:2px solid #4b6a9b;color:#9aa1af;font-size:.7rem;text-align:center;padding:11px 22px}
 
 .stp-appt{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;padding:14px 16px;display:flex;gap:14px;align-items:center}
 .stp-appt.empty{display:block;font-size:.84rem;color:#4a5270}
-.stp-appt-tech{margin:0 22px;background:#0B0F1A;border:1px solid #d9d4ca;border-top:none;padding:11px 16px;display:flex;flex-direction:column;gap:9px}
-.stp-crew-top{display:flex;align-items:center;gap:10px}
-.stp-tech-lbl{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a93a8}
-.stp-tech-int{margin-left:auto;font-size:.6rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C9A96E;border:1px solid rgba(201,169,110,.4);border-radius:100px;padding:2px 8px}
-.stp-crew-chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
-.stp-crew-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:.82rem;font-weight:700;border-radius:100px;padding:5px 6px 5px 12px}
-.stp-crew-x{width:18px;height:18px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:.62rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
-.stp-crew-x:hover{background:#c0392b}
-.stp-tech-none{color:#8a93a8;font-weight:600;font-style:italic;font-size:.84rem}
-.stp-crew-add{display:flex;gap:7px;align-items:center}
-.stp-crew-in{flex:1;min-width:140px;max-width:240px;height:32px;border:1px solid #3a4260;border-radius:8px;background:#151a2d;color:#fff;padding:0 10px;font-size:.8rem;font-family:inherit;outline:none}
-.stp-crew-in:focus{border-color:#C9A96E}
-.stp-crew-addbtn{height:32px;padding:0 13px;border:1px solid rgba(201,169,110,.5);background:rgba(201,169,110,.15);color:#C9A96E;border-radius:8px;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit}
-.stp-crew-addbtn:disabled{opacity:.5;cursor:default}
 .stp-appt-tile{width:56px;height:56px;flex-shrink:0;border-radius:11px;background:#0B0F1A;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .stp-appt-mon{font-size:.6rem;font-weight:800;letter-spacing:.08em;color:#C9A96E}
 .stp-appt-day{font-size:1.4rem;font-weight:800;line-height:1}

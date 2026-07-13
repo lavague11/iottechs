@@ -12,6 +12,18 @@ export const ICL_CSS = `
 .icl-pricebtn.on{background:#0B0F1A;border-color:#0B0F1A;color:#C9A96E}
 .icl-undoall{height:32px;padding:0 12px;border-radius:8px;border:1px solid #d9d4ca;background:#fff;color:#4a5270;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .icl-undoall:hover{border-color:#4b6a9b;color:#0B0F1A}
+.icl-crew{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0B0F1A;border-radius:10px;padding:8px 12px;margin:0 0 12px}
+.icl-crew-lbl{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a93a8;flex-shrink:0}
+.icl-crew-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.icl-crew-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:.78rem;font-weight:700;border-radius:100px;padding:4px 6px 4px 10px}
+.icl-crew-x{width:16px;height:16px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.icl-crew-x:hover{background:#c0392b}
+.icl-crew-none{color:#8a93a8;font-weight:600;font-style:italic;font-size:.8rem}
+.icl-crew-add{display:flex;gap:6px;align-items:center;margin-left:auto}
+.icl-crew-in{width:150px;height:28px;border:1px solid #3a4260;border-radius:8px;background:#151a2d;color:#fff;padding:0 9px;font-size:.76rem;font-family:inherit;outline:none}
+.icl-crew-in:focus{border-color:#C9A96E}
+.icl-crew-addbtn{height:28px;padding:0 11px;border:1px solid rgba(201,169,110,.5);background:rgba(201,169,110,.15);color:#C9A96E;border-radius:8px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:inherit}
+.icl-crew-addbtn:disabled{opacity:.5;cursor:default}
 .icl-summary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
 .icl-sum-cell{flex:1;min-width:150px;background:#0B0F1A;border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
 .icl-sum-k{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a93a8}

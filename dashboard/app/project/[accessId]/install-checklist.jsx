@@ -33,7 +33,7 @@ const CAMERA_BULK = [
 let _cid = 0;
 const newId = () => `c${Date.now().toString(36)}${_cid++}`;
 
-export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress }) {
+export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, staffUsers = [] }) {
   const isCustomer = role === "customer";
   const canEdit  = !readOnly && !isCustomer;   // tech / admin / manager may mark + add + delete
   const canPrice = !isCustomer;                // can SEE pricing (tech + office)
@@ -85,6 +85,28 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   // Load the assigned technician's effective rates (company defaults ← default ← per-tech override).
   const loadRates = () => getRatesAction(accessId, assignedTech).then((r) => { if (r?.ok && r.effective) setRates({ ...DEFAULT_RATES, ...r.effective }); }).catch(() => {});
   useEffect(() => { if (!isCustomer) loadRates(); /* eslint-disable-next-line */ }, [accessId, assignedTech]);
+
+  // ---- Assigned install crew (multiple techs, add/remove) — small tab in the header. ----
+  const [crewList, setCrewList] = useState(null);   // null = not loaded yet; seeds from the WO-signing tech
+  const [techAdd, setTechAdd] = useState("");
+  useEffect(() => {
+    let live = true;
+    getToolDataAction(accessId, "techs").then((r) => {
+      if (!live || !r?.ok || !r.saved?.data) return;
+      try { setCrewList(JSON.parse(r.saved.data).names || []); } catch { /* bad blob */ }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId]);
+  const canAssignCrew = !readOnly && ["admin", "manager", "sales"].includes(role);
+  const crew = crewList != null ? crewList : (assignedTech ? [assignedTech] : []);
+  const staffTechNames = [...new Set(staffUsers.filter((u) => u.role === "tech" && u.name).map((u) => u.name))];
+  async function persistCrew(next) { setCrewList(next); if (!readOnly) await saveToolDataAction(accessId, "techs", JSON.stringify({ names: next })); }
+  function addCrew(name) {
+    const n = String(name || "").trim(); if (!n) return;
+    if (crew.some((t) => t.toLowerCase() === n.toLowerCase())) { setTechAdd(""); return; }
+    persistCrew([...crew, n]); setTechAdd("");
+  }
+  const removeCrew = (name) => persistCrew(crew.filter((t) => t !== name));
   // Preset the End-of-Day date to today (client-only to avoid an SSR/hydration date mismatch).
   useEffect(() => { setEodDate((v) => v || localToday()); }, []);
   const [editNote, setEditNote] = useState(null);
@@ -404,6 +426,26 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
           </div>
         </div>
       </div>
+
+      {/* Assigned crew — internal only (never shown to the customer). Office can add/remove. */}
+      {!isCustomer && (crew.length > 0 || canAssignCrew) && (
+        <div className="icl-crew">
+          <span className="icl-crew-lbl">Assigned Tech{crew.length !== 1 ? "s" : ""}</span>
+          <div className="icl-crew-chips">
+            {crew.length ? crew.map((t) => (
+              <span key={t} className="icl-crew-chip">{t}{canAssignCrew && <button type="button" className="icl-crew-x" title="Remove" onClick={() => removeCrew(t)}>✕</button>}</span>
+            )) : <span className="icl-crew-none">Not yet assigned</span>}
+          </div>
+          {canAssignCrew && (
+            <div className="icl-crew-add">
+              <input className="icl-crew-in" list="icl-tech-list" value={techAdd} placeholder="Add technician…"
+                     onChange={(e) => setTechAdd(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCrew(techAdd)} />
+              <datalist id="icl-tech-list">{staffTechNames.map((n) => <option key={n} value={n} />)}</datalist>
+              <button type="button" className="icl-crew-addbtn" disabled={!techAdd.trim()} onClick={() => addCrew(techAdd)}>+ Add</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Estimated project payout + hours — internal only; payout figure follows the pay toggle. */}
       {canPrice && (
