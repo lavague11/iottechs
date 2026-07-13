@@ -313,8 +313,9 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 //   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
 //   their own header) — just the numbered rail, no FlowStep header or collapse.
 function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, children }) {
-  const [open, setOpen] = useState(status === "active");
-  useEffect(() => { setOpen(status === "active"); }, [status]);   // a completed step collapses, the next opens
+  const expandedByDefault = (s) => s === "active" || s === "open";   // current + available work expand; done/upcoming collapse
+  const [open, setOpen] = useState(expandedByDefault(status));
+  useEffect(() => { setOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
   const isDone = status === "done";
   const rail = (
     <div className="flow-rail">
@@ -327,10 +328,26 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
     </div>
   );
   if (bare) {
+    // A titled bare step is collapsible via a slim header (so ANY tool can be opened/closed);
+    // a title-less bare step just renders its child (backward-compatible).
     return (
       <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
         {rail}
-        <div className="flow-card flow-bare">{children}</div>
+        <div className="flow-card flow-bare">
+          {title ? (
+            <>
+              <button type="button" className="flow-bare-head" onClick={() => setOpen((v) => !v)}>
+                {icon && <span className="pv-tool-icon">{icon}</span>}
+                <span className="pv-tool-title">{title}</span>
+                {sub && <span className="pv-tool-sub">{sub}</span>}
+                {status === "active" && <span className="flow-next-tag">Your next step</span>}
+                {chip}
+                <span className="flow-bare-chev">{open ? "▲" : "▼"}</span>
+              </button>
+              {open && <div className="flow-bare-body">{children}</div>}
+            </>
+          ) : children}
+        </div>
       </div>
     );
   }
@@ -1627,6 +1644,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
+  const [mockupHasLocal, setMockupHasLocal] = useState(false); // mockup widget reports a photo landed → enable Submit instantly
   const [leadConfirmed, setLeadConfirmed]   = useState(false); // customer confirmed/edited their lead info (Survey step ①)
   const [restricted, setRestricted]     = useState(!!project.restricted);
   const [pendingMove, setPendingMove]   = useState(null);
@@ -2337,7 +2355,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               customerView={!!previewRole}
             />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#7a8aa5" bare>
+          <FlowStep n={2} total={2} status="open" color="#7a8aa5" title="Details &amp; Notes" bare>
             <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
           </FlowStep>
         </div>
@@ -2359,6 +2377,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           // The office's Submit gates on "has data". Server tool-meta lags a poll behind an edit, so
           // fold in the widget's live signal — Submit lights up the instant a device/background lands.
           const svMetaEff = { ...svMeta, has: svMeta.has || surveyHasLocal };
+          const mkMetaEff = { ...mkMeta, has: mkMeta.has || mockupHasLocal };
           const showSurvey = isCust ? svMeta.has : true;   // staff always see both to build them
           const showMockup = isCust ? mkMeta.has : true;
           const onApprove = (a) => { setAcceptances(a); setGateMsg(null); refreshAcceptances(); };
@@ -2410,7 +2429,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
               title="Mockups" sub="System diagrams · Product photos · Design references"
               chip={mkMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
-              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
+              headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                 acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />}>
               <MockupWidget
                 accessId={lp.access_id}
@@ -2418,8 +2437,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerView={!!previewRole}
                 noApproval
                 customerName={lp.contact_name || lp.customer}
+                onHasData={setMockupHasLocal}
               />
-              <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMeta}
+              <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                 acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />
             </FlowStep>
           )}
@@ -2532,7 +2552,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const total = unlocked ? 3 : 2;
           return (
             <div className="pv-survey-tools flow-wrap">
-              <FlowStep n={1} total={total} status={lp.system_qr ? "done" : "open"} color="#3aa0a0" bare>
+              <FlowStep n={1} total={total} status={lp.system_qr ? "done" : "open"} color="#3aa0a0" title="System QR" bare>
                 <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
               </FlowStep>
               {!unlocked ? (
@@ -2543,10 +2563,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" bare>
+                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
                   </FlowStep>
-                  <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
+                  <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
                   </FlowStep>
                 </>
@@ -2558,13 +2578,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" bare>
+          <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" title="System QR" bare>
             <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
           </FlowStep>
-          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" bare>
+          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
-          <FlowStep n={3} total={3} status="open" color="#B084E0" bare>
+          <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
@@ -2575,10 +2595,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#B084E0" bare>
+          <FlowStep n={2} total={2} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
@@ -3682,6 +3702,13 @@ const PV_CSS = `
 .pvx .flow-step.open .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold))}
 .pvx .flow-step.upcoming .flow-node{opacity:.45}
 .pvx .flow-bare{display:flex;flex-direction:column;gap:12px}
+/* Collapsible bare step — a slim header (title + chevron) so any tool can be opened/closed. */
+.pvx .flow-bare-head{width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--tool-c,var(--line));border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+.pvx .flow-bare-head:hover{background:var(--bg-soft)}
+.pvx .flow-bare-head .pv-tool-title{font-size:.9rem;font-weight:800;color:var(--ink)}
+.pvx .flow-bare-head .pv-tool-sub{font-size:.76rem;color:var(--muted)}
+.pvx .flow-bare-chev{margin-left:auto;font-size:.7rem;color:var(--muted);flex-shrink:0}
+.pvx .flow-bare-body{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 @keyframes flowPulse{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.16)}50%{box-shadow:0 0 0 6px rgba(201,169,110,0)}}
 .pvx .flow-card{flex:1;min-width:0;transition:opacity .3s,box-shadow .3s}
 /* Active step reads as "here" from the pulsing node + "Your next step" tag — no ring wrapping the

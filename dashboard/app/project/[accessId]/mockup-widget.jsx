@@ -8,7 +8,7 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // themed controls (Upload · Layout · Cameras · paging) in the host bar and drives the
 // iframe over postMessage. It auto-saves to localStorage per-project; ?ro=1 renders the
 // read-only customer grid.
-export default function MockupWidget({ accessId, view, customerView, customerName, noApproval }) {
+export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData }) {
   // Edit lock: only Admin / Manager / Sales rep build the mockup. Every other role
   // (Customer, Technician, Vendor, …) — and the admin "customer view" preview — is read-only.
   const readOnly = !["admin", "manager", "sales"].includes(view) || customerView;
@@ -16,6 +16,17 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
   const frameRef = useRef(null);
+  const fileRef  = useRef(null);   // the picker lives HERE (parent doc) so the click is a real user gesture
+
+  // The upload picker MUST be opened by a direct user gesture in this document — routing the click
+  // through the iframe via postMessage is treated as programmatic and blocked (esp. iPhone Safari).
+  // So we own the <input>, then hand the picked files to the tool inside the iframe (it converts
+  // HEIC + fills the slots). File objects survive postMessage to the same-origin iframe.
+  function onPick(e) {
+    const files = [...(e.target.files || [])];
+    if (files.length) frameRef.current?.contentWindow?.postMessage({ type: "iotMockupCmd", cmd: "addFiles", files }, "*");
+    e.target.value = "";   // let the same file(s) be re-picked later
+  }
 
   const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}`;
 
@@ -42,6 +53,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           height: e.data.height,
         });
         if (e.data.items) setItems(e.data.items);
+        // Report content up so the office's Submit enables the instant a photo lands (no waiting
+        // on the server tool-meta poll) — mirrors the survey widget's onHasData.
+        if (typeof e.data.filled === "number") onHasData?.(e.data.filled > 0);
       }
     }
     window.addEventListener("message", onMsg);
@@ -90,8 +104,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
                 />
               </label>
 
-              {/* Upload */}
-              <button className="mk-btn" onClick={() => cmd({ cmd: "upload" })}>
+              {/* Upload — real file input in THIS document (opens reliably on iPhone), multiple + HEIC */}
+              <input ref={fileRef} type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF" multiple capture={undefined} style={{ display: "none" }} onChange={onPick} />
+              <button className="mk-btn" onClick={() => fileRef.current?.click()}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
                 Upload
               </button>

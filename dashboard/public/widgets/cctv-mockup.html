@@ -520,6 +520,7 @@ rebuildCards();
     if(m.cmd==='setView'){ setView(m.v,true); }
     else if(m.cmd==='setCount'){ S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
     else if(m.cmd==='upload'){ var u=document.getElementById('uploadBtn'); if(u)u.click(); }
+    else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
     else if(m.cmd==='customerView'){ try{openCustomerView();}catch(_e){} }
     else if(m.cmd==='page'){ var n=mockups();
       if(m.dir<0&&S.page>0){S.page--;rebuildCards();}
