@@ -220,9 +220,8 @@ function CinematicTracking({ tracking }) {
 }
 
 // ---- Panel --------------------------------------------------------------------------------
-export default function ScheduleTrackingPanel({ accessId, role, project, preview, proposal }) {
+export default function ShipmentTracking({ accessId, role, preview, proposal }) {
   const isStaff = ["admin", "manager"].includes(role);
-  const [events, setEvents] = useState([]);
   // Shipments — a project's equipment usually arrives in several boxes. Record shape:
   // { shipments: [{number, carrier, status, eta, note}, …] } (legacy single-object records
   // are normalized into a one-element list on load).
@@ -239,10 +238,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
 
   useEffect(() => {
     let live = true;
-    getToolDataAction(accessId, "schedule").then((r) => {
-      if (!live || !r?.ok || !r.saved?.data) return;
-      try { setEvents(JSON.parse(r.saved.data).events || []); } catch { /* bad blob */ }
-    }).catch(() => {});
     getToolDataAction(accessId, "tracking").then((r) => {
       if (!live || !r?.ok || !r.saved?.data) return;
       try {
@@ -253,15 +248,6 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
     }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
-
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const parsed = events
-    .map((e) => ({ ...e, when: new Date(`${e.date}T${e.time || "09:00"}`) }))
-    .filter((e) => !isNaN(e.when))
-    .sort((a, b) => a.when - b.when);
-  const next = parsed.find((e) => e.when >= today) || parsed[parsed.length - 1] || null;
-  const nextIsPast = next && next.when < today;
-  const fallbackDate = project?.install_date || project?.date || null;
 
   const activeShip = shipments[Math.min(active, shipments.length - 1)] || null;
   const shipped = shipments.some((s) => deriveStage(s.status) >= 1);
@@ -327,42 +313,19 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeShip?.number]);
 
-  const dt = (d) => { try { return new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }); } catch { return d.date; } };
-  const tm = (e) => { try { const [h, m] = (e.time || "09:00").split(":").map(Number); const s = new Date(2000, 0, 1, h, m); const en = new Date(s.getTime() + (Number(e.duration) || 60) * 60000); const f = (x) => x.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); return `${f(s)} – ${f(en)}`; } catch { return e.time; } };
-
   return (
     <div className="stp-root">
       <style>{STP_CSS}</style>
-      {/* Next appointment */}
-      <div className="stp-section-hd">Your Next Appointment</div>
-      {next ? (
-        <div className="stp-appt">
-          <div className="stp-appt-tile">
-            <span className="stp-appt-mon">{next.when.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</span>
-            <span className="stp-appt-day">{next.when.getDate()}</span>
-          </div>
-          <div className="stp-appt-info">
-            <b>{next.title || "IOT TECHS — Installation"}</b>
-            <span>{dt(next)} · {tm(next)}</span>
-            {next.location && <span className="stp-appt-loc">{next.location}</span>}
-            {nextIsPast && <span className="stp-appt-note">Most recent appointment — new dates will appear here.</span>}
-          </div>
-        </div>
-      ) : (
-        <div className="stp-appt empty">
-          {fallbackDate
-            ? <>Your visit is penciled in for <b>{fallbackDate}</b> — we'll confirm the exact time window shortly.</>
-            : <>We're lining up your installation date — it will appear here as soon as it's booked.</>}
-        </div>
-      )}
       {/* Tracking — only rendered once a real number exists (or for staff, who can add one) */}
       {showTracking && (<>
-      <div className="stp-section-hd stp-track-hd">
-        <span>Shipment Tracking{shipments.length > 1 ? ` — ${shipments.length} Packages` : ""}</span>
-        {isStaff && !preview && (
-          <button type="button" className="stp-addmini" onClick={() => { setQuick(""); setAddOpen(true); }} title="Add a tracking number">+ Add</button>
-        )}
-      </div>
+      {(shipments.length > 1 || (isStaff && !preview)) && (
+        <div className="stp-track-topbar">
+          {shipments.length > 1 && <span className="stp-pkgcount">{shipments.length} Packages</span>}
+          {isStaff && !preview && (
+            <button type="button" className="stp-addmini" onClick={() => { setQuick(""); setAddOpen(true); }} title="Add a tracking number">+ Add</button>
+          )}
+        </div>
+      )}
       <div className="stp-track">
 
         {/* Package chips — everyone can flip the scene between boxes */}
@@ -498,47 +461,12 @@ export default function ScheduleTrackingPanel({ accessId, role, project, preview
 const STP_CSS = `
 .stp-root{background:#FAF8F4;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:14px;padding:16px 16px 18px;
   font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;box-shadow:0 10px 30px rgba(11,15,26,.06)}
-.stp-section-hd{margin:14px 0 8px;font-size:.7rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a6d2f}
-.stp-section-hd:first-child{margin-top:0}
+.stp-track-topbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:8px}
+.stp-pkgcount{margin-right:auto;font-size:.72rem;font-weight:800;letter-spacing:.03em;color:#8a93a8}
 .stp-addmini{height:26px;padding:0 12px;border-radius:100px;border:1px solid #e2d3ad;background:#f8f0e0;color:#8a6d2f;font-size:.72rem;font-weight:800;letter-spacing:.03em;cursor:pointer;font-family:inherit}
 .stp-addmini:hover{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
-
-.stp-appt{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:14px 16px;display:flex;gap:14px;align-items:center}
-.stp-appt.empty{display:block;font-size:.84rem;color:#4a5270}
-.stp-appt-tile{width:56px;height:56px;flex-shrink:0;border-radius:11px;background:#0B0F1A;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.stp-appt-mon{font-size:.6rem;font-weight:800;letter-spacing:.08em;color:#C9A96E}
-.stp-appt-day{font-size:1.4rem;font-weight:800;line-height:1}
-.stp-appt-info{display:flex;flex-direction:column;gap:2px;min-width:0}
-.stp-appt-info b{font-size:.9rem;color:#0B0F1A}
-.stp-appt-info span{font-size:.8rem;color:#4a5270}
-.stp-appt-loc{color:#6f7686}
-.stp-appt-note{font-size:.72rem;color:#8a6d2f;font-style:italic}
-
-.stp-gather{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
-.stp-anim{display:flex;align-items:flex-end;gap:7px;height:34px}
-.stp-box{width:13px;height:13px;border-radius:3px;background:#C9A96E;opacity:.25;animation:stpPulse 1.5s ease-in-out infinite}
-.stp-box.b2{animation-delay:.25s}
-.stp-box.b3{animation-delay:.5s}
-.stp-truck{color:#4b6a9b;margin-left:8px;animation:stpTruck 2.6s ease-in-out infinite}
 @keyframes stpPulse{0%,100%{opacity:.2;transform:translateY(0)}45%{opacity:1;transform:translateY(-7px)}}
-@keyframes stpTruck{0%,100%{transform:translateX(0)}50%{transform:translateX(9px)}}
-.stp-gather-txt{display:flex;flex-direction:column;gap:3px}
-.stp-gather-txt b{font-size:.92rem;color:#0B0F1A}
-.stp-gather-txt span{font-size:.8rem;color:#4a5270}
-.stp-dots i{font-style:normal;animation:stpDot 1.4s infinite;opacity:0}
-.stp-dots i:nth-child(2){animation-delay:.25s}
-.stp-dots i:nth-child(3){animation-delay:.5s}
-@keyframes stpDot{0%,60%,100%{opacity:0}30%{opacity:1}}
-
-.stp-timeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-top:4px}
-.stp-tl-step{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:74px;text-align:center}
-.stp-tl-dot{width:24px;height:24px;border-radius:50%;border:1.5px solid #d9d4ca;background:#fff;color:#8a93a8;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800}
-.stp-tl-step.done .stp-tl-dot{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.stp-tl-step.now .stp-tl-dot{border-color:#C9A96E;color:#8a6d2f;box-shadow:0 0 0 3px rgba(201,169,110,.2);animation:stpNow 1.8s ease-in-out infinite}
 @keyframes stpNow{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.2)}50%{box-shadow:0 0 0 6px rgba(201,169,110,.06)}}
-.stp-tl-lbl{font-size:.68rem;font-weight:700;color:#4a5270;line-height:1.25}
-.stp-tl-lbl em{display:block;font-style:normal;font-weight:600;color:#8a93a8;font-size:.64rem}
-.stp-tl-line{flex:1;height:1.5px;background:#e6e1d6;margin-top:12px;min-width:12px}
 
 .stp-track{background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .stp-track-wait{display:flex;flex-direction:column;gap:5px}
@@ -557,7 +485,6 @@ const STP_CSS = `
 .stp-btn.danger{color:#a8442f;border-color:#e0b0a8}
 .stp-btn.danger:hover{background:#fbeceb}
 
-.stp-track-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .stp-modal-bg{position:fixed;inset:0;z-index:12000;background:rgba(11,15,26,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
 .stp-modal{width:min(440px,96vw);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 24px 70px rgba(11,15,26,.4)}
 .stp-modal-hd{display:flex;align-items:center;justify-content:space-between;background:#0B0F1A;color:#fff;padding:13px 16px;font-size:.9rem}

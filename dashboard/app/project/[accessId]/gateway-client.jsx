@@ -25,7 +25,8 @@ import CompletionPanel   from "./completion-panel";
 import CustomerActionCard from "./customer-action-card";
 import { customerAction } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
-import ScheduleTrackingPanel from "./schedule-tracking-panel";
+import ShipmentTracking from "./schedule-tracking-panel";
+import NextAppointment from "./next-appointment";
 import { missingReqs }   from "../../../lib/stage-flow";
 import { getAcceptancesAction, getLiveSnapshotAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
@@ -2580,10 +2581,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <div className="pv-survey-tools flow-wrap">
+          <FlowStep status="open" color="#C9A96E" title="Appointment"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+            sub="Your next scheduled visit" bare>
+            <NextAppointment accessId={lp.access_id} project={lp} />
+          </FlowStep>
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Next appointment · package tracking · equipment received" completable bare>
-            <ScheduleTrackingPanel accessId={lp.access_id} role={cView} project={lp} preview={!!previewRole} proposal={proposalData} staffUsers={staffUsers} />
+            sub="Package tracking · equipment received" completable bare>
+            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} />
           </FlowStep>
           <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
           <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" completable bare>
@@ -2600,10 +2606,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
         <div className="pv-survey-tools flow-wrap">
+          <FlowStep status="open" color="#C9A96E" title="Appointment"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+            sub="Your next scheduled visit" bare>
+            <NextAppointment accessId={lp.access_id} project={lp} />
+          </FlowStep>
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Next appointment · package tracking · equipment received" completable bare>
-            <ScheduleTrackingPanel accessId={lp.access_id} role={cView} project={lp} preview={!!previewRole} proposal={proposalData} staffUsers={staffUsers} />
+            sub="Package tracking · equipment received" completable bare>
+            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} />
           </FlowStep>
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
