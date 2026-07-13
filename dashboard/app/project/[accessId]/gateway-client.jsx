@@ -312,61 +312,70 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 //   collapsed) · "open" (neutral numbered, available, no glow/dim — for work steps with no clean
 //   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
 //   their own header) — just the numbered rail, no FlowStep header or collapse.
-function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, children }) {
+function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, children }) {
   const expandedByDefault = (s) => s === "active" || s === "open";   // current + available work expand; done/upcoming collapse
   const [open, setOpen] = useState(expandedByDefault(status));
   useEffect(() => { setOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
-  const isDone = status === "done";
-  const rail = (
-    <div className="flow-rail">
-      <span className="flow-node">
-        {isDone
-          ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          : n}
-      </span>
-      {n < total && <span className="flow-line" />}
+  const [marked, setMarked] = useState(false);   // manual "mark as complete" — shades the header
+  const shaded = marked || status === "done";
+  const tick = <span className="pv-tool-icon done"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>;
+  // Footer at the bottom of an expanded tool — mark it complete (shades the header = done & ready to
+  // publish) or reopen it. Only on tools that opt in via `completable`.
+  const footer = completable ? (
+    <div className="flow-complete-row">
+      {marked ? (
+        <button type="button" className="flow-reopen" onClick={() => setMarked(false)}>↺ Reopen</button>
+      ) : (
+        <button type="button" className="flow-complete-btn" onClick={() => { setMarked(true); setOpen(false); }}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Mark as complete
+        </button>
+      )}
     </div>
-  );
-  if (bare) {
-    // A titled bare step is collapsible via a slim header (so ANY tool can be opened/closed);
-    // a title-less bare step just renders its child (backward-compatible).
+  ) : null;
+
+  if (bare && title) {
     return (
-      <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
-        {rail}
+      <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
         <div className="flow-card flow-bare">
-          {title ? (
-            <>
-              <button type="button" className="flow-bare-head" onClick={() => setOpen((v) => !v)}>
-                {icon && <span className="pv-tool-icon">{icon}</span>}
-                <span className="pv-tool-title">{title}</span>
-                {sub && <span className="pv-tool-sub">{sub}</span>}
-                {status === "active" && <span className="flow-next-tag">Your next step</span>}
-                {chip}
-                <span className="flow-bare-chev">{open ? "▲" : "▼"}</span>
-              </button>
-              {open && <div className="flow-bare-body">{children}</div>}
-            </>
-          ) : children}
+          <div className="flow-bare-head">
+            <button type="button" className="flow-bare-toggle" onClick={() => setOpen((v) => !v)}>
+              {shaded ? tick : (icon && <span className="pv-tool-icon">{icon}</span>)}
+              <span className="pv-tool-title">{title}</span>
+              {shaded ? <span className="pv-tool-sub done">Complete</span> : (sub && <span className="pv-tool-sub">{sub}</span>)}
+              {status === "active" && !shaded && <span className="flow-next-tag">Your next step</span>}
+              {chip}
+            </button>
+            {headerAction}
+            <button type="button" className="flow-bare-chev" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
+          </div>
+          {open && <div className="flow-bare-body">{children}{footer}</div>}
         </div>
       </div>
     );
   }
+  if (bare) {   // title-less bare — just the child (backward-compatible)
+    return (
+      <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
+        <div className="flow-card flow-bare">{children}</div>
+      </div>
+    );
+  }
   return (
-    <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
-      {rail}
+    <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
       <div className="flow-card pv-tool-panel">
         <div className="pv-tool-head">
           <button type="button" className="pv-tool-toggle" onClick={() => setOpen((v) => !v)}>
-            <span className="pv-tool-icon">{icon}</span>
+            {shaded ? tick : <span className="pv-tool-icon">{icon}</span>}
             <span className="pv-tool-title">{title}</span>
-            <span className="pv-tool-sub">{sub}</span>
-            {status === "active" && <span className="flow-next-tag">Your next step</span>}
+            {shaded ? <span className="pv-tool-sub done">Complete</span> : <span className="pv-tool-sub">{sub}</span>}
+            {status === "active" && !shaded && <span className="flow-next-tag">Your next step</span>}
             {chip}
           </button>
           {headerAction}
           <button type="button" className="pv-tool-chev-btn" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
         </div>
-        {open && <div className="pv-tool-body">{children}</div>}
+        {open && <div className="pv-tool-body">{children}{footer}</div>}
       </div>
     </div>
   );
@@ -2355,7 +2364,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               customerView={!!previewRole}
             />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#7a8aa5" title="Details &amp; Notes" bare>
+          <FlowStep n={2} total={2} status="open" color="#7a8aa5" title="Details &amp; Notes" completable bare>
             <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
           </FlowStep>
         </div>
@@ -2552,9 +2561,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const total = unlocked ? 3 : 2;
           return (
             <div className="pv-survey-tools flow-wrap">
-              <FlowStep n={1} total={total} status={lp.system_qr ? "done" : "open"} color="#3aa0a0" title="System QR" bare>
-                <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
-              </FlowStep>
+              <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
               {!unlocked ? (
                 <FlowStep n={2} total={total} status="upcoming" color="#C9A96E" bare>
                   {!woAccepted
@@ -2563,10 +2570,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" bare>
+                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
                   </FlowStep>
-                  <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
+                  <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
                   </FlowStep>
                 </>
@@ -2578,13 +2585,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" title="System QR" bare>
-            <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
-          </FlowStep>
-          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" bare>
+          <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
+          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
-          <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
+          <FlowStep n={3} total={3} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
@@ -2595,10 +2600,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#B084E0" title="Job-Site Add-ons" bare>
+          <FlowStep n={2} total={2} status="open" color="#B084E0" title="Job-Site Add-ons" completable bare>
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
@@ -3693,31 +3698,31 @@ const PV_CSS = `
 .pvx .pv-tool-panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 /* Numbered tool flow (FlowStep) — the guided 1-2-3 rhythm on a stage. */
 .pvx .flow-wrap{display:flex;flex-direction:column;gap:14px;margin:16px 0}
-.pvx .flow-step{display:flex;gap:14px;align-items:stretch}
-.pvx .flow-rail{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:30px}
-.pvx .flow-node{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.9rem;background:#fff;border:2px solid var(--line);color:var(--muted);margin-top:12px;transition:background .3s,border-color .3s,color .3s;font-family:Menlo,Consolas,monospace}
-.pvx .flow-line{flex:1;width:2px;background:var(--line);margin:8px 0 0;min-height:14px;border-radius:1px}
-.pvx .flow-step.done .flow-node{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.pvx .flow-step.active .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold));animation:flowPulse 1.9s ease-in-out infinite}
-.pvx .flow-step.open .flow-node{border-color:var(--tool-c,var(--gold));color:var(--tool-c,var(--gold))}
-.pvx .flow-step.upcoming .flow-node{opacity:.45}
+.pvx .flow-step{display:block}
 .pvx .flow-bare{display:flex;flex-direction:column;gap:12px}
-/* Collapsible bare step — a slim header (title + chevron) so any tool can be opened/closed. */
-.pvx .flow-bare-head{width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--tool-c,var(--line));border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+/* Collapsible tool — a single bar (title + optional action + chevron), no numbered rail. */
+.pvx .flow-bare-head{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--tool-c,var(--line));border-radius:12px;transition:background .12s}
+.pvx .flow-bare-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
 .pvx .flow-bare-head:hover{background:var(--bg-soft)}
 .pvx .flow-bare-head .pv-tool-title{font-size:.9rem;font-weight:800;color:var(--ink)}
 .pvx .flow-bare-head .pv-tool-sub{font-size:.76rem;color:var(--muted)}
-.pvx .flow-bare-chev{margin-left:auto;font-size:.7rem;color:var(--muted);flex-shrink:0}
+.pvx .flow-bare-chev{margin-left:6px;background:none;border:none;cursor:pointer;font-size:.7rem;color:var(--muted);flex-shrink:0;padding:2px 4px;font-family:inherit}
 .pvx .flow-bare-body{display:flex;flex-direction:column;gap:12px;margin-top:12px}
-@keyframes flowPulse{0%,100%{box-shadow:0 0 0 3px rgba(201,169,110,.16)}50%{box-shadow:0 0 0 6px rgba(201,169,110,0)}}
-.pvx .flow-card{flex:1;min-width:0;transition:opacity .3s,box-shadow .3s}
-/* Active step reads as "here" from the pulsing node + "Your next step" tag — no ring wrapping the
-   whole card. The rest recede: upcoming dimmed, done backgrounded with its green check. */
+.pvx .flow-card{min-width:0;transition:opacity .3s}
 .pvx .flow-step.upcoming .flow-card{opacity:.5}
 .pvx .flow-step.upcoming .flow-card:hover{opacity:1}
-.pvx .flow-step.done .flow-card{opacity:.72}
-.pvx .flow-step.done .flow-card:hover{opacity:1}
 .pvx .flow-next-tag{flex-shrink:0;font-size:.6rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:100px;background:var(--tool-c,var(--gold));color:#fff;white-space:nowrap}
+/* Shaded = done / marked complete — the whole header turns green so it reads "done & ready". */
+.pvx .flow-step.shaded .flow-bare-head,.pvx .flow-step.shaded .pv-tool-head{background:#e9f6ee;border-color:#bfe0c9;border-left-color:#2f7d5a}
+.pvx .flow-step.shaded .pv-tool-title{color:#155e33}
+.pvx .pv-tool-icon.done{background:#2f7d5a;color:#fff}
+.pvx .pv-tool-sub.done{color:#1c8a45;font-weight:800}
+/* "Mark as complete" footer at the bottom of an expanded tool. */
+.pvx .flow-complete-row{display:flex;justify-content:flex-end;padding-top:4px;border-top:1px dashed var(--line);margin-top:2px}
+.pvx .flow-complete-btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid #bfe0c9;border-radius:9px;background:#eef7f0;color:#1d5a2e;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pvx .flow-complete-btn:hover{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
+.pvx .flow-reopen{height:34px;padding:0 14px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .flow-reopen:hover{border-color:var(--gold);color:var(--ink)}
 .pvx .pv-tool-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 18px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .pvx .pv-tool-head:hover{background:var(--bg-soft)}
 .pvx .pv-tool-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}
