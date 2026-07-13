@@ -77,6 +77,28 @@ export function customerStagesForType(type) {
 export const masterToCustomerKey = (masterKey) =>
   (CUSTOMER_PHASES.find((p) => p.members.includes(masterKey)) || CUSTOMER_PHASES[0]).key;
 
+// ---- Unified 4-phase view — shown to EVERY role (2026-07-13). ----
+// The backend still runs all 9 stages (auto-advance, requirements, history all unchanged); this is
+// a pure view grouping that merges them into 4 steps on the progress bar, and each phase co-renders
+// the tools of its member stages. `primary` is where a phase-dot click lands when the project isn't
+// currently inside that phase.
+export const PHASES = [
+  { key: "ph_survey",   label: "Survey",   short: "Survey",   members: ["inquiry", "site_survey"],           primary: "site_survey" },
+  { key: "ph_proposal", label: "Proposal", short: "Proposal", members: ["proposal", "approval_deposit"],     primary: "proposal" },
+  { key: "ph_install",  label: "Install",  short: "Install",  members: ["schedule", "install"],              primary: "install" },
+  { key: "ph_wrap",     label: "Wrap-Up",  short: "Wrap-Up",  members: ["qc", "payment", "completion"],      primary: "qc" },
+];
+export function phasesForType(type) {
+  const present = new Set(stagesForType(type).map((s) => s.key));
+  return PHASES
+    .map((p) => ({ ...p, members: p.members.filter((m) => present.has(m)) }))
+    .filter((p) => p.members.length > 0)
+    .map((p) => ({ ...p, primary: p.members.includes(p.primary) ? p.primary : p.members[p.members.length - 1] }));
+}
+// Master lifecycle stage → its 4-phase key (for the "current" bar marker + co-render grouping).
+export const masterToPhaseKey = (masterKey) =>
+  (PHASES.find((p) => p.members.includes(masterKey)) || PHASES[0]).key;
+
 // Gateway access rules (spec §03). PINs map to view types, not accounts.
 // Login roles resolve to their own view; login ALWAYS wins over a PIN.
 export const PIN_VIEW = {

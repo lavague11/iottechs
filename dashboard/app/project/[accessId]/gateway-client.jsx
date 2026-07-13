@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, TECH_STAGES, customerStagesForType, masterToCustomerKey, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
@@ -1707,49 +1707,39 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acceptLoaded]);
 
-  // The progress bar follows the EFFECTIVE role (cView) so previewing as a tech shows their
-  // condensed 4-stage portal instead of the admin's full 9-stage lifecycle. Tech stage keys
-  // (proposal/install/qc/payment) are all valid master keys, so browsing them Just Works;
-  // the master projectStage is mapped into the tech timeline for the "current" marker.
-  const TECH_KEYS = ["proposal", "install", "qc", "payment"];
-  const masterToTech = (k) => ({
-    inquiry: "proposal", site_survey: "proposal", proposal: "proposal", approval_deposit: "proposal",
-    schedule: "install", install: "install", qc: "qc", payment: "payment", completion: "payment",
-  }[k] || "proposal");
-  const isTechView     = cView === "tech";
-  // The customer sees a condensed 5-phase bar over the same master lifecycle (like the tech's
-  // 4-stage view). The bar dots are phases; browsing/gating still runs on real master stage keys.
-  const isCustomerView = cView === "customer" && !previewRole;
-  const masterStages   = stagesForType(project.project_type);   // the real per-type master lifecycle
-  const stageList      = isTechView ? TECH_STAGES : isCustomerView ? customerStagesForType(project.project_type) : masterStages;
-  const barProjectStage = isTechView ? masterToTech(projectStage) : isCustomerView ? masterToCustomerKey(projectStage) : projectStage;
-  // browse()/gating always validate against real master keys — even for the customer, whose dots
-  // are phases. So keep typeKeys on the master lifecycle for the customer (phase clicks resolve to
-  // a master landing key before reaching browse()).
-  const typeKeys       = isCustomerView ? masterStages.map((s) => s.key) : stageList.map((s) => s.key);
-  const projectIdx     = typeKeys.indexOf(isCustomerView ? projectStage : barProjectStage);
-  const prevProjectKey = projectIdx > 0 ? typeKeys[projectIdx - 1] : null;
-  const nextProjectKey = projectIdx >= 0 && projectIdx < typeKeys.length - 1 ? typeKeys[projectIdx + 1] : null;
+  // Every role now sees the unified 4-phase bar (view-merge, 2026-07-13). The backend still runs all
+  // 9 stages — these dots are phase GROUPS, and browsing/gating still resolves to real master keys.
+  // The current-dot marker maps the master projectStage into its phase.
+  const masterStages    = stagesForType(project.project_type);   // the real per-type master lifecycle
+  const phaseList       = phasesForType(project.project_type);   // the 4 phases present for this type
+  const stageList       = phaseList;                             // the bar renders phases for everyone
+  const barProjectStage = masterToPhaseKey(projectStage);
+  const vPhase          = masterToPhaseKey(viewingStage);        // which phase's tools are on screen
+  // browse()/gating validate against real master keys; a phase-dot click resolves to a master landing.
+  const typeKeys        = masterStages.map((s) => s.key);
+  const projectIdx      = typeKeys.indexOf(projectStage);
+  const prevProjectKey  = projectIdx > 0 ? typeKeys[projectIdx - 1] : null;
+  const nextProjectKey  = projectIdx >= 0 && projectIdx < typeKeys.length - 1 ? typeKeys[projectIdx + 1] : null;
 
-  // Which real master stage a customer phase-dot opens: the current stage when the project is
-  // inside that phase (so the active step — pay balance, review survey — is always reachable),
-  // otherwise the phase's primary/action step.
-  function customerLanding(phaseKey) {
-    const phase = stageList.find((p) => p.key === phaseKey);
+  // Which real master stage a phase-dot opens: the current stage when the project is inside that
+  // phase (so the active work — review survey, pay balance — is reachable), else the phase's primary.
+  function phaseLanding(key) {
+    if (key && !String(key).startsWith("ph_")) return key;   // already a master stage — pass through
+    const phase = phaseList.find((p) => p.key === key);
     if (!phase) return projectStage;
-    if (masterToCustomerKey(projectStage) === phaseKey) return projectStage;
+    if (masterToPhaseKey(projectStage) === key) return projectStage;   // land on the active sub-stage
     return phase.primary;
   }
-  // Honest completion % for the condensed customer bar: based on real position in the 9-stage
-  // lifecycle, not the 5 phases — so "at payment" reads ~88%, not a misleading 100%.
-  const custPct = (() => {
+  // Honest completion % based on real 9-stage position (not the 4 phases) — so "at payment" reads
+  // ~88%, not a misleading 100% just because it's the last phase.
+  const phasePct = (() => {
     const i = masterStages.findIndex((s) => s.key === projectStage);
     return i >= 0 && masterStages.length > 1 ? Math.max(10, Math.round((i / (masterStages.length - 1)) * 100)) : 0;
   })();
 
-  // Fire the celebration whenever the project moves FORWARD. The customer celebrates on a phase
-  // change (so intra-phase ops steps stay quiet); everyone else on a real stage change. A backward
-  // move (admin correcting course) gets a quiet neutral toast, never a party.
+  // Fire the celebration whenever the project moves forward into a NEW phase (the bar-level
+  // milestone everyone sees). Intra-phase stage moves stay quiet; a backward move (admin correcting
+  // course) gets a quiet neutral toast, never a party.
   const prevStageRef = useRef(projectStage);
   useEffect(() => {
     const prev = prevStageRef.current;
@@ -1759,17 +1749,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const cIdx = STAGES.findIndex((s) => s.key === projectStage);
     if (cIdx < 0 || pIdx < 0) return;
     const forward = cIdx > pIdx;
-    if (isCustomerView) {
-      const prevPhase = masterToCustomerKey(prev);
-      const curPhase  = masterToCustomerKey(projectStage);
-      if (prevPhase === curPhase) return;           // same phase — no milestone for the customer
-      if (!forward) { showLiveToast(`Back to ${stageList.find((p) => p.key === curPhase)?.label || "an earlier step"}`); return; }
-      const label = stageList.find((p) => p.key === curPhase)?.label || "the next step";
-      setCelebrate(label); setJustDone(prevPhase);
-    } else {
-      if (!forward) { showLiveToast(`Moved back to ${stageLabel(projectStage)}`); return; }
-      setCelebrate(stageLabel(projectStage)); setJustDone(prev);
-    }
+    const prevPhase = masterToPhaseKey(prev);
+    const curPhase  = masterToPhaseKey(projectStage);
+    if (prevPhase === curPhase) return;             // same phase — no bar-level milestone
+    const label = phaseList.find((p) => p.key === curPhase)?.label || "the next step";
+    if (!forward) { showLiveToast(`Back to ${label}`); return; }
+    setCelebrate(label); setJustDone(prevPhase);
     if (celebrateTimer.current) clearTimeout(celebrateTimer.current);
     if (justDoneTimer.current)  clearTimeout(justDoneTimer.current);
     celebrateTimer.current = setTimeout(() => setCelebrate(null), 3600);
@@ -1788,7 +1773,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   useLayoutEffect(() => {
     if (prevCViewRef.current === cView) return;   // not a role switch (deps also cover stage changes)
     prevCViewRef.current = cView;
-    setViewingStage(isTechView ? masterToTech(projectStage) : projectStage);
+    setViewingStage(projectStage);
     setGateMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cView]);
@@ -2095,13 +2080,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         type={project.project_type}
         stages={stageList}
         projectStage={barProjectStage}
-        viewingStage={isCustomerView ? masterToCustomerKey(viewingStage) : viewingStage}
-        onBrowse={isCustomerView ? (k) => browse(customerLanding(k)) : browse}
-        pctOverride={isCustomerView ? custPct : null}
+        viewingStage={masterToPhaseKey(viewingStage)}
+        onBrowse={(k) => browse(phaseLanding(k))}
+        pctOverride={phasePct}
         justDone={justDone}
         canControl={canControl && !previewRole}
-        onJump={doMove}
-        missingFor={(k) => missingReqsFor(k, lp, localAssignments)}
+        onJump={(k) => doMove(phaseLanding(k))}
+        missingFor={(k) => missingReqsFor(phaseLanding(k), lp, localAssignments)}
         role={cView}
         techSigned={!!proposalData?.tech_signed_name}
         custApproved={proposalData?.status === "accepted" || (proposalData?.accepted_options?.length > 0)}
@@ -2293,11 +2278,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         </div>
       )}
-      {viewingStage === "proposal" && ["admin", "manager", "sales"].includes(view) && (
-        <ProposalViews views={proposalViews} view={view} />
-      )}
-
-      {/* Role-preview banner — shown on any stage while a preview role is active */}
+      {/* Role-preview banner — shown on any phase while a preview role is active */}
       {previewRole && ["admin","manager"].includes(view) && (
         <div className="pv-custview-hint-bar">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -2312,11 +2293,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </div>
       )}
 
-      {/* Inquiry stage tools — survey scheduling lives HERE (booked at intake, before the
-          survey visit), plus point-of-contact + a notes thread. All roles see them. */}
-      {viewingStage === "inquiry" && (
+      {/* ============ SURVEY phase (inquiry + site_survey merged) ============
+          Inquiry tools (survey scheduling booked at intake + point-of-contact / notes) render
+          first, then the Site Survey + Mockup flow below (further down, also gated on ph_survey). */}
+      {vPhase === "ph_survey" && cView === "customer" && <CustomerInquiryPanel project={project} accessId={lp.access_id} />}
+      {vPhase === "ph_survey" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
-          {/* ① Book the survey visit (done once a date is set) → ② capture notes / point of contact */}
           <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#4b6a9b"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             title="Survey Scheduling" sub="Book the visit · Pick a time window"
@@ -2337,13 +2319,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </div>
       )}
 
-      {/* Schedule stage — appointment + equipment-gathering status + shipment tracking.
-          The customer lands here right after submitting their deposit; staff post tracking. */}
-      {viewingStage === "schedule" && ["customer", "admin", "manager"].includes(cView) && (
+      {/* INSTALL phase — fulfillment/schedule tracking, shown above the install tools below. */}
+      {vPhase === "ph_install" && ["customer", "admin", "manager"].includes(cView) && (
         <ScheduleTrackingPanel accessId={lp.access_id} role={cView} project={lp} preview={!!previewRole} proposal={proposalData} staffUsers={staffUsers} />
       )}
 
-      {viewingStage === "site_survey" ? (
+      {/* Site Survey + Mockup (numbered flow) — the rest of the Survey phase. */}
+      {vPhase === "ph_survey" && (
         (() => {
           // Data-aware survey review. Customer only sees a tool if it has data to review, and
           // approves each such tool at its own footer. If NOTHING has data → smooth sailing.
@@ -2433,7 +2415,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </div>
           );
         })()
-      ) : viewingStage === "proposal" && ["admin", "manager", "sales", "customer", "tech"].includes(cView) ? (
+      )}
+      {/* Staff intake summary card, part of the Survey phase. */}
+      {vPhase === "ph_survey" && ["admin", "manager", "sales", "tech"].includes(cView) && (
+        <div className="pv-card pv-inquiry-card"><InquiryCard project={project} view={cView} /></div>
+      )}
+
+      {/* ============ PROPOSAL phase (proposal + approval & deposit merged) ============ */}
+      {vPhase === "ph_proposal" && ["admin", "manager", "sales"].includes(view) && (
+        <ProposalViews views={proposalViews} view={view} />
+      )}
+      {vPhase === "ph_proposal" && ["admin", "manager", "sales", "customer", "tech"].includes(cView) && (
         <>
           {/* Tech's "Work Order Created" page: general job overview above the work order itself */}
           {cView === "tech" && <TechProjectBoard project={lp} />}
@@ -2454,18 +2446,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             assignedTech={lp.tech || null}
           />
         </>
-      ) : viewingStage === "completion" ? (
-        // Completion — certificate, warranty, welcome guide (customer) + internal wrap-up (staff).
-        <CompletionPanel
-          project={lp}
-          proposal={proposalData}
+      )}
+      {vPhase === "ph_proposal" && ["admin", "manager", "customer"].includes(cView) && (
+        <ApprovalPanel
+          accessId={lp.access_id}
           role={cView}
-          readOnly={!!previewRole || cView === "tech"}
+          stage="approval_deposit"
+          customerName={lp.contact_name || lp.customer}
+          customerAddress={lp.address}
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
           onBrowseStage={(s) => browse(s)}
-          onCompletedChange={(ts) => setLocalProj((p) => ({ ...p, completed_at: ts }))}
         />
-      ) : viewingStage === "qc" ? (
+      )}
+
+      {/* ============ WRAP-UP phase (qc → payment → completion) ============ */}
+      {vPhase === "ph_wrap" && (
         // Quality-control checklist — office/tech verify each device; customer sees a read-only summary.
         <QCChecklist
           accessId={lp.access_id}
@@ -2476,7 +2471,33 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           userName={currentUser?.name || currentUser?.email || ""}
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
         />
-      ) : viewingStage === "install" && cView === "tech" ? (
+      )}
+      {vPhase === "ph_wrap" && ["admin", "manager", "customer"].includes(cView) && (
+        <ApprovalPanel
+          accessId={lp.access_id}
+          role={cView}
+          stage="payment"
+          customerName={lp.contact_name || lp.customer}
+          customerAddress={lp.address}
+          onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+          onBrowseStage={(s) => browse(s)}
+        />
+      )}
+      {vPhase === "ph_wrap" && (
+        // Completion — certificate, warranty, welcome guide (customer) + internal wrap-up (staff).
+        <CompletionPanel
+          project={lp}
+          proposal={proposalData}
+          role={cView}
+          readOnly={!!previewRole || cView === "tech"}
+          onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+          onBrowseStage={(s) => browse(s)}
+          onCompletedChange={(ts) => setLocalProj((p) => ({ ...p, completed_at: ts }))}
+        />
+      )}
+
+      {/* ============ INSTALL phase (fulfillment + install) ============ */}
+      {vPhase === "ph_install" && cView === "tech" && (
         // Numbered flow: ① System QR → ② Equipment checklist (locked until WO accepted + install day) → ③ Addendum.
         (() => {
           const woAccepted = !!proposalData?.tech_signed_name;
@@ -2509,7 +2530,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>
           );
         })()
-      ) : viewingStage === "install" && ["admin", "manager"].includes(cView) ? (
+      )}
+      {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <div className="pv-survey-tools flow-wrap">
           <FlowStep n={1} total={3} status={lp.system_qr ? "done" : "active"} color="#3aa0a0" bare>
@@ -2522,7 +2544,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
-      ) : viewingStage === "install" && cView === "customer" ? (
+      )}
+      {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0 && (
+        <TechPricingEditor accessId={lp.access_id} proposal={proposalData} onSaved={(p) => setProposalData(p)} />
+      )}
+      {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
         <div className="pv-survey-tools flow-wrap">
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" bare>
@@ -2532,29 +2558,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
-      ) : ["approval_deposit", "payment"].includes(viewingStage) && ["admin", "manager", "customer"].includes(cView) ? (
-        <ApprovalPanel
-          accessId={lp.access_id}
-          role={cView}
-          stage={viewingStage}
-          customerName={lp.contact_name || lp.customer}
-          customerAddress={lp.address}
-          onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
-          onBrowseStage={(s) => browse(s)}
-        />
-      ) : cView === "customer" && showInquiryCard ? (
-        <CustomerInquiryPanel project={project} accessId={lp.access_id} />
-      ) : (
-      <>
-      {viewingStage === "install" && ["admin","manager"].includes(cView) && proposalData?.payload?.options?.length > 0 && (
-        <TechPricingEditor accessId={lp.access_id} proposal={proposalData} onSaved={(p) => setProposalData(p)} />
-      )}
-      {/* The generic "What you see / What you can do" placeholder cards were removed as redundant —
-          moves happen on the progress bar. The inquiry stage keeps its notes/POC composer. */}
-      {showInquiryCard && (
-        <div className="pv-card pv-inquiry-card"><InquiryCard project={project} view={cView} /></div>
-      )}
-      </>
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (
         <div className="pv-close-bar" style={{ gap: 10 }}>
