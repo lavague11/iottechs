@@ -64,6 +64,22 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const p = data.proposal;
   const accepted = p && p.payload && p.status === "accepted";
   if (!accepted) {
+    // Same gate, different truth depending on who's looking and what the proposal is actually
+    // waiting on — staff need to know if THEY still owe an action (build/send/revise) or if the
+    // ball's in the customer's court; the customer only ever sees their own next move.
+    const status = p?.status;
+    const { sub, showBtn } = (() => {
+      if (isStaff) {
+        if (!status || status === "draft") return { sub: "Build and send the proposal to get started.", showBtn: true };
+        if (status === "changes_requested") return { sub: "The customer requested changes — revise the proposal.", showBtn: true };
+        if (status === "declined") return { sub: "The customer declined this proposal — revise it to continue.", showBtn: true };
+        return { sub: "Sent — waiting on the customer to accept a proposal option.", showBtn: true };   // "sent"
+      }
+      if (!status || status === "draft") return { sub: "Your proposal isn't ready yet — we'll notify you the moment it's sent.", showBtn: false };
+      if (status === "changes_requested") return { sub: "We're revising your proposal based on your requested changes.", showBtn: false };
+      if (status === "declined") return { sub: "You declined this proposal. Contact us if you'd like to revisit it.", showBtn: false };
+      return { sub: "Accept a proposal option to continue — the agreement, signature, and deposit unlock here once it's accepted.", showBtn: true };   // "sent"
+    })();
     return (
       <div className="apv-gate">
         <style>{APV_CSS}</style>
@@ -72,8 +88,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         </div>
         <div className="apv-gate-body">
           <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
-          <div className="apv-gate-sub">Accept a proposal option first — the agreement, signature, and deposit unlock here once it’s accepted.</div>
-          {onBrowseStage && (
+          <div className="apv-gate-sub">{sub}</div>
+          {onBrowseStage && showBtn && (
             <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
           )}
         </div>

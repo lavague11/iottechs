@@ -97,7 +97,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
-  const canAssignCrew = !readOnly && ["admin", "manager", "sales"].includes(role);
+  const canAssignCrew = !readOnly && ["admin", "manager"].includes(role);
   const crew = crewList != null ? crewList : (assignedTech ? [assignedTech] : []);
   const staffTechNames = [...new Set(staffUsers.filter((u) => u.role === "tech" && u.name).map((u) => u.name))];
   async function persistCrew(next) { setCrewList(next); if (!readOnly) await saveToolDataAction(accessId, "techs", JSON.stringify({ names: next })); }

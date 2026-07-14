@@ -479,7 +479,7 @@ export async function saveToolDataAction(accessId, tool, data) {
     : tool === "install" ? ["admin", "manager", "tech"]
     : tool === "addendum" ? ["admin", "manager", "sales", "customer"]  // office builds, customer approves
     : tool === "receiving" ? ["admin", "manager", "sales", "tech"]     // office/tech mark gear received
-    : tool === "techs" ? ["admin", "manager", "sales"]                 // office assigns the install crew
+    : tool === "techs" ? ["admin", "manager"]                          // crew assignment — admin/manager only, not sales
     : tool === "qc" ? ["admin", "manager", "tech"]                     // office + installing tech run QC
     : ["admin", "manager", "sales"];
   if (!editors.includes(tok.role)) return { error: "Read-only for your role." };
