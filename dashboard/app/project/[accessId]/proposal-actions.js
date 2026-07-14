@@ -353,7 +353,17 @@ export async function recordPaymentAction(accessId, payment) {
 }
 export async function deletePaymentAction(accessId, id) {
   const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can remove payments." };
+  if (!tok) return { error: "Not authenticated." };
+  if (tok.role === "customer") {
+    // A customer may cancel ONLY their own still-pending submission — never a confirmed payment
+    // or a staff entry. Re-check server-side (client gating isn't trusted).
+    if (!customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+    const p = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
+    if (!p || p.source !== "customer" || p.status !== "pending")
+      return { error: "You can only cancel a pending payment you submitted." };
+  } else if (!STAFF.has(tok.role)) {
+    return { error: "Only Admin & Manager can remove payments." };
+  }
   const payments = deleteProjectPayment(accessId, id, { id: tok.id ?? null, name: tok.name || tok.email || tok.role });
   await revalidate(accessId);
   return { ok: true, payments };

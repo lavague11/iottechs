@@ -177,7 +177,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     setDelPayId(null);
     if (r?.error) { setErr(r.error); return; }
     setData((d) => ({ ...d, payments: r.payments }));
-    showToast("Payment removed — archived");
+    showToast(isCustomer ? "Payment request cancelled" : "Payment removed — archived");
   }
   async function voidSignature() {
     setBusy(true); setErr(null);
@@ -212,12 +212,14 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       <style>{APV_CSS}</style>
 
       <div className="apv-titlebar">
-        <span className="apv-titlebar-h">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
+        <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
       </div>
 
       {err && <div className="apv-note err">{err}</div>}
 
-      {/* Compact recap + the money picture in one box */}
+      {/* Compact recap + the money picture in one box. Customers get the focused payment tool
+          instead (the balance banner below already shows total/received/due), so skip the recap. */}
+      {!isCustomer && (
       <div className="apv-summary">
         <div className="apv-sum-row"><span className="apv-sum-lbl">Prepared For</span><b>{customerName || "Client"}</b></div>
         <div className="apv-sum-row"><span className="apv-sum-lbl">Accepted {shown.length > 1 ? "Options" : "Option"}</span><b>{optLabel}</b></div>
@@ -235,9 +237,11 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         <div className="apv-sum-row"><span className="apv-sum-lbl">Remaining Balance</span><b className={balance > 0 ? "apv-due" : "apv-ok"}>{money(balance)}</b></div>
         <div className="apv-sum-note">Zelle preferred. Balance due upon completion. Proposal terms apply.</div>
       </div>
+      )}
 
-      {/* ② Signature (deposit portal only — the agreement is already signed by final payment) */}
-      {!isFinal && (<>
+      {/* ② Signature — staff only. The customer already signed when they accepted the proposal
+          (Accept & Sign), so their view skips straight to the payment tool. */}
+      {!isFinal && !isCustomer && (<>
       <ToolHead icon="pen" title="Signature" done={signed} doneLabel="Signed" pendingLabel="Awaiting signature" />
       <div className="apv-card">
         {signed ? (
@@ -313,6 +317,17 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                     : <span className="apv-hrow-ok">✓ Received</span>}
                   {isStaff && x.status === "pending" && delPayId !== x.id && (
                     <button className="apv-pay-ok" title="Confirm received" disabled={busy} onClick={() => confirmPayment(x.id)}>Confirm</button>
+                  )}
+                  {/* A customer can cancel their OWN still-pending submission (server re-checks). */}
+                  {isCustomer && x.source === "customer" && x.status === "pending" && (
+                    delPayId === x.id ? (
+                      <span className="apv-pay-confirm">
+                        <button className="apv-pay-yes" disabled={busy} onClick={() => delPayment(x.id)}>Cancel it</button>
+                        <button className="apv-pay-no" onClick={() => setDelPayId(null)}>Keep</button>
+                      </span>
+                    ) : (
+                      <button className="apv-pay-x" title="Cancel this pending payment" onClick={() => setDelPayId(x.id)}>Cancel</button>
+                    )
                   )}
                   {isStaff && (delPayId === x.id ? (
                     <span className="apv-pay-confirm">
