@@ -165,6 +165,8 @@ function init() {
 
   const cols = db.prepare("PRAGMA table_info(projects)").all().map((c) => c.name);
   if (!cols.includes("customer_pin"))    db.exec("ALTER TABLE projects ADD COLUMN customer_pin TEXT");
+  // pin_custom = 1 means an admin hand-set the PIN; the last-4-phone normalizer leaves those alone.
+  if (!cols.includes("pin_custom"))      db.exec("ALTER TABLE projects ADD COLUMN pin_custom INTEGER DEFAULT 0");
   if (!cols.includes("tech_pin"))        db.exec("ALTER TABLE projects ADD COLUMN tech_pin TEXT");
   if (!cols.includes("contact_name"))    db.exec("ALTER TABLE projects ADD COLUMN contact_name TEXT");
   if (!cols.includes("contact_email"))   db.exec("ALTER TABLE projects ADD COLUMN contact_email TEXT");
@@ -253,11 +255,12 @@ function init() {
   // Customer PIN is ALWAYS the last 4 of the contact phone (owner rule). Normalize every row so a
   // seeded/legacy/hand-set PIN can't drift from the number; only fall back to a derived PIN when
   // there's no usable phone on file. tech_pin stays derived. Idempotent — only writes on a diff.
-  const pinRows = db.prepare("SELECT id, access_id, tech, contact_phone, customer_pin, tech_pin FROM projects").all();
+  const pinRows = db.prepare("SELECT id, access_id, tech, contact_phone, customer_pin, tech_pin, pin_custom FROM projects").all();
   const setPin = db.prepare("UPDATE projects SET customer_pin = ?, tech_pin = ? WHERE id = ?");
   for (const r of pinRows) {
     const derived = makePins(r.access_id);
-    const cust = phonePin(r.contact_phone) || r.customer_pin || derived.customer;
+    // Admin-set custom PIN wins — only the phone-derived customer PIN is normalized. tech_pin still fills.
+    const cust = r.pin_custom ? r.customer_pin : (phonePin(r.contact_phone) || r.customer_pin || derived.customer);
     const tech = r.tech ? (r.tech_pin || derived.tech) : null;
     if (cust !== r.customer_pin || tech !== r.tech_pin) setPin.run(cust, tech, r.id);
   }
@@ -1434,6 +1437,22 @@ export function setProjectCustomerPin(accessId, pin) {
   db.prepare("UPDATE projects SET customer_pin = ? WHERE access_id = ? COLLATE NOCASE").run(String(pin), String(accessId));
 }
 
+// Admin override: hand-set a PIN and flag it custom so the last-4-phone normalizer leaves it alone.
+export function setCustomerPinCustom(accessId, pin) {
+  db.prepare("UPDATE projects SET customer_pin = ?, pin_custom = 1 WHERE access_id = ? COLLATE NOCASE")
+    .run(String(pin), String(accessId));
+  return getJobByAccessId(accessId);
+}
+
+// Revert to the default rule: clear the custom flag and re-derive the PIN from the phone (if any).
+export function resetCustomerPinToPhone(accessId) {
+  const p = getJobByAccessId(accessId);
+  const pin = phonePin(p?.contact_phone);
+  db.prepare("UPDATE projects SET customer_pin = COALESCE(?, customer_pin), pin_custom = 0 WHERE access_id = ? COLLATE NOCASE")
+    .run(pin, String(accessId));
+  return getJobByAccessId(accessId);
+}
+
 export function updateProjectContact(accessId, fields) {
   const COLS = ["company_name","contact_name","contact_phone","contact_email","address","contact_message"];
   const keys = COLS.filter(k => k in fields);
@@ -1441,10 +1460,11 @@ export function updateProjectContact(accessId, fields) {
   db.prepare(`UPDATE projects SET ${keys.map(k=>`${k}=?`).join(",")} WHERE access_id=?`)
     .run(...keys.map(k => fields[k]||null), accessId);
   // Owner rule: keep the customer PIN locked to the last 4 of the phone. When the phone changes
-  // to a usable number, the PIN follows it so the two never drift.
+  // to a usable number, the PIN follows it — UNLESS an admin set a custom PIN (pin_custom=1).
   if ("contact_phone" in fields) {
     const pin = phonePin(fields.contact_phone);
-    if (pin) db.prepare("UPDATE projects SET customer_pin=? WHERE access_id=?").run(pin, accessId);
+    const row = db.prepare("SELECT pin_custom FROM projects WHERE access_id=?").get(accessId);
+    if (pin && !row?.pin_custom) db.prepare("UPDATE projects SET customer_pin=? WHERE access_id=?").run(pin, accessId);
   }
 }
 

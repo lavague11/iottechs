@@ -141,6 +141,14 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project.poc_phone       = null;
   }
 
+  // The customer PIN is an access credential — never shipped to the client by default (see
+  // hasTechPin above, a boolean not the value). Admin/Manager manage it from the project header,
+  // so send it ONLY to them for the PIN editor.
+  if (["admin", "manager"].includes(initialView)) {
+    project.customer_pin = p.customer_pin || null;
+    project.pin_custom   = p.pin_custom ? 1 : 0;
+  }
+
   // Who's logged in — so the scheduling tool can invite "me" and so we can auto-add whoever
   // is booking. Derived from the session token (staff) — PIN visitors have no user row.
   let currentUser = null;

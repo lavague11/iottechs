@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -139,6 +139,21 @@ export async function lockProjectAction(accessId) {
     if (grant && String(grant.accessId) === String(accessId)) jar.delete("iot_access");
   }
   return { ok: true };
+}
+
+// Admin/manager override the customer PIN. A 4-digit value is set as a CUSTOM pin (survives the
+// last-4-phone normalizer); an empty value resets the project back to following the phone.
+export async function setCustomerPinAction(accessId, pin) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can set the PIN." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const clean = String(pin ?? "").replace(/\D/g, "");
+  const proj = clean.length >= 4
+    ? setCustomerPinCustom(accessId, clean.slice(0, 4))
+    : resetCustomerPinToPhone(accessId);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, pin: proj?.customer_pin || "", custom: !!proj?.pin_custom };
 }
 
 export async function updateProjectInfoAction(accessId, fields) {

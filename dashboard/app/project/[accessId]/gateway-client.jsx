@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
@@ -1652,6 +1652,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [hEditing,   setHEditing]       = useState(false);
   const [hVals,      setHVals]          = useState({});
   const [hSaving,    setHSaving]        = useState(false);
+  const [pinVal,     setPinVal]         = useState("");     // admin PIN editor
+  const [pinCustom,  setPinCustom]      = useState(false);  // is the current PIN a custom override?
+  const [pinBusy,    setPinBusy]        = useState(false);
   const [localProj,  setLocalProj]      = useState(project);
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
@@ -1920,6 +1923,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     <div className="pv-efield"><label className="pv-hfl">Phone</label><input className="pv-einput" value={hVals.contact_phone||""} onChange={e=>setHVals(v=>({...v,contact_phone:e.target.value}))} placeholder="(xxx) xxx-xxxx" /></div>
                     <div className="pv-efield"><label className="pv-hfl">Email</label><input className="pv-einput" value={hVals.contact_email||""} onChange={e=>setHVals(v=>({...v,contact_email:e.target.value}))} placeholder="email@example.com" /></div>
                     <div className="pv-efield pv-efield-full"><label className="pv-hfl">Address</label><AddressAutocomplete className="pv-einput" value={hVals.address||""} onChange={addr=>setHVals(v=>({...v,address:addr}))} placeholder="Start typing an address…" /></div>
+                    {["admin","manager"].includes(cView) && (
+                      <div className="pv-efield pv-efield-full">
+                        <label className="pv-hfl">Customer PIN <span style={{marginLeft:6,fontSize:".64rem",fontWeight:800,letterSpacing:".03em",textTransform:"uppercase",padding:"2px 8px",borderRadius:100,background:pinCustom?"#f7f0df":"#eef1f6",color:pinCustom?"#7a5f1f":"#5b6275"}}>{pinCustom?"Custom":"Auto · last 4 of phone"}</span></label>
+                        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                          <input className="pv-einput" style={{maxWidth:120,letterSpacing:".3em",fontWeight:700}} value={pinVal} maxLength={4} inputMode="numeric" placeholder="0000" onChange={e=>setPinVal(e.target.value.replace(/\D/g,"").slice(0,4))} />
+                          <button className="pv-hact" disabled={pinBusy||pinVal.length!==4||pinVal===lp.customer_pin} onClick={async()=>{setPinBusy(true);const r=await setCustomerPinAction(lp.access_id,pinVal);setPinBusy(false);if(r?.ok){setLocalProj(p=>({...p,customer_pin:r.pin,pin_custom:r.custom?1:0}));setPinVal(r.pin);setPinCustom(!!r.custom);}else alert(r?.error||"Failed to set PIN.");}}>Set PIN</button>
+                          {pinCustom && <button className="pv-hact" disabled={pinBusy} onClick={async()=>{setPinBusy(true);const r=await setCustomerPinAction(lp.access_id,"");setPinBusy(false);if(r?.ok){setLocalProj(p=>({...p,customer_pin:r.pin,pin_custom:0}));setPinVal(r.pin);setPinCustom(false);}else alert(r?.error||"Failed.");}}>↺ Reset to phone</button>}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="pv-hactions">
                     <button className="pv-hact primary" disabled={hSaving} onClick={async()=>{setHSaving(true);const r=await updateProjectInfoAction(lp.access_id,hVals);setHSaving(false);if(r.ok){setLocalProj(p=>({...p,...hVals}));setHEditing(false);}else alert(r.error||"Save failed.");}}>
@@ -1964,7 +1977,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   </a>
                   <div className="pv-hactions">
                     {["admin","manager","sales","tech","customer"].includes(view) && (
-                      <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||""});setHEditing(true);}}>
+                      <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||""});setPinVal(lp.customer_pin||"");setPinCustom(!!lp.pin_custom);setHEditing(true);}}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Edit info
                       </button>
