@@ -250,13 +250,16 @@ function init() {
     db.prepare("UPDATE projects SET stage = ? WHERE stage = ?").run(newKey, oldKey);
   }
 
-  const needPins = db.prepare("SELECT id, access_id, tech FROM projects WHERE customer_pin IS NULL OR tech_pin IS NULL").all();
-  if (needPins.length) {
-    const upd = db.prepare("UPDATE projects SET customer_pin = ?, tech_pin = ? WHERE id = ?");
-    for (const r of needPins) {
-      const { customer, tech } = makePins(r.access_id);
-      upd.run(customer, r.tech ? tech : null, r.id);
-    }
+  // Customer PIN is ALWAYS the last 4 of the contact phone (owner rule). Normalize every row so a
+  // seeded/legacy/hand-set PIN can't drift from the number; only fall back to a derived PIN when
+  // there's no usable phone on file. tech_pin stays derived. Idempotent — only writes on a diff.
+  const pinRows = db.prepare("SELECT id, access_id, tech, contact_phone, customer_pin, tech_pin FROM projects").all();
+  const setPin = db.prepare("UPDATE projects SET customer_pin = ?, tech_pin = ? WHERE id = ?");
+  for (const r of pinRows) {
+    const derived = makePins(r.access_id);
+    const cust = phonePin(r.contact_phone) || r.customer_pin || derived.customer;
+    const tech = r.tech ? (r.tech_pin || derived.tech) : null;
+    if (cust !== r.customer_pin || tech !== r.tech_pin) setPin.run(cust, tech, r.id);
   }
 
   // Backfill contact info for existing rows
@@ -762,6 +765,13 @@ function makePins(accessId) {
   const customer = String(1000 + (h % 9000));
   const tech = String(100000 + ((h * 7 + 13) % 900000));
   return { customer, tech };
+}
+
+// Owner rule: a project's customer PIN is ALWAYS the last 4 digits of the contact phone.
+// Returns null when there's no usable phone (caller falls back to a derived PIN).
+function phonePin(phone) {
+  const d = String(phone || "").replace(/\D/g, "");
+  return d.length >= 4 ? d.slice(-4) : null;
 }
 
 const DB_VER = "v35";
@@ -1333,12 +1343,10 @@ export function createLeadProject(name, email, phone, address, service, company)
     accessId = `A${svc}${String(Math.floor(Math.random() * 99999)).toString(36).toUpperCase().padStart(4, "0")}`;
   }
 
-  // Auto-set the customer PIN to the last 4 digits of the phone number.
-  // Fall back to a deterministic generated PIN when no usable phone is on file.
-  const phoneDigits = normalPhone ? normalPhone.replace(/\D/g, "") : "";
-  const pin = phoneDigits.length >= 4
-    ? phoneDigits.slice(-4)
-    : String(1000 + (Math.abs(user.id * 7919 + count * 31) % 9000));
+  // Owner rule: the customer PIN is the last 4 digits of the phone number.
+  // Fall back to a deterministic generated PIN only when no usable phone is on file.
+  const pin = phonePin(normalPhone)
+    || String(1000 + (Math.abs(user.id * 7919 + count * 31) % 9000));
 
   const companyName = company ? String(company).trim() : null;
   const customerLabel = companyName || name || "Customer";
@@ -1432,6 +1440,12 @@ export function updateProjectContact(accessId, fields) {
   if (!keys.length) return;
   db.prepare(`UPDATE projects SET ${keys.map(k=>`${k}=?`).join(",")} WHERE access_id=?`)
     .run(...keys.map(k => fields[k]||null), accessId);
+  // Owner rule: keep the customer PIN locked to the last 4 of the phone. When the phone changes
+  // to a usable number, the PIN follows it so the two never drift.
+  if ("contact_phone" in fields) {
+    const pin = phonePin(fields.contact_phone);
+    if (pin) db.prepare("UPDATE projects SET customer_pin=? WHERE access_id=?").run(pin, accessId);
+  }
 }
 
 // ---- Inventory ----

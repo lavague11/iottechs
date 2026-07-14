@@ -7,6 +7,21 @@ import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
 
+// Deliberately generic social preview. A project link that gets texted/forwarded must preview as a
+// neutral, branded "secure access" card — never the customer's name, address, or stage. The matching
+// og:image is app/project/[accessId]/opengraph-image.js. Fetches nothing, so it can't leak.
+export function generateMetadata() {
+  const title = "IOT TECHS";
+  const description = "Secure access link — authorized only.";
+  return {
+    title: "IOT TECHS · Secure Access",
+    description,
+    openGraph: { title, description, siteName: "IOT TECHS", type: "website" },
+    twitter: { card: "summary_large_image", title, description },
+    robots: { index: false, follow: false },
+  };
+}
+
 // A logged-in session can open a project without re-entering the PIN, as long as
 // the session is actually authorized for THIS project:
 //  - staff (admin/manager/sales/tech) → their role view
