@@ -470,7 +470,9 @@ export async function saveToolDataAction(accessId, tool, data) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
-  if (typeof data !== "string" || data.length > 2_000_000) return { error: "Bad payload." };
+  // 8MB ceiling (matches next.config serverActions.bodySizeLimit): the mockup's photo grid is
+  // data-URL images and a real job easily passes 2MB — localStorage caps the blob near ~5MB.
+  if (typeof data !== "string" || data.length > 8_000_000) return { error: "Bad payload." };
   // Who may write each tool: survey/mockup = office; schedule = office + customer; install
   // checklist = office + the technician doing the work.
   const editors = tool === "schedule" ? ["admin", "manager", "sales", "customer"]

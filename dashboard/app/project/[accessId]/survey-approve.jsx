@@ -11,11 +11,18 @@ const DRAFT_STORE = {
 };
 async function flushDraft(accessId, stageKey) {
   const d = DRAFT_STORE[stageKey];
-  if (!d) return;
+  if (!d) return null;
   try {
     const raw = localStorage.getItem(d.key(accessId));
-    if (raw != null) await saveToolDataAction(accessId, d.tool, raw);
-  } catch { /* no localStorage / no access — the server copy is whatever the autosync managed */ }
+    if (raw == null) return null;
+    const r = await saveToolDataAction(accessId, d.tool, raw);
+    // Surface a failed push (payload too big / rejected) — otherwise the submit that follows
+    // errors with a misleading "add something to the tool first".
+    if (r?.error) return `Couldn't sync the ${LABEL[stageKey] || "tool"} to the server: ${r.error}`;
+  } catch (e) {
+    return `Couldn't sync the ${LABEL[stageKey] || "tool"} to the server${e?.message ? ` — ${e.message}` : ""}.`;
+  }
+  return null;
 }
 
 // Survey-stage approval, data-aware:
@@ -64,7 +71,10 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
   async function submit(on) {
     if (busy || preview) return;
     setBusy(true); setErr(null);
-    if (on) await flushDraft(accessId, stageKey);   // make sure the server has the latest draft
+    if (on) {
+      const syncErr = await flushDraft(accessId, stageKey);   // make sure the server has the latest draft
+      if (syncErr) { setBusy(false); setErr(syncErr); return; }
+    }
     const r = await submitToolAction(accessId, stageKey, on);
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
@@ -159,7 +169,8 @@ export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submiss
     setBusy(true); setErr(null);
     // The tool's draft may still be local-only (autosync polls every ~5s) — push it up first so
     // the server sees the same data the office is looking at.
-    await flushDraft(accessId, stageKey);
+    const syncErr = await flushDraft(accessId, stageKey);
+    if (syncErr) { setBusy(false); setErr(syncErr); return; }
     const r = await submitToolAction(accessId, stageKey, true);
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }          // never swallow — show why it didn't submit

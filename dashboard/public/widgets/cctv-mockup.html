@@ -353,12 +353,26 @@ nameEdit.addEventListener('blur',commitName);
 // iPhone HEIC/HEIF (often with an empty MIME type) — treat as an image and convert to JPEG first.
 function isHeic(f){return /image\/hei[cf]/i.test(f.type||'')||/\.(heic|heif)$/i.test(f.name||'');}
 function okImg(f){return (f.type||'').startsWith('image/')||isHeic(f);}
+// Downscale big photos on load (phone shots are 3–8MB each): re-encode anything over ~1280px
+// or ~400KB to a 1280px JPEG. Keeps a full 16-camera grid comfortably inside localStorage's
+// ~5MB quota AND the server sync's payload limit — full-res uploads silently broke both.
+function shrinkPhoto(img,url){
+  const MAX=1280;
+  const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+  if(Math.max(w,h)<=MAX&&url.length<400000)return Promise.resolve({img,url});
+  const s=Math.min(1,MAX/Math.max(w,h)),cw=Math.max(1,Math.round(w*s)),ch=Math.max(1,Math.round(h*s));
+  const c=document.createElement('canvas');c.width=cw;c.height=ch;
+  c.getContext('2d').drawImage(img,0,0,cw,ch);
+  const u2=c.toDataURL('image/jpeg',0.72);
+  return new Promise(res=>{const im2=new Image();im2.onload=()=>res({img:im2,url:u2});
+    im2.onerror=()=>res({img,url});im2.src=u2;});
+}
 async function loadImageFile(f){
   if(isHeic(f)&&window.heic2any){
     try{const out=await heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}catch(_){/* fall through — some browsers decode HEIC natively */}
   }
   return new Promise(res=>{const rd=new FileReader();rd.onload=()=>{const img=new Image();
-    img.onload=()=>res({img,url:rd.result});img.onerror=()=>res(undefined);img.src=rd.result;};rd.readAsDataURL(f);});}
+    img.onload=()=>shrinkPhoto(img,rd.result).then(res);img.onerror=()=>res(undefined);img.src=rd.result;};rd.readAsDataURL(f);});}
 function loadImageURL(u){return new Promise(res=>{const img=new Image();img.onload=()=>res({img,url:u});
   img.onerror=()=>res(undefined);img.src=u;});}
 function loadInto(i,f){loadImageFile(f).then(p=>{if(!p)return;S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}refreshAll();});}
@@ -521,6 +535,7 @@ rebuildCards();
     else if(m.cmd==='setCount'){ S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
     else if(m.cmd==='upload'){ var u=document.getElementById('uploadBtn'); if(u)u.click(); }
     else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
+    else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0; rebuildCards(); touch(); }
     else if(m.cmd==='customerView'){ try{openCustomerView();}catch(_e){} }
     else if(m.cmd==='page'){ var n=mockups();
       if(m.dir<0&&S.page>0){S.page--;rebuildCards();}

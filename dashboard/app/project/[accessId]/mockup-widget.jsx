@@ -15,6 +15,7 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   const [stat, setStat] = useState(null);   // {count, filled, view, page, pages}
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
   const frameRef = useRef(null);
   const fileRef  = useRef(null);   // the picker lives HERE (parent doc) so the click is a real user gesture
 
@@ -110,6 +111,21 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
                 Upload
               </button>
+
+              {/* Reset — clears every photo + name (keeps count/layout). Two-step confirm. */}
+              {confirmReset ? (
+                <>
+                  <button className="mk-btn mk-danger" onClick={() => { cmd({ cmd: "reset" }); setConfirmReset(false); }}>Confirm</button>
+                  <button className="mk-btn" onClick={() => setConfirmReset(false)}>Cancel</button>
+                </>
+              ) : (
+                (stat?.filled > 0) && (
+                  <button className="mk-btn" title="Clear all photos and names" onClick={() => setConfirmReset(true)}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+                    Reset
+                  </button>
+                )
+              )}
 
               {/* Layout — clickable segmented control */}
               <div className="mk-seg" role="group" aria-label="Layout">
