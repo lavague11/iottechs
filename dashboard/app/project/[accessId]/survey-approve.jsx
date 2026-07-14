@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { acceptStageAction, submitToolAction, saveToolDataAction } from "./proposal-actions";
+import { acceptStageAction, submitToolAction } from "./proposal-actions";
 
 // The tools write to localStorage and mirror to the server on a ~5s poll (tool-sync.js). A Submit
 // clicked inside that window would be rejected server-side ("no data yet") — so before submitting,
@@ -15,7 +15,14 @@ async function flushDraft(accessId, stageKey) {
   try {
     const raw = localStorage.getItem(d.key(accessId));
     if (raw == null) return null;
-    const r = await saveToolDataAction(accessId, d.tool, raw);
+    // Plain fetch, not a Server Action — same reason as tool-sync.js (large photo payloads
+    // break the Turbopack dev-mode Flight stream when passed as action arguments).
+    const res = await fetch("/api/tool-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessId, tool: d.tool, data: raw }),
+    });
+    const r = await res.json();
     // Surface a failed push (payload too big / rejected) — otherwise the submit that follows
     // errors with a misleading "add something to the tool first".
     if (r?.error) return `Couldn't sync the ${LABEL[stageKey] || "tool"} to the server: ${r.error}`;

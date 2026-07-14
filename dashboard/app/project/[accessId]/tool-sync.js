@@ -1,5 +1,4 @@
 "use client";
-import { getToolDataAction, saveToolDataAction } from "./proposal-actions";
 
 // Keeps the browser tools' localStorage drafts (survey / mockup / schedule) mirrored to the
 // server. localStorage stays the fast working copy; the server row is the authoritative backup
@@ -8,11 +7,18 @@ import { getToolDataAction, saveToolDataAction } from "./proposal-actions";
 // Rules: on start, if localStorage has nothing for the key, seed it from the server copy.
 // Then watch for local changes (the survey/mockup iframes write localStorage directly, so we
 // poll — same-origin, cheap string compare) and push each change up, debounced by the interval.
+//
+// Goes through /api/tool-data (plain fetch), NOT the saveToolDataAction/getToolDataAction server
+// actions — a mockup/survey photo grid runs several MB, and passing that as a Server Action
+// argument hits a Turbopack dev-mode bug where large action payloads corrupt the RSC Flight
+// stream ("Maximum array nesting exceeded" on an unrelated later request). A plain route ships
+// raw JSON with no Flight encoding, so it can't hit that bug.
 
 export async function seedToolData(accessId, tool, storageKey) {
   try {
     if (localStorage.getItem(storageKey) != null) return false;   // local draft wins
-    const r = await getToolDataAction(accessId, tool);
+    const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
+    const r = await res.json();
     if (r?.ok && r.saved?.data != null) {
       localStorage.setItem(storageKey, r.saved.data);
       return true;   // seeded from server
@@ -38,7 +44,12 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
     if (cur == null || cur === _lastPushed.get(mapKey)) return;
     inFlight = true;
     try {
-      const r = await saveToolDataAction(accessId, tool, cur);
+      const res = await fetch("/api/tool-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessId, tool, data: cur }),
+      });
+      const r = await res.json();
       if (r?.ok) _lastPushed.set(mapKey, cur);
       else if (r?.error === "Read-only for your role.") readOnly = true;  // viewer — stop pushing
     } finally { inFlight = false; }
@@ -49,7 +60,8 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   (async () => {
     if (!_lastPushed.has(mapKey)) {
       try {
-        const r = await getToolDataAction(accessId, tool);
+        const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
+        const r = await res.json();
         if (r?.ok && r.saved?.data != null) _lastPushed.set(mapKey, r.saved.data);
       } catch { /* fall through */ }
     }
