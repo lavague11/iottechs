@@ -91,7 +91,7 @@ const PROP_CSS = `
 .pvx .prop-slots{display:flex;gap:10px;flex-wrap:wrap}
 .pvx .prop-slot{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
 .pvx .prop-slot-lbl{font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-.pvx .prop-slot select{height:30px;border:1px solid var(--line);border-radius:7px;background:#fff;font-size:.76rem;font-weight:700;padding:0 8px;font-family:inherit;outline:none;color:var(--ink)}
+.pvx .prop-slot select{height:38px;border:1px solid var(--line);border-radius:7px;background:#fff;font-size:.76rem;font-weight:700;padding:0 8px;font-family:inherit;outline:none;color:var(--ink)}
 .pvx .prop-slot select:focus{border-color:var(--gold)}
 .pvx .prop-slot-name{width:100%;box-sizing:border-box;height:28px;border:1px solid var(--line);border-radius:6px;font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;color:var(--ink);background:#fff}
 .pvx .prop-slot-name:focus{border-color:var(--gold)}
@@ -182,7 +182,7 @@ const PROP_CSS = `
 .pvx .prop-cols.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-cols span.r{text-align:right}
 .pvx .prop-addbar{display:flex;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid var(--line);flex-wrap:wrap}
-.pvx .prop-addbar select{height:30px;border:1px solid var(--line);border-radius:7px;background:var(--bg-soft);color:var(--ink);font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;max-width:240px}
+.pvx .prop-addbar select{height:38px;border:1px solid var(--line);border-radius:7px;background:var(--bg-soft);color:var(--ink);font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;max-width:240px}
 .pvx .prop-mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .prop-mini:hover{border-color:var(--gold);color:var(--gold-deep)}
 .pvx .prop-mini.gold{background:var(--gold);border-color:var(--gold);color:#fff}
