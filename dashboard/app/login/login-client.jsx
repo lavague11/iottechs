@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { loginAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
-import { TaglinePill } from "../components/brand";
+import { TaglinePill, Wordmark } from "../components/brand";
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -113,7 +113,7 @@ export default function LoginClient({ next }) {
       <div className={`gw2-card${cardWarp ? " gw2-warp" : ""}`}>
         <div className="gw2-ring" />
         <div className="gw2-brand">
-          <h1>IOT&nbsp;TECHS</h1>
+          <h1 style={{ display: "flex", justifyContent: "center" }}><Wordmark height={30} techsColor="#C9A96E" /></h1>
           <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "6px 0 4px" }} />
           <div className="gw2-subtag">Staff Portal</div>
         </div>

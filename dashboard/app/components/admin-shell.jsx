@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "../login/actions";
 import { attachAutocomplete } from "../../lib/places";
-import { TaglinePill } from "./brand";
+import { TaglinePill, Wordmark } from "./brand";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -292,7 +292,7 @@ export default function AdminShell({ user, alerts, active, children }) {
       <header className="nav">
         <div className="apx-wrap nav-top">
           <Link href="/dashboard" className="apx-brand">
-            <span className="name">IOT <b>TECHS</b></span>
+            <span className="name"><Wordmark height={20} /></span>
             <span className="admin-badge" style={{ background: USER_ROLE_COLOR[user?.role] || "#C9A96E" }}>{ROLE_LABEL[user?.role] || "Staff"}</span>
           </Link>
 
@@ -365,7 +365,7 @@ export default function AdminShell({ user, alerts, active, children }) {
       <footer>
         <div className="apx-wrap foot-inner">
           <Link href="/dashboard" className="apx-brand foot-brand">
-            <span className="name">IOT <b>TECHS</b></span>
+            <span className="name"><Wordmark height={18} techsColor="#C9A96E" /></span>
             <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)" }} />
           </Link>
           <div>© 2026 IOT TECHS · La Vague Inc.</div>
