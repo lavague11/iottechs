@@ -3693,13 +3693,13 @@ const PV_CSS = `
 .pvx .wo-textarea:focus{outline:none;border-color:var(--accent)}
 .pvx .wo-input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:.85rem;font-family:inherit;background:#fff;color:var(--ink);margin-bottom:8px;box-sizing:border-box}
 .pvx .wo-input:focus{outline:none;border-color:var(--accent)}
-.pvx .wo-select{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:.85rem;font-family:inherit;background:#fff;color:var(--ink);margin-bottom:8px}
+.pvx .wo-select{flex:1;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-size:.85rem;font-family:inherit;background:#fff;color:var(--ink);margin-bottom:8px}
 .pvx .wo-select:focus{outline:none;border-color:var(--accent)}
 .pvx .wo-row{display:flex;gap:8px;align-items:flex-start}
 .pvx .wo-amount{flex:1;margin-bottom:8px}
 .pvx .wo-amount-tag{font-weight:700;color:var(--accent);margin-left:6px}
 .pvx .exp-status-ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
-.pvx .exp-status-sel{padding:6px 10px;border-radius:8px;border:1.5px solid var(--line);font-size:.82rem;font-family:inherit;background:#fff;cursor:pointer;font-weight:600}
+.pvx .exp-status-sel{height:38px;padding:0 10px;border-radius:8px;border:1.5px solid var(--line);font-size:.82rem;font-family:inherit;background:#fff;cursor:pointer;font-weight:600}
 .pvx .exp-status-sel[data-status="pending"]{color:var(--muted);border-color:var(--line)}
 .pvx .exp-status-sel[data-status="paid"]{color:#1c8a45;border-color:rgba(28,138,69,.35)}
 .pvx .exp-status-sel[data-status="declined"]{color:#e74c3c;border-color:rgba(231,76,60,.35)}
@@ -3885,6 +3885,7 @@ const PV_CSS = `
 .pvx .sig-modal-title{font-size:1rem;font-weight:800;color:var(--ink)}
 .pvx .sig-modal-field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .pvx .sig-modal-field input,.pvx .sig-modal-field select,.pvx .sig-modal-field textarea{font-family:inherit;font-size:.9rem;font-weight:600;text-transform:none;letter-spacing:normal;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:10px 12px;outline:none;resize:vertical}
+.pvx .sig-modal-field input,.pvx .sig-modal-field select{height:38px;padding:0 12px}
 .pvx .sig-modal-field input:focus,.pvx .sig-modal-field select:focus,.pvx .sig-modal-field textarea:focus{border-color:var(--gold)}
 .pvx .sig-modal-stamp{font-size:.78rem;color:var(--muted);font-weight:600}
 .pvx .sig-modal-acts{display:flex;align-items:center;gap:10px;margin-top:4px}
@@ -3939,6 +3940,7 @@ const PV_CSS = `
 .pvx .sched-lbl{font-size:.76rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .pvx .sched-input{border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:.84rem;background:#fff;color:var(--ink);font-family:inherit;width:100%}
 .pvx .sched-input:focus{outline:none;border-color:var(--accent)}
+.pvx select.sched-input{height:38px;padding:0 10px}
 .pvx .sched-ta{resize:vertical;min-height:60px}
 .pvx .sched-checks{display:flex;gap:8px;flex-wrap:wrap}
 .pvx .sched-check{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;padding:5px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}

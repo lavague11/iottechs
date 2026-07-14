@@ -286,7 +286,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
 }
 
 const CMP_CSS = `
-.cmp-root{margin:16px 22px 4px;display:flex;flex-direction:column;gap:14px}
+.cmp-root{margin:16px 0 4px;display:flex;flex-direction:column;gap:14px}
 .cmp-hero{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#122a20,#1d3b2c);color:#eafaf1;border-radius:14px;padding:20px 22px}
 .cmp-hero-ic{width:54px;height:54px;flex-shrink:0;border-radius:14px;background:rgba(255,255,255,.12);display:grid;place-items:center;color:#7fe0ab}
 .cmp-hero-title{font-size:1.25rem;font-weight:800;font-family:'Bricolage Grotesque',sans-serif}
@@ -324,7 +324,7 @@ const CMP_CSS = `
 .cmp-payout-ctrl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .cmp-payout-dollar{display:inline-flex;align-items:center;gap:2px;font-size:.86rem;font-weight:700;color:#0B0F1A}
 .cmp-payout-in{width:74px;height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.86rem;font-family:inherit;text-align:right}
-.cmp-sel{height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.82rem;font-weight:700;font-family:inherit;background:#fff;color:#0B0F1A;cursor:pointer}
+.cmp-sel{height:38px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.82rem;font-weight:700;font-family:inherit;background:#fff;color:#0B0F1A;cursor:pointer}
 .cmp-complete-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .cmp-date-in{height:32px;border:1px solid #d5d9e0;border-radius:8px;padding:0 8px;font-size:.82rem;font-family:inherit;color:#0B0F1A}
 .cmp-err{font-size:.82rem;color:#a8442f;background:#fdeceb;border:1px solid #e0b0a8;border-radius:8px;padding:8px 10px}

@@ -312,7 +312,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       {!readOnly && (
         <div className="prop-tabs">
           <select defaultValue="" onChange={(e) => { addService(e.target.value); e.target.value = ""; }}
-                  style={{ height: 30, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-soft)", fontSize: ".76rem", fontWeight: 700, fontFamily: "inherit", padding: "0 8px", outline: "none" }}>
+                  style={{ height: 38, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-soft)", fontSize: ".76rem", fontWeight: 700, fontFamily: "inherit", padding: "0 8px", outline: "none" }}>
             <option value="" disabled>+ Service…</option>
             {PROPOSAL_SERVICES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>

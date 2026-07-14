@@ -166,7 +166,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
 }
 
 const QC_CSS = `
-.qc-root{margin:16px 22px 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #2f7d5a;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.qc-root{margin:16px 0 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #2f7d5a;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .qc-empty{color:#6f7686;font-size:.9rem;padding:8px 2px}
 .qc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .qc-title{display:block;font-size:.94rem;font-weight:800;color:#0B0F1A}

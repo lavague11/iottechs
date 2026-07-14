@@ -35,7 +35,7 @@ export default function CustomerActionCard({ action, onGo, preview }) {
 }
 
 const CAC_CSS = `
-.cac-root{margin:16px 22px 0;background:#fff;border:1px solid #d9d4ca;border-radius:14px;padding:20px 22px;position:relative}
+.cac-root{margin:16px 0 0;background:#fff;border:1px solid #d9d4ca;border-radius:14px;padding:20px 22px;position:relative}
 .cac-action{border-color:#d8c79a;box-shadow:0 8px 24px -14px rgba(201,169,110,.5)}
 .cac-done{border-color:#bfe0c9}
 .cac-kicker{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:3px 10px;border-radius:100px;margin-bottom:11px}
