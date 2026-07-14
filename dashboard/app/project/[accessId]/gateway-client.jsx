@@ -3822,6 +3822,8 @@ const PV_CSS = `
 .pvx .mk-count input{width:52px;height:30px;padding:0 6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.82rem;font-weight:700;font-family:inherit;outline:none}
 .pvx .mk-count input:focus{border-color:var(--gold)}
 .pvx .mk-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .mk-danger{border-color:#e0b0a8;background:#fdf0ef;color:#a8442f}
+.pvx .mk-danger:hover{background:#a8442f;border-color:#a8442f;color:#fff}
 .pvx .mk-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
 .pvx .mk-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--bg-soft)}
 .pvx .mk-seg-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:26px;border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
