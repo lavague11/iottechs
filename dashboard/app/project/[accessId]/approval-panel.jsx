@@ -65,10 +65,18 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const accepted = p && p.payload && p.status === "accepted";
   if (!accepted) {
     return (
-      <div className="apv-root">
+      <div className="apv-gate">
         <style>{APV_CSS}</style>
-        <div className="apv-header"><span className="apv-brand">IOT TECHS</span><span className="apv-doctag">Approval &amp; Deposit</span></div>
-        <div className="apv-empty">Accept a proposal option first — the agreement, signature, and deposit unlock here once it’s accepted.</div>
+        <div className="apv-gate-ic">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div className="apv-gate-body">
+          <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
+          <div className="apv-gate-sub">Accept a proposal option first — the agreement, signature, and deposit unlock here once it’s accepted.</div>
+          {onBrowseStage && (
+            <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
+          )}
+        </div>
       </div>
     );
   }
@@ -402,6 +410,12 @@ const APV_CSS = `
 .apv-brand-pill{margin:2px 0}
 .apv-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C9A96E;border:1px solid rgba(201,169,110,.4);border-radius:100px;padding:5px 13px}
 .apv-empty{padding:34px 22px;text-align:center;color:#6f7686;font-size:.86rem}
+.apv-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid #C9A96E;border-radius:12px;padding:18px 20px;margin:18px 0}
+.apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
+.apv-gate-title{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#9a8a5f}
+.apv-gate-sub{font-size:.83rem;color:#6f7686;line-height:1.45;max-width:520px;margin-top:6px}
+.apv-gate-btn{margin-top:12px;height:38px;padding:0 20px;border:none;border-radius:9px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
+.apv-gate-btn:hover{filter:brightness(1.04)}
 .apv-note{margin:14px 22px 0;padding:9px 12px;border-radius:8px;font-size:.8rem;font-weight:600}
 .apv-note.err{background:#FBE6E4;border:1px solid #e0b0a8;color:#a8442f}
 
