@@ -3,9 +3,30 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
-import { TaglinePill } from "../../components/brand";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Status tool-head — matches the page's other tool cards (icon + title + Complete / pending chip)
+// instead of the old dark document sub-headers. Sits directly on top of an .apv-card so header +
+// body read as one contained tool, like Survey / Mockup / QC elsewhere on the page.
+const APV_ICON = {
+  pen:  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>,
+  card: <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>,
+  clip: <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>,
+};
+function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
+  return (
+    <div className="apv-toolhead">
+      <span className={`apv-th-ic${done ? " done" : ""}`}>
+        {done
+          ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          : APV_ICON[icon]}
+      </span>
+      <span className="apv-th-title">{title}</span>
+      <span className={`apv-th-status ${done ? "done" : "pending"}`}>{done ? doneLabel : pendingLabel}</span>
+    </div>
+  );
+}
 
 // Approval & Deposit stage — one pipeline, in order:
 //   ① Proposal accepted → ② Agreement signed → ③ Deposit received → ④ Work order created.
@@ -123,15 +144,6 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const depositOk = depositPaid > 0;
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
 
-  // Pipeline states for the step trail.
-  const steps = [
-    { label: "Accepted", done: true },
-    { label: "Signed", done: signed },
-    { label: "Deposit", done: depositOk },
-    { label: "Work Order", done: woCreated || !!p.tech_signed_name },
-  ];
-  const nextIdx = steps.findIndex((s) => !s.done);
-
   // If the server auto-advanced past approval (everything done), follow it.
   const followStage = (s) => { if (s && s !== "approval_deposit") { showToast("All set — moving to the next step"); onStageChange?.(s); } };
   async function sign({ name, data: sigData }) {
@@ -199,26 +211,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     <div className="apv-root">
       <style>{APV_CSS}</style>
 
-      <div className="apv-header">
-        <div className="apv-hd-left">
-          <span className="apv-brand">IOT TECHS</span>
-          <TaglinePill tone="dark" className="apv-brand-pill" />
-        </div>
-        <span className="apv-doctag">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
+      <div className="apv-titlebar">
+        <span className="apv-titlebar-h">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
       </div>
-
-      {/* Step trail — where this approval stands, at a glance (deposit portal only) */}
-      {!isFinal && (
-        <div className="apv-steps">
-          {steps.map((s, i) => (
-            <div key={s.label} className={`apv-step${s.done ? " done" : ""}${i === nextIdx ? " next" : ""}`}>
-              <span className="apv-step-dot">{s.done ? "✓" : i + 1}</span>
-              <span className="apv-step-lbl">{s.label}</span>
-              {i < steps.length - 1 && <span className="apv-step-line" />}
-            </div>
-          ))}
-        </div>
-      )}
 
       {err && <div className="apv-note err">{err}</div>}
 
@@ -243,7 +238,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
 
       {/* ② Signature (deposit portal only — the agreement is already signed by final payment) */}
       {!isFinal && (<>
-      <div className="apv-section-hd">Signature</div>
+      <ToolHead icon="pen" title="Signature" done={signed} doneLabel="Signed" pendingLabel="Awaiting signature" />
       <div className="apv-card">
         {signed ? (
           <div className="apv-signed">
@@ -273,7 +268,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       </>)}
 
       {/* ③ Payments — deposit on the approval portal, remaining balance on the final portal */}
-      <div className="apv-section-hd">{isFinal ? "Final Payment" : "Deposit &amp; Payments"}</div>
+      <ToolHead icon="card" title={isFinal ? "Final Payment" : "Deposit & Payments"}
+        done={isFinal ? balance <= 0 : depositOk}
+        doneLabel={isFinal ? "Paid in full" : "Deposit received"}
+        pendingLabel={isFinal ? "Awaiting payment" : "Awaiting deposit"} />
       <div className="apv-card apv-pay-card">
         {/* Balance banner — the one number that matters, with the money picture beside it */}
         {(() => {
@@ -373,7 +371,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       {/* ④ Staff: create the work order once signed + deposit on file (deposit portal only) */}
       {isStaff && !isFinal && (
         <>
-          <div className="apv-section-hd">Work Order</div>
+          <ToolHead icon="clip" title="Work Order"
+            done={woCreated || !!p.tech_signed_name}
+            doneLabel={p.tech_signed_name ? "Accepted" : "Created"}
+            pendingLabel="Not yet created" />
           <div className="apv-card apv-wo">
             <div>
               <b>Create the work order</b>
@@ -391,8 +392,6 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           </div>
         </>
       )}
-
-      <div className="apv-footer">IOT TECHS · (646) 396-0775 · support@iot-techs.com · Confidential</div>
 
       <ProposalSignModal
         open={signOpen}
@@ -418,13 +417,18 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
 }
 
 const APV_CSS = `
-.apv-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;overflow:hidden;margin:18px 0;
+.apv-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;overflow:hidden;margin:18px 0;padding-bottom:16px;
   box-shadow:0 10px 30px rgba(11,15,26,.08);font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
-.apv-header{background:#0B0F1A;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-top:4px solid #C9A96E}
-.apv-hd-left{display:flex;flex-direction:column;gap:2px}
-.apv-brand{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:.02em}
-.apv-brand-pill{margin:2px 0}
-.apv-doctag{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C9A96E;border:1px solid rgba(201,169,110,.4);border-radius:100px;padding:5px 13px}
+.apv-titlebar{padding:15px 22px 0}
+.apv-titlebar-h{font-size:1.05rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em}
+/* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
+.apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid #d9d4ca;border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
+.apv-th-ic{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:#f0f2f7;color:#5b6275;display:grid;place-items:center}
+.apv-th-ic.done{background:#e7f6ec;color:#1c8a45}
+.apv-th-title{font-size:.92rem;font-weight:800;color:#0B0F1A}
+.apv-th-status{margin-left:auto;font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 11px;border-radius:100px;white-space:nowrap}
+.apv-th-status.done{background:#e7f6ec;color:#1c8a45}
+.apv-th-status.pending{background:#f7f0df;color:#7a5f1f}
 .apv-empty{padding:34px 22px;text-align:center;color:#6f7686;font-size:.86rem}
 .apv-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid #C9A96E;border-radius:12px;padding:18px 20px;margin:18px 0}
 .apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
@@ -434,19 +438,6 @@ const APV_CSS = `
 .apv-gate-btn:hover{filter:brightness(1.04)}
 .apv-note{margin:14px 22px 0;padding:9px 12px;border-radius:8px;font-size:.8rem;font-weight:600}
 .apv-note.err{background:#FBE6E4;border:1px solid #e0b0a8;color:#a8442f}
-
-/* Step trail */
-.apv-steps{display:flex;align-items:center;gap:0;margin:16px 22px 0;background:#fff;border:1px solid #d9d4ca;border-radius:10px;padding:12px 14px;overflow-x:auto}
-.apv-step{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.apv-step-dot{width:24px;height:24px;flex-shrink:0;border-radius:50%;border:1.5px solid #d9d4ca;background:#fff;color:#8a93a8;
-  display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800}
-.apv-step.done .apv-step-dot{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.apv-step.next .apv-step-dot{border-color:#C9A96E;color:#8a6d2f;box-shadow:0 0 0 3px rgba(201,169,110,.18)}
-.apv-step-lbl{font-size:.72rem;font-weight:800;letter-spacing:.02em;color:#6f7686;white-space:nowrap}
-.apv-step.done .apv-step-lbl{color:#1d5a2e}
-.apv-step.next .apv-step-lbl{color:#8a6d2f}
-.apv-step-line{flex:1;height:1.5px;background:#e6e1d6;margin:0 10px;min-width:14px}
-.apv-step.done .apv-step-line{background:#9ec7ad}
 
 .apv-summary{margin:14px 22px 0;background:#fff;border:1px solid #d9d4ca;border-top:2px solid #C9A96E;border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:7px}
 .apv-sum-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.84rem}
@@ -461,8 +452,7 @@ const APV_CSS = `
 .apv-due{color:#a8442f}
 .apv-fine{margin:0;font-size:.7rem;color:#6f7686;font-style:italic}
 
-.apv-section-hd{margin:18px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.74rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #C9A96E}
-.apv-card{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.apv-card{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:none;border-radius:0 0 10px 10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .apv-card p{margin:0;font-size:.8rem;color:#4a5270}
 .apv-await{font-size:.82rem;color:#6f7686}
 .apv-signed{display:flex;flex-direction:column;gap:4px}
@@ -550,7 +540,6 @@ select.apv-input{cursor:pointer}
 @media(max-width:560px){.apv-payform-grid{grid-template-columns:1fr}}
 
 .apv-wo{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.apv-footer{margin-top:18px;background:#0B0F1A;border-top:2px solid #C9A96E;color:#9aa1af;font-size:.7rem;text-align:center;padding:11px 22px}
 .apv-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:11000;background:#0B0F1A;color:#fff;font-size:.82rem;font-weight:700;padding:11px 20px;border-radius:100px;box-shadow:0 12px 34px rgba(0,0,0,.32);display:flex;align-items:center;gap:8px}
 .apv-toast svg{color:#5FB88A}
 `;

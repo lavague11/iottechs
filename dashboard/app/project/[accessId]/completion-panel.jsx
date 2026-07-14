@@ -221,7 +221,12 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
       {/* Internal wrap-up */}
       {isStaff && (
         <div className="cmp-wrap">
-          <div className="cmp-wrap-hd">Wrap-up <span>Internal</span></div>
+          <div className="cmp-wrap-hd">
+            <span className="cmp-wrap-ic"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg></span>
+            Wrap-up
+            <span className="cmp-wrap-tag">Internal</span>
+            <span className={`cmp-wrap-status ${completedAt ? "done" : "pending"}`}>{completedAt ? "Complete" : "In progress"}</span>
+          </div>
           {hasRep && (
             <div className="cmp-wrap-row">
               <div><div className="cmp-wrap-lbl">Sales commission</div><div className="cmp-wrap-meta">{project.sales_rep} · {project.commission_rate}%</div></div>
@@ -312,8 +317,12 @@ const CMP_CSS = `
 .cmp-guide-list{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
 .cmp-guide-list li{font-size:.82rem;color:#41485a;line-height:1.45}
 .cmp-wrap{background:#fbfaf8;border:1px solid #e2ddd2;border-radius:12px;padding:12px 16px}
-.cmp-wrap-hd{font-size:.82rem;font-weight:800;color:#0B0F1A;display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.cmp-wrap-hd span{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8a8378;background:#efeae0;border-radius:100px;padding:2px 8px}
+.cmp-wrap-hd{font-size:.92rem;font-weight:800;color:#0B0F1A;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cmp-wrap-ic{width:26px;height:26px;flex-shrink:0;border-radius:7px;background:#efeae0;color:#8a8378;display:grid;place-items:center}
+.cmp-wrap-tag{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8a8378;background:#efeae0;border-radius:100px;padding:2px 8px}
+.cmp-wrap-status{margin-left:auto;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:4px 11px;border-radius:100px}
+.cmp-wrap-status.done{background:#e7f6ec;color:#1c8a45}
+.cmp-wrap-status.pending{background:#f7f0df;color:#7a5f1f}
 .cmp-wrap-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #ece7dd}
 .cmp-wrap-row:first-of-type{border-top:none}
 .cmp-wrap-lbl{font-size:.86rem;font-weight:700;color:#0B0F1A}
