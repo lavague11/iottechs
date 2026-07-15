@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { confirmInfoAction } from "./actions";
-import { loadPlaces } from "../../../lib/places";
+import AddressAutocomplete from "../../components/address-autocomplete";
 
 // First-login welcome for the customer: a modal that shows the contact details we have on file so
 // they can confirm — or fix anything wrong — before anything else. Confirming stamps
@@ -20,32 +20,8 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
   });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
-  // Google Places, bound on first FOCUS of each input (edit mode) — the node is stable and in the
-  // DOM by then, dodging React Strict-Mode remount races. Picking a business fills its NAME and
-  // auto-fills the ADDRESS; the address field autocompletes street addresses. Fails silently to a
-  // plain text input when no Maps key is configured.
-  const setFRef = useRef(setF);
-  setFRef.current = setF;
-  const bind = (node, types, onPlace) => {
-    if (!node || node.__acBound) return; node.__acBound = true;
-    loadPlaces().catch(() => {});   // kick off the Maps script load (its promise resolves before the
-                                    // places lib finishes async-initializing, so poll for readiness)
-    let tries = 0;
-    const t = setInterval(() => {
-      const AC = window.google?.maps?.places?.Autocomplete;
-      if (AC) {
-        clearInterval(t);
-        try {
-          const ac = new AC(node, { types, fields: ["formatted_address", "name"] });
-          ac.addListener("place_changed", () => { const p = ac.getPlace(); if (p) onPlace({ name: p.name || "", address: p.formatted_address || "" }); });
-          node.setAttribute("autocomplete", "off");
-        } catch (_) { node.__acBound = false; }
-      } else if (++tries > 45) { clearInterval(t); node.__acBound = false; }   // ~9s give-up → plain input
-    }, 200);
-  };
-  const bindBiz  = (node) => bind(node, ["establishment"], ({ name, address }) => setFRef.current((p) => ({ ...p, company_name: name || p.company_name, address: address || p.address })));
-  const bindAddr = (node) => bind(node, ["address"], ({ address }) => setFRef.current((p) => ({ ...p, address: address || p.address })));
-
+  // Business (establishment) + address fields use the shared, race-safe AddressAutocomplete below;
+  // picking a business fills its NAME and auto-fills the ADDRESS.
   const ROWS = [
     { k: "contact_name",  label: "Name" },
     { k: "company_name",  label: "Business" },
@@ -85,12 +61,16 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
               {ROWS.map((r) => (
                 <label key={r.k} className={`icm-field${r.full ? " full" : ""}`}>
                   <span>{r.label}</span>
-                  <input
-                    onFocus={r.k === "company_name" ? (e) => bindBiz(e.target) : r.k === "address" ? (e) => bindAddr(e.target) : undefined}
-                    type={r.type || "text"} value={f[r.k]} onChange={set(r.k)}
-                    placeholder={r.k === "company_name" ? "Business name — address auto-fills"
-                              : r.k === "address" ? "Start typing an address…" : r.label}
-                  />
+                  {r.k === "address" ? (
+                    <AddressAutocomplete value={f.address} onChange={(v) => setF((p) => ({ ...p, address: v }))} placeholder="Start typing an address…" />
+                  ) : r.k === "company_name" ? (
+                    <AddressAutocomplete types={["establishment"]} value={f.company_name}
+                      onChange={(v) => setF((p) => ({ ...p, company_name: v }))}
+                      onPlace={(pl) => setF((p) => ({ ...p, company_name: pl.name || p.company_name, address: pl.address || p.address }))}
+                      placeholder="Business name — address auto-fills" />
+                  ) : (
+                    <input type={r.type || "text"} value={f[r.k]} onChange={set(r.k)} placeholder={r.label} />
+                  )}
                 </label>
               ))}
             </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { logoutAction } from "../login/actions";
 import { STAGES } from "../../lib/spec";
 import { TaglinePill } from "../components/brand";
+import AddressAutocomplete from "../components/address-autocomplete";
 
 const STAGE_KEYS  = STAGES.map((s) => s.key);
 const STAGE_TOTAL = STAGES.length;
@@ -47,81 +48,7 @@ function formatPhone(v) {
 }
 
 // Shared Google Maps loader — injects script once, calls all queued callbacks
-const _gmpCallbacks = [];
-let _gmpLoaded = false;
-let _gmpLoading = false;
-function loadGoogleMaps(apiKey, cb) {
-  if (_gmpLoaded) { cb(); return; }
-  _gmpCallbacks.push(cb);
-  if (_gmpLoading) return;
-  _gmpLoading = true;
-  window._gmpSharedCB = () => {
-    _gmpLoaded = true;
-    _gmpCallbacks.splice(0).forEach(fn => fn());
-    delete window._gmpSharedCB;
-  };
-  const s = document.createElement("script");
-  s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=_gmpSharedCB`;
-  s.async = true;
-  document.head.appendChild(s);
-}
-
-function useGoogleMapsKey() {
-  const [key, setKey] = useState(null);
-  useEffect(() => {
-    fetch("/api/config").then(r=>r.json()).then(j=>{ if(j.googleMapsApiKey) setKey(j.googleMapsApiKey); }).catch(()=>{});
-  }, []);
-  return key;
-}
-
-function AddressAutocomplete({ value, onChange }) {
-  const mapsKey = useGoogleMapsKey();
-  const inputRef = useRef(null);
-  const acRef = useRef(null);
-
-  useEffect(() => {
-    if (!mapsKey || acRef.current) return;
-    loadGoogleMaps(mapsKey, () => {
-      if (!inputRef.current) return;
-      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, { types: ["address"] });
-      acRef.current.addListener("place_changed", () => {
-        const p = acRef.current.getPlace();
-        if (p?.formatted_address) onChange(p.formatted_address);
-      });
-    });
-  }, [mapsKey]);
-
-  return (
-    <input ref={inputRef} value={value} onChange={e=>onChange(e.target.value)} placeholder="123 Main St, City, NJ"/>
-  );
-}
-
-// Business name autocomplete — fills company name; when a place is selected also fires onAddress
-function CompanyAutocomplete({ value, onChange, onAddress }) {
-  const mapsKey = useGoogleMapsKey();
-  const inputRef = useRef(null);
-  const acRef = useRef(null);
-
-  useEffect(() => {
-    if (!mapsKey || acRef.current) return;
-    loadGoogleMaps(mapsKey, () => {
-      if (!inputRef.current) return;
-      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
-        types: ["establishment"],
-        fields: ["name", "formatted_address"],
-      });
-      acRef.current.addListener("place_changed", () => {
-        const p = acRef.current.getPlace();
-        if (p?.name) onChange(p.name);
-        if (p?.formatted_address) onAddress(p.formatted_address);
-      });
-    });
-  }, [mapsKey]);
-
-  return (
-    <input ref={inputRef} value={value} onChange={e=>onChange(toTitleCase(e.target.value))} placeholder="Acme Corp"/>
-  );
-}
+// Address + business autocomplete now come from the shared, race-safe component (imported above).
 
 function IntakeForm({ user, label, service: defaultService, onDone }) {
   const [f, setF] = useState({
@@ -150,7 +77,7 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
       </div>
       <div className="am-row2">
         <div className="am-field"><label>Phone</label><input type="tel" value={f.phone} onChange={e=>set("phone",formatPhone(e.target.value))} placeholder="(646) 555-0100"/></div>
-        <div className="am-field"><label>Company Name <span className="am-opt">(optional)</span></label><CompanyAutocomplete value={f.company} onChange={v=>set("company",v)} onAddress={v=>set("address",v)}/></div>
+        <div className="am-field"><label>Company Name <span className="am-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} value={f.company} onChange={v=>set("company",toTitleCase(v))} onPlace={p=>setF(prev=>({...prev, company:toTitleCase(p.name||prev.company), address:p.address||prev.address}))} placeholder="Acme Corp"/></div>
       </div>
       <div className="am-field">
         <label>Service Address</label>

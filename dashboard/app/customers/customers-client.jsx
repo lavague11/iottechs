@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import { archiveCustomerAction, wipeAllCustomersAction } from "./actions";
-import { attachAutocomplete } from "../../lib/places";
+import AddressAutocomplete from "../components/address-autocomplete";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 const SERVICES = ["Security Cameras / CCTV", "Commercial Audio", "Networking & Cat6", "Access Control / Door Entry", "NVR & Storage", "Other"];
@@ -16,14 +16,6 @@ function AddCustomerModal({ onClose, onAdded }) {
   const [err, setErr] = useState("");
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
-  // Google Places autofill (business → name + address; address field → street addresses).
-  const companyRef = useRef(null);
-  const addressRef = useRef(null);
-  useEffect(() => {
-    const c1 = attachAutocomplete(companyRef.current, { types: ["establishment"], onPlace: (p) => setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })) });
-    const c2 = attachAutocomplete(addressRef.current, { types: ["address"], onPlace: (p) => setF((f) => ({ ...f, address: p.address || f.address })) });
-    return () => { c1?.(); c2?.(); };
-  }, []);
 
   async function submit(e) {
     e.preventDefault();
@@ -45,13 +37,13 @@ function AddCustomerModal({ onClose, onAdded }) {
         <form className="cm-form" onSubmit={submit}>
           <div className="cm-row2">
             <div className="cm-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-            <div className="cm-f"><label>Company <span className="opt">(optional)</span></label><input ref={companyRef} className="apx-input" value={f.company} onChange={(e) => set("company", e.target.value)} placeholder="Start typing a business name…" /></div>
+            <div className="cm-f"><label>Company <span className="opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address }))} placeholder="Start typing a business name…" /></div>
           </div>
           <div className="cm-row2">
             <div className="cm-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
             <div className="cm-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
           </div>
-          <div className="cm-f"><label>Service Address</label><input ref={addressRef} className="apx-input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="123 Main St, City, NJ" /></div>
+          <div className="cm-f"><label>Service Address</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => set("address", v)} placeholder="123 Main St, City, NJ" /></div>
           <div className="cm-f"><label>Service</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div className="cm-f"><label>Notes <span className="opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} /></div>
           {err && <div className="cm-err">{err}</div>}

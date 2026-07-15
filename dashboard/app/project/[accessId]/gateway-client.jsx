@@ -16,6 +16,7 @@ import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
+import AddressAutocomplete from "../../components/address-autocomplete";
 import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted } from "./survey-approve";
 import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
@@ -1275,101 +1276,7 @@ const UPCOMING = {
 };
 
 // ---- Google Places loader (singleton) + address autocomplete input ----
-let placesLoaderPromise = null;
-function loadPlaces(apiKey) {
-  if (typeof window === "undefined") return Promise.reject();
-  if (window.google?.maps?.places) return Promise.resolve();
-  if (placesLoaderPromise) return placesLoaderPromise;
-  placesLoaderPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById("gmaps-places-js");
-    if (existing) { existing.addEventListener("load", () => resolve()); existing.addEventListener("error", reject); return; }
-    const s = document.createElement("script");
-    s.id = "gmaps-places-js";
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-  return placesLoaderPromise;
-}
-
-// PlaceAutocompleteElement registers as a custom element a beat after the
-// places library loads; poll (also nudging importLibrary) until it's ready.
-async function waitForPAE(timeoutMs = 8000) {
-  const start = (typeof performance !== "undefined" ? performance.now() : 0);
-  while ((typeof performance !== "undefined" ? performance.now() : start + timeoutMs) - start < timeoutMs) {
-    const direct = window.google?.maps?.places?.PlaceAutocompleteElement;
-    if (direct) return direct;
-    if (window.google?.maps?.importLibrary) {
-      try { const lib = await window.google.maps.importLibrary("places"); if (lib?.PlaceAutocompleteElement) return lib.PlaceAutocompleteElement; } catch (_) {}
-    }
-    await new Promise(r => setTimeout(r, 200));
-  }
-  return window.google?.maps?.places?.PlaceAutocompleteElement || null;
-}
-
-function AddressAutocomplete({ value, onChange, placeholder, className }) {
-  const hostRef     = useRef(null);
-  const elRef       = useRef(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const [apiKey, setApiKey] = useState(null);
-  const [usingWidget, setUsingWidget] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/config").then(r => r.json()).then(j => { if (j.googleMapsApiKey) setApiKey(j.googleMapsApiKey); }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!apiKey || !hostRef.current || elRef.current) return;
-    let cancelled = false;
-    loadPlaces(apiKey).then(async () => {
-      // The gmp-place-autocomplete element registers asynchronously after the
-      // places library JS runs — poll until the class is actually available.
-      const PAE = await waitForPAE();
-      if (cancelled || !hostRef.current || !PAE) return; // leave fallback input
-      try {
-        const el = new PAE({ includedRegionCodes: ["us"] });
-        el.className = "pv-pac-el";
-        // Resolve a selection (payload/event names have varied between API
-        // releases) down to a formatted address and push it to the form.
-        const onSelect = async (ev) => {
-          try {
-            let place = ev?.place || null;
-            const pred = ev?.placePrediction;
-            if (!place && pred?.toPlace) place = pred.toPlace();
-            if (!place) return;
-            if (place.fetchFields) await place.fetchFields({ fields: ["formattedAddress"] });
-            const addr = place.formattedAddress || place.formatted_address;
-            if (addr) onChangeRef.current(addr);
-          } catch (_) {}
-        };
-        el.addEventListener("gmp-select", onSelect);
-        el.addEventListener("gmp-placeselect", onSelect);
-        hostRef.current.appendChild(el);
-        elRef.current = el;
-        setUsingWidget(true);
-      } catch (_) { /* keep fallback input */ }
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <>
-      <div ref={hostRef} className="pv-pac-host" style={{ display: usingWidget ? "block" : "none" }} />
-      {!usingWidget && (
-        <input
-          className={className}
-          defaultValue={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete="off"
-        />
-      )}
-    </>
-  );
-}
+// Address autocomplete now comes from the shared, race-safe component (imported at the top).
 
 // ---- Map thumbnail for project header ----
 function MapThumb({ address }) {

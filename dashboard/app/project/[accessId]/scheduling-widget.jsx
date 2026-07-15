@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { seedToolData, startToolAutosync } from "./tool-sync";
+import AddressAutocomplete from "../../components/address-autocomplete";
 
 function schedKey(id) { return `sched_v1_${id}`; }
 function schedLoad(id) {
@@ -253,7 +254,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
           </div>
           <div className="sched-row">
             <label className="sched-lbl">Location</label>
-            <input className="sched-input" value={form.location} onChange={e=>setForm(f=>({...f,location:e.target.value}))} placeholder="Job site address" />
+            <AddressAutocomplete className="sched-input" value={form.location} onChange={v=>setForm(f=>({...f,location:v}))} placeholder="Job site address" />
           </div>
           <div className="sched-row">
             <label className="sched-lbl">Invite Members</label>
