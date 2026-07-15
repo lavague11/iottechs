@@ -391,7 +391,8 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
 
 // ---- Progress bar ----
 function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, onJump, busy,
-                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, pctOverride, justDone }) {
+                       toast, setToast, stages: stagesProp, missingFor, role, techSigned, custApproved, pctOverride, justDone,
+                       advanceInline = false }) {
 
   let stages = stagesProp || stagesForType(type);
   if (!stagesProp && !stages.some((s) => s.key === projectStage)) stages = STAGES;
@@ -474,85 +475,13 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
           </span>
         </div>
 
-        {(() => {
-          // Under the % bar, one strip per role telling them exactly where things stand:
-          //   · you owe something        → amber "Next step: X (required)" (click → the stage panel)
-          //   · the other side owes it   → neutral "Awaiting customer …" / "Our team is on it …"
-          //   · everything done          → staff get "step complete → continue" (auto-advance
-          //     usually beats them to it; this is the manual fallback + end-of-line stages)
-          // Technician's own strip: accept the work order → wait on the customer → go on.
-          if (role === "tech") {
-            if (!techSigned) {
-              return (
-                <button type="button" className="pbar-advance todo" disabled={busy} onClick={() => onBrowse("proposal")}>
-                  <span className="pba-check todo">!</span>
-                  <span className="pba-msg"><b>Next step:</b> Accept the work order <span className="pba-req">(required)</span></span>
-                  <span className="pba-arrow">→</span>
-                </button>
-              );
-            }
-            if (!custApproved) {
-              return (
-                <div className="pbar-advance wait">
-                  <span className="pba-check wait"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
-                  <span className="pba-msg"><b>Customer has not approved yet</b> — you'll be notified the moment they sign.</span>
-                </div>
-              );
-            }
-            const nextT = projectIdx >= 0 && projectIdx < stages.length - 1 ? stages[projectIdx + 1] : null;
-            return (
-              <button type="button" className="pbar-advance" disabled={busy} onClick={() => onBrowse(nextT ? nextT.key : projectStage)}>
-                <span className="pba-check">✓</span>
-                <span className="pba-msg"><b>Work order accepted.</b> Go on to the next step</span>
-                <span className="pba-arrow">→</span>
-              </button>
-            );
-          }
-          // Customer's next-step banner is superseded by the hero action card — don't double up.
-          if (!missingFor || !["admin", "manager", "sales"].includes(role)) return null;
-          const remaining = missingFor(projectStage) || [];   // [{ label, who }]
-          const isCust = role === "customer";
-          const mine   = remaining.filter((r) => (r.who === "customer") === isCust);
-          const theirs = remaining.filter((r) => (r.who === "customer") !== isCust);
-          if (mine.length) {
-            return (
-              <button type="button" className="pbar-advance todo" disabled={busy}
-                      onClick={() => onBrowse(projectStage)}
-                      title={mine.length > 1 ? `Also: ${mine.slice(1).map((m) => m.label).join(" · ")}` : undefined}>
-                <span className="pba-check todo">!</span>
-                <span className="pba-msg"><b>{isCust ? "Your next step:" : "Next step:"}</b> {mine[0].label} <span className="pba-req">(required)</span>{mine.length > 1 ? ` +${mine.length - 1} more` : ""}</span>
-                <span className="pba-arrow">→</span>
-              </button>
-            );
-          }
-          if (theirs.length) {
-            return (
-              <button type="button" className="pbar-advance wait" disabled={busy} onClick={() => onBrowse(projectStage)}>
-                <span className="pba-check wait">⏳</span>
-                <span className="pba-msg">
-                  <b>{isCust ? "Our team is on it" : "Awaiting customer"}</b> — {theirs[0].label}{theirs.length > 1 ? ` +${theirs.length - 1} more` : ""}
-                </span>
-              </button>
-            );
-          }
-          if (!canControl) return null;   // all clear — customers just watch it advance
-          const nextStage = projectIdx >= 0 && projectIdx < stages.length - 1 ? stages[projectIdx + 1] : null;
-          if (!nextStage) {
-            return (
-              <div className="pbar-advance done">
-                <span className="pba-check">✓</span>
-                <span className="pba-msg"><b>All steps complete.</b> This project is finished.</span>
-              </div>
-            );
-          }
-          return (
-            <button type="button" className="pbar-advance" disabled={busy} onClick={() => onJump(nextStage.key)}>
-              <span className="pba-check">✓</span>
-              <span className="pba-msg"><b>{stageShortLabel(projectStage)} complete.</b> Continue to {nextStage.short || nextStage.label}</span>
-              <span className="pba-arrow">→</span>
-            </button>
-          );
-        })()}
+        {/* Next-step CTA now lives at the bottom of the tool list (<StageAdvance/>), not under the
+            progress bar. Kept here only if a caller opts back in via advanceInline. */}
+        {advanceInline && (
+          <StageAdvance role={role} busy={busy} techSigned={techSigned} custApproved={custApproved}
+            missingFor={missingFor} projectStage={projectStage} stages={stages} canControl={canControl}
+            onBrowse={onBrowse} onJump={onJump} />
+        )}
 
         {(() => {
           const miss = toast && missingFor ? missingFor(toast.stageKey) : [];
@@ -574,6 +503,82 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
         })()}
       </div>
     </>
+  );
+}
+
+
+// The stage's "next step" call-to-action — lives at the BOTTOM of the tool list (below the last
+// tool card) instead of under the progress bar. Tells each role what's outstanding and advances
+// once the stage is clear. Same look/logic as the old in-bar strip, just relocated.
+function StageAdvance({ role, busy, techSigned, custApproved, missingFor, projectStage, stages, canControl, onBrowse, onJump }) {
+  const projectIdx = stages.findIndex((s) => s.key === projectStage);
+  if (role === "tech") {
+    if (!techSigned) {
+      return (
+        <button type="button" className="pbar-advance todo bottom" disabled={busy} onClick={() => onBrowse("proposal")}>
+          <span className="pba-check todo">!</span>
+          <span className="pba-msg"><b>Next step:</b> Accept the work order <span className="pba-req">(required)</span></span>
+          <span className="pba-arrow">→</span>
+        </button>
+      );
+    }
+    if (!custApproved) {
+      return (
+        <div className="pbar-advance wait bottom">
+          <span className="pba-check wait"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span className="pba-msg"><b>Customer has not approved yet</b> — you'll be notified the moment they sign.</span>
+        </div>
+      );
+    }
+    const nextT = projectIdx >= 0 && projectIdx < stages.length - 1 ? stages[projectIdx + 1] : null;
+    return (
+      <button type="button" className="pbar-advance bottom" disabled={busy} onClick={() => onBrowse(nextT ? nextT.key : projectStage)}>
+        <span className="pba-check">✓</span>
+        <span className="pba-msg"><b>Work order accepted.</b> Go on to the next step</span>
+        <span className="pba-arrow">→</span>
+      </button>
+    );
+  }
+  // Customer's next step is carried by their hero action card — don't double up.
+  if (!missingFor || !["admin", "manager", "sales"].includes(role)) return null;
+  const remaining = missingFor(projectStage) || [];   // [{ label, who }]
+  const mine   = remaining.filter((r) => r.who !== "customer");
+  const theirs = remaining.filter((r) => r.who === "customer");
+  if (mine.length) {
+    return (
+      <button type="button" className="pbar-advance todo bottom" disabled={busy}
+              onClick={() => onBrowse(projectStage)}
+              title={mine.length > 1 ? `Also: ${mine.slice(1).map((m) => m.label).join(" · ")}` : undefined}>
+        <span className="pba-check todo">!</span>
+        <span className="pba-msg"><b>Next step:</b> {mine[0].label} <span className="pba-req">(required)</span>{mine.length > 1 ? ` +${mine.length - 1} more` : ""}</span>
+        <span className="pba-arrow">→</span>
+      </button>
+    );
+  }
+  if (theirs.length) {
+    return (
+      <button type="button" className="pbar-advance wait bottom" disabled={busy} onClick={() => onBrowse(projectStage)}>
+        <span className="pba-check wait">⏳</span>
+        <span className="pba-msg"><b>Awaiting customer</b> — {theirs[0].label}{theirs.length > 1 ? ` +${theirs.length - 1} more` : ""}</span>
+      </button>
+    );
+  }
+  if (!canControl) return null;   // all clear — customers just watch it advance
+  const nextStage = projectIdx >= 0 && projectIdx < stages.length - 1 ? stages[projectIdx + 1] : null;
+  if (!nextStage) {
+    return (
+      <div className="pbar-advance done bottom">
+        <span className="pba-check">✓</span>
+        <span className="pba-msg"><b>All steps complete.</b> This project is finished.</span>
+      </div>
+    );
+  }
+  return (
+    <button type="button" className="pbar-advance bottom" disabled={busy} onClick={() => onJump(nextStage.key)}>
+      <span className="pba-check">✓</span>
+      <span className="pba-msg"><b>{stageShortLabel(projectStage)} complete.</b> Continue to {nextStage.short || nextStage.label}</span>
+      <span className="pba-arrow">→</span>
+    </button>
   );
 }
 
@@ -2702,6 +2707,22 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </FlowStep>
         </div>
         </AccordionProvider>
+      )}
+
+      {/* Next-step CTA — moved out from under the progress bar to the bottom of the tool list. */}
+      {!lp.lost_reason && (
+        <StageAdvance
+          role={cView}
+          busy={busy}
+          techSigned={!!proposalData?.tech_signed_name}
+          custApproved={proposalData?.status === "accepted" || (proposalData?.accepted_options?.length > 0)}
+          missingFor={(k) => missingReqsFor(phaseLanding(k), lp, localAssignments)}
+          projectStage={barProjectStage}
+          stages={stageList}
+          canControl={canControl && !previewRole}
+          onBrowse={(k) => browse(phaseLanding(k))}
+          onJump={(k) => doMove(phaseLanding(k))}
+        />
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (
         <div className="pv-close-bar" style={{ gap: 10 }}>
