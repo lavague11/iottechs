@@ -223,7 +223,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
           + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
           Deposit" is the focus, but the customer can reopen it anytime. */}
-      <button type="button" className="pcv-fold-hd" onClick={toggleDoc} aria-expanded={docOpen}>
+      <button type="button" className={`pcv-fold-hd${locked ? " done" : ""}`} onClick={toggleDoc} aria-expanded={docOpen}>
         <span className="pcv-fold-ic">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </span>
@@ -623,18 +623,22 @@ const PCV_CSS = `
 
 .pcv-section-hd{margin:18px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.76rem;font-weight:800;
   letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #C9A96E}
-/* Fold header — collapses the whole proposal; matches the page tool-card language (icon + title +
-   status chip + chevron). Navy bar with a gold left rule, echoing .pcv-section-hd. */
-.pcv-fold-hd{display:flex;align-items:center;gap:11px;width:100%;margin:0;background:#2C3347;
-  border:none;border-left:4px solid #C9A96E;padding:12px 16px;cursor:pointer;text-align:left;font-family:inherit}
-.pcv-fold-hd:hover{background:#333c53}
-.pcv-fold-ic{flex-shrink:0;width:26px;height:26px;border-radius:7px;background:rgba(201,169,110,.16);color:#E8CB94;display:grid;place-items:center}
-.pcv-fold-title{font-size:.9rem;font-weight:800;color:#FAF8F4;letter-spacing:-.01em}
-.pcv-fold-chip{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#c7cdd9;
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px 9px}
-.pcv-fold-chip.ok{color:#E8CB94;background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.4)}
-.pcv-fold-chip.done{color:#7ee0a6;background:rgba(46,143,91,.16);border-color:rgba(46,143,91,.45)}
-.pcv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.8rem;color:#9aa1af}
+/* Fold header — collapses the whole proposal; matches the page's FlowStep tool-cards (white row,
+   1px border with a status-colored left rule, soft-tint icon, status chip, chevron). Gold while in
+   progress, green once accepted+signed — same "complete = green" convention as the other cards. */
+.pcv-fold-hd{display:flex;align-items:center;gap:10px;width:100%;margin:0;background:#fff;
+  border:1px solid #d9d4ca;border-left:3px solid #C9A96E;border-radius:12px;padding:11px 16px;
+  cursor:pointer;text-align:left;font-family:inherit;transition:background .12s}
+.pcv-fold-hd:hover{background:#faf7f1}
+.pcv-fold-hd.done{border-left-color:#2f7d5a}
+.pcv-fold-ic{flex-shrink:0;width:30px;height:30px;border-radius:8px;background:#f7f0df;color:#a3812f;display:grid;place-items:center}
+.pcv-fold-hd.done .pcv-fold-ic{background:#e7f6ec;color:#2f7d5a}
+.pcv-fold-title{font-size:.9rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em}
+.pcv-fold-chip{font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a8578;
+  background:#f2efe9;border:1px solid #e2ddd3;border-radius:999px;padding:3px 9px}
+.pcv-fold-chip.ok{color:#a3812f;background:#f7f0df;border-color:#e8d9b3}
+.pcv-fold-chip.done{color:#1c8a45;background:#e7f6ec;border-color:#bfe3cd}
+.pcv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.72rem;color:#9aa1af}
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:#2C3347;
   color:#FAF8F4;font-size:.72rem;font-weight:700;padding:8px 10px;border-bottom:2px solid #C9A96E}
