@@ -1962,6 +1962,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     {lp.contact_phone && <div className="pv-hfield"><span className="pv-hfl">Phone</span><a className="pv-hfv link" href={`tel:${lp.contact_phone}`}>{fmtPhone(lp.contact_phone)}</a></div>}
                     {lp.company_name && <div className="pv-hfield"><span className="pv-hfl">Company</span><span className="pv-hfv">{lp.company_name}</span></div>}
                     {lp.contact_email && <div className="pv-hfield"><span className="pv-hfl">Email</span><a className="pv-hfv link" href={`mailto:${lp.contact_email}`}>{lp.contact_email}</a></div>}
+                    {lp.source && <div className="pv-hfield"><span className="pv-hfl">Source</span><span className="pv-hfv" style={{textTransform:"capitalize"}}>{lp.source}</span></div>}
+                    {lp.contact_message && <div className="pv-hfield pv-hfield-full"><span className="pv-hfl">Notes</span><span className="pv-hfv">{lp.contact_message}</span></div>}
                   </div>
                   <a className="pv-addr-row" href={`https://maps.google.com/?q=${encodeURIComponent(lp.address||"2503 Jay Pl, Bronx, NY 10462")}`} target="_blank" rel="noreferrer">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,color:"var(--accent)"}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -2379,9 +2381,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
       {vPhase === "ph_survey" && cView !== "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
-          <FlowStep n={1} total={2} status={lp.date ? "done" : "active"} color="#C9A96E"
+          {/* Survey Scheduling + Details & Notes merged into one card (booking + POC + questions). */}
+          <FlowStep status={lp.date ? "done" : "active"} color="#C9A96E"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
-            title="Survey Scheduling" sub="Book the visit · Pick a time window"
+            title="Survey Scheduling &amp; Notes" sub="Book the visit · Point of contact · Questions"
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
             <SchedulingWidget
               accessId={lp.access_id}
@@ -2392,8 +2395,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               view={view}
               customerView={!!previewRole}
             />
-          </FlowStep>
-          <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Details &amp; Notes" completable bare>
+            <div style={{ height: 1, background: "var(--line,#e6e8ee)", margin: "16px 0 4px" }} />
             <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
           </FlowStep>
         </div>
@@ -2493,10 +2495,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           );
         })()
       )}
-      {/* Staff intake summary card, part of the Survey phase. */}
-      {vPhase === "ph_survey" && ["admin", "manager", "sales", "tech"].includes(cView) && (
-        <div className="pv-card pv-inquiry-card"><InquiryCard project={project} view={cView} /></div>
-      )}
+      {/* Lead Card removed — its fields (incl. Source + intake Notes) now live in the
+          "Customer Information" collapsible at the top of the page. */}
 
       {/* ============ PROPOSAL phase (proposal + approval & deposit merged) ============ */}
       {vPhase === "ph_proposal" && ["admin", "manager", "sales"].includes(view) && (
@@ -3396,6 +3396,7 @@ const PV_CSS = `
 .pvx .pv-hinfo{padding:20px 22px;display:flex;flex-direction:column;min-width:0;gap:13px;border-right:1px solid var(--line)}
 .pvx .pv-hfields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin-top:2px}
 .pvx .pv-hfield{display:flex;flex-direction:column;gap:3px}
+.pvx .pv-hfield-full{grid-column:1 / -1}
 .pvx .pv-hfl{font-size:.67rem;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
 .pvx .pv-hfv{font-size:.87rem;color:var(--slate);font-weight:500}
 .pvx .pv-hfv.link{color:var(--accent);text-decoration:none}
