@@ -190,6 +190,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
         <div className="welcome">
           <h1>Development <em>Roadmap</em></h1>
           <p className="dv-sub">Your build tracker for the platform. Check items off as they ship — completed work sinks to the bottom.</p>
+          <Link href="/dev/role-map" className="dv-map-link">🗺 Role &amp; Flow Map — who sees what, per step</Link>
         </div>
 
         {/* Progress */}
@@ -282,6 +283,8 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
 
 const DV_CSS = `
 .apx .dv-sub{color:var(--muted);font-size:.9rem;margin-top:4px}
+.apx .dv-map-link{display:inline-block;margin-top:10px;font-size:.84rem;font-weight:800;color:#b08f4f;text-decoration:none;border:1px solid #e5d3a1;background:#fdf9ef;border-radius:9px;padding:8px 14px}
+.apx .dv-map-link:hover{background:#C9A96E;border-color:#C9A96E;color:#fff}
 .apx .dv-progress-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px}
 .apx .dv-prog-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .apx .dv-prog-stat{font-size:.95rem;color:var(--ink)}
