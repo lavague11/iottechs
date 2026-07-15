@@ -1827,7 +1827,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <button className={`pv-card-toggle${!hCollapsed?" open":""}`} onClick={()=>setHCollapsed(v=>!v)}>
             <div className="pct-left">
               <span className="pct-id">{lp.access_id}</span>
-              <span className="pct-title">{lp.company_name || lp.customer}<span className="pct-stage"> · {stageShortLabel(projectStage)}</span></span>
+              <span className="pct-title">{lp.company_name || lp.customer}<span className="pct-stage"> · {stageShortLabel(barMarker)}</span></span>
             </div>
             <div className="pct-right">
               <span className="pct-active">Active</span>
