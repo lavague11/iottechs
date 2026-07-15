@@ -51,6 +51,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [signFor, setSignFor] = useState(null);   // option id awaiting signature (accept flow)
+  // Once accepted+signed, the full proposal document collapses to a summary so "Make Your Deposit"
+  // is the focus. null = follow the lock state (auto-collapse on sign); true/false = user override.
+  const [docOverride, setDocOverride] = useState(null);
 
   const isDraftPreview = preview && p?.status === "draft" && p?.payload;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
@@ -158,6 +161,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // toolbar collapses to "Accepted ✓" + Request Modification + Download, and the accept box
   // reduces to the next-step button (the signature block below is the record).
   const locked = !!p.signed_name && acceptedSet.size > 0;
+  // Document body is open by default until the proposal is locked (accepted+signed), then it
+  // auto-collapses to a summary the customer can re-expand. Explicit toggle wins over the default.
+  const docOpen = docOverride == null ? !locked : docOverride;
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
@@ -221,6 +227,20 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         </div>
       </div>
 
+      {/* Once accepted+signed, the full document collapses to a one-line summary so "Make Your
+          Deposit" (below) is the clear next step. The customer can re-expand at any time. */}
+      {locked && !docOpen && (
+        <button type="button" className="pcv-doc-collapsed" onClick={() => setDocOverride(true)}>
+          <span className="pcv-doc-collapsed-badge">✓ Accepted</span>
+          <span className="pcv-doc-collapsed-txt">{[...acceptedSet].sort().map(optName).join(", ")} accepted &amp; signed — your deposit is the next step below.</span>
+          <span className="pcv-doc-collapsed-toggle">View full proposal</span>
+        </button>
+      )}
+      {locked && docOpen && (
+        <button type="button" className="pcv-doc-hide" onClick={() => setDocOverride(false)}>Hide full proposal ▲</button>
+      )}
+
+      {docOpen && (<>
       <div className="pcv-info-box">
         <div className="pcv-info-row">
           <div><span className="pcv-info-lbl">Prepared For</span><b>{customerName || "Client TBD"}</b></div>
@@ -459,6 +479,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           </div>
         </>
       )}
+      </>)}
 
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
@@ -491,9 +512,8 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 </div>
               </>
             )}
-            {acceptedSet.size > 0 && (
-              <button className="pcv-select" onClick={() => onAdvance?.("approval_deposit")}>Go to Next Step: Approval →</button>
-            )}
+            {/* No premature "next step" button here — once accepted, the deposit tool below is the
+                next action, and advancement happens after the deposit is recorded (not on accept). */}
             {!canAct && acceptedSet.size === 0 && <p>This proposal isn’t open for action right now.</p>}
           </>
         )}
@@ -593,6 +613,18 @@ const PCV_CSS = `
 
 .pcv-section-hd{margin:18px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.76rem;font-weight:800;
   letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #C9A96E}
+/* Collapsed-document summary bar (shown after accept+sign so the deposit is the focus) */
+.pcv-doc-collapsed{display:flex;align-items:center;gap:12px;width:calc(100% - 44px);margin:18px 22px 0;
+  background:#fff;border:1px solid #d9d4ca;border-left:4px solid #2f8f5b;border-radius:10px;padding:14px 16px;
+  cursor:pointer;text-align:left;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.pcv-doc-collapsed:hover{border-color:#C9A96E;box-shadow:0 3px 14px rgba(0,0,0,.06)}
+.pcv-doc-collapsed-badge{flex-shrink:0;font-size:.72rem;font-weight:800;letter-spacing:.03em;color:#2f8f5b;
+  background:#e9f6ee;border:1px solid #bfe3cd;border-radius:999px;padding:4px 10px}
+.pcv-doc-collapsed-txt{flex:1;min-width:0;font-size:.86rem;font-weight:600;color:#0B0F1A;line-height:1.35}
+.pcv-doc-collapsed-toggle{flex-shrink:0;font-size:.76rem;font-weight:800;color:#a3812f;text-transform:uppercase;letter-spacing:.03em}
+.pcv-doc-hide{display:block;margin:18px 22px 0;background:none;border:none;color:#8a8578;font-family:inherit;
+  font-size:.76rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;padding:2px 0}
+.pcv-doc-hide:hover{color:#0B0F1A}
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:#2C3347;
   color:#FAF8F4;font-size:.72rem;font-weight:700;padding:8px 10px;border-bottom:2px solid #C9A96E}

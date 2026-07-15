@@ -47,7 +47,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const toastTimer = useRef(null);
   const showToast = (m) => { setToast(m); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2600); };
   const [signOpen, setSignOpen] = useState(false);
-  const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "" });
+  const today = new Date().toISOString().slice(0, 10);
+  const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
@@ -101,19 +102,72 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       if (status === "declined") return { sub: "You declined this proposal. Contact us if you'd like to revisit it.", showBtn: false };
       return { sub: "Accept a proposal option to continue — the agreement, signature, and deposit unlock here once it's accepted.", showBtn: true };   // "sent"
     })();
+    const gatePayments = data.payments || [];
     return (
-      <div className="apv-gate">
+      <div className="apv-root">
         <style>{APV_CSS}</style>
-        <div className="apv-gate-ic">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        {err && <div className="apv-note err">{err}</div>}
+        <div className="apv-gate" style={{ margin: "16px 22px 0" }}>
+          <div className="apv-gate-ic">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div className="apv-gate-body">
+            <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
+            <div className="apv-gate-sub">{sub}</div>
+            {onBrowseStage && showBtn && (
+              <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
+            )}
+          </div>
         </div>
-        <div className="apv-gate-body">
-          <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
-          <div className="apv-gate-sub">{sub}</div>
-          {onBrowseStage && showBtn && (
-            <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
-          )}
-        </div>
+
+        {/* Billing stays open for the office — record a deposit/payment even before the customer
+            has accepted or signed. Money is never blocked by the acceptance flow. */}
+        {isStaff && (
+          <>
+            <ToolHead icon="card" title="Record a Payment" done={false} doneLabel="" pendingLabel="Billing open" />
+            <div className="apv-card apv-pay-card">
+              {gatePayments.length > 0 && (
+                <div className="apv-hist">
+                  <div className="apv-hist-hd">Payment history</div>
+                  {gatePayments.map((x) => (
+                    <div key={x.id} className={`apv-hrow${x.status === "pending" ? " pending" : ""}`}>
+                      <div className="apv-hrow-main">
+                        <span className="apv-hrow-amt">{money(x.amount)}</span>
+                        <span className="apv-hrow-meta">
+                          <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
+                          <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
+                          {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
+                        </span>
+                      </div>
+                      <div className="apv-hrow-acts">
+                        {x.status === "pending" ? <span className="apv-pay-pending">Pending</span> : <span className="apv-hrow-ok">✓ Received</span>}
+                        {x.status === "pending" && <button className="apv-pay-ok" disabled={busy} onClick={() => confirmPayment(x.id)}>Confirm</button>}
+                        <button className="apv-pay-x" title="Remove" onClick={() => delPayment(x.id)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="apv-payform">
+                <div className="apv-payform-hd">Record a payment</div>
+                <div className="apv-payform-grid">
+                  <label className="apv-fld"><span>Amount</span>
+                    <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
+                  <label className="apv-fld"><span>Method</span>
+                    <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
+                      <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
+                    </select></label>
+                  <label className="apv-fld"><span>Date paid</span>
+                    <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
+                  <label className="apv-fld apv-fld-wide"><span>Note / reference <em>(optional)</em></span>
+                    <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
+                </div>
+                <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
+              </div>
+              <div className="apv-fine">Billing stays open — record a deposit or payment even before the customer accepts or signs.</div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -163,7 +217,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setData((d) => ({ ...d, payments: r.payments }));
-    setPay({ amount: "", method: pay.method, kind: isFinal ? "final" : "deposit", note: "" });
+    setPay({ amount: "", method: pay.method, kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
     showToast(isCustomer ? "Payment submitted — here's what happens next" : "Payment recorded");
     followStage(r.stage);
     // On the deposit portal, a customer's natural next step after paying is scheduling — take them
@@ -308,7 +362,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                     <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
                     <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
                     {x.note ? <span className="apv-hrow-note">{x.note}</span> : null}
-                    {x.created_at && <span className="apv-hrow-when">{String(x.created_at).slice(0, 10)}</span>}
+                    {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
                   </span>
                 </div>
                 <div className="apv-hrow-acts">
@@ -361,6 +415,12 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                 <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
               </select>
             </label>
+            {isStaff && (
+              <label className="apv-fld">
+                <span>Date paid</span>
+                <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} />
+              </label>
+            )}
             <label className="apv-fld apv-fld-wide">
               <span>Note / reference <em>(optional)</em></span>
               <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />

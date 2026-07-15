@@ -346,6 +346,7 @@ export async function recordPaymentAction(accessId, payment) {
   const payments = addProjectPayment(accessId, {
     amount: payment.amount, method: payment.method, kind: payment.kind,
     source: isCustomer ? "customer" : "staff", note: payment.note,
+    paidAt: payment.paidAt,   // staff-set date the money changed hands
   }, tok.name || tok.email || tok.role);
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);

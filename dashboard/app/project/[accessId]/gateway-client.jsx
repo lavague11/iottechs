@@ -923,8 +923,8 @@ function TechActionBar({ accessId, projectStage, onStageChange }) {
 }
 
 // ---- Proposal View Log (eye icon) — admin/manager see all views, sales sees customer views ----
-function ProposalViews({ views, view }) {
-  const [open, setOpen] = useState(false);
+// Proposal-view log, shown as a small header-icon modal (opened from the sh-actions row).
+function ProposalViews({ views, view, onClose }) {
   if (!["admin", "manager", "sales"].includes(view)) return null;
 
   const isSales = view === "sales";
@@ -939,17 +939,11 @@ function ProposalViews({ views, view }) {
   const ROLE_LABEL = { admin: "Admin", manager: "Manager", sales: "Sales Rep", tech: "Technician", customer: "Customer" };
 
   return (
-    <div className="wo-panel">
-      <button className="pvw-head" onClick={() => setOpen((o) => !o)}>
-        <span className="pvw-title">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          {heading}
-          <span className="pvw-count">{views.length}</span>
-        </span>
-        <span className="pvw-chev">{open ? "▾" : "▸"}</span>
-      </button>
-      {open && (
-        <div className="pvw-list">
+    <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) onClose(); }}>
+      <div className="pv-modal pv-ta-modal">
+        <button className="pv-modal-x" onClick={onClose}>✕</button>
+        <h2 className="pv-modal-title">{heading} <span className="pv-ap-count">{views.length}</span></h2>
+        <div className="pvw-list" style={{ maxHeight: "60vh", overflowY: "auto", marginTop: 12 }}>
           {views.length === 0 ? (
             <div className="wo-empty">{empty}</div>
           ) : (
@@ -964,7 +958,7 @@ function ProposalViews({ views, view }) {
             ))
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1672,6 +1666,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [verifyCust, setVerifyCust]     = useState(null); // pending external customer awaiting identity confirmation
   const [expOpen,    setExpOpen]        = useState(false);
   const [reqOpen,    setReqOpen]        = useState(false);
+  const [pvwOpen,    setPvwOpen]        = useState(false);   // Proposal Views modal (header icon)
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeSaving,    setCloseSaving]    = useState(false);
   const [closeErr,       setCloseErr]       = useState("");
@@ -2048,6 +2043,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <span className="sh-icon-count">{teamCount}</span>
             </button>
           )}
+          {["admin","manager","sales"].includes(cView) && (
+            <button className="sh-icon-btn" title="Proposal Views" aria-label="Proposal Views" onClick={() => setPvwOpen(true)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              {proposalViews.length > 0 && <span className="sh-icon-count">{proposalViews.length}</span>}
+            </button>
+          )}
           {["admin","manager"].includes(view) && (
             <div className="sh-preview-pick" ref={previewMenuRef}>
               <button className={`sh-icon-btn${previewRole ? " on" : ""}`}
@@ -2185,6 +2186,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             }}>Reopen</button>
           )}
         </div>
+      )}
+      {["admin","manager","sales"].includes(cView) && pvwOpen && (
+        <ProposalViews views={proposalViews} view={cView} onClose={() => setPvwOpen(false)} />
       )}
       {["admin","manager"].includes(view) && taOpen && (
         <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) setTaOpen(false); }}>
@@ -2509,9 +2513,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           "Customer Information" collapsible at the top of the page. */}
 
       {/* ============ PROPOSAL phase (proposal + approval & deposit merged) ============ */}
-      {vPhase === "ph_proposal" && ["admin", "manager", "sales"].includes(view) && (
-        <ProposalViews views={proposalViews} view={view} />
-      )}
+      {/* Proposal Views moved to the header icon row (setPvwOpen) — the modal is mounted below. */}
       {vPhase === "ph_proposal" && ["admin", "manager", "sales", "customer", "tech"].includes(cView) && (
         <>
           {/* Tech's "Work Order Created" page: general job overview above the work order itself */}

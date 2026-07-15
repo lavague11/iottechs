@@ -665,6 +665,8 @@ function init() {
   // 'confirmed' at creation. Only confirmed money counts toward the balance.
   const payCols = db.prepare("PRAGMA table_info(project_payments)").all().map((c) => c.name);
   if (!payCols.includes("status")) db.exec("ALTER TABLE project_payments ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
+  // The actual date the money changed hands (staff-set), separate from created_at (when it was logged).
+  if (!payCols.includes("paid_at")) db.exec("ALTER TABLE project_payments ADD COLUMN paid_at TEXT");
 
   // ---- Inquiry-stage extras: appointment point-of-contact + a lightweight notes thread ----
   if (!cols.includes("poc_name"))  db.exec("ALTER TABLE projects ADD COLUMN poc_name TEXT");
@@ -2192,14 +2194,16 @@ export function acceptWorkOrder(accessId, name, signatureData) {
 export function getProjectPayments(accessId) {
   return db.prepare("SELECT * FROM project_payments WHERE project_access_id=? ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
 }
-export function addProjectPayment(accessId, { amount, method, kind, source, note }, byName) {
+export function addProjectPayment(accessId, { amount, method, kind, source, note, paidAt }, byName) {
   // Customer submissions await staff confirmation of receipt; staff entries are money-in-hand.
   const src = source === "customer" ? "customer" : "staff";
-  db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status) VALUES (?,?,?,?,?,?,?,?)")
+  // paid_at = the date the money changed hands (staff-set, YYYY-MM-DD). Defaults to today.
+  const paid = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || "")) ? String(paidAt) : new Date().toISOString().slice(0, 10);
+  db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status, paid_at) VALUES (?,?,?,?,?,?,?,?,?)")
     .run(String(accessId), Math.max(0, +amount || 0), String(method || "").slice(0, 60) || null,
       ["deposit", "final", "partial", "other"].includes(kind) ? kind : "deposit",
       src, String(note || "").slice(0, 500) || null, byName || null,
-      src === "customer" ? "pending" : "confirmed");
+      src === "customer" ? "pending" : "confirmed", paid);
   return getProjectPayments(accessId);
 }
 // Staff confirm a customer-submitted payment once the money is actually received.
