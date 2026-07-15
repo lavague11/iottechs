@@ -39,6 +39,18 @@ export function AccordionProvider({ children }) {
 
   const setDone = useCallback((key, done) => {
     setReg((r) => r.done[key] === done ? r : { ...r, done: { ...r.done, [key]: done } });
+    // Completing a tool always hands off to the next incomplete one — even if the user had manually
+    // opened this tool — as long as they're still looking at it (not parked on a different tool).
+    if (done) {
+      setOpenKey((cur) => {
+        const r = regRef.current;
+        const eff = cur == null ? (r.order.find((k) => !r.done[k]) || NONE) : cur;
+        if (eff !== key) return cur;
+        const i = r.order.indexOf(key);
+        const next = r.order.slice(i + 1).find((k) => !r.done[k]);
+        return next || NONE;
+      });
+    }
   }, []);
 
   const firstIncomplete = (r) => r.order.find((k) => !r.done[k]) || NONE;
