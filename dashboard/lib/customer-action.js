@@ -11,6 +11,19 @@ const A = (headline, sub, cta, target) => ({ tone: "action", kicker: "Your next 
 const S = (headline, sub) => ({ tone: "status", kicker: "In progress", headline, sub });
 const D = (headline, sub) => ({ tone: "done", kicker: "Complete", headline, sub });
 
+// The master stage the customer's VIEW should sit on — their first unmet obligation, independent of
+// how far the office has pushed the internal stage. This is the fix for "the admin moved ahead and
+// now the customer is lost": their pointer follows THEIR to-do, not ops. Returns null once they're
+// caught up on the getting-started obligations (survey → accept → sign → deposit) — after that their
+// view just follows the real project (watch install; pay the final balance at closeout).
+export function customerPointer(f = {}) {
+  if (!f.survey_ok)                    return "site_survey";       // review/approve the survey (or wait for it)
+  if (f.proposal_status !== "accepted") return "proposal";        // review + accept a proposal option
+  if (!f.proposal_signed)              return "approval_deposit";  // sign the agreement
+  if (!f.deposit_recorded)             return "approval_deposit";  // pay the deposit
+  return null;                                                     // caught up → follow the real project
+}
+
 export function customerAction(stage, f = {}) {
   switch (stage) {
     case "inquiry":

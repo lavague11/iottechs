@@ -26,7 +26,7 @@ import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerActionCard from "./customer-action-card";
-import { customerAction } from "../../../lib/customer-action";
+import { customerAction, customerPointer } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
@@ -1491,9 +1491,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
       if (snap.stage !== prev.stage) {
         onProjectStage(snap.stage);
-        // Only follow along automatically if they were viewing the live stage (not off browsing
-        // an earlier one on purpose) — otherwise just toast and let them keep looking around.
-        setViewingStage((vs) => (vs === prev.stage ? snap.stage : vs));
+        // Staff/tech following the live stage move along with it; a customer stays on their own
+        // journey pointer (they should never be dragged to a step ops opened but they haven't earned).
+        if (cView !== "customer") setViewingStage((vs) => (vs === prev.stage ? snap.stage : vs));
         // The stage-advance celebration effect (keyed on projectStage) handles the toast/animation
         // for both local and remote moves — no separate "stage moved" toast here (would double up).
       }
@@ -1629,33 +1629,40 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // silently re-edited. Admin/manager can Reopen from the Completion panel to make changes.
   const locked = !!lp.completed_at;
 
-  // Customer hero: the single next step, derived from the same flow-matrix facts that gate stages.
-  const custAction = cView === "customer" ? customerAction(projectStage, {
+  // ---- Customer journey pointer ----
+  // The customer's view follows THEIR outstanding to-do, not how far the office has pushed the
+  // internal stage — so they always land on exactly the thing they need to do next, never on a step
+  // that's ahead of them. `custStage` = their first unmet obligation; once caught up it just follows
+  // the real project (watch install; pay the final balance at closeout). surveyOk is the canonical
+  // "survey done" check (every tool with data approved, or no data at all → smooth sailing).
+  const surveyOk = surveySatisfied(toolMeta, acceptances);
+  const proposalAccepted = (proposalData?.accepted_options?.length > 0) || proposalData?.status === "accepted";
+  const custFacts = {
     appt_date:         lp.date,
+    survey_ok:         surveyOk,
     survey_accepted:   lp.survey_accepted,
     survey_submitted:  !!acceptances?.submit_site_survey,
-    proposal_status:   lp.proposal_status,
-    proposal_signed:   lp.proposal_signed,
+    proposal_status:   proposalAccepted ? "accepted" : (proposalData?.status || lp.proposal_status || ""),
+    proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
     deposit_submitted: lp.deposit_submitted,
     deposit_recorded:  lp.deposit_recorded,
     install_date:      lp.install_date || lp.date,
     install_date_fmt:  fmtDate(lp.install_date || lp.date),
-  }) : null;
+  };
+  // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
+  const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
+  const custStage   = custPointer || projectStage;   // their current step, else follow the real project
+  const custAction  = cView === "customer" ? customerAction(custStage, custFacts) : null;
 
-  // One-time clamp: a real customer (not admin preview) who lands ahead of their acceptance
-  // progress is pulled back to the gate they still owe. Runs only after acceptances load so a
-  // customer who already accepted is never bounced.
-  // Survey stage satisfied = every tool that has data is currently approved (or there's no data
-  // at all → smooth sailing). Shared with the browse gate below and the stage-flow server check.
-  const surveyOk = surveySatisfied(toolMeta, acceptances);
+  // Keep a real customer parked on their current step: re-center on load and each time they finish an
+  // item (which advances custStage). Between progressions they can still click the bar freely — this
+  // fires only when custStage itself changes, so browsing around doesn't yank them back.
   useEffect(() => {
     if (!acceptLoaded || previewRole || cView !== "customer") return;
-    let target = viewingStage;
-    if (!surveyOk && (target === "proposal" || target === "approval_deposit")) target = "site_survey";
-    else if (!(proposalData?.accepted_options?.length) && target === "approval_deposit") target = "proposal";
-    if (target !== viewingStage) { setViewingStage(target); setGateMsg(target === "site_survey" ? "Please review and approve your site survey first." : "Please accept a proposal option before the approval step."); }
+    setViewingStage(custStage);
+    setGateMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acceptLoaded]);
+  }, [custStage, acceptLoaded]);
 
   // Every role now sees the unified 4-phase bar (view-merge, 2026-07-13). The backend still runs all
   // 9 stages — these dots are phase GROUPS, and browsing/gating still resolves to real master keys.
@@ -1667,7 +1674,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const stageList       = cView === "tech"
     ? phaseList.map((p) => ({ ...p, label: p.techLabel || p.label, short: p.techLabel || p.short }))
     : phaseList;
-  const barProjectStage = masterToPhaseKey(projectStage);
+  // The "you are here" marker: for a customer it sits on THEIR pointer (custStage) so the bar reflects
+  // their journey, not how far ops has pushed the internal stage; staff/tech see the real stage.
+  const barMarker       = cView === "customer" ? custStage : projectStage;
+  const barProjectStage = masterToPhaseKey(barMarker);
   const vPhase          = masterToPhaseKey(viewingStage);        // which phase's tools are on screen
   // browse()/gating validate against real master keys; a phase-dot click resolves to a master landing.
   const typeKeys        = masterStages.map((s) => s.key);
@@ -1689,7 +1699,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // finish line: the balance is paid AND the system is released (completed_at is stamped).
   const phasePct = (() => {
     if (lp.completed_at) return 100;
-    const i = masterStages.findIndex((s) => s.key === projectStage);
+    // % tracks the "you are here" marker — the customer's own pointer for them, the real stage for staff —
+    // so a customer who still owes their deposit never sees a misleading "80%" from ops running ahead.
+    const i = masterStages.findIndex((s) => s.key === barMarker);
     const raw = i >= 0 && masterStages.length > 1 ? Math.round((i / (masterStages.length - 1)) * 100) : 0;
     return Math.min(97, Math.max(10, raw));
   })();
