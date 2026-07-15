@@ -26,6 +26,7 @@ import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerActionCard from "./customer-action-card";
+import CustomerTour from "./customer-tour";
 import { customerAction, customerPointer } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -1435,6 +1436,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [toolMeta, setToolMeta]         = useState(null);  // { survey:{has,fingerprint}, mockup:{…} } — server-authoritative
   const [acceptLoaded, setAcceptLoaded] = useState(false);
   const [gateMsg, setGateMsg]           = useState(null);  // shown when a gated nav is blocked
+  const [tourOpen, setTourOpen]         = useState(false); // first-time guided tour (customer)
   // Load acceptances + per-tool data meta together, and expose a refresher so the survey stage
   // re-reads them after the customer approves (or after staff change a tool → void).
   async function refreshAcceptances() {
@@ -1663,6 +1665,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     setGateMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [custStage, acceptLoaded]);
+
+  // First-time guided tour: auto-opens once (DB flag tour_seen_at) right after the customer confirms
+  // their details, giving the page a beat to render the bar + tools before we spotlight them.
+  const tourFiredRef = useRef(false);
+  useEffect(() => {
+    if (tourFiredRef.current) return;
+    if (cView === "customer" && !previewRole && lp.info_confirmed_at && !lp.tour_seen_at) {
+      tourFiredRef.current = true;
+      const t = setTimeout(() => setTourOpen(true), 650);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lp.info_confirmed_at, lp.tour_seen_at, cView, previewRole]);
 
   // Every role now sees the unified 4-phase bar (view-merge, 2026-07-13). The backend still runs all
   // 9 stages — these dots are phase GROUPS, and browsing/gating still resolves to real master keys.
@@ -2103,6 +2118,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {cView === "customer" && custAction && (
         <CustomerActionCard action={custAction} preview={!!previewRole}
           onGo={(t) => { if (t && t !== viewingStage) browse(t); }} />
+      )}
+      {cView === "customer" && (
+        <button type="button" onClick={() => setTourOpen(true)}
+          style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px auto 8px", padding: "4px 8px", background: "none", border: "none", color: "#9aa1af", fontSize: ".78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Show me around
+        </button>
+      )}
+      {tourOpen && (
+        <CustomerTour accessId={lp.access_id} phone="(646) 396-0775"
+          onClose={() => { setTourOpen(false); setLocalProj((p) => ({ ...p, tour_seen_at: p.tour_seen_at || new Date().toISOString() })); }} />
       )}
       {locked && !previewRole && cView !== "customer" && (
         <div className="pv-lockbanner">

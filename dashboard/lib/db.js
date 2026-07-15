@@ -192,6 +192,8 @@ function init() {
   if (!cols.includes("payout_status"))      db.exec("ALTER TABLE projects ADD COLUMN payout_status TEXT DEFAULT 'pending'");
   // Set the first time the customer confirms their contact details (first-login welcome modal).
   if (!cols.includes("info_confirmed_at"))  db.exec("ALTER TABLE projects ADD COLUMN info_confirmed_at TEXT");
+  // Set the first time the customer finishes (or skips) the first-time guided tour — so it shows once.
+  if (!cols.includes("tour_seen_at"))       db.exec("ALTER TABLE projects ADD COLUMN tour_seen_at TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -1441,6 +1443,12 @@ export function reactivateProject(accessId) {
 // welcome modal never shows again for this project. Idempotent — a second call is a no-op.
 export function markInfoConfirmed(accessId) {
   db.prepare("UPDATE projects SET info_confirmed_at = COALESCE(info_confirmed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+
+// Stamp the first-time guided tour as seen (once) so it never auto-opens again.
+export function markTourSeen(accessId) {
+  db.prepare("UPDATE projects SET tour_seen_at = COALESCE(tour_seen_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
   return getJobByAccessId(accessId);
 }
 
