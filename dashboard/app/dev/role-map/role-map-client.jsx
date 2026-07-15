@@ -3,76 +3,29 @@
 import { useState } from "react";
 import Link from "next/link";
 import AdminShell from "../../components/admin-shell";
+import { PHASES, stageLabel } from "../../../lib/spec";
+import { STAGE_FLOW } from "../../../lib/stage-flow";
+import { PHASE_COLORS, ROLES, blocksForRole, ROLE_NOTES, FINDINGS } from "../../../lib/project-blocks";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Static reference data — the role × phase × blocks map of the project page,
-// derived from spec.js (PHASES), stage-flow.js (requirements) and the gateway's
-// render conditions. This is a developer reference; nothing here reads the DB.
+// DYNAMIC role × phase × blocks map. Nothing on this page is hand-maintained data:
+//  · phases / stages / step-counts come live from spec.js (PHASES) + stage-flow.js
+//  · the blocks each role sees come live from lib/project-blocks.js
+// Change any of those and this map updates itself — no edit here needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PHASES = [
-  { key: "consulting", name: "Consulting", tech: "Survey",     status: "Pending",     stages: "Inquiry + Site Survey",            steps: 3, color: "#C9A96E" },
-  { key: "proposal",   name: "Proposal",   tech: "Accept",     status: "Reviewing",   stages: "Proposal + Approval & Deposit",    steps: 6, color: "#7c3aed" },
-  { key: "install",    name: "Install",    tech: "Install",    status: "In Progress", stages: "Fulfillment + Install",            steps: 4, color: "#3257ff" },
-  { key: "completion", name: "Completion", tech: "Completion", status: "Finalizing",  stages: "QC + Payment + Completion",        steps: 4, color: "#1c8a45" },
-];
-
-const ROLES = [
-  { key: "admin",    label: "Admin",    color: "#C9A96E" },
-  { key: "manager",  label: "Manager",  color: "#C9A96E" },
-  { key: "sales",    label: "Sales",    color: "#7c3aed" },
-  { key: "tech",     label: "Technician", color: "#1c8a45" },
-  { key: "customer", label: "Customer", color: "#3257ff" },
-];
-
-// a = action: "edit" (can act) · "view" (read-only) · "issue" (over-exposed / flagged)
-const MAP = {
-  admin: {
-    consulting: [b("Survey Scheduling","edit"), b("Details & Notes","edit"), b("Site Survey","edit"), b("Mockups","edit"), b("Intake Card","view")],
-    proposal:   [b("Proposal Views","view"), b("Proposal Builder","edit"), b("Approval & Deposit","edit")],
-    install:    [b("Install Scheduling","edit"), b("Shipment Tracking","edit"), b("System QR","view"), b("Work Order","edit"), b("Job-Site Add-ons","edit"), b("Tech Pricing","edit")],
-    completion: [b("QC Checklist","edit"), b("Final Payment","edit"), b("Completion / Wrap-up","edit")],
-  },
-  manager: {
-    consulting: [b("Survey Scheduling","edit"), b("Details & Notes","edit"), b("Site Survey","edit"), b("Mockups","edit"), b("Intake Card","view")],
-    proposal:   [b("Proposal Views","view"), b("Proposal Builder","edit"), b("Approval & Deposit","edit")],
-    install:    [b("Install Scheduling","edit"), b("Shipment Tracking","edit"), b("System QR","view"), b("Work Order","edit"), b("Job-Site Add-ons","edit"), b("Tech Pricing","edit")],
-    completion: [b("QC Checklist","edit"), b("Final Payment","edit"), b("Completion / Wrap-up","edit")],
-  },
-  sales: {
-    consulting: [b("Survey Scheduling","edit"), b("Details & Notes","edit"), b("Site Survey","edit"), b("Mockups","edit"), b("Intake Card","view")],
-    proposal:   [b("Proposal Views","view"), b("Proposal Builder","edit")],
-    install:    [],
-    completion: [b("QC Checklist","view"), b("Completion","view")],
-  },
-  tech: {
-    consulting: [b("Survey Scheduling","issue"), b("Details & Notes","issue"), b("Site Survey","view"), b("Mockups","view"), b("Intake Card","issue")],
-    proposal:   [b("Tech Board","view"), b("Work Order","edit")],
-    install:    [b("System QR","view"), b("Equipment Checklist","edit"), b("Job-Site Add-ons","view")],
-    completion: [b("QC Checklist","view"), b("Completion","view")],
-  },
-  customer: {
-    consulting: [b("Your Information","edit"), b("Schedule Appointment","edit"), b("Site Survey · review & approve","edit"), b("Mockups · review & approve","edit")],
-    proposal:   [b("Proposal · accept / decline","edit"), b("Make Your Deposit","edit")],
-    install:    [b("Install Schedule","view"), b("Shipment","view"), b("Work Order","view"), b("Add-ons","view")],
-    completion: [b("QC","view"), b("Final Payment","edit"), b("Certificate & Warranty","view")],
-  },
-};
-function b(name, a) { return { name, a }; }
-
-const NOTES = {
-  manager: "Identical to Admin — no manager-specific restriction exists in code.",
-  sales:   "Blind in the Install phase — no render branch. Loses the job once it's being built.",
-  tech:    "Over-exposed in Consulting — sees office intake tools it shouldn't.",
-};
-
-const ISSUES = [
-  { tag: "REMOVE",    cls: "rm-i-remove",    text: "Dead 5-phase code (CUSTOMER_PHASES) — 0 usages, superseded by the 4-phase bar (2026-07-13)." },
-  { tag: "TRIM",      cls: "rm-i-trim",      text: "Tech sees office intake tools (Survey Scheduling, Details & Notes, Intake Card) in Consulting." },
-  { tag: "MISSING",   cls: "rm-i-missing",   text: "Sales sees NOTHING in the Install phase — no branch exists." },
-  { tag: "MISSING",   cls: "rm-i-missing",   text: "Vendor & Readonly roles have no render branch on the project page at all." },
-  { tag: "REDUNDANT", cls: "rm-i-redundant", text: "Proposal phase stacks two heavy money panels (Proposal Builder + Approval & Deposit)." },
-];
+// Phase overview built from the app's own lifecycle config.
+const PHASE_DATA = PHASES.map((p) => ({
+  key: p.key,
+  name: p.label,
+  tech: p.techLabel,
+  status: p.status,
+  stages: p.members.map(stageLabel).join(" + "),
+  steps: p.members.reduce((n, m) => n + (STAGE_FLOW[m]?.length || 0), 0),
+  color: PHASE_COLORS[p.key] || "#C9A96E",
+}));
+const TOTAL_STAGES = PHASES.reduce((n, p) => n + p.members.length, 0);
+const TOTAL_STEPS  = PHASE_DATA.reduce((n, p) => n + p.steps, 0);
 
 const ACTION_META = {
   edit:  { label: "Can act / edit", cls: "rm-a-edit",  ic: "✎" },
@@ -83,7 +36,6 @@ const ACTION_META = {
 export default function RoleMapClient({ user, alerts }) {
   const [role, setRole] = useState("admin");
   const [showIssues, setShowIssues] = useState(true);
-  const map = MAP[role];
 
   return (
     <AdminShell user={user} alerts={alerts} active="dev">
@@ -91,16 +43,16 @@ export default function RoleMapClient({ user, alerts }) {
       <div className="rm-wrap">
         <div className="rm-head">
           <div>
-            <div className="rm-kicker">DEV · REFERENCE MAP</div>
+            <div className="rm-kicker">DEV · REFERENCE MAP · LIVE</div>
             <h1 className="rm-title">Role &amp; Flow Map</h1>
-            <p className="rm-sub">What each role sees under the progress bar, phase by phase. The bar is <b>4 phases</b> covering <b>9 backend stages</b> and <b>17 requirement-steps</b>.</p>
+            <p className="rm-sub">What each role sees under the progress bar, phase by phase. The bar is <b>{PHASE_DATA.length} phases</b> covering <b>{TOTAL_STAGES} backend stages</b> and <b>{TOTAL_STEPS} requirement-steps</b>. This map reads the app's own config — it updates itself.</p>
           </div>
           <Link href="/dev" className="rm-back">← Dev Roadmap</Link>
         </div>
 
-        {/* Phase overview strip */}
+        {/* Phase overview strip — dynamic from spec.js / stage-flow.js */}
         <div className="rm-phasestrip">
-          {PHASES.map((p, i) => (
+          {PHASE_DATA.map((p, i) => (
             <div className="rm-pchip" key={p.key} style={{ "--c": p.color }}>
               <span className="rm-pnum">{i + 1}</span>
               <div className="rm-pchip-body">
@@ -126,12 +78,12 @@ export default function RoleMapClient({ user, alerts }) {
           </div>
         </div>
 
-        {NOTES[role] && <div className="rm-note">{NOTES[role]}</div>}
+        {ROLE_NOTES[role] && <div className="rm-note">{ROLE_NOTES[role]}</div>}
 
-        {/* The flow — 4 phase columns for the selected role */}
+        {/* The flow — one column per phase for the selected role */}
         <div className="rm-flow">
-          {PHASES.map((p, i) => {
-            const blocks = map[p.key] || [];
+          {PHASE_DATA.map((p, i) => {
+            const blocks = blocksForRole(p.key, role);
             return (
               <div className="rm-col" key={p.key}>
                 <div className="rm-col-head" style={{ "--c": p.color }}>
@@ -142,7 +94,7 @@ export default function RoleMapClient({ user, alerts }) {
                   {blocks.length === 0 ? (
                     <div className="rm-empty">Nothing shown{role === "sales" ? " — gap" : ""}</div>
                   ) : blocks.map((blk) => {
-                    const m = ACTION_META[blk.a];
+                    const m = ACTION_META[blk.a] || ACTION_META.view;
                     const dim = blk.a === "issue" && !showIssues;
                     return (
                       <div key={blk.name} className={`rm-block ${m.cls}${dim ? " rm-dim" : ""}`}>
@@ -161,11 +113,11 @@ export default function RoleMapClient({ user, alerts }) {
         {/* Findings */}
         <div className="rm-findings">
           <button className="rm-findings-toggle" onClick={() => setShowIssues((v) => !v)}>
-            {showIssues ? "▾" : "▸"} Findings &amp; gaps ({ISSUES.length})
+            {showIssues ? "▾" : "▸"} Findings &amp; gaps ({FINDINGS.length})
           </button>
           {showIssues && (
             <div className="rm-findings-body">
-              {ISSUES.map((f, i) => (
+              {FINDINGS.map((f, i) => (
                 <div className="rm-finding" key={i}>
                   <span className={`rm-ftag ${f.cls}`}>{f.tag}</span>
                   <span className="rm-ftext">{f.text}</span>
@@ -184,7 +136,7 @@ const CSS = `
 .rm-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
 .rm-kicker{font-size:.66rem;font-weight:800;letter-spacing:.12em;color:#b08f4f}
 .rm-title{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin:2px 0 4px}
-.rm-sub{font-size:.9rem;color:#5b6275;max-width:640px;line-height:1.5;margin:0}
+.rm-sub{font-size:.9rem;color:#5b6275;max-width:680px;line-height:1.5;margin:0}
 .rm-back{flex-shrink:0;font-size:.82rem;font-weight:700;color:#5b6275;text-decoration:none;border:1px solid #e6e8ee;border-radius:9px;padding:8px 14px;background:#fff}
 .rm-back:hover{border-color:#C9A96E;color:#b08f4f}
 
