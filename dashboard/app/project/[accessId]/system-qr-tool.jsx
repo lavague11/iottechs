@@ -62,19 +62,21 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
       {viewing && <SystemQrModal src={saved} onClose={() => setViewing(false)} />}
 
       <style>{`
-        .sqp{border:1px solid #d9d4ca;border-left:4px solid var(--sq);border-radius:12px;background:#fff;margin:0 0 14px;overflow:hidden;font-family:inherit;box-shadow:0 6px 18px -12px rgba(11,15,26,.25)}
-        .sqp-head{display:flex;align-items:center;gap:12px;padding:13px 16px}
-        .sqp-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
+        /* Match the FlowStep bare cards exactly (.flow-bare-head): same padding, icon, border, radius
+           — so the whole install flow reads as one uniform stack of rows. */
+        .sqp{border:1px solid #d9d4ca;border-left:3px solid var(--sq);border-radius:12px;background:#fff;margin:0;overflow:hidden;font-family:inherit}
+        .sqp-head{display:flex;align-items:center;gap:10px;padding:11px 16px}
+        .sqp-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
         .sqp-tt{display:flex;flex-direction:column;min-width:0;flex:1}
-        .sqp-title{font-weight:800;font-size:.92rem;color:#0B0F1A}
+        .sqp-title{font-weight:800;font-size:.9rem;color:#0B0F1A}
         .sqp-sub{font-size:.76rem;color:#6f7686}
         .sqp-flash{font-size:.76rem;font-weight:800;color:#1c8a45;white-space:nowrap}
-        .sqp-btn{height:34px;padding:0 20px;border:none;border-radius:8px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
+        .sqp-btn{height:30px;padding:0 16px;border:none;border-radius:8px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
         .sqp-btn.upload{background:#C9A96E;color:#0B0F1A}
         .sqp-btn.view{background:#2f7d5a}
         .sqp-btn.ghost{background:#fff;border:1px solid #d9d4ca;color:#41485a}
         .sqp-btn:hover{filter:brightness(1.06)}
-        .sqp-replace{width:34px;height:34px;flex-shrink:0;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#6f7686;cursor:pointer;font-size:.95rem;line-height:1}
+        .sqp-replace{width:30px;height:30px;flex-shrink:0;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#6f7686;cursor:pointer;font-size:.9rem;line-height:1}
         .sqp-replace:hover{border-color:#2f7d5a;color:#2f7d5a}
         .sqp-body{border-top:1px solid #eee}
         .sqp-frame{width:100%;height:640px;border:none;background:#0B0F1A;display:block}
