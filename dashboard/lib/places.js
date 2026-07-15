@@ -8,26 +8,40 @@ let _loading = null;
 
 export function loadPlaces() {
   if (typeof window === "undefined") return Promise.reject(new Error("no-window"));
-  if (window.google?.maps?.places) return Promise.resolve(window.google.maps.places);
+  // Only truly "ready" once the Places library (with Autocomplete) is actually present.
+  if (window.google?.maps?.places?.Autocomplete) return Promise.resolve(window.google.maps.places);
   if (_loading) return _loading;
   _loading = (async () => {
     const cfg = await fetch("/api/config").then((r) => r.json()).catch(() => ({}));
     const key = cfg?.googleMapsApiKey;
     if (!key) throw new Error("no-maps-key");
-    if (!window.google?.maps?.places) {
-      await new Promise((res, rej) => {
-        const existing = document.getElementById("iot-gmaps-js");
-        if (existing) { existing.addEventListener("load", res); existing.addEventListener("error", rej); return; }
-        const s = document.createElement("script");
-        s.id = "iot-gmaps-js";
-        s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&loading=async`;
-        s.async = true;
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
+    // Inject the Maps JS bootstrap once (fixed id → shared by every form, never double-loads).
+    if (!document.getElementById("iot-gmaps-js")) {
+      const s = document.createElement("script");
+      s.id = "iot-gmaps-js";
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&loading=async`;
+      s.async = true;
+      document.head.appendChild(s);
     }
-    return window.google.maps.places;
+    // CRITICAL: with `loading=async`, the API finishes initialising ~a tick AFTER the script's load
+    // event — at onload neither `google.maps.places` nor `google.maps.importLibrary` exist yet
+    // (measured: both appear ~100ms later). The old code returned `google.maps.places` right at
+    // onload → it was `undefined`, so `new places.Autocomplete()` threw and autocomplete silently
+    // died on any page that hadn't already loaded Maps (i.e. every intake form on the dashboard).
+    // Poll until Places is actually ready, then hand back the real library.
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      if (window.google?.maps?.places?.Autocomplete) return window.google.maps.places;
+      if (typeof window.google?.maps?.importLibrary === "function") {
+        const lib = await window.google.maps.importLibrary("places");
+        if (lib?.Autocomplete) return lib;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("places-not-ready");
   })();
+  // On failure, drop the cached promise so a later attempt (transient network, late key) can retry.
+  _loading.catch(() => { _loading = null; });
   return _loading;
 }
 
@@ -37,7 +51,7 @@ export function loadPlaces() {
 export function attachAutocomplete(input, { types = ["address"], onPlace } = {}) {
   let ac = null, cancelled = false;
   loadPlaces().then((places) => {
-    if (cancelled || !input) return;
+    if (cancelled || !input || !places?.Autocomplete) return;
     ac = new places.Autocomplete(input, { types, fields: ["formatted_address", "name"] });
     ac.addListener("place_changed", () => {
       const p = ac.getPlace();
