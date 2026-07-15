@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { confirmInfoAction } from "./actions";
+import { loadPlaces } from "../../../lib/places";
 
 // First-login welcome for the customer: a modal that shows the contact details we have on file so
 // they can confirm — or fix anything wrong — before anything else. Confirming stamps
@@ -18,6 +19,32 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
     address:       project.address       || "",
   });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  // Google Places, bound on first FOCUS of each input (edit mode) — the node is stable and in the
+  // DOM by then, dodging React Strict-Mode remount races. Picking a business fills its NAME and
+  // auto-fills the ADDRESS; the address field autocompletes street addresses. Fails silently to a
+  // plain text input when no Maps key is configured.
+  const setFRef = useRef(setF);
+  setFRef.current = setF;
+  const bind = (node, types, onPlace) => {
+    if (!node || node.__acBound) return; node.__acBound = true;
+    loadPlaces().catch(() => {});   // kick off the Maps script load (its promise resolves before the
+                                    // places lib finishes async-initializing, so poll for readiness)
+    let tries = 0;
+    const t = setInterval(() => {
+      const AC = window.google?.maps?.places?.Autocomplete;
+      if (AC) {
+        clearInterval(t);
+        try {
+          const ac = new AC(node, { types, fields: ["formatted_address", "name"] });
+          ac.addListener("place_changed", () => { const p = ac.getPlace(); if (p) onPlace({ name: p.name || "", address: p.formatted_address || "" }); });
+          node.setAttribute("autocomplete", "off");
+        } catch (_) { node.__acBound = false; }
+      } else if (++tries > 45) { clearInterval(t); node.__acBound = false; }   // ~9s give-up → plain input
+    }, 200);
+  };
+  const bindBiz  = (node) => bind(node, ["establishment"], ({ name, address }) => setFRef.current((p) => ({ ...p, company_name: name || p.company_name, address: address || p.address })));
+  const bindAddr = (node) => bind(node, ["address"], ({ address }) => setFRef.current((p) => ({ ...p, address: address || p.address })));
 
   const ROWS = [
     { k: "contact_name",  label: "Name" },
@@ -58,7 +85,12 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
               {ROWS.map((r) => (
                 <label key={r.k} className={`icm-field${r.full ? " full" : ""}`}>
                   <span>{r.label}</span>
-                  <input type={r.type || "text"} value={f[r.k]} onChange={set(r.k)} placeholder={r.label} />
+                  <input
+                    onFocus={r.k === "company_name" ? (e) => bindBiz(e.target) : r.k === "address" ? (e) => bindAddr(e.target) : undefined}
+                    type={r.type || "text"} value={f[r.k]} onChange={set(r.k)}
+                    placeholder={r.k === "company_name" ? "Business name — address auto-fills"
+                              : r.k === "address" ? "Start typing an address…" : r.label}
+                  />
                 </label>
               ))}
             </div>
@@ -118,4 +150,6 @@ const CSS = `
 .icm-primary:disabled{opacity:.55;cursor:default}
 .icm-ghost{height:44px;padding:0 18px;border:1px solid #d9d4ca;border-radius:10px;background:#fff;color:#5b6275;font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit}
 .icm-ghost:hover:not(:disabled){border-color:#C9A96E;color:#0B0F1A}
+/* Google Places dropdown renders on <body>; lift it above the modal (z 11000). */
+.pac-container{z-index:12000!important}
 `;
