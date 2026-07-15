@@ -2568,7 +2568,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       </AccordionProvider>
       )}
 
-      {/* ============ WRAP-UP phase (qc → payment → completion) ============ */}
+      {/* ============ CLOSEOUT phase (step 4: System QR handover → QC → final payment) ============ */}
+      {vPhase === "ph_wrap" && ["admin", "manager", "tech"].includes(cView) && (
+        // System QR handover — moved here from Install so it sits at the top of the closeout steps.
+        <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
+      )}
       {vPhase === "ph_wrap" && (
         // Quality-control checklist — office/tech verify each device; customer sees a read-only summary.
         <QCChecklist
@@ -2592,7 +2596,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onBrowseStage={(s) => browse(s)}
         />
       )}
-      {vPhase === "ph_wrap" && (
+
+      {/* ============ COMPLETION phase (step 5: read-only "all done" wrap-up) ============ */}
+      {vPhase === "ph_complete" && (
         // Completion — certificate, warranty, welcome guide (customer) + internal wrap-up (staff).
         <CompletionPanel
           project={lp}
@@ -2607,30 +2613,30 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
       {/* ============ INSTALL phase (fulfillment + install) ============ */}
       {vPhase === "ph_install" && cView === "tech" && (
-        // Numbered flow: ① System QR → ② Equipment checklist (locked until WO accepted + install day) → ③ Addendum.
+        // Numbered flow: ① Equipment checklist (locked until WO accepted + install day) → ② Addendum.
+        // (System QR handover moved to the Closeout phase.)
         (() => {
           const woAccepted = !!proposalData?.tech_signed_name;
           const iDate = lp.install_date || lp.date || null;
           const today = new Date(); today.setHours(0, 0, 0, 0);
           const dOpen = iDate ? (new Date(iDate + "T00:00:00") <= today) : false;
           const unlocked = woAccepted && dOpen;
-          const total = unlocked ? 3 : 2;
+          const total = unlocked ? 2 : 1;
           return (
             <AccordionProvider key="install-tech">
             <div className="pv-survey-tools flow-wrap">
-              <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
               {!unlocked ? (
-                <FlowStep n={2} total={total} status="upcoming" color="#C9A96E" bare>
+                <FlowStep n={1} total={total} status="upcoming" color="#C9A96E" bare>
                   {!woAccepted
                     ? <div className="pv-lockcard"><b>Accept the work order first.</b><span>Head back to <a onClick={() => browse("proposal")}>Work Order Created</a> and sign to accept — the equipment checklist unlocks after that.</span></div>
                     : <div className="pv-lockcard"><b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b><span>Your equipment checklist becomes available the day of the install.</span></div>}
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={2} total={3} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
+                  <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
                   </FlowStep>
-                  <FlowStep n={3} total={3} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
+                  <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
                   </FlowStep>
                 </>
@@ -2663,11 +2669,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             sub="Package tracking · equipment received" completable bare>
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} />
           </FlowStep>
-          <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
-          <FlowStep n={2} total={3} status={installDone ? "done" : lp.system_qr ? "active" : "open"} color="#C9A96E" title="Installation Work Order" completable bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
-          <FlowStep n={3} total={3} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
+          <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>

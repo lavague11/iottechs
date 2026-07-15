@@ -77,9 +77,9 @@ export function customerStagesForType(type) {
 export const masterToCustomerKey = (masterKey) =>
   (CUSTOMER_PHASES.find((p) => p.members.includes(masterKey)) || CUSTOMER_PHASES[0]).key;
 
-// ---- Unified 4-phase view — shown to EVERY role (2026-07-13). ----
+// ---- Unified 5-phase view — shown to EVERY role (2026-07-13; split to 5 on 2026-07-15). ----
 // The backend still runs all 9 stages (auto-advance, requirements, history all unchanged); this is
-// a pure view grouping that merges them into 4 steps on the progress bar, and each phase co-renders
+// a pure view grouping that merges them into 5 steps on the progress bar, and each phase co-renders
 // the tools of its member stages. `primary` is where a phase-dot click lands when the project isn't
 // currently inside that phase.
 // status: the word shown in the project-header pill for each phase (Consulting=Pending,
@@ -91,7 +91,10 @@ export const PHASES = [
   { key: "ph_survey",   label: "Consulting",  short: "Consulting",  techLabel: "Survey",     status: "Pending",     members: ["inquiry", "site_survey"],       primary: "site_survey" },
   { key: "ph_proposal", label: "Proposal",    short: "Proposal",    techLabel: "Accept",     status: "Reviewing",   members: ["proposal", "approval_deposit"], primary: "proposal" },
   { key: "ph_install",  label: "Install",     short: "Install",     techLabel: "Install",    status: "In Progress", members: ["schedule", "install"],          primary: "install" },
-  { key: "ph_wrap",     label: "Completion",  short: "Completion",  techLabel: "Completion", status: "Finalizing",  members: ["qc", "payment", "completion"],  primary: "qc" },
+  // Split into two closing steps (2026-07-15): Closeout = the last hands-on work (System QR handover,
+  // QC, final payment); Completion = a read-only "you're all done" wrap-up. Same for every role.
+  { key: "ph_wrap",     label: "Closeout",    short: "Closeout",    techLabel: "Closeout",   status: "Finalizing",  members: ["qc", "payment"],                primary: "qc" },
+  { key: "ph_complete", label: "Completion",  short: "Completion",  techLabel: "Completion", status: "Finalizing",  members: ["completion"],                   primary: "completion" },
 ];
 export const phaseStatusWord = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.status || "Pending";
 export const phaseLabelOf    = (phaseKey) => PHASES.find((p) => p.key === phaseKey)?.label || phaseKey;

@@ -19,6 +19,7 @@ export const PHASE_COLORS = {
   ph_proposal: "#7c3aed",
   ph_install:  "#3257ff",
   ph_wrap:     "#1c8a45",
+  ph_complete: "#0f766e",
 };
 
 export const ROLES = [
@@ -49,14 +50,18 @@ export const PHASE_BLOCKS = {
   ph_install: [
     { name: "Install Scheduling",          access: { admin: "edit", manager: "edit", customer: "view" } },
     { name: "Shipment Tracking",           access: { admin: "edit", manager: "edit", customer: "view" } },
-    { name: "System QR",                   access: { admin: "view", manager: "view", tech: "view" } },
     { name: "Equipment / Work Order",      access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
     { name: "Job-Site Add-ons",            access: { admin: "edit", manager: "edit", tech: "view", customer: "view" } },
     { name: "Tech Pricing",                access: { admin: "edit", manager: "edit" } },
   ],
+  // Step 4 — Closeout: System QR handover, QC, final payment.
   ph_wrap: [
+    { name: "System QR",                   access: { admin: "view", manager: "view", tech: "view" } },
     { name: "QC Checklist",                access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view" } },
     { name: "Final Payment",               access: { admin: "edit", manager: "edit", customer: "edit" } },
+  ],
+  // Step 5 — Completion: read-only "all done" wrap-up (certificate / warranty / welcome guide).
+  ph_complete: [
     { name: "Completion / Wrap-up",        access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view" } },
   ],
 };
