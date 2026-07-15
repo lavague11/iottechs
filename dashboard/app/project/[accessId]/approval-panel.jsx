@@ -52,6 +52,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
+  const [open, setOpen] = useState(true);   // whole-panel collapse (tool-card style chevron)
 
   useEffect(() => {
     let live = true;
@@ -265,12 +266,15 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     <div className="apv-root">
       <style>{APV_CSS}</style>
 
-      <div className="apv-titlebar">
+      <button type="button" className="apv-titlebar apv-foldbtn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
-      </div>
+        <span className="apv-fold-chev">{open ? "▲" : "▼"}</span>
+      </button>
 
       {err && <div className="apv-note err">{err}</div>}
 
+      {open && (
+      <div className="apv-foldbody">
       {/* Compact recap + the money picture in one box. Customers get the focused payment tool
           instead (the balance banner below already shows total/received/due), so skip the recap. */}
       {!isCustomer && (
@@ -468,6 +472,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         </>
       )}
 
+      </div>
+      )}
+
       <ProposalSignModal
         open={signOpen}
         heading="Sign Agreement"
@@ -495,7 +502,10 @@ const APV_CSS = `
 .apv-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;overflow:hidden;margin:18px 0;padding-bottom:16px;
   box-shadow:0 10px 30px rgba(11,15,26,.08);font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
 .apv-titlebar{padding:15px 22px 0}
+.apv-foldbtn{display:flex;align-items:center;gap:12px;width:100%;padding:16px 22px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left}
+.apv-foldbtn:hover .apv-titlebar-h{color:#a3812f}
 .apv-titlebar-h{font-size:1.05rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em}
+.apv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.8rem;color:#9aa1af}
 /* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
 .apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid #d9d4ca;border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
 .apv-th-ic{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:#f0f2f7;color:#5b6275;display:grid;place-items:center}

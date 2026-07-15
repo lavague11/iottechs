@@ -213,6 +213,22 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     <div className="pcv-root">
       <style>{PCV_CSS}</style>
 
+      {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
+          + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
+          Deposit" is the focus, but the customer can reopen it anytime. */}
+      <button type="button" className="pcv-fold-hd" onClick={() => setDocOverride(!docOpen)} aria-expanded={docOpen}>
+        <span className="pcv-fold-ic">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </span>
+        <span className="pcv-fold-title">System Proposal</span>
+        <span className={`pcv-fold-chip${locked ? " done" : acceptedSet.size > 0 ? " ok" : ""}`}>
+          {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
+        </span>
+        <span className="pcv-fold-chev">{docOpen ? "▲" : "▼"}</span>
+      </button>
+
+      {docOpen && (
+      <div className="pcv-foldwrap">
       <div className="pcv-header">
         <div className="pcv-hd-left">
           <span className="pcv-brand">IOT TECHS</span>
@@ -227,20 +243,6 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         </div>
       </div>
 
-      {/* Once accepted+signed, the full document collapses to a one-line summary so "Make Your
-          Deposit" (below) is the clear next step. The customer can re-expand at any time. */}
-      {locked && !docOpen && (
-        <button type="button" className="pcv-doc-collapsed" onClick={() => setDocOverride(true)}>
-          <span className="pcv-doc-collapsed-badge">✓ Accepted</span>
-          <span className="pcv-doc-collapsed-txt">{[...acceptedSet].sort().map(optName).join(", ")} accepted &amp; signed — your deposit is the next step below.</span>
-          <span className="pcv-doc-collapsed-toggle">View full proposal</span>
-        </button>
-      )}
-      {locked && docOpen && (
-        <button type="button" className="pcv-doc-hide" onClick={() => setDocOverride(false)}>Hide full proposal ▲</button>
-      )}
-
-      {docOpen && (<>
       <div className="pcv-info-box">
         <div className="pcv-info-row">
           <div><span className="pcv-info-lbl">Prepared For</span><b>{customerName || "Client TBD"}</b></div>
@@ -479,7 +481,6 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           </div>
         </>
       )}
-      </>)}
 
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
@@ -541,6 +542,8 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-footer">
         IOT TECHS · (646) 396-0775 · support@iot-techs.com · www.iot-techs.com · Confidential Proposal
       </div>
+      </div>
+      )}
 
       <ProposalSignModal
         open={!!signFor}
@@ -613,18 +616,18 @@ const PCV_CSS = `
 
 .pcv-section-hd{margin:18px 22px 0;background:#2C3347;color:#FAF8F4;font-size:.76rem;font-weight:800;
   letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid #C9A96E}
-/* Collapsed-document summary bar (shown after accept+sign so the deposit is the focus) */
-.pcv-doc-collapsed{display:flex;align-items:center;gap:12px;width:calc(100% - 44px);margin:18px 22px 0;
-  background:#fff;border:1px solid #d9d4ca;border-left:4px solid #2f8f5b;border-radius:10px;padding:14px 16px;
-  cursor:pointer;text-align:left;font-family:inherit;transition:border-color .15s,box-shadow .15s}
-.pcv-doc-collapsed:hover{border-color:#C9A96E;box-shadow:0 3px 14px rgba(0,0,0,.06)}
-.pcv-doc-collapsed-badge{flex-shrink:0;font-size:.72rem;font-weight:800;letter-spacing:.03em;color:#2f8f5b;
-  background:#e9f6ee;border:1px solid #bfe3cd;border-radius:999px;padding:4px 10px}
-.pcv-doc-collapsed-txt{flex:1;min-width:0;font-size:.86rem;font-weight:600;color:#0B0F1A;line-height:1.35}
-.pcv-doc-collapsed-toggle{flex-shrink:0;font-size:.76rem;font-weight:800;color:#a3812f;text-transform:uppercase;letter-spacing:.03em}
-.pcv-doc-hide{display:block;margin:18px 22px 0;background:none;border:none;color:#8a8578;font-family:inherit;
-  font-size:.76rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;padding:2px 0}
-.pcv-doc-hide:hover{color:#0B0F1A}
+/* Fold header — collapses the whole proposal; matches the page tool-card language (icon + title +
+   status chip + chevron). Navy bar with a gold left rule, echoing .pcv-section-hd. */
+.pcv-fold-hd{display:flex;align-items:center;gap:11px;width:100%;margin:0;background:#2C3347;
+  border:none;border-left:4px solid #C9A96E;padding:12px 16px;cursor:pointer;text-align:left;font-family:inherit}
+.pcv-fold-hd:hover{background:#333c53}
+.pcv-fold-ic{flex-shrink:0;width:26px;height:26px;border-radius:7px;background:rgba(201,169,110,.16);color:#E8CB94;display:grid;place-items:center}
+.pcv-fold-title{font-size:.9rem;font-weight:800;color:#FAF8F4;letter-spacing:-.01em}
+.pcv-fold-chip{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#c7cdd9;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px 9px}
+.pcv-fold-chip.ok{color:#E8CB94;background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.4)}
+.pcv-fold-chip.done{color:#7ee0a6;background:rgba(46,143,91,.16);border-color:rgba(46,143,91,.45)}
+.pcv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.8rem;color:#9aa1af}
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:#2C3347;
   color:#FAF8F4;font-size:.72rem;font-weight:700;padding:8px 10px;border-bottom:2px solid #C9A96E}
