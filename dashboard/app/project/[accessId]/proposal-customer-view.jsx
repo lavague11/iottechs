@@ -5,6 +5,7 @@ import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
+import { useAccordionItem } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Per-option accent so the customer can tell A / B / C apart at a glance.
@@ -54,6 +55,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // Once accepted+signed, the full proposal document collapses to a summary so "Make Your Deposit"
   // is the focus. null = follow the lock state (auto-collapse on sign); true/false = user override.
   const [docOverride, setDocOverride] = useState(null);
+  // Accordion: the proposal document and the deposit panel open one at a time. `done` = locked
+  // (accepted+signed) so completing the proposal hands the open slot to the deposit below.
+  const lockedEarly = !!p?.signed_name && (p?.accepted_options?.length > 0);
+  const acc = useAccordionItem("proposal-doc", lockedEarly);
 
   const isDraftPreview = preview && p?.status === "draft" && p?.payload;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
@@ -162,8 +167,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // reduces to the next-step button (the signature block below is the record).
   const locked = !!p.signed_name && acceptedSet.size > 0;
   // Document body is open by default until the proposal is locked (accepted+signed), then it
-  // auto-collapses to a summary the customer can re-expand. Explicit toggle wins over the default.
-  const docOpen = docOverride == null ? !locked : docOverride;
+  // auto-collapses to a summary the customer can re-expand. The accordion (one tool open at a time)
+  // drives it when present; otherwise fall back to the local override / lock default.
+  const docOpen = acc ? acc.open : (docOverride == null ? !locked : docOverride);
+  const toggleDoc = () => { if (acc) acc.toggle(); else setDocOverride(!docOpen); };
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
@@ -216,7 +223,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
           + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
           Deposit" is the focus, but the customer can reopen it anytime. */}
-      <button type="button" className="pcv-fold-hd" onClick={() => setDocOverride(!docOpen)} aria-expanded={docOpen}>
+      <button type="button" className="pcv-fold-hd" onClick={toggleDoc} aria-expanded={docOpen}>
         <span className="pcv-fold-ic">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </span>

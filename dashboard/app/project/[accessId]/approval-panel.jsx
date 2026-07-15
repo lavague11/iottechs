@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import { useAccordionItem } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -52,7 +53,12 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
-  const [open, setOpen] = useState(true);   // whole-panel collapse (tool-card style chevron)
+  const [localOpen, setLocalOpen] = useState(true);   // whole-panel collapse (tool-card style chevron)
+  // Accordion: inside the proposal phase this panel shares one-open-at-a-time with the proposal
+  // document — accepting+signing the proposal hands the open slot to this deposit panel.
+  const acc = useAccordionItem(isFinal ? "final-payment" : "deposit", false);
+  const open = acc ? acc.open : localOpen;
+  const toggleOpen = () => { if (acc) acc.toggle(); else setLocalOpen((v) => !v); };
 
   useEffect(() => {
     let live = true;
@@ -266,7 +272,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     <div className="apv-root">
       <style>{APV_CSS}</style>
 
-      <button type="button" className="apv-titlebar apv-foldbtn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="apv-titlebar apv-foldbtn" onClick={toggleOpen} aria-expanded={open}>
         <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
         <span className="apv-fold-chev">{open ? "▲" : "▼"}</span>
       </button>

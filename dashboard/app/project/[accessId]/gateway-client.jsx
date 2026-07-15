@@ -15,6 +15,7 @@ import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
 import ApprovalPanel     from "./approval-panel";
+import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted } from "./survey-approve";
 import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
@@ -313,12 +314,18 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 //   collapsed) · "open" (neutral numbered, available, no glow/dim — for work steps with no clean
 //   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
 //   their own header) — just the numbered rail, no FlowStep header or collapse.
-function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, children }) {
+function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, flowKey, children }) {
   const expandedByDefault = (s) => s === "active" || s === "open";   // current + available work expand; done/upcoming collapse
-  const [open, setOpen] = useState(expandedByDefault(status));
-  useEffect(() => { setOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
+  const [localOpen, setLocalOpen] = useState(expandedByDefault(status));
+  useEffect(() => { setLocalOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
   const [marked, setMarked] = useState(false);   // manual "mark as complete" — shades the header
   const shaded = marked || status === "done";
+  // Accordion: when this tool sits inside an <AccordionProvider>, exactly one tool is open at a time
+  // and completing one opens the next. Falls back to local open state when there's no provider.
+  const acc = useAccordionItem(flowKey || title, shaded);
+  const open = acc ? acc.open : localOpen;
+  const toggleOpen = () => { if (acc) acc.toggle(); else setLocalOpen((v) => !v); };
+  const closeSelf = () => { if (acc) acc.complete(); else setLocalOpen(false); };   // done → hand off to next
   const tick = <span className="pv-tool-icon done"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>;
   // Footer at the bottom of an expanded tool — mark it complete (shades the header = done & ready to
   // publish) or reopen it. Only on tools that opt in via `completable`.
@@ -327,7 +334,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
       {marked ? (
         <button type="button" className="flow-reopen" onClick={() => setMarked(false)}>↺ Reopen</button>
       ) : (
-        <button type="button" className="flow-complete-btn" onClick={() => { setMarked(true); setOpen(false); }}>
+        <button type="button" className="flow-complete-btn" onClick={() => { setMarked(true); closeSelf(); }}>
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           Mark as complete
         </button>
@@ -340,7 +347,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
       <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
         <div className="flow-card flow-bare">
           <div className="flow-bare-head">
-            <button type="button" className="flow-bare-toggle" onClick={() => setOpen((v) => !v)}>
+            <button type="button" className="flow-bare-toggle" onClick={toggleOpen}>
               {shaded ? tick : (icon && <span className="pv-tool-icon">{icon}</span>)}
               <span className="pv-tool-title">{title}</span>
               {shaded ? <span className="pv-tool-sub done">Complete</span> : (sub && <span className="pv-tool-sub">{sub}</span>)}
@@ -348,7 +355,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
               {chip}
             </button>
             {headerAction}
-            <button type="button" className="flow-bare-chev" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
+            <button type="button" className="flow-bare-chev" onClick={toggleOpen}>{open ? "▲" : "▼"}</button>
           </div>
           {open && <div className="flow-bare-body">{children}{footer}</div>}
         </div>
@@ -366,7 +373,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
     <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
       <div className="flow-card pv-tool-panel">
         <div className="pv-tool-head">
-          <button type="button" className="pv-tool-toggle" onClick={() => setOpen((v) => !v)}>
+          <button type="button" className="pv-tool-toggle" onClick={toggleOpen}>
             {shaded ? tick : <span className="pv-tool-icon">{icon}</span>}
             <span className="pv-tool-title">{title}</span>
             {shaded ? <span className="pv-tool-sub done">Complete</span> : <span className="pv-tool-sub">{sub}</span>}
@@ -374,7 +381,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
             {chip}
           </button>
           {headerAction}
-          <button type="button" className="pv-tool-chev-btn" onClick={() => setOpen((v) => !v)}>{open ? "▲" : "▼"}</button>
+          <button type="button" className="pv-tool-chev-btn" onClick={toggleOpen}>{open ? "▲" : "▼"}</button>
         </div>
         {open && <div className="pv-tool-body">{children}{footer}</div>}
       </div>
@@ -2449,6 +2456,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const stepNum     = (k) => order.indexOf(k) + 1;
           const stepTotal   = order.length;
           return (
+        <AccordionProvider key="survey">
         <div className="pv-survey-tools flow-wrap">
           {/* Site Survey tool */}
           {showSurvey && (
@@ -2506,6 +2514,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>
           )}
         </div>
+        </AccordionProvider>
           );
         })()
       )}
@@ -2514,6 +2523,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
       {/* ============ PROPOSAL phase (proposal + approval & deposit merged) ============ */}
       {/* Proposal Views moved to the header icon row (setPvwOpen) — the modal is mounted below. */}
+      {/* Accordion: the proposal document and the deposit panel open one at a time — accept+sign the
+          proposal and the deposit takes over as the open step. */}
+      {vPhase === "ph_proposal" && (
+      <AccordionProvider key="proposal">
       {vPhase === "ph_proposal" && ["admin", "manager", "sales", "customer", "tech"].includes(cView) && (
         <>
           {/* Tech's "Work Order Created" page: general job overview above the work order itself */}
@@ -2546,6 +2559,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
           onBrowseStage={(s) => browse(s)}
         />
+      )}
+      </AccordionProvider>
       )}
 
       {/* ============ WRAP-UP phase (qc → payment → completion) ============ */}
@@ -2596,6 +2611,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const unlocked = woAccepted && dOpen;
           const total = unlocked ? 3 : 2;
           return (
+            <AccordionProvider key="install-tech">
             <div className="pv-survey-tools flow-wrap">
               <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
               {!unlocked ? (
@@ -2615,11 +2631,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </>
               )}
             </div>
+            </AccordionProvider>
           );
         })()
       )}
       {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && (
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
+        <AccordionProvider key="install-staff">
         <div className="pv-survey-tools flow-wrap">
           <FlowStep status={lp.install_date || lp.date ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
@@ -2648,12 +2666,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
+        </AccordionProvider>
       )}
       {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0 && (
         <TechPricingEditor accessId={lp.access_id} proposal={proposalData} onSaved={(p) => setProposalData(p)} />
       )}
       {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
+        <AccordionProvider key="install-cust">
         <div className="pv-survey-tools flow-wrap">
           <FlowStep status={lp.install_date || lp.date ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
@@ -2681,6 +2701,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
           </FlowStep>
         </div>
+        </AccordionProvider>
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (
         <div className="pv-close-bar" style={{ gap: 10 }}>
