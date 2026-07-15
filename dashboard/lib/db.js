@@ -190,6 +190,8 @@ function init() {
   if (!cols.includes("system_qr"))          db.exec("ALTER TABLE projects ADD COLUMN system_qr TEXT");
   if (!cols.includes("payout_amount"))      db.exec("ALTER TABLE projects ADD COLUMN payout_amount REAL DEFAULT 0");
   if (!cols.includes("payout_status"))      db.exec("ALTER TABLE projects ADD COLUMN payout_status TEXT DEFAULT 'pending'");
+  // Set the first time the customer confirms their contact details (first-login welcome modal).
+  if (!cols.includes("info_confirmed_at"))  db.exec("ALTER TABLE projects ADD COLUMN info_confirmed_at TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -1430,6 +1432,13 @@ export function markProjectLost(accessId, reason) {
 export function reactivateProject(accessId) {
   db.prepare("UPDATE projects SET lost_reason = NULL, lost_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
   db.prepare("UPDATE tickets SET status = 'closed', updated_at = datetime('now') WHERE access_id = ? COLLATE NOCASE AND status NOT IN ('closed','resolved') AND subject LIKE 'Reopen request%'").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+
+// First-login: the customer confirmed their contact details. Stamps the time (once) so the
+// welcome modal never shows again for this project. Idempotent — a second call is a no-op.
+export function markInfoConfirmed(accessId) {
+  db.prepare("UPDATE projects SET info_confirmed_at = COALESCE(info_confirmed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
   return getJobByAccessId(accessId);
 }
 

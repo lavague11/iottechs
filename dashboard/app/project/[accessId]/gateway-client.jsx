@@ -10,6 +10,7 @@ import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
+import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import TechPricingEditor from "./proposal-tech-pricing";
@@ -1660,7 +1661,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
   const [mockupHasLocal, setMockupHasLocal] = useState(false); // mockup widget reports a photo landed → enable Submit instantly
-  const [leadConfirmed, setLeadConfirmed]   = useState(false); // customer confirmed/edited their lead info (Survey step ①)
+  const [leadConfirmed, setLeadConfirmed]   = useState(!!project.info_confirmed_at); // customer confirmed their lead info (welcome modal / Survey step ①)
   const [restricted, setRestricted]     = useState(!!project.restricted);
   const [pendingMove, setPendingMove]   = useState(null);
   const [taOpen, setTaOpen]             = useState(false);
@@ -2351,6 +2352,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
           {gateMsg}
         </div>
+      )}
+
+      {/* First-login welcome — the customer confirms their contact details once, before anything else. */}
+      {cView === "customer" && !previewRole && !lp.info_confirmed_at && (
+        <InfoConfirmModal
+          accessId={lp.access_id}
+          project={lp}
+          onDone={() => { setLocalProj((p) => ({ ...p, info_confirmed_at: new Date().toISOString() })); setLeadConfirmed(true); }}
+        />
       )}
 
       {/* ============ SURVEY phase (inquiry + site_survey merged) ============

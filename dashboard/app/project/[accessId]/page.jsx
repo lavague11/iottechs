@@ -117,6 +117,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     completed_at:      p.completed_at      || null,   // completion date — fine for the customer to see
     warranty_months:   p.warranty_months   || 6,      // warranty term (6/12/24) — customer-safe
     system_qr:         p.system_qr         || null,   // branded system QR card handed to the customer
+    info_confirmed_at: p.info_confirmed_at  || null,   // first-login welcome: has the customer confirmed their details?
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);

@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, markInfoConfirmed } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -154,6 +154,26 @@ export async function setCustomerPinAction(accessId, pin) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, pin: proj?.customer_pin || "", custom: !!proj?.pin_custom };
+}
+
+// First-login welcome: the customer confirms (optionally edits) their contact details. Saves any
+// edits, then stamps info_confirmed_at so the modal never reappears. Customer-owned or staff.
+export async function confirmInfoAction(accessId, fields) {
+  const tok = await getAnyTok();
+  if (!tok) return { error: "Not authenticated." };
+  if (tok.role === "customer") {
+    const proj = getJobByAccessId(accessId);
+    if (!proj || (tok.viaPin ? String(tok.accessId) !== String(accessId)
+                             : String(proj.contact_email || "").toLowerCase() !== String(tok.email || "").toLowerCase()))
+      return { error: "Not your project." };
+  } else if (!["admin", "manager", "sales", "tech"].includes(tok.role)) {
+    return { error: "Unauthorized." };
+  }
+  if (fields && Object.keys(fields).length) updateProjectContact(accessId, fields);
+  markInfoConfirmed(accessId);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true };
 }
 
 export async function updateProjectInfoAction(accessId, fields) {
