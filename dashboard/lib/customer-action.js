@@ -24,6 +24,30 @@ export function customerPointer(f = {}) {
   return null;                                                     // caught up → follow the real project
 }
 
+// The one "just published" item to celebrate for the customer right now: the first office-published
+// review item that's available and not yet done, in order (survey → mockup → proposal). Returns null
+// when there's nothing new to announce (caught up, or waiting on the office). Pair with the project's
+// announced_seen set so each item pops exactly once. "One at a time" is by construction — the next
+// item only surfaces once the current one is done.
+export function customerAnnouncement(f = {}) {
+  if (f.survey_published && f.survey_has && !f.survey_done)
+    return { key: "survey", icon: "survey",
+      title: "Your site survey is ready",
+      body: "We've mapped out where every device goes. Take a look and approve it to keep things moving.",
+      cta: "Review survey", target: "site_survey" };
+  if (f.mockup_published && f.mockup_has && !f.mockup_done)
+    return { key: "mockup", icon: "mockup",
+      title: "Your system mockup is ready",
+      body: "See the design we put together for your space, then approve it.",
+      cta: "Review mockup", target: "site_survey" };
+  if (f.proposal_status === "sent")
+    return { key: f.proposal_version ? `proposal:v${f.proposal_version}` : "proposal", icon: "proposal",
+      title: "Your proposal is ready",
+      body: "Your options and pricing are in. Review them and accept the one you want.",
+      cta: "View proposal", target: "proposal" };
+  return null;
+}
+
 export function customerAction(stage, f = {}) {
   switch (stage) {
     case "inquiry":

@@ -194,6 +194,9 @@ function init() {
   if (!cols.includes("info_confirmed_at"))  db.exec("ALTER TABLE projects ADD COLUMN info_confirmed_at TEXT");
   // Set the first time the customer finishes (or skips) the first-time guided tour — so it shows once.
   if (!cols.includes("tour_seen_at"))       db.exec("ALTER TABLE projects ADD COLUMN tour_seen_at TEXT");
+  // JSON array of customer-facing "X has been published" pop-ups already shown, so each published
+  // item (survey / mockup / proposal vN) celebrates exactly once.
+  if (!cols.includes("announced_seen"))     db.exec("ALTER TABLE projects ADD COLUMN announced_seen TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -1449,6 +1452,22 @@ export function markInfoConfirmed(accessId) {
 // Stamp the first-time guided tour as seen (once) so it never auto-opens again.
 export function markTourSeen(accessId) {
   db.prepare("UPDATE projects SET tour_seen_at = COALESCE(tour_seen_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  return getJobByAccessId(accessId);
+}
+
+// Record that a customer-facing "published" pop-up (survey / mockup / proposal vN) has been shown,
+// so it never re-pops. Stored as a JSON array of keys on the project. Idempotent + append-only.
+export function markAnnouncementSeen(accessId, key) {
+  const k = String(key || "").slice(0, 60);
+  if (!k) return getJobByAccessId(accessId);
+  const proj = getJobByAccessId(accessId);
+  let seen = [];
+  try { seen = JSON.parse(proj?.announced_seen || "[]"); } catch { seen = []; }
+  if (!Array.isArray(seen)) seen = [];
+  if (!seen.includes(k)) {
+    seen.push(k);
+    db.prepare("UPDATE projects SET announced_seen = ? WHERE access_id = ? COLLATE NOCASE").run(JSON.stringify(seen), String(accessId));
+  }
   return getJobByAccessId(accessId);
 }
 

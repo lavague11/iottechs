@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
@@ -26,7 +26,8 @@ import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
-import { customerPointer } from "../../../lib/customer-action";
+import { customerPointer, customerAnnouncement } from "../../../lib/customer-action";
+import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
@@ -1647,10 +1648,37 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     deposit_recorded:  lp.deposit_recorded,
     install_date:      lp.install_date || lp.date,
     install_date_fmt:  fmtDate(lp.install_date || lp.date),
+    // Per-tool "published (office submitted) / has data / done (customer approved)" — drives the
+    // celebratory "X has been published" pop-up below.
+    survey_has:        !!toolMeta?.survey?.has,
+    survey_published:  !!acceptances?.submit_site_survey,
+    survey_done:       !!acceptances?.site_survey,
+    mockup_has:        !!toolMeta?.mockup?.has,
+    mockup_published:  !!acceptances?.submit_mockup,
+    mockup_done:       !!acceptances?.mockup,
+    proposal_version:  proposalData?.version || null,
   };
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
+
+  // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
+  // a real customer, once they're past the welcome + tour, and only if this exact item hasn't popped
+  // before (DB: announced_seen). Clicking it takes them straight there; each item pops once.
+  const announcedSeen = (() => { try { return JSON.parse(lp.announced_seen || "[]"); } catch { return []; } })();
+  const announcement  = (cView === "customer" && !previewRole && acceptLoaded && lp.info_confirmed_at && lp.tour_seen_at && !tourOpen)
+    ? customerAnnouncement(custFacts) : null;
+  const showAnnounce  = !!announcement && !announcedSeen.includes(announcement.key);
+  async function ackAnnouncement(key, go) {
+    setLocalProj((p) => {
+      let seen = []; try { seen = JSON.parse(p.announced_seen || "[]"); } catch {}
+      if (!Array.isArray(seen)) seen = [];
+      if (!seen.includes(key)) seen.push(key);
+      return { ...p, announced_seen: JSON.stringify(seen) };
+    });
+    if (go) browse(go);
+    try { await markAnnouncementSeenAction(lp.access_id, key); } catch (_) {}
+  }
 
   // Keep a real customer parked on their current step: re-center on load and each time they finish an
   // item (which advances custStage). Between progressions they can still click the bar freely — this
@@ -2134,6 +2162,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {tourOpen && (
         <CustomerTour accessId={lp.access_id} phone="(646) 396-0775"
           onClose={() => { setTourOpen(false); setLocalProj((p) => ({ ...p, tour_seen_at: p.tour_seen_at || new Date().toISOString() })); }} />
+      )}
+      {showAnnounce && (
+        <PublishAnnounce
+          announcement={announcement}
+          onGo={() => ackAnnouncement(announcement.key, announcement.target)}
+          onDismiss={() => ackAnnouncement(announcement.key, null)}
+        />
       )}
       {locked && !previewRole && cView !== "customer" && (
         <div className="pv-lockbanner">

@@ -118,6 +118,8 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     warranty_months:   p.warranty_months   || 6,      // warranty term (6/12/24) — customer-safe
     system_qr:         p.system_qr         || null,   // branded system QR card handed to the customer
     info_confirmed_at: p.info_confirmed_at  || null,   // first-login welcome: has the customer confirmed their details?
+    tour_seen_at:      p.tour_seen_at       || null,   // has the customer seen the first-time guided tour? (so it shows once)
+    announced_seen:    p.announced_seen     || null,   // JSON array of "X has been published" pop-ups already shown
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
