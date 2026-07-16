@@ -25,9 +25,8 @@ import InstallAddendum   from "./install-addendum";
 import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
-import CustomerActionCard from "./customer-action-card";
 import CustomerTour from "./customer-tour";
-import { customerAction, customerPointer } from "../../../lib/customer-action";
+import { customerPointer } from "../../../lib/customer-action";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
@@ -210,9 +209,10 @@ function NotificationBell({ view }) {
 // ---- Inline project header ----
 function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = null, onPreviewRole }) {
   const [open, setOpen] = useState(false);
-  // The pill reflects the EFFECTIVE view — while previewing customer/tech in-place, it shows that
-  // role so the label matches what's on screen (not the underlying admin/manager login).
-  const effView = (previewRole && ["admin", "manager"].includes(view)) ? previewRole : view;
+  // The pill reflects the REAL login role, always. The eye-icon "preview" is a read-only overlay,
+  // not a view change, so it must NOT relabel this pill (that was the old confusion — the pill said
+  // CUSTOMER VIEW during a mere preview). Switching this pill's role is the real "view as" action.
+  const effView = view;
   const col = effView ? ROLE_PILL[effView] : null;
 
   // Which roles show in the dropdown (null = plain lock pill, [] = dropdown with only Lock)
@@ -225,15 +225,12 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 
   async function pickView(role) {
     setOpen(false);
-    // Customer/tech are just view projections of the same project — switch IN-PLACE via the preview
-    // mechanism (which snaps the page to the current step) instead of spawning a stale second tab.
-    if (onPreviewRole && ["admin", "manager"].includes(view) && ["customer", "tech"].includes(role)) {
-      onPreviewRole(role);
-      return;
-    }
     // Selecting your own login role clears any active in-place preview.
     if (role === view) { if (previewRole && onPreviewRole) onPreviewRole(null); return; }
-    // Peer/higher staff roles need their own auth + data — open a signed tab (no PIN re-entry).
+    // Every other role — customer, tech, or a peer/higher staff role — opens a REAL signed session in
+    // a new tab: you "view AS that role," fully controllable, as if you'd logged in as them (no PIN
+    // re-entry). This is deliberately different from the eye-icon "preview" menu, which is a
+    // read-only, in-place peek you can't control. Two distinct things.
     const token = await getPreviewTokenAction(accessId, role);
     window.open(`/project/${accessId}?preview=${role}&pt=${token}`, "_blank");
   }
@@ -1654,7 +1651,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
-  const custAction  = cView === "customer" ? customerAction(custStage, custFacts) : null;
 
   // Keep a real customer parked on their current step: re-center on load and each time they finish an
   // item (which advances custStage). Between progressions they can still click the bar freely — this
@@ -1944,6 +1940,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </div>{/* end pv-project-card */}
       </div>
 
+      {/* Role-preview banner — marks the start of the previewed view. Kept in ONE consistent spot for
+          every phase: right under the project/customer info card and above everything else (status
+          pill, progress bar, tools), so all of it reads clearly as "what this role sees." Read-only
+          (eye-icon preview); the real, controllable "view as" session opens from the header role pill. */}
+      {previewRole && ["admin","manager"].includes(view) && (
+        <div className="pv-custview-hint-bar">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          {previewRole === "customer"
+            ? "Customer preview — read-only view of what the customer sees"
+            : "Technician preview — read-only view of what the technician sees"}
+        </div>
+      )}
+
       <div className="section-head">
         <div className="sh-left">
           {(() => {
@@ -1998,8 +2007,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {["admin","manager"].includes(view) && (
             <div className="sh-preview-pick" ref={previewMenuRef}>
               <button className={`sh-icon-btn${previewRole ? " on" : ""}`}
-                      title={previewRole ? `Exit ${previewRole} view` : "Preview as another role"}
-                      aria-label="Preview as another role"
+                      title={previewRole ? `Exit ${previewRole} preview` : "Preview a role (read-only)"}
+                      aria-label="Preview a role (read-only)"
                       onClick={() => setPreviewMenuOpen((v) => !v)}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -2007,11 +2016,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <div className="sh-preview-menu">
                   <button className={previewRole === "customer" ? "on" : ""}
                           onClick={() => { setPreviewRole(previewRole === "customer" ? null : "customer"); setPreviewMenuOpen(false); }}>
-                    Customer View
+                    Customer Preview
                   </button>
                   <button className={previewRole === "tech" ? "on" : ""}
                           onClick={() => { setPreviewRole(previewRole === "tech" ? null : "tech"); setPreviewMenuOpen(false); }}>
-                    Technician View
+                    Technician Preview
                   </button>
                   {previewRole && (
                     <button className="exit" onClick={() => { setPreviewRole(null); setPreviewMenuOpen(false); }}>
@@ -2110,15 +2119,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
         />
       )}
-      {(view === "admin" || view === "manager" || view === "tech") && projectStage === "qc" && (
+      {!previewRole && (view === "admin" || view === "manager" || view === "tech") && projectStage === "qc" && (
         <WorkOrderPanel accessId={project.access_id} workOrders={workOrders} view={view} />
       )}
-      {/* Customer hero: the ONE next step (or a status), promoted above the stage tools. Reads the
-          same flow-matrix facts that gate the lifecycle; the CTA routes to the stage with the control. */}
-      {cView === "customer" && custAction && (
-        <CustomerActionCard action={custAction} preview={!!previewRole}
-          onGo={(t) => { if (t && t !== viewingStage) browse(t); }} />
-      )}
+      {/* (Removed the "Your next step" hero — redundant with the tool card's own next-step tag.
+          custStage/custPointer still drive the bar marker, landing, and % below.) */}
       {cView === "customer" && (
         <button type="button" onClick={() => setTourOpen(true)}
           style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px auto 8px", padding: "4px 8px", background: "none", border: "none", color: "#9aa1af", fontSize: ".78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
@@ -2300,14 +2305,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         </div>
       )}
-      {/* Role-preview banner — shown on any phase while a preview role is active */}
-      {previewRole && ["admin","manager"].includes(view) && (
-        <div className="pv-custview-hint-bar">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          {previewRole === "customer" ? "Customer view preview — showing what the customer sees" : "Technician view preview — showing what the technician sees"}
-        </div>
-      )}
-
       {gateMsg && ["customer", "tech"].includes(cView) && (
         <div className="pv-custview-hint-bar" style={{ background: "#F3E9D3", color: "#7a5f1f" }}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>

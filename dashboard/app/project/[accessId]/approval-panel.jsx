@@ -114,18 +114,23 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       <div className="apv-root">
         <style>{APV_CSS}</style>
         {err && <div className="apv-note err">{err}</div>}
-        <div className="apv-gate" style={{ margin: "16px 22px 0" }}>
-          <div className="apv-gate-ic">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        {/* Staff don't need this lock card — the proposal panel above already shows the status (and
+            the Revise/Send controls), and billing stays open right below. It's the customer's
+            "accept a proposal option to continue" guidance, so show it to them only. */}
+        {!isStaff && (
+          <div className="apv-gate" style={{ margin: "16px 22px 0" }}>
+            <div className="apv-gate-ic">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div className="apv-gate-body">
+              <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
+              <div className="apv-gate-sub">{sub}</div>
+              {onBrowseStage && showBtn && (
+                <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
+              )}
+            </div>
           </div>
-          <div className="apv-gate-body">
-            <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
-            <div className="apv-gate-sub">{sub}</div>
-            {onBrowseStage && showBtn && (
-              <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* Billing stays open for the office — record a deposit/payment even before the customer
             has accepted or signed. Money is never blocked by the acceptance flow. */}
@@ -144,6 +149,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                           <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
                           <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
                           {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
+                          {x.recorded_by && <span className="apv-hrow-by">by {x.recorded_by}</span>}
                         </span>
                       </div>
                       <div className="apv-hrow-acts">
@@ -373,6 +379,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                     <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
                     {x.note ? <span className="apv-hrow-note">{x.note}</span> : null}
                     {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
+                    {/* Who logged it — staff see every entry (audit); a customer only sees it on their
+                        own submission, never a staff member's name. */}
+                    {(isStaff || x.source === "customer") && x.recorded_by && <span className="apv-hrow-by">by {x.recorded_by}</span>}
                   </span>
                 </div>
                 <div className="apv-hrow-acts">
@@ -616,6 +625,7 @@ select.apv-input{cursor:pointer}
 .apv-hrow-kind{text-transform:capitalize}
 .apv-hrow-note{font-style:italic;color:#8a8378}
 .apv-hrow-when{color:#a7a094}
+.apv-hrow-by{color:#8a8378;font-weight:600}
 .apv-hrow-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .apv-hrow-ok{font-size:.68rem;font-weight:800;color:#1d7a3a;white-space:nowrap}
 

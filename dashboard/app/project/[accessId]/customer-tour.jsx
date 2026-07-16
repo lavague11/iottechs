@@ -10,7 +10,7 @@ export default function CustomerTour({ accessId, phone = "(646) 396-0775", onClo
   const STEPS = [
     { selector: ".pbar-wrap", title: "This is your project",
       body: "Your progress bar. Tap any step to see exactly where things stand — and what's coming next." },
-    { selector: ".cac-root", altSelector: ".pv-survey-tools", title: "Your next step is right here",
+    { selector: ".pv-survey-tools", altSelector: ".flow-wrap, .pcv-root, .apv-root", title: "Your next step is right here",
       body: "Review and approve items here to move your project forward. We'll guide you one step at a time." },
     { selector: null, title: "We're one call away", isFinal: true,
       body: "Questions at any point? Give us a call and we'll walk you through it — no rush." },

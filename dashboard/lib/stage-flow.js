@@ -21,7 +21,6 @@ export const STAGE_FLOW = {
     { label: "Survey appointment scheduled", who: "internal", check: (p) => !!p.date },
   ],
   site_survey: [
-    { label: "Sales rep assigned", who: "internal", check: (p, a) => !!(p.sales_rep || (a || []).some((x) => x.role === "sales")) },
     { label: "Customer accepted the site survey", who: "customer", check: (p) => !!p.survey_accepted },
   ],
   proposal: [

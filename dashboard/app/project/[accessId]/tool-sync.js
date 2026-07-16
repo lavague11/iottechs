@@ -14,12 +14,19 @@
 // stream ("Maximum array nesting exceeded" on an unrelated later request). A plain route ships
 // raw JSON with no Flight encoding, so it can't hit that bug.
 
-export async function seedToolData(accessId, tool, storageKey) {
+// `force`: for read-only viewers (the customer), the SERVER is the source of truth — always pull
+// the latest and overwrite the local copy. Without this, a customer seeded once (before the office
+// named the cameras / edited the survey) keeps that stale copy forever, because the guard below
+// treats any existing local value as an authoritative draft. Read-only views never write
+// localStorage, so overwriting loses nothing. Never force for editors — it would clobber an
+// unsynced draft (e.g. a staff member previewing the customer view in the same browser).
+export async function seedToolData(accessId, tool, storageKey, { force = false } = {}) {
   try {
-    if (localStorage.getItem(storageKey) != null) return false;   // local draft wins
+    if (!force && localStorage.getItem(storageKey) != null) return false;   // local draft wins
     const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
     const r = await res.json();
     if (r?.ok && r.saved?.data != null) {
+      if (force && r.saved.data === localStorage.getItem(storageKey)) return false;  // already current
       localStorage.setItem(storageKey, r.saved.data);
       return true;   // seeded from server
     }

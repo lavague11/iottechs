@@ -22,8 +22,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [synced, setSynced] = useState(false);
   useEffect(() => {
     let stop = null, live = true;
+    // A real customer (view === "customer") is a pure viewer: always pull the office's latest so
+    // survey edits — device names, added cameras — reach them even on a return visit. Staff
+    // previewing the customer view (customerView via previewRole, but view still "admin") keep
+    // their own working draft, so don't force there.
+    const viewerRefresh = view === "customer";
     (async () => {
-      await seedToolData(accessId, "survey", `iottechs_sitesurvey_v2_${accessId}`);
+      await seedToolData(accessId, "survey", `iottechs_sitesurvey_v2_${accessId}`, { force: viewerRefresh });
       if (!live) return;
       setSynced(true);
       stop = startToolAutosync(accessId, "survey", `iottechs_sitesurvey_v2_${accessId}`);
