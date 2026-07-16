@@ -262,13 +262,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     sub: driveItems.length ? `${driveItems.length} drive${driveItems.length !== 1 ? "s" : ""}` : "No drives",
     total: nvrGroupTotal, edit: () => setNvrDone(false),
     // Breakdown so the collapsed line isn't a mystery total — recorder + each drive, priced.
-    items: [{ name: nvrItem.name, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
-      ...driveItems.map((d) => ({ name: d.name || "Storage drive", total: (+d.qty || 1) * (+d.price || 0) }))] });
+    // qty/price carried so these rows read exactly like a camera's sub-items (qty · price · total).
+    items: [{ name: nvrItem.name, qty: +nvrItem.qty || 1, price: +nvrItem.price || 0, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
+      ...driveItems.map((d) => ({ name: d.name || "Storage drive", qty: +d.qty || 1, price: +d.price || 0, total: (+d.qty || 1) * (+d.price || 0) }))] });
   if (dispCollapsed) leadRows.push({ key: "disp", title: "Displays",
     sub: `${displayItems.length} display${displayItems.length !== 1 ? "s" : ""}`,
     total: displaysTotal, edit: () => setDispDone(false),
     // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
-    items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, total: itemTotal(d) })) });
+    items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
   const leadCount = leadRows.length;
   // Camera location blocks number AFTER the collapsed recording-system lines (1, 2, then cameras).
   const blockNumOf = {};
@@ -509,14 +510,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {!readOnly && <button type="button" className="prop-mini prop-sysline-edit" onClick={lr.edit}>Edit</button>}
           </div>
           {leadOpen[lr.key] && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
-            // Same read-only shape as a camera's expanded sub-item (.prop-item.sub) so the
-            // NVR/Display breakdown reads identically to every other block's breakdown.
+            // Byte-for-byte the same DOM as a camera's expanded sub-item (.prop-item.sub with
+            // name + qty + price inputs) so height, zebra shading, and row hover are identical —
+            // only read-only (pointer-events off): you edit these via the block's Edit button.
             <div key={bidx} className={`prop-item${gridClass} sub${bidx % 2 ? " alt" : ""}`}>
               <span style={{ display: "flex", alignItems: "center" }}>
-                <span className="prop-sub-name">{bi.name}</span>
+                <input value={bi.name} readOnly tabIndex={-1} style={{ marginLeft: 18, pointerEvents: "none" }} />
               </span>
-              <span />
-              <span />
+              <input className="num" value={bi.qty} readOnly tabIndex={-1} style={{ pointerEvents: "none" }} />
+              <input className="num" value={bi.price} readOnly tabIndex={-1} style={{ pointerEvents: "none" }} />
               {showCost && <span />}
               <span className="prop-line-total">{money(bi.total)}</span>
               <span />

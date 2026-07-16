@@ -6,14 +6,14 @@ import {
   reviseProposal, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags,
   signProposal, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
-  confirmProjectPayment, voidProposalSignature,
+  confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
   getProjectNotes, getScopedNotes, addProjectNote, setProjectPoc, maybeAutoAdvance,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
-  approvePcpAgreement, finalizePcp, actorName,
+  approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
 import { fetchTracking } from "../../../lib/tracking";
@@ -260,6 +260,15 @@ export async function approvePcpAction(accessId, name, signature) {
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
+// Admin/manager correction: void the customer's PCP agreement signature so it can be re-approved.
+export async function voidPcpAgreementAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can void a signature." };
+  const row = voidPcpAgreement(accessId);
+  if (!row) return { error: "No PCP agreement to void." };
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+}
 // Admin/manager finalizes or adjusts the discretionary credit (approve + attribute grant source).
 export async function finalizePcpAction(accessId, patch) {
   const tok = await getSessionRole();
@@ -376,6 +385,16 @@ export async function voidProposalSignatureAction(accessId) {
   if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can void a signature." };
   const row = voidProposalSignature(accessId);
   if (!row) return { error: "No proposal to void." };
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+}
+// Admin/manager correction: void the technician's work-order signature (also their self-
+// assignment) so the work order can be re-accepted. Record preserved (tech fields cleared).
+export async function voidTechSignatureAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can void a signature." };
+  const row = voidTechSignature(accessId);
+  if (!row) return { error: "No work order to void." };
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }

@@ -55,6 +55,7 @@ export default function SignaturePanel({ accessId, tool, toolLabel, items, view,
   const [overrideOther, setOverrideOther] = useState("");
   const [reqOpen, setReqOpen] = useState(null); // { itemId, kind: 'change'|'remove' }
   const [reqNote, setReqNote] = useState("");
+  const [sigVoidOpen, setSigVoidOpen] = useState(false); // admin void of the customer signature
 
   const isCustomer = view === "customer" && !customerView;
   const canOverride = ["admin", "manager"].includes(view) && !customerView;
@@ -94,6 +95,12 @@ export default function SignaturePanel({ accessId, tool, toolLabel, items, view,
     setItemDecision(reqOpen.itemId, reqOpen.kind, reqNote.trim());
     setReqOpen(null);
     setReqNote("");
+  }
+  // Admin/manager correction: void the customer approval signature so it can be re-signed.
+  function voidSignature() {
+    persist({ ...data, signature: null });
+    setSigVoidOpen(false);
+    setItemsOpen(true);
   }
 
   const signed = !!data.signature;
@@ -191,13 +198,37 @@ export default function SignaturePanel({ accessId, tool, toolLabel, items, view,
 
       {signed && (
         <div className="sig-block">
-          <div className="sig-block-script">{data.signature.name}</div>
-          <div className="sig-block-line" />
-          <div className="sig-block-meta">
-            <span>{data.signature.name}</span>
-            <span>{fmtStamp(data.signature.ts)}</span>
-          </div>
+          {canOverride ? (
+            <button type="button" title="Click to void this signature"
+              style={{ background: "none", border: "1px dashed transparent", borderRadius: 8, padding: "4px 8px", margin: "-4px -8px", cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "block", width: "fit-content" }}
+              onMouseOver={(e) => { e.currentTarget.style.background = "#fbece7"; e.currentTarget.style.borderColor = "#e2c9c1"; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "transparent"; }}
+              onClick={() => setSigVoidOpen(true)}>
+              <div className="sig-block-script">{data.signature.name}</div>
+              <div className="sig-block-line" />
+              <div className="sig-block-meta">
+                <span>{data.signature.name}</span>
+                <span>{fmtStamp(data.signature.ts)}</span>
+              </div>
+            </button>
+          ) : (
+            <>
+              <div className="sig-block-script">{data.signature.name}</div>
+              <div className="sig-block-line" />
+              <div className="sig-block-meta">
+                <span>{data.signature.name}</span>
+                <span>{fmtStamp(data.signature.ts)}</span>
+              </div>
+            </>
+          )}
           <div className="sig-block-foot">Signed electronically · E-Sign disclosure accepted</div>
+          {canOverride && sigVoidOpen && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8, fontSize: ".72rem", color: "#7a5f1f" }}>
+              Are you sure you want to void this signature?
+              <button onClick={voidSignature} style={{ height: 24, padding: "0 10px", borderRadius: 100, border: "none", background: "#a8442f", color: "#fff", fontSize: ".68rem", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Void</button>
+              <button onClick={() => setSigVoidOpen(false)} style={{ height: 24, padding: "0 10px", borderRadius: 100, border: "1px solid #d9d4ca", background: "#fff", color: "#4a4f5a", fontSize: ".68rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Keep</button>
+            </div>
+          )}
         </div>
       )}
 

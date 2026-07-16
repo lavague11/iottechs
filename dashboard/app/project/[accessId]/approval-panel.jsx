@@ -71,6 +71,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const [signOpen, setSignOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
+  const [payFormOpen, setPayFormOpen] = useState(true);   // collapsible "Record a payment" entry form
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
@@ -96,9 +97,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   // once the data loads — staff/customer usually pay exactly that. Still fully editable.
   const prefilled = useRef(false);
   useEffect(() => {
-    if (prefilled.current || !data?.proposal) return;
+    if (prefilled.current || !data?.proposal?.payload?.options?.length) return;
     const pp = data.proposal;
-    if (!(pp.payload && pp.status === "accepted")) return;
+    // Prefill as soon as there's a priced proposal — billing is open before acceptance, so the
+    // office sees the deposit amount ready to record without retyping it.
     const ids = (pp.accepted_options?.length) ? pp.accepted_options : (pp.selected_option ? [pp.selected_option] : []);
     const opts = pp.payload.options.filter((o) => ids.includes(o.id));
     const sh = opts.length ? opts : [pp.payload.options[0]];
@@ -136,6 +138,24 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       return { sub: "Accept a proposal option to continue — the agreement, signature, and deposit unlock here once it's accepted.", showBtn: true };   // "sent"
     })();
     const gatePayments = data.payments || [];
+    // Billing figures even before acceptance: total owed, deposit target/due, and remaining
+    // balance (drops as payments are confirmed) — the office needs the money picture up front.
+    const gpay = p?.payload;
+    let gTotal = 0, gDepTarget = 0, gDepDue = 0, gRemaining = 0, gHasNums = false;
+    if (gpay?.options?.length) {
+      const gids = (p.accepted_options?.length) ? p.accepted_options : (p.selected_option ? [p.selected_option] : []);
+      const gopts = gpay.options.filter((o) => gids.includes(o.id));
+      const gsh = gopts.length ? gopts : [gpay.options[0]];
+      const grand = gsh.reduce((s, o) => s + optionTotals(o, p.tax_rate, gpay.discount, p.deposit_pct, gpay.pcp_credit).grand, 0);
+      const conf = gatePayments.filter((x) => x.status !== "pending");
+      const paid = conf.reduce((s, x) => s + (+x.amount || 0), 0);
+      const depPaid = conf.filter((x) => x.kind === "deposit").reduce((s, x) => s + (+x.amount || 0), 0);
+      gTotal = grand + (+data.addons?.total || 0);
+      gDepTarget = grand * (+p.deposit_pct || 50) / 100;
+      gDepDue = Math.max(0, gDepTarget - depPaid);
+      gRemaining = Math.max(0, gTotal - paid);
+      gHasNums = grand > 0;
+    }
     return (
       <div className="apv-root">
         <style>{APV_CSS}</style>
@@ -190,21 +210,35 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                   ))}
                 </div>
               )}
-              <div className="apv-payform">
-                <div className="apv-payform-hd">Record a payment</div>
-                <div className="apv-payform-grid">
-                  <label className="apv-fld"><span>Amount</span>
-                    <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
-                  <label className="apv-fld"><span>Method</span>
-                    <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-                      <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
-                    </select></label>
-                  <label className="apv-fld"><span>Date paid</span>
-                    <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
-                  <label className="apv-fld apv-fld-wide"><span>Note / reference <em>(optional)</em></span>
-                    <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
+              {gHasNums && (
+                <div className="apv-balbar">
+                  <div className="apv-baltile"><span>Total</span><b>{money(gTotal)}</b></div>
+                  {gDepDue > 0 && <div className="apv-baltile"><span>Deposit due</span><b className="apv-due">{money(gDepDue)}</b></div>}
+                  <div className="apv-baltile"><span>Remaining</span><b className={gRemaining > 0 ? "apv-due" : "apv-ok"}>{money(gRemaining)}</b></div>
                 </div>
-                <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
+              )}
+              <div className="apv-payform">
+                <button type="button" className="apv-payform-hd apv-payform-toggle" onClick={() => setPayFormOpen((o) => !o)}>
+                  <span>Record a payment</span>
+                  <svg className={`apv-payform-chev${payFormOpen ? " open" : ""}`} viewBox="0 0 10 6" width="11" height="7" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+                </button>
+                {payFormOpen && (
+                  <div style={{ display: "contents" }}>
+                    <div className="apv-payform-grid">
+                      <label className="apv-fld"><span>Amount</span>
+                        <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
+                      <label className="apv-fld"><span>Method</span>
+                        <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
+                          <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
+                        </select></label>
+                      <label className="apv-fld"><span>Date paid</span>
+                        <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
+                      <label className="apv-fld"><span>Note / reference <em>(optional)</em></span>
+                        <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
+                    </div>
+                    <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
+                  </div>
+                )}
               </div>
               <div className="apv-fine">Billing stays open — record a deposit or payment even before the customer accepts or signs.</div>
             </div>
@@ -350,19 +384,25 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       <div className="apv-card">
         {signed ? (
           <div className="apv-signed">
-            {p.signature_data
-              ? <img src={p.signature_data} alt="Signature" className="apv-sig-img" />
-              : <span className="apv-sig-name">{p.signed_name}</span>}
+            {isStaff ? (
+              <button type="button" className="apv-sig-void-target" title="Click to void this signature" onClick={() => setVoidSigOpen(true)}>
+                {p.signature_data
+                  ? <img src={p.signature_data} alt="Signature" className="apv-sig-img" />
+                  : <span className="apv-sig-name">{p.signed_name}</span>}
+              </button>
+            ) : (
+              p.signature_data
+                ? <img src={p.signature_data} alt="Signature" className="apv-sig-img" />
+                : <span className="apv-sig-name">{p.signed_name}</span>
+            )}
             <span className="apv-sig-meta">{p.signed_name} · Signed {fmtSignStamp(p.signed_at)}</span>
-            {isStaff && (voidSigOpen ? (
+            {isStaff && voidSigOpen && (
               <span className="apv-void-confirm">
-                Void this signature?
+                Are you sure you want to void this signature?
                 <button className="apv-void-yes" disabled={busy} onClick={voidSignature}>Void</button>
                 <button className="apv-void-no" onClick={() => setVoidSigOpen(false)}>Keep</button>
               </span>
-            ) : (
-              <button className="apv-void-btn" title="Void signature (correction)" onClick={() => setVoidSigOpen(true)}>Void</button>
-            ))}
+            )}
           </div>
         ) : isCustomer ? (
           <div className="apv-sign-form">
@@ -457,7 +497,11 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         {/* Record a payment — a clean, labeled form (no more cramped single row) */}
         {(isCustomer ? balance > 0 : true) && (
         <div className="apv-payform">
-          <div className="apv-payform-hd">{isCustomer ? "Make a payment" : "Record a payment"}</div>
+          <button type="button" className="apv-payform-hd apv-payform-toggle" onClick={() => setPayFormOpen((o) => !o)}>
+            <span>{isCustomer ? "Make a payment" : "Record a payment"}</span>
+            <svg className={`apv-payform-chev${payFormOpen ? " open" : ""}`} viewBox="0 0 10 6" width="11" height="7" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+          </button>
+          {payFormOpen && (<div style={{ display: "contents" }}>
           <div className="apv-payform-grid">
             <label className="apv-fld">
               <span>Amount</span>
@@ -476,9 +520,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                 <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} />
               </label>
             )}
-            <label className="apv-fld apv-fld-wide">
+            <label className={`apv-fld${isStaff ? "" : " apv-fld-wide"}`}>
               <span>Note / reference <em>(optional)</em></span>
-              <input className="apv-input" placeholder="Reference #, confirmation…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
+              <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
             </label>
           </div>
           {(() => {
@@ -509,6 +553,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
             {isCustomer ? "I Paid This" : "Record Payment"}
           </button>
+          </div>)}
         </div>
         )}
         {isCustomer && <div className="apv-fine">Your submission shows as pending until our team confirms receipt — the balance updates once confirmed.</div>}
@@ -589,6 +634,8 @@ const APV_CSS = `
 .apv-signed{display:flex;flex-direction:column;gap:4px}
 .apv-sig-img{max-height:56px;max-width:250px;object-fit:contain;align-self:flex-start}
 .apv-sig-name{font-family:"Segoe Script","Brush Script MT",cursive;font-size:1.6rem;color:#0B0F1A;line-height:1.1}
+.apv-sig-void-target{align-self:flex-start;background:none;border:1px dashed transparent;border-radius:8px;padding:3px 6px;margin:-3px -6px;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s}
+.apv-sig-void-target:hover{background:#fbece7;border-color:#e2c9c1}
 .apv-sig-meta{font-size:.72rem;color:#6f7686}
 .apv-sign-form{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 
@@ -666,6 +713,14 @@ select.apv-input{cursor:pointer}
 
 .apv-payform{border:1px dashed #d9d0bd;border-radius:12px;background:#fcfaf5;padding:14px;display:flex;flex-direction:column;gap:12px}
 .apv-payform-hd{font-size:.8rem;font-weight:800;color:#0B0F1A}
+.apv-payform-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;text-align:left}
+.apv-payform-chev{transition:transform .18s;opacity:.6;flex-shrink:0}
+.apv-payform-chev.open{transform:rotate(180deg)}
+.apv-balbar{display:flex;gap:8px;flex-wrap:wrap}
+.apv-baltile{flex:1;min-width:92px;border:1px solid #ece7dc;border-radius:10px;background:#fff;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.apv-baltile>span{font-size:.62rem;font-weight:800;color:#8a8f9c;text-transform:uppercase;letter-spacing:.04em}
+.apv-baltile>b{font-size:.94rem;font-weight:800;color:#0B0F1A;font-variant-numeric:tabular-nums}
+.apv-baltile>b.apv-due{color:#a8442f}.apv-baltile>b.apv-ok{color:#1d7a3a}
 .apv-payform-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .apv-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .apv-fld>span{font-size:.7rem;font-weight:700;color:#6f7686;text-transform:uppercase;letter-spacing:.03em}

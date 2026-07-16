@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction } from "./proposal-actions";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -28,9 +28,10 @@ function itemNameNode(name, outdoor) {
 // as a PDF, just interactive (option tabs, expandable breakdowns, Select / Request changes).
 // Receives the server-sanitized proposal (no cost/margin — stripped before it ever reaches
 // the browser). `preview` = staff looking through the customer-view toggle → actions disabled.
-export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync }) {
+export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false }) {
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
+  const [voidPcpOpen, setVoidPcpOpen] = useState(false);   // admin void of the PCP agreement signature
   const [err, setErr] = useState(null);
   const [reqOpen, setReqOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -118,6 +119,15 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     if (r?.error) { setErr(r.error); return; }
     if (r.proposal) setP(r.proposal);
     showToast("PCP agreement approved — thank you");
+  }
+  // Admin/manager correction: void the customer's PCP agreement signature so it can be re-approved.
+  async function voidPcp() {
+    setBusy(true); setErr(null);
+    const r = await voidPcpAgreementAction(accessId);
+    setBusy(false); setVoidPcpOpen(false);
+    if (r?.error) { setErr(r.error); return; }
+    if (r.proposal) setP(r.proposal);
+    showToast("PCP signature voided — customer can re-approve");
   }
 
   if (!p || !p.payload) {
@@ -484,8 +494,21 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             </ul>
             {pcpAgreed ? (
               <div className="pcv-pcp-agreed">
-                ✓ Approved{p.pcp_agreement_no ? ` · ${p.pcp_agreement_no}` : ""}{p.pcp_agreed_at ? ` · ${new Date(p.pcp_agreed_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                {canVoid ? (
+                  <button type="button" className="pcv-pcp-void-target" title="Click to void this signature" onClick={() => setVoidPcpOpen(true)}>
+                    ✓ Approved{p.pcp_agreement_no ? ` · ${p.pcp_agreement_no}` : ""}{p.pcp_agreed_at ? ` · ${new Date(p.pcp_agreed_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                  </button>
+                ) : (
+                  <>✓ Approved{p.pcp_agreement_no ? ` · ${p.pcp_agreement_no}` : ""}{p.pcp_agreed_at ? ` · ${new Date(p.pcp_agreed_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}</>
+                )}
                 <span className="pcv-pcp-agreed-note">{pcpApproved ? "Credit confirmed by IOT TECHS." : "Credit remains pending final confirmation at completion."}</span>
+                {canVoid && voidPcpOpen && (
+                  <span className="pcv-void-confirm">
+                    Are you sure you want to void this signature?
+                    <button className="pcv-void-yes" disabled={busy} onClick={voidPcp}>Void</button>
+                    <button className="pcv-void-no" onClick={() => setVoidPcpOpen(false)}>Keep</button>
+                  </span>
+                )}
               </div>
             ) : (
               <button className="pcv-select pcv-pcp-approve" disabled={busy} onClick={approvePcp}>Approve PCP Agreement</button>
@@ -697,6 +720,11 @@ const PCV_CSS = `
 .pcv-pcp-approve:hover:not(:disabled){background:#166e37!important}
 .pcv-pcp-agreed{margin-top:12px;font-size:.82rem;font-weight:700;color:#12331f;display:flex;flex-direction:column;gap:2px}
 .pcv-pcp-agreed-note{font-size:.76rem;font-weight:500;color:#3a5346}
+.pcv-pcp-void-target{align-self:flex-start;background:none;border:1px dashed transparent;border-radius:8px;padding:3px 7px;margin:-3px -7px;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;color:#12331f;transition:background .12s,border-color .12s}
+.pcv-pcp-void-target:hover{background:#fbece7;border-color:#e2c9c1}
+.pcv-void-confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:.72rem;color:#7a5f1f}
+.pcv-void-yes{height:24px;padding:0 10px;border-radius:100px;border:none;background:#a8442f;color:#fff;font-size:.68rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pcv-void-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid #d9d4ca;background:#fff;color:#4a4f5a;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pcv-fineprint{margin:6px 22px 0;font-size:.7rem;color:#4a5270;font-style:italic}
 
 .pcv-accept-box{margin:0 22px;background:#fff;border:1px solid #d9d4ca;border-top:2px solid #C9A96E;

@@ -16,12 +16,12 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
       {staffBuilder ? (
         <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} />
       ) : cView === "tech" ? (
-        <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} />
+        <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
         <ProposalCustomerView
           accessId={accessId} proposal={proposal} preview={custView} customerName={customerName}
           customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail}
-          onAdvance={onAdvance} onStageSync={onStageSync}
+          onAdvance={onAdvance} onStageSync={onStageSync} canVoid={["admin", "manager"].includes(view)}
         />
       )}
     </div>
@@ -155,7 +155,6 @@ const PROP_CSS = `
 .pvx .prop-sysline-sub{font-size:.74rem;font-weight:600;color:var(--muted)}
 .pvx .prop-sysline-total{margin-left:auto;font-size:.82rem;font-weight:800;color:var(--ink)}
 .pvx .prop-sysline-edit{flex-shrink:0}
-.pvx .prop-sub-name{margin-left:18px;font-size:.8rem;font-weight:500;color:var(--muted);text-transform:capitalize}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */

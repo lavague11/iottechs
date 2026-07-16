@@ -2057,6 +2057,14 @@ export function approvePcpAgreement(accessId, name, signatureData) {
     .run(signatureData || name || null, agrNo, cur.id);
   return getActiveProposal(accessId);
 }
+// Admin/manager correction: void the customer's PCP agreement signature so it can be re-approved.
+// Record preserved (agreement number kept); only the signature + agreed timestamp are cleared.
+export function voidPcpAgreement(accessId) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  db.prepare("UPDATE proposals SET pcp_agreed_at=NULL, pcp_agreed_sig=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  return getActiveProposal(accessId);
+}
 // Admin finalizes / adjusts the discretionary credit at the payment stage (status + grant source).
 export function finalizePcp(accessId, { status, grantSource } = {}) {
   const cur = getActiveProposal(accessId);
@@ -2269,6 +2277,14 @@ export function voidProposalSignature(accessId) {
   const cur = getActiveProposal(accessId);
   if (!cur) return null;
   db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  return getActiveProposal(accessId);
+}
+// Admin/manager correction: void the technician's work-order signature (which is also their
+// self-assignment) so the work order can be re-accepted/re-assigned. Record preserved, not erased.
+export function voidTechSignature(accessId) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  db.prepare("UPDATE proposals SET tech_signed_name=NULL, tech_signed_at=NULL, tech_signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
   return getActiveProposal(accessId);
 }
 // Confirmed money only — the number the balance and stage gates trust.

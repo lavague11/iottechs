@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
-import { getProposalAction, acceptWorkOrderAction } from "./proposal-actions";
+import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { TaglinePill } from "../../components/brand";
 
@@ -21,11 +21,12 @@ function itemNameNode(name, outdoor) {
 // internal labor/equipment doc: every line is valued at its TECH price (set by admin at the
 // install stage), never the customer price. Server strips customer price/cost before this ever
 // reaches a tech (see sanitizeProposal role "tech"); this component only ever reads techPrice.
-export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null }) {
+export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null, canVoid = false }) {
   const [fetched, setFetched] = useState(null);
   const p = fetched || proposal;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
   const [signOpen, setSignOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [toast, setToast] = useState(null);
@@ -42,6 +43,16 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
     onProposalChange?.(r.proposal);   // propagate to the gateway so Install unlocks without reload
     setSignOpen(false);
     showToast("Work order accepted — you're assigned");
+  }
+  // Admin/manager correction: void the technician's signature/assignment so it can be re-accepted.
+  async function voidTechSig() {
+    setBusy(true); setErr(null);
+    const r = await voidTechSignatureAction(accessId);
+    setBusy(false); setVoidOpen(false);
+    if (r?.error) { setErr(r.error); return; }
+    setFetched(r.proposal);
+    onProposalChange?.(r.proposal);
+    showToast("Signature voided — work order can be re-accepted");
   }
 
   // Pull current server state on mount so a work order that became available (proposal sent) or
@@ -220,11 +231,26 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
             <span>Accepted &amp; assigned to <b>{p.tech_signed_name}</b>{p.tech_signed_at ? ` · ${fmtSignStamp(p.tech_signed_at)}` : ""}</span>
           </div>
           <div className="pwo-sign-mark">
-            {p.tech_signature_data
-              ? <img src={p.tech_signature_data} alt="Technician signature" className="pwo-sign-img" />
-              : <span className="pwo-sign-typed">{p.tech_signed_name}</span>}
+            {canVoid ? (
+              <button type="button" className="pwo-sign-void-target" title="Click to void this signature" onClick={() => setVoidOpen(true)}>
+                {p.tech_signature_data
+                  ? <img src={p.tech_signature_data} alt="Technician signature" className="pwo-sign-img" />
+                  : <span className="pwo-sign-typed">{p.tech_signed_name}</span>}
+              </button>
+            ) : (
+              p.tech_signature_data
+                ? <img src={p.tech_signature_data} alt="Technician signature" className="pwo-sign-img" />
+                : <span className="pwo-sign-typed">{p.tech_signed_name}</span>
+            )}
             <span className="pwo-sign-rule" />
             <span className="pwo-sign-cap">Technician Signature</span>
+            {canVoid && voidOpen && (
+              <span className="pwo-void-confirm">
+                Are you sure you want to void this signature?
+                <button className="pwo-void-yes" disabled={busy} onClick={voidTechSig}>Void</button>
+                <button className="pwo-void-no" onClick={() => setVoidOpen(false)}>Keep</button>
+              </span>
+            )}
           </div>
         </div>
       ) : (
@@ -355,6 +381,11 @@ const PWO_CSS = `
 .pwo-sign-mark{display:flex;flex-direction:column;gap:2px;min-width:200px}
 .pwo-sign-img{max-height:64px;max-width:260px;object-fit:contain;align-self:flex-start}
 .pwo-sign-typed{font-size:1.6rem;color:#10204a;font-family:"Brush Script MT","Segoe Script",cursive;padding-left:4px}
+.pwo-sign-void-target{align-self:flex-start;background:none;border:1px dashed transparent;border-radius:8px;padding:3px 6px;margin:-3px -6px;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s}
+.pwo-sign-void-target:hover{background:#fbece7;border-color:#e2c9c1}
+.pwo-void-confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:.72rem;color:#7a5f1f}
+.pwo-void-yes{height:24px;padding:0 10px;border-radius:100px;border:none;background:#a8442f;color:#fff;font-size:.68rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pwo-void-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid #d9d4ca;background:#fff;color:#4a4f5a;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pwo-sign-rule{border-bottom:1px solid #0B0F1A;height:1px;width:100%;margin-top:4px}
 .pwo-sign-cap{font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#4a5270;margin-top:4px}
 .pwo-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:11000;background:#0B0F1A;color:#fff;
