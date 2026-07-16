@@ -36,20 +36,20 @@ export default function PublishAnnounce({ announcement, onGo, onDismiss }) {
 }
 
 const CSS = `
-.pann{position:fixed;inset:0;z-index:9100;display:flex;align-items:center;justify-content:center;font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
+.pann{position:fixed;inset:0;z-index:9100;display:flex;align-items:center;justify-content:center;font-family:var(--font)}
 .pann-bg{position:fixed;inset:0;background:rgba(11,15,26,.74);animation:pannf .25s ease}
-.pann-card{position:relative;width:min(370px,92vw);background:#fff;border-radius:20px;border-top:5px solid #C9A96E;box-shadow:0 28px 70px rgba(0,0,0,.5);padding:26px 24px 18px;text-align:center;animation:pannp .34s cubic-bezier(.2,.85,.3,1.1)}
+.pann-card{position:relative;width:min(370px,92vw);background:#fff;border-radius:20px;border-top:5px solid var(--gold);box-shadow:0 28px 70px rgba(0,0,0,.5);padding:26px 24px 18px;text-align:center;animation:pannp .34s cubic-bezier(.2,.85,.3,1.1)}
 @keyframes pannf{from{opacity:0}to{opacity:1}}
 @keyframes pannp{from{opacity:0;transform:translateY(14px) scale(.95)}to{opacity:1;transform:none}}
 .pann-x{position:absolute;top:12px;right:12px;width:28px;height:28px;border:none;background:#f2efe9;border-radius:9px;color:#8a8578;font-size:.82rem;cursor:pointer;line-height:1}
-.pann-x:hover{background:#e8e3d8;color:#0B0F1A}
-.pann-burst{width:64px;height:64px;margin:6px auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0B0F1A;background:linear-gradient(180deg,#F0DCB2,#C9A96E);box-shadow:0 8px 22px rgba(201,169,110,.5);animation:pannpop .5s cubic-bezier(.2,.85,.3,1.4) .08s both}
+.pann-x:hover{background:#e8e3d8;color:var(--ink)}
+.pann-burst{width:64px;height:64px;margin:6px auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);background:linear-gradient(180deg,#F0DCB2,var(--gold));box-shadow:0 8px 22px rgba(201,169,110,.5);animation:pannpop .5s cubic-bezier(.2,.85,.3,1.4) .08s both}
 @keyframes pannpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
 .pann-kick{font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#a3812f}
-.pann-title{font-size:1.32rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em;margin-top:5px}
-.pann-body{font-size:.92rem;color:#5b6275;line-height:1.5;margin-top:8px}
-.pann-go{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;width:100%;height:48px;border:none;border-radius:12px;background:#0B0F1A;color:#fff;font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit;transition:.15s}
+.pann-title{font-size:1.32rem;font-weight:800;color:var(--ink);letter-spacing:-.01em;margin-top:5px}
+.pann-body{font-size:.92rem;color:var(--muted);line-height:1.5;margin-top:8px}
+.pann-go{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;width:100%;height:48px;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit;transition:.15s}
 .pann-go:hover{background:#1a2233}
 .pann-later{margin-top:8px;width:100%;height:34px;border:none;background:none;color:#9aa1af;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pann-later:hover{color:#5b6275}
+.pann-later:hover{color:var(--muted)}
 `;

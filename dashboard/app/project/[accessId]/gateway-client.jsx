@@ -2736,8 +2736,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </AccordionProvider>
       )}
 
-      {/* Next-step CTA — moved out from under the progress bar to the bottom of the tool list. */}
-      {!lp.lost_reason && (
+      {/* Next-step CTA — shown ONCE, only while viewing the project's CURRENT phase. Browsing an
+          earlier/later stage doesn't repeat it (it's about what's outstanding now, not everywhere). */}
+      {!lp.lost_reason && vPhase === barProjectStage && (
         <StageAdvance
           role={cView}
           busy={busy}
@@ -3318,8 +3319,23 @@ export default function GatewayClient({ project, initialView = null, currentUser
 // without changing any JSX, text, or logic. The dark PIN gateway is untouched.
 const PV_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-.pvx{--bg-soft:#f6f7f9;--bg-tint:#f0f2f7;--ink:#0e1320;--slate:#2C3347;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--accent:#3257ff;--accent-soft:#eef1ff;--green:#1c8a45;--green-soft:#e7f6ec;--red:#d23c3c;--red-soft:#fdeaea;--amber:#b45309;--amber-soft:#fef3c7;--purple:#7c3aed;--purple-soft:#f3eeff;
-  background:var(--bg-soft);min-height:100vh;font-family:'Hanken Grotesk',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;padding-bottom:50px}
+/* ===== DESIGN TOKENS — single source of truth for the whole project page =====
+   Anchored to the FlowStep tool-cards (the agreed reference look). Every component
+   should consume these vars; no hand-typed hex/px. See /style for the living guide. */
+.pvx{
+  /* surfaces */ --bg-soft:#f6f7f9;--bg-tint:#f0f2f7;--bg-paper:#FAF8F4;--bg:#ffffff;
+  /* ink / text */ --ink:#0B0F1A;--slate:#2C3347;--muted:#5b6275;
+  /* lines */ --line:#e6e8ee;--line-warm:#d9d4ca;
+  /* brand gold */ --gold:#C9A96E;--gold-deep:#b08f4f;--gold-hi:#E8CB94;
+  /* semantic */ --accent:#3257ff;--accent-soft:#eef1ff;
+  --green:#2f7d5a;--green-soft:#e7f6ec;--red:#a8442f;--red-soft:#fdeaea;
+  --amber:#b45309;--amber-soft:#fef3c7;--purple:#7c3aed;--purple-soft:#f3eeff;
+  /* type scale (6 steps) */ --fs-xs:.68rem;--fs-sm:.78rem;--fs-md:.82rem;--fs-lg:.92rem;--fs-xl:1.05rem;--fs-title:1.22rem;
+  /* radii (3) */ --r-sm:8px;--r-md:14px;--r-pill:100px;
+  /* spacing */ --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:22px;
+  /* elevation */ --shadow-card:0 10px 30px rgba(11,15,26,.07);--shadow-modal:0 24px 70px rgba(11,15,26,.30);
+  /* fonts */ --font:'Hanken Grotesk',sans-serif;--font-title:'Bricolage Grotesque',sans-serif;
+  background:var(--bg-soft);min-height:100vh;font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;padding-bottom:50px}
 .pvx .wrap{max-width:1180px;margin:0 auto;padding:0 26px 60px}
 .pvx .mono{font-family:Menlo,Consolas,monospace;letter-spacing:.3px}
 /* Google Places autocomplete — new web component (PlaceAutocompleteElement) */
@@ -3867,8 +3883,8 @@ const PV_CSS = `
 /* Shaded = done / marked complete — background stays white (matches System QR); only the left
    border + icon + sub-label flip green, so it reads "done & ready" without a full color fill. */
 .pvx .flow-step.shaded .flow-bare-head,.pvx .flow-step.shaded .pv-tool-head,.pvx .flow-step.shaded .pv-tool-panel{border-left-color:#2f7d5a}
-.pvx .pv-tool-icon.done{background:#e7f6ec;color:#2f7d5a}
-.pvx .pv-tool-sub.done{color:#1c8a45;font-weight:800}
+.pvx .pv-tool-icon.done{background:var(--green-soft);color:var(--green)}
+.pvx .pv-tool-sub.done{color:var(--green);font-weight:800}
 /* "Mark as complete" footer at the bottom of an expanded tool. */
 .pvx .flow-complete-row{display:flex;justify-content:flex-end;padding-top:4px;border-top:1px dashed var(--line);margin-top:2px}
 .pvx .flow-complete-btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid #bfe0c9;border-radius:9px;background:#eef7f0;color:#1d5a2e;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}

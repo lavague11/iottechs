@@ -59,8 +59,8 @@ export default function TechProjectBoard({ project }) {
 }
 
 const TPB_CSS = `
-.tpb-root{background:#0B0F1A;border-radius:14px;padding:16px 18px;margin-bottom:14px;color:#fff;
-  font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;border-top:4px solid #2f7d5a}
+.tpb-root{background:var(--ink);border-radius:14px;padding:16px 18px;margin-bottom:14px;color:#fff;
+  font-family:var(--font);border-top:4px solid var(--green)}
 .tpb-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .tpb-title{font-size:.95rem;font-weight:800;letter-spacing:.02em}
 .tpb-tag{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#5FB88A;border:1px solid rgba(95,184,138,.45);border-radius:100px;padding:4px 11px}
@@ -69,6 +69,6 @@ const TPB_CSS = `
 .tpb-lbl{font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a93a8}
 .tpb-cell b{font-size:.9rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tpb-dir{font-size:.72rem;color:#9fc0e8;text-decoration:none;margin-top:1px}
-.tpb-dir:hover{color:#C9A96E}
+.tpb-dir:hover{color:var(--gold)}
 .tpb-foot{margin-top:12px;font-size:.72rem;color:#9aa1af;border-top:1px solid rgba(255,255,255,.08);padding-top:10px}
 `;

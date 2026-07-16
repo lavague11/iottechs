@@ -86,29 +86,29 @@ export default function CustomerTour({ accessId, phone = "(646) 396-0775", onClo
 }
 
 const CSS = `
-.ctour{position:fixed;inset:0;z-index:9000;font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
+.ctour{position:fixed;inset:0;z-index:9000;font-family:var(--font)}
 .ctour-dim{position:fixed;inset:0;background:rgba(11,15,26,.74);animation:ctf .25s ease}
-.ctour-hole{position:fixed;border-radius:14px;border:2px solid #E8CB94;box-shadow:0 0 0 9999px rgba(11,15,26,.74),0 0 0 4px rgba(201,169,110,.35);pointer-events:none;transition:top .35s ease,left .35s ease,width .35s ease,height .35s ease;animation:ctf .25s ease}
+.ctour-hole{position:fixed;border-radius:14px;border:2px solid var(--gold-hi);box-shadow:0 0 0 9999px rgba(11,15,26,.74),0 0 0 4px rgba(201,169,110,.35);pointer-events:none;transition:top .35s ease,left .35s ease,width .35s ease,height .35s ease;animation:ctf .25s ease}
 @keyframes ctf{from{opacity:0}to{opacity:1}}
-.ctour-card{position:fixed;width:min(340px,92vw);background:#fff;border-radius:16px;border-top:4px solid #C9A96E;box-shadow:0 24px 60px rgba(0,0,0,.45);padding:18px 18px 14px;animation:ctp .28s cubic-bezier(.2,.8,.3,1)}
+.ctour-card{position:fixed;width:min(340px,92vw);background:#fff;border-radius:16px;border-top:4px solid var(--gold);box-shadow:0 24px 60px rgba(0,0,0,.45);padding:18px 18px 14px;animation:ctp .28s cubic-bezier(.2,.8,.3,1)}
 .ctour-center{left:50%;top:50%;transform:translate(-50%,-50%)}
 @keyframes ctp{from{opacity:0;transform:translate(-50%,-50%) scale(.94)}to{opacity:1}}
 .ctour-below,.ctour-above{animation:ctp2 .28s cubic-bezier(.2,.8,.3,1)}
 @keyframes ctp2{from{opacity:0}to{opacity:1}}
 .ctour-x{position:absolute;top:10px;right:10px;width:26px;height:26px;border:none;background:#f2efe9;border-radius:8px;color:#8a8578;font-size:.8rem;cursor:pointer;line-height:1}
-.ctour-x:hover{background:#e8e3d8;color:#0B0F1A}
+.ctour-x:hover{background:#e8e3d8;color:var(--ink)}
 .ctour-kick{font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#a3812f}
-.ctour-title{font-size:1.12rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em;margin-top:4px}
-.ctour-body{font-size:.9rem;color:#5b6275;line-height:1.5;margin-top:6px}
-.ctour-call{display:inline-flex;align-items:center;gap:8px;margin-top:12px;height:40px;padding:0 16px;border-radius:10px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;text-decoration:none}
+.ctour-title{font-size:1.12rem;font-weight:800;color:var(--ink);letter-spacing:-.01em;margin-top:4px}
+.ctour-body{font-size:.9rem;color:var(--muted);line-height:1.5;margin-top:6px}
+.ctour-call{display:inline-flex;align-items:center;gap:8px;margin-top:12px;height:40px;padding:0 16px;border-radius:10px;background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--ink);font-size:.9rem;font-weight:800;text-decoration:none}
 .ctour-call:hover{filter:brightness(1.05)}
 .ctour-foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px}
 .ctour-dots{display:flex;gap:6px}
 .ctour-dots span{width:7px;height:7px;border-radius:50%;background:#dcd8cf;transition:.2s}
-.ctour-dots span.on{background:#C9A96E;width:20px;border-radius:4px}
+.ctour-dots span.on{background:var(--gold);width:20px;border-radius:4px}
 .ctour-btns{display:flex;gap:8px}
-.ctour-back{height:36px;padding:0 14px;border:1px solid #d9d4ca;border-radius:9px;background:#fff;color:#5b6275;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit}
-.ctour-back:hover{border-color:#C9A96E;color:#0B0F1A}
-.ctour-next{height:36px;padding:0 18px;border:none;border-radius:9px;background:#0B0F1A;color:#fff;font-size:.85rem;font-weight:800;cursor:pointer;font-family:inherit}
+.ctour-back{height:36px;padding:0 14px;border:1px solid var(--line-warm);border-radius:9px;background:#fff;color:var(--muted);font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit}
+.ctour-back:hover{border-color:var(--gold);color:var(--ink)}
+.ctour-next{height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--ink);color:#fff;font-size:.85rem;font-weight:800;cursor:pointer;font-family:inherit}
 .ctour-next:hover{background:#1a2233}
 `;

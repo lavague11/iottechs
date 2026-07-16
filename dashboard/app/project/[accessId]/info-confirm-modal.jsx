@@ -107,29 +107,29 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
 
 const CSS = `
 .icm-backdrop{position:fixed;inset:0;z-index:11000;background:rgba(11,15,26,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;
-  font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;animation:icm-fade .18s ease}
+  font-family:var(--font);animation:icm-fade .18s ease}
 @keyframes icm-fade{from{opacity:0}to{opacity:1}}
-.icm{width:min(520px,96vw);background:#FAF8F4;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.4);animation:icm-pop .2s ease}
+.icm{width:min(520px,96vw);background:var(--bg-paper);border:1px solid var(--line-warm);border-top:4px solid var(--gold);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.4);animation:icm-pop .2s ease}
 @keyframes icm-pop{from{transform:translateY(10px) scale(.98);opacity:.6}to{transform:none;opacity:1}}
 .icm-head{display:flex;gap:14px;align-items:flex-start;padding:22px 22px 4px}
 .icm-badge{width:46px;height:46px;flex-shrink:0;border-radius:12px;background:#f7f0df;color:#a3812f;display:grid;place-items:center}
-.icm-title{font-size:1.25rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em}
-.icm-sub{font-size:.86rem;color:#6f7686;line-height:1.45;margin-top:3px}
+.icm-title{font-size:1.25rem;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+.icm-sub{font-size:.86rem;color:var(--muted);line-height:1.45;margin-top:3px}
 .icm-body{padding:16px 22px 4px}
 .icm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
 .icm-cell,.icm-field{display:flex;flex-direction:column;gap:3px;min-width:0}
 .icm-cell.full,.icm-field.full{grid-column:1/-1}
 .icm-k,.icm-field span{font-size:.64rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8578}
-.icm-v{font-size:.94rem;font-weight:700;color:#0B0F1A;overflow:hidden;text-overflow:ellipsis}
-.icm-field input{border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#0B0F1A;padding:10px 12px;font-size:.92rem;font-family:inherit;outline:none}
-.icm-field input:focus{border-color:#C9A96E}
-.icm-err{margin-top:12px;font-size:.82rem;color:#c0392b;font-weight:600}
+.icm-v{font-size:.94rem;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.icm-field input{border:1px solid var(--line-warm);border-radius:8px;background:#fff;color:var(--ink);padding:10px 12px;font-size:.92rem;font-family:inherit;outline:none}
+.icm-field input:focus{border-color:var(--gold)}
+.icm-err{margin-top:12px;font-size:.82rem;color:var(--red);font-weight:600}
 .icm-actions{display:flex;gap:10px;flex-wrap:wrap;padding:18px 22px 22px}
-.icm-primary{height:44px;padding:0 22px;border:none;border-radius:10px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
+.icm-primary{height:44px;padding:0 22px;border:none;border-radius:10px;background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--ink);font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
 .icm-primary:hover:not(:disabled){filter:brightness(1.05)}
 .icm-primary:disabled{opacity:.55;cursor:default}
-.icm-ghost{height:44px;padding:0 18px;border:1px solid #d9d4ca;border-radius:10px;background:#fff;color:#5b6275;font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit}
-.icm-ghost:hover:not(:disabled){border-color:#C9A96E;color:#0B0F1A}
+.icm-ghost{height:44px;padding:0 18px;border:1px solid var(--line-warm);border-radius:10px;background:#fff;color:var(--muted);font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit}
+.icm-ghost:hover:not(:disabled){border-color:var(--gold);color:var(--ink)}
 /* Google Places dropdown renders on <body>; lift it above the modal (z 11000). */
 .pac-container{z-index:12000!important}
 `;

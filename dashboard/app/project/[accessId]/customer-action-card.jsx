@@ -35,21 +35,21 @@ export default function CustomerActionCard({ action, onGo, preview }) {
 }
 
 const CAC_CSS = `
-.cac-root{margin:16px 0 0;background:#fff;border:1px solid #d9d4ca;border-radius:14px;padding:20px 22px;position:relative}
+.cac-root{margin:16px 0 0;background:#fff;border:1px solid var(--line-warm);border-radius:14px;padding:20px 22px;position:relative}
 .cac-action{border-color:#d8c79a;box-shadow:0 8px 24px -14px rgba(201,169,110,.5)}
 .cac-done{border-color:#bfe0c9}
 .cac-kicker{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:3px 10px;border-radius:100px;margin-bottom:11px}
 .cac-action .cac-kicker{background:#f7f0df;color:#7a5f1f}
-.cac-status .cac-kicker{background:#eef1f6;color:#5b6275;border:1px solid #dfe3ea}
-.cac-done .cac-kicker{background:#eef7f0;color:#1d7a3a}
-.cac-headline{font-size:1.22rem;font-weight:800;color:#0B0F1A;line-height:1.25;letter-spacing:-.01em}
-.cac-sub{font-size:.92rem;color:#5b6275;line-height:1.55;margin-top:6px}
+.cac-status .cac-kicker{background:#eef1f6;color:var(--muted);border:1px solid #dfe3ea}
+.cac-done .cac-kicker{background:var(--green-soft);color:var(--green)}
+.cac-headline{font-size:1.22rem;font-weight:800;color:var(--ink);line-height:1.25;letter-spacing:-.01em}
+.cac-sub{font-size:.92rem;color:var(--muted);line-height:1.55;margin-top:6px}
 .cac-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px}
-.cac-btn{display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.95rem;font-weight:800;cursor:pointer;font-family:inherit}
+.cac-btn{display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--ink);font-size:.95rem;font-weight:800;cursor:pointer;font-family:inherit}
 .cac-btn:hover:not(:disabled){filter:brightness(1.05)}
 .cac-btn:disabled{opacity:.55;cursor:default}
 .cac-preview{font-size:.74rem;color:#8a93a8}
-.cac-donecheck{position:absolute;top:20px;right:22px;width:34px;height:34px;border-radius:50%;background:#2f7d5a;color:#fff;display:flex;align-items:center;justify-content:center}
+.cac-donecheck{position:absolute;top:20px;right:22px;width:34px;height:34px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center}
 /* Done/status is a quiet confirmation, not a hero — keep it a slim strip: check + headline inline
    with the kicker, sub on the same compact block, minimal height. */
 .cac-done, .cac-status{padding:11px 16px}

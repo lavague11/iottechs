@@ -26,7 +26,7 @@ function typedToImg(name) {
 
 export default function ProposalSignModal({
   open, heading, subheading, reference, defaultName, showTitle = false,
-  agreeText = DEFAULT_AGREE, accent = "#C9A96E", busy, onConfirm, onCancel,
+  agreeText = DEFAULT_AGREE, accent = "var(--gold)", busy, onConfirm, onCancel,
 }) {
   const [name, setName] = useState(defaultName || "");
   const [jobTitle, setJobTitle] = useState("");
@@ -92,7 +92,7 @@ const PSM_CSS = `
 @keyframes psmFade{from{opacity:0}to{opacity:1}}
 .psm-card{width:min(480px,96vw);background:#fff;border:1px solid #e3ddd1;border-radius:12px;
   box-shadow:0 24px 70px rgba(11,15,26,.4);overflow:hidden;
-  font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;animation:psmPop .18s ease}
+  font-family:var(--font);animation:psmPop .18s ease}
 @keyframes psmPop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .psm-ribbon{display:flex;align-items:center;gap:10px;background:#FFD55A;color:#3a2f00;padding:12px 18px;font-weight:800;font-size:.86rem}
 .psm-tag{background:#3a2f00;color:#FFD55A;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em}
@@ -101,19 +101,19 @@ const PSM_CSS = `
 .psm-row{display:flex;gap:14px;flex-wrap:wrap}
 .psm-field{flex:1 1 200px;min-width:170px}
 .psm-field label{display:block;font-size:.62rem;letter-spacing:.05em;color:#8a8378;font-weight:800;margin-bottom:5px;text-transform:uppercase}
-.psm-field input{width:100%;border:1px solid #d8d2c6;border-radius:8px;padding:11px 12px;font-size:.9rem;color:#0B0F1A;background:#fff;font-family:inherit;outline:none}
+.psm-field input{width:100%;border:1px solid #d8d2c6;border-radius:8px;padding:11px 12px;font-size:.9rem;color:var(--ink);background:#fff;font-family:inherit;outline:none}
 .psm-field input:focus{border-color:var(--accent)}
 .psm-preview{height:100px;border:1px solid #eee5d4;border-radius:10px;background:#FBFAF6;display:flex;align-items:center;justify-content:center;margin-top:14px;overflow:hidden}
 .psm-preview span{font-size:3rem;color:#10204a;line-height:1;padding:0 16px;white-space:nowrap}
 .psm-preview .psm-ph{font-family:inherit;font-size:.82rem;color:#b3aa99;font-style:italic}
 .psm-agree{display:flex;align-items:flex-start;gap:9px;margin:16px 0 6px;font-size:.78rem;color:#3a3f4a;line-height:1.55;cursor:pointer}
-.psm-agree input{width:17px;height:17px;margin-top:1px;accent-color:#0B0F1A;flex:0 0 auto}
+.psm-agree input{width:17px;height:17px;margin-top:1px;accent-color:var(--ink);flex:0 0 auto}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:800;cursor:pointer;font-family:inherit;padding:13px 22px}
-.psm-btn.go{background:var(--accent);color:#0B0F1A}
+.psm-btn.go{background:var(--accent);color:var(--ink)}
 .psm-btn.go:hover{filter:brightness(1.05)}
 .psm-btn.go:disabled{background:#e4ddcd;color:#a59c89;cursor:not-allowed}
-.psm-btn.ghost{background:#fff;border:1px solid #d9d4ca;color:#0B0F1A;padding:12px 18px}
+.psm-btn.ghost{background:#fff;border:1px solid var(--line-warm);color:var(--ink);padding:12px 18px}
 .psm-btn.ghost:hover{border-color:#8a6d2f;color:#8a6d2f}
 .psm-btn.ghost:disabled{opacity:.5;cursor:default}
 .psm-clear{background:none;border:none;color:#8a8378;font-weight:700;font-size:.76rem;cursor:pointer;text-decoration:underline;font-family:inherit}
