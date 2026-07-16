@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseToken } from "../../lib/auth";
-import { setUserRole, getUserById, updateUser, setUserDisabled, createStaffUser, archiveAndDelete, resetUserPassword } from "../../lib/db";
+import { setUserRole, getUserById, updateUser, setUserDisabled, createStaffUser, archiveAndDelete, resetUserPassword, setUserPin, userEffectivePin, openPinConflictTicketIfAny } from "../../lib/db";
 import { randomBytes } from "crypto";
 
 const ALLOWED_ROLES = ["admin", "manager", "sales", "tech", "customer"];
@@ -138,6 +138,29 @@ export async function resetPasswordAction(targetId) {
 
   resetUserPassword(targetId, tempPassword);
   return { ok: true, tempPassword };
+}
+
+// Admin/manager: set a staff member's custom project PIN (4 digits) or reset it (empty → back to
+// last-4-of-phone). If the resulting PIN collides with another user or a project's customer PIN,
+// a high-priority service ticket is opened automatically so the conflict never silently shadows a login.
+export async function setUserPinAction(targetId, pin) {
+  const actor = await getActor();
+  if (!actor || !["admin", "manager"].includes(actor.role)) return { error: "Unauthorized." };
+  const target = getUserById(targetId);
+  if (!target) return { error: "User not found." };
+  if (actor.role === "manager" && target.role === "admin") return { error: "Managers cannot set an admin's PIN." };
+  const clean = String(pin ?? "").replace(/\D/g, "");
+  if (clean && clean.length !== 4) return { error: "PIN must be exactly 4 digits (or blank to reset)." };
+
+  const u = setUserPin(targetId, clean);
+  const eff = userEffectivePin(u);
+  let conflict = null;
+  if (eff) {
+    const res = openPinConflictTicketIfAny(eff, `${u.name} (${u.role})`, { skipUserId: u.id, actor });
+    if (res) conflict = { ticketId: res.ticketId, count: res.conflicts.length };
+  }
+  revalidatePath("/users");
+  return { ok: true, pin: eff || "", custom: !!u.pin_custom, conflict };
 }
 
 export async function createUserAction(fields) {

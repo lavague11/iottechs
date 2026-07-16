@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { USER_ROLE_COLOR } from "../components/admin-shell";
-import { updateRoleAction, updateUserInfoAction, toggleDisabledAction, createUserAction, deleteUserAction, resetPasswordAction, bulkUserAction } from "./actions";
+import { updateRoleAction, updateUserInfoAction, toggleDisabledAction, createUserAction, deleteUserAction, resetPasswordAction, setUserPinAction, bulkUserAction } from "./actions";
+
+// A staff member's project login PIN: their custom PIN if set, else the last 4 of their phone.
+const phoneLast4 = (phone) => { const d = String(phone || "").replace(/\D/g, ""); return d.length >= 4 ? d.slice(-4) : ""; };
+const effectivePin = (u) => (u.pin_custom ? String(u.pin_custom) : phoneLast4(u.phone));
 
 const ALL_ROLES  = ["admin", "manager", "sales", "tech", "customer"];
 const ROLE_LABEL = { admin: "Admin", manager: "Manager", sales: "Sales", tech: "Tech", customer: "Customer" };
@@ -94,6 +98,10 @@ function EditPanel({ user, onClose, onSaved }) {
   const [password, setPassword] = useState("");
   const [err, setErr]           = useState(null);
   const [pending, startTx]      = useTransition();
+  // Project-login PIN (last 4 of phone by default; a 4-digit value overrides it).
+  const [pin, setPin]           = useState(user.pin_custom || "");
+  const [pinMsg, setPinMsg]     = useState(null);
+  const [pinPending, startPin]  = useTransition();
 
   function handleSave(e) {
     e.preventDefault();
@@ -103,6 +111,18 @@ function EditPanel({ user, onClose, onSaved }) {
       const res = await updateUserInfoAction(user.id, { name: capName, username, email, phone, password: password || undefined });
       if (res.error) setErr(res.error);
       else { onSaved({ ...user, name: capName, username, email, phone }); onClose(); }
+    });
+  }
+  function savePin(value) {
+    setPinMsg(null);
+    startPin(async () => {
+      const res = await setUserPinAction(user.id, value);
+      if (res.error) { setPinMsg({ err: res.error }); return; }
+      setPin(res.custom ? res.pin : "");
+      onSaved({ ...user, pin_custom: res.custom ? res.pin : null });
+      setPinMsg(res.conflict
+        ? { warn: `PIN ${res.pin} conflicts with ${res.conflict.count} other login — service ticket #${res.conflict.ticketId} opened.` }
+        : { ok: res.pin ? `PIN set to ${res.pin}.` : "Reset — PIN now follows the phone." });
     });
   }
 
@@ -117,7 +137,16 @@ function EditPanel({ user, onClose, onSaved }) {
             <label>Email<input className="apx-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
             <label>Phone<input className="apx-input" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
             <label>New Password <span className="opt">(leave blank to keep)</span><input className="apx-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></label>
+            <label>Project PIN <span className="opt">(4 digits — blank = last 4 of phone: {phoneLast4(phone) || "—"})</span>
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input className="apx-input" inputMode="numeric" maxLength={4} placeholder={phoneLast4(phone) || "----"} value={pin}
+                       onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} style={{ width: 90, letterSpacing: 2 }} />
+                <button type="button" className="btn btn-ghost btn-sm" disabled={pinPending} onClick={() => savePin(pin)}>Set</button>
+                {user.pin_custom && <button type="button" className="btn btn-ghost btn-sm" disabled={pinPending} onClick={() => { setPin(""); savePin(""); }}>Reset</button>}
+              </span>
+            </label>
           </div>
+          {pinMsg && <div className="edit-err" style={{ color: pinMsg.err ? undefined : (pinMsg.warn ? "var(--red)" : "var(--green)") }}>{pinMsg.err || pinMsg.warn || pinMsg.ok}</div>}
           {err && <div className="edit-err">{err}</div>}
           <div className="edit-actions">
             <button type="submit" className="btn btn-gold btn-sm" disabled={pending}>{pending ? "Saving…" : "Save Changes"}</button>

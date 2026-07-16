@@ -804,6 +804,59 @@ export function findInternalUserByPin(entered) {
       || null;
 }
 
+// An internal user's effective project PIN: their custom PIN if set, else last-4-of-phone.
+export function userEffectivePin(user) {
+  return user?.pin_custom ? String(user.pin_custom).trim() : phonePin(user?.phone);
+}
+
+// Admin/manager: set a staff member's custom project PIN (4 digits), or clear it (NULL) to fall
+// back to the last-4-of-phone rule. Returns the fresh user row (for the panel to reflect).
+export function setUserPin(userId, pin) {
+  const clean = String(pin ?? "").replace(/\D/g, "");
+  if (clean.length >= 4) db.prepare("UPDATE users SET pin_custom=? WHERE id=?").run(clean.slice(0, 4), Number(userId));
+  else                   db.prepare("UPDATE users SET pin_custom=NULL WHERE id=?").run(Number(userId));
+  return db.prepare("SELECT id,name,role,phone,pin_custom FROM users WHERE id=?").get(Number(userId));
+}
+
+// Everyone (staff + project customers) whose effective 4-digit PIN equals `pin`, excluding the
+// entity that just changed. Used to detect shadowing collisions (resolveAccess resolves a
+// project's own customer/tech PIN before internal-user PINs, so a shared PIN hides one login).
+export function findPinConflicts(pin, { skipUserId = null, skipAccessId = null } = {}) {
+  const p = String(pin || "").replace(/\D/g, "");
+  if (p.length !== 4) return [];
+  const out = [];
+  const staff = db.prepare("SELECT id,name,role,phone,pin_custom FROM users WHERE role IN ('tech','sales','manager','admin') AND (disabled IS NULL OR disabled=0)").all();
+  for (const u of staff) {
+    if (skipUserId && u.id === Number(skipUserId)) continue;
+    if (userEffectivePin(u) === p) out.push({ kind: "user", id: u.id, name: u.name, role: u.role });
+  }
+  const projs = db.prepare("SELECT access_id, contact_name, customer FROM projects WHERE customer_pin = ?").all(p);
+  for (const pr of projs) {
+    if (skipAccessId && String(pr.access_id).toUpperCase() === String(skipAccessId).toUpperCase()) continue;
+    out.push({ kind: "project", access_id: pr.access_id, name: pr.contact_name || pr.customer || pr.access_id });
+  }
+  return out;
+}
+
+// If setting `pin` for `label` collides with anyone else's PIN, open ONE high-priority service
+// ticket (admin+manager) describing the conflict. Returns { ticketId, conflicts } or null.
+export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skipAccessId = null, accessId = null, actor = null } = {}) {
+  const conflicts = findPinConflicts(pin, { skipUserId, skipAccessId });
+  if (!conflicts.length) return null;
+  const lines = conflicts.map((c) => c.kind === "user"
+    ? `• ${c.name} (${c.role})`
+    : `• Project ${c.access_id} — ${c.name} (customer PIN)`).join("\n");
+  const ticketId = createTicket({
+    access_id: accessId || conflicts.find((c) => c.kind === "project")?.access_id || null,
+    subject: `PIN conflict — ${label} shares a login PIN`,
+    priority: "high",
+    opened_by_id: actor?.id ?? null, opened_by_name: actor?.name || "System", opened_by_role: actor?.role || "system",
+    audience: "admin,manager",
+    body: `${label} was just set to a PIN already used by:\n${lines}\n\nA project resolves its own customer/tech PIN before internal-user PINs, so on a shared project one of these logins is shadowed. Set a custom PIN on one of them to resolve.`,
+  });
+  return { ticketId, conflicts };
+}
+
 const DB_VER = "v35";
 const g = globalThis;
 
@@ -1053,7 +1106,7 @@ export function updateCustomerContact(name, { contact_name, contact_email, conta
 }
 
 export function getAllUsers() {
-  return db.prepare("SELECT id, name, username, email, phone, role, disabled, created_at FROM users ORDER BY id").all();
+  return db.prepare("SELECT id, name, username, email, phone, role, disabled, pin_custom, created_at FROM users ORDER BY id").all();
 }
 
 export function setUserDisabled(targetId, disabled) {

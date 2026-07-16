@@ -166,9 +166,18 @@ export async function setCustomerPinAction(accessId, pin) {
   const proj = clean.length >= 4
     ? setCustomerPinCustom(accessId, clean.slice(0, 4))
     : resetCustomerPinToPhone(accessId);
+  // If this project's customer PIN now collides with a staff member or another project, open a
+  // high-priority service ticket — a shared PIN silently shadows one of the logins.
+  let conflict = null;
+  if (proj?.customer_pin) {
+    const { openPinConflictTicketIfAny } = await import("../../../lib/db");
+    const res = openPinConflictTicketIfAny(proj.customer_pin, `Project ${accessId} customer (${proj.contact_name || proj.customer || ""})`,
+      { skipAccessId: accessId, accessId, actor: tok });
+    if (res) conflict = { ticketId: res.ticketId, count: res.conflicts.length };
+  }
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
-  return { ok: true, pin: proj?.customer_pin || "", custom: !!proj?.pin_custom };
+  return { ok: true, pin: proj?.customer_pin || "", custom: !!proj?.pin_custom, conflict };
 }
 
 // First-login welcome: the customer confirms (optionally edits) their contact details. Saves any
