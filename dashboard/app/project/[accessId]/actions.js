@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -120,6 +120,21 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       recordEvent("pin_access", null, ip, ua, p.id, `Tech PIN on ${p.access_id}`);
       await grantPin("tech");
       return { ok: true, view: PIN_VIEW.tech, via: "pin" };
+    }
+    // Internal-user PIN (owner rule): any staff member — tech, sales, manager, admin — PINs in
+    // with the LAST 4 OF THEIR OWN PHONE (or their custom PIN if one is set on the account).
+    // A correct personal PIN is a real login: full session + their role, same as the password
+    // path above. Project-scoped PINs (customer/tech above) win first on any digit collision.
+    const staffUser = findInternalUserByPin(entered);
+    if (staffUser) {
+      recordLogin(staffUser.id, ip, ua);
+      recordEvent("pin_access", staffUser.id, ip, ua, p.id, `Staff PIN → ${staffUser.name} (${staffUser.role}) on ${p.access_id}`);
+      const view = LOGIN_VIEW[staffUser.role] || staffUser.role;
+      const { makeToken } = await import("../../../lib/auth");
+      const jar = await cookies();
+      jar.set("iot_session", await makeToken(staffUser), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+      jar.delete("iot_access");
+      return { ok: true, view, via: "pin", name: staffUser.name };
     }
     return { ok: false, error: "Invalid PIN." };
   }

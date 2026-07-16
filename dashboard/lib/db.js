@@ -132,6 +132,9 @@ function init() {
   // the account owner deliberately set" so userHasPassword() can tell registration it's still safe
   // to write their real chosen password, instead of bouncing them with "you already have an account."
   if (!uCols.includes("password_set")) db.exec("ALTER TABLE users ADD COLUMN password_set INTEGER DEFAULT 0");
+  // Per-user PIN override (internal users). Owner rule: an internal user's project PIN is the
+  // last 4 of THEIR phone; pin_custom (4 digits) overrides it when set. NULL = follow the phone.
+  if (!uCols.includes("pin_custom"))   db.exec("ALTER TABLE users ADD COLUMN pin_custom TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
 
@@ -784,6 +787,21 @@ function makePins(accessId) {
 function phonePin(phone) {
   const d = String(phone || "").replace(/\D/g, "");
   return d.length >= 4 ? d.slice(-4) : null;
+}
+
+// Internal-user PIN login (owner rule): every staff member — tech, sales, manager, admin —
+// can PIN into a project with the LAST 4 OF THEIR OWN PHONE, or a custom PIN if one is set
+// on their account (users.pin_custom). Custom PINs win over phone matches so an admin-set
+// PIN can never be shadowed by someone else's phone digits. Returns the matched user or null.
+export function findInternalUserByPin(entered) {
+  const pin = String(entered || "").replace(/\D/g, "");
+  if (pin.length !== 4) return null;
+  const staff = db.prepare(
+    "SELECT * FROM users WHERE role IN ('tech','sales','manager','admin') AND (disabled IS NULL OR disabled=0)"
+  ).all();
+  return staff.find((u) => u.pin_custom && String(u.pin_custom).trim() === pin)
+      || staff.find((u) => !u.pin_custom && phonePin(u.phone) === pin)
+      || null;
 }
 
 const DB_VER = "v35";
