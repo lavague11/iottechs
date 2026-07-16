@@ -25,3 +25,6 @@ dist/
 .swarm/
 graphify-out/
 *.jsonl
+
+# Stray shell-mishap artifact — OS-locked, clears on reboot (see chat 2026-07-16)
+dashboard/a.role
