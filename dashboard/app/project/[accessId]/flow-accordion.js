@@ -75,11 +75,21 @@ export function AccordionProvider({ children }) {
     });
   }, []);
 
+  // Force a specific tool open (e.g. after signing the proposal, pop the deposit panel open even if
+  // the accordion was collapsed or parked elsewhere — the handoff-on-complete misses those cases).
+  const open = useCallback((key) => { if (key) setOpenKey(key); }, []);
+
   return (
-    <Ctx.Provider value={{ register, unregister, setDone, effectiveKey, toggle, complete }}>
+    <Ctx.Provider value={{ register, unregister, setDone, effectiveKey, toggle, complete, open }}>
       {children}
     </Ctx.Provider>
   );
+}
+
+// Raw accordion access for a component that needs to open a DIFFERENT tool than its own (e.g. the
+// proposal document opening the deposit panel below it). Returns null outside a provider.
+export function useAccordion() {
+  return useContext(Ctx);
 }
 
 // A collapsible tool joins the accordion. Returns null when there's no provider (the tool then keeps

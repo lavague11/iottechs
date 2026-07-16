@@ -5,7 +5,7 @@ import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
-import { useAccordionItem } from "./flow-accordion";
+import { useAccordionItem, useAccordion } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Per-option accent so the customer can tell A / B / C apart at a glance.
@@ -59,6 +59,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // (accepted+signed) so completing the proposal hands the open slot to the deposit below.
   const lockedEarly = !!p?.signed_name && (p?.accepted_options?.length > 0);
   const acc = useAccordionItem("proposal-doc", lockedEarly);
+  const accCtx = useAccordion();   // to pop the deposit panel open right after signing (no page change)
 
   const isDraftPreview = preview && p?.status === "draft" && p?.payload;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
@@ -192,7 +193,11 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     setP(r.proposal);
     setSignFor(null); setConfirmApprove(false);
     showToast(sign ? "Signed & accepted" : "Option removed");
-    if (r.stage && r.stage !== "proposal") onStageSync?.(r.stage);   // auto-advanced
+    // After signing, stay on this page and pop the deposit panel open (it lives right below in the
+    // same phase) — don't jump anywhere. The stage advances to approval_deposit, but that's the same
+    // phase view, so nothing navigates.
+    if (sign) accCtx?.open?.("deposit");
+    if (r.stage && r.stage !== "proposal") onStageSync?.(r.stage);   // auto-advanced (same phase)
   }
   // Decline just the current option — never touches the others (accept A, decline B).
   async function decline(reason) {

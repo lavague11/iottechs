@@ -239,7 +239,7 @@ function CinematicTracking({ tracking }) {
 }
 
 // ---- Panel --------------------------------------------------------------------------------
-export default function ShipmentTracking({ accessId, role, preview, proposal }) {
+export default function ShipmentTracking({ accessId, role, preview, proposal, onStatus }) {
   const isStaff = ["admin", "manager"].includes(role);
   // Shipments — a project's equipment usually arrives in several boxes. Record shape:
   // { shipments: [{number, carrier, status, eta, note}, …] } (legacy single-object records
@@ -269,6 +269,15 @@ export default function ShipmentTracking({ accessId, role, preview, proposal }) 
   const activeShip = shipments[Math.min(active, shipments.length - 1)] || null;
   const shipped = shipments.some((s) => stageOf(s) >= 1);
   const deliveredNow = shipments.length > 0 && shipments.every((s) => stageOf(s) === 4);
+  // Report up so the caller can (a) hide the whole step until a tracking # exists and (b) auto-mark
+  // it complete once every package is delivered. Recompute the "live" stage from any carrier update.
+  useEffect(() => {
+    const allDelivered = shipments.length > 0 && shipments.every((s) => {
+      const lv = live[s.number]; const st = lv && typeof lv.stage === "number" ? lv.stage : stageOf(s);
+      return st === 4;
+    });
+    onStatus?.({ count: shipments.length, delivered: allDelivered });
+  }, [shipments, live, onStatus]);
   // The tracker only appears once a real tracking number exists. Staff (not previewing) always see
   // it so they can paste one in; the customer sees nothing until a package is actually posted.
   const showTracking = shipments.length > 0 || (isStaff && !preview);

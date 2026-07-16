@@ -13,7 +13,7 @@ import {
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
-  approvePcpAgreement, finalizePcp,
+  approvePcpAgreement, finalizePcp, actorName,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
 import { fetchTracking } from "../../../lib/tracking";
@@ -63,7 +63,7 @@ export async function getPriceBookAction() {
 export async function savePriceBookAction(book) {
   const tok = await getSessionRole();
   if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can set default pricing." };
-  const saved = setPriceBook(book, tok.name || tok.email || tok.role);
+  const saved = setPriceBook(book, actorName(tok));
   return { ok: true, book: saved };
 }
 
@@ -104,7 +104,7 @@ export async function saveProposalDraftAction(accessId, { payload, taxRate, depo
     walk(payload, (it) => { it.cost = storedCost.get(it.id) ?? 0; });
   }
 
-  const row = saveProposalDraft(accessId, { payload, taxRate, depositPct }, tok.name || tok.email || tok.role);
+  const row = saveProposalDraft(accessId, { payload, taxRate, depositPct }, actorName(tok));
   if (!row) return { error: "Proposal was already sent — revise it to make changes." };
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
@@ -119,7 +119,7 @@ export async function sendProposalAction(accessId) {
   try { payload = JSON.parse(cur.payload); } catch { return { error: "Malformed proposal." }; }
   const hasItems = payload.options?.some((o) => o.services?.some((s) => s.items?.length));
   if (!hasItems) return { error: "Add at least one line item first." };
-  const row = markProposalSent(accessId, tok.name || tok.email || tok.role);
+  const row = markProposalSent(accessId, actorName(tok));
   // Notify the customer their proposal is ready — fire-and-forget so a slow/failed
   // email never blocks or fails the send. No-op until RESEND_API_KEY is configured.
   emailProposalReady(accessId).catch(() => {});
@@ -130,7 +130,7 @@ export async function sendProposalAction(accessId) {
 export async function reviseProposalAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
-  const row = reviseProposal(accessId, tok.name || tok.email || tok.role);
+  const row = reviseProposal(accessId, actorName(tok));
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
@@ -347,7 +347,7 @@ export async function recordPaymentAction(accessId, payment) {
     amount: payment.amount, method: payment.method, kind: payment.kind,
     source: isCustomer ? "customer" : "staff", note: payment.note,
     paidAt: payment.paidAt,   // staff-set date the money changed hands
-  }, tok.name || tok.email || tok.role);
+  }, actorName(tok));
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, payments };
@@ -365,7 +365,7 @@ export async function deletePaymentAction(accessId, id) {
   } else if (!STAFF.has(tok.role)) {
     return { error: "Only Admin & Manager can remove payments." };
   }
-  const payments = deleteProjectPayment(accessId, id, { id: tok.id ?? null, name: tok.name || tok.email || tok.role });
+  const payments = deleteProjectPayment(accessId, id, { id: tok.id ?? null, name: actorName(tok) });
   await revalidate(accessId);
   return { ok: true, payments };
 }
@@ -418,7 +418,7 @@ export async function saveRatesAction(scope, data) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
   if (!["admin", "manager"].includes(tok.role)) return { error: "Only the office can edit rates." };
-  const ok = saveRateScope(scope, data || {}, tok.name || tok.email || tok.role);
+  const ok = saveRateScope(scope, data || {}, actorName(tok));
   if (!ok) return { error: "Bad rate scope." };
   return { ok: true, book: getRateBook() };
 }
@@ -505,7 +505,7 @@ export async function saveToolDataAction(accessId, tool, data) {
     payload = mergeCustomerAddendumWrite(accessId, data);
     if (payload == null) return { error: "Bad payload." };
   }
-  const saved = saveToolData(accessId, tool, payload, tok.name || tok.email || tok.role);
+  const saved = saveToolData(accessId, tool, payload, actorName(tok));
   return { ok: true, saved: { updated_at: saved.updated_at } };
 }
 
@@ -538,7 +538,7 @@ export async function addNoteAction(accessId, body) {
   if (!tok) return { error: "Session expired — unlock the project again." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (!String(body || "").trim()) return { error: "Write a note first." };
-  const notes = addProjectNote(accessId, { role: tok.role, name: tok.name || tok.email || tok.role, body: body.trim() });
+  const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: body.trim() });
   await revalidate(accessId);
   return { ok: true, notes };
 }
@@ -550,7 +550,7 @@ export async function addSurveyNoteAction(accessId, body) {
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   const text = String(body || "").trim();
   if (!text) return { error: "Write a note first." };
-  const notes = addProjectNote(accessId, { role: tok.role, name: tok.name || tok.email || tok.role, body: text, scope: "survey" });
+  const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: text, scope: "survey" });
   await revalidate(accessId);
   return { ok: true, notes };
 }
@@ -579,7 +579,7 @@ export async function acceptStageAction(accessId, stage, on = true) {
   const meta = getToolMeta(accessId);
   const fp = stage === "site_survey" ? meta.survey.fingerprint : meta.mockup.fingerprint;
   const acceptances = on
-    ? acceptStage(accessId, stage, tok.name || tok.email || tok.role, fp)
+    ? acceptStage(accessId, stage, actorName(tok), fp)
     : unacceptStage(accessId, stage);
   const newStage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
@@ -600,7 +600,7 @@ export async function submitToolAction(accessId, tool, on = true) {
   const fp   = tool === "site_survey" ? meta.survey.fingerprint : meta.mockup.fingerprint;
   const key  = `submit_${tool}`;
   const acceptances = on
-    ? acceptStage(accessId, key, tok.name || tok.email || tok.role, fp)
+    ? acceptStage(accessId, key, actorName(tok), fp)
     : unacceptStage(accessId, key);
   await revalidate(accessId);
   return { ok: true, acceptances };

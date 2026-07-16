@@ -1449,6 +1449,23 @@ export function markInfoConfirmed(accessId) {
   return getJobByAccessId(accessId);
 }
 
+// Resolve a signed-in actor to a human display NAME for stamping (recorded_by, created_by_name…).
+// Session tokens carry { id, email, role } but no name, and PIN tokens carry only role — so look the
+// user up by id/email. Never surface a raw email in the UI: fall back to the email's local part
+// (title-cased), then the role. Keep this the single source so payments and proposals stamp alike.
+export function actorName(tok) {
+  if (!tok) return "Staff";
+  if (tok.name) return String(tok.name);
+  const u = (tok.id != null && getUserById(tok.id)) || (tok.email && getUserByEmail(tok.email)) || null;
+  if (u?.name) return u.name;
+  if (tok.email) {
+    const local = String(tok.email).split("@")[0].replace(/[._-]+/g, " ").trim();
+    if (local) return local.replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  const role = String(tok.role || "").trim();
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : "Staff";
+}
+
 // Stamp the first-time guided tour as seen (once) so it never auto-opens again.
 export function markTourSeen(accessId) {
   db.prepare("UPDATE projects SET tour_seen_at = COALESCE(tour_seen_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
@@ -2337,9 +2354,26 @@ export function acceptStage(accessId, stage, byName, fingerprint) {
 export function getToolMeta(accessId) {
   const surveyRow = getToolData(accessId, "survey");
   const mockupRow = getToolData(accessId, "mockup");
+  // Shipment tracking: count + all-delivered, so the office-only "shipping" step can stay hidden
+  // until a tracking # exists and auto-complete once every package is delivered.
+  const trackRow = getToolData(accessId, "tracking");
+  let trkCount = 0, trkDelivered = false;
+  try {
+    const t = JSON.parse(trackRow?.data || "{}");
+    const list = Array.isArray(t.shipments) ? t.shipments : (t.number ? [t] : []);
+    const ships = list.filter((s) => s && s.number);
+    trkCount = ships.length;
+    trkDelivered = ships.length > 0 && ships.every((s) => (typeof s.stage === "number" ? s.stage : 0) === 4);
+  } catch { /* bad blob */ }
+  // Job-site add-ons count, so the "Add-ons" step stays hidden for the customer until one is submitted.
+  const addRow = getToolData(accessId, "addendum");
+  let addCount = 0;
+  try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).length; } catch { /* bad blob */ }
   return {
     survey: { has: toolHasData("survey", surveyRow?.data), fingerprint: toolFingerprint("survey", surveyRow?.data) },
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
+    tracking: { count: trkCount, delivered: trkDelivered },
+    addendum: { count: addCount },
   };
 }
 // The survey stage is satisfied when every tool that HAS data has a current (fingerprint-matching)
@@ -2363,11 +2397,11 @@ export function getPriceBook() {
   const r = db.prepare("SELECT prices FROM price_book WHERE id=1").get();
   try {
     const d = JSON.parse(r?.prices || "{}") || {};
-    const looksStructured = d && (d.prices || d.names || d.hidden || d.custom);
+    const looksStructured = d && (d.prices || d.names || d.hidden || d.custom || d.presets);
     return looksStructured
-      ? { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {} }
-      : { prices: d || {}, names: {}, hidden: {}, custom: {} }; // legacy flat map
-  } catch { return { prices: {}, names: {}, hidden: {}, custom: {} }; }
+      ? { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [] }
+      : { prices: d || {}, names: {}, hidden: {}, custom: {}, presets: [] }; // legacy flat map
+  } catch { return { prices: {}, names: {}, hidden: {}, custom: {}, presets: [] }; }
 }
 export function setPriceBook(book, byName) {
   const cleanPrices = {};
@@ -2382,7 +2416,21 @@ export function setPriceBook(book, byName) {
     const items = arr.filter((c) => c?.name).map((c) => ({ name: String(c.name).slice(0, 120), price: +c.price >= 0 ? +c.price : 0 }));
     if (items.length) cleanCustom[svc] = items;
   });
-  const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom };
+  // Preset bundles: { id, name, service, items:[{name, qty}] } — one-click line bundles.
+  const cleanPresets = (Array.isArray(book?.presets) ? book.presets : [])
+    .filter((p) => p && p.name && p.service)
+    .slice(0, 60)
+    .map((p) => ({
+      id: String(p.id || "").slice(0, 40) || ("p" + Math.random().toString(36).slice(2, 9)),
+      name: String(p.name).slice(0, 60),
+      service: String(p.service).slice(0, 20),
+      items: (Array.isArray(p.items) ? p.items : [])
+        .filter((x) => x && x.name)
+        .slice(0, 30)
+        .map((x) => ({ name: String(x.name).slice(0, 120), qty: (+x.qty > 0 && +x.qty <= 999) ? +x.qty : 1 })),
+    }))
+    .filter((p) => p.items.length);
+  const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom, presets: cleanPresets };
   db.prepare("UPDATE price_book SET prices=?, updated_by=?, updated_at=datetime('now','localtime') WHERE id=1")
     .run(JSON.stringify(clean), byName || null);
   return clean;

@@ -105,6 +105,7 @@ export default function PricingDefaults({ onClose, onSaved, scopeKey }) {
   async function save() {
     const clean = {
       prices: {}, names: {}, hidden: book.hidden || {}, custom: {},
+      presets: Array.isArray(book.presets) ? book.presets : [], // preserve preset bundles across a price save
     };
     Object.entries(book.prices || {}).forEach(([k, v]) => { if (v !== "" && +v >= 0) clean.prices[k] = +v; });
     Object.entries(book.names || {}).forEach(([k, v]) => { if (v && v.trim()) clean.names[k] = v.trim(); });
@@ -207,7 +208,7 @@ const PRC_CSS = `
 .pvx .prc-x:hover{color:var(--red)}
 .pvx .prc-sub{font-size:.78rem;color:var(--muted);padding:0 22px 14px;line-height:1.45}
 .pvx .prc-err{margin:0 22px 12px;padding:8px 11px;border-radius:8px;background:var(--red-soft);color:var(--red);font-size:.78rem;font-weight:700}
-.pvx .prc-body{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px;max-height:56vh;overflow-y:auto}
+.pvx .prc-body{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
 .pvx .prc-group{border:1px solid #c9c2b2;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(11,15,26,.05)}
 .pvx .prc-group-h{display:flex;align-items:center;gap:8px;width:100%;background:var(--bg-soft);border:none;border-bottom:1px solid transparent;padding:11px 14px;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--gold-deep);cursor:pointer;font-family:inherit;text-align:left}
 .pvx .prc-group-h:hover{background:var(--bg-tint)}

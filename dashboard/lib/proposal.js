@@ -6,7 +6,7 @@
 // Camera Mounting $20, Camera Programming $20, Camera Waterproofing $20.
 
 export const OPTION_LETTERS = ["A", "B", "C"];
-export const OPTION_NAMES = ["Essential", "Recommended", "Premium"];
+export const OPTION_NAMES = ["Premium Security", "Recommended", "Premium"];
 
 export const PROPOSAL_SERVICES = [
   { key: "camera", label: "Security Cameras" },
@@ -110,6 +110,61 @@ export const CAMERA_BUNDLE = [
   { name: "Camera Waterproofing", price: 20 },
 ];
 
+// ---- Preset bundles (company-wide) -----------------------------------------
+// A preset is a named group of catalog items that drops as ONE line block (header +
+// sub-items), e.g. "Full Camera Install" = Camera + Cat6 drop + termination + mounting +
+// programming + waterproofing. Admins add/edit them; they show as one-click buttons at the
+// top of the builder's add bar. Stored on the price book (book.presets); these are the seed
+// defaults, always present unless an admin overrides one by id.
+export const DEFAULT_PRESETS = [
+  {
+    id: "full-camera", name: "Full Camera Install", service: "camera",
+    items: [
+      { name: "Camera", qty: 1 },
+      { name: "Cat6 Drop", qty: 1 },
+      { name: "Cat6 Termination", qty: 1 },
+      { name: "Camera Mounting", qty: 1 },
+      { name: "Camera Programming", qty: 1 },
+      { name: "Camera Waterproofing", qty: 1 },
+    ],
+  },
+];
+
+// Once an admin has saved presets, that list is authoritative (edits/deletes stick). The seed
+// defaults only fill in when presets were never configured. Clearing every preset re-seeds.
+export function loadPresets(book) {
+  const b = book || loadPriceBook();
+  return (Array.isArray(b.presets) && b.presets.length) ? b.presets : DEFAULT_PRESETS;
+}
+export const presetsForService = (serviceKey, book) => loadPresets(book).filter((p) => p.service === serviceKey);
+
+// Build a line block from a preset: header = preset name (rename to the location), sub-items =
+// the preset's items priced from the book. Same shape as a camera block / survey import.
+export function makePresetBlock(preset, book) {
+  const b = book || loadPriceBook();
+  const px = (name) => priceOf(name, b);
+  const dn = (name) => displayNameOf(name, b);
+  return {
+    id: newItemId(), name: preset.name || "Bundle", qty: 1, price: 0, cost: 0,
+    sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), qty: +x.qty || 1, price: px(x.name), cost: 0 })),
+  };
+}
+
+// Build one "full camera" line block on demand. Kept as the survey-import / default path;
+// equivalent to makePresetBlock(the "full-camera" preset) but with a plain "Camera" header.
+export function makeCameraBundle(book, label = "Camera") {
+  const b = book || loadPriceBook();
+  const px = (name) => priceOf(name, b);
+  const dn = (name) => displayNameOf(name, b);
+  return {
+    id: newItemId(), name: label, qty: 1, price: 0, cost: 0,
+    sub: [
+      { id: newItemId(), name: dn("Camera"), qty: 1, price: px("Camera"), cost: 0 },
+      ...CAMERA_BUNDLE.map((x) => ({ id: newItemId(), name: dn(x.name), qty: 1, price: px(x.name), cost: 0 })),
+    ],
+  };
+}
+
 // NVR models and storage drives are structurally load-bearing — their exact names are
 // pattern-matched elsewhere (channel/bay counts, quick-pick lists in proposal-items-editor.jsx).
 // They stay LOCKED in the catalog editor: price is editable, name and removal are not.
@@ -137,7 +192,7 @@ export const PRICE_FIELDS = [
 ];
 const PRICE_FIELD_NAMES = new Set(PRICE_FIELDS.flatMap((g) => g.names));
 
-const emptyBook = () => ({ prices: {}, names: {}, hidden: {}, custom: {} });
+const emptyBook = () => ({ prices: {}, names: {}, hidden: {}, custom: {}, presets: [] });
 
 // Client-side cache of the company price book (localStorage). Shape: { prices, names,
 // hidden, custom } — see lib/db.js getPriceBook/setPriceBook for the DB-backed source of truth.
@@ -146,7 +201,7 @@ export function loadPriceBook() {
   try {
     if (typeof localStorage === "undefined") return emptyBook();
     const d = JSON.parse(localStorage.getItem(PRICE_KEY) || "{}") || {};
-    return { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {} };
+    return { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [] };
   } catch { return emptyBook(); }
 }
 export function savePriceBookCache(book) {

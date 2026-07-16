@@ -40,6 +40,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [priceBookVersion, setPriceBookVersion] = useState(0);
   const [surveyFloors, setSurveyFloors] = useState([]); // [{index, name, count}] for the import picker
   const [waiveOpen, setWaiveOpen] = useState(false);     // waiver tool panel
+  const [bodyOpen, setBodyOpen] = useState(true);        // whole-card collapse (matches the other proposal-phase cards)
 
   // Refresh with a role-appropriate copy on mount (covers PIN-resolved sessions that got
   // the customer-safe variant from the server render). If the draft is still empty and
@@ -225,9 +226,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   }
 
   // ---- Waiver tool: comp a whole line item off the invoice (keeps it visible at $0) ----
-  // A line is "waivable" if it carries real value (or is already waived). NVR/drives/displays
-  // live in the camera sysbar (slot/displaySlot) and aren't individually waivable here.
-  const canWaive = (it) => it.slot == null && it.displaySlot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
+  // A line is "waivable" if it carries real value (or is already waived). NVR/drives live in the
+  // camera sysbar (slot) and aren't individually waivable; displays (displaySlot) CAN be comped.
+  const canWaive = (it) => it.slot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
   const waivable = [];
   opt.services.forEach((s) => (s.items || []).forEach((it) => { if (canWaive(it)) waivable.push({ svcLabel: s.label, it }); }));
   const waivedCount = waivable.filter((w) => w.it.waived).length;
@@ -241,11 +242,15 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   return (
     <div className="prop-card">
       <div className="prop-head">
-        <span className="prop-title">Proposal builder{meta?.version ? ` · v${meta.version}` : ""}</span>
+        <button type="button" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: ".7rem", color: "var(--muted)" }}>{bodyOpen ? "▾" : "▸"}</span>
+          <span className="prop-title">Proposal builder{meta?.version ? ` · v${meta.version}` : ""}</span>
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className={`prop-status ${status === "changes_requested" ? "changes" : status}`}>
             {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
-            {status === "sent" && `Sent ${meta?.sent_at ? meta.sent_at.slice(0, 16) : ""}${meta?.sent_by_name ? ` by ${meta.sent_by_name}` : ""}`}
+            {status === "sent" && `Sent ${meta?.sent_at ? meta.sent_at.slice(0, 16) : ""}${meta?.sent_by_name ? ` by ${String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name}` : ""}`}
             {status === "changes_requested" && "Changes requested"}
             {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
           </span>
@@ -257,6 +262,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         </div>
       </div>
 
+      {bodyOpen && (<div style={{ display: "contents" }}>
       {status === "changes_requested" && meta?.change_note && (
         <div className="prop-note-strip">Customer: “{meta.change_note}”</div>
       )}
@@ -431,6 +437,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
           {toast}
         </div>
       )}
+      </div>)}
 
       {pricingOpen && (
         <PricingDefaults
@@ -500,3 +507,4 @@ function FloorImportPicker({ floors, onImport }) {
     </div>
   );
 }
+

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock } from "../../../lib/proposal";
+import PresetEditor from "./proposal-preset-editor";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -101,6 +102,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     return DISPLAY_OPTION_NAMES.map((n) => ({ baseName: n, name: displayNameOf(n, book), price: priceOf(n, book) }));
   }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
+  const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays lead row -> breakdown expanded
+  const [presetOpen, setPresetOpen] = useState(false); // preset-bundle manager modal
+  const [presetVer, setPresetVer] = useState(0);       // bumps after a preset save to refresh chips
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const [dragId, setDragId] = useState(null);   // line item being dragged
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
@@ -218,6 +222,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   function addItem(name = "", price = 0) {
     patchItems([...svc.items, { id: newItemId(), name, qty: 1, price, cost: 0 }]);
   }
+  // Preset bundles for this service (default "Full Camera Install" + any admin-added). One
+  // click drops the whole bundle as a block (header + sub-items priced from the book).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const presets = presetsForService(svc.key, loadPriceBook());
+  void presetVer; // referenced so the chip row recomputes after a preset save
+  function addPresetBlock(preset) {
+    patchItems([...svc.items, makePresetBlock(preset, loadPriceBook())]);
+  }
   function quickAdd(e) {
     const v = e.target.value;
     if (!v) return;
@@ -248,10 +260,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const leadRows = [];
   if (nvrCollapsed) leadRows.push({ key: "nvr", title: `NVR · ${nvrShort(nvrItem.name)}`,
     sub: driveItems.length ? `${driveItems.length} drive${driveItems.length !== 1 ? "s" : ""}` : "No drives",
-    total: nvrGroupTotal, edit: () => setNvrDone(false) });
+    total: nvrGroupTotal, edit: () => setNvrDone(false),
+    // Breakdown so the collapsed line isn't a mystery total — recorder + each drive, priced.
+    items: [{ name: nvrItem.name, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
+      ...driveItems.map((d) => ({ name: d.name || "Storage drive", total: (+d.qty || 1) * (+d.price || 0) }))] });
   if (dispCollapsed) leadRows.push({ key: "disp", title: "Displays",
     sub: `${displayItems.length} display${displayItems.length !== 1 ? "s" : ""}`,
-    total: displaysTotal, edit: () => setDispDone(false) });
+    total: displaysTotal, edit: () => setDispDone(false),
+    // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
+    items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, total: itemTotal(d) })) });
   const leadCount = leadRows.length;
   // Camera location blocks number AFTER the collapsed recording-system lines (1, 2, then cameras).
   const blockNumOf = {};
@@ -479,12 +496,32 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {/* Collapsed recording-system lines (NVR, Displays) — numbered, expandable via Edit */}
       {leadRows.map((lr, i) => (
-        <div key={lr.key} className="prop-block prop-sysline">
-          <span className="prop-block-num" style={{ background: svcColor }}>{i + 1}</span>
-          <span className="prop-sysline-name">{lr.title}</span>
-          <span className="prop-sysline-sub">{lr.sub}</span>
-          <span className="prop-sysline-total">{money(lr.total)}</span>
-          {!readOnly && <button type="button" className="prop-mini prop-sysline-edit" onClick={lr.edit}>Edit</button>}
+        <div key={lr.key} className="prop-block">
+          <div className="prop-sysline">
+            {lr.items?.length > 0 ? (
+              <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] ? "Hide breakdown" : "Show breakdown"}
+                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: !o[lr.key] }))}>{leadOpen[lr.key] ? "▾" : "▸"}</button>
+            ) : <span style={{ width: 16, flexShrink: 0 }} />}
+            <span className="prop-block-num" style={{ background: svcColor }}>{i + 1}</span>
+            <span className="prop-sysline-name">{lr.title}</span>
+            <span className="prop-sysline-sub">{lr.sub}</span>
+            <span className="prop-sysline-total">{money(lr.total)}</span>
+            {!readOnly && <button type="button" className="prop-mini prop-sysline-edit" onClick={lr.edit}>Edit</button>}
+          </div>
+          {leadOpen[lr.key] && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
+            // Same read-only shape as a camera's expanded sub-item (.prop-item.sub) so the
+            // NVR/Display breakdown reads identically to every other block's breakdown.
+            <div key={bidx} className={`prop-item${gridClass} sub${bidx % 2 ? " alt" : ""}`}>
+              <span style={{ display: "flex", alignItems: "center" }}>
+                <span className="prop-sub-name">{bi.name}</span>
+              </span>
+              <span />
+              <span />
+              {showCost && <span />}
+              <span className="prop-line-total">{money(bi.total)}</span>
+              <span />
+            </div>
+          ))}
         </div>
       ))}
 
@@ -513,19 +550,39 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {!readOnly && (
         <div className="prop-addbar">
-          <button className="prop-mini" onClick={() => addItem()}>+ Item</button>
-          {catalog.length > 0 && (
-            <select defaultValue="" onChange={quickAdd}>
-              <option value="" disabled>Catalog…</option>
-              {catalog.map((c, i) => (
-                <option key={c.name} value={i}>{c.name} · {money(c.price)}</option>
-              ))}
-            </select>
-          )}
+          {/* Preset bundles — one-click line groups, kept at the top of the add area */}
+          <div className="prop-preset-row">
+            {presets.map((p) => (
+              <button key={p.id} className="prop-preset-chip" title={`Add bundle: ${p.name}`} onClick={() => addPresetBlock(p)}>+ {p.name}</button>
+            ))}
+            <button className="prop-preset-edit" title="Create or edit preset bundles" onClick={() => setPresetOpen(true)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              {presets.length ? "Edit presets" : "+ Preset"}
+            </button>
+          </div>
+          <div className="prop-addrow-basic">
+            <button className="prop-mini" onClick={() => addItem()}>+ Item</button>
+            {catalog.length > 0 && (
+              <select defaultValue="" onChange={quickAdd}>
+                <option value="" disabled>Catalog…</option>
+                {catalog.map((c, i) => (
+                  <option key={c.name} value={i}>{c.name} · {money(c.price)}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       )}
 
       {svc.note && <div className="prop-svc-note">{svc.note}</div>}
+
+      {presetOpen && (
+        <PresetEditor
+          serviceKey={svc.key}
+          onClose={() => setPresetOpen(false)}
+          onSaved={() => { setPresetVer((v) => v + 1); setPresetOpen(false); }}
+        />
+      )}
     </div>
   );
 }

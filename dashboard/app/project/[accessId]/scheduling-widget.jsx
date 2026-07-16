@@ -101,7 +101,7 @@ const Ico = {
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
-export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey" }) {
+export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", onCount }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -127,6 +127,9 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   useEffect(() => {
     setForm(f => f.date ? f : { ...f, date: tomorrowISO() });
   }, []);
+
+  // Report how many events are scheduled so the caller can gate a step's "done" on a real booking.
+  useEffect(() => { onCount?.(data.events.length); }, [data.events.length, onCount]);
 
   const isReadOnly = view === "customer" || customerView;
 

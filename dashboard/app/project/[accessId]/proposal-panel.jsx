@@ -30,9 +30,9 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
 
 const PROP_CSS = `
 .pvx .prop-wrap{display:flex;flex-direction:column;gap:14px;margin:18px 0}
-.pvx .prop-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.pvx .prop-card{background:#fff;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .pvx .prop-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.pvx .prop-title{font-size:.92rem;font-weight:800;color:var(--ink)}
+.pvx .prop-title{font-family:'Bricolage Grotesque',sans-serif;font-size:.97rem;font-weight:700;color:var(--ink)}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--muted);cursor:pointer}
 .pvx .prop-gear:hover{border-color:var(--gold);color:var(--gold-deep)}
 .pvx .prop-fp{position:relative}
@@ -150,11 +150,12 @@ const PROP_CSS = `
 /* Recording-system "Done" button + collapsed NVR/Displays summary lines */
 .pvx .prop-sys-done{align-self:center;height:30px;padding:0 16px;border:1px solid var(--gold);border-radius:8px;background:var(--gold);color:#fff;font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit}
 .pvx .prop-sys-done:hover{background:var(--gold-deep);border-color:var(--gold-deep)}
-.pvx .prop-block.prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}
+.pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}
 .pvx .prop-sysline-name{font-size:.86rem;font-weight:800;color:var(--ink)}
 .pvx .prop-sysline-sub{font-size:.74rem;font-weight:600;color:var(--muted)}
 .pvx .prop-sysline-total{margin-left:auto;font-size:.82rem;font-weight:800;color:var(--ink)}
 .pvx .prop-sysline-edit{flex-shrink:0}
+.pvx .prop-sub-name{margin-left:18px;font-size:.8rem;font-weight:500;color:var(--muted);text-transform:capitalize}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--line)}
 /* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
@@ -181,7 +182,13 @@ const PROP_CSS = `
 .pvx .prop-cols{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;padding:6px 12px 2px;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .pvx .prop-cols.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-cols span.r{text-align:right}
-.pvx .prop-addbar{display:flex;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.pvx .prop-addbar{display:flex;flex-direction:column;gap:9px;align-items:stretch;padding:9px 12px;border-top:1px solid var(--line)}
+.pvx .prop-preset-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.pvx .prop-addrow-basic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:1px solid var(--gold);border-radius:999px;background:var(--gold);color:#fff;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit}
+.pvx .prop-preset-chip:hover{background:var(--gold-deep);border-color:var(--gold-deep)}
+.pvx .prop-preset-edit{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border:1px dashed var(--gold);border-radius:999px;background:#fff;color:var(--gold-deep);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .prop-preset-edit:hover{background:var(--gold);color:#fff;border-style:solid}
 .pvx .prop-addbar select{height:38px;border:1px solid var(--line);border-radius:7px;background:var(--bg-soft);color:var(--ink);font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;max-width:240px}
 .pvx .prop-mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .prop-mini:hover{border-color:var(--gold);color:var(--gold-deep)}

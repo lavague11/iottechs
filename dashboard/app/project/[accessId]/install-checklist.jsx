@@ -39,15 +39,37 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const canPrice = !isCustomer;                // can SEE pricing (tech + office)
   const canEditPay = canEdit && role !== "tech"; // can CHANGE pay amounts — office only, never tech
 
-  // Items derived from the accepted option — carries tech payout when the proposal has it.
+  // Camera location names carried down from the Site Survey (the "Front Door" / "Back Lot" labels the
+  // office set on the plan), in placement order. The work order pre-fills each camera with its survey
+  // location so the tech knows exactly which one is which — no re-typing.
+  const [surveyCams, setSurveyCams] = useState(null);
+  useEffect(() => {
+    let live = true;
+    getToolDataAction(accessId, "survey").then((r) => {
+      if (!live || !r?.ok || !r.saved?.data) return;
+      try {
+        const d = JSON.parse(r.saved.data);
+        const names = [];
+        (d.floors || []).forEach((f) => (f.markers || []).forEach((m) => {
+          if (m.kind === "cam") names.push((m.name || "").trim());
+        }));
+        setSurveyCams(names);
+      } catch { /* bad blob */ }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId]);
+
+  // Items derived from the accepted option — carries tech payout when the proposal has it. Camera
+  // names are overlaid with the survey's location labels (by placement order) when available.
   const derived = (() => {
     const out = [];
+    let camIdx = 0;
     const opt = proposal?.payload?.options?.find(o => o.id === proposal.selected_option) || proposal?.payload?.options?.[0];
     (opt?.services || []).forEach((s) => {
       (s.items || []).forEach((it) => {
         const hasSub = (it.sub || []).length > 0;
         const tech = hasSub ? techItemTotal(it) : (+(it.qty ?? 1) || 1) * (+it.techPrice || 0);
-        if (s.key === "camera" && hasSub) { out.push({ id: it.id, name: it.name, outdoor: it.outdoor, type: "camera", tech, derived: true }); return; }
+        if (s.key === "camera" && hasSub) { const loc = surveyCams && surveyCams[camIdx]; camIdx++; out.push({ id: it.id, name: (loc || it.name), location: loc || null, outdoor: it.outdoor, type: "camera", tech, derived: true }); return; }
         // Toast POS / network devices (service key "toast"/"pos") run the cable-drop install path.
         if ((s.key === "toast" || s.key === "pos") && hasSub) { out.push({ id: it.id, name: it.name, outdoor: it.outdoor, type: "pos", tech, derived: true }); return; }
         if (/\bnvr\b|recorder/i.test(it.name)) { out.push({ id: it.id, name: it.name, type: "nvr", tech, derived: true }); return; }

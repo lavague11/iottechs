@@ -43,7 +43,7 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [savedAt, setSavedAt] = useState(null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);   // start collapsed — part of the compact proposal-phase flow
 
   if (!opt) return null;
 
@@ -113,12 +113,14 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
 }
 
 const TPX_CSS = `
-.tpx-card{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;margin-bottom:18px}
-.tpx-head{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg-soft,#f5f5f7);border:none;cursor:pointer;font-family:inherit;text-align:left}
-.tpx-icon{display:inline-grid;place-items:center;color:var(--tech,#2f7d5a)}
-.tpx-title{font-size:.86rem;font-weight:800;color:var(--ink)}
-.tpx-sub{font-size:.76rem;font-weight:700;color:var(--tech,#2f7d5a);margin-left:6px}
-.tpx-chev{margin-left:auto;font-size:.7rem;color:var(--muted)}
+.tpx-card{border:1px solid var(--line,#e6e8ee);border-left:3px solid var(--gold,#C9A96E);border-radius:14px;background:#fff;overflow:hidden;margin:0}
+.tpx-head{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;background:#fff;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+.tpx-head:hover{background:var(--bg-soft,#f6f7f9)}
+.tpx-icon{width:30px;height:30px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--green,#1c8a45);
+  background:var(--green-soft,#e7f6ec);border:1px solid color-mix(in srgb,var(--green,#1c8a45) 30%,transparent)}
+.tpx-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:.97rem;color:var(--ink,#0e1320)}
+.tpx-sub{font-size:.72rem;font-weight:800;letter-spacing:.02em;color:var(--green,#1c8a45);margin-left:auto;padding:4px 11px;border-radius:100px;background:var(--green-soft,#e7f6ec);border:1px solid #bfe0c9;white-space:nowrap}
+.tpx-chev{margin-left:8px;font-size:.7rem;color:var(--muted,#5b6275)}
 .tpx-body{padding:14px 16px}
 .tpx-note{font-size:.76rem;color:var(--muted);margin-bottom:12px;line-height:1.45}
 .tpx-err{margin-bottom:10px;padding:8px 11px;border-radius:8px;background:#fbe6e4;color:#a8442f;font-size:.78rem;font-weight:700}

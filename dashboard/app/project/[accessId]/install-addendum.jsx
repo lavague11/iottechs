@@ -16,7 +16,7 @@ const blankItem = () => ({ id: newId(), name: "", type: "camera", qty: 1, price:
 
 const fmtStamp = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } };
 
-export default function InstallAddendum({ accessId, role, readOnly, customerName }) {
+export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount }) {
   const isCustomer = role === "customer";
   const isTech = role === "tech";
   const canBuild = !readOnly && ["admin", "manager", "sales"].includes(role);
@@ -40,6 +40,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
+
+  // Report how many add-ons exist so the caller can hide the whole step until one is submitted.
+  useEffect(() => { onCount?.(addendums.length); }, [addendums.length, onCount]);
 
   async function persist(next) {
     setAddendums(next);
@@ -125,8 +128,12 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                 </span>
               )}
               {a.status === "voided" && <span className="adn-void-note">Voided{a.voidedAt ? ` · ${fmtStamp(a.voidedAt)}` : ""}</span>}
-              {a.status === "voided" && canVoid && (
+              {a.status === "voided" && canVoid && confirm?.id !== a.id && (
                 <button type="button" className="adn-unvoid" disabled={busy} onClick={() => unvoidAddendum(a.id)}>Restore</button>
+              )}
+              {/* Once voided, admin/manager can permanently delete it (it's off billing already). */}
+              {a.status === "voided" && canVoid && confirm?.id !== a.id && (
+                <button type="button" className="adn-del" disabled={busy} onClick={() => setConfirm({ id: a.id, action: "delete" })}>Delete</button>
               )}
               {a.status === "pending" && isCustomer && (
                 <button type="button" className="adn-approve" disabled={readOnly} title={readOnly ? "The customer signs here" : undefined}

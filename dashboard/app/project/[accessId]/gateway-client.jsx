@@ -13,7 +13,7 @@ import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
-import TechPricingEditor from "./proposal-tech-pricing";
+import WorkOrderCard    from "./work-order-card";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
@@ -208,7 +208,7 @@ function NotificationBell({ view }) {
 }
 
 // ---- Inline project header ----
-function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = null, onPreviewRole }) {
+function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = null, onPreviewRole, viewingStageRef = null }) {
   const [open, setOpen] = useState(false);
   // The pill reflects the REAL login role, always. The eye-icon "preview" is a read-only overlay,
   // not a view change, so it must NOT relabel this pill (that was the old confusion — the pill said
@@ -233,7 +233,11 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
     // re-entry). This is deliberately different from the eye-icon "preview" menu, which is a
     // read-only, in-place peek you can't control. Two distinct things.
     const token = await getPreviewTokenAction(accessId, role);
-    window.open(`/project/${accessId}?preview=${role}&pt=${token}`, "_blank");
+    // Carry the step you're currently looking at into the new role's tab (so it lands on the
+    // SAME stage, not that role's default). The target seeds viewingStage from ?stage=.
+    const stage = viewingStageRef?.current;
+    const qs = `preview=${role}&pt=${token}${stage ? `&stage=${encodeURIComponent(stage)}` : ""}`;
+    window.open(`/project/${accessId}?${qs}`, "_blank");
   }
 
   const pillStyle = col ? { background: col.bg, color: col.fg, borderColor: col.bg } : {};
@@ -314,11 +318,14 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 //   collapsed) · "open" (neutral numbered, available, no glow/dim — for work steps with no clean
 //   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
 //   their own header) — just the numbered rail, no FlowStep header or collapse.
-function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, flowKey, children }) {
+function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, canComplete = true, cantHint, autoComplete, flowKey, children }) {
   const expandedByDefault = (s) => s === "active" || s === "open";   // current + available work expand; done/upcoming collapse
   const [localOpen, setLocalOpen] = useState(expandedByDefault(status));
   useEffect(() => { setLocalOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
   const [marked, setMarked] = useState(false);   // manual "mark as complete" — shades the header
+  // Auto-complete: some tools finish on a real-world signal (a package marked Delivered) rather than
+  // a click. Fires when the signal flips true; the user can still Reopen (the dep won't re-fire).
+  useEffect(() => { if (autoComplete) setMarked(true); }, [autoComplete]);
   const shaded = marked || status === "done";
   // Accordion: when this tool sits inside an <AccordionProvider>, exactly one tool is open at a time
   // and completing one opens the next. Falls back to local open state when there's no provider.
@@ -333,11 +340,13 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
     <div className="flow-complete-row">
       {marked ? (
         <button type="button" className="flow-reopen" onClick={() => setMarked(false)}>↺ Reopen</button>
-      ) : (
+      ) : canComplete ? (
         <button type="button" className="flow-complete-btn" onClick={() => { setMarked(true); closeSelf(); }}>
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           Mark as complete
         </button>
+      ) : (
+        <span className="flow-cant" title={cantHint || ""}>{cantHint || "Not ready to complete"}</span>
       )}
     </div>
   ) : null;
@@ -620,6 +629,10 @@ function WorkOrderPanel({ accessId, workOrders, view }) {
   }
 
   if (!canApprove && !canSubmit) return null;
+  // Render only when real (DoD #5): approvers (admin/manager) don't see an empty "No work
+  // orders" shell — the panel appears the moment a tech submits one. Techs still see it so
+  // they have the Submit affordance.
+  if (canApprove && items.length === 0) return null;
 
   return (
     <div className="wo-panel">
@@ -1424,9 +1437,12 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole }) {
   const [proposalData, setProposalData] = useState(proposal);
-  const [viewingStage, setViewingStage] = useState(projectStage);
+  // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
+  // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
+  const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
+  const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
   const [busy, setBusy]                 = useState(false);
   const [err,  setErr]                  = useState("");
   const [jumpToast, setJumpToast]       = useState(null);
@@ -1572,6 +1588,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [localProj,  setLocalProj]      = useState(project);
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
+  const [installEvents, setInstallEvents] = useState(null);  // scheduling widget event count (install phase) — gate "done" on a real booking
+  const [shipStatus, setShipStatus]     = useState({ count: 0, delivered: false }); // shipment tracker: hide until a #, auto-complete on delivered
+  const [addonCount, setAddonCount]     = useState(0);       // job-site add-ons count — hide the step until one is submitted
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
   const [mockupHasLocal, setMockupHasLocal] = useState(false); // mockup widget reports a photo landed → enable Submit instantly
   const [leadConfirmed, setLeadConfirmed]   = useState(!!project.info_confirmed_at); // customer confirmed their lead info (welcome modal / Survey step ①)
@@ -1685,10 +1704,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // fires only when custStage itself changes, so browsing around doesn't yank them back.
   useEffect(() => {
     if (!acceptLoaded || previewRole || cView !== "customer") return;
+    // Honor a carried-in step on first load (a role switch that landed here), then resume
+    // normal re-centering as the customer progresses.
+    if (stageParamRef.current) { stageParamRef.current = null; return; }
     setViewingStage(custStage);
     setGateMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [custStage, acceptLoaded]);
+
+  // Publish the currently-shown step so the header's role switcher can carry it into a new tab.
+  useEffect(() => { if (viewingStageRef) viewingStageRef.current = viewingStage; }, [viewingStage, viewingStageRef]);
 
   // First-time guided tour: auto-opens once (DB flag tour_seen_at) right after the customer confirms
   // their details, giving the page a beat to render the bar + tools before we spotlight them.
@@ -2542,6 +2567,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onBrowseStage={(s) => browse(s)}
         />
       )}
+      {/* Third card: Create Work Order — assign the technician(s), set their payout (the pricing
+          editor, moved here from Install), and create the work order once signed + deposit are in. */}
+      {vPhase === "ph_proposal" && ["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0 && (
+        <WorkOrderCard
+          accessId={lp.access_id}
+          proposal={proposalData}
+          onProposalChange={setProposalData}
+          assignments={localAssignments}
+          staffUsers={staffUsers}
+          onAssignmentsChange={setLocalAssignments}
+          onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+        />
+      )}
       </AccordionProvider>
       )}
 
@@ -2627,7 +2665,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <AccordionProvider key="install-staff">
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep status={lp.install_date || lp.date ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
+          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             sub="Book the install visit · Pick a time window" bare>
             <SchedulingWidget
@@ -2639,30 +2677,29 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               view={view}
               customerView={!!previewRole}
               defaultTitle="IOT TECHS — Installation"
+              onCount={setInstallEvents}
             />
           </FlowStep>
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Package tracking · equipment received" completable bare>
-            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} />
+            sub="Package tracking · equipment received" completable autoComplete={shipStatus.delivered}
+            canComplete={shipStatus.count > 0} cantHint="Add a tracking number first" bare>
+            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
           <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
-            <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} />
+            <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
           </FlowStep>
         </div>
         </AccordionProvider>
-      )}
-      {vPhase === "ph_install" && ["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0 && (
-        <TechPricingEditor accessId={lp.access_id} proposal={proposalData} onSaved={(p) => setProposalData(p)} />
       )}
       {vPhase === "ph_install" && cView === "customer" && (
         // Customer just watches the install progress — no editing, no pricing.
         <AccordionProvider key="install-cust">
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep status={lp.install_date || lp.date ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
+          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             sub="Your install visit" bare>
             <SchedulingWidget
@@ -2674,19 +2711,27 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               view={view}
               customerView={!!previewRole}
               defaultTitle="IOT TECHS — Installation"
+              onCount={setInstallEvents}
             />
           </FlowStep>
+          {/* Shipment Tracking — the customer only sees it once the office posts a tracking number. */}
+          {(toolMeta?.tracking?.count > 0) && (
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Package tracking · equipment received" completable bare>
-            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} />
+            sub="Package tracking · equipment received" completable
+            autoComplete={shipStatus.delivered || toolMeta?.tracking?.delivered} bare>
+            <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
+          )}
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
+          {/* Job-Site Add-ons — hidden until the office submits a change order for them to approve. */}
+          {(toolMeta?.addendum?.count > 0) && (
           <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
-            <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} />
+            <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
           </FlowStep>
+          )}
         </div>
         </AccordionProvider>
       )}
@@ -3217,6 +3262,9 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
 export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
+  // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
+  // into the new role's tab, landing them on the SAME step instead of that role's default.
+  const viewingStageRef                 = useRef(project.stage);
   // In-place preview role (admin/manager viewing as customer/tech) — lifted here so BOTH the
   // masthead pill and the subheader eye drive the same state and the page snaps in one tab.
   const [previewRole, setPreviewRole]   = useState(null);
@@ -3233,7 +3281,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
     <div className="pvx">
       <style>{PV_CSS}</style>
       <ProjectHeader accessId={project.access_id} view={view} onReAuth={() => setView(null)} onViewChange={setView}
-                     previewRole={previewRole} onPreviewRole={setPreviewRole} />
+                     previewRole={previewRole} onPreviewRole={setPreviewRole} viewingStageRef={viewingStageRef} />
       <div className="wrap">
         {view === "customer" && (
           <Link href="/my-projects" className="pv-back">
@@ -3249,6 +3297,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
           currentUser={currentUser}
           projectStage={projectStage}
           onProjectStage={setProjectStage}
+          viewingStageRef={viewingStageRef}
           previewRole={previewRole}
           onPreviewRole={setPreviewRole}
           assignments={assignments}
@@ -3826,6 +3875,7 @@ const PV_CSS = `
 .pvx .flow-complete-btn:hover{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
 .pvx .flow-reopen{height:34px;padding:0 14px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .flow-reopen:hover{border-color:var(--gold);color:var(--ink)}
+.pvx .flow-cant{display:inline-flex;align-items:center;height:34px;padding:0 12px;font-size:.78rem;font-weight:700;color:#9aa1af;font-style:italic}
 .pvx .pv-tool-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 18px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .pvx .pv-tool-head:hover{background:var(--bg-soft)}
 .pvx .pv-tool-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0;color:inherit}

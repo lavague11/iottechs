@@ -7,6 +7,17 @@ import { useAccordionItem } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Show a person, never a raw email. New rows stamp a real name (lib/db actorName); this prettifies
+// any lingering email on older rows to its local part, title-cased ("admin@iot-techs.com" → "Admin").
+const byName = (s) => {
+  s = String(s || "").trim();
+  if (!s) return "";
+  if (s.includes("@")) { const l = s.split("@")[0].replace(/[._-]+/g, " ").trim(); return l ? l.replace(/\b\w/g, (c) => c.toUpperCase()) : s; }
+  return s;
+};
+// Compact, human date for the payment log ("Jul 16, 2026").
+const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return String(d).slice(0, 10); } };
+
 // Status tool-head — matches the page's other tool cards (icon + title + Complete / pending chip)
 // instead of the old dark document sub-headers. Sits directly on top of an .apv-card so header +
 // body read as one contained tool, like Survey / Mockup / QC elsewhere on the page.
@@ -37,6 +48,16 @@ function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
 export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage, stage = "approval_deposit" }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
+  // The person who paid, by NAME. New entries stamp a real name; older/generic ones ("customer",
+  // "admin") get resolved — a customer payment shows the project's customer (a job can have two),
+  // a staff entry title-cases its role. Never surfaces a bare role word.
+  const GENERIC_PAYER = new Set(["customer", "client", "staff", "admin", "manager", "sales", "office", "you"]);
+  const payerName = (x) => {
+    const rb = String(x.recorded_by || "").trim();
+    if (rb && !GENERIC_PAYER.has(rb.toLowerCase())) return byName(rb);
+    if (x.source === "customer") return customerName || "Customer";
+    return rb ? rb.replace(/\b\w/g, (c) => c.toUpperCase()) : "Office";
+  };
   // Two portals share this component: the Deposit portal (approval stage) and the Final Payment
   // portal (payment stage). Final skips the signature/work-order pipeline — those are already done —
   // and focuses on the remaining balance.
@@ -60,10 +81,15 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const open = acc ? acc.open : localOpen;
   const toggleOpen = () => { if (acc) acc.toggle(); else setLocalOpen((v) => !v); };
 
+  // The deposit summary is the live source of truth: it re-pulls the proposal totals, approved
+  // add-ons, and payments on a light interval so a change up top (a revised total, a new job-site
+  // add-on) flows straight into Total With Add-ons / Deposit / Balance without a manual reload.
   useEffect(() => {
     let live = true;
-    getApprovalDataAction(accessId).then((r) => { if (live && r?.ok) setData(r); }).catch(() => {});
-    return () => { live = false; };
+    const load = () => getApprovalDataAction(accessId).then((r) => { if (live && r?.ok) setData(r); }).catch(() => {});
+    load();
+    const id = setInterval(load, 12000);
+    return () => { live = false; clearInterval(id); };
   }, [accessId]);
 
   // Prefill the payment amount with what's still owed (deposit due, or the remaining balance),
@@ -144,13 +170,16 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                   {gatePayments.map((x) => (
                     <div key={x.id} className={`apv-hrow${x.status === "pending" ? " pending" : ""}`}>
                       <div className="apv-hrow-main">
-                        <span className="apv-hrow-amt">{money(x.amount)}</span>
+                        <div className="apv-hrow-top">
+                          <span className="apv-hrow-amt">{money(x.amount)}</span>
+                          <span className="apv-hrow-who">{payerName(x)}</span>
+                        </div>
                         <span className="apv-hrow-meta">
-                          <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
-                          <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
-                          {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
-                          {x.recorded_by && <span className="apv-hrow-by">by {x.recorded_by}</span>}
+                          <span className="apv-hrow-kind">{x.kind}</span>
+                          {x.method && <span>· {x.method}</span>}
+                          {(x.paid_at || x.created_at) && <span>· {fmtDay(x.paid_at || x.created_at)}</span>}
                         </span>
+                        {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                       </div>
                       <div className="apv-hrow-acts">
                         {x.status === "pending" ? <span className="apv-pay-pending">Pending</span> : <span className="apv-hrow-ok">✓ Received</span>}
@@ -211,8 +240,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const depositOk = depositPaid > 0;
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
 
-  // If the server auto-advanced past approval (everything done), follow it.
-  const followStage = (s) => { if (s && s !== "approval_deposit") { showToast("All set — moving to the next step"); onStageChange?.(s); } };
+  // If the server auto-advanced past approval (everything done), follow it. A hoisted declaration
+  // (not const) so the pre-acceptance gate view's Record-Payment button — which also calls
+  // addPayment() before this line runs — can reach it without a temporal-dead-zone crash.
+  function followStage(s) { if (s && s !== "approval_deposit") { showToast("All set — moving to the next step"); onStageChange?.(s); } }
   async function sign({ name, data: sigData }) {
     setBusy(true); setErr(null);
     const r = await signProposalAction(accessId, name, sigData);
@@ -279,6 +310,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       <style>{APV_CSS}</style>
 
       <button type="button" className="apv-titlebar apv-foldbtn" onClick={toggleOpen} aria-expanded={open}>
+        <span className="apv-fold-ic">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        </span>
         <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
         <span className="apv-fold-chev">{open ? "▲" : "▼"}</span>
       </button>
@@ -373,16 +407,18 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             {payments.map((x) => (
               <div key={x.id} className={`apv-hrow${x.status === "pending" ? " pending" : ""}`}>
                 <div className="apv-hrow-main">
-                  <span className="apv-hrow-amt">{money(x.amount)}</span>
+                  <div className="apv-hrow-top">
+                    <span className="apv-hrow-amt">{money(x.amount)}</span>
+                    {/* Who paid — the actual person's name, not "Customer"/"Staff" (a project can have
+                        several people). Staff see every name; a customer sees only their own entry. */}
+                    {(isStaff || x.source === "customer") && <span className="apv-hrow-who">{payerName(x)}</span>}
+                  </div>
                   <span className="apv-hrow-meta">
-                    <span className={`apv-pay-src ${x.source}`}>{x.source === "customer" ? "Customer" : "Staff"}</span>
-                    <span className="apv-hrow-kind">{x.kind}{x.method ? ` · ${x.method}` : ""}</span>
-                    {x.note ? <span className="apv-hrow-note">{x.note}</span> : null}
-                    {(x.paid_at || x.created_at) && <span className="apv-hrow-when">Paid {String(x.paid_at || x.created_at).slice(0, 10)}</span>}
-                    {/* Who logged it — staff see every entry (audit); a customer only sees it on their
-                        own submission, never a staff member's name. */}
-                    {(isStaff || x.source === "customer") && x.recorded_by && <span className="apv-hrow-by">by {x.recorded_by}</span>}
+                    <span className="apv-hrow-kind">{x.kind}</span>
+                    {x.method && <span>· {x.method}</span>}
+                    {(x.paid_at || x.created_at) && <span>· {fmtDay(x.paid_at || x.created_at)}</span>}
                   </span>
+                  {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                 </div>
                 <div className="apv-hrow-acts">
                   {x.status === "pending"
@@ -446,12 +482,28 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             </label>
           </div>
           {(() => {
-            const quick = isFinal ? balance : (depositDue > 0 ? depositDue : balance);
-            const qLbl  = isFinal ? "Pay full balance" : (depositDue > 0 ? "Use deposit" : "Pay full balance");
-            return quick > 0 && !(+pay.amount) ? (
-              <button type="button" className="apv-chip-btn" onClick={() => setPay((v) => ({ ...v, amount: quick.toFixed(2), kind: isFinal ? "final" : (depositDue > 0 ? "deposit" : "final") }))}>
-                {qLbl} · {money(quick)}
-              </button>
+            // Quick-fill presets — one tap sets the amount (still fully editable). Deposit portal
+            // offers the deposit due, half, and the full balance; the final portal just the balance.
+            const presets = isFinal
+              ? [["Full balance", balance, "final"]]
+              : [
+                  [`Deposit (${depositPct}%)`, depositDue, "deposit"],
+                  ["Full balance", balance, "final"],
+                ];
+            const seen = new Set();
+            const shown = presets.filter(([, amt]) => amt > 0.005 && !seen.has(amt.toFixed(2)) && seen.add(amt.toFixed(2)));
+            return shown.length ? (
+              <div className="apv-chip-row">
+                {shown.map(([lbl, amt, kind]) => {
+                  const on = +pay.amount > 0 && Math.abs(+pay.amount - amt) < 0.005;
+                  return (
+                    <button key={lbl} type="button" className={`apv-chip-btn${on ? " on" : ""}`}
+                      onClick={() => setPay((v) => ({ ...v, amount: amt.toFixed(2), kind }))}>
+                      {lbl} · {money(amt)}
+                    </button>
+                  );
+                })}
+              </div>
             ) : null;
           })()}
           <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
@@ -461,31 +513,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         )}
         {isCustomer && <div className="apv-fine">Your submission shows as pending until our team confirms receipt — the balance updates once confirmed.</div>}
       </div>
-
-      {/* ④ Staff: create the work order once signed + deposit on file (deposit portal only) */}
-      {isStaff && !isFinal && (
-        <>
-          <ToolHead icon="clip" title="Work Order"
-            done={woCreated || !!p.tech_signed_name}
-            doneLabel={p.tech_signed_name ? "Accepted" : "Created"}
-            pendingLabel="Not yet created" />
-          <div className="apv-card apv-wo">
-            <div>
-              <b>Create the work order</b>
-              <p>
-                {woCreated || p.tech_signed_name
-                  ? (p.tech_signed_name ? `Work order accepted by ${p.tech_signed_name}.` : "Work order created — project is in scheduling.")
-                  : signed && depositOk
-                    ? "Signed and deposit on file — create the work order to move to scheduling."
-                    : [!signed && "customer signature", !depositOk && "a deposit"].filter(Boolean).join(" and ").replace(/^./, (c) => "Needs " + c) + " before the work order can go out."}
-              </p>
-            </div>
-            {!(woCreated || p.tech_signed_name) && (
-              <button className="apv-btn green" disabled={busy || !signed || !depositOk} onClick={createWO}>Create Work Order →</button>
-            )}
-          </div>
-        </>
-      )}
+      {/* Work-order creation moved to its own "Create Work Order" card (tech assignment + tech pricing
+          + create), so Approval & Deposit stays focused on the deposit. See work-order-card.jsx. */}
 
       </div>
       )}
@@ -514,13 +543,15 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
 }
 
 const APV_CSS = `
-.apv-root{background:#FAF8F4;border-radius:14px;border:1px solid #d9d4ca;border-top:4px solid #C9A96E;overflow:hidden;margin:18px 0;padding-bottom:16px;
-  box-shadow:0 10px 30px rgba(11,15,26,.08);font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
-.apv-titlebar{padding:15px 22px 0}
-.apv-foldbtn{display:flex;align-items:center;gap:12px;width:100%;padding:16px 22px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left}
-.apv-foldbtn:hover .apv-titlebar-h{color:#a3812f}
-.apv-titlebar-h{font-size:1.05rem;font-weight:800;color:#0B0F1A;letter-spacing:-.01em}
-.apv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.8rem;color:#9aa1af}
+.apv-root{background:#fff;border-radius:14px;border:1px solid var(--line,#e6e8ee);border-left:3px solid var(--gold,#C9A96E);overflow:hidden;margin:12px 0;padding-bottom:16px;
+  font-family:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif}
+.apv-titlebar{padding:0}
+.apv-foldbtn{display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+.apv-foldbtn:hover{background:var(--bg-soft,#f6f7f9)}
+.apv-fold-ic{width:30px;height:30px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--gold,#C9A96E);
+  background:color-mix(in srgb,var(--gold,#C9A96E) 14%,#fff);border:1px solid color-mix(in srgb,var(--gold,#C9A96E) 30%,transparent)}
+.apv-titlebar-h{font-family:'Bricolage Grotesque',sans-serif;font-size:.97rem;font-weight:700;color:var(--ink,#0e1320);letter-spacing:-.01em}
+.apv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.7rem;color:var(--muted,#5b6275)}
 /* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
 .apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid #d9d4ca;border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
 .apv-th-ic{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:#f0f2f7;color:#5b6275;display:grid;place-items:center}
@@ -570,9 +601,11 @@ select.apv-input{cursor:pointer}
 .apv-btn.green{background:#2f7d5a;color:#fff}
 .apv-btn:hover{filter:brightness(1.05)}
 .apv-btn:disabled{opacity:.5;cursor:default}
+.apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .apv-chip-btn{height:30px;padding:0 12px;border-radius:100px;border:1px dashed #C9A96E;background:#fff8ee;color:#8a6d2f;
   font-size:.72rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .apv-chip-btn:hover{background:#F3E9D3}
+.apv-chip-btn.on{border-style:solid;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A}
 
 .apv-pay-list{display:flex;flex-direction:column;gap:6px}
 .apv-pay-row{display:grid;grid-template-columns:auto auto 1fr auto auto auto;gap:10px;align-items:center;font-size:.8rem;padding:7px 0;border-bottom:1px solid #f0ece6}
@@ -616,14 +649,16 @@ select.apv-input{cursor:pointer}
 
 .apv-hist{display:flex;flex-direction:column;gap:0;border:1px solid #ece8e0;border-radius:10px;overflow:hidden}
 .apv-hist-hd{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8a8378;background:#f7f4ee;padding:8px 12px;border-bottom:1px solid #ece8e0}
-.apv-hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #f3efe8}
+.apv-hrow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:11px 13px;border-bottom:1px solid #f3efe8}
 .apv-hrow:last-child{border-bottom:none}
 .apv-hrow.pending{background:#fdf9ef}
 .apv-hrow-main{display:flex;flex-direction:column;gap:3px;min-width:0}
-.apv-hrow-amt{font-size:1rem;font-weight:800;color:#0B0F1A}
-.apv-hrow-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.74rem;color:#6f7686}
-.apv-hrow-kind{text-transform:capitalize}
-.apv-hrow-note{font-style:italic;color:#8a8378}
+.apv-hrow-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.apv-hrow-amt{font-size:1.02rem;font-weight:800;color:#0B0F1A;font-variant-numeric:tabular-nums}
+.apv-hrow-who{font-size:.82rem;font-weight:700;color:#4a5270}
+.apv-hrow-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.76rem;color:#6f7686}
+.apv-hrow-kind{text-transform:capitalize;font-weight:600;color:#4a5270}
+.apv-hrow-note{font-style:italic;color:#8a8378;font-size:.76rem;margin-top:1px}
 .apv-hrow-when{color:#a7a094}
 .apv-hrow-by{color:#8a8378;font-weight:600}
 .apv-hrow-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
