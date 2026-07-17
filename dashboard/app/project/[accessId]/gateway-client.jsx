@@ -2963,7 +2963,43 @@ function LoginForm({ busy, onSubmit }) {
   );
 }
 
-// ---- New dark PIN gateway screen ----
+// Light-card override for the PIN gate — matches the home-page login modal (white card, gold
+// accents, Bricolage heading, light-gray keypad) while keeping the animated dark starfield behind
+// it. Scoped to .gw2-light so the staff /login screen (its own inline gw2 styles) stays dark.
+const GW2_LIGHT_CSS = `
+.gw2-light .gw2-card{background:#fff;border:1px solid rgba(14,19,32,.06);border-radius:22px;
+  box-shadow:0 44px 90px -26px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.18);
+  backdrop-filter:none;-webkit-backdrop-filter:none;}
+.gw2-light .gw2-ring{border-radius:22px;}
+.gw2-light .gw2-brand h1{color:#0e1320;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-weight:800;letter-spacing:2px;}
+.gw2-light .gw2-subtag{color:#b08f4f;}
+.gw2-light .gw2-mark{background:linear-gradient(145deg,#2C3347,#0e1320);border:1px solid rgba(201,169,110,.28);
+  box-shadow:0 8px 20px rgba(14,19,32,.18);}
+.gw2-light .gw2-prompt{color:#6b7280;}
+.gw2-light .gw2-prompt.ok{color:#1c8a45;}
+.gw2-light .gw2-prompt.err{color:#c0392b;}
+.gw2-light .gw2-dot{border-color:rgba(176,143,79,.45);}
+.gw2-light .gw2-dot.fill{background:#C9A96E;border-color:#C9A96E;box-shadow:0 0 12px rgba(201,169,110,.5);}
+.gw2-light .gw2-dot.fill.ok{background:#1c8a45;border-color:#1c8a45;box-shadow:0 0 14px rgba(28,138,69,.5);}
+.gw2-light .gw2-dot.fill.err{background:#c0392b;border-color:#c0392b;box-shadow:0 0 12px rgba(192,57,43,.5);}
+.gw2-light .gw2-key{background:#f4f5f7;border:1px solid #e6e8ee;color:#0e1320;
+  box-shadow:0 1px 2px rgba(14,19,32,.05);}
+.gw2-light .gw2-key:hover:not(:disabled){border-color:rgba(201,169,110,.55);background:#faf4e8;}
+.gw2-light .gw2-del{color:#b08f4f;}
+.gw2-light .gw2-loc{color:#b08f4f;}
+.gw2-light .gw2-loc:hover{border-color:rgba(201,169,110,.55) !important;background:#faf4e8 !important;box-shadow:none !important;}
+.gw2-light .gw2-banner{background:rgba(224,90,90,.08);border:1px solid rgba(224,90,90,.32);color:#c0392b;}
+.gw2-light .gw2-lbtn{background:#f4f5f7;border:1px solid #e6e8ee;color:#2C3347;}
+.gw2-light .gw2-lbtn:hover{border-color:rgba(201,169,110,.55);background:#faf4e8;}
+.gw2-light .gw2-help-btn{color:#b08f4f;}
+.gw2-light .gw2-lf-input{background:#f4f5f7;border:1px solid #e6e8ee;color:#0e1320;}
+.gw2-light .gw2-lf-input::placeholder{color:#9aa0ab;}
+.gw2-light .gw2-lf-input:focus{border-color:#C9A96E;}
+.gw2-light .gw2-lf-btn{background:#C9A96E;color:#0e1320;}
+.gw2-light .gw2-lf-btn:hover:not(:disabled){background:#b08f4f;color:#fff;}
+`;
+
+// ---- PIN gateway screen (light card on the animated starfield) ----
 function GatewayScreen({ onAuthenticated, attemptAccess }) {
   const [pin, setPin]             = useState("");
   const [dotState, setDotState]   = useState(""); // "" | "ok" | "err"
@@ -3151,7 +3187,8 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
   const displayPin = needsClear ? "" : pin;
 
   return (
-    <div className="gw2-root">
+    <div className="gw2-root gw2-light">
+      <style>{GW2_LIGHT_CSS}</style>
       <div className="gw2-aura" />
       <div className="gw2-grid" />
       <canvas ref={canvasRef} className="gw2-net" />
