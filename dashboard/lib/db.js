@@ -2113,6 +2113,15 @@ export function purgeAllArchives() {
   return { ok: true, count: n };
 }
 
+// Archive ONE project by its access_id (soft/recoverable → /archives). The per-project counterpart
+// to archiveCustomer — lets an admin remove a single job without touching the customer's others.
+export function archiveProject(accessId, actor) {
+  const row = db.prepare("SELECT id, customer, access_id FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId || "").trim());
+  if (!row) return { ok: false, error: "Project not found." };
+  const res = archiveAndDelete("project", row.id, actor);
+  return res.ok ? { ok: true, customer: row.customer, access_id: row.access_id } : res;
+}
+
 // A "customer" is every project sharing a customer name — archive them all (soft/recoverable).
 export function archiveCustomer(customerName, actor) {
   const rows = db.prepare("SELECT id FROM projects WHERE customer = ?").all(String(customerName));

@@ -6,6 +6,7 @@ import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, mast
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { startPinCanvas } from "./gateway-pin-canvas";
+import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
@@ -1608,6 +1609,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeSaving,    setCloseSaving]    = useState(false);
   const [closeErr,       setCloseErr]       = useState("");
+  const [showArchive,    setShowArchive]    = useState(false);   // per-project archive confirm
+  const [archiving,      setArchiving]      = useState(false);
   const [attention,      setAttention]      = useState(!!project.needs_attention);
   const [attentionNote,  setAttentionNote]  = useState(project.attention_note || "");
   const [showNoteBox,    setShowNoteBox]    = useState(false);
@@ -2118,6 +2121,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               onClick={() => setShowCloseModal(true)}
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </button>
+          )}
+          {["admin","manager"].includes(cView) && (
+            <button
+              className="sh-icon-btn sh-close-btn"
+              title="Archive project"
+              aria-label="Archive project"
+              onClick={() => setShowArchive(true)}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
             </button>
           )}
         </div>
@@ -2822,6 +2835,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showArchive}
+        title="Archive this project?"
+        message={<>“{lp.customer || "This project"}” — {lp.access_id} will be moved to <strong>Archives</strong>. You can restore it anytime; the customer’s other projects are untouched.</>}
+        confirmLabel="Archive"
+        busy={archiving}
+        onConfirm={async () => {
+          setArchiving(true);
+          const r = await archiveProjectAction(lp.access_id);
+          if (r?.ok) { window.location.href = "/projects"; }
+          else { setArchiving(false); setShowArchive(false); }
+        }}
+        onCancel={() => setShowArchive(false)}
+      />
 
       {expOpen && (view === "admin" || view === "manager" || view === "tech") && (
         <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) setExpOpen(false); }}>

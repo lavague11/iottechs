@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
+import ConfirmDialog from "../components/confirm-dialog";
+import { archiveProjectAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 const CLOSED = new Set(["payment", "completion"]);
@@ -51,8 +53,18 @@ function matches(p, filter) {
 export default function ProjectsClient({ user, alerts, projects, initialFilter = "all" }) {
   const [filter, setFilter] = useState(TABS.some((t) => t[0] === initialFilter) ? initialFilter : "all");
   const [query, setQuery]   = useState("");
+  const [archiveTarget, setArchiveTarget] = useState(null);   // project pending archive-confirm
+  const [pending, startTx]  = useTransition();
   const router = useRouter();
   const q = query.trim().toLowerCase();
+  const canArchive = ["admin", "manager"].includes(user?.role);
+
+  function confirmArchive() {
+    const id = archiveTarget?.access_id;
+    setArchiveTarget(null);
+    if (!id) return;
+    startTx(async () => { await archiveProjectAction(id); router.refresh(); });
+  }
 
   const visible = projects
     .filter((p) => matches(p, filter))
@@ -102,12 +114,38 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                     </span>
                   )}
                 </div>
+                {canArchive && (
+                  <button
+                    className="prj-arch"
+                    title="Archive project"
+                    disabled={pending}
+                    onClick={(e) => { e.stopPropagation(); setArchiveTarget(p); }}
+                  >
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+                  </button>
+                )}
                 <span className="c-arr">→</span>
               </div>
             );
           })}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!archiveTarget}
+        title="Archive this project?"
+        message={<>“{archiveTarget?.customer}” — {archiveTarget?.access_id} will be moved to <strong>Archives</strong>. You can restore it anytime; the customer’s other projects are untouched.</>}
+        confirmLabel="Archive"
+        busy={pending}
+        onConfirm={confirmArchive}
+        onCancel={() => setArchiveTarget(null)}
+      />
+
+      <style>{`
+        .apx .prj-arch{flex-shrink:0;width:30px;height:30px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+        .apx .prj-arch:hover{background:rgba(231,76,60,.08);border-color:rgba(231,76,60,.35);color:#c0392b}
+        .apx .prj-arch:disabled{opacity:.4;cursor:default}
+      `}</style>
     </AdminShell>
   );
 }
