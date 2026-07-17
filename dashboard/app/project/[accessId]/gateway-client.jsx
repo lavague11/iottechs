@@ -2581,6 +2581,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           staffUsers={staffUsers}
           onAssignmentsChange={setLocalAssignments}
           onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+          internalJob={!!lp.internal_job}
         />
       )}
       </AccordionProvider>

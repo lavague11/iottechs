@@ -1,16 +1,17 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getApprovalDataAction, createWorkOrderAction } from "./proposal-actions";
-import { addAssignmentAction, removeAssignmentAction } from "./actions";
+import { addAssignmentAction, removeAssignmentAction, setInternalJobAction } from "./actions";
 import TechPricingEditor from "./proposal-tech-pricing";
 
 // Third card of the proposal-phase flow (admin/manager): everything to stand up the work order once
 // the proposal is signed + the deposit is in. Groups, in order: assign the technician(s) → set their
 // per-line payout (the pricing editor, moved here from Install) → create the work order. Self-contained
 // (fetches its own approval data for the signed/deposit gate) so it drops in as its own collapsible.
-export default function WorkOrderCard({ accessId, proposal, onProposalChange, assignments = [], staffUsers = [], onAssignmentsChange, onStageChange }) {
+export default function WorkOrderCard({ accessId, proposal, onProposalChange, assignments = [], staffUsers = [], onAssignmentsChange, onStageChange, internalJob = false }) {
   const [open, setOpen] = useState(false);   // collapsed by default — part of the compact flow
   const [data, setData] = useState(null);
+  const [intern, setIntern] = useState(!!internalJob);   // internal / legacy job — skips the sign+deposit gate
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [pick, setPick] = useState("");
@@ -58,12 +59,22 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
     onStageChange?.(r.stage);
   }
 
+  // Internal / legacy jobs (no customer sale) skip the customer sign + deposit requirement.
+  const gateOk = intern || (signed && depositOk);
+  async function toggleInternal(on) {
+    setIntern(on);   // optimistic
+    const r = await setInternalJobAction(accessId, on);
+    if (r?.error) { setIntern(!on); setErr(r.error); }
+  }
+
   const statusTxt = created ? (techSigned ? "Accepted" : "Created") : "Not created";
   const gateNote = created
     ? (techSigned ? `Work order accepted by ${p.tech_signed_name}.` : "Work order created — project is in scheduling.")
-    : signed && depositOk
-      ? "Signed and deposit on file — assign a technician, set their payout, then create the work order."
-      : [!signed && "customer signature", !depositOk && "a deposit"].filter(Boolean).join(" and ").replace(/^./, (c) => "Needs " + c) + " before the work order can go out.";
+    : intern
+      ? "Internal job — no customer sign-off needed. Assign a technician, set their payout, then create the work order."
+      : signed && depositOk
+        ? "Signed and deposit on file — assign a technician, set their payout, then create the work order."
+        : [!signed && "customer signature", !depositOk && "a deposit"].filter(Boolean).join(" and ").replace(/^./, (c) => "Needs " + c) + " before the work order can go out — or mark it an internal job below.";
 
   return (
     <div className="woc-card">
@@ -117,10 +128,18 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
 
           {/* ③ Create it */}
           <div className="woc-sec">
+            {!created && (
+              <label className="woc-intern">
+                <input type="checkbox" checked={intern} disabled={busy} onChange={(e) => toggleInternal(e.target.checked)} />
+                <span>
+                  <b>Internal job</b> — no customer sale. Skip the signature + deposit gate.
+                </span>
+              </label>
+            )}
             <div className="woc-create">
               <p className="woc-gate">{gateNote}</p>
               {!created && (
-                <button className="woc-create-btn" disabled={busy || !signed || !depositOk} onClick={createWO}>Create Work Order →</button>
+                <button className="woc-create-btn" disabled={busy || !gateOk} onClick={createWO}>Create Work Order →</button>
               )}
             </div>
           </div>
@@ -163,4 +182,7 @@ const WOC_CSS = `
 .woc-create-btn{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--green,var(--green));color:#fff;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .woc-create-btn:hover{filter:brightness(1.05)}
 .woc-create-btn:disabled{opacity:.45;cursor:default}
+.woc-intern{display:flex;align-items:flex-start;gap:9px;margin-bottom:10px;padding:10px 12px;border:1px dashed var(--line,var(--line));border-radius:10px;cursor:pointer;font-size:.8rem;color:var(--muted,var(--muted))}
+.woc-intern input{margin-top:2px;width:15px;height:15px;accent-color:var(--gold-deep,var(--gold-deep));cursor:pointer;flex-shrink:0}
+.woc-intern b{color:var(--ink,var(--ink));font-weight:800}
 `;

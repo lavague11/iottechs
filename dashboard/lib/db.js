@@ -175,6 +175,9 @@ function init() {
   // flags it "missing details" for the office to complete later; clears once a phone is on file.
   if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
   if (!cols.includes("created_by_name")) db.exec("ALTER TABLE projects ADD COLUMN created_by_name TEXT");
+  // Internal / legacy job (no customer sale): the work order skips the customer sign+deposit gate.
+  // Set automatically for field-created jobs; also toggleable on any project by admin/manager.
+  if (!cols.includes("internal_job"))    db.exec("ALTER TABLE projects ADD COLUMN internal_job INTEGER DEFAULT 0");
   if (!cols.includes("contact_name"))    db.exec("ALTER TABLE projects ADD COLUMN contact_name TEXT");
   if (!cols.includes("contact_email"))   db.exec("ALTER TABLE projects ADD COLUMN contact_email TEXT");
   if (!cols.includes("contact_phone"))   db.exec("ALTER TABLE projects ADD COLUMN contact_phone TEXT");
@@ -1459,9 +1462,17 @@ export function createFieldProject({ name, address, createdByName }) {
   const cleanAddr = String(address || "").trim();
   if (!cleanName) return { error: "Customer name is required." };
   const res = createLeadProject(cleanName, null, null, cleanAddr, null, null);
-  db.prepare("UPDATE projects SET needs_details=1, source='field', created_by_name=? WHERE access_id=? COLLATE NOCASE")
+  // Field jobs are internal by default (no customer sale) so the work order can skip the sign+deposit gate.
+  db.prepare("UPDATE projects SET needs_details=1, internal_job=1, source='field', created_by_name=? WHERE access_id=? COLLATE NOCASE")
     .run(createdByName || null, res.accessId);
   return { ok: true, accessId: res.accessId };
+}
+
+// Admin/manager toggle: mark a project internal (no customer sale) so its work order can be created
+// without a customer signature + deposit. Works on any project, not just field-created ones.
+export function setInternalJob(accessId, on) {
+  db.prepare("UPDATE projects SET internal_job=? WHERE access_id=? COLLATE NOCASE").run(on ? 1 : 0, String(accessId));
+  return getJobByAccessId(accessId);
 }
 
 export function setCommission(accessId, { rate, status, salesRep }) {

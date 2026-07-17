@@ -121,6 +121,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     tour_seen_at:      p.tour_seen_at       || null,   // has the customer seen the first-time guided tour? (so it shows once)
     announced_seen:    p.announced_seen     || null,   // JSON array of "X has been published" pop-ups already shown
     needs_details:     p.needs_details      ? 1 : 0,   // field-logged by a tech — office still owes the contact details
+    internal_job:      p.internal_job       ? 1 : 0,   // internal/legacy job (no customer sale) — WO skips sign+deposit
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);

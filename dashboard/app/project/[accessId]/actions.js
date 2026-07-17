@@ -156,6 +156,19 @@ export async function lockProjectAction(accessId) {
   return { ok: true };
 }
 
+// Admin/manager: flag a project internal (legacy / no customer sale) so the work order can be
+// created without a customer signature + deposit. Reuses the same proposal + line items.
+export async function setInternalJobAction(accessId, on) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can change this." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const { setInternalJob } = await import("../../../lib/db");
+  const proj = setInternalJob(accessId, !!on);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, internal: !!proj?.internal_job };
+}
+
 // Admin/manager override the customer PIN. A 4-digit value is set as a CUSTOM pin (survives the
 // last-4-phone normalizer); an empty value resets the project back to following the phone.
 export async function setCustomerPinAction(accessId, pin) {
