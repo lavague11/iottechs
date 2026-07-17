@@ -559,30 +559,22 @@
     <button class="lm-close" id="loginModalClose" aria-label="Close">&#x2715;</button>
     <div class="lm-head">
       <h3 class="display">Access your account.</h3>
-      <p>Enter your project PIN or sign in to your dashboard.</p>
+      <p>Find your project or sign in to your dashboard.</p>
     </div>
     <div class="pl-tabs">
       <button class="pl-tab active" id="tabSignInBtn">Sign In</button>
-      <button class="pl-tab" id="tabPinBtn">Project PIN</button>
+      <button class="pl-tab" id="tabPinBtn">Project ID</button>
     </div>
     <div class="pl-panel" id="tabPin">
       <form id="pinForm">
         <div class="field">
           <label for="pinAccessId">Project ID</label>
-          <input id="pinAccessId" type="text" placeholder="e.g. ASC00SK" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+          <input id="pinAccessId" type="text" placeholder="Last 4 or full ID — e.g. 00SK" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
         </div>
-        <div class="field">
-          <label for="pinCode">PIN</label>
-          <div class="pw-wrap">
-            <input id="pinCode" type="password" placeholder="Enter PIN" autocomplete="off" inputmode="numeric">
-            <button type="button" class="pw-toggle" onclick="togglePw('pinCode',this)" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-        </div>
-        <label class="pl-remember"><input type="checkbox" id="pinRemember"> Remember this device for 7 days</label>
         <div id="pinError" class="pl-error" style="display:none;"></div>
-        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Access Project →</button>
+        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Find Project →</button>
       </form>
-      <p class="pl-sub">Customer PIN printed on your service agreement.</p>
+      <p class="pl-sub">Enter your Project ID — you&rsquo;ll enter your PIN on the next screen.</p>
     </div>
     <div class="pl-panel active" id="tabSignIn">
       <form id="signinForm">
@@ -863,35 +855,24 @@
     });
   }
 
-  // project PIN form
+  // project ID search — resolve the ID (full or last-4), then hand off to the project's
+  // animated PIN gate. No PIN is entered here; the portal collects it.
   document.getElementById('pinForm').addEventListener('submit',async function(e){
     e.preventDefault();
     const errEl=document.getElementById('pinError');
     errEl.style.display='none';
     const accessId=document.getElementById('pinAccessId').value.trim().toUpperCase();
-    const pin=document.getElementById('pinCode').value.trim();
-    if(!accessId||!pin){errEl.textContent='Enter a Project ID and PIN.';errEl.style.display='block';return;}
+    if(!accessId){errEl.textContent='Enter a Project ID.';errEl.style.display='block';return;}
+    const btn=this.querySelector('button[type=submit]');const old=btn.textContent;btn.disabled=true;btn.textContent='Finding…';
     try{
-      const res=await fetch('/api/pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId,pin})});
+      const res=await fetch('/api/pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId})});
       const json=await res.json();
-      // pin-check accepts the full ID or the last-4 short code and hands back the canonical ID.
-      const realId=(json.accessId||accessId);
       if(!json.ok){
-        if(json.error==='no_project') errEl.textContent='No project found with that ID.';
-        else if(json.error==='no_pin') errEl.textContent='This project has no PIN yet — contact our office to set one up.';
-        else if(json.error==='wrong_pin'){
-          errEl.textContent='Incorrect PIN.';
-          document.getElementById('pinCode').value='';
-          document.getElementById('pinCode').focus();
-        } else errEl.textContent=json.error||'Something went wrong.';
-        errEl.style.display='block';
-        return;
+        errEl.textContent = json.error==='no_project' ? 'No project found with that ID.' : (json.error||'Something went wrong.');
+        errEl.style.display='block';btn.disabled=false;btn.textContent=old;return;
       }
-    }catch(err){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';return;}
-    if(document.getElementById('pinRemember').checked){
-      try{ localStorage.setItem('iot_pin_remember',JSON.stringify({accessId:realId,pin,exp:Date.now()+7*24*3600*1000})); }catch(e){}
-    }
-    window.location.href='/project/'+encodeURIComponent(realId)+'?pin='+encodeURIComponent(pin);
+      window.location.href='/project/'+encodeURIComponent(json.accessId||accessId);
+    }catch(err){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=old;}
   });
 
   // sign-in form

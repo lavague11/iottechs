@@ -3,13 +3,18 @@ import { resolveProjectRef } from "../../../lib/db";
 export async function POST(request) {
   try {
     const { accessId, pin } = await request.json();
-    if (!accessId || !pin)
-      return Response.json({ ok: false, error: "Enter a Project ID and PIN." }, { status: 400 });
+    if (!accessId)
+      return Response.json({ ok: false, error: "Enter a Project ID." }, { status: 400 });
 
-    // Accept the FULL project ID (ASC0041) or just its last 4 digits (0041).
+    // Accept the FULL project ID (ASC00SY) or just its last 4 (00SY / 0041).
     const project = resolveProjectRef(accessId);
     if (!project)
       return Response.json({ ok: false, error: "no_project" }, { status: 404 });
+
+    // Resolve-only mode: no PIN supplied. The home-page ID search just needs the canonical ID
+    // so it can hand the visitor to the project's animated PIN gate, which collects the PIN.
+    if (!pin)
+      return Response.json({ ok: true, accessId: project.access_id });
 
     // A project with no stored PIN must never validate — "no PIN" used to pass any
     // entry straight through, which made unclaimed projects open to guessed IDs.
