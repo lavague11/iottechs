@@ -3,6 +3,7 @@ import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
+import AddressAutocomplete from "../components/address-autocomplete";
 import { createFieldProjectAction } from "./actions";
 
 const STAGE_PILL = {
@@ -116,8 +117,18 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
             <form className="nj-form" onSubmit={(e) => { e.preventDefault(); createJobSite(); }}>
               <div className="nj-hint">Log a job from the field — just the customer name and address. The office fills in the rest.</div>
               <div className="nj-grid">
-                <label>Customer name<input className="apx-input" value={njName} onChange={(e) => setNjName(e.target.value)} placeholder="e.g. Riverside Auto Body" autoFocus /></label>
-                <label>Address <span className="nj-opt">(optional)</span><input className="apx-input" value={njAddr} onChange={(e) => setNjAddr(e.target.value)} placeholder="Street, City, State" /></label>
+                <label className="nj-field">
+                  <span className="nj-lbl">Customer name</span>
+                  <AddressAutocomplete className="apx-input" types={["establishment"]} value={njName}
+                    onChange={setNjName}
+                    onPlace={(p) => { setNjName(p.name || p.address || ""); if (p.address) setNjAddr(p.address); }}
+                    placeholder="Search a business, or type a name" autoFocus />
+                </label>
+                <label className="nj-field">
+                  <span className="nj-lbl">Address <span className="nj-opt">optional</span></span>
+                  <AddressAutocomplete className="apx-input" value={njAddr} onChange={setNjAddr}
+                    placeholder="Start typing an address…" />
+                </label>
               </div>
               {njErr && <div className="nj-err">{njErr}</div>}
               <div className="nj-actions">
@@ -286,13 +297,15 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
 }
 
 const TK_CSS = `
-.apx .nj-form{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--bg-soft);display:flex;flex-direction:column;gap:10px}
-.apx .nj-hint{font-size:.8rem;color:var(--muted)}
-.apx .nj-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.apx .nj-grid label{display:flex;flex-direction:column;gap:5px;font-size:.75rem;font-weight:700;color:var(--muted)}
-.apx .nj-opt{font-weight:500;color:var(--muted);text-transform:none}
-.apx .nj-err{font-size:.8rem;color:#a8442f;font-weight:600}
-.apx .nj-actions{display:flex;gap:8px}
+.apx .nj-form{padding:16px 18px 18px;border-bottom:1px solid var(--line);background:var(--bg-soft);display:flex;flex-direction:column;gap:14px}
+.apx .nj-hint{font-size:.82rem;color:var(--muted);line-height:1.4}
+.apx .nj-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.apx .nj-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.apx .nj-lbl{font-size:.72rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px}
+.apx .nj-opt{font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted);opacity:.7;font-size:.68rem}
+.apx .nj-field .apx-input{width:100%;box-sizing:border-box;height:42px}
+.apx .nj-err{font-size:.8rem;color:#a8442f;font-weight:700}
+.apx .nj-actions{display:flex;gap:8px;margin-top:2px}
 @media(max-width:640px){.apx .nj-grid{grid-template-columns:1fr}}
 .apx .tk-wo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);transition:.12s}
 .apx .tk-wo:last-child{border-bottom:none}
