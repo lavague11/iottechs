@@ -987,18 +987,19 @@ export function getJobByAccessId(accessId) {
   return r ? decorate(r) : null;
 }
 
-// Resolve a project the way a person types it at the gate: either the FULL project ID (ASC0041)
-// or just the LAST 4 digits (0041). Full match wins; otherwise fall back to the numeric tail.
-// Suffix match only resolves when it's UNAMBIGUOUS — if two projects share the same last-4, the
-// short code is rejected and the full ID is required (never guess which project someone meant).
+// Resolve a project the way a person types it at the gate: either the FULL project ID (ASC00SY)
+// or just its LAST 4 characters (00SY / 0041). IDs are ASC + a 4-char alphanumeric tail, so the
+// short code is matched on characters, not digits. Full match wins; otherwise fall back to the
+// tail. Suffix match only resolves when it's UNAMBIGUOUS — if two projects share the same last-4,
+// the short code is rejected and the full ID is required (never guess which project was meant).
 export function resolveProjectRef(ref) {
   const raw = String(ref || "").trim();
   if (!raw) return null;
   const exact = getJobByAccessId(raw);
   if (exact) return exact;
-  const tail = raw.replace(/\D/g, "");            // digits only — "0041", "41", …
-  if (tail.length < 3 || tail.length > 6) return null;
-  const rows = db.prepare("SELECT * FROM projects WHERE access_id LIKE ? COLLATE NOCASE").all("%" + tail);
+  const code = raw.replace(/[^a-z0-9]/gi, "");    // keep letters+digits — "00SY", "0041"
+  if (code.length < 3 || code.length > 8) return null;
+  const rows = db.prepare("SELECT * FROM projects WHERE access_id LIKE ? COLLATE NOCASE").all("%" + code);
   return rows.length === 1 ? decorate(rows[0]) : null;   // exactly one → resolve; 0 or many → no
 }
 

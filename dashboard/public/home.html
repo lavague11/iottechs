@@ -874,6 +874,8 @@
     try{
       const res=await fetch('/api/pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId,pin})});
       const json=await res.json();
+      // pin-check accepts the full ID or the last-4 short code and hands back the canonical ID.
+      const realId=(json.accessId||accessId);
       if(!json.ok){
         if(json.error==='no_project') errEl.textContent='No project found with that ID.';
         else if(json.error==='no_pin') errEl.textContent='This project has no PIN yet — contact our office to set one up.';
@@ -887,9 +889,9 @@
       }
     }catch(err){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';return;}
     if(document.getElementById('pinRemember').checked){
-      try{ localStorage.setItem('iot_pin_remember',JSON.stringify({accessId,pin,exp:Date.now()+7*24*3600*1000})); }catch(e){}
+      try{ localStorage.setItem('iot_pin_remember',JSON.stringify({accessId:realId,pin,exp:Date.now()+7*24*3600*1000})); }catch(e){}
     }
-    window.location.href='/project/'+encodeURIComponent(accessId)+'?pin='+encodeURIComponent(pin);
+    window.location.href='/project/'+encodeURIComponent(realId)+'?pin='+encodeURIComponent(pin);
   });
 
   // sign-in form
