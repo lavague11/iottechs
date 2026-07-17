@@ -171,6 +171,10 @@ function init() {
   // pin_custom = 1 means an admin hand-set the PIN; the last-4-phone normalizer leaves those alone.
   if (!cols.includes("pin_custom"))      db.exec("ALTER TABLE projects ADD COLUMN pin_custom INTEGER DEFAULT 0");
   if (!cols.includes("tech_pin"))        db.exec("ALTER TABLE projects ADD COLUMN tech_pin TEXT");
+  // Field-created project (a tech logged a legacy/on-site job with just name + address). needs_details=1
+  // flags it "missing details" for the office to complete later; clears once a phone is on file.
+  if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
+  if (!cols.includes("created_by_name")) db.exec("ALTER TABLE projects ADD COLUMN created_by_name TEXT");
   if (!cols.includes("contact_name"))    db.exec("ALTER TABLE projects ADD COLUMN contact_name TEXT");
   if (!cols.includes("contact_email"))   db.exec("ALTER TABLE projects ADD COLUMN contact_email TEXT");
   if (!cols.includes("contact_phone"))   db.exec("ALTER TABLE projects ADD COLUMN contact_phone TEXT");
@@ -1448,6 +1452,18 @@ export function createLeadProject(name, email, phone, address, service, company)
   return { userId: user.id, accessId, customerPin: pin };
 }
 
+// Field capture (tech, on-site): create a project from JUST a name + address for a legacy/pre-software
+// job. Reuses createLeadProject, then flags it needs_details so the office knows to fill in the rest.
+export function createFieldProject({ name, address, createdByName }) {
+  const cleanName = String(name || "").trim();
+  const cleanAddr = String(address || "").trim();
+  if (!cleanName) return { error: "Customer name is required." };
+  const res = createLeadProject(cleanName, null, null, cleanAddr, null, null);
+  db.prepare("UPDATE projects SET needs_details=1, source='field', created_by_name=? WHERE access_id=? COLLATE NOCASE")
+    .run(createdByName || null, res.accessId);
+  return { ok: true, accessId: res.accessId };
+}
+
 export function setCommission(accessId, { rate, status, salesRep }) {
   const sets = [];
   const vals = [];
@@ -1591,6 +1607,8 @@ export function updateProjectContact(accessId, fields) {
     const pin = phonePin(fields.contact_phone);
     const row = db.prepare("SELECT pin_custom FROM projects WHERE access_id=?").get(accessId);
     if (pin && !row?.pin_custom) db.prepare("UPDATE projects SET customer_pin=? WHERE access_id=?").run(pin, accessId);
+    // Office filled in the phone → the field-created "missing details" flag clears itself.
+    if (pin) db.prepare("UPDATE projects SET needs_details=0 WHERE access_id=?").run(accessId);
   }
 }
 

@@ -1,7 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
+import { createFieldProjectAction } from "./actions";
 
 const STAGE_PILL = {
   install: ["s-install", "Install"], schedule: ["s-install", "Schedule"],
@@ -29,6 +31,22 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
   const [toolsChecked, setToolsChecked] = useState({});
   const [vehicleChecked, setVehicleChecked] = useState({});
   const [nowStr, setNowStr]       = useState("");
+  // Field capture: log a legacy/on-site job from just a name + address.
+  const router = useRouter();
+  const [njOpen, setNjOpen]   = useState(false);
+  const [njName, setNjName]   = useState("");
+  const [njAddr, setNjAddr]   = useState("");
+  const [njErr, setNjErr]     = useState(null);
+  const [njPending, startNj]  = useTransition();
+  function createJobSite() {
+    setNjErr(null);
+    if (!njName.trim()) { setNjErr("Customer name is required."); return; }
+    startNj(async () => {
+      const res = await createFieldProjectAction({ name: njName.trim(), address: njAddr.trim() });
+      if (res?.error) { setNjErr(res.error); return; }
+      router.push(`/project/${res.accessId}`);
+    });
+  }
 
   const first = (user.name || "Tech").split(/\s+/)[0].replace(/\(.*\)/, "").trim();
 
@@ -85,12 +103,29 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
         <div className="panel mb">
           <div className="panel-head">
             <h3>Work Orders</h3>
-            <div className="ph-right"><div className="tab-row">
-              {[["all",`All (${allJobs.length})`],["mine",`Mine (${myJobs.length})`],["open",`Available (${unassignedJobs.length})`]].map(([k,l]) => (
-                <button key={k} className={woFilter===k?"on":""} onClick={()=>setWoFilter(k)}>{l}</button>
-              ))}
-            </div></div>
+            <div className="ph-right" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div className="tab-row">
+                {[["all",`All (${allJobs.length})`],["mine",`Mine (${myJobs.length})`],["open",`Available (${unassignedJobs.length})`]].map(([k,l]) => (
+                  <button key={k} className={woFilter===k?"on":""} onClick={()=>setWoFilter(k)}>{l}</button>
+                ))}
+              </div>
+              <button className="btn btn-gold btn-sm" onClick={() => { setNjOpen(v => !v); setNjErr(null); }}>{njOpen ? "Cancel" : "+ New job site"}</button>
+            </div>
           </div>
+          {njOpen && (
+            <form className="nj-form" onSubmit={(e) => { e.preventDefault(); createJobSite(); }}>
+              <div className="nj-hint">Log a job from the field — just the customer name and address. The office fills in the rest.</div>
+              <div className="nj-grid">
+                <label>Customer name<input className="apx-input" value={njName} onChange={(e) => setNjName(e.target.value)} placeholder="e.g. Riverside Auto Body" autoFocus /></label>
+                <label>Address <span className="nj-opt">(optional)</span><input className="apx-input" value={njAddr} onChange={(e) => setNjAddr(e.target.value)} placeholder="Street, City, State" /></label>
+              </div>
+              {njErr && <div className="nj-err">{njErr}</div>}
+              <div className="nj-actions">
+                <button type="submit" className="btn btn-gold btn-sm" disabled={njPending || !njName.trim()}>{njPending ? "Creating…" : "Create job site"}</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNjOpen(false)}>Cancel</button>
+              </div>
+            </form>
+          )}
           {filtered.length === 0 && <div className="empty">No work orders in this view.</div>}
           {filtered.map((j) => {
             const isMine = j.tech && j.tech.split(/\s+/)[0].toLowerCase() === first.toLowerCase();
@@ -251,6 +286,14 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
 }
 
 const TK_CSS = `
+.apx .nj-form{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--bg-soft);display:flex;flex-direction:column;gap:10px}
+.apx .nj-hint{font-size:.8rem;color:var(--muted)}
+.apx .nj-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.apx .nj-grid label{display:flex;flex-direction:column;gap:5px;font-size:.75rem;font-weight:700;color:var(--muted)}
+.apx .nj-opt{font-weight:500;color:var(--muted);text-transform:none}
+.apx .nj-err{font-size:.8rem;color:#a8442f;font-weight:600}
+.apx .nj-actions{display:flex;gap:8px}
+@media(max-width:640px){.apx .nj-grid{grid-template-columns:1fr}}
 .apx .tk-wo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);transition:.12s}
 .apx .tk-wo:last-child{border-bottom:none}
 .apx .tk-wo:hover{background:var(--bg-soft)}

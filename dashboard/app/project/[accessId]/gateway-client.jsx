@@ -1894,6 +1894,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <span className="pct-title">{lp.company_name || lp.customer}<span className="pct-stage"> · {stageShortLabel(barMarker)}</span></span>
             </div>
             <div className="pct-right">
+              {!!lp.needs_details && ["admin", "manager", "sales", "tech"].includes(view) && (
+                <span className="pct-missing" title="Field-logged by a tech — add the customer's contact details">Missing details</span>
+              )}
               <span className="pct-active">Active</span>
               <span className="pct-arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg></span>
             </div>
@@ -3530,6 +3533,7 @@ const PV_CSS = `
 .pvx .pct-stage{font-size:.78rem;color:var(--muted);margin-left:4px;font-weight:400}
 .pvx .pct-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .pvx .pct-active{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:100px;background:var(--green-soft);color:var(--green)}
+.pvx .pct-missing{font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:100px;background:var(--amber-soft);color:var(--amber);cursor:help}
 .pvx .pv-toggle-row{display:flex;align-items:center}
 .pvx .pv-toggle-row .pv-card-toggle{flex:1}
 .pvx .pct-map-btn{display:flex;align-items:center;gap:5px;font-size:.7rem;font-weight:600;padding:6px 12px;border-radius:0;border:none;border-left:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;height:100%;flex-shrink:0}
