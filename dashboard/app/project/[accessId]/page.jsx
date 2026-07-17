@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { getJobByAccessId, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -78,7 +78,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   const sp = await searchParams;
   const previewRole  = sp?.preview || null;
   const previewToken = sp?.pt || null;
-  const p = getJobByAccessId(accessId);
+  const p = resolveProjectRef(accessId);   // full project ID (ASC0041) or just the last-4 (0041)
 
   if (!p) {
     return <LinkNotFound />;
