@@ -823,15 +823,15 @@ function init() {
 // Each step: `art` = which animated illustration to show, plus editable title/text. Ties into the
 // System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
 const MOBILE_SETUP_GUIDE = {
-  intro: "Watch your cameras from your phone with the Annke Vision app. Takes about 3 minutes.",
+  intro: "Set up the Annke Vision app in a few taps.",
   steps: [
-    { art: "download", title: "Download Annke Vision", text: "On your phone, open the App Store (iPhone) or Google Play (Android), search “Annke Vision,” and install it — the blue icon by ANNKE." },
-    { art: "account",  title: "Create your account", text: "Open Annke Vision and tap Register. Sign up with your email, enter the verification code they email you, then log in." },
-    { art: "qr",       title: "Scan your System QR", text: "Tap the + in the top-right corner and choose Scan QR Code. Point your phone at the QR on the System Card we gave you (or on the recorder). One scan adds your whole system." },
-    { art: "device",   title: "Enter the device code", text: "If Annke Vision asks for a device verification code, it's printed on your System Card (or a sticker on the recorder). Enter it and give it a few seconds to come online." },
-    { art: "name",     title: "Name your cameras", text: "Give each camera a clear name — Front Door, Back Lot, Register. It makes finding the right view instant." },
-    { art: "notify",   title: "Turn on alerts", text: "In the device settings, turn on Notifications / Alarm push so you get a ping on motion or a doorbell press. You can fine-tune which cameras alert you anytime." },
-    { art: "done",     title: "You're all set!", text: "Tap any camera for live video, swipe to scrub playback, and pinch to zoom. Need a hand? Open a support ticket from your portal anytime." },
+    { art: "download", title: "Download Annke Vision", text: "Search “Annke Vision” and install it." },
+    { art: "account",  title: "Create your account", text: "Tap Register. Sign up with your email." },
+    { art: "qr",       title: "Scan your QR code", text: "Tap +, then Scan QR. Point it at your card." },
+    { art: "device",   title: "Enter the device code", text: "If asked, type the code from your card." },
+    { art: "name",     title: "Name your cameras", text: "Give each one a name — Front Door, Back Lot." },
+    { art: "notify",   title: "Turn on alerts", text: "Enable notifications for motion alerts." },
+    { art: "done",     title: "You're all set", text: "Tap a camera to watch live." },
   ],
 };
 

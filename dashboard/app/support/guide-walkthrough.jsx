@@ -2,47 +2,56 @@
 
 import { useState, useEffect } from "react";
 
-// A fullscreen, animated step-by-step walkthrough. Driven by a `steps` array (each with an `art`
-// key selecting an animated scene + editable title/text). Built first for Mobile App Setup, but
-// generic — any guide-kind support article renders through this.
+// A fullscreen, step-by-step walkthrough. Flow: two quick intro questions (which phone? got your
+// QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
+// (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
+// renders through this; the intro questions are specific to the mobile-app setup by design.
 export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], onClose }) {
-  const [i, setI] = useState(0);
-  const [dir, setDir] = useState(1);       // slide direction for the entry animation
-  const [done, setDone] = useState(false);
+  const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'done'
+  const [qi, setQi]           = useState(0);       // which intro question (0 = phone, 1 = QR)
+  const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
+  const [i, setI]             = useState(0);        // step index
+  const [dir, setDir]         = useState(1);        // slide direction for entry animation
   const total = steps.length;
   const step = steps[i] || {};
   const last = i === total - 1;
+  const store = platform === "android" ? "Google Play" : "the App Store";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
+  function next() { if (last) setPhase("done"); else go(i + 1); }
+  function back() {
+    if (i === 0) { setPhase("ask"); setQi(1); }   // step 1 → back to the last intro question
+    else go(i - 1);
+  }
 
-  // Keyboard: ← → to move, Esc to close.
+  // Keyboard: ← → move through steps, Esc closes.
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose?.();
-      else if (e.key === "ArrowRight" && !last) go(i + 1);
-      else if (e.key === "ArrowLeft" && i > 0) go(i - 1);
+      else if (phase === "steps" && e.key === "ArrowRight") next();
+      else if (phase === "steps" && e.key === "ArrowLeft") back();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [i, last]);
+  }, [phase, i, last]);
 
-  function next() {
-    if (last) { setDone(true); return; }
-    go(i + 1);
-  }
+  function pickPlatform(p) { setPlatform(p); setQi(1); }
+  function answerQr() { setPhase("steps"); setI(0); setDir(1); }
 
   return (
     <div className="gw-scrim" onClick={(e) => { if (e.target.classList.contains("gw-scrim")) onClose?.(); }}>
       <style>{CSS}</style>
       <div className="gw-card">
         <button className="gw-x" onClick={onClose} aria-label="Close">✕</button>
+        <div className="gw-kicker gw-kicker-abs">{title}</div>
 
-        {done ? (
-          <Finish title={title} onClose={onClose} onRestart={() => { setDone(false); setI(0); }} />
+        {phase === "ask" ? (
+          <AskFlow qi={qi} platform={platform} onPlatform={pickPlatform} onQr={answerQr} onBack={() => setQi(0)} />
+        ) : phase === "done" ? (
+          <Finish title={title} onClose={onClose} onRestart={() => { setPhase("steps"); setI(0); }} />
         ) : (
           <>
             <div className="gw-head">
-              <div className="gw-kicker">{title}</div>
               <div className="gw-progresswrap"><div className="gw-progress" style={{ width: `${((i + 1) / total) * 100}%` }} /></div>
               <div className="gw-dots">
                 {steps.map((_, n) => (
@@ -54,24 +63,63 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             <div className="gw-body" key={i} style={{ "--dir": dir }}>
               <div className="gw-phone">
                 <div className="gw-phone-notch" />
-                <div className="gw-screen"><Scene art={step.art} /></div>
+                <div className="gw-screen"><Scene art={step.art} image={step.image} platform={platform} /></div>
               </div>
               <div className="gw-text">
                 <div className="gw-stepno">Step {i + 1} of {total}</div>
                 <h2 className="gw-title">{step.title}</h2>
                 <p className="gw-desc">{step.text}</p>
-                {i === 0 && intro && <div className="gw-intro">{intro}</div>}
               </div>
             </div>
 
             <div className="gw-foot">
-              <button className="gw-back" onClick={() => go(i - 1)} disabled={i === 0}>← Back</button>
+              <button className="gw-back" onClick={back}>← Back</button>
               <div className="gw-count">{i + 1} / {total}</div>
               <button className="gw-next" onClick={next}>{last ? "Finish ✓" : "Next →"}</button>
             </div>
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Two quick questions shown before any phone appears: which platform, and QR readiness.
+function AskFlow({ qi, platform, onPlatform, onQr, onBack }) {
+  return (
+    <div className="gw-ask" key={qi}>
+      <div className="gw-ask-step">Quick question {qi + 1} of 2</div>
+      {qi === 0 ? (
+        <>
+          <h2 className="gw-ask-q">Which phone do you have?</h2>
+          <div className="gw-choices">
+            <button className={`gw-choice${platform === "ios" ? " on" : ""}`} onClick={() => onPlatform("ios")}>
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
+              iPhone
+            </button>
+            <button className={`gw-choice${platform === "android" ? " on" : ""}`} onClick={() => onPlatform("android")}>
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" stroke="none"><path d="M6 9v7a1.5 1.5 0 0 0 1.5 1.5H8V20a1 1 0 0 0 2 0v-2.5h4V20a1 1 0 0 0 2 0v-2.5h.5A1.5 1.5 0 0 0 18 16V9H6ZM4.5 9A1.5 1.5 0 0 0 3 10.5v4a1.5 1.5 0 0 0 3 0v-4A1.5 1.5 0 0 0 4.5 9ZM19.5 9A1.5 1.5 0 0 0 18 10.5v4a1.5 1.5 0 0 0 3 0v-4A1.5 1.5 0 0 0 19.5 9ZM15.6 3.9l1-1.5a.3.3 0 0 0-.5-.3l-1 1.6a6 6 0 0 0-4.2 0l-1-1.6a.3.3 0 0 0-.5.3l1 1.5A5.3 5.3 0 0 0 6.3 8h11.4a5.3 5.3 0 0 0-2.1-4.1ZM9.5 6.2a.6.6 0 1 1 0-1.2.6.6 0 0 1 0 1.2Zm5 0a.6.6 0 1 1 0-1.2.6.6 0 0 1 0 1.2Z"/></svg>
+              Android
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h2 className="gw-ask-q">Do you have your QR code?</h2>
+          <p className="gw-ask-sub">It’s the System Card we gave you — a small card with a QR code (or a sticker on your recorder).</p>
+          <div className="gw-choices">
+            <button className="gw-choice" onClick={onQr}>
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
+              Yes, I have it
+            </button>
+            <button className="gw-choice" onClick={onQr}>
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              Not sure — show me
+            </button>
+          </div>
+          <button className="gw-ask-back" onClick={onBack}>← Back</button>
+        </>
+      )}
     </div>
   );
 }
@@ -92,8 +140,10 @@ function Finish({ title, onClose, onRestart }) {
   );
 }
 
-// ---- Animated scenes (rendered inside the phone screen), keyed by step.art ----
-function Scene({ art }) {
+// ---- Phone-screen content: a real screenshot (step.image) if given, else an animated scene ----
+function Scene({ art, image, platform }) {
+  // A supplied screenshot always wins — this is how real app screens drop in.
+  if (image) return <img className="sc-shot" src={image} alt="" draggable={false} />;
   switch (art) {
     case "download": return (
       <div className="sc sc-dl">
@@ -104,7 +154,7 @@ function Scene({ art }) {
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13" /><path d="M6 11l6 6 6-6" /></svg>
         </div>
         <div className="sc-bar"><span /></div>
-        <div className="sc-cap">Installing…</div>
+        <div className="sc-cap">{platform === "android" ? "Google Play" : "App Store"}</div>
       </div>
     );
     case "account": return (
@@ -175,8 +225,24 @@ const CSS = `
 @keyframes gwIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
 .gw-x{position:absolute;top:14px;right:14px;z-index:5;width:32px;height:32px;border:none;border-radius:9px;background:rgba(14,19,32,.05);color:#5b6472;font-size:1rem;cursor:pointer;line-height:1}
 .gw-x:hover{background:rgba(14,19,32,.1);color:#0e1320}
-.gw-head{padding:22px 26px 0}
+.gw-head{padding:40px 26px 0}
 .gw-kicker{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:#b08f4f}
+.gw-kicker-abs{position:absolute;top:22px;left:26px;z-index:4}
+/* intro questions (no phone yet) */
+.gw-ask{padding:60px 30px 40px;text-align:center;animation:gwSlide .35s both;--dir:1}
+.gw-ask-step{font-size:.74rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9aa0ab;margin-bottom:10px}
+.gw-ask-q{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem;color:#0e1320;margin:0 0 8px;line-height:1.15}
+.gw-ask-sub{font-size:.9rem;color:#5b6472;line-height:1.55;max-width:400px;margin:0 auto 22px}
+.gw-choices{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+.gw-choice{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:150px;height:130px;border:1.5px solid #e6e8ee;border-radius:16px;background:#fff;color:#0e1320;font-family:inherit;font-size:.95rem;font-weight:700;cursor:pointer;transition:all .15s}
+.gw-choice svg{color:#b08f4f;transition:transform .15s}
+.gw-choice:hover{border-color:#C9A96E;background:#faf4e8;transform:translateY(-2px);box-shadow:0 14px 30px -14px rgba(176,143,79,.5)}
+.gw-choice:hover svg{transform:scale(1.08)}
+.gw-choice.on{border-color:#C9A96E;background:#faf4e8}
+.gw-ask-back{margin-top:24px;background:none;border:none;color:#9aa0ab;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer}
+.gw-ask-back:hover{color:#0e1320}
+/* screenshot inside the phone */
+.sc-shot{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
 .gw-progresswrap{height:5px;border-radius:100px;background:#eef0f4;margin:12px 0 10px;overflow:hidden}
 .gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#C9A96E,#e8cb94);transition:width .4s cubic-bezier(.16,1,.3,1)}
 .gw-dots{display:flex;gap:7px}
