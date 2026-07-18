@@ -831,7 +831,7 @@ const MOBILE_SETUP_GUIDE = {
     { art: "account",  image: "/guides/annke/04.png", title: "Pick your country", text: "Choose USA." },
     { art: "account",  image: "/guides/annke/05.png", title: "Use your phone",    text: "Tap “Register by Mobile Phone Number.”", tap: { x: 50, y: 90 } },
     { art: "account",  image: "/guides/annke/06.png", title: "Enter your number", text: "Type your mobile number.",               tap: { x: 50, y: 28 } },
-    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "8+ characters, then Get Security Code.", tap: { x: 50, y: 40 } },
+    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "Use the password: Password1", tap: { x: 50, y: 40 }, why: "Why this password? So we can get into your system for the first two weeks to monitor it and make sure everything's working. Change it anytime after." },
     { art: "account",  image: "/guides/annke/08.png", title: "Enter the code",    text: "Check your texts. Tap Finish.",          tap: { x: 35, y: 32 } },
     { art: "device",   image: "/guides/annke/09.png", title: "Add a device",      text: "Tap Add Device.",                        tap: { x: 50, y: 61 } },
     { art: "qr",       image: "/guides/annke/10.png", title: "Choose Scan QR",    text: "Tap Scan QR Code.",                      tap: { x: 50, y: 78 } },

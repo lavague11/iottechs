@@ -62,18 +62,8 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             </div>
 
             <div className="gw-body" key={i} style={{ "--dir": dir }}>
-              <div className="gw-phone">
-                <div className="gw-phone-notch" />
-                <div className="gw-screen">
-                  <Scene art={step.art} image={step.image} platform={platform} />
-                  {step.tap && <span className="gw-tap" style={{ left: `${step.tap.x}%`, top: `${step.tap.y}%` }} aria-hidden="true" />}
-                </div>
-              </div>
-              <div className="gw-text">
-                <div className="gw-stepno">Step {i + 1} of {total}</div>
-                <h2 className="gw-title">{step.title}</h2>
-                <p className="gw-desc">{step.text}</p>
-              </div>
+              <PhoneFrame art={step.art} image={step.image} tap={step.tap} platform={platform} />
+              <StepText label={`Step ${i + 1} of ${total}`} step={step} />
             </div>
 
             <div className="gw-foot">
@@ -84,6 +74,37 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Reusable phone mockup: a screenshot (or animated scene) + an optional "tap here" highlight.
+function PhoneFrame({ art, image, tap, platform }) {
+  return (
+    <div className="gw-phone">
+      <div className="gw-phone-notch" />
+      <div className="gw-screen">
+        <Scene art={art} image={image} platform={platform} />
+        {tap && <span className="gw-tap" style={{ left: `${tap.x}%`, top: `${tap.y}%` }} aria-hidden="true" />}
+      </div>
+    </div>
+  );
+}
+
+// Step caption with an optional "?" that reveals the "why" behind a step.
+function StepText({ label, step }) {
+  const [why, setWhy] = useState(false);
+  return (
+    <div className="gw-text">
+      <div className="gw-stepno">{label}</div>
+      <h2 className="gw-title">
+        {step.title}
+        {step.why && (
+          <button className={`gw-why-btn${why ? " on" : ""}`} onClick={() => setWhy((w) => !w)} aria-label="Why?" title="Why?">?</button>
+        )}
+      </h2>
+      <p className="gw-desc">{step.text}</p>
+      {step.why && why && <div className="gw-why">{step.why}</div>}
     </div>
   );
 }
@@ -179,24 +200,54 @@ function QrZoom({ proj, onClose }) {
 }
 
 // End question: offer to add another person to the system.
+// Adding another person = the Annke "share" flow. They install the app, scan your QR, tap
+// Apply for Sharing; you approve the request on your phone and pick which cameras to share.
+const SHARE_STEPS = [
+  { image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
+  { image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50 } },
+  { image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66 } },
+  { image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58 } },
+  { art: "notify", title: "Check your phone", text: "A new Share request shows at the top. Tap it." },
+  { art: "name",   title: "Pick cameras",     text: "Choose which cameras to share. Done!" },
+];
+
 function AddMore({ onDone }) {
-  const [yes, setYes] = useState(false);
-  if (yes) return (
-    <div className="gw-ask gw-qrhelp">
-      <h2 className="gw-ask-q">Add someone else</h2>
-      <p className="gw-ask-sub">In Annke Vision, open the device, tap the share icon, and enter their email. They'll get access to view it too.</p>
-      <div className="gw-qr-actions">
-        <button className="gw-back" onClick={() => setYes(false)}>← Back</button>
-        <button className="gw-next" onClick={onDone}>Done</button>
-      </div>
-    </div>
-  );
+  const [mode, setMode] = useState("ask");   // 'ask' | 'share'
+  const [j, setJ] = useState(0);
+  const [dir, setDir] = useState(1);
+  const sstep = SHARE_STEPS[j] || {};
+  const slast = j === SHARE_STEPS.length - 1;
+  const sgo = (n) => { setDir(n > j ? 1 : -1); setJ(Math.max(0, Math.min(SHARE_STEPS.length - 1, n))); };
+
+  if (mode === "share") {
+    return (
+      <>
+        <div className="gw-head">
+          <div className="gw-progresswrap"><div className="gw-progress" style={{ width: `${((j + 1) / SHARE_STEPS.length) * 100}%` }} /></div>
+          <div className="gw-dots">
+            {SHARE_STEPS.map((_, n) => (
+              <button key={n} className={`gw-dot${n === j ? " on" : ""}${n < j ? " past" : ""}`} onClick={() => sgo(n)} aria-label={`Share step ${n + 1}`} />
+            ))}
+          </div>
+        </div>
+        <div className="gw-body" key={j} style={{ "--dir": dir }}>
+          <PhoneFrame art={sstep.art} image={sstep.image} tap={sstep.tap} />
+          <StepText label={`Sharing · ${j + 1} of ${SHARE_STEPS.length}`} step={sstep} />
+        </div>
+        <div className="gw-foot">
+          <button className="gw-back" onClick={() => (j === 0 ? setMode("ask") : sgo(j - 1))}>← Back</button>
+          <div className="gw-count">{j + 1} / {SHARE_STEPS.length}</div>
+          <button className="gw-next" onClick={() => (slast ? onDone() : sgo(j + 1))}>{slast ? "Done ✓" : "Next →"}</button>
+        </div>
+      </>
+    );
+  }
   return (
     <div className="gw-ask">
       <h2 className="gw-ask-q">Add anyone else to the system?</h2>
       <p className="gw-ask-sub">Give family or staff access to view the cameras.</p>
       <div className="gw-choices">
-        <button className="gw-choice" onClick={() => setYes(true)}>
+        <button className="gw-choice" onClick={() => { setJ(0); setDir(1); setMode("share"); }}>
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
           Yes
         </button>
@@ -363,7 +414,10 @@ const CSS = `
 .gw-body>*{animation:gwSlide .4s cubic-bezier(.16,1,.3,1) both}
 @keyframes gwSlide{from{opacity:0;transform:translateX(calc(var(--dir,1)*26px))}to{opacity:1;transform:none}}
 .gw-text .gw-stepno{font-size:.74rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9aa0ab;margin-bottom:6px}
-.gw-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.5rem;color:#0e1320;line-height:1.15;margin:0 0 10px}
+.gw-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.5rem;color:#0e1320;line-height:1.15;margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gw-why-btn{width:24px;height:24px;flex-shrink:0;border-radius:50%;border:1.5px solid #d8c39a;background:#faf4e8;color:#b08f4f;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:.85rem;line-height:1;cursor:pointer;transition:all .12s}
+.gw-why-btn:hover,.gw-why-btn.on{background:#C9A96E;color:#fff;border-color:#C9A96E}
+.gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.35);font-size:.85rem;line-height:1.55;color:#7a5f2a;animation:gwSlide .25s both;--dir:1}
 .gw-desc{font-size:.95rem;line-height:1.6;color:#2C3347;margin:0}
 .gw-intro{margin-top:12px;padding:10px 12px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.3);font-size:.82rem;color:#7a5f2a}
 .gw-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 26px 22px;margin-top:8px;border-top:1px solid #eef0f4}
