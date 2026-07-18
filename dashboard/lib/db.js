@@ -823,14 +823,14 @@ function init() {
 // Each step: `art` = which animated illustration to show, plus editable title/text. Ties into the
 // System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
 const MOBILE_SETUP_GUIDE = {
-  intro: "A quick, guided setup to watch your cameras from your phone. Takes about 3 minutes.",
+  intro: "Watch your cameras from your phone with the Annke Vision app. Takes about 3 minutes.",
   steps: [
-    { art: "download", title: "Download the app", text: "On your phone, open the App Store (iPhone) or Google Play (Android) and install the camera app we set you up with. Not sure which one? Check your welcome email or just ask us." },
-    { art: "account",  title: "Create your account", text: "Open the app and tap Sign Up. Use your email and a password you'll remember. Verify your email if it asks — that's it." },
-    { art: "qr",       title: "Scan your System QR", text: "Tap Add Device, then Scan QR. Point your phone at the QR code on the System Card we gave you (or on the recorder). One scan links your whole system." },
-    { art: "device",   title: "Connect your system", text: "The app finds your recorder and connects. If it asks for a device password, it's printed on your System Card. Give it a few seconds to come online." },
+    { art: "download", title: "Download Annke Vision", text: "On your phone, open the App Store (iPhone) or Google Play (Android), search “Annke Vision,” and install it — the blue icon by ANNKE." },
+    { art: "account",  title: "Create your account", text: "Open Annke Vision and tap Register. Sign up with your email, enter the verification code they email you, then log in." },
+    { art: "qr",       title: "Scan your System QR", text: "Tap the + in the top-right corner and choose Scan QR Code. Point your phone at the QR on the System Card we gave you (or on the recorder). One scan adds your whole system." },
+    { art: "device",   title: "Enter the device code", text: "If Annke Vision asks for a device verification code, it's printed on your System Card (or a sticker on the recorder). Enter it and give it a few seconds to come online." },
     { art: "name",     title: "Name your cameras", text: "Give each camera a clear name — Front Door, Back Lot, Register. It makes finding the right view instant." },
-    { art: "notify",   title: "Turn on alerts", text: "Enable notifications so you get a ping on motion or a doorbell press. You can fine-tune which cameras alert you later in Settings." },
+    { art: "notify",   title: "Turn on alerts", text: "In the device settings, turn on Notifications / Alarm push so you get a ping on motion or a doorbell press. You can fine-tune which cameras alert you anytime." },
     { art: "done",     title: "You're all set!", text: "Tap any camera for live video, swipe to scrub playback, and pinch to zoom. Need a hand? Open a support ticket from your portal anytime." },
   ],
 };
