@@ -807,9 +807,33 @@ function init() {
     const seedArticle = db.prepare("INSERT INTO support_articles (title, body, category, pinned, author) VALUES (?,?,?,?,?)");
     for (const a of SUPPORT_SEED) seedArticle.run(a.title, a.body, a.category, a.pinned ? 1 : 0, "IOT TECHS");
   }
+  // `kind` = 'article' (plain FAQ) or 'guide' (interactive animated walkthrough; body holds step JSON).
+  const supCols = db.prepare("PRAGMA table_info(support_articles)").all().map((c) => c.name);
+  if (!supCols.includes("kind")) db.exec("ALTER TABLE support_articles ADD COLUMN kind TEXT DEFAULT 'article'");
+  // Seed the built-in Mobile App Setup guide once (the animated device walkthrough).
+  if (db.prepare("SELECT COUNT(*) AS n FROM support_articles WHERE kind='guide'").get().n === 0) {
+    db.prepare("INSERT INTO support_articles (title, body, category, kind, pinned, author) VALUES (?,?,?,?,?,?)")
+      .run("Mobile App Setup", JSON.stringify(MOBILE_SETUP_GUIDE), "Getting Started", "guide", 1, "IOT TECHS");
+  }
 
   return db;
 }
+
+// The Mobile App Setup walkthrough — a sequence of animated steps rendered by GuideWalkthrough.
+// Each step: `art` = which animated illustration to show, plus editable title/text. Ties into the
+// System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
+const MOBILE_SETUP_GUIDE = {
+  intro: "A quick, guided setup to watch your cameras from your phone. Takes about 3 minutes.",
+  steps: [
+    { art: "download", title: "Download the app", text: "On your phone, open the App Store (iPhone) or Google Play (Android) and install the camera app we set you up with. Not sure which one? Check your welcome email or just ask us." },
+    { art: "account",  title: "Create your account", text: "Open the app and tap Sign Up. Use your email and a password you'll remember. Verify your email if it asks — that's it." },
+    { art: "qr",       title: "Scan your System QR", text: "Tap Add Device, then Scan QR. Point your phone at the QR code on the System Card we gave you (or on the recorder). One scan links your whole system." },
+    { art: "device",   title: "Connect your system", text: "The app finds your recorder and connects. If it asks for a device password, it's printed on your System Card. Give it a few seconds to come online." },
+    { art: "name",     title: "Name your cameras", text: "Give each camera a clear name — Front Door, Back Lot, Register. It makes finding the right view instant." },
+    { art: "notify",   title: "Turn on alerts", text: "Enable notifications so you get a ping on motion or a doorbell press. You can fine-tune which cameras alert you later in Settings." },
+    { art: "done",     title: "You're all set!", text: "Tap any camera for live video, swipe to scrub playback, and pinch to zoom. Need a hand? Open a support ticket from your portal anytime." },
+  ],
+};
 
 // Starter knowledge-base content — editable/archivable from the Support page. Kept generic (no
 // customer data) so it's a useful template the owner can rewrite.
@@ -872,8 +896,8 @@ export function getPrimaryAdmin() {
 // ---- Support library (FAQ / knowledge base) ----
 export function getSupportArticles() {
   return db.prepare(
-    "SELECT id, title, body, category, pinned, author, created_at, updated_at FROM support_articles ORDER BY pinned DESC, category ASC, updated_at DESC, id DESC"
-  ).all().map((r) => ({ ...r, pinned: !!r.pinned }));
+    "SELECT id, title, body, category, kind, pinned, author, created_at, updated_at FROM support_articles ORDER BY pinned DESC, category ASC, updated_at DESC, id DESC"
+  ).all().map((r) => ({ ...r, pinned: !!r.pinned, kind: r.kind || "article" }));
 }
 export function getSupportArticle(id) {
   const r = db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id));

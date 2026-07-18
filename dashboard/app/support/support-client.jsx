@@ -4,7 +4,15 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
+import GuideWalkthrough from "./guide-walkthrough";
 import { createSupportArticleAction, updateSupportArticleAction, archiveSupportArticleAction } from "./actions";
+
+// Parse a guide-kind article's body (JSON: {intro, steps[]}); returns null if it isn't a valid guide.
+function parseGuide(a) {
+  if (a?.kind !== "guide") return null;
+  try { const g = JSON.parse(a.body); return Array.isArray(g?.steps) && g.steps.length ? g : null; }
+  catch { return null; }
+}
 
 function PinIcon() {
   return <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M14 4v6l3 3v2h-5v5l-1 1-1-1v-5H4v-2l3-3V4H6V2h12v2z"/></svg>;
@@ -16,6 +24,7 @@ export default function SupportClient({ user, alerts, articles: initial }) {
   const [query, setQuery]   = useState("");
   const [cat, setCat]       = useState("all");
   const [openId, setOpenId] = useState(null);
+  const [guide, setGuide]   = useState(null);    // { title, steps } — active walkthrough
   const [editor, setEditor] = useState(null);   // null | {} (new) | article (edit)
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [pending, startTx]  = useTransition();
@@ -97,7 +106,28 @@ export default function SupportClient({ user, alerts, articles: initial }) {
           <div className="sup-group" key={category}>
             <div className="sup-cat">{category}</div>
             <div className="panel sup-panel">
-              {items.map((a) => (
+              {items.map((a) => parseGuide(a) ? (
+                <div className="sup-row sup-guide-row" key={a.id}>
+                  <div className="sup-guide">
+                    <span className="sup-guide-ic">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+                    </span>
+                    <div className="sup-guide-txt">
+                      <div className="sup-guide-title">{a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}</div>
+                      <div className="sup-guide-sub">Interactive guide · {parseGuide(a).steps.length} steps</div>
+                    </div>
+                    <button className="sup-guide-start" onClick={() => setGuide({ title: a.title, ...parseGuide(a) })}>
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+                      Start
+                    </button>
+                    {canEdit && (
+                      <button className="sup-guide-arch" title="Archive" onClick={() => setArchiveTarget(a)}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
                 <div className={`sup-row${openId === a.id ? " open" : ""}`} key={a.id}>
                   <button className="sup-q" onClick={() => setOpenId(openId === a.id ? null : a.id)}>
                     {a.pinned && <span className="sup-pin" title="Pinned"><PinIcon /></span>}
@@ -127,6 +157,10 @@ export default function SupportClient({ user, alerts, articles: initial }) {
           </div>
         ))}
       </div>
+
+      {guide && (
+        <GuideWalkthrough title={guide.title} intro={guide.intro} steps={guide.steps} onClose={() => setGuide(null)} />
+      )}
 
       {editor && (
         <ArticleEditor
@@ -193,7 +227,18 @@ const CSS = `
 .apx .sup-q{width:100%;display:flex;align-items:center;gap:10px;padding:14px 16px;background:#fff;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .apx .sup-q:hover{background:var(--bg-soft)}
 .apx .sup-row.open .sup-q{background:var(--bg-soft)}
-.apx .sup-pin{display:inline-flex;color:var(--gold-deep,#b08f4f);flex-shrink:0}
+.apx .sup-pin{display:inline-flex;color:var(--gold-deep,#b08f4f);flex-shrink:0;vertical-align:-2px;margin-right:5px}
+/* guide (interactive walkthrough) row */
+.apx .sup-guide-row{background:linear-gradient(100deg,#faf4e8,#fff)}
+.apx .sup-guide{display:flex;align-items:center;gap:12px;padding:13px 16px}
+.apx .sup-guide-ic{width:38px;height:38px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#C9A96E,#b08f4f);box-shadow:0 6px 14px -5px rgba(176,143,79,.6)}
+.apx .sup-guide-txt{flex:1;min-width:0}
+.apx .sup-guide-title{font-size:.94rem;font-weight:700;color:var(--ink);display:flex;align-items:center}
+.apx .sup-guide-sub{font-size:.76rem;color:var(--gold-deep,#b08f4f);font-weight:600;margin-top:1px}
+.apx .sup-guide-start{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px;border:none;border-radius:9px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-family:inherit;font-size:.84rem;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 8px 18px -8px rgba(176,143,79,.7);transition:transform .12s,filter .12s}
+.apx .sup-guide-start:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.apx .sup-guide-arch{width:34px;height:34px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);cursor:pointer;transition:all .12s}
+.apx .sup-guide-arch:hover{border-color:rgba(231,76,60,.4);color:#c0392b;background:rgba(231,76,60,.06)}
 .apx .sup-title{flex:1;font-size:.92rem;font-weight:600;color:var(--ink)}
 .apx .sup-chev{font-size:.66rem;color:var(--muted);flex-shrink:0}
 .apx .sup-a{padding:0 16px 16px;animation:supIn .16s ease}
