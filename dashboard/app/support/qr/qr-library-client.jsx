@@ -63,6 +63,10 @@ export default function QrLibraryClient({ user, alerts, codes = [] }) {
               <Link href={`/project/${zoom.access_id}`} className="qrl-link">{zoom.access_id}</Link>
               {zoom.address ? ` · ${zoom.address}` : ""}{zoom.phone ? ` · ${zoom.phone}` : ""}
             </div>
+            <a className="qrl-dl" href={zoom.system_qr} download={`IOT-TECHS-QR-${zoom.access_id}.png`}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Download QR
+            </a>
           </div>
         </div>
       )}
@@ -93,4 +97,6 @@ const CSS = `
 .apx .qrl-zoom-meta{font-size:.8rem;color:var(--muted);margin-top:4px}
 .apx .qrl-link{color:var(--gold-deep,#b08f4f);font-weight:600;text-decoration:none}
 .apx .qrl-link:hover{text-decoration:underline}
+.apx .qrl-dl{display:inline-flex;align-items:center;gap:7px;margin-top:16px;height:40px;padding:0 20px;border-radius:10px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:700;font-size:.86rem;text-decoration:none}
+.apx .qrl-dl:hover{filter:brightness(1.06)}
 `;

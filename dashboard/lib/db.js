@@ -825,17 +825,17 @@ function init() {
 const MOBILE_SETUP_GUIDE = {
   intro: "",
   steps: [
-    { art: "download", image: "/guides/annke/01-appstore.png",    title: "Get the app",     text: "Install Annke Vision." },
-    { art: "account",  image: "/guides/annke/02-login.png",       title: "Log in",          text: "Tap Register to sign up." },
-    { art: "device",   image: "/guides/annke/03-device-home.png", title: "Add a device",    text: "Tap Add Device." },
-    { art: "qr",       image: "/guides/annke/04-add-menu.png",    title: "Choose Scan QR",  text: "Tap Scan QR Code." },
-    { art: "qr",       image: "/guides/annke/05-scan.png",        title: "Scan your card",  text: "Point it at your QR." },
-    { art: "device",   image: "",                                 title: "Wait a moment",   text: "It connects for you." },
-    { art: "account",  image: "",                                 title: "Enter the code",  text: "Type the code if asked." },
-    { art: "name",     image: "",                                 title: "Name a camera",   text: "Type a name. Tap Save." },
-    { art: "notify",   image: "",                                 title: "Turn on alerts",  text: "Tap Allow." },
-    { art: "done",     image: "",                                 title: "Watch live",      text: "Tap a camera." },
-    { art: "done",     image: "",                                 title: "All set",         text: "You're done." },
+    { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision." },
+    { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register." },
+    { art: "account",  image: "/guides/annke/03.png", title: "Agree",             text: "Tap Agree." },
+    { art: "account",  image: "/guides/annke/04.png", title: "Pick your country", text: "Choose USA." },
+    { art: "account",  image: "/guides/annke/05.png", title: "Sign up",           text: "Enter email + password." },
+    { art: "account",  image: "/guides/annke/06.png", title: "Or use your phone", text: "Enter your number." },
+    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "8+ characters." },
+    { art: "account",  image: "/guides/annke/08.png", title: "Enter the code",    text: "Check your texts. Tap Finish." },
+    { art: "device",   image: "/guides/annke/09.png", title: "Add a device",      text: "Tap Add Device." },
+    { art: "qr",       image: "/guides/annke/10.png", title: "Choose Scan QR",    text: "Tap Scan QR Code." },
+    { art: "qr",       image: "/guides/annke/11.png", title: "Scan your card",    text: "Point it at your QR." },
   ],
 };
 

@@ -115,6 +115,7 @@ function AskFlow({ qi, platform, projects, onPlatform, onContinue, onBack }) {
 function SystemPicker({ projects = [], onContinue, onBack }) {
   const withQr = (projects || []).filter((p) => p.system_qr);
   const [sel, setSel] = useState(withQr[0]?.access_id || "");
+  const [zoom, setZoom] = useState(false);
   const proj = withQr.find((p) => p.access_id === sel);
 
   if (withQr.length === 0) {
@@ -139,14 +140,36 @@ function SystemPicker({ projects = [], onContinue, onBack }) {
         </select>
       )}
       {proj && (
-        <div className="gw-qr-card">
-          <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
-          <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
-        </div>
+        <>
+          <button className="gw-qr-card gw-qr-tap" onClick={() => setZoom(true)} title="Tap to enlarge">
+            <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
+            <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
+            <div className="gw-qr-hint">Tap to enlarge</div>
+          </button>
+          {zoom && <QrZoom proj={proj} onClose={() => setZoom(false)} />}
+        </>
       )}
       <div className="gw-qr-actions">
         <button className="gw-back" onClick={onBack}>← Back</button>
         <button className="gw-next" onClick={onContinue}>Got it →</button>
+      </div>
+    </div>
+  );
+}
+
+// Full-screen QR viewer: big code, download, and an X to close. Used from the guide's system picker.
+function QrZoom({ proj, onClose }) {
+  const file = `IOT-TECHS-QR-${(proj.access_id || "system")}.png`;
+  return (
+    <div className="gw-qrzoom-bg" onClick={(e) => { if (e.target.classList.contains("gw-qrzoom-bg")) onClose(); }}>
+      <div className="gw-qrzoom">
+        <button className="gw-qrzoom-x" onClick={onClose} aria-label="Close">✕</button>
+        <img className="gw-qrzoom-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
+        <div className="gw-qrzoom-name">{proj.customer || proj.access_id}</div>
+        <a className="gw-qrzoom-dl" href={proj.system_qr} download={file}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Save QR
+        </a>
       </div>
     </div>
   );
@@ -307,9 +330,21 @@ const CSS = `
 .gw-qrhelp{padding:44px 30px 30px}
 .gw-qr-select{margin:0 auto 16px;display:block;min-width:220px;max-width:100%;height:42px;border:1.5px solid #e6e8ee;border-radius:10px;background:#fff;color:#0e1320;font-family:inherit;font-size:.9rem;padding:0 12px;cursor:pointer}
 .gw-qr-card{display:inline-flex;flex-direction:column;align-items:center;gap:8px;padding:16px;background:#fff;border:1px solid #eef0f4;border-radius:16px;box-shadow:0 14px 34px -16px rgba(0,0,0,.28)}
-.gw-qr-img{width:200px;height:200px;object-fit:contain;border-radius:8px;background:#fff}
+.gw-qr-tap{border:1px solid #eef0f4;cursor:pointer;font-family:inherit;transition:transform .12s,box-shadow .12s,border-color .12s}
+.gw-qr-tap:hover{transform:translateY(-2px);border-color:#C9A96E;box-shadow:0 18px 40px -16px rgba(176,143,79,.5)}
+.gw-qr-img{width:220px;height:220px;object-fit:contain;border-radius:8px;background:#fff}
 .gw-qr-name{font-size:.85rem;font-weight:700;color:#2C3347}
+.gw-qr-hint{font-size:.72rem;font-weight:700;color:#b08f4f}
 .gw-qr-actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
+/* full-screen QR viewer */
+.gw-qrzoom-bg{position:fixed;inset:0;z-index:5000;background:rgba(8,11,20,.8);backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;animation:gwIn .2s ease}
+.gw-qrzoom{position:relative;background:#fff;border-radius:20px;padding:26px 28px 22px;max-width:92vw;text-align:center;box-shadow:0 40px 90px rgba(0,0,0,.5)}
+.gw-qrzoom-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border:none;border-radius:9px;background:#f0f1f4;color:#5b6472;font-size:1.1rem;cursor:pointer;line-height:1}
+.gw-qrzoom-x:hover{background:#e2e5ec;color:#0e1320}
+.gw-qrzoom-img{width:min(78vw,360px);height:min(78vw,360px);object-fit:contain;display:block;margin:6px auto 0}
+.gw-qrzoom-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.1rem;color:#0e1320;margin-top:8px}
+.gw-qrzoom-dl{display:inline-flex;align-items:center;gap:7px;margin-top:14px;height:42px;padding:0 22px;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:700;font-size:.9rem;text-decoration:none}
+.gw-qrzoom-dl:hover{filter:brightness(1.06)}
 .gw-progresswrap{height:5px;border-radius:100px;background:#eef0f4;margin:12px 0 10px;overflow:hidden}
 .gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#C9A96E,#e8cb94);transition:width .4s cubic-bezier(.16,1,.3,1)}
 .gw-dots{display:flex;gap:7px}
