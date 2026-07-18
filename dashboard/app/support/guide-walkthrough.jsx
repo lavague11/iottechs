@@ -64,7 +64,10 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             <div className="gw-body" key={i} style={{ "--dir": dir }}>
               <div className="gw-phone">
                 <div className="gw-phone-notch" />
-                <div className="gw-screen"><Scene art={step.art} image={step.image} platform={platform} /></div>
+                <div className="gw-screen">
+                  <Scene art={step.art} image={step.image} platform={platform} />
+                  {step.tap && <span className="gw-tap" style={{ left: `${step.tap.x}%`, top: `${step.tap.y}%` }} aria-hidden="true" />}
+                </div>
               </div>
               <div className="gw-text">
                 <div className="gw-stepno">Step {i + 1} of {total}</div>
@@ -325,7 +328,12 @@ const CSS = `
 .gw-ask-back{margin-top:24px;background:none;border:none;color:#9aa0ab;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer}
 .gw-ask-back:hover{color:#0e1320}
 /* screenshot inside the phone */
-.sc-shot{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.sc-shot{width:100%;height:100%;object-fit:contain;object-position:top center;display:block;background:#fff}
+/* "tap here" highlight — a pulsing gold ring over the screenshot */
+.gw-tap{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #C9A96E;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 14px 3px rgba(201,169,110,.55);pointer-events:none;z-index:5;animation:gwTap 1.4s ease-in-out infinite}
+.gw-tap::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:2px solid rgba(201,169,110,.6);animation:gwTapRipple 1.4s ease-out infinite}
+@keyframes gwTap{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.86);opacity:.85}}
+@keyframes gwTapRipple{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.9);opacity:0}}
 /* "no QR" → show my System QR */
 .gw-qrhelp{padding:44px 30px 30px}
 .gw-qr-select{margin:0 auto 16px;display:block;min-width:220px;max-width:100%;height:42px;border:1.5px solid #e6e8ee;border-radius:10px;background:#fff;color:#0e1320;font-family:inherit;font-size:.9rem;padding:0 12px;cursor:pointer}
