@@ -978,7 +978,16 @@ function ProposalViews({ views, view, onClose }) {
                 <span className={`pvw-role pvw-${v.viewer_role}`}>{ROLE_LABEL[v.viewer_role] || v.viewer_role}</span>
                 <div className="pvw-row-body">
                   <div className="pvw-who">{v.viewer_name || ROLE_LABEL[v.viewer_role] || "Someone"}</div>
-                  <div className="pvw-meta">{fmt(v.viewed_at)}{v.ip ? ` · ${v.ip}` : ""}</div>
+                  <div className="pvw-meta">
+                    {v.geo && (
+                      <span className="pvw-geo" title="Approximate location (IP-based)">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                        {v.geo}
+                      </span>
+                    )}
+                    <span>{fmt(v.viewed_at)}</span>
+                    {v.ip ? <span className="pvw-ip">{v.ip}</span> : null}
+                  </div>
                 </div>
               </div>
             ))
@@ -3867,7 +3876,10 @@ const PV_CSS = `
 .pvx .pvw-sales{background:rgba(155,89,182,.12);color:#7d3c98}
 .pvx .pvw-tech{background:rgba(28,138,69,.1);color:#1c8a45}
 .pvx .pvw-who{font-weight:600;font-size:.86rem}
-.pvx .pvw-meta{font-size:.75rem;color:var(--muted);margin-top:1px}
+.pvx .pvw-meta{font-size:.75rem;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pvx .pvw-geo{display:inline-flex;align-items:center;gap:3px;font-weight:700;color:var(--gold-deep)}
+.pvx .pvw-geo svg{flex-shrink:0}
+.pvx .pvw-ip{font-family:Menlo,Consolas,monospace;font-size:.68rem;opacity:.6}
 .pvx .wo-panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
 .pvx .wo-panel-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:.95rem;display:flex;align-items:center;gap:8px}
 .pvx .wo-panel-badge{background:var(--amber-soft);color:var(--amber);font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:100px}

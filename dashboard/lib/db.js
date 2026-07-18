@@ -616,6 +616,17 @@ function init() {
       viewed_at         TEXT DEFAULT (datetime('now','localtime'))
     )
   `);
+  // Approximate viewer location (IP-based, like Wix/GA), resolved lazily when staff open the views.
+  const pvCols = db.prepare("PRAGMA table_info(proposal_views)").all().map((c) => c.name);
+  if (!pvCols.includes("geo")) db.exec("ALTER TABLE proposal_views ADD COLUMN geo TEXT");
+  // IP → location cache, so each distinct IP hits the geolocation API only once, ever.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ip_geo (
+      ip           TEXT PRIMARY KEY,
+      label        TEXT,
+      resolved_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
 
   // ---- Proposals (versioned business record: options A/B/C, line items, pricing) ----
   // Sent versions are immutable; revisions clone to version+1 and mark the old row superseded.
@@ -2153,8 +2164,55 @@ export function recordProposalView(accessId, { role, name, ip }) {
 }
 export function getProposalViews(accessId) {
   return db.prepare(
-    "SELECT id, viewer_role, viewer_name, ip, viewed_at FROM proposal_views WHERE project_access_id=? ORDER BY viewed_at DESC, id DESC LIMIT 200"
+    "SELECT id, viewer_role, viewer_name, ip, geo, viewed_at FROM proposal_views WHERE project_access_id=? ORDER BY viewed_at DESC, id DESC LIMIT 200"
   ).all(String(accessId)).map((r) => ({ ...r }));
+}
+
+// Private / loopback / unroutable IPs never geolocate — don't waste an API call.
+function isPrivateIp(ip) {
+  const s = String(ip || "").trim();
+  if (!s || s === "::1" || s === "127.0.0.1" || s.startsWith("::ffff:127.")) return true;
+  if (s.startsWith("10.") || s.startsWith("192.168.") || s.startsWith("169.254.") || s.startsWith("fc") || s.startsWith("fd")) return true;
+  const m = s.match(/^172\.(\d+)\./);
+  if (m && +m[1] >= 16 && +m[1] <= 31) return true;
+  return false;
+}
+
+// Resolve an IP to a short "City, Region, Country" label — IP-based (approximate), the same
+// approach analytics tools use. Cached in ip_geo so each IP is looked up at most once. Returns
+// "" for private IPs or on any failure (never throws, never blocks a page for long).
+async function resolveIpGeo(ip) {
+  if (isPrivateIp(ip)) return "";
+  const cached = db.prepare("SELECT label FROM ip_geo WHERE ip=?").get(String(ip));
+  if (cached) return cached.label || "";
+  let label = "";
+  try {
+    const res = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,city,region,country,country_code`,
+      { signal: AbortSignal.timeout(2500), cache: "no-store" });
+    const d = await res.json();
+    if (d && d.success) {
+      label = [d.city, d.region, d.country_code || d.country].filter(Boolean).join(", ");
+    }
+  } catch { /* network/timeout — leave blank, we still cache the miss below */ }
+  db.prepare("INSERT OR REPLACE INTO ip_geo (ip, label) VALUES (?,?)").run(String(ip), label);
+  return label;
+}
+
+// Views list with location backfilled — call this from staff view paths only (customers never wait
+// on a geo lookup). Resolves any rows missing geo, caches per IP, and writes the label back.
+export async function getProposalViewsWithGeo(accessId) {
+  const rows = getProposalViews(accessId);
+  const need = rows.filter((r) => !r.geo && r.ip && !isPrivateIp(r.ip));
+  const uniq = [...new Set(need.map((r) => r.ip))];
+  const map = {};
+  for (const ip of uniq) map[ip] = await resolveIpGeo(ip);
+  for (const r of rows) {
+    if (!r.geo && map[r.ip]) {
+      r.geo = map[r.ip];
+      db.prepare("UPDATE proposal_views SET geo=? WHERE id=?").run(r.geo, r.id);
+    }
+  }
+  return rows;
 }
 
 // ---- Proposals (versioned; see table DDL in init) ----

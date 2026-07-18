@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -234,14 +234,15 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     }
     recordProposalView(p.access_id, { role: initialView, name: viewerName, ip });
     // Role-scoped read: admin/manager see all views; sales sees only customer views; others see none.
+    // Staff paths resolve approximate viewer location (IP-based); customers never wait on that.
     if (initialView === "admin" || initialView === "manager") {
-      proposalViews = getProposalViews(p.access_id);
+      proposalViews = await getProposalViewsWithGeo(p.access_id);
     } else if (initialView === "sales") {
-      proposalViews = getProposalViews(p.access_id).filter(v => v.viewer_role === "customer");
+      proposalViews = (await getProposalViewsWithGeo(p.access_id)).filter(v => v.viewer_role === "customer");
     }
   } else if (initialView && (initialView === "admin" || initialView === "manager" || initialView === "sales")) {
     // Past the proposal stage — still let staff review the historical view log.
-    const all = getProposalViews(p.access_id);
+    const all = await getProposalViewsWithGeo(p.access_id);
     proposalViews = initialView === "sales" ? all.filter(v => v.viewer_role === "customer") : all;
   }
 
