@@ -7,8 +7,8 @@ import { useState, useEffect } from "react";
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
 export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], projects = [], onClose }) {
-  const [phase, setPhase]     = useState("ask");   // 'ask' → 'qr-help' → 'steps' → 'done'
-  const [qi, setQi]           = useState(0);       // which intro question (0 = phone, 1 = QR)
+  const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'add-more' → 'done'
+  const [qi, setQi]           = useState(0);       // intro question (0 = phone, 1 = which system)
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
   const [i, setI]             = useState(0);        // step index
   const [dir, setDir]         = useState(1);        // slide direction for entry animation
@@ -17,9 +17,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const last = i === total - 1;
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
-  function next() { if (last) setPhase("done"); else go(i + 1); }
+  function next() { if (last) setPhase("add-more"); else go(i + 1); }   // end → "add anyone else?"
   function back() {
-    if (i === 0) { setPhase("ask"); setQi(1); }   // step 1 → back to the last intro question
+    if (i === 0) { setPhase("ask"); setQi(1); }   // step 1 → back to the system picker
     else go(i - 1);
   }
 
@@ -35,8 +35,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   }, [phase, i, last]);
 
   function pickPlatform(p) { setPlatform(p); setQi(1); }
-  function haveQr() { setPhase("steps"); setI(0); setDir(1); }   // "Yes" → straight into steps
-  function needQr() { setPhase("qr-help"); }                     // "No" → show their System QR first
+  function startSteps() { setPhase("steps"); setI(0); setDir(1); }
 
   return (
     <div className="gw-scrim" onClick={(e) => { if (e.target.classList.contains("gw-scrim")) onClose?.(); }}>
@@ -46,9 +45,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         <div className="gw-kicker gw-kicker-abs">{title}</div>
 
         {phase === "ask" ? (
-          <AskFlow qi={qi} platform={platform} onPlatform={pickPlatform} onHaveQr={haveQr} onNeedQr={needQr} onBack={() => setQi(0)} />
-        ) : phase === "qr-help" ? (
-          <QrHelp projects={projects} onContinue={haveQr} onBack={() => setPhase("ask")} />
+          <AskFlow qi={qi} platform={platform} projects={projects} onPlatform={pickPlatform} onContinue={startSteps} onBack={() => setQi(0)} />
+        ) : phase === "add-more" ? (
+          <AddMore onDone={() => setPhase("done")} />
         ) : phase === "done" ? (
           <Finish title={title} onClose={onClose} onRestart={() => { setPhase("steps"); setI(0); }} />
         ) : (
@@ -86,11 +85,11 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   );
 }
 
-// Two quick questions shown before any phone appears: which platform, and QR readiness.
-function AskFlow({ qi, platform, onPlatform, onHaveQr, onNeedQr, onBack }) {
+// Two intro screens before the phone: which platform, then which system (shows that system's QR).
+function AskFlow({ qi, platform, projects, onPlatform, onContinue, onBack }) {
   return (
     <div className="gw-ask" key={qi}>
-      <div className="gw-ask-step">Quick question {qi + 1} of 2</div>
+      <div className="gw-ask-step">Step {qi + 1} of 2</div>
       {qi === 0 ? (
         <>
           <h2 className="gw-ask-q">Which phone do you have?</h2>
@@ -106,56 +105,79 @@ function AskFlow({ qi, platform, onPlatform, onHaveQr, onNeedQr, onBack }) {
           </div>
         </>
       ) : (
-        <>
-          <h2 className="gw-ask-q">Do you have your QR code?</h2>
-          <p className="gw-ask-sub">It’s the System Card we gave you — a small card with a QR code (or a sticker on your recorder).</p>
-          <div className="gw-choices">
-            <button className="gw-choice" onClick={onHaveQr}>
-              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
-              Yes
-            </button>
-            <button className="gw-choice" onClick={onNeedQr}>
-              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-              No — show mine
-            </button>
-          </div>
-          <button className="gw-ask-back" onClick={onBack}>← Back</button>
-        </>
+        <SystemPicker projects={projects} onContinue={onContinue} onBack={onBack} />
       )}
     </div>
   );
 }
 
-// "No QR" branch: pick your project, see its System QR right here, then continue.
-function QrHelp({ projects = [], onContinue, onBack }) {
-  const withQr = projects.filter((p) => p.system_qr);
+// "Which system?" — list the customer's systems, show the picked one's QR. No system → contact us.
+function SystemPicker({ projects = [], onContinue, onBack }) {
+  const withQr = (projects || []).filter((p) => p.system_qr);
   const [sel, setSel] = useState(withQr[0]?.access_id || "");
   const proj = withQr.find((p) => p.access_id === sel);
 
+  if (withQr.length === 0) {
+    return (
+      <div className="gw-qrhelp">
+        <h2 className="gw-ask-q">Which system?</h2>
+        <p className="gw-ask-sub">We don't see a QR for your systems yet. Please contact support and we'll get you set up.</p>
+        <div className="gw-qr-actions">
+          <button className="gw-back" onClick={onBack}>← Back</button>
+          <a className="gw-next" href="mailto:support@iot-techs.com?subject=Mobile%20app%20QR%20help" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Contact support</a>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="gw-ask gw-qrhelp">
-      <h2 className="gw-ask-q">Here's your QR code</h2>
-      {withQr.length === 0 ? (
-        <p className="gw-ask-sub">Open your project page to find your System QR, or message us and we'll resend your card. You can still continue.</p>
-      ) : (
-        <>
-          <p className="gw-ask-sub">Pick your project, then scan this from the app.</p>
-          {withQr.length > 1 && (
-            <select className="gw-qr-select" value={sel} onChange={(e) => setSel(e.target.value)}>
-              {withQr.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer || p.access_id}</option>)}
-            </select>
-          )}
-          {proj && (
-            <div className="gw-qr-card">
-              <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
-              <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
-            </div>
-          )}
-        </>
+    <div className="gw-qrhelp">
+      <h2 className="gw-ask-q">Which system?</h2>
+      <p className="gw-ask-sub">Pick your system, then scan this QR from the app.</p>
+      {withQr.length > 1 && (
+        <select className="gw-qr-select" value={sel} onChange={(e) => setSel(e.target.value)}>
+          {withQr.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer || p.access_id}</option>)}
+        </select>
+      )}
+      {proj && (
+        <div className="gw-qr-card">
+          <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
+          <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
+        </div>
       )}
       <div className="gw-qr-actions">
         <button className="gw-back" onClick={onBack}>← Back</button>
         <button className="gw-next" onClick={onContinue}>Got it →</button>
+      </div>
+    </div>
+  );
+}
+
+// End question: offer to add another person to the system.
+function AddMore({ onDone }) {
+  const [yes, setYes] = useState(false);
+  if (yes) return (
+    <div className="gw-ask gw-qrhelp">
+      <h2 className="gw-ask-q">Add someone else</h2>
+      <p className="gw-ask-sub">In Annke Vision, open the device, tap the share icon, and enter their email. They'll get access to view it too.</p>
+      <div className="gw-qr-actions">
+        <button className="gw-back" onClick={() => setYes(false)}>← Back</button>
+        <button className="gw-next" onClick={onDone}>Done</button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="gw-ask">
+      <h2 className="gw-ask-q">Add anyone else to the system?</h2>
+      <p className="gw-ask-sub">Give family or staff access to view the cameras.</p>
+      <div className="gw-choices">
+        <button className="gw-choice" onClick={() => setYes(true)}>
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+          Yes
+        </button>
+        <button className="gw-choice" onClick={onDone}>
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
+          No, I'm done
+        </button>
       </div>
     </div>
   );

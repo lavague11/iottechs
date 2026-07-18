@@ -897,13 +897,29 @@ export function getPrimaryAdmin() {
   return db.prepare("SELECT * FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) ORDER BY id ASC LIMIT 1").get() || null;
 }
 
-// Projects that have a generated System QR — powers the guide's "No QR → show mine" branch.
+// Projects that have a generated System QR — powers the guide's "which system?" picker.
 // Pass the caller's own scope (all for admin/manager; a single customer's list in their portal).
 export function getProjectsWithSystemQr(rows) {
   const src = rows || db.prepare("SELECT access_id, customer, system_qr FROM projects WHERE system_qr IS NOT NULL AND system_qr != ''").all();
   return src
     .filter((p) => p.system_qr)
     .map((p) => ({ access_id: p.access_id, customer: p.customer || p.access_id, system_qr: p.system_qr }));
+}
+
+// Admin System-QR library: every project that has a QR, with the fields you'd search by
+// (customer, address, phone, ID). The QR image itself lives in system_qr (a data URL).
+export function getSystemQrLibrary() {
+  return db.prepare(
+    `SELECT access_id, customer, address, contact_phone, contact_name, system_qr
+       FROM projects WHERE system_qr IS NOT NULL AND system_qr != ''
+      ORDER BY customer COLLATE NOCASE ASC, access_id ASC`
+  ).all().map((p) => ({
+    access_id: p.access_id,
+    customer: p.customer || p.contact_name || p.access_id,
+    address: p.address || "",
+    phone: p.contact_phone || "",
+    system_qr: p.system_qr,
+  }));
 }
 
 // ---- Support library (FAQ / knowledge base) ----
