@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSupportArticles } from "../../lib/db";
+import { getSupportArticles, getProjectsWithSystemQr } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import SupportClient from "./support-client";
 
@@ -11,5 +11,8 @@ export default async function SupportPage() {
 
   const alerts   = getNotifSummary(user.id);
   const articles = getSupportArticles();
-  return <SupportClient user={user} alerts={alerts} articles={articles} />;
+  // Projects with a System QR — lets the Mobile App Setup guide show a QR when the customer says
+  // they don't have their card. Admin/manager preview all; other staff see none here.
+  const qrProjects = ["admin", "manager"].includes(user.role) ? getProjectsWithSystemQr() : [];
+  return <SupportClient user={user} alerts={alerts} articles={articles} qrProjects={qrProjects} />;
 }

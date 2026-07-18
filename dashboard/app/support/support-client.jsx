@@ -18,7 +18,7 @@ function PinIcon() {
   return <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M14 4v6l3 3v2h-5v5l-1 1-1-1v-5H4v-2l3-3V4H6V2h12v2z"/></svg>;
 }
 
-export default function SupportClient({ user, alerts, articles: initial }) {
+export default function SupportClient({ user, alerts, articles: initial, qrProjects = [] }) {
   const canEdit = ["admin", "manager"].includes(user?.role);
   const [articles, setArticles] = useState(initial || []);
   const [query, setQuery]   = useState("");
@@ -159,7 +159,7 @@ export default function SupportClient({ user, alerts, articles: initial }) {
       </div>
 
       {guide && (
-        <GuideWalkthrough title={guide.title} intro={guide.intro} steps={guide.steps} onClose={() => setGuide(null)} />
+        <GuideWalkthrough title={guide.title} intro={guide.intro} steps={guide.steps} projects={qrProjects} onClose={() => setGuide(null)} />
       )}
 
       {editor && (

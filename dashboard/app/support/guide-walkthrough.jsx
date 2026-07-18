@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
-export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], onClose }) {
-  const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'done'
+export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], projects = [], onClose }) {
+  const [phase, setPhase]     = useState("ask");   // 'ask' → 'qr-help' → 'steps' → 'done'
   const [qi, setQi]           = useState(0);       // which intro question (0 = phone, 1 = QR)
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
   const [i, setI]             = useState(0);        // step index
@@ -15,7 +15,6 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const total = steps.length;
   const step = steps[i] || {};
   const last = i === total - 1;
-  const store = platform === "android" ? "Google Play" : "the App Store";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
   function next() { if (last) setPhase("done"); else go(i + 1); }
@@ -36,7 +35,8 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   }, [phase, i, last]);
 
   function pickPlatform(p) { setPlatform(p); setQi(1); }
-  function answerQr() { setPhase("steps"); setI(0); setDir(1); }
+  function haveQr() { setPhase("steps"); setI(0); setDir(1); }   // "Yes" → straight into steps
+  function needQr() { setPhase("qr-help"); }                     // "No" → show their System QR first
 
   return (
     <div className="gw-scrim" onClick={(e) => { if (e.target.classList.contains("gw-scrim")) onClose?.(); }}>
@@ -46,7 +46,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         <div className="gw-kicker gw-kicker-abs">{title}</div>
 
         {phase === "ask" ? (
-          <AskFlow qi={qi} platform={platform} onPlatform={pickPlatform} onQr={answerQr} onBack={() => setQi(0)} />
+          <AskFlow qi={qi} platform={platform} onPlatform={pickPlatform} onHaveQr={haveQr} onNeedQr={needQr} onBack={() => setQi(0)} />
+        ) : phase === "qr-help" ? (
+          <QrHelp projects={projects} onContinue={haveQr} onBack={() => setPhase("ask")} />
         ) : phase === "done" ? (
           <Finish title={title} onClose={onClose} onRestart={() => { setPhase("steps"); setI(0); }} />
         ) : (
@@ -85,7 +87,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
 }
 
 // Two quick questions shown before any phone appears: which platform, and QR readiness.
-function AskFlow({ qi, platform, onPlatform, onQr, onBack }) {
+function AskFlow({ qi, platform, onPlatform, onHaveQr, onNeedQr, onBack }) {
   return (
     <div className="gw-ask" key={qi}>
       <div className="gw-ask-step">Quick question {qi + 1} of 2</div>
@@ -108,18 +110,53 @@ function AskFlow({ qi, platform, onPlatform, onQr, onBack }) {
           <h2 className="gw-ask-q">Do you have your QR code?</h2>
           <p className="gw-ask-sub">It’s the System Card we gave you — a small card with a QR code (or a sticker on your recorder).</p>
           <div className="gw-choices">
-            <button className="gw-choice" onClick={onQr}>
+            <button className="gw-choice" onClick={onHaveQr}>
               <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
-              Yes, I have it
+              Yes
             </button>
-            <button className="gw-choice" onClick={onQr}>
+            <button className="gw-choice" onClick={onNeedQr}>
               <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-              Not sure — show me
+              No — show mine
             </button>
           </div>
           <button className="gw-ask-back" onClick={onBack}>← Back</button>
         </>
       )}
+    </div>
+  );
+}
+
+// "No QR" branch: pick your project, see its System QR right here, then continue.
+function QrHelp({ projects = [], onContinue, onBack }) {
+  const withQr = projects.filter((p) => p.system_qr);
+  const [sel, setSel] = useState(withQr[0]?.access_id || "");
+  const proj = withQr.find((p) => p.access_id === sel);
+
+  return (
+    <div className="gw-ask gw-qrhelp">
+      <h2 className="gw-ask-q">Here's your QR code</h2>
+      {withQr.length === 0 ? (
+        <p className="gw-ask-sub">Open your project page to find your System QR, or message us and we'll resend your card. You can still continue.</p>
+      ) : (
+        <>
+          <p className="gw-ask-sub">Pick your project, then scan this from the app.</p>
+          {withQr.length > 1 && (
+            <select className="gw-qr-select" value={sel} onChange={(e) => setSel(e.target.value)}>
+              {withQr.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer || p.access_id}</option>)}
+            </select>
+          )}
+          {proj && (
+            <div className="gw-qr-card">
+              <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
+              <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
+            </div>
+          )}
+        </>
+      )}
+      <div className="gw-qr-actions">
+        <button className="gw-back" onClick={onBack}>← Back</button>
+        <button className="gw-next" onClick={onContinue}>Got it →</button>
+      </div>
     </div>
   );
 }
@@ -142,8 +179,9 @@ function Finish({ title, onClose, onRestart }) {
 
 // ---- Phone-screen content: a real screenshot (step.image) if given, else an animated scene ----
 function Scene({ art, image, platform }) {
-  // A supplied screenshot always wins — this is how real app screens drop in.
-  if (image) return <img className="sc-shot" src={image} alt="" draggable={false} />;
+  const [failed, setFailed] = useState(false);
+  // A supplied screenshot wins — but if it hasn't been uploaded yet (404), fall back to the scene.
+  if (image && !failed) return <img className="sc-shot" src={image} alt="" draggable={false} onError={() => setFailed(true)} />;
   switch (art) {
     case "download": return (
       <div className="sc sc-dl">
@@ -243,6 +281,13 @@ const CSS = `
 .gw-ask-back:hover{color:#0e1320}
 /* screenshot inside the phone */
 .sc-shot{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+/* "no QR" → show my System QR */
+.gw-qrhelp{padding:44px 30px 30px}
+.gw-qr-select{margin:0 auto 16px;display:block;min-width:220px;max-width:100%;height:42px;border:1.5px solid #e6e8ee;border-radius:10px;background:#fff;color:#0e1320;font-family:inherit;font-size:.9rem;padding:0 12px;cursor:pointer}
+.gw-qr-card{display:inline-flex;flex-direction:column;align-items:center;gap:8px;padding:16px;background:#fff;border:1px solid #eef0f4;border-radius:16px;box-shadow:0 14px 34px -16px rgba(0,0,0,.28)}
+.gw-qr-img{width:200px;height:200px;object-fit:contain;border-radius:8px;background:#fff}
+.gw-qr-name{font-size:.85rem;font-weight:700;color:#2C3347}
+.gw-qr-actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
 .gw-progresswrap{height:5px;border-radius:100px;background:#eef0f4;margin:12px 0 10px;overflow:hidden}
 .gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#C9A96E,#e8cb94);transition:width .4s cubic-bezier(.16,1,.3,1)}
 .gw-dots{display:flex;gap:7px}

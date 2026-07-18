@@ -823,15 +823,19 @@ function init() {
 // Each step: `art` = which animated illustration to show, plus editable title/text. Ties into the
 // System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
 const MOBILE_SETUP_GUIDE = {
-  intro: "Set up the Annke Vision app in a few taps.",
+  intro: "",
   steps: [
-    { art: "download", title: "Download Annke Vision", text: "Search “Annke Vision” and install it." },
-    { art: "account",  title: "Create your account", text: "Tap Register. Sign up with your email." },
-    { art: "qr",       title: "Scan your QR code", text: "Tap +, then Scan QR. Point it at your card." },
-    { art: "device",   title: "Enter the device code", text: "If asked, type the code from your card." },
-    { art: "name",     title: "Name your cameras", text: "Give each one a name — Front Door, Back Lot." },
-    { art: "notify",   title: "Turn on alerts", text: "Enable notifications for motion alerts." },
-    { art: "done",     title: "You're all set", text: "Tap a camera to watch live." },
+    { art: "download", image: "/guides/annke/01-appstore.png",    title: "Get the app",     text: "Install Annke Vision." },
+    { art: "account",  image: "/guides/annke/02-login.png",       title: "Log in",          text: "Tap Register to sign up." },
+    { art: "device",   image: "/guides/annke/03-device-home.png", title: "Add a device",    text: "Tap Add Device." },
+    { art: "qr",       image: "/guides/annke/04-add-menu.png",    title: "Choose Scan QR",  text: "Tap Scan QR Code." },
+    { art: "qr",       image: "/guides/annke/05-scan.png",        title: "Scan your card",  text: "Point it at your QR." },
+    { art: "device",   image: "",                                 title: "Wait a moment",   text: "It connects for you." },
+    { art: "account",  image: "",                                 title: "Enter the code",  text: "Type the code if asked." },
+    { art: "name",     image: "",                                 title: "Name a camera",   text: "Type a name. Tap Save." },
+    { art: "notify",   image: "",                                 title: "Turn on alerts",  text: "Tap Allow." },
+    { art: "done",     image: "",                                 title: "Watch live",      text: "Tap a camera." },
+    { art: "done",     image: "",                                 title: "All set",         text: "You're done." },
   ],
 };
 
@@ -891,6 +895,15 @@ export function userEffectivePin(user) {
 // gets a real cross-project session (dashboard access + correct attribution), not a synthetic one.
 export function getPrimaryAdmin() {
   return db.prepare("SELECT * FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) ORDER BY id ASC LIMIT 1").get() || null;
+}
+
+// Projects that have a generated System QR — powers the guide's "No QR → show mine" branch.
+// Pass the caller's own scope (all for admin/manager; a single customer's list in their portal).
+export function getProjectsWithSystemQr(rows) {
+  const src = rows || db.prepare("SELECT access_id, customer, system_qr FROM projects WHERE system_qr IS NOT NULL AND system_qr != ''").all();
+  return src
+    .filter((p) => p.system_qr)
+    .map((p) => ({ access_id: p.access_id, customer: p.customer || p.access_id, system_qr: p.system_qr }));
 }
 
 // ---- Support library (FAQ / knowledge base) ----
