@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -81,8 +81,21 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
 
   if (pin != null && pin !== "") {
     const entered = String(pin).trim();
-    // Master admin PIN — works everywhere, including production.
+    // Master admin PIN — works everywhere, including production. This is a full admin login, not a
+    // project-scoped peek: mint a real cross-project session (bound to the primary admin account so
+    // dashboard access + write attribution work) so "Back to dashboard" lands on /dashboard instead
+    // of bouncing to /login. Falls back to a project-scoped grant if there's no admin account yet.
     if (ADMIN_MASTER_PIN && entered === ADMIN_MASTER_PIN) {
+      const admin = getPrimaryAdmin();
+      if (admin) {
+        recordEvent("pin_access", admin.id, ip, ua, p.id, `Master admin PIN → ${admin.name || "admin"} on ${p.access_id}`);
+        recordLogin(admin.id, ip, ua);
+        const { makeToken } = await import("../../../lib/auth");
+        const jar = await cookies();
+        jar.set("iot_session", await makeToken(admin), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+        jar.delete("iot_access");
+        return { ok: true, view: LOGIN_VIEW.admin || "admin", via: "pin", name: admin.name };
+      }
       recordEvent("pin_access", null, ip, ua, p.id, `Master admin PIN on ${p.access_id}`);
       await grantPin("admin");
       return { ok: true, view: LOGIN_VIEW.admin || "admin", via: "pin" };

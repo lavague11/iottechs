@@ -827,6 +827,12 @@ export function userEffectivePin(user) {
   return user?.pin_custom ? String(user.pin_custom).trim() : phonePin(user?.phone);
 }
 
+// The primary admin account (lowest id) — who the master admin PIN logs in AS, so that override
+// gets a real cross-project session (dashboard access + correct attribution), not a synthetic one.
+export function getPrimaryAdmin() {
+  return db.prepare("SELECT * FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) ORDER BY id ASC LIMIT 1").get() || null;
+}
+
 // Admin/manager: set a staff member's custom project PIN (4 digits), or clear it (NULL) to fall
 // back to the last-4-of-phone rule. Returns the fresh user row (for the panel to reflect).
 export function setUserPin(userId, pin) {
