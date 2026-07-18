@@ -789,8 +789,44 @@ function init() {
     )
   `);
 
+  // Support library — FAQ / knowledge-base articles. Admin/manager author; everyone reads.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS support_articles (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT NOT NULL,
+      body        TEXT NOT NULL DEFAULT '',
+      category    TEXT NOT NULL DEFAULT 'General',
+      pinned      INTEGER DEFAULT 0,
+      author      TEXT,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  // Seed a small starter library so the page opens with real, editable examples (not an empty shell).
+  if (db.prepare("SELECT COUNT(*) AS n FROM support_articles").get().n === 0) {
+    const seedArticle = db.prepare("INSERT INTO support_articles (title, body, category, pinned, author) VALUES (?,?,?,?,?)");
+    for (const a of SUPPORT_SEED) seedArticle.run(a.title, a.body, a.category, a.pinned ? 1 : 0, "IOT TECHS");
+  }
+
   return db;
 }
+
+// Starter knowledge-base content — editable/archivable from the Support page. Kept generic (no
+// customer data) so it's a useful template the owner can rewrite.
+const SUPPORT_SEED = [
+  { category: "Getting Started", pinned: 1, title: "How do I access my project portal?",
+    body: "Go to the login page and choose the “Project ID” tab. Enter your Project ID — the full ID (e.g. ASC00SK) or just its last 4 digits — then enter the PIN printed on your service agreement. Your PIN is usually the last 4 digits of the phone number on file." },
+  { category: "Getting Started", pinned: 0, title: "What do the project stages mean?",
+    body: "Every project moves through: Inquiry → Site Survey → Proposal → Approval & Deposit → Schedule → Install → QC → Payment → Completion. Your portal always shows the current stage and the one action needed next." },
+  { category: "Billing", pinned: 0, title: "How is my deposit calculated?",
+    body: "The deposit is a percentage of the pre-tax project total (typically 50%). It’s shown on your proposal and must be received before the work order is scheduled. The remaining balance is due at completion unless your agreement says otherwise." },
+  { category: "Billing", pinned: 0, title: "What is the PCP credit on my invoice?",
+    body: "The Performance Credit Program (PCP) is a discretionary labor credit we may apply back to your project. When one is granted, it appears as a credit line on your proposal and you can approve it in one click from your portal." },
+  { category: "Technical", pinned: 0, title: "My camera is offline — what should I do?",
+    body: "First check the camera has power and the network cable is seated. Power-cycle the NVR (unplug 30 seconds, plug back in). If it’s still offline after a few minutes, open a support ticket from your portal with the camera name and we’ll dispatch a technician." },
+  { category: "Warranty", pinned: 0, title: "What does my warranty cover?",
+    body: "Standard installs carry a workmanship warranty (6, 12, or 24 months — see your completion record). It covers labor to correct install-related faults. Hardware is covered by the manufacturer’s warranty. Accidental damage and power surges are not covered." },
+];
 
 function makePins(accessId) {
   let h = 0;
@@ -831,6 +867,37 @@ export function userEffectivePin(user) {
 // gets a real cross-project session (dashboard access + correct attribution), not a synthetic one.
 export function getPrimaryAdmin() {
   return db.prepare("SELECT * FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) ORDER BY id ASC LIMIT 1").get() || null;
+}
+
+// ---- Support library (FAQ / knowledge base) ----
+export function getSupportArticles() {
+  return db.prepare(
+    "SELECT id, title, body, category, pinned, author, created_at, updated_at FROM support_articles ORDER BY pinned DESC, category ASC, updated_at DESC, id DESC"
+  ).all().map((r) => ({ ...r, pinned: !!r.pinned }));
+}
+export function getSupportArticle(id) {
+  const r = db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id));
+  return r ? { ...r, pinned: !!r.pinned } : null;
+}
+export function createSupportArticle({ title, body, category, pinned, author }) {
+  const info = db.prepare(
+    "INSERT INTO support_articles (title, body, category, pinned, author) VALUES (?,?,?,?,?)"
+  ).run(String(title || "").trim(), String(body || "").trim(), String(category || "General").trim() || "General", pinned ? 1 : 0, author || null);
+  return getSupportArticle(info.lastInsertRowid);
+}
+export function updateSupportArticle(id, { title, body, category, pinned }) {
+  const cur = getSupportArticle(id);
+  if (!cur) return null;
+  db.prepare(
+    "UPDATE support_articles SET title=?, body=?, category=?, pinned=?, updated_at=datetime('now','localtime') WHERE id=?"
+  ).run(
+    title != null ? String(title).trim() : cur.title,
+    body != null ? String(body).trim() : cur.body,
+    category != null ? (String(category).trim() || "General") : cur.category,
+    pinned != null ? (pinned ? 1 : 0) : (cur.pinned ? 1 : 0),
+    Number(id)
+  );
+  return getSupportArticle(id);
 }
 
 // Admin/manager: set a staff member's custom project PIN (4 digits), or clear it (NULL) to fall
@@ -2079,6 +2146,7 @@ const ARCHIVABLE = {
   dev_task:  { table: "dev_tasks",  label: (r) => r.title || "Task", detail: (r) => r.category || "", guard: (r) => r.is_custom === 1 },
   payment:   { table: "project_payments", label: (r) => "$" + Number(r.amount || 0).toLocaleString() + " " + (r.kind || "payment"), detail: (r) => [r.project_access_id, r.method, r.source].filter(Boolean).join(" · ") },
   project:   { table: "projects",   label: (r) => r.customer || r.access_id || "Project", detail: (r) => [r.access_id, r.stage].filter(Boolean).join(" · ") },
+  support:   { table: "support_articles", label: (r) => r.title || "Article", detail: (r) => r.category || "" },
 };
 const ARCHIVE_TABLES = new Set(Object.values(ARCHIVABLE).map((c) => c.table));
 

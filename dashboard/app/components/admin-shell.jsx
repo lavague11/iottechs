@@ -18,6 +18,7 @@ const TABS = [
   { key: "expenses",  label: "Expenses",  href: "/expenses" },
   { key: "users",     label: "Users",     href: "/users" },
   { key: "activity",  label: "Activity",  href: "/activity" },
+  { key: "support",   label: "Support",   href: "/support" },
   { key: "dev",       label: "Dev",       href: "/dev" },
 ];
 
@@ -52,6 +53,9 @@ const NAV_GROUPS = [
   ]},
   { key: "ops-grp", label: "Operations", items: [
     { key: "operations", label: "Action Center", href: "/operations" },
+  ]},
+  { key: "support-grp", label: "Support", items: [
+    { key: "support", label: "Support Library", href: "/support" },
   ]},
 ];
 

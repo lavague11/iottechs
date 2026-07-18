@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseToken } from "./lib/auth";
 
-const PROTECTED = ["/dashboard", "/sales", "/tech", "/customers", "/portal", "/manager", "/my-projects", "/users", "/activity", "/inventory", "/tickets", "/projects", "/notifications", "/finances", "/expenses"];
+const PROTECTED = ["/dashboard", "/sales", "/tech", "/customers", "/portal", "/manager", "/my-projects", "/users", "/activity", "/inventory", "/tickets", "/projects", "/notifications", "/finances", "/expenses", "/support"];
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
@@ -22,5 +22,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/sales/:path*", "/tech/:path*", "/customers/:path*", "/portal/:path*", "/manager/:path*", "/my-projects/:path*", "/users/:path*", "/activity/:path*", "/inventory/:path*", "/tickets/:path*", "/projects/:path*", "/notifications/:path*", "/finances/:path*", "/expenses/:path*"],
+  matcher: ["/dashboard/:path*", "/sales/:path*", "/tech/:path*", "/customers/:path*", "/portal/:path*", "/manager/:path*", "/my-projects/:path*", "/users/:path*", "/activity/:path*", "/inventory/:path*", "/tickets/:path*", "/projects/:path*", "/notifications/:path*", "/finances/:path*", "/expenses/:path*", "/support/:path*"],
 };
