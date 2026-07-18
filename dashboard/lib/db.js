@@ -826,15 +826,15 @@ const MOBILE_SETUP_GUIDE = {
   intro: "",
   steps: [
     { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision." },
-    { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register.",                          tap: { x: 15, y: 44 } },
-    { art: "account",  image: "/guides/annke/03.png", title: "Agree",             text: "Tap Agree.",                             tap: { x: 50, y: 60 } },
+    { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register.",                          tap: { x: 18, y: 44, w: 32, h: 5 } },
+    { art: "account",  image: "/guides/annke/03.png", title: "Agree",             text: "Tap Agree.",                             tap: { x: 50, y: 60, w: 60, h: 6 } },
     { art: "account",  image: "/guides/annke/04.png", title: "Pick your country", text: "Choose USA." },
-    { art: "account",  image: "/guides/annke/05.png", title: "Use your phone",    text: "Tap “Register by Mobile Phone Number.”", tap: { x: 50, y: 90 } },
-    { art: "account",  image: "/guides/annke/06.png", title: "Enter your number", text: "Type your mobile number.",               tap: { x: 50, y: 28 } },
-    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "Use the password: Password1", tap: { x: 50, y: 40 }, why: "Why this password? So we can get into your system for the first two weeks to monitor it and make sure everything's working. Change it anytime after." },
-    { art: "account",  image: "/guides/annke/08.png", title: "Enter the code",    text: "Check your texts. Tap Finish.",          tap: { x: 35, y: 32 } },
-    { art: "device",   image: "/guides/annke/09.png", title: "Add a device",      text: "Tap Add Device.",                        tap: { x: 50, y: 61 } },
-    { art: "qr",       image: "/guides/annke/10.png", title: "Choose Scan QR",    text: "Tap Scan QR Code.",                      tap: { x: 50, y: 78 } },
+    { art: "account",  image: "/guides/annke/05.png", title: "Use your phone",    text: "Tap “Register by Mobile Phone Number.”", tap: { x: 50, y: 90, w: 72, h: 5 } },
+    { art: "account",  image: "/guides/annke/06.png", title: "Enter your number", text: "Type your mobile number.",               tap: { x: 50, y: 28, w: 82, h: 6 } },
+    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "Set the password to: {PASSWORD}", tap: { x: 50, y: 40, w: 82, h: 6 }, why: "Why this password? So we can program your app for the first week and make any changes you need. After that, you can change your password to whatever you like." },
+    { art: "account",  image: "/guides/annke/08.png", title: "Enter the code",    text: "Check your texts. Tap Finish.",          tap: { x: 50, y: 32, w: 82, h: 7 } },
+    { art: "device",   image: "/guides/annke/09.png", title: "Add a device",      text: "Tap Add Device.",                        tap: { x: 50, y: 61, w: 58, h: 7 } },
+    { art: "qr",       image: "/guides/annke/10.png", title: "Choose Scan QR",    text: "Tap Scan QR Code.",                      tap: { x: 50, y: 78, w: 84, h: 7 } },
     { art: "qr",       image: "/guides/annke/11.png", title: "Scan your card",    text: "Point it at your QR." },
   ],
 };
@@ -900,10 +900,16 @@ export function getPrimaryAdmin() {
 // Projects that have a generated System QR — powers the guide's "which system?" picker.
 // Pass the caller's own scope (all for admin/manager; a single customer's list in their portal).
 export function getProjectsWithSystemQr(rows) {
-  const src = rows || db.prepare("SELECT access_id, customer, system_qr FROM projects WHERE system_qr IS NOT NULL AND system_qr != ''").all();
+  const src = rows || db.prepare("SELECT access_id, customer, address, system_qr FROM projects WHERE system_qr IS NOT NULL AND system_qr != ''").all();
   return src
     .filter((p) => p.system_qr)
-    .map((p) => ({ access_id: p.access_id, customer: p.customer || p.access_id, system_qr: p.system_qr }));
+    .map((p) => ({
+      access_id: p.access_id,
+      customer: p.customer || p.access_id,
+      system_qr: p.system_qr,
+      // ZIP drives the app password (Cam<ZIP>) — pulled from the project address.
+      zip: (String(p.address || "").match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || "",
+    }));
 }
 
 // Admin System-QR library: every project that has a QR, with the fields you'd search by

@@ -10,11 +10,15 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'add-more' → 'done'
   const [qi, setQi]           = useState(0);       // intro question (0 = phone, 1 = which system)
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
+  const [system, setSystem]   = useState(null);     // the system they picked (drives the password)
   const [i, setI]             = useState(0);        // step index
   const [dir, setDir]         = useState(1);        // slide direction for entry animation
   const total = steps.length;
   const step = steps[i] || {};
   const last = i === total - 1;
+  // App password = "Cam" + the system's ZIP, so we can get in during the first week of tuning.
+  const zip = system?.zip || (projects || []).find((p) => p.zip)?.zip || "";
+  const password = zip ? `Cam${zip}` : "Cam + your ZIP";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
   function next() { if (last) setPhase("add-more"); else go(i + 1); }   // end → "add anyone else?"
@@ -35,7 +39,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   }, [phase, i, last]);
 
   function pickPlatform(p) { setPlatform(p); setQi(1); }
-  function startSteps() { setPhase("steps"); setI(0); setDir(1); }
+  function startSteps(proj) { if (proj) setSystem(proj); setPhase("steps"); setI(0); setDir(1); }
 
   return (
     <div className="gw-scrim" onClick={(e) => { if (e.target.classList.contains("gw-scrim")) onClose?.(); }}>
@@ -63,7 +67,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
 
             <div className="gw-body" key={i} style={{ "--dir": dir }}>
               <PhoneFrame art={step.art} image={step.image} tap={step.tap} platform={platform} />
-              <StepText label={`Step ${i + 1} of ${total}`} step={step} />
+              <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} />
             </div>
 
             <div className="gw-foot">
@@ -85,15 +89,23 @@ function PhoneFrame({ art, image, tap, platform }) {
       <div className="gw-phone-notch" />
       <div className="gw-screen">
         <Scene art={art} image={image} platform={platform} />
-        {tap && <span className="gw-tap" style={{ left: `${tap.x}%`, top: `${tap.y}%` }} aria-hidden="true" />}
+        {tap && (
+          <span
+            className="gw-tap"
+            style={{ left: `${tap.x}%`, top: `${tap.y}%`, width: `${tap.w || 74}%`, height: `${tap.h || 7}%` }}
+            aria-hidden="true"
+          />
+        )}
       </div>
     </div>
   );
 }
 
 // Step caption with an optional "?" that reveals the "why" behind a step.
-function StepText({ label, step }) {
+// {PASSWORD} in the text is swapped for the system's app password (Cam + ZIP) and shown as a chip.
+function StepText({ label, step, password }) {
   const [why, setWhy] = useState(false);
+  const parts = String(step.text || "").split("{PASSWORD}");
   return (
     <div className="gw-text">
       <div className="gw-stepno">{label}</div>
@@ -103,7 +115,11 @@ function StepText({ label, step }) {
           <button className={`gw-why-btn${why ? " on" : ""}`} onClick={() => setWhy((w) => !w)} aria-label="Why?" title="Why?">?</button>
         )}
       </h2>
-      <p className="gw-desc">{step.text}</p>
+      <p className="gw-desc">
+        {parts.length > 1
+          ? <>{parts[0]}<code className="gw-pass">{password}</code>{parts[1]}</>
+          : step.text}
+      </p>
       {step.why && why && <div className="gw-why">{step.why}</div>}
     </div>
   );
@@ -175,7 +191,7 @@ function SystemPicker({ projects = [], onContinue, onBack }) {
       )}
       <div className="gw-qr-actions">
         <button className="gw-back" onClick={onBack}>← Back</button>
-        <button className="gw-next" onClick={onContinue}>Got it →</button>
+        <button className="gw-next" onClick={() => onContinue(proj)}>Got it →</button>
       </div>
     </div>
   );
@@ -204,9 +220,9 @@ function QrZoom({ proj, onClose }) {
 // Apply for Sharing; you approve the request on your phone and pick which cameras to share.
 const SHARE_STEPS = [
   { image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
-  { image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50 } },
-  { image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66 } },
-  { image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58 } },
+  { image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
+  { image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
+  { image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
   { art: "notify", title: "Check your phone", text: "A new Share request shows at the top. Tap it." },
   { art: "name",   title: "Pick cameras",     text: "Choose which cameras to share. Done!" },
 ];
@@ -380,11 +396,15 @@ const CSS = `
 .gw-ask-back:hover{color:#0e1320}
 /* screenshot inside the phone */
 .sc-shot{width:100%;height:100%;object-fit:contain;object-position:top center;display:block;background:#fff}
-/* "tap here" highlight — a pulsing gold ring over the screenshot */
-.gw-tap{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #C9A96E;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 14px 3px rgba(201,169,110,.55);pointer-events:none;z-index:5;animation:gwTap 1.4s ease-in-out infinite}
-.gw-tap::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:2px solid rgba(201,169,110,.6);animation:gwTapRipple 1.4s ease-out infinite}
-@keyframes gwTap{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.86);opacity:.85}}
-@keyframes gwTapRipple{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.9);opacity:0}}
+/* "tap here" highlight — the screen dims and a glowing rectangle spotlights the target.
+   The huge spread shadow darkens everything OUTSIDE the box (clipped by .gw-screen). */
+.gw-tap{position:absolute;transform:translate(-50%,-50%);border-radius:9px;border:2px solid #E8CB94;
+  box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 18px 4px rgba(201,169,110,.85),inset 0 0 14px rgba(201,169,110,.3);
+  pointer-events:none;z-index:5;animation:gwTapGlow 1.6s ease-in-out infinite}
+@keyframes gwTapGlow{
+  0%,100%{box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 14px 3px rgba(201,169,110,.7),inset 0 0 12px rgba(201,169,110,.25)}
+  50%    {box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 26px 7px rgba(232,203,148,1),inset 0 0 18px rgba(232,203,148,.45)}
+}
 /* "no QR" → show my System QR */
 .gw-qrhelp{padding:44px 30px 30px}
 .gw-qr-select{margin:0 auto 16px;display:block;min-width:220px;max-width:100%;height:42px;border:1.5px solid #e6e8ee;border-radius:10px;background:#fff;color:#0e1320;font-family:inherit;font-size:.9rem;padding:0 12px;cursor:pointer}
@@ -419,6 +439,7 @@ const CSS = `
 .gw-why-btn:hover,.gw-why-btn.on{background:#C9A96E;color:#fff;border-color:#C9A96E}
 .gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.35);font-size:.85rem;line-height:1.55;color:#7a5f2a;animation:gwSlide .25s both;--dir:1}
 .gw-desc{font-size:.95rem;line-height:1.6;color:#2C3347;margin:0}
+.gw-pass{display:inline-block;font-family:Menlo,Consolas,monospace;font-size:1rem;font-weight:700;letter-spacing:.5px;color:#7a5f2a;background:#faf4e8;border:1px solid rgba(201,169,110,.45);border-radius:7px;padding:2px 9px;user-select:all}
 .gw-intro{margin-top:12px;padding:10px 12px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.3);font-size:.82rem;color:#7a5f2a}
 .gw-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 26px 22px;margin-top:8px;border-top:1px solid #eef0f4}
 .gw-count{font-size:.8rem;color:#9aa0ab;font-weight:600}
