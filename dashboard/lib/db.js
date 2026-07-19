@@ -825,7 +825,8 @@ function init() {
 const MOBILE_SETUP_GUIDE = {
   intro: "",
   steps: [
-    { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision." },
+    // store:true makes the mockup + a button link to the right listing for their platform.
+    { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision.", store: true },
     { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register.",                          tap: { x: 18, y: 44, w: 32, h: 5 } },
     { art: "account",  image: "/guides/annke/03.png", title: "Agree",             text: "Tap Agree.",                             tap: { x: 50, y: 60, w: 60, h: 6 } },
     { art: "account",  image: "/guides/annke/04.png", title: "Pick your country", text: "Choose USA." },

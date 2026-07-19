@@ -70,8 +70,8 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             </div>
 
             <div className="gw-body" key={i} style={{ "--dir": dir }}>
-              <PhoneFrame art={step.art} image={step.image} tap={step.tap} platform={platform} />
-              <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} />
+              <PhoneFrame art={step.art} image={step.image} tap={step.tap} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+              <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
 
             <div className="gw-foot">
@@ -89,13 +89,16 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
 // Reusable phone mockup: a screenshot (or animated scene) + "tap here" highlights. `tap` is one
 // box or an array of them (a screen can ask for two fields plus the button). The dim is a single
 // SVG mask with a hole per box — stacking one shadow per box would darken the other holes.
-function PhoneFrame({ art, image, tap, platform }) {
+function PhoneFrame({ art, image, tap, platform, href }) {
   const uid = useId().replace(/:/g, "");
   const taps = !tap ? [] : Array.isArray(tap) ? tap : [tap];
   const box = (t) => ({ w: t.w || 74, h: t.h || 7 });
+  // On the "get the app" step the whole mockup is the store link.
+  const Frame = href ? "a" : "div";
+  const frameProps = href ? { href, target: "_blank", rel: "noopener noreferrer" } : {};
 
   return (
-    <div className="gw-phone">
+    <Frame className={`gw-phone${href ? " link" : ""}`} {...frameProps}>
       <div className="gw-phone-notch" />
       <div className="gw-screen">
         <Scene art={art} image={image} platform={platform} />
@@ -127,21 +130,22 @@ function PhoneFrame({ art, image, tap, platform }) {
           </>
         )}
       </div>
-    </div>
+    </Frame>
   );
 }
 
 // Step caption. {PASSWORD} in the text becomes the system's app password (Cam + ZIP) as a chip with
 // a copy button. A step's "why" is always on screen — people skip anything they have to tap for.
-function StepText({ label, step, password }) {
+function StepText({ label, step, password, platform }) {
   const [copied, setCopied] = useState(false);
   const parts = String(step.text || "").split("{PASSWORD}");
+  const store = step.store ? STORE[platform] || STORE.ios : null;
 
   function copy() {
-    navigator.clipboard?.writeText(password).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(password).then(() => setCopied(true)).catch(() => { legacyCopy(password); setCopied(true); });
+    } else { legacyCopy(password); setCopied(true); }
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -162,39 +166,86 @@ function StepText({ label, step, password }) {
           </>
         ) : step.text}
       </p>
+      {store && (
+        <a className="gw-store" href={store} target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          {platform === "android" ? "Open Google Play" : "Open the App Store"}
+        </a>
+      )}
       {step.why && <div className="gw-why">{step.why}</div>}
     </div>
   );
+}
+
+// Annke Vision store listings. Verified IDs — Annke also ships View / Sight / Home, so a wrong
+// link installs the wrong app and nothing in the guide works from step 2 on.
+const STORE = {
+  ios: "https://apps.apple.com/us/app/annke-vision/id1121463741",
+  android: "https://play.google.com/store/apps/details?id=com.anni.annkevision",
+};
+
+// Clipboard fallback for insecure origins / in-app browsers where navigator.clipboard is missing.
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  } catch (e) { /* the password is on screen either way */ }
 }
 
 // Shared-account notice. Shown after the system is picked (its ZIP is the password) and before
 // step 1, so the password is a policy they've accepted rather than a surprise demand mid-form.
 function SharedAccount({ password, onAgree, onBack }) {
   const [copied, setCopied] = useState(false);
+
+  // Copying is the gate for "I understand", so the unlock can't depend on the clipboard call
+  // succeeding — it fails on insecure origins and some in-app browsers, which would trap them.
+  // Attempt it, fall back to execCommand, and unlock on the click either way.
   function copy() {
-    navigator.clipboard?.writeText(password).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+    const done = () => setCopied(true);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(password).then(done).catch(() => { legacyCopy(password); done(); });
+    } else {
+      legacyCopy(password);
+      done();
+    }
   }
 
   return (
     <div className="gw-ask">
       <div className="gw-ask-step">Before you start</div>
-      <h2 className="gw-ask-q">This is a shared account</h2>
+      <h2 className="gw-ask-q">We need access for 7 days</h2>
       <div className="gw-sa">
-        <p>To program your system and make changes for you, we need to sign in to the app too.</p>
-        <p>So please don’t use a personal password — you’d have to hand it to us. Use the one below instead and keep your private passwords private.</p>
-        <p>After the first week, change it to anything you like.</p>
+        <p>For the first seven days after your install, our team signs in to the app alongside you to verify the system. During that window we will:</p>
+        <ul className="gw-sa-list">
+          <li>Check the voltage and power on every camera</li>
+          <li>Verify recording and playback on all channels</li>
+          <li>Confirm the system is stable and program every feature</li>
+        </ul>
+        <p>That is why we set the password together — so you never hand us a private one. After the seven days, you are more than welcome to change the password.</p>
       </div>
       <div className="gw-sa-pass">
         <span className="gw-sa-lbl">Your password</span>
         <code className="gw-pass">{password}</code>
-        <button className={`gw-copy${copied ? " on" : ""}`} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+        <button className={`gw-copy big${copied ? " on" : " nudge"}`} onClick={copy}>
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+        {!copied && (
+          <span className="gw-point" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
+            Tap to copy
+          </span>
+        )}
       </div>
       <div className="gw-qr-actions">
         <button className="gw-back" onClick={onBack}>← Back</button>
-        <button className="gw-next" onClick={onAgree}>I understand →</button>
+        <button className="gw-next" onClick={onAgree} disabled={!copied} title={copied ? "" : "Copy the password first"}>
+          I understand →
+        </button>
       </div>
     </div>
   );
@@ -515,8 +566,26 @@ const CSS = `
 .gw-pass-wrap{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}
 .gw-sa{max-width:440px;margin:0 auto;text-align:left}
 .gw-sa p{font-size:.92rem;line-height:1.6;color:#2C3347;margin:0 0 10px}
+.gw-sa-list{margin:0 0 12px;padding:0;list-style:none}
+.gw-sa-list li{position:relative;padding:0 0 0 24px;margin-bottom:7px;font-size:.92rem;line-height:1.55;color:#2C3347}
+.gw-sa-list li::before{content:"";position:absolute;left:6px;top:.62em;width:6px;height:6px;border-radius:50%;background:#C9A96E}
 .gw-sa-pass{display:flex;align-items:center;justify-content:center;gap:9px;margin:18px auto 0;padding:14px 18px;max-width:440px;border-radius:12px;background:#fdecec;border:1px solid #f2c4c4}
 .gw-sa-lbl{font-size:.78rem;font-weight:800;color:#a3312d;text-transform:uppercase;letter-spacing:.4px}
+.gw-sa-pass{flex-wrap:wrap}
+/* Copying is required before continuing, so the button pulses until they do. */
+.gw-copy.big{height:34px;padding:0 16px;font-size:.84rem}
+.gw-copy.nudge{background:linear-gradient(135deg,#C9A96E,#b08f4f);border-color:#b08f4f;color:#fff;animation:gwCopyPulse 1.5s ease-in-out infinite}
+@keyframes gwCopyPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55);transform:scale(1)}
+  50%    {box-shadow:0 0 0 8px rgba(201,169,110,0);transform:scale(1.06)}
+}
+.gw-point{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:700;color:#b08f4f;animation:gwPoint 1.5s ease-in-out infinite}
+@keyframes gwPoint{0%,100%{transform:translateX(0)}50%{transform:translateX(-5px)}}
+.gw-next:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+.gw-store{display:inline-flex;align-items:center;gap:8px;margin-top:14px;height:42px;padding:0 20px;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:800;font-size:.88rem;text-decoration:none}
+.gw-store:hover{filter:brightness(1.06)}
+.gw-phone.link{display:flex;text-decoration:none;transition:transform .14s}
+.gw-phone.link:hover{transform:translateY(-3px)}
 .gw-copy{height:26px;padding:0 10px;border:1px solid rgba(201,169,110,.5);border-radius:7px;background:#fff;color:#7a5f2a;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .gw-copy:hover{background:#faf4e8}
 .gw-copy.on{background:#e7f6ec;border-color:#2f7d5a;color:#1c8a45}
