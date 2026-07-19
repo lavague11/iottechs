@@ -14,6 +14,70 @@ function parseGuide(a) {
   catch { return null; }
 }
 
+// A collapsible band of walkthroughs for one device. Opens showing the first three — enough to see
+// what's here without a wall of ten — with "Show more" for the rest. Renders nothing when empty,
+// so a search that matches no guides doesn't leave two empty shells behind.
+function GuideSection({ title, subtitle, items, icon, canEdit, onStart, onArchive }) {
+  const [open, setOpen] = useState(true);
+  const [all, setAll]   = useState(false);
+  if (!items.length) return null;
+
+  const TOP = 3;
+  const shown = all ? items : items.slice(0, TOP);
+  const rest  = items.length - TOP;
+
+  return (
+    <div className="sup-group sup-sec">
+      <button className="sup-sec-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="sup-sec-ic">{icon}</span>
+        <span className="sup-sec-txt">
+          <span className="sup-sec-title">{title}</span>
+          <span className="sup-sec-sub">{subtitle}</span>
+        </span>
+        <span className="sup-sec-count">{items.length}</span>
+        <span className={`sup-sec-chev${open ? " on" : ""}`}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </button>
+
+      {open && (
+        <div className="panel sup-panel">
+          {shown.map((a) => {
+            const g = parseGuide(a);
+            return (
+              <div className="sup-row sup-guide-row" key={a.id}>
+                <div className="sup-guide">
+                  <span className="sup-guide-ic">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+                  </span>
+                  <div className="sup-guide-txt">
+                    <div className="sup-guide-title">{a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}</div>
+                    <div className="sup-guide-sub">{g.steps.length} steps</div>
+                  </div>
+                  <button className="sup-guide-start" onClick={() => onStart(a)}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+                    Start
+                  </button>
+                  {canEdit && (
+                    <button className="sup-guide-arch" title="Archive" onClick={() => onArchive(a)}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {rest > 0 && (
+            <button className="sup-more" onClick={() => setAll((v) => !v)}>
+              {all ? "Show less" : `Show ${rest} more`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PinIcon() {
   return <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M14 4v6l3 3v2h-5v5l-1 1-1-1v-5H4v-2l3-3V4H6V2h12v2z"/></svg>;
 }
@@ -40,10 +104,19 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
     .filter((a) => !q || a.title.toLowerCase().includes(q) || (a.body || "").toLowerCase().includes(q) || (a.category || "").toLowerCase().includes(q)),
     [articles, cat, q]);
 
-  // Group visible articles by category (pinned already sorted first by the query).
+  // Guides are split out of the category grouping: they're walkthroughs, not reading, and they
+  // divide by which device the customer is holding rather than by topic.
+  const guides = useMemo(() => visible.filter((a) => parseGuide(a)), [visible]);
+  const mobileGuides = useMemo(() => guides.filter((a) => (parseGuide(a).surface || "mobile") === "mobile"), [guides]);
+  const nvrGuides    = useMemo(() => guides.filter((a) => parseGuide(a).surface === "nvr"), [guides]);
+
+  // Group the remaining (FAQ) articles by category.
   const groups = useMemo(() => {
     const m = new Map();
-    for (const a of visible) { if (!m.has(a.category)) m.set(a.category, []); m.get(a.category).push(a); }
+    for (const a of visible) {
+      if (parseGuide(a)) continue;
+      if (!m.has(a.category)) m.set(a.category, []); m.get(a.category).push(a);
+    }
     return [...m.entries()];
   }, [visible]);
 
@@ -100,34 +173,32 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
           <input className="apx-input" style={{ maxWidth: 340 }} placeholder="Search the knowledge base…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
 
+        <GuideSection
+          title="Phone &amp; App"
+          subtitle="Setting up and using Annke Vision"
+          items={mobileGuides}
+          canEdit={canEdit}
+          onStart={(a) => setGuide({ title: a.title, ...parseGuide(a) })}
+          onArchive={setArchiveTarget}
+          icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>}
+        />
+        <GuideSection
+          title="Recorder (NVR)"
+          subtitle="Settings on the box itself"
+          items={nvrGuides}
+          canEdit={canEdit}
+          onStart={(a) => setGuide({ title: a.title, ...parseGuide(a) })}
+          onArchive={setArchiveTarget}
+          icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>}
+        />
+
         {visible.length === 0 ? (
           <div className="panel"><div className="empty">{q || cat !== "all" ? "No articles match." : "No articles yet — add the first one."}</div></div>
         ) : groups.map(([category, items]) => (
           <div className="sup-group" key={category}>
             <div className="sup-cat">{category}</div>
             <div className="panel sup-panel">
-              {items.map((a) => parseGuide(a) ? (
-                <div className="sup-row sup-guide-row" key={a.id}>
-                  <div className="sup-guide">
-                    <span className="sup-guide-ic">
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
-                    </span>
-                    <div className="sup-guide-txt">
-                      <div className="sup-guide-title">{a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}</div>
-                      <div className="sup-guide-sub">Interactive guide · {parseGuide(a).steps.length} steps</div>
-                    </div>
-                    <button className="sup-guide-start" onClick={() => setGuide({ title: a.title, ...parseGuide(a) })}>
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
-                      Start
-                    </button>
-                    {canEdit && (
-                      <button className="sup-guide-arch" title="Archive" onClick={() => setArchiveTarget(a)}>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
+              {items.map((a) => (
                 <div className={`sup-row${openId === a.id ? " open" : ""}`} key={a.id}>
                   <button className="sup-q" onClick={() => setOpenId(openId === a.id ? null : a.id)}>
                     {a.pinned && <span className="sup-pin" title="Pinned"><PinIcon /></span>}
@@ -216,6 +287,17 @@ function ArticleEditor({ article, categories, busy, onSave, onCancel }) {
 }
 
 const CSS = `
+.apx .sup-sec{margin-bottom:14px}
+.apx .sup-sec-head{display:flex;align-items:center;gap:11px;width:100%;padding:11px 4px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit}
+.apx .sup-sec-ic{width:32px;height:32px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;background:#f8f0e0;color:#8a6d2f}
+.apx .sup-sec-txt{display:flex;flex-direction:column;flex:1;min-width:0}
+.apx .sup-sec-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;color:var(--ink)}
+.apx .sup-sec-sub{font-size:.76rem;color:var(--muted)}
+.apx .sup-sec-count{font-size:.75rem;font-weight:800;color:var(--gold-deep,#b08f4f);background:#f8f0e0;border-radius:20px;padding:2px 9px}
+.apx .sup-sec-chev{color:var(--muted);display:grid;place-items:center;transition:transform .16s}
+.apx .sup-sec-chev.on{transform:rotate(180deg)}
+.apx .sup-more{width:100%;padding:11px;border:none;border-top:1px solid var(--line);background:none;color:var(--gold-deep,#b08f4f);font-weight:700;font-size:.82rem;cursor:pointer;font-family:inherit}
+.apx .sup-more:hover{background:var(--bg-soft,#fafaf8)}
 .apx .sup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .apx .sup-add{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 16px;border:none;border-radius:9px;background:var(--gold,#C9A96E);color:var(--ink);font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap}
 .apx .sup-add:hover{background:var(--gold-deep,#b08f4f);color:#fff}

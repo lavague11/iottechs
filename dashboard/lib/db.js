@@ -828,7 +828,7 @@ function init() {
   const addGuide = db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,'guide',?,0,?)");
   for (const g of GUIDE_SEED) {
     if (hasSlug.get(g.slug)) continue;
-    addGuide.run(g.title, JSON.stringify({ flow: g.flow || {}, steps: g.steps }), g.category, g.slug, "IOT TECHS");
+    addGuide.run(g.title, JSON.stringify({ surface: g.surface || "mobile", flow: g.flow || {}, steps: g.steps }), g.category, g.slug, "IOT TECHS");
   }
 
   return db;
@@ -839,6 +839,7 @@ function init() {
 // System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
 const MOBILE_SETUP_GUIDE = {
   intro: "",
+  surface: "mobile",
   // `flow` turns the setup-specific screens on. Other guides leave these off and are a plain
   // step-through — a troubleshooting guide shouldn't demand a System QR before showing anything.
   flow: { askPlatform: true, needsSystem: true, consent: true, addMore: true },
@@ -866,7 +867,7 @@ const MOBILE_SETUP_GUIDE = {
 // NOTE: the booklet's "Password1" is replaced everywhere by {PASSWORD} (Cam + the system ZIP).
 const GUIDE_SEED = [
   {
-    slug: "admin-transfer", title: "Add Your System", category: "Getting Started",
+    slug: "admin-transfer", title: "Add Your System", surface: "mobile", category: "Getting Started",
     steps: [
       { art: "device", device: "monitor", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
       { art: "device", device: "monitor", title: "Open the menu",       text: "Choose Menu." },
@@ -880,7 +881,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "share-system", title: "Share With Family", category: "Everyday Use",
+    slug: "share-system", title: "Share With Family", surface: "mobile", category: "Everyday Use",
     steps: [
       { art: "device", title: "Refresh your list",  text: "On the app’s home screen, pull down to refresh." },
       { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system name." },
@@ -897,7 +898,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "nvr-time-sync", title: "Fix the Time", category: "Troubleshooting",
+    slug: "nvr-time-sync", title: "Fix the Time", surface: "nvr", category: "Troubleshooting",
     steps: [
       { art: "device", title: "Open the app",       text: "Go to the Home screen." },
       { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system." },
@@ -912,7 +913,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "rename-cameras", title: "Rename Cameras", category: "Everyday Use",
+    slug: "rename-cameras", title: "Rename Cameras", surface: "nvr", category: "Everyday Use",
     steps: [
       { art: "device", title: "Open the app",      text: "Open Annke Vision." },
       { art: "device", title: "Open the menu",     text: "Tap the three dots next to your system." },
@@ -924,7 +925,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "admin-pattern", title: "Admin Pattern", category: "Getting Started",
+    slug: "admin-pattern", title: "Admin Pattern", surface: "nvr", category: "Getting Started",
     steps: [
       { art: "device", device: "monitor", image: "/guides/nvr/pattern-where.png", title: "Where to set it",
         text: "On the recorder: System → User → Admin → Edit → Unlock Pattern.", tap: { x: 55.6, y: 27, w: 14, h: 5.5 } },
@@ -936,7 +937,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "mic-off", title: "Turn Off the Mic", category: "Everyday Use",
+    slug: "mic-off", title: "Turn Off the Mic", surface: "nvr", category: "Everyday Use",
     steps: [
       { art: "device", title: "Open the app",      text: "Tap Home in the bottom left." },
       { art: "device", title: "Open the menu",     text: "Find your system and tap the three dots." },
@@ -950,7 +951,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "change-passwords", title: "Change Passwords", category: "Getting Started",
+    slug: "change-passwords", title: "Change Passwords", surface: "nvr", category: "Getting Started",
     steps: [
       { art: "account", title: "Open More",        text: "In the app, tap More in the bottom right." },
       { art: "account", title: "Tap your account", text: "Tap your name, email, or phone number at the top." },
@@ -965,7 +966,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "add-system-user", title: "Add a User", category: "Everyday Use",
+    slug: "add-system-user", title: "Add a User", surface: "nvr", category: "Everyday Use",
     steps: [
       { art: "device", title: "Open User Management", text: "Home → three dots → Settings → Web Configuration → System → User Management." },
       { art: "name",   title: "Tap +",                text: "Tap the + in the top right." },
@@ -976,7 +977,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "monthly-reset", title: "Monthly Reset", category: "Troubleshooting",
+    slug: "monthly-reset", title: "Monthly Reset", surface: "nvr", category: "Troubleshooting",
     steps: [
       { art: "device", title: "Why reset",     text: "A monthly restart fixes about 90% of common problems and keeps your system healthy." },
       { art: "device", title: "Power it off",  text: "Unplug the recorder for 1–2 minutes." },
@@ -1108,6 +1109,7 @@ function decorateGuide(r) {
     category: r.category || "General",
     pinned: !!r.pinned,
     updated_at: r.updated_at,
+    surface: parsed.surface || "mobile",   // "mobile" (their phone) | "nvr" (the recorder)
     flow: parsed.flow || {},
     steps: Array.isArray(parsed.steps) ? parsed.steps : [],
   };
