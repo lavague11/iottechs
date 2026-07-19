@@ -20,7 +20,7 @@ export default function GuidePageClient({ title, steps, flow, projects, projectR
           projectRef={projectRef}
           loggedIn={loggedIn}
           onUnlock={unlockGuideQrAction}
-          onClose={() => { if (loggedIn) window.location.href = "/dashboard"; else setOpen(false); }}
+          onClose={() => { if (loggedIn) window.location.href = "/support"; else setOpen(false); }}
         />
       ) : (
         <div className="gpg-done">

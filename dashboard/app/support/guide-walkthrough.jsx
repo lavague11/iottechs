@@ -540,9 +540,10 @@ function Finish({ title, onClose, onRestart, loggedIn }) {
       <p>You&rsquo;ve finished {title}. You can revisit this guide anytime from Support.</p>
       <div className="gw-finish-btns">
         <button className="gw-back" onClick={onRestart}>&#8634; Start over</button>
-        {/* Signed-in people belong back in the app; a visitor on a texted link has nowhere to go. */}
+        {/* Signed-in people go back to the library they came from; a visitor on a texted link has
+            no library to return to, so they just close. */}
         {loggedIn
-          ? <a className="gw-next" href="/dashboard" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Go to dashboard</a>
+          ? <a className="gw-next" href="/support" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Support library</a>
           : <button className="gw-next" onClick={onClose}>Done</button>}
       </div>
     </div>
