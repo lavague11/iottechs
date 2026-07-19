@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 
 // A fullscreen, step-by-step walkthrough. Flow: two quick intro questions (which phone? got your
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
@@ -82,19 +82,45 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   );
 }
 
-// Reusable phone mockup: a screenshot (or animated scene) + an optional "tap here" highlight.
+// Reusable phone mockup: a screenshot (or animated scene) + "tap here" highlights. `tap` is one
+// box or an array of them (a screen can ask for two fields plus the button). The dim is a single
+// SVG mask with a hole per box — stacking one shadow per box would darken the other holes.
 function PhoneFrame({ art, image, tap, platform }) {
+  const uid = useId().replace(/:/g, "");
+  const taps = !tap ? [] : Array.isArray(tap) ? tap : [tap];
+  const box = (t) => ({ w: t.w || 74, h: t.h || 7 });
+
   return (
     <div className="gw-phone">
       <div className="gw-phone-notch" />
       <div className="gw-screen">
         <Scene art={art} image={image} platform={platform} />
-        {tap && (
-          <span
-            className="gw-tap"
-            style={{ left: `${tap.x}%`, top: `${tap.y}%`, width: `${tap.w || 74}%`, height: `${tap.h || 7}%` }}
-            aria-hidden="true"
-          />
+        {taps.length > 0 && (
+          <>
+            <svg className="gw-dim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <mask id={`gwm${uid}`}>
+                  <rect width="100" height="100" fill="#fff" />
+                  {taps.map((t, n) => {
+                    const b = box(t);
+                    return <rect key={n} x={t.x - b.w / 2} y={t.y - b.h / 2} width={b.w} height={b.h} rx="1" fill="#000" />;
+                  })}
+                </mask>
+              </defs>
+              <rect width="100" height="100" fill="rgba(10,14,22,.58)" mask={`url(#gwm${uid})`} />
+            </svg>
+            {taps.map((t, n) => {
+              const b = box(t);
+              return (
+                <span
+                  key={n}
+                  className="gw-tap"
+                  style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${b.w}%`, height: `${b.h}%` }}
+                  aria-hidden="true"
+                />
+              );
+            })}
+          </>
         )}
       </div>
     </div>
@@ -410,12 +436,12 @@ const CSS = `
 .sc-shot{width:100%;height:100%;object-fit:contain;object-position:top center;display:block;background:#fff}
 /* "tap here" highlight — the screen dims and a glowing rectangle spotlights the target.
    The huge spread shadow darkens everything OUTSIDE the box (clipped by .gw-screen). */
+.gw-dim{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
 .gw-tap{position:absolute;transform:translate(-50%,-50%);border-radius:9px;border:2px solid #E8CB94;
-  box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 18px 4px rgba(201,169,110,.85),inset 0 0 14px rgba(201,169,110,.3);
   pointer-events:none;z-index:5;animation:gwTapGlow 1.6s ease-in-out infinite}
 @keyframes gwTapGlow{
-  0%,100%{box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 14px 3px rgba(201,169,110,.7),inset 0 0 12px rgba(201,169,110,.25)}
-  50%    {box-shadow:0 0 0 9999px rgba(10,14,22,.55),0 0 26px 7px rgba(232,203,148,1),inset 0 0 18px rgba(232,203,148,.45)}
+  0%,100%{box-shadow:0 0 14px 3px rgba(201,169,110,.7),inset 0 0 12px rgba(201,169,110,.25)}
+  50%    {box-shadow:0 0 26px 7px rgba(232,203,148,1),inset 0 0 18px rgba(232,203,148,.45)}
 }
 /* "no QR" → show my System QR */
 .gw-qrhelp{padding:44px 30px 30px}
