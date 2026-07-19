@@ -63,7 +63,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
-          <AddMore onDone={() => setPhase("done")} />
+          <AddMore platform={platform} onDone={() => setPhase("done")} />
         ) : phase === "done" ? (
           <Finish title={title} loggedIn={loggedIn} onClose={onClose} onRestart={() => { setPhase(hasIntro ? "ask" : "steps"); setQi(askPlatform ? 0 : 1); setI(0); }} />
         ) : (
@@ -78,7 +78,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             </div>
 
             <div className={`gw-body${step.device === "monitor" ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
-              <DeviceFrame art={step.art} image={step.image} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+              <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
 
@@ -128,7 +128,10 @@ function PatternOverlay({ pattern }) {
   );
 }
 
-function DeviceFrame({ art, image, tap, pattern, platform, href, device = "phone" }) {
+function DeviceFrame({ art, image, imageAndroid, tap, pattern, platform, href, device = "phone" }) {
+  // Android screenshots are supplied per step as they're captured; until then the iOS shot stands
+  // in, since the Annke app's layout is near-identical across platforms.
+  const shot = platform === "android" && imageAndroid ? imageAndroid : image;
   const uid = useId().replace(/:/g, "");
   const taps = !tap ? [] : Array.isArray(tap) ? tap : [tap];
   const isMonitor = device === "monitor";
@@ -139,12 +142,14 @@ function DeviceFrame({ art, image, tap, pattern, platform, href, device = "phone
   const frameProps = href ? { href, target: "_blank", rel: "noopener noreferrer" } : {};
 
   return (
-    <Frame className={`${isMonitor ? "gw-monitor" : "gw-phone"}${href ? " link" : ""}`} {...frameProps}>
-      {!isMonitor && <div className="gw-phone-notch" />}
+    <Frame className={`${isMonitor ? "gw-monitor" : `gw-phone${platform === "android" ? " android" : ""}`}${href ? " link" : ""}`} {...frameProps}>
+      {!isMonitor && (platform === "android"
+        ? <div className="gw-phone-hole" />      /* Android: centred punch-hole camera */
+        : <div className="gw-phone-notch" />)}
       <div className="gw-screen">
         {/* When a pattern overlay is drawing the grid, the scene must not draw one too — the
             standalone "pattern" art has its own grid at its own coordinates and the two stack. */}
-        <Scene art={pattern && art === "pattern" ? "device" : art} image={image} platform={platform} />
+        <Scene art={pattern && art === "pattern" ? "device" : art} image={shot} platform={platform} />
         {pattern && <PatternOverlay pattern={pattern} />}
         {taps.length > 0 && (
           <>
@@ -212,19 +217,22 @@ function StepText({ label, step, password, platform }) {
         ) : step.text}
       </p>
       {step.store && (
-        // Both stores are offered — the one they picked leads, the other is there in case they
-        // tapped the wrong phone at the first question.
+        // Only their own store — showing both just asks them to make a decision they already made
+        // at the first question.
         <div className="gw-stores">
-          {(platform === "android" ? ["android", "ios"] : ["ios", "android"]).map((os, n) => (
-            <a key={os} className={`gw-store${n === 0 ? "" : " alt"}`} href={STORE[os]} target="_blank" rel="noopener noreferrer">
-              {os === "ios" ? (
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M3.6 2.2a1 1 0 0 0-.5.9v17.8a1 1 0 0 0 .5.9l9.3-9.8L3.6 2.2ZM14.2 10.5l2.9-3-9.3-5.3a1 1 0 0 0-.4-.1l6.8 8.4ZM14.2 13.5l-6.8 8.4a1 1 0 0 0 .4-.1l9.3-5.3-2.9-3ZM18.3 8.4l-3.2 3.6 3.2 3.6 2.4-1.4a1.3 1.3 0 0 0 0-2.3l-2.4-1.5Z"/></svg>
-              )}
-              {os === "ios" ? "App Store" : "Google Play"}
-            </a>
-          ))}
+          {(() => {
+            const os = platform === "android" ? "android" : "ios";
+            return (
+              <a className="gw-store" href={STORE[os]} target="_blank" rel="noopener noreferrer">
+                {os === "ios" ? (
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M3.6 2.2a1 1 0 0 0-.5.9v17.8a1 1 0 0 0 .5.9l9.3-9.8L3.6 2.2ZM14.2 10.5l2.9-3-9.3-5.3a1 1 0 0 0-.4-.1l6.8 8.4ZM14.2 13.5l-6.8 8.4a1 1 0 0 0 .4-.1l9.3-5.3-2.9-3ZM18.3 8.4l-3.2 3.6 3.2 3.6 2.4-1.4a1.3 1.3 0 0 0 0-2.3l-2.4-1.5Z"/></svg>
+                )}
+                {os === "ios" ? "Open the App Store" : "Open Google Play"}
+              </a>
+            );
+          })()}
         </div>
       )}
       {step.why && <div className="gw-why">{step.why}</div>}
@@ -473,7 +481,7 @@ const SHARE_STEPS = [
   { image: "/guides/annke/share-04.png", title: "Accept",           text: "You’re back here. Tap Accept — they’re in.", tap: { x: 75, y: 34, w: 48, h: 5 } },
 ];
 
-function AddMore({ onDone }) {
+function AddMore({ platform, onDone }) {
   const [mode, setMode] = useState("ask");   // 'ask' | 'share'
   const [j, setJ] = useState(0);
   const [dir, setDir] = useState(1);
@@ -493,7 +501,7 @@ function AddMore({ onDone }) {
           </div>
         </div>
         <div className="gw-body" key={j} style={{ "--dir": dir }}>
-          <DeviceFrame art={sstep.art} image={sstep.image} tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} />
+          <DeviceFrame art={sstep.art} image={sstep.image} imageAndroid={sstep.imageAndroid} tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} platform={platform} />
           <StepText label={`Sharing · ${j + 1} of ${SHARE_STEPS.length}`} step={sstep} />
         </div>
         <div className="gw-foot">
@@ -764,6 +772,10 @@ const CSS = `
 /* Phone frame */
 .gw-phone{position:relative;width:200px;height:400px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#161b26,#0b0f18);padding:11px;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.05);display:flex;flex-direction:column}
 .gw-phone-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:78px;height:17px;background:#0b0f18;border-radius:0 0 12px 12px;z-index:3}
+/* Android frame: squarer corners, thinner bezel, punch-hole selfie camera instead of a notch. */
+.gw-phone.android{border-radius:22px;padding:8px}
+.gw-phone.android .gw-screen{border-radius:16px}
+.gw-phone-hole{position:absolute;top:15px;left:50%;transform:translateX(-50%);width:9px;height:9px;border-radius:50%;background:#0b0f18;box-shadow:0 0 0 1.5px rgba(255,255,255,.07);z-index:3}
 /* Monitor frame — the recorder's own screen. Landscape 16:9 with a bezel, neck and foot, so a
    customer instantly knows "this is the box on the wall", not their phone. */
 .gw-monitor{position:relative;width:100%;max-width:420px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
