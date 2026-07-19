@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import path from "node:path";
+import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES } from "./stage-flow.js";
 import { toolHasData, toolFingerprint } from "./tool-data.js";
@@ -1609,6 +1610,43 @@ export function recordLogout(userId) {
     "SELECT id FROM login_logs WHERE user_id = ? AND logout_at IS NULL ORDER BY id DESC LIMIT 1"
   ).get(Number(userId));
   if (row) db.prepare("UPDATE login_logs SET logout_at = datetime('now') WHERE id = ?").run(row.id);
+}
+
+// Distinct devices a user has signed in from, newest activity first. Grouped by a coarse
+// fingerprint (OS family + major version + browser) so a routine browser update doesn't read as a
+// new device. Purely observational — nothing here gates access.
+export function getUserDevices(userId, limit = 40) {
+  const rows = db.prepare(
+    `SELECT ip_address, user_agent, login_at
+       FROM login_logs
+      WHERE user_id = ? AND event_type = 'login' AND user_agent IS NOT NULL
+      ORDER BY id DESC LIMIT 500`
+  ).all(Number(userId));
+
+  const byFp = new Map();
+  for (const r of rows) {
+    const fp = deviceFingerprint(r.user_agent);
+    let d = byFp.get(fp);
+    if (!d) {
+      const p = parseUserAgent(r.user_agent);
+      d = { fp, label: p.label, kind: p.kind, os: p.os, browser: p.browser,
+            logins: 0, last_seen: r.login_at, first_seen: r.login_at, ips: new Set() };
+      byFp.set(fp, d);
+    }
+    d.logins += 1;
+    if (r.ip_address) d.ips.add(r.ip_address);
+    if (r.login_at < d.first_seen) d.first_seen = r.login_at;   // rows are newest-first
+    if (r.login_at > d.last_seen)  d.last_seen  = r.login_at;
+  }
+
+  return [...byFp.values()]
+    .map((d) => {
+      const ip = [...d.ips][0];
+      const hit = ip ? db.prepare("SELECT label FROM ip_geo WHERE ip=?").get(String(ip)) : null;
+      return { ...d, ips: [...d.ips], geo: hit?.label || "" };   // cache-only; never blocks
+    })
+    .sort((a, b) => String(b.last_seen).localeCompare(String(a.last_seen)))
+    .slice(0, limit);
 }
 
 export function recordEvent(eventType, userId, ip, ua, projectId, notes) {

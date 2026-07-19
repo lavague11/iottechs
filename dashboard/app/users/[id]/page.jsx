@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getUserById, getProjectsForUser, getLoginStatsMap } from "../../../lib/db";
+import { getUserById, getProjectsForUser, getLoginStatsMap, getUserDevices } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import ProfileClient from "./profile-client";
 
@@ -15,6 +15,8 @@ export default async function UserProfilePage({ params }) {
   const statsMap  = getLoginStatsMap();
   const projects  = getProjectsForUser(Number(id));
   const loginStat = statsMap[profile.id] || {};
+  // Devices this account has signed in from — an unfamiliar one is worth a second look.
+  const devices   = getUserDevices(profile.id);
 
   return (
     <ProfileClient
@@ -27,6 +29,7 @@ export default async function UserProfilePage({ params }) {
         session_mins: loginStat.session_mins ?? null,
       }}
       projects={projects}
+      devices={devices}
     />
   );
 }

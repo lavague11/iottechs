@@ -21,7 +21,7 @@ function timeAgo(iso) {
   return `${Math.floor(mins / 1440)}d ago`;
 }
 
-export default function ProfileClient({ user, alerts, profile, projects }) {
+export default function ProfileClient({ user, alerts, profile, projects, devices = [] }) {
   const router = useRouter();
   const roleColor = USER_ROLE_COLOR[profile.role] || "#888";
 
@@ -131,7 +131,55 @@ export default function ProfileClient({ user, alerts, profile, projects }) {
             </table>
           )}
         </div>
+
+        <DevicesPanel devices={devices} />
       </div>
     </AdminShell>
+  );
+}
+
+function DeviceGlyph({ kind }) {
+  if (kind === "desktop") return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
+  if (kind === "tablet")  return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M11 18h2"/></svg>;
+  return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>;
+}
+
+// Every device this account has signed in from. Observational only — a user agent is trivially
+// spoofed, so this is here to make an unusual login visible, never to allow or deny one.
+function DevicesPanel({ devices }) {
+  if (!devices.length) return null;
+  const fmt = (t) => (t ? String(t).replace("T", " ").slice(0, 16) : "—");
+  return (
+    <div className="panel" style={{ marginTop: 18 }}>
+      <div className="sec-head" style={{ padding: "14px 16px 0" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Devices</h2>
+          <div style={{ fontSize: ".76rem", color: "var(--muted)" }}>
+            {devices.length} device{devices.length === 1 ? "" : "s"} used to sign in
+          </div>
+        </div>
+      </div>
+      <table className="apx-table" style={{ marginTop: 10 }}>
+        <thead><tr><th>Device</th><th>Location</th><th>Sign-ins</th><th>First seen</th><th>Last seen</th></tr></thead>
+        <tbody>
+          {devices.map((d) => (
+            <tr key={d.fp}>
+              <td>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "var(--gold-deep,#b08f4f)" }}><DeviceGlyph kind={d.kind} /></span>
+                  <span style={{ fontWeight: 600 }}>{d.label}</span>
+                </span>
+              </td>
+              <td style={{ color: "var(--muted)", fontSize: ".84rem" }}>
+                {d.geo || <span title={d.ips.join(", ")}>{d.ips[0] || "—"}</span>}
+              </td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>{d.logins}</td>
+              <td style={{ color: "var(--muted)", fontSize: ".82rem", fontVariantNumeric: "tabular-nums" }}>{fmt(d.first_seen)}</td>
+              <td style={{ fontSize: ".82rem", fontVariantNumeric: "tabular-nums" }}>{fmt(d.last_seen)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
