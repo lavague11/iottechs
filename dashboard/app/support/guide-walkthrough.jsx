@@ -166,11 +166,21 @@ function StepText({ label, step, password, platform }) {
           </>
         ) : step.text}
       </p>
-      {store && (
-        <a className="gw-store" href={store} target="_blank" rel="noopener noreferrer">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          {platform === "android" ? "Open Google Play" : "Open the App Store"}
-        </a>
+      {step.store && (
+        // Both stores are offered — the one they picked leads, the other is there in case they
+        // tapped the wrong phone at the first question.
+        <div className="gw-stores">
+          {(platform === "android" ? ["android", "ios"] : ["ios", "android"]).map((os, n) => (
+            <a key={os} className={`gw-store${n === 0 ? "" : " alt"}`} href={STORE[os]} target="_blank" rel="noopener noreferrer">
+              {os === "ios" ? (
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M3.6 2.2a1 1 0 0 0-.5.9v17.8a1 1 0 0 0 .5.9l9.3-9.8L3.6 2.2ZM14.2 10.5l2.9-3-9.3-5.3a1 1 0 0 0-.4-.1l6.8 8.4ZM14.2 13.5l-6.8 8.4a1 1 0 0 0 .4-.1l9.3-5.3-2.9-3ZM18.3 8.4l-3.2 3.6 3.2 3.6 2.4-1.4a1.3 1.3 0 0 0 0-2.3l-2.4-1.5Z"/></svg>
+              )}
+              {os === "ios" ? "App Store" : "Google Play"}
+            </a>
+          ))}
+        </div>
       )}
       {step.why && <div className="gw-why">{step.why}</div>}
     </div>
@@ -582,8 +592,11 @@ const CSS = `
 .gw-point{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:700;color:#b08f4f;animation:gwPoint 1.5s ease-in-out infinite}
 @keyframes gwPoint{0%,100%{transform:translateX(0)}50%{transform:translateX(-5px)}}
 .gw-next:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
-.gw-store{display:inline-flex;align-items:center;gap:8px;margin-top:14px;height:42px;padding:0 20px;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:800;font-size:.88rem;text-decoration:none}
+.gw-stores{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.gw-store{display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 20px;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:800;font-size:.88rem;text-decoration:none}
 .gw-store:hover{filter:brightness(1.06)}
+.gw-store.alt{background:#fff;border:1.5px solid #e6e0d4;color:#6f7686}
+.gw-store.alt:hover{border-color:#C9A96E;color:#b08f4f;filter:none}
 .gw-phone.link{display:flex;text-decoration:none;transition:transform .14s}
 .gw-phone.link:hover{transform:translateY(-3px)}
 .gw-copy{height:26px;padding:0 10px;border:1px solid rgba(201,169,110,.5);border-radius:7px;background:#fff;color:#7a5f2a;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
