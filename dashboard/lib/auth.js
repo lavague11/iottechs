@@ -71,6 +71,31 @@ export async function parseAccessToken(token) {
   }
 }
 
+// Guide link token — lets us text a customer a link that shows their System QR without a PIN.
+// Scoped to ONE project and expiring (default 7 days, matching the commissioning window), because
+// whoever holds the link holds the QR. Payload is accessId:expiresAt.
+const GUIDE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function makeGuideToken(accessId, ttlMs = GUIDE_TTL_MS) {
+  const payload = `${accessId}:${Date.now() + ttlMs}`;
+  const sig = await hmac(payload);
+  return btoa(`${payload}:${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+export async function parseGuideToken(token) {
+  try {
+    const raw = atob(String(token).replace(/-/g, "+").replace(/_/g, "/"));
+    const parts = raw.split(":");
+    if (parts.length < 3) return null;
+    const [accessId, expiresAt, sig] = parts;
+    if ((await hmac(`${accessId}:${expiresAt}`)) !== sig) return null;
+    if (Date.now() > Number(expiresAt)) return null;
+    return { accessId };
+  } catch {
+    return null;
+  }
+}
+
 async function previewHmac(payload) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(

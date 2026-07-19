@@ -6,7 +6,7 @@ import { useState, useEffect, useId } from "react";
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
-export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], projects = [], onClose }) {
+export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], projects = [], projectRef, onUnlock, onClose }) {
   const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'add-more' → 'done'
   const [qi, setQi]           = useState(0);       // intro question (0 = phone, 1 = which system)
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
@@ -51,7 +51,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         <div className="gw-kicker gw-kicker-abs">{title}</div>
 
         {phase === "ask" ? (
-          <AskFlow qi={qi} platform={platform} projects={projects} onPlatform={pickPlatform} onContinue={toConsent} onBack={() => setQi(0)} />
+          <AskFlow qi={qi} platform={platform} projects={projects} projectRef={projectRef} onUnlock={onUnlock} onPlatform={pickPlatform} onContinue={toConsent} onBack={() => setQi(0)} />
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
@@ -262,7 +262,7 @@ function SharedAccount({ password, onAgree, onBack }) {
 }
 
 // Two intro screens before the phone: which platform, then which system (shows that system's QR).
-function AskFlow({ qi, platform, projects, onPlatform, onContinue, onBack }) {
+function AskFlow({ qi, platform, projects, projectRef, onUnlock, onPlatform, onContinue, onBack }) {
   return (
     <div className="gw-ask" key={qi}>
       <div className="gw-ask-step">Step {qi + 1} of 2</div>
@@ -281,17 +281,25 @@ function AskFlow({ qi, platform, projects, onPlatform, onContinue, onBack }) {
           </div>
         </>
       ) : (
-        <SystemPicker projects={projects} onContinue={onContinue} onBack={onBack} />
+        <SystemPicker projects={projects} projectRef={projectRef} onUnlock={onUnlock} onContinue={onContinue} onBack={onBack} />
       )}
     </div>
   );
 }
 
 // "Which system?" — list the customer's systems, show the picked one's QR. No system → contact us.
-function SystemPicker({ projects = [], onContinue, onBack }) {
-  const withQr = (projects || []).filter((p) => p.system_qr);
+function SystemPicker({ projects = [], onContinue, onBack, onUnlock, projectRef }) {
+  const [found, setFound] = useState([]);          // systems unlocked here with an ID + PIN
+  const all = [...(projects || []), ...found];
+  const withQr = all.filter((p) => p.system_qr);
   const [sel, setSel] = useState(withQr[0]?.access_id || "");
-  const proj = withQr.find((p) => p.access_id === sel);
+  const proj = withQr.find((p) => p.access_id === sel) || withQr[0];
+
+  // Nothing to show and an unlock path available → ask for the project ID + PIN. This is the
+  // public-link case: the steps are open to anyone, but the QR needs the project's credentials.
+  if (withQr.length === 0 && onUnlock) {
+    return <QrUnlock projectRef={projectRef} onUnlock={onUnlock} onFound={(p) => { setFound([p]); setSel(p.access_id); }} onBack={onBack} />;
+  }
 
   if (withQr.length === 0) {
     return (
@@ -343,6 +351,48 @@ function SystemPicker({ projects = [], onContinue, onBack }) {
 }
 
 // Full-screen QR viewer: big code, download, and an X to close. Used from the guide's system picker.
+// Project ID + PIN gate for the QR on the public guide. Same credentials as the project page —
+// this doesn't create a new way in, it just asks for the existing one at the point of need.
+function QrUnlock({ projectRef, onUnlock, onFound, onBack }) {
+  const [ref, setRef]   = useState(projectRef || "");
+  const [pin, setPin]   = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState("");
+
+  const MSG = {
+    no_project: "We couldn't find that project. Check the ID and try again.",
+    wrong_pin:  "That PIN doesn't match. Try again.",
+    no_pin:     "This project has no PIN set yet — please contact support.",
+    no_qr:      "This system doesn't have a QR code yet — please contact support.",
+  };
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!ref.trim() || !pin.trim()) return;
+    setBusy(true); setErr("");
+    const r = await onUnlock(ref.trim(), pin.trim());
+    setBusy(false);
+    if (r?.ok) onFound(r.project);
+    else setErr(MSG[r?.error] || "Something went wrong. Try again.");
+  }
+
+  return (
+    <div className="gw-qrhelp">
+      <h2 className="gw-ask-q">Find your system</h2>
+      <p className="gw-ask-sub">Enter your Project ID and PIN to pull up your QR code. They’re on your welcome card.</p>
+      <form className="gw-unlock" onSubmit={submit}>
+        <input className="gw-unlock-in" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Project ID (or last 4)" autoComplete="off" autoFocus={!projectRef} />
+        <input className="gw-unlock-in" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN" inputMode="numeric" autoComplete="off" autoFocus={!!projectRef} />
+        {err && <div className="gw-unlock-err">{err}</div>}
+        <div className="gw-qr-actions">
+          <button type="button" className="gw-back" onClick={onBack}>← Back</button>
+          <button type="submit" className="gw-next" disabled={busy || !ref.trim() || !pin.trim()}>{busy ? "Checking…" : "Show my QR →"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function QrZoom({ proj, onClose }) {
   const file = `IOT-TECHS-QR-${(proj.access_id || "system")}.png`;
   return (
@@ -561,6 +611,10 @@ const CSS = `
 .gw-qr-hint{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 16px;border-radius:9px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-size:.8rem;font-weight:800}
 .gw-qr-card:hover .gw-qr-hint{filter:brightness(1.06)}
 .gw-qr-note{margin:10px auto 0;max-width:340px;font-size:.76rem;line-height:1.5;color:#6f7686}
+.gw-unlock{display:flex;flex-direction:column;gap:10px;max-width:320px;margin:0 auto}
+.gw-unlock-in{height:46px;padding:0 14px;border:1.5px solid #e6e8ee;border-radius:11px;font-size:1rem;font-family:inherit;color:#0e1320;text-align:center;background:#fff}
+.gw-unlock-in:focus{outline:none;border-color:#C9A96E}
+.gw-unlock-err{padding:9px 12px;border-radius:9px;background:#fdecec;border:1px solid #f2c4c4;color:#a3312d;font-size:.82rem;font-weight:600}
 .gw-qr-actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
 /* full-screen QR viewer */
 .gw-qrzoom-bg{position:fixed;inset:0;z-index:5000;background:rgba(8,11,20,.8);backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;animation:gwIn .2s ease}

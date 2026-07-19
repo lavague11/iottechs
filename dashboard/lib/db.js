@@ -944,6 +944,10 @@ export function getSupportArticle(id) {
   const r = db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id));
   return r ? { ...r, pinned: !!r.pinned } : null;
 }
+// The walkthrough guide row, for the public /guide/mobile-setup page.
+export function getGuideArticle() {
+  return db.prepare("SELECT * FROM support_articles WHERE kind='guide' ORDER BY id ASC").get() || null;
+}
 export function createSupportArticle({ title, body, category, pinned, author }) {
   const info = db.prepare(
     "INSERT INTO support_articles (title, body, category, pinned, author) VALUES (?,?,?,?,?)"
