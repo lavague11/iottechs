@@ -6,7 +6,7 @@ import { unlockGuideQrAction } from "./actions";
 
 // Standalone host for the walkthrough. On the Support page the guide opens as an overlay over the
 // admin shell; here it IS the page, so closing it shows a restart card rather than nothing.
-export default function GuidePageClient({ title, steps, flow, projects, projectRef }) {
+export default function GuidePageClient({ title, steps, flow, projects, projectRef, loggedIn }) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -18,8 +18,9 @@ export default function GuidePageClient({ title, steps, flow, projects, projectR
           flow={flow}
           projects={projects}
           projectRef={projectRef}
+          loggedIn={loggedIn}
           onUnlock={unlockGuideQrAction}
-          onClose={() => setOpen(false)}
+          onClose={() => { if (loggedIn) window.location.href = "/dashboard"; else setOpen(false); }}
         />
       ) : (
         <div className="gpg-done">

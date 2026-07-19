@@ -30,6 +30,11 @@ export default async function GuidePage({ params, searchParams }) {
   const ref = String(sp?.project || "").trim();
   const tok = String(sp?.t || "").trim();
 
+  // Signed-in visitors get sent back into the app when they finish; a visitor on a texted link
+  // has no dashboard to return to, so they get the standalone finish card instead.
+  const sessionTok = (await cookies()).get("iot_session")?.value;
+  const loggedIn   = !!(sessionTok && await parseToken(sessionTok));
+
   let projects = [];
 
   if (guide.flow?.needsSystem) {
@@ -69,6 +74,7 @@ export default async function GuidePage({ params, searchParams }) {
       flow={guide.flow}
       projects={projects}
       projectRef={ref}
+      loggedIn={loggedIn}
     />
   );
 }

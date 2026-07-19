@@ -6,7 +6,7 @@ import { useState, useEffect, useId } from "react";
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
-export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, onUnlock, onClose }) {
+export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, loggedIn = false, onUnlock, onClose }) {
   // Which extra screens this guide uses. A plain how-to guide turns them all off and is just steps.
   const askPlatform = !!flow.askPlatform;
   const needsSystem = !!flow.needsSystem;
@@ -65,7 +65,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : phase === "add-more" ? (
           <AddMore onDone={() => setPhase("done")} />
         ) : phase === "done" ? (
-          <Finish title={title} onClose={onClose} onRestart={() => { setPhase("steps"); setI(0); }} />
+          <Finish title={title} loggedIn={loggedIn} onClose={onClose} onRestart={() => { setPhase(hasIntro ? "ask" : "steps"); setQi(askPlatform ? 0 : 1); setI(0); }} />
         ) : (
           <>
             <div className="gw-head">
@@ -78,7 +78,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             </div>
 
             <div className={`gw-body${step.device === "monitor" ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
-              <DeviceFrame art={step.art} image={step.image} tap={step.tap} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+              <DeviceFrame art={step.art} image={step.image} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
 
@@ -99,7 +99,36 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
 // box or an array of them. The dim is a single SVG mask with a hole per box — stacking one shadow
 // per box would darken the other holes. Highlight coordinates are percentages, so they survive
 // the switch between frames unchanged.
-function DeviceFrame({ art, image, tap, platform, href, device = "phone" }) {
+// The G-shape unlock gesture, drawn over a real pattern screen. `pattern` places the 3x3 grid as
+// percentages of the screen: {x, y} = grid centre, gap = spacing between dots. A screenshot can
+// show where the grid is but not how to drag through it, so the path animates on a loop.
+function PatternOverlay({ pattern }) {
+  const { x = 50, y = 50, gap = 7, order = [3, 1, 7, 9, 6, 5] } = pattern || {};
+  // The viewBox is stretched to the screen's aspect, so x and y percentages aren't the same
+  // physical distance — the grid takes a spacing per axis, and dots are ellipses, not circles.
+  const gx = pattern?.gapX ?? gap;
+  const gy = pattern?.gapY ?? gap;
+  const pos = (n) => {
+    const col = (n - 1) % 3, row = Math.floor((n - 1) / 3);
+    return [x + (col - 1) * gx, y + (row - 1) * gy];
+  };
+  const d = order.map((n, i) => `${i ? "L" : "M"}${pos(n).join(" ")}`).join(" ");
+  return (
+    <svg className="gw-patov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+        const [cx, cy] = pos(n);
+        return <ellipse key={n} cx={cx} cy={cy} rx={gx * 0.3} ry={gy * 0.3} fill="none" stroke="rgba(201,169,110,.5)" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
+      })}
+      <path d={d} className="gw-patov-path" fill="none" stroke="#E8CB94" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      {order.map((n, i) => {
+        const [cx, cy] = pos(n);
+        return <ellipse key={`o${i}`} cx={cx} cy={cy} rx={gx * 0.13} ry={gy * 0.13} fill="#E8CB94" />;
+      })}
+    </svg>
+  );
+}
+
+function DeviceFrame({ art, image, tap, pattern, platform, href, device = "phone" }) {
   const uid = useId().replace(/:/g, "");
   const taps = !tap ? [] : Array.isArray(tap) ? tap : [tap];
   const isMonitor = device === "monitor";
@@ -113,7 +142,10 @@ function DeviceFrame({ art, image, tap, platform, href, device = "phone" }) {
     <Frame className={`${isMonitor ? "gw-monitor" : "gw-phone"}${href ? " link" : ""}`} {...frameProps}>
       {!isMonitor && <div className="gw-phone-notch" />}
       <div className="gw-screen">
-        <Scene art={art} image={image} platform={platform} />
+        {/* When a pattern overlay is drawing the grid, the scene must not draw one too — the
+            standalone "pattern" art has its own grid at its own coordinates and the two stack. */}
+        <Scene art={pattern && art === "pattern" ? "device" : art} image={image} platform={platform} />
+        {pattern && <PatternOverlay pattern={pattern} />}
         {taps.length > 0 && (
           <>
             <svg className="gw-dim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -461,7 +493,7 @@ function AddMore({ onDone }) {
           </div>
         </div>
         <div className="gw-body" key={j} style={{ "--dir": dir }}>
-          <DeviceFrame art={sstep.art} image={sstep.image} tap={sstep.tap} device={sstep.device} />
+          <DeviceFrame art={sstep.art} image={sstep.image} tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} />
           <StepText label={`Sharing · ${j + 1} of ${SHARE_STEPS.length}`} step={sstep} />
         </div>
         <div className="gw-foot">
@@ -490,17 +522,20 @@ function AddMore({ onDone }) {
   );
 }
 
-function Finish({ title, onClose, onRestart }) {
+function Finish({ title, onClose, onRestart, loggedIn }) {
   return (
     <div className="gw-finish">
       <div className="gw-burst">
         <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
       </div>
       <h2>All done!</h2>
-      <p>You've finished {title}. You can revisit this guide anytime from Support.</p>
+      <p>You&rsquo;ve finished {title}. You can revisit this guide anytime from Support.</p>
       <div className="gw-finish-btns">
-        <button className="gw-back" onClick={onRestart}>↺ Replay</button>
-        <button className="gw-next" onClick={onClose}>Done</button>
+        <button className="gw-back" onClick={onRestart}>&#8634; Start over</button>
+        {/* Signed-in people belong back in the app; a visitor on a texted link has nowhere to go. */}
+        {loggedIn
+          ? <a className="gw-next" href="/dashboard" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Go to dashboard</a>
+          : <button className="gw-next" onClick={onClose}>Done</button>}
       </div>
     </div>
   );
@@ -638,6 +673,9 @@ const CSS = `
 .sc-pat-svg{width:min(230px,72%);height:auto}
 .sc-pat-path{stroke-dasharray:260;stroke-dashoffset:260;animation:scPat 3.2s ease-in-out infinite}
 @keyframes scPat{0%{stroke-dashoffset:260}55%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+.gw-patov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6;filter:drop-shadow(0 0 4px rgba(201,169,110,.9))}
+.gw-patov-path{stroke-dasharray:600;stroke-dashoffset:600;animation:gwPatDraw 3.4s ease-in-out infinite}
+@keyframes gwPatDraw{0%{stroke-dashoffset:600}45%,80%{stroke-dashoffset:0}95%,100%{stroke-dashoffset:0;opacity:0}}
 .gw-dim{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
 .gw-tap{position:absolute;transform:translate(-50%,-50%);border-radius:9px;border:2px solid #E8CB94;
   pointer-events:none;z-index:5;animation:gwTapGlow 1.6s ease-in-out infinite}

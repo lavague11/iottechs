@@ -926,7 +926,12 @@ const GUIDE_SEED = [
   {
     slug: "admin-pattern", title: "Admin Pattern", category: "Getting Started",
     steps: [
-      { art: "pattern", title: "The admin pattern", text: "Some screens ask for a pattern. Draw the G shape: 3 → 1 → 7 → 9 → 6 → 5.",
+      { art: "device", device: "monitor", image: "/guides/nvr/pattern-where.png", title: "Where to set it",
+        text: "On the recorder: System → User → Admin → Edit → Unlock Pattern.", tap: { x: 55.6, y: 27, w: 14, h: 5.5 } },
+      { art: "pattern", device: "monitor", image: "/guides/nvr/pattern-screen.png", title: "Draw the G",
+        text: "Drag through the dots in this order: 3 → 1 → 7 → 9 → 6 → 5.",
+        // Grid measured off the recorder screen: centre 48.9%/51%, spacing 6.6% across, 7.3% down.
+        pattern: { x: 48.9, y: 51, gapX: 6.6, gapY: 7.3 },
         why: "This is the admin pattern for your system. Keep it private — it unlocks settings that can turn cameras off." },
     ],
   },
