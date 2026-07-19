@@ -47,13 +47,10 @@ function GuideSection({ title, subtitle, items, icon, canEdit, onStart, onArchiv
             return (
               <div className="sup-row sup-guide-row" key={a.id}>
                 <div className="sup-guide">
-                  <span className="sup-guide-ic">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
-                  </span>
                   <div className="sup-guide-txt">
                     <div className="sup-guide-title">{a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}</div>
-                    <div className="sup-guide-sub">{g.steps.length} steps</div>
                   </div>
+                  <span className="sup-steps">{g.steps.length} steps</span>
                   <button className="sup-guide-start" onClick={() => onStart(a)}>
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
                     Start
@@ -98,6 +95,13 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
     () => [...new Set(articles.map((a) => a.category).filter(Boolean))].sort(),
     [articles]
   );
+  // Chips filter articles, so they must list article categories only — guide categories in that
+  // row filtered to nothing visible and looked broken.
+  const faqCount    = useMemo(() => articles.filter((a) => !parseGuide(a)).length, [articles]);
+  const articleCats = useMemo(
+    () => [...new Set(articles.filter((a) => !parseGuide(a)).map((a) => a.category).filter(Boolean))].sort(),
+    [articles]
+  );
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => articles
     .filter((a) => cat === "all" || a.category === cat)
@@ -106,7 +110,11 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
 
   // Guides are split out of the category grouping: they're walkthroughs, not reading, and they
   // divide by which device the customer is holding rather than by topic.
-  const guides = useMemo(() => visible.filter((a) => parseGuide(a)), [visible]);
+  const guides = useMemo(
+    () => articles.filter((a) => parseGuide(a))
+      .filter((a) => !q || a.title.toLowerCase().includes(q) || (a.body || "").toLowerCase().includes(q)),
+    [articles, q]
+  );
   const mobileGuides = useMemo(() => guides.filter((a) => (parseGuide(a).surface || "mobile") === "mobile"), [guides]);
   const nvrGuides    = useMemo(() => guides.filter((a) => parseGuide(a).surface === "nvr"), [guides]);
 
@@ -153,7 +161,7 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
         <div className="page-head sup-head">
           <div>
             <h1>Support</h1>
-            <div className="ph-sub">Knowledge base · {articles.length} article{articles.length === 1 ? "" : "s"}</div>
+            <div className="ph-sub">{guides.length} guide{guides.length === 1 ? "" : "s"} · {faqCount} article{faqCount === 1 ? "" : "s"}</div>
           </div>
           {canEdit && (
             <button className="sup-add" onClick={() => setEditor({})}>
@@ -164,13 +172,7 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
         </div>
 
         <div className="sec-head">
-          <div className="filters">
-            <button className={cat === "all" ? "on" : ""} onClick={() => setCat("all")}>All <span style={{ opacity: .6 }}>{articles.length}</span></button>
-            {categories.map((c) => (
-              <button key={c} className={cat === c ? "on" : ""} onClick={() => setCat(c)}>{c} <span style={{ opacity: .6 }}>{articles.filter((a) => a.category === c).length}</span></button>
-            ))}
-          </div>
-          <input className="apx-input" style={{ maxWidth: 340 }} placeholder="Search the knowledge base…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="apx-input" style={{ maxWidth: 340 }} placeholder="Search guides and articles…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
 
         <GuideSection
@@ -192,8 +194,20 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
           icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>}
         />
 
+        {groups.length > 0 && (
+          <div className="sup-artbar">
+            <div className="sup-artbar-t">Articles</div>
+            <div className="filters">
+              <button className={cat === "all" ? "on" : ""} onClick={() => setCat("all")}>All <span style={{ opacity: .6 }}>{faqCount}</span></button>
+              {articleCats.map((c) => (
+                <button key={c} className={cat === c ? "on" : ""} onClick={() => setCat(c)}>{c} <span style={{ opacity: .6 }}>{articles.filter((a) => !parseGuide(a) && a.category === c).length}</span></button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {visible.length === 0 ? (
-          <div className="panel"><div className="empty">{q || cat !== "all" ? "No articles match." : "No articles yet — add the first one."}</div></div>
+          <div className="panel"><div className="empty">{q || cat !== "all" ? "Nothing matches." : "No articles yet — add the first one."}</div></div>
         ) : groups.map(([category, items]) => (
           <div className="sup-group" key={category}>
             <div className="sup-cat">{category}</div>
@@ -288,6 +302,12 @@ function ArticleEditor({ article, categories, busy, onSave, onCancel }) {
 
 const CSS = `
 .apx .sup-sec{margin-bottom:14px}
+.apx .sup-steps{font-size:.75rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.apx .sup-artbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:22px 0 8px;padding-top:16px;border-top:1px solid var(--line)}
+.apx .sup-artbar-t{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;color:var(--ink)}
+/* Archive is an admin escape hatch, not a primary action — it fades in on hover. */
+.apx .sup-guide-row .sup-guide-arch{opacity:0;transition:opacity .14s}
+.apx .sup-guide-row:hover .sup-guide-arch,.apx .sup-guide-arch:focus-visible{opacity:1}
 .apx .sup-sec-head{display:flex;align-items:center;gap:11px;width:100%;padding:11px 4px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit}
 .apx .sup-sec-ic{width:32px;height:32px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;background:#f8f0e0;color:#8a6d2f}
 .apx .sup-sec-txt{display:flex;flex-direction:column;flex:1;min-width:0}
