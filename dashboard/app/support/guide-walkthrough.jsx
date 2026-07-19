@@ -461,7 +461,7 @@ function AddMore({ onDone }) {
           </div>
         </div>
         <div className="gw-body" key={j} style={{ "--dir": dir }}>
-          <PhoneFrame art={sstep.art} image={sstep.image} tap={sstep.tap} />
+          <DeviceFrame art={sstep.art} image={sstep.image} tap={sstep.tap} device={sstep.device} />
           <StepText label={`Sharing · ${j + 1} of ${SHARE_STEPS.length}`} step={sstep} />
         </div>
         <div className="gw-foot">
