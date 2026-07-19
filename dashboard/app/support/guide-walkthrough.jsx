@@ -23,7 +23,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
   function next() { if (last) setPhase("add-more"); else go(i + 1); }   // end → "add anyone else?"
   function back() {
-    if (i === 0) { setPhase("ask"); setQi(1); }   // step 1 → back to the system picker
+    if (i === 0) setPhase("consent");             // step 1 → back to the shared-account notice
     else go(i - 1);
   }
 
@@ -39,7 +39,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   }, [phase, i, last]);
 
   function pickPlatform(p) { setPlatform(p); setQi(1); }
-  function startSteps(proj) { if (proj) setSystem(proj); setPhase("steps"); setI(0); setDir(1); }
+  // System first (its ZIP is the password), then the shared-account notice, then step 1.
+  function toConsent(proj) { if (proj) setSystem(proj); setPhase("consent"); }
+  function startSteps() { setPhase("steps"); setI(0); setDir(1); }
 
   return (
     <div className="gw-scrim" onClick={(e) => { if (e.target.classList.contains("gw-scrim")) onClose?.(); }}>
@@ -49,7 +51,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         <div className="gw-kicker gw-kicker-abs">{title}</div>
 
         {phase === "ask" ? (
-          <AskFlow qi={qi} platform={platform} projects={projects} onPlatform={pickPlatform} onContinue={startSteps} onBack={() => setQi(0)} />
+          <AskFlow qi={qi} platform={platform} projects={projects} onPlatform={pickPlatform} onContinue={toConsent} onBack={() => setQi(0)} />
+        ) : phase === "consent" ? (
+          <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
           <AddMore onDone={() => setPhase("done")} />
         ) : phase === "done" ? (
@@ -159,6 +163,39 @@ function StepText({ label, step, password }) {
         ) : step.text}
       </p>
       {step.why && <div className="gw-why">{step.why}</div>}
+    </div>
+  );
+}
+
+// Shared-account notice. Shown after the system is picked (its ZIP is the password) and before
+// step 1, so the password is a policy they've accepted rather than a surprise demand mid-form.
+function SharedAccount({ password, onAgree, onBack }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(password).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
+
+  return (
+    <div className="gw-ask">
+      <div className="gw-ask-step">Before you start</div>
+      <h2 className="gw-ask-q">This is a shared account</h2>
+      <div className="gw-sa">
+        <p>To program your system and make changes for you, we need to sign in to the app too.</p>
+        <p>So please don’t use a personal password — you’d have to hand it to us. Use the one below instead and keep your private passwords private.</p>
+        <p>After the first week, change it to anything you like.</p>
+      </div>
+      <div className="gw-sa-pass">
+        <span className="gw-sa-lbl">Your password</span>
+        <code className="gw-pass">{password}</code>
+        <button className={`gw-copy${copied ? " on" : ""}`} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+      </div>
+      <div className="gw-qr-actions">
+        <button className="gw-back" onClick={onBack}>← Back</button>
+        <button className="gw-next" onClick={onAgree}>I understand →</button>
+      </div>
     </div>
   );
 }
@@ -476,6 +513,10 @@ const CSS = `
 /* The reason is always on screen and red — it's an instruction, not a footnote. */
 .gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#fdecec;border:1px solid #f2c4c4;font-size:.85rem;line-height:1.55;color:#a3312d;font-weight:600}
 .gw-pass-wrap{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}
+.gw-sa{max-width:440px;margin:0 auto;text-align:left}
+.gw-sa p{font-size:.92rem;line-height:1.6;color:#2C3347;margin:0 0 10px}
+.gw-sa-pass{display:flex;align-items:center;justify-content:center;gap:9px;margin:18px auto 0;padding:14px 18px;max-width:440px;border-radius:12px;background:#fdecec;border:1px solid #f2c4c4}
+.gw-sa-lbl{font-size:.78rem;font-weight:800;color:#a3312d;text-transform:uppercase;letter-spacing:.4px}
 .gw-copy{height:26px;padding:0 10px;border:1px solid rgba(201,169,110,.5);border-radius:7px;background:#fff;color:#7a5f2a;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .gw-copy:hover{background:#faf4e8}
 .gw-copy.on{background:#e7f6ec;border-color:#2f7d5a;color:#1c8a45}
