@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { createSupportArticle, updateSupportArticle, archiveAndDelete } from "../../lib/db";
+import { createSupportArticle, updateSupportArticle, archiveAndDelete, setSystemQr } from "../../lib/db";
 
 // Support articles are edited by admin/manager only; everyone else reads.
 async function requireEditor() {
@@ -38,4 +38,19 @@ export async function archiveSupportArticleAction(id) {
   revalidatePath("/support");
   revalidatePath("/archives");
   return { ok: true };
+}
+
+// Save an activation card generated in the QR library. Same payload contract as the project-page
+// System QR step (a data: URL out of the QR Cleaner widget) — this just lets admin fill the gap
+// from the library instead of walking into each project.
+export async function setLibrarySystemQrAction(accessId, dataUrl) {
+  const { error } = await requireEditor();
+  if (error) return { ok: false, error };
+  const s = String(dataUrl || "");
+  if (!s.startsWith("data:image/") || s.length > 3000000) return { ok: false, error: "Bad image." };
+  const row = setSystemQr(accessId, s);
+  if (!row) return { ok: false, error: "Project not found." };
+  revalidatePath("/support/qr");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, system_qr: s };
 }
