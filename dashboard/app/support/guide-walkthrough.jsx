@@ -291,7 +291,6 @@ function AskFlow({ qi, platform, projects, onPlatform, onContinue, onBack }) {
 function SystemPicker({ projects = [], onContinue, onBack }) {
   const withQr = (projects || []).filter((p) => p.system_qr);
   const [sel, setSel] = useState(withQr[0]?.access_id || "");
-  const [zoom, setZoom] = useState(false);
   const proj = withQr.find((p) => p.access_id === sel);
 
   if (withQr.length === 0) {
@@ -309,7 +308,7 @@ function SystemPicker({ projects = [], onContinue, onBack }) {
   return (
     <div className="gw-qrhelp">
       <h2 className="gw-ask-q">Which system?</h2>
-      <p className="gw-ask-sub">Pick your system, then scan this QR from the app.</p>
+      <p className="gw-ask-sub">Pick your system, then save the QR to your photos — you’ll need it near the end.</p>
       {withQr.length > 1 && (
         <select className="gw-qr-select" value={sel} onChange={(e) => setSel(e.target.value)}>
           {withQr.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer || p.access_id}</option>)}
@@ -317,12 +316,22 @@ function SystemPicker({ projects = [], onContinue, onBack }) {
       )}
       {proj && (
         <>
-          <button className="gw-qr-card gw-qr-tap" onClick={() => setZoom(true)} title="Tap to enlarge">
+          {/* A download link, not a lightbox — step 10 asks them to pick this from their Album,
+              so getting it into their photos is the whole point of this screen. */}
+          <a
+            className="gw-qr-card gw-qr-tap"
+            href={proj.system_qr}
+            download={`IOT-TECHS-QR-${proj.access_id || "system"}.png`}
+            title="Tap to save"
+          >
             <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
             <div className="gw-qr-name">{proj.customer || proj.access_id}</div>
-            <div className="gw-qr-hint">Tap to enlarge</div>
-          </button>
-          {zoom && <QrZoom proj={proj} onClose={() => setZoom(false)} />}
+            <div className="gw-qr-hint">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Tap to save
+            </div>
+          </a>
+          <p className="gw-qr-note">On iPhone you can also press and hold the code, then choose “Save to Photos.”</p>
         </>
       )}
       <div className="gw-qr-actions">
@@ -547,9 +556,11 @@ const CSS = `
 .gw-qr-card{display:inline-flex;flex-direction:column;align-items:center;gap:8px;padding:16px;background:#fff;border:1px solid #eef0f4;border-radius:16px;box-shadow:0 14px 34px -16px rgba(0,0,0,.28)}
 .gw-qr-tap{border:1px solid #eef0f4;cursor:pointer;font-family:inherit;transition:transform .12s,box-shadow .12s,border-color .12s}
 .gw-qr-tap:hover{transform:translateY(-2px);border-color:#C9A96E;box-shadow:0 18px 40px -16px rgba(176,143,79,.5)}
-.gw-qr-img{width:220px;height:220px;object-fit:contain;border-radius:8px;background:#fff}
+.gw-qr-img{width:min(300px,72vw);height:min(300px,72vw);object-fit:contain;border-radius:8px;background:#fff}
 .gw-qr-name{font-size:.85rem;font-weight:700;color:#2C3347}
-.gw-qr-hint{font-size:.72rem;font-weight:700;color:#b08f4f}
+.gw-qr-hint{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 16px;border-radius:9px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-size:.8rem;font-weight:800}
+.gw-qr-card:hover .gw-qr-hint{filter:brightness(1.06)}
+.gw-qr-note{margin:10px auto 0;max-width:340px;font-size:.76rem;line-height:1.5;color:#6f7686}
 .gw-qr-actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
 /* full-screen QR viewer */
 .gw-qrzoom-bg{position:fixed;inset:0;z-index:5000;background:rgba(8,11,20,.8);backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;animation:gwIn .2s ease}
