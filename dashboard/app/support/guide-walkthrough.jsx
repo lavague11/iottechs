@@ -433,8 +433,12 @@ const SHARE_STEPS = [
   { image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
   { image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
   { image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
-  { art: "notify", title: "Check your phone", text: "A new Share request shows at the top. Tap it." },
-  { art: "name",   title: "Pick cameras",     text: "Choose which cameras to share. Done!" },
+  { image: "/guides/annke/share-03.png", title: "Check your phone", text: "“You have 1 new sharing” appears at the top. Tap it.", tap: { x: 50, y: 13, w: 97, h: 5 } },
+  { image: "/guides/annke/share-04.png", title: "Check the number", text: "Make sure the number is theirs, then tap the system to choose cameras.",
+    tap: [{ x: 50, y: 25, w: 92, h: 5 }, { x: 50, y: 18, w: 92, h: 6 }],
+    why: "Only accept a request from a number you recognise. Accepting gives that person live view of your cameras." },
+  { image: "/guides/annke/share-05.png", title: "Pick cameras",     text: "Tick the cameras to share, then tap Finish.", tap: [{ x: 50, y: 16, w: 60, h: 4 }, { x: 50, y: 95, w: 92, h: 5 }] },
+  { image: "/guides/annke/share-04.png", title: "Accept",           text: "You’re back here. Tap Accept — they’re in.", tap: { x: 75, y: 34, w: 48, h: 5 } },
 ];
 
 function AddMore({ onDone }) {
