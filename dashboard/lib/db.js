@@ -829,13 +829,13 @@ const MOBILE_SETUP_GUIDE = {
     { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register.",                          tap: { x: 18, y: 44, w: 32, h: 5 } },
     { art: "account",  image: "/guides/annke/03.png", title: "Agree",             text: "Tap Agree.",                             tap: { x: 50, y: 60, w: 60, h: 6 } },
     { art: "account",  image: "/guides/annke/04.png", title: "Pick your country", text: "Choose USA." },
-    { art: "account",  image: "/guides/annke/05.png", title: "Use your phone",    text: "Tap “Register by Mobile Phone Number.”", tap: { x: 50, y: 90, w: 72, h: 5 } },
+    { art: "account",  image: "/guides/annke/05.png", title: "Use your phone",    text: "Tap “Register by Mobile Phone Number.”", tap: { x: 50, y: 94, w: 68, h: 4 } },
     { art: "account",  image: "/guides/annke/06.png", title: "Enter your number", text: "Type your mobile number.",               tap: { x: 50, y: 28, w: 82, h: 6 } },
-    { art: "account",  image: "/guides/annke/07.png", title: "Make a password",   text: "Set the password to: {PASSWORD}", tap: { x: 50, y: 40, w: 82, h: 6 }, why: "Why this password? So we can program your app for the first week and make any changes you need. After that, you can change your password to whatever you like." },
+    { art: "account",  image: "/guides/annke/07.png", title: "Set the password",  text: "Set the password to {PASSWORD}", tap: { x: 50, y: 40, w: 82, h: 6 }, why: "Use this exact password. It lets us set up your app for the first week and make any changes for you — and it keeps this a shared account, so we never see your personal login. After the first week, change it to anything you like." },
     { art: "account",  image: "/guides/annke/08.png", title: "Enter the code",    text: "Check your texts. Tap Finish.",          tap: { x: 50, y: 32, w: 82, h: 7 } },
     { art: "device",   image: "/guides/annke/09.png", title: "Add a device",      text: "Tap Add Device.",                        tap: { x: 50, y: 61, w: 58, h: 7 } },
     { art: "qr",       image: "/guides/annke/10.png", title: "Choose Scan QR",    text: "Tap Scan QR Code.",                      tap: { x: 50, y: 78, w: 84, h: 7 } },
-    { art: "qr",       image: "/guides/annke/11.png", title: "Scan your card",    text: "Point it at your QR." },
+    { art: "qr",       image: "/guides/annke/11.png", title: "Upload your QR",    text: "Tap Album, then pick the QR code we gave you.", tap: { x: 21, y: 90, w: 18, h: 9 } },
   ],
 };
 

@@ -101,26 +101,38 @@ function PhoneFrame({ art, image, tap, platform }) {
   );
 }
 
-// Step caption with an optional "?" that reveals the "why" behind a step.
-// {PASSWORD} in the text is swapped for the system's app password (Cam + ZIP) and shown as a chip.
+// Step caption. {PASSWORD} in the text becomes the system's app password (Cam + ZIP) as a chip with
+// a copy button. A step's "why" is always on screen — people skip anything they have to tap for.
 function StepText({ label, step, password }) {
-  const [why, setWhy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const parts = String(step.text || "").split("{PASSWORD}");
+
+  function copy() {
+    navigator.clipboard?.writeText(password).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
+
   return (
     <div className="gw-text">
       <div className="gw-stepno">{label}</div>
-      <h2 className="gw-title">
-        {step.title}
-        {step.why && (
-          <button className={`gw-why-btn${why ? " on" : ""}`} onClick={() => setWhy((w) => !w)} aria-label="Why?" title="Why?">?</button>
-        )}
-      </h2>
+      <h2 className="gw-title">{step.title}</h2>
       <p className="gw-desc">
-        {parts.length > 1
-          ? <>{parts[0]}<code className="gw-pass">{password}</code>{parts[1]}</>
-          : step.text}
+        {parts.length > 1 ? (
+          <>
+            {parts[0]}
+            <span className="gw-pass-wrap">
+              <code className="gw-pass">{password}</code>
+              <button className={`gw-copy${copied ? " on" : ""}`} onClick={copy} title="Copy">
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </span>
+            {parts[1]}
+          </>
+        ) : step.text}
       </p>
-      {step.why && why && <div className="gw-why">{step.why}</div>}
+      {step.why && <div className="gw-why">{step.why}</div>}
     </div>
   );
 }
@@ -435,9 +447,12 @@ const CSS = `
 @keyframes gwSlide{from{opacity:0;transform:translateX(calc(var(--dir,1)*26px))}to{opacity:1;transform:none}}
 .gw-text .gw-stepno{font-size:.74rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9aa0ab;margin-bottom:6px}
 .gw-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.5rem;color:#0e1320;line-height:1.15;margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.gw-why-btn{width:24px;height:24px;flex-shrink:0;border-radius:50%;border:1.5px solid #d8c39a;background:#faf4e8;color:#b08f4f;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:.85rem;line-height:1;cursor:pointer;transition:all .12s}
-.gw-why-btn:hover,.gw-why-btn.on{background:#C9A96E;color:#fff;border-color:#C9A96E}
-.gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.35);font-size:.85rem;line-height:1.55;color:#7a5f2a;animation:gwSlide .25s both;--dir:1}
+/* The reason is always on screen and red — it's an instruction, not a footnote. */
+.gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#fdecec;border:1px solid #f2c4c4;font-size:.85rem;line-height:1.55;color:#a3312d;font-weight:600}
+.gw-pass-wrap{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}
+.gw-copy{height:26px;padding:0 10px;border:1px solid rgba(201,169,110,.5);border-radius:7px;background:#fff;color:#7a5f2a;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.gw-copy:hover{background:#faf4e8}
+.gw-copy.on{background:#e7f6ec;border-color:#2f7d5a;color:#1c8a45}
 .gw-desc{font-size:.95rem;line-height:1.6;color:#2C3347;margin:0}
 .gw-pass{display:inline-block;font-family:Menlo,Consolas,monospace;font-size:1rem;font-weight:700;letter-spacing:.5px;color:#7a5f2a;background:#faf4e8;border:1px solid rgba(201,169,110,.45);border-radius:7px;padding:2px 9px;user-select:all}
 .gw-intro{margin-top:12px;padding:10px 12px;border-radius:10px;background:#faf4e8;border:1px solid rgba(201,169,110,.3);font-size:.82rem;color:#7a5f2a}
