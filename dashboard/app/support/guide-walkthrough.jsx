@@ -77,8 +77,8 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
               </div>
             </div>
 
-            <div className="gw-body" key={i} style={{ "--dir": dir }}>
-              <PhoneFrame art={step.art} image={step.image} tap={step.tap} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+            <div className={`gw-body${step.device === "monitor" ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
+              <DeviceFrame art={step.art} image={step.image} tap={step.tap} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
 
@@ -94,20 +94,24 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   );
 }
 
-// Reusable phone mockup: a screenshot (or animated scene) + "tap here" highlights. `tap` is one
-// box or an array of them (a screen can ask for two fields plus the button). The dim is a single
-// SVG mask with a hole per box — stacking one shadow per box would darken the other holes.
-function PhoneFrame({ art, image, tap, platform, href }) {
+// Device mockup: a screenshot (or animated scene) + "tap here" highlights, framed as either a
+// phone (portrait, app screens) or a monitor (landscape, the recorder's own screen). `tap` is one
+// box or an array of them. The dim is a single SVG mask with a hole per box — stacking one shadow
+// per box would darken the other holes. Highlight coordinates are percentages, so they survive
+// the switch between frames unchanged.
+function DeviceFrame({ art, image, tap, platform, href, device = "phone" }) {
   const uid = useId().replace(/:/g, "");
   const taps = !tap ? [] : Array.isArray(tap) ? tap : [tap];
-  const box = (t) => ({ w: t.w || 74, h: t.h || 7 });
+  const isMonitor = device === "monitor";
+  // A recorder screen is dense — default the box smaller than a phone's full-width button.
+  const box = (t) => ({ w: t.w || (isMonitor ? 30 : 74), h: t.h || (isMonitor ? 8 : 7) });
   // On the "get the app" step the whole mockup is the store link.
   const Frame = href ? "a" : "div";
   const frameProps = href ? { href, target: "_blank", rel: "noopener noreferrer" } : {};
 
   return (
-    <Frame className={`gw-phone${href ? " link" : ""}`} {...frameProps}>
-      <div className="gw-phone-notch" />
+    <Frame className={`${isMonitor ? "gw-monitor" : "gw-phone"}${href ? " link" : ""}`} {...frameProps}>
+      {!isMonitor && <div className="gw-phone-notch" />}
       <div className="gw-screen">
         <Scene art={art} image={image} platform={platform} />
         {taps.length > 0 && (
@@ -138,6 +142,7 @@ function PhoneFrame({ art, image, tap, platform, href }) {
           </>
         )}
       </div>
+      {isMonitor && <><div className="gw-mon-neck" /><div className="gw-mon-foot" /></>}
     </Frame>
   );
 }
@@ -717,6 +722,15 @@ const CSS = `
 /* Phone frame */
 .gw-phone{position:relative;width:200px;height:400px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#161b26,#0b0f18);padding:11px;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.05);display:flex;flex-direction:column}
 .gw-phone-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:78px;height:17px;background:#0b0f18;border-radius:0 0 12px 12px;z-index:3}
+/* Monitor frame — the recorder's own screen. Landscape 16:9 with a bezel, neck and foot, so a
+   customer instantly knows "this is the box on the wall", not their phone. */
+.gw-monitor{position:relative;width:100%;max-width:420px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
+.gw-monitor .gw-screen{width:100%;aspect-ratio:16/9;flex:none;border-radius:6px;background:#0b0f18;border:9px solid #161b26;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.06)}
+.gw-mon-neck{width:52px;height:18px;background:linear-gradient(180deg,#161b26,#11151f)}
+.gw-mon-foot{width:132px;height:9px;border-radius:0 0 7px 7px;background:linear-gradient(180deg,#161b26,#0b0f18);box-shadow:0 6px 14px -6px rgba(0,0,0,.6)}
+/* A landscape screen needs the full width, so the caption drops underneath instead of beside. */
+.gw-body.wide{grid-template-columns:1fr;gap:18px;justify-items:center}
+.gw-body.wide .gw-text{text-align:center;max-width:520px}
 .gw-screen{position:relative;width:100%;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:linear-gradient(170deg,#f7f8fa,#eef1f6);display:grid;place-items:center}
 /* Scenes */
 .sc{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#b08f4f}

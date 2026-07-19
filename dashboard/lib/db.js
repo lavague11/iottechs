@@ -868,11 +868,11 @@ const GUIDE_SEED = [
   {
     slug: "admin-transfer", title: "Add Your System", category: "Getting Started",
     steps: [
-      { art: "device", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
-      { art: "device", title: "Open the menu",       text: "Choose Menu." },
-      { art: "device", title: "Go to Network",       text: "Pick Network on the left." },
-      { art: "device", title: "Platform Access",     text: "Choose the middle option: Platform Access." },
-      { art: "device", title: "Check it says Online", text: "If it doesn’t say Online, call us before going further." },
+      { art: "device", device: "monitor", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
+      { art: "device", device: "monitor", title: "Open the menu",       text: "Choose Menu." },
+      { art: "device", device: "monitor", title: "Go to Network",       text: "Pick Network on the left." },
+      { art: "device", device: "monitor", title: "Platform Access",     text: "Choose the middle option: Platform Access." },
+      { art: "device", device: "monitor", title: "Check it says Online", text: "If it doesn’t say Online, call us before going further." },
       { art: "qr",     title: "Open the app",        text: "On your phone, open Annke Vision." },
       { art: "qr",     title: "Tap +",               text: "Tap the + in the top right corner." },
       { art: "qr",     title: "Scan QR Code",        text: "Choose Scan QR Code." },
