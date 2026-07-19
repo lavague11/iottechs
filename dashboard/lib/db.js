@@ -822,6 +822,14 @@ function init() {
   for (const g of db.prepare("SELECT id, title FROM support_articles WHERE kind='guide' AND (slug IS NULL OR slug='')").all()) {
     db.prepare("UPDATE support_articles SET slug=? WHERE id=?").run(slugify(g.title, g.id), g.id);
   }
+  // Seed the rest of the Welcome Package. Keyed by slug and insert-only, so this adds guides that
+  // don't exist yet and never overwrites one the owner has since edited.
+  const hasSlug = db.prepare("SELECT 1 FROM support_articles WHERE slug=? LIMIT 1");
+  const addGuide = db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,'guide',?,0,?)");
+  for (const g of GUIDE_SEED) {
+    if (hasSlug.get(g.slug)) continue;
+    addGuide.run(g.title, JSON.stringify({ flow: g.flow || {}, steps: g.steps }), g.category, g.slug, "IOT TECHS");
+  }
 
   return db;
 }
@@ -850,6 +858,123 @@ const MOBILE_SETUP_GUIDE = {
     { art: "qr",       image: "/guides/annke/11.png", title: "Upload your QR",    text: "Tap Album, then pick the QR code we gave you.", tap: { x: 21, y: 90, w: 18, h: 9 } },
   ],
 };
+
+// The rest of the Welcome Package, as interactive guides. Step text is condensed from the printed
+// booklet — short lines, one action each, because these are read on a phone by someone who is not
+// technical. Screenshots get attached per step later; until then each step falls back to its `art`
+// animation. `flow: {}` means a plain step-through: no platform question, no System QR, no consent.
+// NOTE: the booklet's "Password1" is replaced everywhere by {PASSWORD} (Cam + the system ZIP).
+const GUIDE_SEED = [
+  {
+    slug: "admin-transfer", title: "Add Your System", category: "Getting Started",
+    steps: [
+      { art: "device", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
+      { art: "device", title: "Open the menu",       text: "Choose Menu." },
+      { art: "device", title: "Go to Network",       text: "Pick Network on the left." },
+      { art: "device", title: "Platform Access",     text: "Choose the middle option: Platform Access." },
+      { art: "device", title: "Check it says Online", text: "If it doesn’t say Online, call us before going further." },
+      { art: "qr",     title: "Open the app",        text: "On your phone, open Annke Vision." },
+      { art: "qr",     title: "Tap +",               text: "Tap the + in the top right corner." },
+      { art: "qr",     title: "Scan QR Code",        text: "Choose Scan QR Code." },
+      { art: "qr",     title: "Scan the recorder",   text: "Point your phone at the QR code on the recorder’s screen. Your system is added." },
+    ],
+  },
+  {
+    slug: "share-system", title: "Share With Family", category: "Everyday Use",
+    steps: [
+      { art: "device", title: "Refresh your list",  text: "On the app’s home screen, pull down to refresh." },
+      { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system name." },
+      { art: "name",   title: "Tap Share",          text: "Choose Share." },
+      { art: "qr",     title: "Share via QR Code",  text: "Choose Share via QR Code." },
+      { art: "download", title: "They get the app", text: "Have them install Annke Vision on their phone." },
+      { art: "qr",     title: "They scan it",       text: "They scan the code from your phone, or from a screenshot you send." },
+      { art: "notify", title: "Approve the request", text: "You’ll get a notification. Tap it, then choose which cameras to share." },
+    ],
+  },
+  {
+    slug: "nvr-time-sync", title: "Fix the Time", category: "Troubleshooting",
+    steps: [
+      { art: "device", title: "Open the app",       text: "Go to the Home screen." },
+      { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system." },
+      { art: "device", title: "Settings",           text: "Choose Settings." },
+      { art: "device", title: "Web Configuration",  text: "Tap Web Configuration." },
+      { art: "device", title: "Confirm",            text: "When it asks to Select NVR/DVR, tap OK." },
+      { art: "device", title: "System",             text: "Choose System from the left menu." },
+      { art: "device", title: "System Settings",    text: "Tap System Settings." },
+      { art: "device", title: "Time Settings",      text: "Switch to the Time Settings tab." },
+      { art: "device", title: "Manual Time Sync",   text: "Turn on Manual Time Sync." },
+      { art: "device", title: "Sync",               text: "Tap Sync with Mobile Time, then Save." },
+    ],
+  },
+  {
+    slug: "rename-cameras", title: "Rename Cameras", category: "Everyday Use",
+    steps: [
+      { art: "device", title: "Open the app",      text: "Open Annke Vision." },
+      { art: "device", title: "Open the menu",     text: "Tap the three dots next to your system." },
+      { art: "device", title: "Settings",          text: "Choose Settings." },
+      { art: "device", title: "Channel Management", text: "Tap Channel Management." },
+      { art: "device", title: "Pick a camera",     text: "Choose the camera you want to rename." },
+      { art: "name",   title: "Type the new name", text: "Tap Channel Name and type it — “Front Door,” “Driveway.”" },
+      { art: "name",   title: "Save",              text: "Tap the check mark in the top right. You’ll see Completed." },
+    ],
+  },
+  {
+    slug: "admin-pattern", title: "Admin Pattern", category: "Getting Started",
+    steps: [
+      { art: "pattern", title: "The admin pattern", text: "Some screens ask for a pattern. Draw the G shape: 3 → 1 → 7 → 9 → 6 → 5.",
+        why: "This is the admin pattern for your system. Keep it private — it unlocks settings that can turn cameras off." },
+    ],
+  },
+  {
+    slug: "mic-off", title: "Turn Off the Mic", category: "Everyday Use",
+    steps: [
+      { art: "device", title: "Open the app",      text: "Tap Home in the bottom left." },
+      { art: "device", title: "Open the menu",     text: "Find your system and tap the three dots." },
+      { art: "device", title: "Settings",          text: "Choose Settings, then Web Configuration." },
+      { art: "device", title: "Confirm",           text: "When it asks to Select NVR/DVR, tap OK." },
+      { art: "device", title: "Video and Audio",   text: "Under Configuration, tap Video and Audio — then tap it again for the channel list." },
+      { art: "device", title: "Pick a camera",     text: "Choose the camera you want to change." },
+      { art: "device", title: "Video Stream Only", text: "Tap Video Type and change it from Video and Audio to Video Stream Only." },
+      { art: "device", title: "Save",              text: "Tap OK, then Save. You’ll see Saved.",
+        why: "Audio recording laws vary by state. Please check your local laws, or ask an attorney, before recording audio." },
+    ],
+  },
+  {
+    slug: "change-passwords", title: "Change Passwords", category: "Getting Started",
+    steps: [
+      { art: "account", title: "Open More",        text: "In the app, tap More in the bottom right." },
+      { art: "account", title: "Tap your account", text: "Tap your name, email, or phone number at the top." },
+      { art: "account", title: "Account Manager",  text: "Open Account Manager." },
+      { art: "account", title: "Change password",  text: "Choose Change App Account Password." },
+      { art: "account", title: "Old, then new",    text: "Enter {PASSWORD}, then your new password. Confirm and save.",
+        why: "Write the new password down and keep it somewhere safe. If it’s lost, a reset can cost $100–$300 depending on your system." },
+      { art: "device",  title: "Now the recorder", text: "For the recorder itself: Home → three dots → Settings → Web Configuration → NVR/DVR." },
+      { art: "device",  title: "User Management",  text: "Tap System, then User Management." },
+      { art: "device",  title: "Edit Admin",       text: "Tap Admin, then Edit." },
+      { art: "device",  title: "Set the new one",  text: "Enter the current password, then the new one. Confirm and save." },
+    ],
+  },
+  {
+    slug: "add-system-user", title: "Add a User", category: "Everyday Use",
+    steps: [
+      { art: "device", title: "Open User Management", text: "Home → three dots → Settings → Web Configuration → System → User Management." },
+      { art: "name",   title: "Tap +",                text: "Tap the + in the top right." },
+      { art: "name",   title: "Fill in their details", text: "Enter their name and password." },
+      { art: "device", title: "Choose permissions",   text: "Pick what they’re allowed to do." },
+      { art: "device", title: "Save",                 text: "Save. Limiting permissions keeps admin-only settings safe.",
+        why: "Give family and staff their own limited user instead of the admin login — it stops accidental changes to the system." },
+    ],
+  },
+  {
+    slug: "monthly-reset", title: "Monthly Reset", category: "Troubleshooting",
+    steps: [
+      { art: "device", title: "Why reset",     text: "A monthly restart fixes about 90% of common problems and keeps your system healthy." },
+      { art: "device", title: "Power it off",  text: "Unplug the recorder for 1–2 minutes." },
+      { art: "device", title: "Power it on",   text: "Plug it back in and give it a few minutes to come up." },
+      { art: "device", title: "Still stuck?",  text: "If a camera is still offline, call us at 646-396-0775. We’re here 24/7." },
+    ],
+  },
+];
 
 // Starter knowledge-base content — editable/archivable from the Support page. Kept generic (no
 // customer data) so it's a useful template the owner can rewrite.

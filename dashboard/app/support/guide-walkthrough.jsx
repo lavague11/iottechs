@@ -503,6 +503,28 @@ function Scene({ art, image, platform }) {
   // A supplied screenshot wins — but if it hasn't been uploaded yet (404), fall back to the scene.
   if (image && !failed) return <img className="sc-shot" src={image} alt="" draggable={false} onError={() => setFailed(true)} />;
   switch (art) {
+    // The admin unlock pattern: a 3x3 grid with the G-shape (3→1→7→9→6→5) drawing itself on a
+    // loop. This one can't be a screenshot — the gesture is the instruction.
+    case "pattern": {
+      const P = { 1: [22, 22], 2: [50, 22], 3: [78, 22], 4: [22, 50], 5: [50, 50], 6: [78, 50], 7: [22, 78], 8: [50, 78], 9: [78, 78] };
+      const order = [3, 1, 7, 9, 6, 5];
+      const d = order.map((n, i) => `${i ? "L" : "M"}${P[n][0]} ${P[n][1]}`).join(" ");
+      return (
+        <div className="sc sc-pattern">
+          <svg viewBox="0 0 100 100" className="sc-pat-svg">
+            <path d={d} fill="none" stroke="#C9A96E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="sc-pat-path" />
+            {Object.entries(P).map(([n, [x, y]]) => (
+              <g key={n}>
+                <circle cx={x} cy={y} r="7" fill="none" stroke={order.includes(Number(n)) ? "#C9A96E" : "#3a4356"} strokeWidth="2" />
+                <circle cx={x} cy={y} r="2.6" fill={order.includes(Number(n)) ? "#C9A96E" : "#3a4356"} />
+                <text x={x} y={y - 11} textAnchor="middle" fontSize="7" fill="#6f7686">{n}</text>
+              </g>
+            ))}
+          </svg>
+          <div className="sc-cap">3 → 1 → 7 → 9 → 6 → 5</div>
+        </div>
+      );
+    }
     case "download": return (
       <div className="sc sc-dl">
         <div className="sc-appicon">
@@ -603,6 +625,10 @@ const CSS = `
 .sc-shot{width:100%;height:100%;object-fit:contain;object-position:top center;display:block;background:#fff}
 /* "tap here" highlight — the screen dims and a glowing rectangle spotlights the target.
    The huge spread shadow darkens everything OUTSIDE the box (clipped by .gw-screen). */
+.sc-pattern{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;height:100%;background:#12172a}
+.sc-pat-svg{width:min(230px,72%);height:auto}
+.sc-pat-path{stroke-dasharray:260;stroke-dashoffset:260;animation:scPat 3.2s ease-in-out infinite}
+@keyframes scPat{0%{stroke-dashoffset:260}55%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
 .gw-dim{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
 .gw-tap{position:absolute;transform:translate(-50%,-50%);border-radius:9px;border:2px solid #E8CB94;
   pointer-events:none;z-index:5;animation:gwTapGlow 1.6s ease-in-out infinite}
