@@ -915,11 +915,14 @@ export function getProjectsWithSystemQr(rows) {
 // Admin System-QR library: every project that has a QR, with the fields you'd search by
 // (customer, address, phone, ID). The QR image itself lives in system_qr (a data URL).
 export function getSystemQrLibrary() {
-  // Every project is listed, with or without a card — the ones missing a QR are the actionable
-  // ones (admin uploads the device photo right from the library), so they sort to the top.
+  // Every project is listed, with or without a card. Ones that HAVE a card lead (that's what the
+  // library is for), and within each group the newest project comes first.
   return db.prepare(
-    `SELECT access_id, customer, address, contact_phone, contact_name, system_qr
-       FROM projects ORDER BY customer COLLATE NOCASE ASC, access_id ASC`
+    `SELECT access_id, customer, address, contact_phone, contact_name, system_qr, created_at
+       FROM projects
+      ORDER BY (system_qr IS NOT NULL AND system_qr != '') DESC,
+               COALESCE(created_at, '') DESC,
+               id DESC`
   ).all().map((p) => ({
     access_id: p.access_id,
     customer: p.customer || p.contact_name || p.access_id,

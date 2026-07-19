@@ -65,8 +65,8 @@ export default function QrLibraryClient({ user, alerts, codes = [] }) {
           <input className="apx-input" style={{ maxWidth: 420 }} placeholder="Search customer, address, phone, or project ID…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
           <div className="qrl-tabs">
             <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All {rows.length}</button>
-            <button className={filter === "missing" ? "on" : ""} onClick={() => setFilter("missing")}>Missing {missing}</button>
-            <button className={filter === "has" ? "on" : ""} onClick={() => setFilter("has")}>Ready {withQr}</button>
+            <button className={filter === "has" ? "on" : ""} onClick={() => setFilter("has")}>With QR {withQr}</button>
+            <button className={filter === "missing" ? "on" : ""} onClick={() => setFilter("missing")}>No QR {missing}</button>
           </div>
         </div>
 
