@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { setSystemQrAction } from "./actions";
 import SystemQrModal from "./system-qr-modal";
+import ConfirmDialog from "../../components/confirm-dialog";
 
 // Minimal System QR step. One row: red "Upload" until a card exists, green "View" after.
 // Upload opens the compact QR Cleaner; once it produces a verified card we save it and flip to
@@ -12,6 +13,19 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
   const [mode, setMode] = useState("idle");   // idle | upload
   const [viewing, setViewing] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Removing the card clears it and drops straight into the uploader — the reason to remove one is
+  // almost always to put a corrected card in its place.
+  function removeQr() {
+    setBusy(true);
+    setSystemQrAction(accessId, "").then((r) => {
+      setBusy(false);
+      setConfirming(false);
+      if (r?.ok) { setSaved(null); setMode("upload"); }
+    });
+  }
 
   useEffect(() => {
     function onMsg(e) {
@@ -46,7 +60,9 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         ) : saved ? (
           <>
             <button type="button" className="sqp-btn view" onClick={() => setViewing(true)}>View</button>
-            <button type="button" className="sqp-replace" title="Replace" onClick={() => setMode("upload")}>↻</button>
+            <button type="button" className="sqp-remove" title="Remove" aria-label="Remove QR code" onClick={() => setConfirming(true)}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
           </>
         ) : (
           <button type="button" className="sqp-btn upload" onClick={() => setMode("upload")}>Upload</button>
@@ -60,6 +76,16 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
       )}
 
       {viewing && <SystemQrModal src={saved} onClose={() => setViewing(false)} />}
+
+      <ConfirmDialog
+        open={confirming}
+        title="Remove this QR code?"
+        message="Are you sure you want to remove this QR code? The uploader opens right after so you can add another one."
+        confirmLabel="Remove"
+        busy={busy}
+        onConfirm={removeQr}
+        onCancel={() => setConfirming(false)}
+      />
 
       <style>{`
         /* Match the FlowStep bare cards exactly (.flow-bare-head): same padding, icon, border, radius
@@ -76,8 +102,8 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         .sqp-btn.view{background:#2f7d5a}
         .sqp-btn.ghost{background:#fff;border:1px solid #d9d4ca;color:#41485a}
         .sqp-btn:hover{filter:brightness(1.06)}
-        .sqp-replace{width:30px;height:30px;flex-shrink:0;border:1px solid #d9d4ca;border-radius:8px;background:#fff;color:#6f7686;cursor:pointer;font-size:.9rem;line-height:1}
-        .sqp-replace:hover{border-color:#2f7d5a;color:#2f7d5a}
+        .sqp-remove{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border:1px solid #f2c4c4;border-radius:8px;background:#fff;color:#e74c3c;cursor:pointer;line-height:1}
+        .sqp-remove:hover{background:#fdecec;border-color:#e74c3c}
         .sqp-body{border-top:1px solid #eee}
         .sqp-frame{width:100%;height:640px;border:none;background:#0B0F1A;display:block}
       `}</style>
