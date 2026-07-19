@@ -159,7 +159,7 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
       </div>
 
       {guide && (
-        <GuideWalkthrough title={guide.title} intro={guide.intro} steps={guide.steps} projects={qrProjects} onClose={() => setGuide(null)} />
+        <GuideWalkthrough title={guide.title} intro={guide.intro} steps={guide.steps} flow={guide.flow} projects={qrProjects} onClose={() => setGuide(null)} />
       )}
 
       {editor && (

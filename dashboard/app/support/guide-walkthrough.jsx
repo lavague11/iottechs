@@ -6,9 +6,15 @@ import { useState, useEffect, useId } from "react";
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
-export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], projects = [], projectRef, onUnlock, onClose }) {
-  const [phase, setPhase]     = useState("ask");   // 'ask' → 'steps' → 'add-more' → 'done'
-  const [qi, setQi]           = useState(0);       // intro question (0 = phone, 1 = which system)
+export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, onUnlock, onClose }) {
+  // Which extra screens this guide uses. A plain how-to guide turns them all off and is just steps.
+  const askPlatform = !!flow.askPlatform;
+  const needsSystem = !!flow.needsSystem;
+  const wantConsent = !!flow.consent;
+  const wantAddMore = !!flow.addMore;
+  const hasIntro    = askPlatform || needsSystem;
+  const [phase, setPhase]     = useState(hasIntro ? "ask" : "steps");
+  const [qi, setQi]           = useState(askPlatform ? 0 : 1);  // 0 = phone, 1 = which system
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
   const [system, setSystem]   = useState(null);     // the system they picked (drives the password)
   const [i, setI]             = useState(0);        // step index
@@ -21,10 +27,12 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const password = zip ? `Cam${zip}` : "Cam + your ZIP";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
-  function next() { if (last) setPhase("add-more"); else go(i + 1); }   // end → "add anyone else?"
+  function next() { if (last) setPhase(wantAddMore ? "add-more" : "done"); else go(i + 1); }
   function back() {
-    if (i === 0) setPhase("consent");             // step 1 → back to the shared-account notice
-    else go(i - 1);
+    if (i !== 0) { go(i - 1); return; }
+    // Step 1 → back to whichever intro screen this guide actually has.
+    if (wantConsent) setPhase("consent");
+    else if (hasIntro) { setPhase("ask"); setQi(needsSystem ? 1 : 0); }
   }
 
   // Keyboard: ← → move through steps, Esc closes.
@@ -38,9 +46,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, i, last]);
 
-  function pickPlatform(p) { setPlatform(p); setQi(1); }
+  function pickPlatform(p) { setPlatform(p); if (needsSystem) setQi(1); else toConsent(null); }
   // System first (its ZIP is the password), then the shared-account notice, then step 1.
-  function toConsent(proj) { if (proj) setSystem(proj); setPhase("consent"); }
+  function toConsent(proj) { if (proj) setSystem(proj); if (wantConsent) setPhase("consent"); else startSteps(); }
   function startSteps() { setPhase("steps"); setI(0); setDir(1); }
 
   return (
@@ -51,7 +59,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         <div className="gw-kicker gw-kicker-abs">{title}</div>
 
         {phase === "ask" ? (
-          <AskFlow qi={qi} platform={platform} projects={projects} projectRef={projectRef} onUnlock={onUnlock} onPlatform={pickPlatform} onContinue={toConsent} onBack={() => setQi(0)} />
+          <AskFlow qi={qi} askPlatform={askPlatform} needsSystem={needsSystem} platform={platform} projects={projects} projectRef={projectRef} onUnlock={onUnlock} onPlatform={pickPlatform} onContinue={toConsent} onBack={() => setQi(0)} />
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
@@ -262,10 +270,12 @@ function SharedAccount({ password, onAgree, onBack }) {
 }
 
 // Two intro screens before the phone: which platform, then which system (shows that system's QR).
-function AskFlow({ qi, platform, projects, projectRef, onUnlock, onPlatform, onContinue, onBack }) {
+function AskFlow({ qi, askPlatform, needsSystem, platform, projects, projectRef, onUnlock, onPlatform, onContinue, onBack }) {
+  const nQ = (askPlatform ? 1 : 0) + (needsSystem ? 1 : 0);
+  const shown = askPlatform ? qi + 1 : 1;
   return (
     <div className="gw-ask" key={qi}>
-      <div className="gw-ask-step">Step {qi + 1} of 2</div>
+      <div className="gw-ask-step">{nQ > 1 ? `Step ${shown} of ${nQ}` : "Before you start"}</div>
       {qi === 0 ? (
         <>
           <h2 className="gw-ask-q">Which phone do you have?</h2>

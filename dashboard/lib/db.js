@@ -810,10 +810,17 @@ function init() {
   // `kind` = 'article' (plain FAQ) or 'guide' (interactive animated walkthrough; body holds step JSON).
   const supCols = db.prepare("PRAGMA table_info(support_articles)").all().map((c) => c.name);
   if (!supCols.includes("kind")) db.exec("ALTER TABLE support_articles ADD COLUMN kind TEXT DEFAULT 'article'");
+  // `slug` is the public URL of a guide (/guide/<slug>). Guides are many now, not one.
+  if (!supCols.includes("slug")) db.exec("ALTER TABLE support_articles ADD COLUMN slug TEXT");
   // Seed the built-in Mobile App Setup guide once (the animated device walkthrough).
   if (db.prepare("SELECT COUNT(*) AS n FROM support_articles WHERE kind='guide'").get().n === 0) {
-    db.prepare("INSERT INTO support_articles (title, body, category, kind, pinned, author) VALUES (?,?,?,?,?,?)")
-      .run("Mobile App Setup", JSON.stringify(MOBILE_SETUP_GUIDE), "Getting Started", "guide", 1, "IOT TECHS");
+    db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,?,?,?,?)")
+      .run("Mobile App Setup", JSON.stringify(MOBILE_SETUP_GUIDE), "Getting Started", "guide", "mobile-setup", 1, "IOT TECHS");
+  }
+  // Backfill: the first guide predates slugs and its URL is already in customers' hands.
+  db.prepare("UPDATE support_articles SET slug='mobile-setup' WHERE kind='guide' AND (slug IS NULL OR slug='') AND title LIKE 'Mobile App Setup%'").run();
+  for (const g of db.prepare("SELECT id, title FROM support_articles WHERE kind='guide' AND (slug IS NULL OR slug='')").all()) {
+    db.prepare("UPDATE support_articles SET slug=? WHERE id=?").run(slugify(g.title, g.id), g.id);
   }
 
   return db;
@@ -824,6 +831,9 @@ function init() {
 // System QR card the customer was handed. Kept brand-neutral so the owner can tailor the app name.
 const MOBILE_SETUP_GUIDE = {
   intro: "",
+  // `flow` turns the setup-specific screens on. Other guides leave these off and are a plain
+  // step-through — a troubleshooting guide shouldn't demand a System QR before showing anything.
+  flow: { askPlatform: true, needsSystem: true, consent: true, addMore: true },
   steps: [
     // store:true makes the mockup + a button link to the right listing for their platform.
     { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision.", store: true },
@@ -944,9 +954,72 @@ export function getSupportArticle(id) {
   const r = db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id));
   return r ? { ...r, pinned: !!r.pinned } : null;
 }
-// The walkthrough guide row, for the public /guide/mobile-setup page.
+// ---- Guides (interactive walkthroughs; body holds {flow, steps} JSON) ----
+
+// URL-safe slug, unique-ified with the row id so two guides can share a title.
+export function slugify(title, id) {
+  const base = String(title || "guide").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "guide";
+  return id ? `${base}-${id}` : base;
+}
+
+function decorateGuide(r) {
+  if (!r) return null;
+  let parsed = { steps: [] };
+  try { parsed = JSON.parse(r.body || "{}"); } catch { /* a malformed body shouldn't 500 the page */ }
+  return {
+    id: r.id,
+    title: r.title,
+    slug: r.slug || slugify(r.title, r.id),
+    category: r.category || "General",
+    pinned: !!r.pinned,
+    updated_at: r.updated_at,
+    flow: parsed.flow || {},
+    steps: Array.isArray(parsed.steps) ? parsed.steps : [],
+  };
+}
+
+export function getGuides() {
+  return db.prepare("SELECT * FROM support_articles WHERE kind='guide' ORDER BY pinned DESC, title COLLATE NOCASE ASC").all().map(decorateGuide);
+}
+
+export function getGuideBySlug(slug) {
+  const s = String(slug || "").trim();
+  if (!s) return null;
+  return decorateGuide(db.prepare("SELECT * FROM support_articles WHERE kind='guide' AND slug=? COLLATE NOCASE").get(s));
+}
+
+// The first guide — kept for callers that just want "the" walkthrough.
 export function getGuideArticle() {
   return db.prepare("SELECT * FROM support_articles WHERE kind='guide' ORDER BY id ASC").get() || null;
+}
+
+export function createGuide({ title, category, flow, steps, author }) {
+  const info = db.prepare(
+    "INSERT INTO support_articles (title, body, category, kind, pinned, author) VALUES (?,?,?,'guide',0,?)"
+  ).run(String(title || "Untitled guide").trim(), JSON.stringify({ flow: flow || {}, steps: steps || [] }), String(category || "Guides").trim(), author || null);
+  const id = Number(info.lastInsertRowid);
+  db.prepare("UPDATE support_articles SET slug=? WHERE id=?").run(slugify(title, id), id);
+  return decorateGuide(db.prepare("SELECT * FROM support_articles WHERE id=?").get(id));
+}
+
+export function updateGuide(id, { title, category, flow, steps, pinned }) {
+  const cur = db.prepare("SELECT * FROM support_articles WHERE id=? AND kind='guide'").get(Number(id));
+  if (!cur) return null;
+  const prev = decorateGuide(cur);
+  const body = JSON.stringify({
+    flow:  flow  != null ? flow  : prev.flow,
+    steps: steps != null ? steps : prev.steps,
+  });
+  db.prepare(
+    "UPDATE support_articles SET title=?, body=?, category=?, pinned=?, updated_at=datetime('now','localtime') WHERE id=?"
+  ).run(
+    title != null ? String(title).trim() : cur.title,
+    body,
+    category != null ? String(category).trim() : cur.category,
+    pinned != null ? (pinned ? 1 : 0) : (cur.pinned ? 1 : 0),
+    Number(id)
+  );
+  return decorateGuide(db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id)));
 }
 export function createSupportArticle({ title, body, category, pinned, author }) {
   const info = db.prepare(

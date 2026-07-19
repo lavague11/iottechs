@@ -6,7 +6,7 @@ import { unlockGuideQrAction } from "./actions";
 
 // Standalone host for the walkthrough. On the Support page the guide opens as an overlay over the
 // admin shell; here it IS the page, so closing it shows a restart card rather than nothing.
-export default function GuidePageClient({ title, steps, projects, projectRef }) {
+export default function GuidePageClient({ title, steps, flow, projects, projectRef }) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -15,6 +15,7 @@ export default function GuidePageClient({ title, steps, projects, projectRef }) 
         <GuideWalkthrough
           title={title}
           steps={steps}
+          flow={flow}
           projects={projects}
           projectRef={projectRef}
           onUnlock={unlockGuideQrAction}
