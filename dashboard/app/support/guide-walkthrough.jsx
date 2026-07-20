@@ -553,11 +553,10 @@ function Finish({ title, onClose, onRestart, loggedIn }) {
       <p>You&rsquo;ve finished {title}. You can revisit this guide anytime from Support.</p>
       <div className="gw-finish-btns">
         <button className="gw-back" onClick={onRestart}>&#8634; Start over</button>
-        {/* Signed-in people go back to the library they came from; a visitor on a texted link has
-            no library to return to, so they just close. */}
-        {loggedIn
-          ? <a className="gw-next" href="/support" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Support library</a>
-          : <button className="gw-next" onClick={onClose}>Done</button>}
+        {/* Always calls onClose — the host decides where that lands. The Support overlay closes
+            back to the tab; the standalone page navigates a signed-in visitor to /support. Label
+            just reflects that so it reads right in both. */}
+        <button className="gw-next" onClick={onClose}>{loggedIn ? "Back to Support" : "Done"}</button>
       </div>
     </div>
   );
