@@ -928,11 +928,11 @@ const GUIDE_SEED = [
   {
     slug: "admin-pattern", title: "Admin Pattern", surface: "nvr", category: "Getting Started",
     steps: [
-      // One screen, one gesture — the recorder asks for the pattern and that is the whole task.
-      { art: "pattern", device: "monitor", image: "/guides/nvr/pattern-screen.png", title: "Draw the G",
-        text: "When the recorder asks for the pattern, drag through the dots: 3 → 1 → 7 → 9 → 6 → 5.",
-        // Grid measured off the recorder screen: centre 48.9%/51%, spacing 6.6% across, 7.3% down.
-        pattern: { x: 48.9, y: 51, gapX: 6.6, gapY: 7.3 },
+      // One screen, one gesture — the recorder asks for the pattern and that is the whole task. The
+      // reveal draws the G over the real lock screen, then fades to the live cameras.
+      { title: "Draw the G",
+        text: "When the recorder asks for the pattern, draw the G — start top-right and trace it as shown.",
+        reveal: { lockedSrc: "/guides/nvr/pattern-locked.png", cleanSrc: "/guides/nvr/pattern-clean.png", pattern: [3, 2, 1, 4, 7, 8, 9, 6, 5] },
         why: "This is the admin pattern for your system. Keep it private — it unlocks settings that can turn cameras off." },
     ],
   },

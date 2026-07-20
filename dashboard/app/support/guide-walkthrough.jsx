@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useId } from "react";
+import UnlockPatternReveal from "./unlock-pattern-reveal";
 
 // A fullscreen, step-by-step walkthrough. Flow: two quick intro questions (which phone? got your
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
@@ -77,8 +78,20 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
               </div>
             </div>
 
-            <div className={`gw-body${step.device === "monitor" ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
-              <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+            <div className={`gw-body${step.device === "monitor" || step.reveal ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
+              {step.reveal ? (
+                // A cinematic lock-screen reveal replaces the frame entirely — the image is already
+                // a full recorder screen, so it isn't wrapped in a mockup. `i` is the replay key,
+                // so re-landing on this step (or the dot nav) re-plays the draw.
+                <UnlockPatternReveal
+                  lockedSrc={step.reveal.lockedSrc}
+                  cleanSrc={step.reveal.cleanSrc}
+                  pattern={step.reveal.pattern}
+                  replayKey={i}
+                />
+              ) : (
+                <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+              )}
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
 
