@@ -115,9 +115,10 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
       .filter((a) => !q || a.title.toLowerCase().includes(q) || (a.body || "").toLowerCase().includes(q)),
     [articles, q]
   );
-  const demoGuides   = useMemo(() => guides.filter((a) => parseGuide(a).surface === "demo"), [guides]);
-  const mobileGuides = useMemo(() => guides.filter((a) => (parseGuide(a).surface || "mobile") === "mobile"), [guides]);
-  const nvrGuides    = useMemo(() => guides.filter((a) => parseGuide(a).surface === "nvr"), [guides]);
+  const byOrder = (a, b) => (parseGuide(a).order ?? 999) - (parseGuide(b).order ?? 999);
+  const demoGuides   = useMemo(() => guides.filter((a) => parseGuide(a).surface === "demo").sort(byOrder), [guides]);
+  const mobileGuides = useMemo(() => guides.filter((a) => (parseGuide(a).surface || "mobile") === "mobile").sort(byOrder), [guides]);
+  const nvrGuides    = useMemo(() => guides.filter((a) => parseGuide(a).surface === "nvr").sort(byOrder), [guides]);
 
   // Group the remaining (FAQ) articles by category.
   const groups = useMemo(() => {
