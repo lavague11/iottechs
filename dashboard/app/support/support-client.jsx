@@ -48,10 +48,14 @@ function GuideSection({ title, subtitle, items, icon, canEdit, onStart, onArchiv
               <div className="sup-row sup-guide-row" key={a.id}>
                 <div className="sup-guide">
                   <div className="sup-guide-txt">
-                    <div className="sup-guide-title">{a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}</div>
+                    <div className="sup-guide-title">
+                      {a.pinned && <span className="sup-pin"><PinIcon /></span>}{a.title}
+                      {/* Build status for us: red until the real screenshots are in. Staff-only page. */}
+                      {!g.ready && <span className="sup-draft" title="Placeholder images — not finished">Draft</span>}
+                    </div>
                   </div>
                   <span className="sup-steps">{g.steps.length} steps</span>
-                  <button className="sup-guide-start" onClick={() => onStart(a)}>
+                  <button className={`sup-guide-start${g.ready ? "" : " draft"}`} onClick={() => onStart(a)}>
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
                     Start
                   </button>
@@ -364,6 +368,9 @@ const CSS = `
 .apx .sup-guide-sub{font-size:.76rem;color:var(--gold-deep,#b08f4f);font-weight:600;margin-top:1px}
 .apx .sup-guide-start{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px;border:none;border-radius:9px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-family:inherit;font-size:.84rem;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 8px 18px -8px rgba(176,143,79,.7);transition:transform .12s,filter .12s}
 .apx .sup-guide-start:hover{filter:brightness(1.06);transform:translateY(-1px)}
+/* Draft = placeholder fillers, not real screenshots yet. Red Start + chip, staff-only build status. */
+.apx .sup-guide-start.draft{background:linear-gradient(135deg,#e35d4f,#c9382b);box-shadow:0 8px 18px -8px rgba(201,56,43,.7)}
+.apx .sup-draft{margin-left:8px;font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#c9382b;background:#fdecec;border:1px solid #f2c4c4;border-radius:20px;padding:1px 8px}
 .apx .sup-guide-arch{width:34px;height:34px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);cursor:pointer;transition:all .12s}
 .apx .sup-guide-arch:hover{border-color:rgba(231,76,60,.4);color:#c0392b;background:rgba(231,76,60,.06)}
 .apx .sup-title{flex:1;font-size:.92rem;font-weight:600;color:var(--ink)}

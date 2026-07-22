@@ -831,18 +831,19 @@ function init() {
   const addGuide = db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,'guide',?,0,?)");
   for (const g of GUIDE_SEED) {
     if (hasSlug.get(g.slug)) continue;
-    addGuide.run(g.title, JSON.stringify({ surface: g.surface || "mobile", order: g.order ?? 999, flow: g.flow || {}, steps: g.steps }), g.category, g.slug, "IOT TECHS");
+    addGuide.run(g.title, JSON.stringify({ surface: g.surface || "mobile", order: g.order ?? 999, ready: g.ready === true, flow: g.flow || {}, steps: g.steps }), g.category, g.slug, "IOT TECHS");
   }
 
   // Reconcile placement + order onto existing rows so re-orderings ship without a manual migration.
   // Only touches surface/order (structural metadata the owner doesn't edit in-UI); steps preserved.
-  const placement = [{ slug: "mobile-setup", surface: "mobile", order: 1 }, ...GUIDE_SEED.map((g) => ({ slug: g.slug, surface: g.surface, order: g.order }))];
+  const placement = [{ slug: "mobile-setup", surface: "mobile", order: 1, ready: true }, ...GUIDE_SEED.map((g) => ({ slug: g.slug, surface: g.surface, order: g.order, ready: g.ready === true }))];
   for (const p of placement) {
     const row = db.prepare("SELECT id, body FROM support_articles WHERE slug=? AND kind='guide'").get(p.slug);
     if (!row) continue;
     let b; try { b = JSON.parse(row.body); } catch { continue; }
     if (p.surface) b.surface = p.surface;
     if (p.order != null) b.order = p.order;
+    b.ready = p.ready === true;
     db.prepare("UPDATE support_articles SET body=? WHERE id=?").run(JSON.stringify(b), row.id);
   }
   // One-time title rename; guarded so an owner edit isn't clobbered.
@@ -864,6 +865,7 @@ const MOBILE_SETUP_GUIDE = {
   intro: "",
   surface: "mobile",
   order: 1,
+  ready: true,
   // `flow` turns the setup-specific screens on. Other guides leave these off and are a plain
   // step-through — a troubleshooting guide shouldn't demand a System QR before showing anything.
   flow: { askPlatform: true, needsSystem: true, consent: true, addMore: true },
@@ -894,7 +896,7 @@ const GUIDE_SEED = [
     // The showcase reel — what the system can do, in the app. Steps use `art` filler animations and
     // `video`/`image` slots the owner maps to real captures later. `landscape:true` rotates the
     // phone for the full-screen playback beat.
-    slug: "system-demo", title: "System Demo", surface: "demo", order: 1, category: "Demo",
+    slug: "system-demo", title: "System Demo", surface: "demo", order: 1, ready: false, category: "Demo",
     steps: [
       { art: "device",   image: "/guides/annke/09.png", title: "Open your system", text: "Tap your recorder to jump in." },
       { art: "live",     video: "/demo/live.mp4",  videoLandscape: "/demo/live-land.mp4",  title: "Live view",  text: "Every camera, live. Rotate your phone for the wide view." },
@@ -907,7 +909,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "admin-transfer", title: "Add Your System", surface: "nvr", order: 2, category: "Getting Started",
+    slug: "admin-transfer", title: "Add Your System", surface: "nvr", order: 2, ready: false, category: "Getting Started",
     steps: [
       { art: "device", device: "monitor", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
       { art: "device", device: "monitor", title: "Open the menu",       text: "Choose Menu." },
@@ -921,7 +923,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "share-system", title: "Share With Family", surface: "mobile", order: 2, category: "Everyday Use",
+    slug: "share-system", title: "Share With Family", surface: "mobile", order: 2, ready: true, category: "Everyday Use",
     steps: [
       { art: "device", title: "Refresh your list",  text: "On the app’s home screen, pull down to refresh." },
       { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system name." },
@@ -938,7 +940,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "nvr-time-sync", title: "Set the Time", surface: "nvr", order: 3, category: "Troubleshooting",
+    slug: "nvr-time-sync", title: "Set the Time", surface: "nvr", order: 3, ready: false, category: "Troubleshooting",
     steps: [
       { art: "device", title: "Open the app",       text: "Go to the Home screen." },
       { art: "device", title: "Open the menu",      text: "Tap the three dots next to your system." },
@@ -953,7 +955,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "rename-cameras", title: "Rename Cameras", surface: "nvr", order: 4, category: "Everyday Use",
+    slug: "rename-cameras", title: "Rename Cameras", surface: "nvr", order: 4, ready: false, category: "Everyday Use",
     steps: [
       { art: "device", title: "Open the app",      text: "Open Annke Vision." },
       { art: "device", title: "Open the menu",     text: "Tap the three dots next to your system." },
@@ -965,7 +967,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "admin-pattern", title: "Admin Pattern", surface: "nvr", order: 1, category: "Getting Started",
+    slug: "admin-pattern", title: "Admin Pattern", surface: "nvr", order: 1, ready: true, category: "Getting Started",
     steps: [
       // One screen, one gesture — the recorder asks for the pattern and that is the whole task. The
       // reveal draws the G over the real lock screen, then fades to the live cameras.
@@ -976,7 +978,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "mic-off", title: "Turn Off the Mic", surface: "nvr", order: 5, category: "Everyday Use",
+    slug: "mic-off", title: "Turn Off the Mic", surface: "nvr", order: 5, ready: false, category: "Everyday Use",
     steps: [
       { art: "device", title: "Open the app",      text: "Tap Home in the bottom left." },
       { art: "device", title: "Open the menu",     text: "Find your system and tap the three dots." },
@@ -990,7 +992,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "change-passwords", title: "Change Passwords", surface: "nvr", order: 6, category: "Getting Started",
+    slug: "change-passwords", title: "Change Passwords", surface: "nvr", order: 6, ready: false, category: "Getting Started",
     steps: [
       { art: "account", title: "Open More",        text: "In the app, tap More in the bottom right." },
       { art: "account", title: "Tap your account", text: "Tap your name, email, or phone number at the top." },
@@ -1005,7 +1007,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "add-system-user", title: "Add a User", surface: "nvr", order: 7, category: "Everyday Use",
+    slug: "add-system-user", title: "Add a User", surface: "nvr", order: 7, ready: false, category: "Everyday Use",
     steps: [
       { art: "device", title: "Open User Management", text: "Home → three dots → Settings → Web Configuration → System → User Management." },
       { art: "name",   title: "Tap +",                text: "Tap the + in the top right." },
@@ -1016,7 +1018,7 @@ const GUIDE_SEED = [
     ],
   },
   {
-    slug: "monthly-reset", title: "Monthly Reset", surface: "nvr", order: 8, category: "Troubleshooting",
+    slug: "monthly-reset", title: "Monthly Reset", surface: "nvr", order: 8, ready: false, category: "Troubleshooting",
     steps: [
       { art: "device", title: "Why reset",     text: "A monthly restart fixes about 90% of common problems and keeps your system healthy." },
       { art: "device", title: "Power it off",  text: "Unplug the recorder for 1–2 minutes." },
@@ -1167,6 +1169,7 @@ function decorateGuide(r) {
     updated_at: r.updated_at,
     surface: parsed.surface || "mobile",   // "mobile" (their phone) | "nvr" (the recorder)
     order: parsed.order ?? 999,            // display order within a surface section
+    ready: parsed.ready === true,          // build status: real screenshots in, vs placeholder fillers
     flow: parsed.flow || {},
     steps: Array.isArray(parsed.steps) ? parsed.steps : [],
   };
