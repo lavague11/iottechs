@@ -90,7 +90,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
-          <AddMore platform={platform} onDone={() => onClose?.()} />
+          <AddMore platform={platform} qr={system?.system_qr} onDone={() => onClose?.()} />
         ) : phase === "done" ? (
           <Finish title={title} loggedIn={loggedIn} onClose={onClose} onRestart={() => { setPhase(hasIntro ? "ask" : "steps"); setQi(askPlatform ? 0 : 1); setI(0); }} />
         ) : (
@@ -534,9 +534,11 @@ function QrZoom({ proj, onClose }) {
 // Adding another person = the Annke "share" flow. They install the app, scan your QR, tap
 // Apply for Sharing; you approve the request on your phone and pick which cameras to share.
 // `who` marks whose phone each step is on: "them" (the person being added — red) or "you" (the
-// owner — green), so it's obvious the flow hops between two phones.
+// owner — green), so it's obvious the flow hops between two phones. First step is a colour key.
 const SHARE_STEPS = [
+  { legend: true, title: "Two phones", text: "This part moves between two phones. Green steps are on YOUR phone. Red steps are on their device." },
   { who: "them", image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
+  { who: "you",  showQr: true,                          title: "Show your QR",       text: "On your phone, pull up your System QR — hold it up for them to scan." },
   { who: "them", image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
   { who: "them", image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
   { who: "them", image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
@@ -548,7 +550,23 @@ const SHARE_STEPS = [
   { who: "you",  image: "/guides/annke/share-04.png", title: "Accept",           text: "You’re back here. Tap Accept — they’re in.", tap: { x: 75, y: 34, w: 48, h: 5 } },
 ];
 
-function AddMore({ platform, onDone }) {
+// The two-phone colour key shown before the share steps start.
+function ShareLegend() {
+  const PhoneChip = ({ tone, label }) => (
+    <div className={`gw-leg-chip gw-leg-${tone}`}>
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></svg>
+      <span>{label}</span>
+    </div>
+  );
+  return (
+    <div className="gw-legend">
+      <PhoneChip tone="you"  label="Your phone" />
+      <PhoneChip tone="them" label="Their device" />
+    </div>
+  );
+}
+
+function AddMore({ platform, qr, onDone }) {
   const [mode, setMode] = useState("ask");   // 'ask' | 'share'
   const [j, setJ] = useState(0);
   const [dir, setDir] = useState(1);
@@ -568,7 +586,16 @@ function AddMore({ platform, onDone }) {
           </div>
         </div>
         <div className="gw-body" key={j} style={{ "--dir": dir }}>
-          <DeviceFrame art={sstep.art} image={sstep.image} imageAndroid={sstep.imageAndroid} tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} platform={platform} />
+          {sstep.legend ? (
+            <ShareLegend />
+          ) : (
+            <DeviceFrame
+              art={sstep.showQr ? "qr" : sstep.art}
+              image={sstep.showQr ? qr : sstep.image}
+              imageAndroid={sstep.imageAndroid}
+              tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} platform={platform}
+            />
+          )}
           <StepText label={`Sharing · ${j + 1} of ${SHARE_STEPS.length}`} step={sstep} />
         </div>
         <div className="gw-foot">
@@ -892,6 +919,11 @@ const CSS = `
 .gw-who{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;padding:3px 11px;border-radius:20px;font-size:.72rem;font-weight:800;letter-spacing:.02em}
 .gw-who-them{color:#c9382b;background:#fdecec;border:1px solid #f2c4c4}
 .gw-who-you{color:#1c8a45;background:#e7f6ec;border:1px solid #b6e3c6}
+/* Two-phone colour key */
+.gw-legend{display:flex;flex-direction:column;gap:14px;align-items:stretch;justify-content:center;width:200px;margin:0 auto}
+.gw-leg-chip{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 12px;border-radius:16px;font-weight:800;font-size:.92rem}
+.gw-leg-you{color:#1c8a45;background:#e7f6ec;border:2px solid #b6e3c6}
+.gw-leg-them{color:#c9382b;background:#fdecec;border:2px solid #f2c4c4}
 .gw-sa{max-width:440px;margin:0 auto;text-align:left}
 .gw-sa p{font-size:.92rem;line-height:1.6;color:#2C3347;margin:0 0 10px}
 .gw-sa-list{margin:0 0 12px;padding:0;list-style:none}
