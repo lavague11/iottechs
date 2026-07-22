@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import UnlockPatternReveal from "./unlock-pattern-reveal";
 
 // A fullscreen, step-by-step walkthrough. Flow: two quick intro questions (which phone? got your
@@ -597,12 +597,38 @@ function Finish({ title, onClose, onRestart, loggedIn }) {
 }
 
 // ---- Phone-screen content: a real screenshot (step.image) if given, else an animated scene ----
+// A demo video: autoplays muted+looping (the only way browsers allow autoplay), with a tap-to-unmute
+// button — that tap is the gesture browsers require before sound can play.
+function SceneVideo({ src, onError }) {
+  const ref = useRef(null);
+  const [muted, setMuted] = useState(true);
+  function toggle() {
+    const v = ref.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+    if (!v.muted) v.play().catch(() => {});
+  }
+  return (
+    <>
+      <video ref={ref} className="sc-video" src={src} autoPlay muted loop playsInline onError={onError} />
+      <button className="sc-mute" onClick={toggle} title={muted ? "Unmute" : "Mute"} aria-label={muted ? "Unmute" : "Mute"}>
+        {muted ? (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M23 9l-6 6M17 9l6 6" /></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" /></svg>
+        )}
+      </button>
+    </>
+  );
+}
+
 function Scene({ art, image, video, platform }) {
   const [failed, setFailed] = useState(false);
   const [vidFailed, setVidFailed] = useState(false);
   // A dropped-in screen recording wins for demo steps; the animated scene stands in until then.
   if (video && !vidFailed) {
-    return <video className="sc-video" src={video} autoPlay muted loop playsInline onError={() => setVidFailed(true)} />;
+    return <SceneVideo src={video} onError={() => setVidFailed(true)} />;
   }
   // A supplied screenshot wins — but if it hasn't been uploaded yet (404), fall back to the scene.
   if (image && !failed) return <img className="sc-shot" src={image} alt="" draggable={false} onError={() => setFailed(true)} />;
@@ -945,6 +971,8 @@ const CSS = `
 .gw-phone.landscape .gw-phone-notch{top:50%;left:9px;transform:translate(0,-50%) rotate(90deg);border-radius:0 0 12px 12px}
 @keyframes gwLandIn{from{opacity:0;transform:rotate(-82deg) scale(.55)}to{opacity:1;transform:none}}
 .sc-video{width:100%;height:100%;object-fit:cover;display:block;background:#0b0f18}
+.sc-mute{position:absolute;bottom:10px;right:10px;z-index:6;width:34px;height:34px;border:none;border-radius:50%;background:rgba(10,14,22,.6);backdrop-filter:blur(4px);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.sc-mute:hover{background:rgba(10,14,22,.82)}
 .sc-cap{font-size:.72rem;font-weight:700;color:#8a93a3;letter-spacing:.02em}
 /* download */
 .sc-appicon{width:66px;height:66px;border-radius:17px;background:linear-gradient(145deg,#C9A96E,#a8843f);display:grid;place-items:center;box-shadow:0 10px 20px -6px rgba(168,132,63,.6);animation:scPop .5s cubic-bezier(.16,1,.3,1) both}
