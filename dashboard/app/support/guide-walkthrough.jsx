@@ -90,7 +90,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
-          <AddMore platform={platform} qr={system?.system_qr} onDone={() => onClose?.()} />
+          <AddMore platform={platform} qr={system?.system_qr} projects={projects} onDone={() => onClose?.()} />
         ) : phase === "done" ? (
           <Finish title={title} loggedIn={loggedIn} onClose={onClose} onRestart={() => { setPhase(hasIntro ? "ask" : "steps"); setQi(askPlatform ? 0 : 1); setI(0); }} />
         ) : (
@@ -538,7 +538,7 @@ function QrZoom({ proj, onClose }) {
 const SHARE_STEPS = [
   { legend: true, title: "Two phones", text: "This part moves between two phones. Green steps are on YOUR phone. Red steps are on their device." },
   { who: "them", image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
-  { who: "you",  showQr: true,                          title: "Show your QR",       text: "On your phone, pull up your System QR — hold it up for them to scan." },
+  { who: "you",  showQr: true,                          title: "Share your QR",      text: "Pick which system to share, then hold the QR up for them to scan — or text it to them." },
   { who: "them", image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
   { who: "them", image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
   { who: "them", image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
@@ -566,7 +566,55 @@ function ShareLegend() {
   );
 }
 
-function AddMore({ platform, qr, onDone }) {
+// The "Share your QR" step: pick which of the customer's systems to share, then show it to be
+// scanned or text it via the phone's share sheet. Same picker idea as the setup guide's SystemPicker.
+function ShareQrPicker({ projects = [] }) {
+  const withQr = (projects || []).filter((p) => p.system_qr);
+  const [sel, setSel] = useState(withQr[0]?.access_id || "");
+  const [flash, setFlash] = useState("");
+  const proj = withQr.find((p) => p.access_id === sel) || withQr[0];
+
+  // No resolved system (public link, no login) → fall back to the animated QR filler.
+  if (!proj) return <DeviceFrame art="qr" />;
+
+  const file = `IOT-TECHS-QR-${proj.access_id || "system"}.png`;
+  async function textIt() {
+    try {
+      const res = await fetch(proj.system_qr);
+      const blob = await res.blob();
+      const f = new File([blob], file, { type: blob.type || "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        await navigator.share({ files: [f], title: "System QR", text: "Scan this in Annke Vision to view the cameras." });
+        return;
+      }
+    } catch { /* fall through to download */ }
+    const a = document.createElement("a"); a.href = proj.system_qr; a.download = file; a.click();
+    setFlash("saved"); setTimeout(() => setFlash(""), 2500);
+  }
+
+  return (
+    <div className="gw-shareqr">
+      {withQr.length > 1 && (
+        <select className="gw-qr-select" value={sel} onChange={(e) => setSel(e.target.value)}>
+          {withQr.map((p) => <option key={p.access_id} value={p.access_id}>{p.customer || p.access_id}</option>)}
+        </select>
+      )}
+      <img className="gw-shareqr-img" src={proj.system_qr} alt="Your System QR" draggable={false} />
+      <div className="gw-shareqr-btns">
+        <a className="gw-shareqr-btn" href={proj.system_qr} download={file}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Save
+        </a>
+        <button className="gw-shareqr-btn primary" onClick={textIt}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+          {flash === "saved" ? "Saved ✓" : "Text it"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AddMore({ platform, qr, projects, onDone }) {
   const [mode, setMode] = useState("ask");   // 'ask' | 'share'
   const [j, setJ] = useState(0);
   const [dir, setDir] = useState(1);
@@ -588,11 +636,11 @@ function AddMore({ platform, qr, onDone }) {
         <div className="gw-body" key={j} style={{ "--dir": dir }}>
           {sstep.legend ? (
             <ShareLegend />
+          ) : sstep.showQr ? (
+            <ShareQrPicker projects={projects} />
           ) : (
             <DeviceFrame
-              art={sstep.showQr ? "qr" : sstep.art}
-              image={sstep.showQr ? qr : sstep.image}
-              imageAndroid={sstep.imageAndroid}
+              art={sstep.art} image={sstep.image} imageAndroid={sstep.imageAndroid}
               tap={sstep.tap} pattern={sstep.pattern} device={sstep.device} platform={platform}
             />
           )}
@@ -924,6 +972,14 @@ const CSS = `
 .gw-leg-chip{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 12px;border-radius:16px;font-weight:800;font-size:.92rem}
 .gw-leg-you{color:#1c8a45;background:#e7f6ec;border:2px solid #b6e3c6}
 .gw-leg-them{color:#c9382b;background:#fdecec;border:2px solid #f2c4c4}
+/* Share-your-QR picker (step 3) */
+.gw-shareqr{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+.gw-shareqr-img{width:min(180px,60%);aspect-ratio:1;object-fit:contain;background:#fff;border:1px solid #eef0f4;border-radius:12px;padding:6px}
+.gw-shareqr-btns{display:flex;gap:8px}
+.gw-shareqr-btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:9px;border:1.5px solid #e6e8ee;background:#fff;color:#2C3347;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer;text-decoration:none}
+.gw-shareqr-btn:hover{border-color:#C9A96E;color:#b08f4f}
+.gw-shareqr-btn.primary{background:linear-gradient(135deg,#C9A96E,#b08f4f);border-color:#b08f4f;color:#fff}
+.gw-shareqr-btn.primary:hover{filter:brightness(1.06);color:#fff}
 .gw-sa{max-width:440px;margin:0 auto;text-align:left}
 .gw-sa p{font-size:.92rem;line-height:1.6;color:#2C3347;margin:0 0 10px}
 .gw-sa-list{margin:0 0 12px;padding:0;list-style:none}
