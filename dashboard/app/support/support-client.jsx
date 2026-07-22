@@ -79,8 +79,9 @@ function PinIcon() {
   return <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M14 4v6l3 3v2h-5v5l-1 1-1-1v-5H4v-2l3-3V4H6V2h12v2z"/></svg>;
 }
 
-export default function SupportClient({ user, alerts, articles: initial, qrProjects = [] }) {
+export default function SupportClient({ user, alerts, articles: initial, qrProjects = [], audience = "customer", heading = "Support", subheading }) {
   const canEdit = ["admin", "manager"].includes(user?.role);
+  const isTech  = audience === "tech";
   const [articles, setArticles] = useState(initial || []);
   const [query, setQuery]   = useState("");
   const [cat, setCat]       = useState("all");
@@ -136,7 +137,7 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
     startTx(async () => {
       const r = editor?.id
         ? await updateSupportArticleAction(editor.id, form)
-        : await createSupportArticleAction(form);
+        : await createSupportArticleAction({ ...form, audience });
       if (r?.ok) {
         setArticles((prev) => {
           if (editor?.id) return prev.map((a) => (a.id === r.article.id ? r.article : a));
@@ -158,12 +159,12 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
   }
 
   return (
-    <AdminShell user={user} alerts={alerts} active="support">
+    <AdminShell user={user} alerts={alerts} active={isTech ? "tech-support" : "support"}>
       <div className="apx-wrap">
         <div className="page-head sup-head">
           <div>
-            <h1>Support</h1>
-            <div className="ph-sub">{guides.length} guide{guides.length === 1 ? "" : "s"} · {faqCount} article{faqCount === 1 ? "" : "s"}</div>
+            <h1>{heading}</h1>
+            <div className="ph-sub">{subheading || `${guides.length} guide${guides.length === 1 ? "" : "s"} · ${faqCount} article${faqCount === 1 ? "" : "s"}`}</div>
           </div>
           {canEdit && (
             <button className="sup-add" onClick={() => setEditor({})}>

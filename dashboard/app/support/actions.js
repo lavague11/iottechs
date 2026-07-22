@@ -11,12 +11,13 @@ async function requireEditor() {
   return { user, error: null };
 }
 
-export async function createSupportArticleAction({ title, body, category, pinned }) {
+export async function createSupportArticleAction({ title, body, category, pinned, audience }) {
   const { user, error } = await requireEditor();
   if (error) return { ok: false, error };
   if (!String(title || "").trim()) return { ok: false, error: "A title is required." };
-  const a = createSupportArticle({ title, body, category, pinned, author: user.name });
+  const a = createSupportArticle({ title, body, category, pinned, author: user.name, audience });
   revalidatePath("/support");
+  revalidatePath("/tech-support");
   return { ok: true, article: a };
 }
 
@@ -26,6 +27,7 @@ export async function updateSupportArticleAction(id, { title, body, category, pi
   const a = updateSupportArticle(id, { title, body, category, pinned });
   if (!a) return { ok: false, error: "Article not found." };
   revalidatePath("/support");
+  revalidatePath("/tech-support");
   return { ok: true, article: a };
 }
 
@@ -36,6 +38,7 @@ export async function archiveSupportArticleAction(id) {
   const r = archiveAndDelete("support", id, { id: user.id, name: user.name });
   if (!r.ok) return r;
   revalidatePath("/support");
+  revalidatePath("/tech-support");
   revalidatePath("/archives");
   return { ok: true };
 }

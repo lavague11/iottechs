@@ -10,7 +10,7 @@ export default async function SupportPage() {
   if (!["admin", "manager", "sales", "tech"].includes(user.role)) redirect("/login");
 
   const alerts   = getNotifSummary(user.id);
-  const articles = getSupportArticles();
+  const articles = getSupportArticles("customer");
   // Projects with a System QR — lets the Mobile App Setup guide show a QR when the customer says
   // they don't have their card. Admin/manager preview all; other staff see none here.
   const qrProjects = ["admin", "manager"].includes(user.role) ? getProjectsWithSystemQr() : [];

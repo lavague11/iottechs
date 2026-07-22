@@ -45,8 +45,9 @@ const NAV_GROUPS = [
     { key: "tickets",   label: "Tickets",   href: "/tickets" },
   ]},
   { key: "tech-grp", label: "Technicians", items: [
-    { key: "tech",      label: "Tech Dashboard", href: "/tech" },
-    { key: "inventory", label: "Inventory",      href: "/inventory" },
+    { key: "tech",         label: "Tech Dashboard", href: "/tech" },
+    { key: "inventory",    label: "Inventory",      href: "/inventory" },
+    { key: "tech-support", label: "Tech Support",   href: "/tech-support" },
   ]},
   { key: "sales-grp", label: "Sales", items: [
     { key: "sales",     label: "Sales Pipeline", href: "/sales" },

@@ -813,6 +813,8 @@ function init() {
   if (!supCols.includes("kind")) db.exec("ALTER TABLE support_articles ADD COLUMN kind TEXT DEFAULT 'article'");
   // `slug` is the public URL of a guide (/guide/<slug>). Guides are many now, not one.
   if (!supCols.includes("slug")) db.exec("ALTER TABLE support_articles ADD COLUMN slug TEXT");
+  // `audience` = 'customer' (the public/help library) or 'tech' (the technician support portal).
+  if (!supCols.includes("audience")) db.exec("ALTER TABLE support_articles ADD COLUMN audience TEXT DEFAULT 'customer'");
   // Seed the built-in Mobile App Setup guide once (the animated device walkthrough).
   if (db.prepare("SELECT COUNT(*) AS n FROM support_articles WHERE kind='guide'").get().n === 0) {
     db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,?,?,?,?)")
@@ -845,6 +847,12 @@ function init() {
   }
   // One-time title rename; guarded so an owner edit isn't clobbered.
   db.prepare("UPDATE support_articles SET title='Set the Time' WHERE slug='nvr-time-sync' AND title='Fix the Time'").run();
+
+  // Seed the technician support portal once (audience:'tech'), separate from the customer library.
+  if (db.prepare("SELECT COUNT(*) AS n FROM support_articles WHERE audience='tech'").get().n === 0) {
+    const seedTech = db.prepare("INSERT INTO support_articles (title, body, category, pinned, author, audience) VALUES (?,?,?,?,?,'tech')");
+    for (const a of TECH_SUPPORT_SEED) seedTech.run(a.title, a.body, a.category, a.pinned ? 1 : 0, "IOT TECHS");
+  }
 
   return db;
 }
@@ -1035,6 +1043,23 @@ const SUPPORT_SEED = [
     body: "Standard installs carry a workmanship warranty (6, 12, or 24 months — see your completion record). It covers labor to correct install-related faults. Hardware is covered by the manufacturer’s warranty. Accidental damage and power surges are not covered." },
 ];
 
+// Technician-facing knowledge base — field diagnostics and service-call procedure. Blunt and
+// technical on purpose; this is for staff on a call, not customers. Seeded with audience:'tech'.
+const TECH_SUPPORT_SEED = [
+  { category: "Service Calls", pinned: 1, title: "Service call — arrival checklist",
+    body: "1. Confirm the ticket + system model before leaving. 2. Verify the reported fault yourself; don't trust the description. 3. Check NVR status page (Menu → Maintenance → System Info) and note firmware. 4. Photograph the rack/NVR and any fault before touching anything. 5. Log the fix and parts used on the ticket, with before/after photos." },
+  { category: "Cameras", pinned: 0, title: "Camera offline — diagnostic order",
+    body: "Work outside-in: 1. PoE — check the switch/NVR port LED; move the camera to a known-good port. 2. Cable — test with a spare patch lead; re-terminate if the run is suspect (TIA-568B both ends). 3. Power budget — sum camera wattage vs switch PoE budget; IR cameras spike at night. 4. IP conflict — ping the camera IP; check for a duplicate. 5. Camera — factory-reset (hold reset 15s), re-add. If still dead after a known-good port + cable + power, RMA the camera." },
+  { category: "Cameras", pinned: 0, title: "No image at night / IR not working",
+    body: "Daytime fine, night black = IR or exposure. 1. Confirm IR LEDs glow faint red in the dark (phone camera sees them). 2. Check for spider webs / dust on the dome — #1 cause of night glare and false motion. 3. Day/Night mode set to Auto, not Colour. 4. IR cut filter should click at dusk — listen for it. 5. If LEDs are dead, it's a hardware fault → RMA." },
+  { category: "Recorder", pinned: 0, title: "NVR not recording",
+    body: "1. Storage — Menu → HDD: is the disk Normal, or Uninitialised/Error? Initialise a new disk; a failing disk shows SMART warnings. 2. Recording schedule — confirm Continuous or Motion is actually enabled on the channel, all-day. 3. Overwrite — if the disk is full and overwrite is off, recording stops. Turn on Overwrite. 4. Channel — a camera in a fault state won't record; fix the feed first. Note SMART health on the ticket if the disk is aging." },
+  { category: "Network", pinned: 0, title: "Remote view fails but local works",
+    body: "Local live view fine, app/remote fails = WAN/P2P. 1. NVR → Network → Platform Access (P2P): status must read Online. 2. Check the NVR has a valid gateway + DNS (DHCP or static that matches the LAN). 3. Router — no double-NAT; P2P needs outbound 443/UDP. 4. Re-add the device in Annke Vision if the P2P register is stale. Avoid manual port-forwarding unless P2P is blocked on-site." },
+  { category: "Recorder", pinned: 0, title: "Forgotten admin password / lockout",
+    body: "Do NOT hard-reset a live system — it wipes camera bindings and recordings config. 1. Try the shared Cam+ZIP password if within the first-week window. 2. Use the pattern unlock if set. 3. If truly locked, generate a reset code via the recorder's date-based flow and contact the manufacturer with the device serial. Resets on complex systems bill $100–$300; quote before proceeding." },
+];
+
 function makePins(accessId) {
   let h = 0;
   for (let i = 0; i < accessId.length; i++) h = (h * 31 + accessId.charCodeAt(i)) >>> 0;
@@ -1112,10 +1137,10 @@ export function getSystemQrLibrary() {
 }
 
 // ---- Support library (FAQ / knowledge base) ----
-export function getSupportArticles() {
+export function getSupportArticles(audience = "customer") {
   return db.prepare(
-    "SELECT id, title, body, category, kind, pinned, author, created_at, updated_at FROM support_articles ORDER BY pinned DESC, category ASC, updated_at DESC, id DESC"
-  ).all().map((r) => ({ ...r, pinned: !!r.pinned, kind: r.kind || "article" }));
+    "SELECT id, title, body, category, kind, pinned, author, created_at, updated_at FROM support_articles WHERE COALESCE(audience,'customer') = ? ORDER BY pinned DESC, category ASC, updated_at DESC, id DESC"
+  ).all(audience).map((r) => ({ ...r, pinned: !!r.pinned, kind: r.kind || "article" }));
 }
 export function getSupportArticle(id) {
   const r = db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id));
@@ -1190,10 +1215,10 @@ export function updateGuide(id, { title, category, flow, steps, pinned }) {
   );
   return decorateGuide(db.prepare("SELECT * FROM support_articles WHERE id=?").get(Number(id)));
 }
-export function createSupportArticle({ title, body, category, pinned, author }) {
+export function createSupportArticle({ title, body, category, pinned, author, audience = "customer" }) {
   const info = db.prepare(
-    "INSERT INTO support_articles (title, body, category, pinned, author) VALUES (?,?,?,?,?)"
-  ).run(String(title || "").trim(), String(body || "").trim(), String(category || "General").trim() || "General", pinned ? 1 : 0, author || null);
+    "INSERT INTO support_articles (title, body, category, pinned, author, audience) VALUES (?,?,?,?,?,?)"
+  ).run(String(title || "").trim(), String(body || "").trim(), String(category || "General").trim() || "General", pinned ? 1 : 0, author || null, audience === "tech" ? "tech" : "customer");
   return getSupportArticle(info.lastInsertRowid);
 }
 export function updateSupportArticle(id, { title, body, category, pinned }) {
