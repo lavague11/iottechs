@@ -78,7 +78,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
               </div>
             </div>
 
-            <div className={`gw-body${step.device === "monitor" || step.reveal ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
+            <div className={`gw-body${step.device === "monitor" || step.reveal || step.landscape ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
               {step.reveal ? (
                 // A cinematic lock-screen reveal replaces the frame entirely — the image is already
                 // a full recorder screen, so it isn't wrapped in a mockup. `i` is the replay key,
@@ -155,7 +155,7 @@ function DeviceFrame({ art, image, imageAndroid, tap, pattern, platform, href, d
   const frameProps = href ? { href, target: "_blank", rel: "noopener noreferrer" } : {};
 
   return (
-    <Frame className={`${isMonitor ? "gw-monitor" : `gw-phone${platform === "android" ? " android" : ""}${landscape ? " rotate" : ""}`}${href ? " link" : ""}`} {...frameProps}>
+    <Frame className={`${isMonitor ? "gw-monitor" : `gw-phone${platform === "android" ? " android" : ""}${landscape ? " landscape" : ""}`}${href ? " link" : ""}`} {...frameProps}>
       {!isMonitor && (platform === "android"
         ? <div className="gw-phone-hole" />      /* Android: centred punch-hole camera */
         : <div className="gw-phone-notch" />)}
@@ -897,10 +897,14 @@ const CSS = `
 .sc-clip-a{left:24%}.sc-clip-b{right:24%}
 .sc-clip-sel{position:absolute;top:0;bottom:0;left:24%;right:24%;background:rgba(201,169,110,.28);border-top:2px solid #C9A96E;border-bottom:2px solid #C9A96E;animation:scClip 2.8s ease-in-out infinite}
 @keyframes scClip{0%,100%{left:38%;right:38%}50%{left:18%;right:18%}}
-/* Landscape demo step: rotate the whole phone frame. Uses its own animation (not a static
-   transform) because .gw-body>* runs gwSlide, and an animation overrides a plain transform. */
-.gw-phone.rotate{animation:gwRotate .6s cubic-bezier(.5,1.3,.4,1) both}
-@keyframes gwRotate{from{opacity:0;transform:rotate(0) scale(.88)}to{opacity:1;transform:rotate(90deg) scale(.62)}}
+/* Landscape demo step: a genuinely wide phone (not a rotated portrait one) so the layout box
+   matches the visual — full width, caption drops below via .gw-body.wide. It animates in as a
+   turn (starts portrait-oriented, settles to landscape) but ENDS at identity so nothing overflows.
+   Own animation because .gw-body>* runs gwSlide and an animation overrides a plain transform. */
+.gw-phone.landscape{width:min(480px,86vw);height:auto;aspect-ratio:19.5 / 9;padding:9px;border-radius:34px;animation:gwLandIn .6s cubic-bezier(.5,1.25,.4,1) both}
+.gw-phone.landscape .gw-screen{border-radius:24px}
+.gw-phone.landscape .gw-phone-notch{top:50%;left:9px;transform:translate(0,-50%) rotate(90deg);border-radius:0 0 12px 12px}
+@keyframes gwLandIn{from{opacity:0;transform:rotate(-82deg) scale(.55)}to{opacity:1;transform:none}}
 .sc-video{width:100%;height:100%;object-fit:cover;display:block;background:#0b0f18}
 .sc-cap{font-size:.72rem;font-weight:700;color:#8a93a3;letter-spacing:.02em}
 /* download */
