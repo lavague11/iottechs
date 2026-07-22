@@ -127,6 +127,10 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
                   pattern={step.reveal.pattern}
                   replayKey={`${i}-${replayNonce}`}
                 />
+              ) : step.legend ? (
+                <ShareLegend />
+              ) : step.showQr ? (
+                <ShareQrPicker projects={projects} />
               ) : (
                 <DeviceFrame art={step.art} image={stepImage} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} landscape={showLand} video={stepVideo} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               )}
@@ -539,7 +543,7 @@ const SHARE_STEPS = [
   { legend: true, title: "Two phones", text: "This part moves between two phones. Green steps are on YOUR phone. Red steps are on their device." },
   { who: "them", image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
   { who: "you",  showQr: true,                          title: "Share your QR",      text: "Pick which system to share, then hold the QR up for them to scan — or text it to them." },
-  { who: "them", image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
+  { who: "them", image: "/guides/annke/11.png",       title: "Scan or upload",     text: "They point at your QR to scan it — or tap Album (bottom-left) to pick the photo you sent.", tap: { x: 21, y: 90, w: 18, h: 9 } },
   { who: "them", image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
   { who: "them", image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
   { who: "you",  image: "/guides/annke/share-03.png", title: "Check your phone", text: "“You have 1 new sharing” appears at the top. Tap it.", tap: { x: 50, y: 13, w: 97, h: 5 } },
@@ -901,7 +905,10 @@ const CSS = `
 .gw-ask-back{margin-top:24px;background:none;border:none;color:#9aa0ab;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer}
 .gw-ask-back:hover{color:#0e1320}
 /* screenshot inside the phone */
-.sc-shot{width:100%;height:100%;object-fit:contain;object-position:top center;display:block;background:#fff}
+/* Fill the whole screen. Absolutely positioned (not a grid item) so height:100% resolves against
+   the screen box; cover fills edge-to-edge. The screen aspect matches the iPhone screenshot below,
+   so there's effectively no crop and taps still map linearly. */
+.sc-shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;background:#fff;z-index:1}
 /* "tap here" highlight — the screen dims and a glowing rectangle spotlights the target.
    The huge spread shadow darkens everything OUTSIDE the box (clipped by .gw-screen). */
 .sc-pattern{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;height:100%;background:#12172a}
@@ -1024,7 +1031,7 @@ const CSS = `
 .gw-replay{height:42px;padding:0 16px;border-radius:11px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;border:1.5px solid #e6e8ee;color:#0e1320}
 .gw-replay:hover{border-color:#C9A96E;color:#b08f4f}
 /* Phone frame */
-.gw-phone{position:relative;width:200px;height:400px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#161b26,#0b0f18);padding:11px;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.05);display:flex;flex-direction:column}
+.gw-phone{position:relative;width:200px;height:408px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#161b26,#0b0f18);padding:11px;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.05);display:flex;flex-direction:column}
 .gw-phone-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:78px;height:17px;background:#0b0f18;border-radius:0 0 12px 12px;z-index:3}
 /* Android frame: squarer corners, thinner bezel, punch-hole selfie camera instead of a notch. */
 .gw-phone.android{border-radius:22px;padding:8px}

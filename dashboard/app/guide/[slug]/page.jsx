@@ -37,7 +37,10 @@ export default async function GuidePage({ params, searchParams }) {
 
   let projects = [];
 
-  if (guide.flow?.needsSystem) {
+  // Resolve the customer's QR systems when the guide needs a system (the picker intro) OR has a
+  // "share your QR" step that offers a live picker.
+  const needsProjects = guide.flow?.needsSystem || (guide.steps || []).some((s) => s.showQr);
+  if (needsProjects) {
     const jar = await cookies();
 
     // 1 + 2 — a single project, by cookie or by token. Both must match the requested project.
