@@ -21,6 +21,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const [i, setI]             = useState(0);        // step index
   const [dir, setDir]         = useState(1);        // slide direction for entry animation
   const [orient, setOrient]   = useState("portrait"); // portrait | landscape (global view toggle)
+  const [replayNonce, setReplayNonce] = useState(0);  // bump to remount steps on replay
   const total = steps.length;
   const step = steps[i] || {};
   const last = i === total - 1;
@@ -49,7 +50,11 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const password = zip ? `Cam${zip}` : "Cam + your ZIP";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
-  function next() { if (last) setPhase(wantAddMore ? "add-more" : "done"); else go(i + 1); }
+  // Finish just exits (guides with an "add anyone else?" step still ask that first). Replay restarts
+  // from step 1 — the nonce forces a remount so animated steps (the reveal) play again.
+  function finish() { if (wantAddMore) setPhase("add-more"); else onClose?.(); }
+  function replay() { setReplayNonce((n) => n + 1); setDir(1); setI(0); setPhase("steps"); }
+  function next() { if (last) finish(); else go(i + 1); }
   function back() {
     if (i !== 0) { go(i - 1); return; }
     // Step 1 → back to whichever intro screen this guide actually has.
@@ -85,7 +90,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : phase === "consent" ? (
           <SharedAccount password={password} onAgree={startSteps} onBack={() => { setPhase("ask"); setQi(1); }} />
         ) : phase === "add-more" ? (
-          <AddMore platform={platform} onDone={() => setPhase("done")} />
+          <AddMore platform={platform} onDone={() => onClose?.()} />
         ) : phase === "done" ? (
           <Finish title={title} loggedIn={loggedIn} onClose={onClose} onRestart={() => { setPhase(hasIntro ? "ask" : "steps"); setQi(askPlatform ? 0 : 1); setI(0); }} />
         ) : (
@@ -112,16 +117,16 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
               </div>
             </div>
 
-            <div className={`gw-body${step.device === "monitor" || step.reveal || showLand ? " wide" : ""}`} key={`${i}-${showLand}`} style={{ "--dir": dir }}>
+            <div className={`gw-body${step.device === "monitor" || step.reveal || showLand ? " wide" : ""}`} key={`${i}-${showLand}-${replayNonce}`} style={{ "--dir": dir }}>
               {step.reveal ? (
                 // A cinematic lock-screen reveal replaces the frame entirely — the image is already
-                // a full recorder screen, so it isn't wrapped in a mockup. `i` is the replay key,
-                // so re-landing on this step (or the dot nav) re-plays the draw.
+                // a full recorder screen, so it isn't wrapped in a mockup. The key includes the
+                // replay nonce, so a Replay re-plays the draw.
                 <UnlockPatternReveal
                   lockedSrc={step.reveal.lockedSrc}
                   cleanSrc={step.reveal.cleanSrc}
                   pattern={step.reveal.pattern}
-                  replayKey={i}
+                  replayKey={`${i}-${replayNonce}`}
                 />
               ) : (
                 <DeviceFrame art={step.art} image={stepImage} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} landscape={showLand} video={stepVideo} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
@@ -132,7 +137,14 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
             <div className="gw-foot">
               <button className="gw-back" onClick={back}>← Back</button>
               <div className="gw-count">{i + 1} / {total}</div>
-              <button className="gw-next" onClick={next}>{last ? "Finish ✓" : "Next →"}</button>
+              {last ? (
+                <div className="gw-foot-end">
+                  <button className="gw-replay" onClick={replay}>↺ Replay</button>
+                  <button className="gw-next" onClick={finish}>Finish ✓</button>
+                </div>
+              ) : (
+                <button className="gw-next" onClick={next}>Next →</button>
+              )}
             </div>
           </>
         )}
@@ -906,6 +918,10 @@ const CSS = `
 .gw-back:disabled{opacity:.4;cursor:default}
 .gw-next{background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;color:#fff;box-shadow:0 10px 24px -10px rgba(176,143,79,.7)}
 .gw-next:hover{filter:brightness(1.06);transform:translateY(-1px)}
+/* Last step: Replay sits to the left of Finish. */
+.gw-foot-end{display:flex;align-items:center;gap:9px}
+.gw-replay{height:42px;padding:0 16px;border-radius:11px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;border:1.5px solid #e6e8ee;color:#0e1320}
+.gw-replay:hover{border-color:#C9A96E;color:#b08f4f}
 /* Phone frame */
 .gw-phone{position:relative;width:200px;height:400px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#161b26,#0b0f18);padding:11px;box-shadow:0 20px 46px -14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.05);display:flex;flex-direction:column}
 .gw-phone-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:78px;height:17px;background:#0b0f18;border-radius:0 0 12px 12px;z-index:3}
