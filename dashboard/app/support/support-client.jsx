@@ -115,6 +115,7 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
       .filter((a) => !q || a.title.toLowerCase().includes(q) || (a.body || "").toLowerCase().includes(q)),
     [articles, q]
   );
+  const demoGuides   = useMemo(() => guides.filter((a) => parseGuide(a).surface === "demo"), [guides]);
   const mobileGuides = useMemo(() => guides.filter((a) => (parseGuide(a).surface || "mobile") === "mobile"), [guides]);
   const nvrGuides    = useMemo(() => guides.filter((a) => parseGuide(a).surface === "nvr"), [guides]);
 
@@ -174,6 +175,20 @@ export default function SupportClient({ user, alerts, articles: initial, qrProje
         <div className="sec-head">
           <input className="apx-input" style={{ maxWidth: 340 }} placeholder="Search guides and articles…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
+
+        {demoGuides.map((a) => {
+          const g = parseGuide(a);
+          return (
+            <button className="sup-demo" key={a.id} onClick={() => setGuide({ title: a.title, ...g })}>
+              <span className="sup-demo-play"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z" /></svg></span>
+              <span className="sup-demo-txt">
+                <span className="sup-demo-t">{a.title}</span>
+                <span className="sup-demo-s">See what your system can do — live view, playback, clips and more</span>
+              </span>
+              <span className="sup-demo-go">Watch →</span>
+            </button>
+          );
+        })}
 
         <GuideSection
           title="Phone &amp; App"
@@ -301,6 +316,14 @@ function ArticleEditor({ article, categories, busy, onSave, onCancel }) {
 }
 
 const CSS = `
+.apx .sup-demo{display:flex;align-items:center;gap:16px;width:100%;margin:2px 0 18px;padding:18px 22px;border:none;border-radius:16px;cursor:pointer;text-align:left;font-family:inherit;color:#fff;background:linear-gradient(120deg,#141a2b 0%,#20283f 55%,#2c2338 100%);box-shadow:0 18px 40px -20px rgba(0,0,0,.5);position:relative;overflow:hidden}
+.apx .sup-demo::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 140% at 90% 0%,rgba(201,169,110,.22),transparent 55%);pointer-events:none}
+.apx .sup-demo:hover{transform:translateY(-2px);box-shadow:0 24px 50px -22px rgba(0,0,0,.6)}
+.apx .sup-demo-play{width:46px;height:46px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#0b0f18;box-shadow:0 0 0 6px rgba(201,169,110,.14)}
+.apx .sup-demo-txt{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;z-index:1}
+.apx .sup-demo-t{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.1rem}
+.apx .sup-demo-s{font-size:.8rem;color:#aeb6c6}
+.apx .sup-demo-go{font-weight:800;font-size:.85rem;color:#e8cb94;white-space:nowrap;z-index:1}
 .apx .sup-sec{margin-bottom:14px}
 .apx .sup-steps{font-size:.75rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .apx .sup-artbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:22px 0 8px;padding-top:16px;border-top:1px solid var(--line)}

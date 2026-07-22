@@ -90,7 +90,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
                   replayKey={i}
                 />
               ) : (
-                <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+                <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} landscape={step.landscape} video={step.video} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               )}
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
@@ -141,7 +141,7 @@ function PatternOverlay({ pattern }) {
   );
 }
 
-function DeviceFrame({ art, image, imageAndroid, tap, pattern, platform, href, device = "phone" }) {
+function DeviceFrame({ art, image, imageAndroid, tap, pattern, platform, href, device = "phone", landscape = false, video = null }) {
   // Android screenshots are supplied per step as they're captured; until then the iOS shot stands
   // in, since the Annke app's layout is near-identical across platforms.
   const shot = platform === "android" && imageAndroid ? imageAndroid : image;
@@ -155,14 +155,14 @@ function DeviceFrame({ art, image, imageAndroid, tap, pattern, platform, href, d
   const frameProps = href ? { href, target: "_blank", rel: "noopener noreferrer" } : {};
 
   return (
-    <Frame className={`${isMonitor ? "gw-monitor" : `gw-phone${platform === "android" ? " android" : ""}`}${href ? " link" : ""}`} {...frameProps}>
+    <Frame className={`${isMonitor ? "gw-monitor" : `gw-phone${platform === "android" ? " android" : ""}${landscape ? " rotate" : ""}`}${href ? " link" : ""}`} {...frameProps}>
       {!isMonitor && (platform === "android"
         ? <div className="gw-phone-hole" />      /* Android: centred punch-hole camera */
         : <div className="gw-phone-notch" />)}
       <div className="gw-screen">
         {/* When a pattern overlay is drawing the grid, the scene must not draw one too — the
             standalone "pattern" art has its own grid at its own coordinates and the two stack. */}
-        <Scene art={pattern && art === "pattern" ? "device" : art} image={shot} platform={platform} />
+        <Scene art={pattern && art === "pattern" ? "device" : art} image={shot} video={video} platform={platform} />
         {pattern && <PatternOverlay pattern={pattern} />}
         {taps.length > 0 && (
           <>
@@ -563,8 +563,13 @@ function Finish({ title, onClose, onRestart, loggedIn }) {
 }
 
 // ---- Phone-screen content: a real screenshot (step.image) if given, else an animated scene ----
-function Scene({ art, image, platform }) {
+function Scene({ art, image, video, platform }) {
   const [failed, setFailed] = useState(false);
+  const [vidFailed, setVidFailed] = useState(false);
+  // A dropped-in screen recording wins for demo steps; the animated scene stands in until then.
+  if (video && !vidFailed) {
+    return <video className="sc-video" src={video} autoPlay muted loop playsInline onError={() => setVidFailed(true)} />;
+  }
   // A supplied screenshot wins — but if it hasn't been uploaded yet (404), fall back to the scene.
   if (image && !failed) return <img className="sc-shot" src={image} alt="" draggable={false} onError={() => setFailed(true)} />;
   switch (art) {
@@ -650,6 +655,60 @@ function Scene({ art, image, platform }) {
           <span className="sc-badge">1</span>
         </div>
         <div className="sc-toast"><b>Motion — Front Door</b><span>Just now</span></div>
+      </div>
+    );
+    // ---- System-demo fillers: stand-ins until real screenshots / a screen recording are dropped
+    // in. Each is a lightweight CSS animation so the demo reads end-to-end today. ----
+    case "live": return (
+      <div className="sc sc-live">
+        <div className="sc-livegrid">
+          {Array.from({ length: 4 }).map((_, n) => (
+            <div className="sc-cam" key={n} style={{ animationDelay: `${n * 0.4}s` }}>
+              <span className="sc-camdot" /><span className="sc-camlabel">CAM {n + 1}</span>
+            </div>
+          ))}
+        </div>
+        <div className="sc-livepill"><span className="sc-rec" />LIVE</div>
+      </div>
+    );
+    case "playback": return (
+      <div className="sc sc-play">
+        <div className="sc-screen1">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="#fff" stroke="none"><path d="M8 5v14l11-7z" /></svg>
+        </div>
+        <div className="sc-timeline"><span className="sc-tl-fill" /><span className="sc-tl-head" /></div>
+        <div className="sc-scrub">◀ scrub the day ▶</div>
+      </div>
+    );
+    case "rotate": return (
+      <div className="sc sc-rotate">
+        <div className="sc-phonelil"><span /></div>
+        <svg className="sc-rotarrow" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+        <div className="sc-cap">Rotate to full screen</div>
+      </div>
+    );
+    case "zoom": return (
+      <div className="sc sc-zoom">
+        <div className="sc-timeline wide"><span className="sc-tl-fill" /><span className="sc-tl-head" /></div>
+        <div className="sc-loupe">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M11 8v6M8 11h6" /></svg>
+        </div>
+        <div className="sc-cap">Pinch to zoom the timeline</div>
+      </div>
+    );
+    case "screenshot": return (
+      <div className="sc sc-shot2">
+        <div className="sc-flash" />
+        <div className="sc-thumb">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></svg>
+        </div>
+        <div className="sc-cap">Saved to your photos</div>
+      </div>
+    );
+    case "clip": return (
+      <div className="sc sc-clip">
+        <div className="sc-timeline"><span className="sc-clip-a" /><span className="sc-clip-b" /><span className="sc-clip-sel" /></div>
+        <div className="sc-cap">Trim and save a clip</div>
       </div>
     );
     case "done":
@@ -801,6 +860,48 @@ const CSS = `
 .gw-screen{position:relative;width:100%;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:linear-gradient(170deg,#f7f8fa,#eef1f6);display:grid;place-items:center}
 /* Scenes */
 .sc{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#b08f4f}
+/* ---- System-demo filler scenes (placeholders until real captures land) ---- */
+.sc-live{background:#0b0f18;gap:0;justify-content:flex-start;padding:8px}
+.sc-livegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;flex:1}
+.sc-cam{position:relative;border-radius:6px;background:linear-gradient(135deg,#1b2740,#0e1626);display:flex;align-items:flex-end;padding:6px;overflow:hidden;animation:scCamFlick 2.4s ease-in-out infinite}
+.sc-cam::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 0%,rgba(120,150,200,.18),transparent 60%)}
+@keyframes scCamFlick{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
+.sc-camdot{position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:#ff5b5b;box-shadow:0 0 8px #ff5b5b;animation:scBlink 1.2s steps(1) infinite}
+@keyframes scBlink{50%{opacity:.25}}
+.sc-camlabel{font-size:.56rem;font-weight:800;color:#cdd6e6;letter-spacing:.05em;z-index:1}
+.sc-livepill{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:5px;font-size:.62rem;font-weight:900;color:#fff;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:20px;letter-spacing:.08em}
+.sc-rec{width:6px;height:6px;border-radius:50%;background:#ff5b5b;animation:scBlink 1.1s steps(1) infinite}
+.sc-play{background:#0b0f18;gap:16px}
+.sc-screen1{width:64%;aspect-ratio:16/10;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1626);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.sc-timeline{position:relative;width:78%;height:12px;border-radius:6px;background:#1a2338;overflow:hidden}
+.sc-timeline.wide{width:88%;height:16px}
+.sc-tl-fill{position:absolute;inset:0;width:100%;background:repeating-linear-gradient(90deg,#243250 0 8px,#1a2338 8px 16px)}
+.sc-tl-head{position:absolute;top:-3px;bottom:-3px;width:3px;background:#C9A96E;box-shadow:0 0 8px #C9A96E;left:20%;animation:scScrub 3s ease-in-out infinite}
+@keyframes scScrub{0%{left:12%}50%{left:78%}100%{left:12%}}
+.sc-scrub,.sc-cap{font-size:.72rem;font-weight:700;color:#8a94a8}
+.sc-rotate{background:#0b0f18}
+.sc-phonelil{width:44px;height:78px;border:2px solid #4a5876;border-radius:9px;display:grid;place-items:center;animation:scRotate 3s ease-in-out infinite;transform-origin:center}
+.sc-phonelil span{width:60%;height:60%;background:linear-gradient(135deg,#243250,#0e1626);border-radius:3px}
+@keyframes scRotate{0%,30%{transform:rotate(0)}55%,100%{transform:rotate(90deg)}}
+.sc-rotarrow{color:#C9A96E}
+.sc-zoom{background:#0b0f18}
+.sc-loupe{width:52px;height:52px;border-radius:50%;border:2px solid #C9A96E;display:grid;place-items:center;color:#C9A96E;animation:scLoupe 2.6s ease-in-out infinite}
+@keyframes scLoupe{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+.sc-shot2{background:#0b0f18}
+.sc-flash{position:absolute;inset:0;background:#fff;opacity:0;animation:scFlash 2.6s ease-out infinite}
+@keyframes scFlash{0%,12%{opacity:0}6%{opacity:.9}}
+.sc-thumb{width:64px;height:64px;border-radius:10px;border:2px solid #C9A96E;display:grid;place-items:center;color:#C9A96E;background:#0e1626;animation:scPop 2.6s ease-out infinite}
+@keyframes scPop{0%,10%{transform:scale(.6);opacity:0}20%{transform:scale(1);opacity:1}100%{opacity:1}}
+.sc-clip{background:#0b0f18}
+.sc-clip-a,.sc-clip-b{position:absolute;top:-3px;bottom:-3px;width:4px;background:#C9A96E}
+.sc-clip-a{left:24%}.sc-clip-b{right:24%}
+.sc-clip-sel{position:absolute;top:0;bottom:0;left:24%;right:24%;background:rgba(201,169,110,.28);border-top:2px solid #C9A96E;border-bottom:2px solid #C9A96E;animation:scClip 2.8s ease-in-out infinite}
+@keyframes scClip{0%,100%{left:38%;right:38%}50%{left:18%;right:18%}}
+/* Landscape demo step: rotate the whole phone frame. Uses its own animation (not a static
+   transform) because .gw-body>* runs gwSlide, and an animation overrides a plain transform. */
+.gw-phone.rotate{animation:gwRotate .6s cubic-bezier(.5,1.3,.4,1) both}
+@keyframes gwRotate{from{opacity:0;transform:rotate(0) scale(.88)}to{opacity:1;transform:rotate(90deg) scale(.62)}}
+.sc-video{width:100%;height:100%;object-fit:cover;display:block;background:#0b0f18}
 .sc-cap{font-size:.72rem;font-weight:700;color:#8a93a3;letter-spacing:.02em}
 /* download */
 .sc-appicon{width:66px;height:66px;border-radius:17px;background:linear-gradient(145deg,#C9A96E,#a8843f);display:grid;place-items:center;box-shadow:0 10px 20px -6px rgba(168,132,63,.6);animation:scPop .5s cubic-bezier(.16,1,.3,1) both}

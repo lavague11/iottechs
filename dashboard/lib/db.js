@@ -868,6 +868,23 @@ const MOBILE_SETUP_GUIDE = {
 // NOTE: the booklet's "Password1" is replaced everywhere by {PASSWORD} (Cam + the system ZIP).
 const GUIDE_SEED = [
   {
+    // The showcase reel — what the system can do, in the app. Steps use `art` filler animations and
+    // `video`/`image` slots the owner maps to real captures later. `landscape:true` rotates the
+    // phone for the full-screen playback beat.
+    slug: "system-demo", title: "System Demo", surface: "demo", category: "Demo",
+    steps: [
+      { art: "download", image: "/guides/annke/01.png", title: "Open the app",   text: "It all lives in one app on your phone." },
+      { art: "device",   image: "/guides/annke/09.png", title: "Open your system", text: "Tap your recorder to jump in." },
+      { art: "live",     video: "/demo/live.mp4",        title: "Live view",      text: "Every camera, live, from anywhere." },
+      { art: "notify",                                   title: "Get alerts",     text: "Motion alerts arrive the moment they happen." },
+      { art: "playback",                                 title: "Playback",       text: "Scrub back through the whole day." },
+      { art: "playback", landscape: true, video: "/demo/playback.mp4", title: "Full screen", text: "Rotate your phone for a full-screen view." },
+      { art: "zoom",                                     title: "Zoom the timeline", text: "Pinch to find the exact moment." },
+      { art: "screenshot",                               title: "Screenshot",     text: "Grab a still and save it to your photos." },
+      { art: "clip",                                     title: "Save a clip",    text: "Trim a moment and share it." },
+    ],
+  },
+  {
     slug: "admin-transfer", title: "Add Your System", surface: "mobile", category: "Getting Started",
     steps: [
       { art: "device", device: "monitor", title: "Wake the recorder",   text: "Right-click anywhere on the recorder’s screen." },
