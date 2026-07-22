@@ -888,7 +888,6 @@ const GUIDE_SEED = [
     // phone for the full-screen playback beat.
     slug: "system-demo", title: "System Demo", surface: "demo", order: 1, category: "Demo",
     steps: [
-      { art: "download", image: "/guides/annke/01.png", title: "Open the app",   text: "It all lives in one app on your phone." },
       { art: "device",   image: "/guides/annke/09.png", title: "Open your system", text: "Tap your recorder to jump in." },
       { art: "live",     video: "/demo/live.mp4",  videoLandscape: "/demo/live-land.mp4",  title: "Live view",  text: "Every camera, live. Rotate your phone for the wide view." },
       { art: "notify",                                   title: "Get alerts",     text: "Motion alerts arrive the moment they happen." },
