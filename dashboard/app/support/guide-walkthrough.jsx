@@ -259,6 +259,13 @@ function StepText({ label, step, password, platform }) {
   return (
     <div className="gw-text">
       <div className="gw-stepno">{label}</div>
+      {/* Whose phone this share step happens on — red for the other person, green for you. */}
+      {step.who && (
+        <div className={`gw-who gw-who-${step.who}`}>
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+          {step.who === "them" ? "On their phone" : "On your phone"}
+        </div>
+      )}
       <h2 className="gw-title">{step.title}</h2>
       <p className="gw-desc">
         {parts.length > 1 ? (
@@ -526,17 +533,19 @@ function QrZoom({ proj, onClose }) {
 // End question: offer to add another person to the system.
 // Adding another person = the Annke "share" flow. They install the app, scan your QR, tap
 // Apply for Sharing; you approve the request on your phone and pick which cameras to share.
+// `who` marks whose phone each step is on: "them" (the person being added — red) or "you" (the
+// owner — green), so it's obvious the flow hops between two phones.
 const SHARE_STEPS = [
-  { image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
-  { image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
-  { image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
-  { image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
-  { image: "/guides/annke/share-03.png", title: "Check your phone", text: "“You have 1 new sharing” appears at the top. Tap it.", tap: { x: 50, y: 13, w: 97, h: 5 } },
-  { image: "/guides/annke/share-04.png", title: "Check the number", text: "Make sure the number is theirs, then tap the system to choose cameras.",
+  { who: "them", image: "/guides/annke/01.png",       title: "They get the app",   text: "Have them install Annke Vision." },
+  { who: "them", image: "/guides/annke/11.png",       title: "They scan your QR",  text: "They scan your System QR.",           tap: { x: 50, y: 50, w: 58, h: 30 } },
+  { who: "them", image: "/guides/annke/share-01.png", title: "Apply for Sharing",  text: "They tap Apply for Sharing.",         tap: { x: 50, y: 66, w: 70, h: 6 } },
+  { who: "them", image: "/guides/annke/share-02.png", title: "Request sent",       text: "They tap OK.",                        tap: { x: 50, y: 58, w: 40, h: 6 } },
+  { who: "you",  image: "/guides/annke/share-03.png", title: "Check your phone", text: "“You have 1 new sharing” appears at the top. Tap it.", tap: { x: 50, y: 13, w: 97, h: 5 } },
+  { who: "you",  image: "/guides/annke/share-04.png", title: "Check the number", text: "Make sure the number is theirs, then tap the system to choose cameras.",
     tap: [{ x: 50, y: 25, w: 92, h: 5 }, { x: 50, y: 18, w: 92, h: 6 }],
     why: "Only accept a request from a number you recognise. Accepting gives that person live view of your cameras." },
-  { image: "/guides/annke/share-05.png", title: "Pick cameras",     text: "Tick the cameras to share, then tap Finish.", tap: [{ x: 50, y: 16, w: 60, h: 4 }, { x: 50, y: 95, w: 92, h: 5 }] },
-  { image: "/guides/annke/share-04.png", title: "Accept",           text: "You’re back here. Tap Accept — they’re in.", tap: { x: 75, y: 34, w: 48, h: 5 } },
+  { who: "you",  image: "/guides/annke/share-05.png", title: "Pick cameras",     text: "Tick the cameras to share, then tap Finish.", tap: [{ x: 50, y: 16, w: 60, h: 4 }, { x: 50, y: 95, w: 92, h: 5 }] },
+  { who: "you",  image: "/guides/annke/share-04.png", title: "Accept",           text: "You’re back here. Tap Accept — they’re in.", tap: { x: 75, y: 34, w: 48, h: 5 } },
 ];
 
 function AddMore({ platform, onDone }) {
@@ -879,6 +888,10 @@ const CSS = `
 /* The reason is always on screen and red — it's an instruction, not a footnote. */
 .gw-why{margin-top:12px;padding:11px 13px;border-radius:10px;background:#fdecec;border:1px solid #f2c4c4;font-size:.85rem;line-height:1.55;color:#a3312d;font-weight:600}
 .gw-pass-wrap{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}
+/* Whose-phone marker for the share flow: red = the person being added, green = you. */
+.gw-who{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;padding:3px 11px;border-radius:20px;font-size:.72rem;font-weight:800;letter-spacing:.02em}
+.gw-who-them{color:#c9382b;background:#fdecec;border:1px solid #f2c4c4}
+.gw-who-you{color:#1c8a45;background:#e7f6ec;border:1px solid #b6e3c6}
 .gw-sa{max-width:440px;margin:0 auto;text-align:left}
 .gw-sa p{font-size:.92rem;line-height:1.6;color:#2C3347;margin:0 0 10px}
 .gw-sa-list{margin:0 0 12px;padding:0;list-style:none}
