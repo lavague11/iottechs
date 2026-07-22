@@ -96,12 +96,11 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
         ) : (
           <>
             <div className="gw-head">
-              <div className="gw-progresswrap"><div className="gw-progress" style={{ width: `${((i + 1) / total) * 100}%` }} /></div>
               <div className="gw-headrow">
-                <div className="gw-dots">
-                  {steps.map((_, n) => (
-                    <button key={n} className={`gw-dot${n === i ? " on" : ""}${n < i ? " past" : ""}`} onClick={() => go(n)} aria-label={`Step ${n + 1}`} />
-                  ))}
+                {/* Green progress bar — one bar per step, fills to (step / total) as a percentage. */}
+                <div className="gw-prog">
+                  <div className="gw-prog-track"><div className="gw-prog-fill" style={{ width: `${Math.round(((i + 1) / total) * 100)}%` }} /></div>
+                  <span className="gw-prog-pct">{Math.round(((i + 1) / total) * 100)}%</span>
                 </div>
                 {/* Orientation toggle — flips the whole demo to the landscape versions. Rotating a
                     real phone does this automatically; the toggle is for desktop. */}
@@ -860,17 +859,18 @@ const CSS = `
 .gw-qrzoom-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.1rem;color:#0e1320;margin-top:8px}
 .gw-qrzoom-dl{display:inline-flex;align-items:center;gap:7px;margin-top:14px;height:42px;padding:0 22px;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:700;font-size:.9rem;text-decoration:none}
 .gw-qrzoom-dl:hover{filter:brightness(1.06)}
-.gw-progresswrap{height:5px;border-radius:100px;background:#eef0f4;margin:12px 0 10px;overflow:hidden}
-.gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#C9A96E,#e8cb94);transition:width .4s cubic-bezier(.16,1,.3,1)}
-.gw-headrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
-.gw-dots{display:flex;gap:7px}
+/* Green step-progress bar with a live percentage. Old gold line + dots replaced by this. */
+.gw-progresswrap{height:8px;border-radius:100px;background:#e9ecf1;margin:12px 0 10px;overflow:hidden}
+.gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#2f9e63,#37d67a);transition:width .45s cubic-bezier(.4,0,.2,1)}
+.gw-headrow{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}
+.gw-prog{display:flex;align-items:center;gap:11px;flex:1;min-width:0}
+.gw-prog-track{position:relative;flex:1;height:9px;border-radius:100px;background:#e9ecf1;overflow:hidden}
+.gw-prog-fill{position:absolute;inset:0 auto 0 0;height:100%;border-radius:100px;background:linear-gradient(90deg,#2f9e63,#37d67a);box-shadow:0 0 8px rgba(55,214,122,.5);transition:width .45s cubic-bezier(.4,0,.2,1)}
+.gw-prog-pct{font-size:.82rem;font-weight:800;color:#2f9e63;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:38px;text-align:right}
 .gw-orient{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid #e6e0d4;border-radius:20px;background:#fff;color:#6f7686;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
 .gw-orient:hover{border-color:#C9A96E;color:#b08f4f}
 .gw-orient.on{background:linear-gradient(135deg,#C9A96E,#b08f4f);border-color:#b08f4f;color:#fff}
 .gw-orient.on svg{transform:rotate(90deg);transition:transform .3s}
-.gw-dot{width:9px;height:9px;border-radius:50%;border:none;background:#e2e5ec;cursor:pointer;padding:0;transition:background .2s,transform .2s}
-.gw-dot.past{background:#d8c39a}
-.gw-dot.on{background:#C9A96E;transform:scale(1.3)}
 .gw-body{display:grid;grid-template-columns:200px 1fr;gap:26px;align-items:center;padding:22px 26px 8px}
 .gw-body>*{animation:gwSlide .4s cubic-bezier(.16,1,.3,1) both}
 @keyframes gwSlide{from{opacity:0;transform:translateX(calc(var(--dir,1)*26px))}to{opacity:1;transform:none}}
