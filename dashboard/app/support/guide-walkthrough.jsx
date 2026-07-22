@@ -20,9 +20,30 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   const [system, setSystem]   = useState(null);     // the system they picked (drives the password)
   const [i, setI]             = useState(0);        // step index
   const [dir, setDir]         = useState(1);        // slide direction for entry animation
+  const [orient, setOrient]   = useState("portrait"); // portrait | landscape (global view toggle)
   const total = steps.length;
   const step = steps[i] || {};
   const last = i === total - 1;
+
+  // A step is landscape-capable if it's flagged or ships a landscape asset. Forced-landscape steps
+  // (step.landscape) always show landscape; the rest follow the toggle / device rotation, and only
+  // flip if they actually have a landscape version — a portrait-only step stays portrait.
+  const stepHasLand  = !!(step.imageLandscape || step.videoLandscape);
+  const showLand     = !!step.landscape || (orient === "landscape" && stepHasLand);
+  const stepImage    = showLand ? (step.imageLandscape || step.image) : step.image;
+  const stepVideo    = showLand ? (step.videoLandscape || step.video) : step.video;
+
+  // On a real phone, rotating the device flips the view. Desktop is always "landscape" orientation,
+  // so only follow the sensor on touch devices; desktop uses the manual toggle.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    const mq = window.matchMedia("(orientation: landscape)");
+    const apply = () => setOrient(mq.matches ? "landscape" : "portrait");
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
   // App password = "Cam" + the system's ZIP, so we can get in during the first week of tuning.
   const zip = system?.zip || (projects || []).find((p) => p.zip)?.zip || "";
   const password = zip ? `Cam${zip}` : "Cam + your ZIP";
@@ -71,14 +92,27 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
           <>
             <div className="gw-head">
               <div className="gw-progresswrap"><div className="gw-progress" style={{ width: `${((i + 1) / total) * 100}%` }} /></div>
-              <div className="gw-dots">
-                {steps.map((_, n) => (
-                  <button key={n} className={`gw-dot${n === i ? " on" : ""}${n < i ? " past" : ""}`} onClick={() => go(n)} aria-label={`Step ${n + 1}`} />
-                ))}
+              <div className="gw-headrow">
+                <div className="gw-dots">
+                  {steps.map((_, n) => (
+                    <button key={n} className={`gw-dot${n === i ? " on" : ""}${n < i ? " past" : ""}`} onClick={() => go(n)} aria-label={`Step ${n + 1}`} />
+                  ))}
+                </div>
+                {/* Orientation toggle — flips the whole demo to the landscape versions. Rotating a
+                    real phone does this automatically; the toggle is for desktop. */}
+                <button
+                  className={`gw-orient${orient === "landscape" ? " on" : ""}`}
+                  onClick={() => setOrient((o) => (o === "landscape" ? "portrait" : "landscape"))}
+                  title={orient === "landscape" ? "Portrait view" : "Landscape view"}
+                  aria-pressed={orient === "landscape"}
+                >
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M12 3v3M12 18v3" /></svg>
+                  {orient === "landscape" ? "Landscape" : "Portrait"}
+                </button>
               </div>
             </div>
 
-            <div className={`gw-body${step.device === "monitor" || step.reveal || step.landscape ? " wide" : ""}`} key={i} style={{ "--dir": dir }}>
+            <div className={`gw-body${step.device === "monitor" || step.reveal || showLand ? " wide" : ""}`} key={`${i}-${showLand}`} style={{ "--dir": dir }}>
               {step.reveal ? (
                 // A cinematic lock-screen reveal replaces the frame entirely — the image is already
                 // a full recorder screen, so it isn't wrapped in a mockup. `i` is the replay key,
@@ -90,7 +124,7 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
                   replayKey={i}
                 />
               ) : (
-                <DeviceFrame art={step.art} image={step.image} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} landscape={step.landscape} video={step.video} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
+                <DeviceFrame art={step.art} image={stepImage} imageAndroid={step.imageAndroid} tap={step.tap} pattern={step.pattern} device={step.device} landscape={showLand} video={stepVideo} platform={platform} href={step.store ? STORE[platform] || STORE.ios : null} />
               )}
               <StepText label={`Step ${i + 1} of ${total}`} step={step} password={password} platform={platform} />
             </div>
@@ -790,7 +824,12 @@ const CSS = `
 .gw-qrzoom-dl:hover{filter:brightness(1.06)}
 .gw-progresswrap{height:5px;border-radius:100px;background:#eef0f4;margin:12px 0 10px;overflow:hidden}
 .gw-progress{height:100%;border-radius:100px;background:linear-gradient(90deg,#C9A96E,#e8cb94);transition:width .4s cubic-bezier(.16,1,.3,1)}
+.gw-headrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .gw-dots{display:flex;gap:7px}
+.gw-orient{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid #e6e0d4;border-radius:20px;background:#fff;color:#6f7686;font-size:.76rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.gw-orient:hover{border-color:#C9A96E;color:#b08f4f}
+.gw-orient.on{background:linear-gradient(135deg,#C9A96E,#b08f4f);border-color:#b08f4f;color:#fff}
+.gw-orient.on svg{transform:rotate(90deg);transition:transform .3s}
 .gw-dot{width:9px;height:9px;border-radius:50%;border:none;background:#e2e5ec;cursor:pointer;padding:0;transition:background .2s,transform .2s}
 .gw-dot.past{background:#d8c39a}
 .gw-dot.on{background:#C9A96E;transform:scale(1.3)}

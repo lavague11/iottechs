@@ -875,10 +875,10 @@ const GUIDE_SEED = [
     steps: [
       { art: "download", image: "/guides/annke/01.png", title: "Open the app",   text: "It all lives in one app on your phone." },
       { art: "device",   image: "/guides/annke/09.png", title: "Open your system", text: "Tap your recorder to jump in." },
-      { art: "live",     video: "/demo/live.mp4",        title: "Live view",      text: "Every camera, live, from anywhere." },
+      { art: "live",     video: "/demo/live.mp4",  videoLandscape: "/demo/live-land.mp4",  title: "Live view",  text: "Every camera, live. Rotate your phone for the wide view." },
       { art: "notify",                                   title: "Get alerts",     text: "Motion alerts arrive the moment they happen." },
-      { art: "playback",                                 title: "Playback",       text: "Scrub back through the whole day." },
-      { art: "playback", landscape: true, video: "/demo/playback.mp4", title: "Full screen", text: "Rotate your phone for a full-screen view." },
+      { art: "playback", video: "/demo/playback.mp4", videoLandscape: "/demo/playback-land.mp4", title: "Playback", text: "Scrub back through the whole day." },
+      { art: "playback", landscape: true, video: "/demo/playback-land.mp4", title: "Full screen", text: "Rotate your phone for a full-screen view." },
       { art: "zoom",                                     title: "Zoom the timeline", text: "Pinch to find the exact moment." },
       { art: "screenshot",                               title: "Screenshot",     text: "Grab a still and save it to your photos." },
       { art: "clip",                                     title: "Save a clip",    text: "Trim a moment and share it." },
