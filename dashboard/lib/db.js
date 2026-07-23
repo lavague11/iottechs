@@ -412,6 +412,64 @@ function init() {
       created_at  TEXT DEFAULT (datetime('now'))
     )
   `);
+  // ---- Service calls (TRACE) ----
+  // A service call is its OWN entity, not a project. Own SVC#### id series, own stage flow, its own
+  // PIN gate. Add-on cameras still become projects; this is the fault-report / diagnostic / billing
+  // track. `diagnostics` holds each guided session (customer or tech); `service_call_events` is the
+  // append-only, timestamped timeline the whole record is built from.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS service_calls (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      svc_id            TEXT UNIQUE,
+      customer          TEXT,
+      contact_name      TEXT,
+      contact_email     TEXT,
+      contact_phone     TEXT,
+      address           TEXT,
+      project_access_id TEXT,               -- the project whose system this is about (optional)
+      issue             TEXT,               -- what the customer reported
+      category          TEXT,               -- camera | dropout | nvr | other
+      stage             TEXT NOT NULL DEFAULT 'submitted',
+      status            TEXT NOT NULL DEFAULT 'open',
+      priority          TEXT NOT NULL DEFAULT 'medium',
+      outcome_route     TEXT,               -- last diagnostic outcome: solved|service|field|replace|escalate
+      customer_pin      TEXT,               -- PIN gate, last 4 of contact phone
+      assignee_id       INTEGER,
+      assignee_name     TEXT,
+      ticket_id         INTEGER,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      updated_at        TEXT DEFAULT (datetime('now','localtime')),
+      resolved_at       TEXT,
+      closed_at         TEXT
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS diagnostics (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      svc_id      TEXT NOT NULL,
+      mode        TEXT NOT NULL,            -- 'customer' | 'tech'
+      technician  TEXT,
+      issue       TEXT,
+      steps       TEXT,                     -- JSON: [{step, question, answer}]
+      speed_test  TEXT,                     -- JSON: {down, up, ping, at}
+      outcome     TEXT,                     -- JSON: {route, routeLabel, title, action}
+      started     TEXT,
+      completed   TEXT,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS service_call_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      svc_id      TEXT NOT NULL,
+      at          TEXT DEFAULT (datetime('now','localtime')),
+      kind        TEXT NOT NULL,            -- submitted | diagnostic | note | stage | quote | payment | resolved | closed
+      actor_role  TEXT,
+      actor_name  TEXT,
+      detail      TEXT
+    )
+  `);
+
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
     const URGENT = /offline|down|not\s+(working|record)|no\s+signal|dead|fail/i;
@@ -2309,6 +2367,149 @@ export function createTicket({ access_id, subject, priority, opened_by_id, opene
   if (body && String(body).trim()) addTicketMessage(id, { author_id: opened_by_id, author_name: opened_by_name, author_role: opened_by_role, body });
   return id;
 }
+
+// ===========================================================================
+// Service calls (TRACE) — Phase 1 data layer
+// ===========================================================================
+
+// The stage ladder for a service call, in order. Distinct from the project lifecycle.
+export const SVC_STAGES = [
+  { key: "submitted",  label: "Submitted" },
+  { key: "diagnosing", label: "Diagnosing" },
+  { key: "quoted",     label: "Quoted" },
+  { key: "scheduled",  label: "Scheduled" },
+  { key: "onsite",     label: "On-site" },
+  { key: "resolved",   label: "Resolved" },
+  { key: "billed",     label: "Billed" },
+  { key: "closed",     label: "Closed" },
+];
+export function svcStageLabel(key) {
+  return (SVC_STAGES.find((s) => s.key === key) || {}).label || key || "";
+}
+
+// SVC id from a counter — same base36 scheme as project ids, distinct prefix so it never reads as
+// a project. e.g. counter 1 -> "SVC0001", 42 -> "SVC0016".
+export function makeSvcId(counter) {
+  return `SVC${Number(counter).toString(36).toUpperCase().padStart(4, "0")}`;
+}
+
+function decorateSvc(r) {
+  if (!r) return null;
+  return { ...r, stage_label: svcStageLabel(r.stage) };
+}
+
+// Append a line to the call's timeline. Everything the record is built from flows through here, so
+// the PDF timeline is just this table in order.
+export function logServiceCallEvent(svcId, { kind, detail = null, actor_role = null, actor_name = null }) {
+  db.prepare(
+    "INSERT INTO service_call_events (svc_id, kind, detail, actor_role, actor_name) VALUES (?,?,?,?,?)"
+  ).run(String(svcId), String(kind), detail == null ? null : String(detail), actor_role, actor_name);
+}
+
+export function getServiceCallEvents(svcId) {
+  return db.prepare(
+    "SELECT id, at, kind, actor_role, actor_name, detail FROM service_call_events WHERE svc_id = ? ORDER BY id ASC"
+  ).all(String(svcId));
+}
+
+// Create a service call from an intake. Assigns the SVC id from the row's own autoincrement id
+// (guaranteed unique), sets the PIN to the last 4 of the contact phone (same rule as projects),
+// links a ticket, and logs the opening event.
+export function createServiceCall({ customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, actor_role, actor_name }) {
+  const info = db.prepare(`
+    INSERT INTO service_calls (customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, customer_pin)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    String(customer || contact_name || "").trim() || null,
+    contact_name || null, contact_email || null, contact_phone || null,
+    address || null, project_access_id || null,
+    String(issue || "").trim() || null, category || "other", priority || "medium",
+    phonePin(contact_phone)
+  );
+  const id = Number(info.lastInsertRowid);
+  const svcId = makeSvcId(id);
+  db.prepare("UPDATE service_calls SET svc_id = ? WHERE id = ?").run(svcId, id);
+
+  // Companion ticket so it flows through the existing ticket surfaces too.
+  const ticketId = createTicket({
+    subject: `Service call — ${issue || category || "issue"}`,
+    priority: priority || "medium",
+    opened_by_name: actor_name || contact_name, opened_by_role: actor_role || "customer",
+    audience: "admin,manager,tech,customer",
+  });
+  db.prepare("UPDATE service_calls SET ticket_id = ? WHERE id = ?").run(ticketId, id);
+
+  logServiceCallEvent(svcId, { kind: "submitted", detail: issue || category || "Service call opened", actor_role: actor_role || "customer", actor_name: actor_name || contact_name });
+  return getServiceCall(svcId);
+}
+
+export function getServiceCall(svcId) {
+  return decorateSvc(db.prepare("SELECT * FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId || "").trim()));
+}
+
+// Full SVC id or its last 4 (unambiguous only) — mirrors resolveProjectRef so the PIN page can
+// accept either. Returns null when zero or many match.
+export function resolveServiceCallRef(ref) {
+  const raw = String(ref || "").trim();
+  if (!raw) return null;
+  const exact = getServiceCall(raw);
+  if (exact) return exact;
+  const code = raw.replace(/[^a-z0-9]/gi, "");
+  if (code.length < 3 || code.length > 8) return null;
+  const rows = db.prepare("SELECT * FROM service_calls WHERE svc_id LIKE ? COLLATE NOCASE").all("%" + code);
+  return rows.length === 1 ? decorateSvc(rows[0]) : null;
+}
+
+export function listServiceCalls({ stage, assignee_id, project_access_id } = {}) {
+  const where = [], args = [];
+  if (stage) { where.push("stage = ?"); args.push(stage); }
+  if (assignee_id) { where.push("assignee_id = ?"); args.push(Number(assignee_id)); }
+  if (project_access_id) { where.push("project_access_id = ?"); args.push(project_access_id); }
+  const sql = "SELECT * FROM service_calls" + (where.length ? " WHERE " + where.join(" AND ") : "") + " ORDER BY id DESC";
+  return db.prepare(sql).all(...args).map(decorateSvc);
+}
+
+export function getServiceCallsForCustomer(email) {
+  if (!email) return [];
+  return db.prepare("SELECT * FROM service_calls WHERE contact_email = ? COLLATE NOCASE ORDER BY id DESC").all(String(email)).map(decorateSvc);
+}
+
+export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {}) {
+  if (!SVC_STAGES.some((s) => s.key === stage)) return null;
+  const cur = getServiceCall(svcId);
+  if (!cur) return null;
+  const extra = stage === "resolved" ? ", resolved_at = datetime('now','localtime')"
+              : stage === "closed"   ? ", closed_at = datetime('now','localtime')" : "";
+  db.prepare(`UPDATE service_calls SET stage = ?, updated_at = datetime('now','localtime')${extra} WHERE svc_id = ? COLLATE NOCASE`).run(stage, String(svcId));
+  logServiceCallEvent(svcId, { kind: "stage", detail: `${cur.stage} → ${stage}`, actor_role, actor_name });
+  return getServiceCall(svcId);
+}
+
+// Persist a completed diagnostic session (the buildRecord() shape from the handoff), stamp the
+// call's outcome route, and log it to the timeline.
+export function addDiagnostic(svcId, { mode, technician, issue, steps, speedTest, outcome, started, completed, actor_role, actor_name }) {
+  db.prepare(`
+    INSERT INTO diagnostics (svc_id, mode, technician, issue, steps, speed_test, outcome, started, completed)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `).run(
+    String(svcId), mode === "tech" ? "tech" : "customer", technician || null, issue || null,
+    JSON.stringify(steps || []), speedTest ? JSON.stringify(speedTest) : null,
+    outcome ? JSON.stringify(outcome) : null, started || null, completed || null
+  );
+  if (outcome?.route) db.prepare("UPDATE service_calls SET outcome_route = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(outcome.route, String(svcId));
+  logServiceCallEvent(svcId, { kind: "diagnostic", detail: `${mode === "tech" ? "Tech" : "Customer"} diagnostic — ${outcome?.title || outcome?.route || "completed"}`, actor_role: actor_role || (mode === "tech" ? "tech" : "customer"), actor_name });
+}
+
+export function getDiagnostics(svcId) {
+  return db.prepare("SELECT * FROM diagnostics WHERE svc_id = ? ORDER BY id ASC").all(String(svcId)).map((d) => ({
+    ...d,
+    steps: safeJson(d.steps, []),
+    speed_test: safeJson(d.speed_test, null),
+    outcome: safeJson(d.outcome, null),
+  }));
+}
+
+function safeJson(s, fallback) { try { return s ? JSON.parse(s) : fallback; } catch { return fallback; } }
 
 export function updateTicket(id, fields) {
   const sets = [], vals = [];
