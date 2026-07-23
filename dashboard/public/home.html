@@ -955,9 +955,18 @@
   }
 
   function finderInstaller(who) {
-    var key = who === 'iot' ? (_finderType === 'not-working' ? 'not-working' : 'repair') : 'repair-other';
-    var ctx = FINDER_MODAL_TITLES[key];
+    // IOT installed it → this is a service call on a system we own. Send them to the tracked
+    // service-call intake instead of the generic lead modal. Someone else installed it → we don't
+    // have their system, so it's a service estimate (lead).
+    if (who === 'iot') { goToServiceIntake(_finderService); return; }
+    var ctx = FINDER_MODAL_TITLES['repair-other'];
     openDemoModal(_finderService, ctx.title, ctx.sub);
+  }
+
+  // Public service-call intake page — carries the picked service as context.
+  function goToServiceIntake(service) {
+    var q = service ? '?service=' + encodeURIComponent(service) : '';
+    window.location.href = '/report-issue' + q;
   }
 
 
@@ -996,8 +1005,8 @@
     wdsClose(); openDemoModal(null,ctx.title,ctx.sub);
   }
   function wdsInstaller(who){
-    var key=who==='iot'?(_wdsType==='not-working'?'not-working':'repair'):'repair-other';
-    var ctx=FINDER_MODAL_TITLES[key];
+    if(who==='iot'){ wdsClose(); goToServiceIntake(_wdsService); return; }
+    var ctx=FINDER_MODAL_TITLES['repair-other'];
     wdsClose(); openDemoModal(_wdsService,ctx.title,ctx.sub);
   }
   // Demo modal open/close
