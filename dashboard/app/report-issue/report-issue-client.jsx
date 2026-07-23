@@ -80,8 +80,8 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
               </div>
             </div>
             <div className="ri-actions">
-              <a className="ri-btn ri-btn-gold" href="/">Back to home</a>
-              {loggedIn && <a className="ri-btn ri-btn-ghost" href="/my-projects">My dashboard</a>}
+              <a className="ri-btn ri-btn-gold" href={`/service-call/${done.svcId}`}>Track my service call</a>
+              <a className="ri-btn ri-btn-ghost" href="/">Back to home</a>
             </div>
           </div>
         ) : (

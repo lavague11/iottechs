@@ -71,6 +71,31 @@ export async function parseAccessToken(token) {
   }
 }
 
+// Service-call access token — a customer who unlocks their service call with its PIN gets no login
+// session, so this signed cookie (svcId:issuedAt) authorizes their reads/writes on THAT service
+// call only. A service call is a longer-lived thread than a project browse session (they check
+// back over days as it's scheduled and worked), so the leash is generous.
+const SVC_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+export const SVC_ACCESS_TTL_MS = SVC_TTL_MS;
+export async function makeSvcToken(svcId) {
+  const payload = `${svcId}:${Date.now()}`;
+  const sig = await hmac(payload);
+  return btoa(`${payload}:${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+export async function parseSvcToken(token) {
+  try {
+    const raw = atob(String(token).replace(/-/g, "+").replace(/_/g, "/"));
+    const parts = raw.split(":");
+    if (parts.length < 3) return null;
+    const [svcId, issuedAt, sig] = parts;
+    if ((await hmac(`${svcId}:${issuedAt}`)) !== sig) return null;
+    if (Date.now() - Number(issuedAt) > SVC_TTL_MS) return null;
+    return { svcId };
+  } catch {
+    return null;
+  }
+}
+
 // Guide link token — lets us text a customer a link that shows their System QR without a PIN.
 // Scoped to ONE project and expiring (default 7 days, matching the commissioning window), because
 // whoever holds the link holds the QR. Payload is accessId:expiresAt.
