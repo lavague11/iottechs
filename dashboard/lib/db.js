@@ -2485,6 +2485,15 @@ export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {
   return getServiceCall(svcId);
 }
 
+// Assign (or clear) the technician on a service call, logged to the timeline.
+export function assignServiceCallTech(svcId, techId, techName, { actor_role, actor_name } = {}) {
+  const cur = getServiceCall(svcId);
+  if (!cur) return null;
+  db.prepare("UPDATE service_calls SET assignee_id = ?, assignee_name = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(techId || null, techName || null, String(svcId));
+  logServiceCallEvent(svcId, { kind: "assign", detail: techName ? `Assigned to ${techName}` : "Unassigned", actor_role, actor_name });
+  return getServiceCall(svcId);
+}
+
 // Persist a completed diagnostic session (the buildRecord() shape from the handoff), stamp the
 // call's outcome route, and log it to the timeline.
 export function addDiagnostic(svcId, { mode, technician, issue, steps, speedTest, outcome, started, completed, actor_role, actor_name }) {
