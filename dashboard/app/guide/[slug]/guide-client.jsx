@@ -20,13 +20,16 @@ export default function GuidePageClient({ title, steps, flow, projects, projectR
           projectRef={projectRef}
           loggedIn={loggedIn}
           onUnlock={unlockGuideQrAction}
-          onClose={() => { if (loggedIn) window.location.href = "/support"; else setOpen(false); }}
+          onClose={() => { window.location.href = loggedIn ? "/support" : "/"; }}
         />
       ) : (
         <div className="gpg-done">
           <h1>All set</h1>
           <p>You can reopen these steps any time from this link.</p>
-          <button className="gpg-btn" onClick={() => setOpen(true)}>Start over</button>
+          <div className="gpg-btns">
+            <button className="gpg-btn ghost" onClick={() => setOpen(true)}>↺ Start over</button>
+            <a className="gpg-btn" href="/">Go home</a>
+          </div>
         </div>
       )}
       <style>{`
@@ -34,7 +37,9 @@ export default function GuidePageClient({ title, steps, flow, projects, projectR
         .gpg-done{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;color:#fff;font-family:'Hanken Grotesk',sans-serif}
         .gpg-done h1{font-family:'Bricolage Grotesque',sans-serif;font-size:1.9rem;font-weight:800;margin:0}
         .gpg-done p{color:#9aa3b2;margin:0;font-size:.95rem}
-        .gpg-btn{margin-top:10px;height:44px;padding:0 24px;border:none;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:800;font-size:.9rem;cursor:pointer;font-family:inherit}
+        .gpg-btns{display:flex;gap:10px;margin-top:10px}
+        .gpg-btn{display:inline-flex;align-items:center;height:44px;padding:0 24px;border:none;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:800;font-size:.9rem;cursor:pointer;font-family:inherit;text-decoration:none}
+        .gpg-btn.ghost{background:transparent;border:1.5px solid rgba(255,255,255,.2);color:#fff}
       `}</style>
     </div>
   );
