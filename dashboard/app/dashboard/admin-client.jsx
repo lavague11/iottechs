@@ -75,7 +75,7 @@ export default function AdminClient({ user, alerts, kpis, projects, tickets, tec
     { cls: "c-blue",   label: "New Inquiries",      val: kpis.newInquiries,      sub: <>in the pipeline</>,        href: "/projects?filter=inquiry" },
     { cls: "c-gold",   label: "Open Projects",      val: kpis.openProjects,      sub: <><b>+{kpis.newThisWeek}</b> this week</>, href: "/projects?filter=active" },
     { cls: "c-amber",  label: "Awaiting Signature", val: kpis.awaitingSignature, sub: <>proposal &amp; approval</>, href: "/projects?filter=needs" },
-    { cls: "c-purple", label: "Open Service Calls", val: kpis.openServiceCalls,  sub: <><b>{kpis.urgentCalls}</b> urgent</> },
+    { cls: "c-purple", label: "Open Service Calls", val: kpis.openServiceCalls,  sub: <><b>{kpis.urgentCalls}</b> urgent</>, href: "/service-calls" },
     { cls: "c-red",    label: "Open Tickets",       val: kpis.openTickets,       sub: <><b>{kpis.urgentTickets}</b> urgent</>, href: "/tickets" },
     { cls: "c-green",  label: "Inventory",          val: kpis.invUnits,          sub: <><b>{money(kpis.invValue)}</b> on hand</>, href: "/inventory" },
   ];

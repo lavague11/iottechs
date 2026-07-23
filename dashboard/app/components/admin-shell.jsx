@@ -53,7 +53,8 @@ const NAV_GROUPS = [
     { key: "sales",     label: "Sales Pipeline", href: "/sales" },
   ]},
   { key: "ops-grp", label: "Operations", items: [
-    { key: "operations", label: "Action Center", href: "/operations" },
+    { key: "operations",    label: "Action Center", href: "/operations" },
+    { key: "service-calls", label: "Service Calls", href: "/service-calls" },
   ]},
   { key: "support-grp", label: "Support", items: [
     { key: "support", label: "Support Library", href: "/support" },

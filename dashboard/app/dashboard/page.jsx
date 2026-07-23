@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets } from "../../lib/db";
+import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets, listServiceCalls } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import AdminClient from "./admin-client";
 
@@ -35,13 +35,17 @@ export default async function DashboardPage() {
   const realTickets = getTickets();
   const openReal = realTickets.filter((t) => t.status !== "closed" && t.status !== "resolved");
   const urgentTickets = openReal.filter((t) => t.priority === "urgent").length;
-  const urgentCalls   = openJobs.filter((j) => j.project_type === "C" && j.issue && URGENT_RE.test(j.issue)).length;
+  // Service calls now come from the SVC entity (not project_type C). Open = not resolved/billed/closed.
+  const svcOpen = ["submitted","diagnosing","quoted","scheduled","onsite"];
+  const svcCalls = listServiceCalls();
+  const openSvc = svcCalls.filter((c) => svcOpen.includes(c.stage));
+  const urgentCalls = openSvc.filter((c) => ["urgent","high"].includes(c.priority)).length;
 
   const kpis = {
     newInquiries:      jobs.filter((j) => j.stage === "inquiry").length,
     openProjects:      openJobs.length,
     awaitingSignature: jobs.filter((j) => ["proposal", "approval_deposit"].includes(j.stage)).length,
-    openServiceCalls:  openJobs.filter((j) => j.project_type === "C").length,
+    openServiceCalls:  openSvc.length,
     openTickets:       openReal.length,
     invUnits:          inv.units,
     invValue:          inv.value,
