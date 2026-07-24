@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { parseSvcToken } from "../../../lib/auth";
+import { parseSvcToken, parseAccessToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { getServiceCall, getUserById, addDiagnostic, signSvcInvoice, getSvcInvoice } from "../../../lib/db";
 
@@ -17,6 +17,16 @@ async function authorizeCustomer(svcId) {
   const svcTok = jar.get("iot_svc")?.value;
   const svc = svcTok ? await parseSvcToken(svcTok) : null;
   if (svc && String(svc.svcId).toUpperCase() === String(call.svc_id).toUpperCase()) {
+    return { call, name: call.contact_name || call.customer || "Customer" };
+  }
+
+  // Gateway path: a customer who PIN-unlocked the call's companion project holds a project-scoped
+  // iot_access grant for it — that unlock covers the call itself (same PIN, same person).
+  const accTok = jar.get("iot_access")?.value;
+  const acc = accTok ? await parseAccessToken(accTok) : null;
+  if (acc?.accessId && call.svc_project_id &&
+      String(acc.accessId).toUpperCase() === String(call.svc_project_id).toUpperCase() &&
+      (acc.role === "customer" || acc.role === "inquiry")) {
     return { call, name: call.contact_name || call.customer || "Customer" };
   }
 

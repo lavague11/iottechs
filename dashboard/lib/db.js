@@ -2509,6 +2509,12 @@ export function ensureSvcProject(svcId) {
   return getJobByAccessId(cId);
 }
 
+// Reverse lookup: the service call living on a companion type-C project (gateway integration).
+export function getServiceCallByProject(accessId) {
+  const r = db.prepare("SELECT * FROM service_calls WHERE svc_project_id = ? COLLATE NOCASE").get(String(accessId || "").trim());
+  return decorateSvc(r);
+}
+
 // Full SVC id or its last 4 (unambiguous only) — mirrors resolveProjectRef so the PIN page can
 // accept either. Returns null when zero or many match.
 export function resolveServiceCallRef(ref) {

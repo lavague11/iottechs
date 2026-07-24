@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -246,5 +246,31 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     proposalViews = initialView === "sales" ? all.filter(v => v.viewer_role === "customer") : all;
   }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} />;
+  // ---- Linked service call (companion type-C project) — diagnostic + invoice cards on the
+  // gateway. Sanitized per role SERVER-SIDE: a customer never receives tech diagnostics or
+  // unsent drafts; a tech never receives the invoice at all. With no session yet (PIN gate
+  // ahead) ship the customer-safe variant, same convention as the proposal above.
+  let svcCall = null;
+  {
+    const sc = getServiceCallByProject(p.access_id);
+    if (sc) {
+      const effView = initialView || "customer";
+      const allDiags = getDiagnostics(sc.svc_id).map((r) => ({ ...r }));
+      const diagnostics = effView === "customer"
+        ? allDiags.filter((d) => d.mode !== "tech")
+        : allDiags;
+      let invoice = null, payments = [];
+      if (effView !== "tech") {
+        const invRow = getSvcInvoice(sc.svc_id);
+        const custSafe = invRow && invRow.status === "sent"
+          ? { items: invRow.items, total: invRow.total, notes: invRow.notes, signed_name: invRow.signed_name, signed_at: invRow.signed_at }
+          : null;
+        invoice = ["admin", "manager"].includes(effView) ? (invRow ? { ...invRow } : null) : custSafe;
+        payments = invoice ? getSvcPayments(sc.svc_id).map((x) => ({ id: x.id, amount: x.amount, method: x.method, paid_at: x.paid_at })) : [];
+      }
+      svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments };
+    }
+  }
+
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} />;
 }

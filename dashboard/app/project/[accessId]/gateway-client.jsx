@@ -27,6 +27,7 @@ import SystemQrTool      from "./system-qr-tool";
 import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
+import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement } from "../../../lib/customer-action";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -1447,7 +1448,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, svcCall = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
@@ -2190,6 +2191,29 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         setToast={setJumpToast}
       />
       {err && <div className="gw-error">{err}</div>}
+
+      {/* ===== Service call (companion type-C project) — diagnostic + invoice live on the gateway.
+          Always visible regardless of stage: the call IS the job. Invoice never renders for tech
+          (retail); for a customer it only exists once sent (server strips drafts). ===== */}
+      {svcCall && (
+        <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
+          <FlowStep status={svcCall.diagnostics.length ? "done" : "active"} color="#C9A96E"
+            icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>}
+            title="Service Diagnostic" sub="60-second check · Guided steps · On the record"
+            chip={cView === "customer" && !svcCall.diagnostics.length ? <span className="pv-tool-chip go">Try it first</span> : null}>
+            <SvcDiagnosticPanel svcCall={svcCall} view={cView} preview={!!previewRole} />
+          </FlowStep>
+          {cView !== "tech" && (cView !== "customer" || svcCall.invoice) && (
+            <FlowStep status={svcCall.invoice?.signed_name ? "done" : svcCall.invoice ? "active" : "upcoming"} color="#C9A96E"
+              icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+              title="Service Invoice" sub="Rate card · Approve &amp; sign · Balance"
+              chip={cView === "customer" && svcCall.invoice && !svcCall.invoice.signed_name ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}>
+              <SvcInvoicePanel svcCall={svcCall} view={cView} preview={!!previewRole} />
+            </FlowStep>
+          )}
+        </div>
+      )}
+
       {view === "tech" && !isBrowsing && (
         <TechActionBar
           accessId={project.access_id}
@@ -3338,7 +3362,7 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
 }
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -3386,6 +3410,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
           requests={requests}
           proposalViews={proposalViews}
           proposal={proposal}
+          svcCall={svcCall}
         />
       </div>
     </div>
