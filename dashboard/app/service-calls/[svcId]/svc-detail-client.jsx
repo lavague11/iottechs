@@ -140,6 +140,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             {call.outcome_route && ROUTE[call.outcome_route] && (
               <span className="svc-route" style={{ color: ROUTE[call.outcome_route][1], borderColor: ROUTE[call.outcome_route][1] + "55" }}>{ROUTE[call.outcome_route][0]}</span>
             )}
+            {call.svc_project_id && <Link href={`/project/${call.svc_project_id}`} className="svc-proj-btn">Open project</Link>}
           </div>
         </div>
 
@@ -377,6 +378,8 @@ const CSS = `
 .apx .svc-pri.low{color:var(--muted);background:var(--bg-soft,#f4f4f2);border:1px solid var(--line);text-transform:capitalize}
 .apx .svc-cat{font-size:.74rem;font-weight:700;color:var(--gold-deep,#b08f4f);background:#f8f0e0;border-radius:20px;padding:4px 12px}
 .apx .svc-route{font-size:.74rem;font-weight:800;background:#fff;border:1px solid;border-radius:20px;padding:4px 12px}
+.apx .svc-proj-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none}
+.apx .svc-proj-btn:hover{filter:brightness(1.05)}
 .apx .svc-stagebar{display:flex;gap:2px;padding:14px 10px;overflow-x:auto;margin-bottom:16px}
 .apx .svc-stage{flex:1;min-width:74px;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 2px;position:relative}
 .apx .svc-stage:not(:last-child)::after{content:"";position:absolute;top:9px;left:calc(50% + 12px);right:calc(-50% + 12px);height:2px;background:var(--line)}

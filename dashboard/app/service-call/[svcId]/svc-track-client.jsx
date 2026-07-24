@@ -81,6 +81,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
         <a href="/" className="st-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <div className="st-top-right">
           <span className="st-id mono">{call.svc_id}</span>
+          {call.svc_project_id && <a href={`/project/${call.svc_project_id}`} className="st-exit st-exit-gold">Full portal</a>}
           {staff ? <a href="/dashboard" className="st-exit">Dashboard</a> : loggedIn ? <a href="/my-projects" className="st-exit">Dashboard</a> : <a href="/" className="st-exit">Home</a>}
         </div>
       </header>
@@ -284,6 +285,8 @@ const CSS = `
 .st-id{font-size:.8rem;font-weight:800;color:var(--gold-deep);letter-spacing:.5px}
 .st-exit{color:var(--ink);text-decoration:none;font-size:.84rem;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:8px 16px;background:#fff;transition:border-color .15s,background .15s}
 .st-exit:hover{border-color:var(--gold);background:#fdfaf2}
+.st-exit-gold{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+.st-exit-gold:hover{background:var(--gold-deep);border-color:var(--gold-deep);color:#fff}
 .st-main{max-width:680px;margin:0 auto;padding:18px 20px 60px}
 .st-hero{margin:8px 0 18px}
 .st-hero-tag{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold-deep)}

@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments, ensureSvcProject } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import SvcGate from "./svc-gate";
@@ -49,8 +49,11 @@ async function authorize(call) {
 
 export default async function ServiceCallTrackPage({ params }) {
   const { svcId } = await params;
-  const call = resolveServiceCallRef(svcId);
+  let call = resolveServiceCallRef(svcId);
   if (!call) return <SvcNotFound />;
+  // Companion type-C project (lazy for pre-existing calls) — full portal for this call.
+  const svcProject = ensureSvcProject(call.svc_id);
+  if (svcProject && !call.svc_project_id) call = { ...call, svc_project_id: svcProject.access_id };
 
   const auth = await authorize(call);
   if (!auth.ok) {
@@ -71,6 +74,7 @@ export default async function ServiceCallTrackPage({ params }) {
   // Customer-safe slim: only what a customer should see. No internal ids, no ticket linkage.
   const safeCall = {
     svc_id: call.svc_id,
+    svc_project_id: call.svc_project_id || null,   // their own portal page — PIN-gated there too
     customer: call.customer,
     contact_name: call.contact_name,
     address: call.address,

@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments, ensureSvcProject } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import { SVC_RATES } from "../../../lib/spec";
 import SvcDetailClient from "./svc-detail-client";
@@ -11,8 +11,11 @@ export default async function ServiceCallDetailPage({ params }) {
   const user = await getSessionUser();
   if (!["admin", "manager", "tech"].includes(user.role)) redirect("/login");
 
-  const call = resolveServiceCallRef(svcId);
+  let call = resolveServiceCallRef(svcId);
   if (!call) notFound();
+  // Companion type-C project (lazy for pre-existing calls) — the full gateway page for this call.
+  const svcProject = ensureSvcProject(call.svc_id);
+  if (svcProject && !call.svc_project_id) call = { ...call, svc_project_id: svcProject.access_id };
 
   const alerts      = getNotifSummary(user.id);
   const events      = getServiceCallEvents(call.svc_id);

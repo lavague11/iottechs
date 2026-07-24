@@ -469,6 +469,10 @@ function init() {
       detail      TEXT
     )
   `);
+  // Existing DBs predate the companion-project link — add the column in place.
+  const svcCols = db.prepare("PRAGMA table_info(service_calls)").all().map((c) => c.name);
+  if (!svcCols.includes("svc_project_id")) db.exec("ALTER TABLE service_calls ADD COLUMN svc_project_id TEXT");
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS svc_invoices (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2467,11 +2471,42 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
   db.prepare("UPDATE service_calls SET ticket_id = ? WHERE id = ?").run(ticketId, id);
 
   logServiceCallEvent(svcId, { kind: "submitted", detail: issue || category || "Service call opened", actor_role: actor_role || "customer", actor_name: actor_name || contact_name });
+  ensureSvcProject(svcId);   // companion type-C project — the call's full gateway page
   return getServiceCall(svcId);
 }
 
 export function getServiceCall(svcId) {
   return decorateSvc(db.prepare("SELECT * FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId || "").trim()));
+}
+
+// Every service call gets a COMPANION type-C project so it lives on the full project gateway —
+// identical page skeleton to any other job (collapsible tool cards, customer/admin/tech views,
+// survey, mockup, expenses, scheduling). The SVC row stays the source of truth for the call's
+// own thread (diagnostics, rate-card invoice, event log); the project carries the job tooling.
+// Idempotent: returns the existing link when the project is already there. Lazily invoked on
+// page loads too, so calls created before this shipped get their project on first open.
+export function ensureSvcProject(svcId) {
+  const call = getServiceCall(svcId);
+  if (!call) return null;
+  if (call.svc_project_id) {
+    const existing = getJobByAccessId(call.svc_project_id);
+    if (existing) return existing;
+  }
+  // createLeadProject handles the customer-user upsert + unique id + PIN; retype the row to a
+  // type-C "Service Requests" project and re-prefix the access id (A… → C…) to match the type.
+  const { accessId } = createLeadProject(
+    call.contact_name || call.customer, call.contact_email, call.contact_phone,
+    call.address || "", "Security Cameras / CCTV", call.customer !== call.contact_name ? call.customer : null
+  );
+  let cId = "C" + accessId.slice(1);
+  while (db.prepare("SELECT id FROM projects WHERE access_id = ?").get(cId)) {
+    cId = "C" + accessId.slice(1, 3) + String(Math.floor(Math.random() * 99999)).toString(36).toUpperCase().padStart(4, "0");
+  }
+  db.prepare("UPDATE projects SET access_id = ?, project_type = 'C', category = 'service', issue = ? WHERE access_id = ?")
+    .run(cId, call.issue || null, accessId);
+  db.prepare("UPDATE service_calls SET svc_project_id = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(cId, String(call.svc_id));
+  logServiceCallEvent(call.svc_id, { kind: "note", detail: `Project ${cId} opened for this call`, actor_role: "system", actor_name: null });
+  return getJobByAccessId(cId);
 }
 
 // Full SVC id or its last 4 (unambiguous only) — mirrors resolveProjectRef so the PIN page can
