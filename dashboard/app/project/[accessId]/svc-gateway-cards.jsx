@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SVC_DIAG_ENTRIES, SVC_DIAG_NODES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 import { saveCustomerDiagnosticAction, signSvcInvoiceAction } from "../../service-call/[svcId]/actions";
+import SvcCamMap from "../../components/svc-cam-map";
 
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
@@ -86,12 +87,13 @@ export function SvcDiagnosticPanel({ svcCall, view, preview = false }) {
               <>
                 <div className="svg-tag">Quick check</div>
                 <h3>Which camera is the problem?</h3>
-                <p className="svg-sub">These are your cameras from our install — tap the one acting up.</p>
+                <p className="svg-sub">This is your floor plan from our install — tap the camera acting up.</p>
+                <SvcCamMap cameras={cameras} floors={svcCall.camFloors || []} onPick={pickCam} />
                 <div className="svg-cams">
                   {cameras.map((c) => (
-                    <button className="svg-cam" key={c} onClick={() => pickCam(c)}>
+                    <button className="svg-cam" key={c.label} onClick={() => pickCam(c.label)}>
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                      {c}
+                      {c.label}
                     </button>
                   ))}
                 </div>

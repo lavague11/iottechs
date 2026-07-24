@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark } from "../../components/brand";
+import SvcCamMap from "../../components/svc-cam-map";
 import { SVC_DIAG_ENTRIES, SVC_DIAG_NODES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 import { saveCustomerDiagnosticAction, signSvcInvoiceAction } from "./actions";
 
@@ -21,7 +22,7 @@ const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", ot
 const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
-export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [], cameras = [] }) {
+export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [], cameras = [], camFloors = [] }) {
   const router = useRouter();
   const stageIdx = stepIndexForStage(call.stage);
   const first = (viewerName || "").trim().split(/\s+/)[0];
@@ -216,12 +217,13 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
               <div className="st-diag-pick">
                 <div className="st-tag">Quick check</div>
                 <h2>Which camera is the problem?</h2>
-                <p className="st-pick-sub">These are your cameras from our install — tap the one acting up.</p>
+                <p className="st-pick-sub">This is your floor plan from our install — tap the camera acting up.</p>
+                <SvcCamMap cameras={cameras} floors={camFloors} onPick={pickCam} />
                 <div className="st-cams">
                   {cameras.map((c) => (
-                    <button className="st-cam" key={c} onClick={() => pickCam(c)}>
+                    <button className="st-cam" key={c.label} onClick={() => pickCam(c.label)}>
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                      {c}
+                      {c.label}
                     </button>
                   ))}
                 </div>

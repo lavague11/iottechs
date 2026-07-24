@@ -2628,29 +2628,43 @@ export function getServiceCallsForCustomer(email, phone) {
   return rows.map(decorateSvc);
 }
 
-// Cameras from a project's site survey, by the survey's OWN naming — powers the "which camera is
-// the problem?" step of the customer diagnostic. Label priority per marker: the survey tag + a
-// given name ("IC1 — Front Door"), then the given name alone, then the tag alone (IC1/OC2…),
-// then a stable number. Floor-tagged on multi-floor sites. Empty array when there's no survey.
+// Cameras from a project's site survey, by the survey's OWN naming AND positions — powers the
+// "which camera is the problem?" step of the customer diagnostic, including the tap-on-the-map
+// picker. Label priority per marker: survey tag + given name ("IC1 — Front Door"), then name,
+// then tag (IC1/OC2…), then a stable number. Returns { cameras, floors }: cameras carry x/y
+// (the survey's percent coordinates) + their floor index; floors carry the plan name and a
+// background image only when it's a reasonably-sized data URL (big uploads ship as blank plans).
 export function getSvcCameras(accessId) {
-  let cameras = [];
+  const cameras = [], floors = [];
   try {
     const sv = JSON.parse(getToolData(accessId, "survey")?.data || "null");
     let n = 0;
-    for (const f of sv?.floors || []) {
+    (sv?.floors || []).forEach((f, fi) => {
+      const rawImg = f?.B?.img || f?.B?.imgSource || null;
+      floors.push({
+        name: String(f?.name || "").slice(0, 60) || (sv.floors.length > 1 ? `Floor ${fi + 1}` : ""),
+        img: typeof rawImg === "string" && rawImg.startsWith("data:image") && rawImg.length <= 300000 ? rawImg : null,
+      });
       const floorTag = (sv.floors.length > 1 && f?.name) ? ` (${f.name})` : "";
       for (const m of f?.markers || []) {
         if (!/cam/i.test(String(m?.kind || "")) && !/cam/i.test(String(m?.name || ""))) continue;
         n += 1;
         const tag = String(m?._tag || "").trim();
         const name = String(m?.name || "").trim();
-        const label = tag && name ? `${tag} — ${name}` : name || tag || `Camera ${n}`;
-        cameras.push(label.slice(0, 60) + floorTag);
+        const label = (tag && name ? `${tag} — ${name}` : name || tag || `Camera ${n}`).slice(0, 60) + floorTag;
+        if (cameras.length < 32 && !cameras.some((c) => c.label === label)) {
+          cameras.push({
+            label,
+            tag: tag || String(n),
+            x: Math.max(0, Math.min(100, +m?.x || 0)),
+            y: Math.max(0, Math.min(100, +m?.y || 0)),
+            floor: fi,
+          });
+        }
       }
-    }
-    cameras = [...new Set(cameras)].slice(0, 32);
+    });
   } catch { /* no/bad survey */ }
-  return cameras;
+  return { cameras, floors };
 }
 
 export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {}) {

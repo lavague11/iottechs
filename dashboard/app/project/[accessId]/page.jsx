@@ -268,10 +268,10 @@ export default async function ProjectLinkPage({ params, searchParams }) {
         invoice = ["admin", "manager"].includes(effView) ? (invRow ? { ...invRow } : null) : custSafe;
         payments = invoice ? getSvcPayments(sc.svc_id).map((x) => ({ id: x.id, amount: x.amount, method: x.method, paid_at: x.paid_at })) : [];
       }
-      // Named cameras from this project's site survey (imported from the install at call
-      // creation) — lets the customer point at WHICH camera is down during the 60-second check.
-      const cameras = getSvcCameras(p.access_id);
-      svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments, cameras };
+      // Named cameras + plan positions from this project's site survey (imported from the install
+      // at call creation) — the customer taps the down camera on the map during the 60-second check.
+      const { cameras, floors } = getSvcCameras(p.access_id);
+      svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments, cameras, camFloors: floors };
     }
   }
 

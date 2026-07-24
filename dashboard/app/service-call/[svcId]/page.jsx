@@ -111,7 +111,7 @@ export default async function ServiceCallTrackPage({ params }) {
     e.actor_role !== "system" && !(e.kind === "diagnostic" && String(e.detail || "").startsWith("Tech")));
 
   // Same camera picker as the gateway's check — built from the companion project's survey.
-  const cameras = call.svc_project_id ? getSvcCameras(call.svc_project_id) : [];
+  const { cameras, floors: camFloors } = call.svc_project_id ? getSvcCameras(call.svc_project_id) : { cameras: [], floors: [] };
 
   return (
     <SvcTrackClient
@@ -124,6 +124,7 @@ export default async function ServiceCallTrackPage({ params }) {
       invoice={invoice}
       payments={payments}
       cameras={cameras}
+      camFloors={camFloors}
     />
   );
 }
