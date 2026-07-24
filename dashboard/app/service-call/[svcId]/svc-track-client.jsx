@@ -6,24 +6,24 @@ import { Wordmark } from "../../components/brand";
 import { SVC_DIAG_ENTRIES, SVC_DIAG_NODES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 import { saveCustomerDiagnosticAction } from "./actions";
 
-// Customer-facing stage wording (the internal keys stay the same on the staff side).
-const STAGES = [
-  { key: "submitted", label: "Received" },
-  { key: "diagnosing", label: "Reviewing" },
-  { key: "quoted", label: "Quote sent" },
-  { key: "scheduled", label: "Scheduled" },
-  { key: "onsite", label: "Technician on site" },
-  { key: "resolved", label: "Resolved" },
-  { key: "billed", label: "Invoice" },
-  { key: "closed", label: "Closed" },
+// The customer sees three plain steps — the office's 8 internal stages roll up into these. The
+// full workflow strip lives on the staff side; a customer just wants "where is this?".
+const STEPS = [
+  { key: "received", label: "Received", stages: ["submitted"] },
+  { key: "troubleshoot", label: "Troubleshooting", stages: ["diagnosing", "quoted", "scheduled", "onsite", "billed"] },
+  { key: "resolved", label: "Resolved", stages: ["resolved", "closed"] },
 ];
+function stepIndexForStage(stage) {
+  const i = STEPS.findIndex((s) => s.stages.includes(stage));
+  return i === -1 ? 0 : i;
+}
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Issue" };
 const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
 export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff }) {
   const router = useRouter();
-  const stageIdx = STAGES.findIndex((s) => s.key === call.stage);
+  const stageIdx = stepIndexForStage(call.stage);
   const first = (viewerName || "").trim().split(/\s+/)[0];
 
   // ---- TRACE customer diagnostic state ----
@@ -79,7 +79,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
 
         {/* Stage strip */}
         <div className="st-card st-stagebar">
-          {STAGES.map((s, n) => (
+          {STEPS.map((s, n) => (
             <div key={s.key} className={`st-stage${n < stageIdx ? " done" : ""}${n === stageIdx ? " on" : ""}`}>
               <span className="st-stage-dot" />
               <span className="st-stage-lbl">{s.label}</span>
