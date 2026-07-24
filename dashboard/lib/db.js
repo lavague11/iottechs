@@ -2537,7 +2537,9 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
   db.prepare("UPDATE service_calls SET ticket_id = ? WHERE id = ?").run(ticketId, id);
 
   logServiceCallEvent(svcId, { kind: "submitted", detail: issue || category || "Service call opened", actor_role: actor_role || "customer", actor_name: actor_name || contact_name });
-  ensureSvcProject(svcId);   // companion type-C project — the call's full gateway page
+  // Companion type-C project — the call's full gateway page. Never let a hiccup here kill the
+  // intake (the call row already exists); the detail/tracker pages lazily repair a missing link.
+  try { ensureSvcProject(svcId); } catch (e) { console.error("ensureSvcProject failed for", svcId, e); }
   return getServiceCall(svcId);
 }
 
@@ -2713,8 +2715,9 @@ export function saveSvcInvoice(svcId, { items, notes }, { actor_role, actor_name
   })).filter((it) => it.desc.trim());
   const cur = getSvcInvoice(svcId);
   if (cur) {
-    // A signed invoice is locked — void it (admin) to re-bill; edits would silently change what was agreed.
-    if (cur.signed_name) return cur;
+    // Once SENT, the invoice is what the customer saw — editing it in place would let them sign
+    // an amount different from what was first shown. Sent or signed → locked; void to re-bill.
+    if (cur.signed_name || cur.status === "sent") return cur;
     db.prepare("UPDATE svc_invoices SET items=?, notes=?, updated_at=datetime('now','localtime') WHERE id=?")
       .run(JSON.stringify(clean), String(notes || "").slice(0, 500) || null, cur.id);
   } else {
@@ -2750,8 +2753,10 @@ export function getSvcPayments(svcId) {
 }
 export function addSvcPayment(svcId, { amount, method, note, paidAt }, byName) {
   const paid = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || "")) ? String(paidAt) : new Date().toISOString().slice(0, 10);
-  const amt = Math.max(0, +amount || 0);
-  if (!amt) return getSvcPayments(svcId);
+  // Same sanity bounds as invoice lines — a fat-fingered extra digit shouldn't enter the money
+  // trail. And money only lands against an actual invoice (payments have to reconcile to one).
+  const amt = Math.max(0, Math.min(999999, +amount || 0));
+  if (!amt || !getSvcInvoice(svcId)) return getSvcPayments(svcId);
   db.prepare("INSERT INTO svc_payments (svc_id, amount, method, note, recorded_by, paid_at) VALUES (?,?,?,?,?,?)")
     .run(String(svcId), amt, String(method || "").slice(0, 60) || null, String(note || "").slice(0, 500) || null, byName || null, paid);
   logServiceCallEvent(svcId, { kind: "payment", detail: `Payment received — $${amt.toFixed(2)}${method ? ` (${method})` : ""}`, actor_role: "staff", actor_name: byName });

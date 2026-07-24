@@ -87,7 +87,9 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const [rows, setRows] = useState(() => (invoice?.items?.length ? invoice.items : DEFAULT_ROWS));
   const [invNotes, setInvNotes] = useState(invoice?.notes || "");
   const [voidArm, setVoidArm] = useState(false);
-  const invLocked = !!invoice?.signed_name;
+  // Sent OR signed = locked read-only. What the customer saw is what they sign — to change a
+  // sent invoice, void it and re-bill (the DB enforces the same rule server-side).
+  const invLocked = !!invoice && (!!invoice.signed_name || invoice.status === "sent");
   const total = rows.reduce((s, r) => s + Math.max(0, +r.qty || 0) * Math.max(0, +r.price || 0), 0);
   const paidTotal = payments.reduce((s, p) => s + (+p.amount || 0), 0);
   const balance = Math.round(((invoice?.total ?? total) - paidTotal) * 100) / 100;
@@ -265,7 +267,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             {!invLocked && (
               <div className="svc-inv-actions">
                 <button className="svc-inv-btn ghost" onClick={saveInv} disabled={pending}>Save</button>
-                <button className="svc-inv-btn gold" onClick={sendInv} disabled={pending || !rows.some((r) => String(r.desc).trim())}>{invoice?.status === "sent" ? "Resend" : "Send"}</button>
+                <button className="svc-inv-btn gold" onClick={sendInv} disabled={pending || !rows.some((r) => String(r.desc).trim())}>Send</button>
               </div>
             )}
 

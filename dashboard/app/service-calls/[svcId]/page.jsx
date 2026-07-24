@@ -32,11 +32,21 @@ export default async function ServiceCallDetailPage({ params }) {
   // node:sqlite rows are null-prototype objects; plain-clone before crossing to the client component.
   const plain = (r) => (r ? { ...r } : r);
 
+  // Role stripping, same rules as the project gateway: the PIN is an access credential — no
+  // client ever needs it; a tech coordinates through the office and never receives the
+  // customer's direct contact channels. Server-side, not hidden UI.
+  const safeCall = { ...call };
+  delete safeCall.customer_pin;
+  if (user.role === "tech") {
+    safeCall.contact_phone = null;
+    safeCall.contact_email = null;
+  }
+
   return (
     <SvcDetailClient
       user={user}
       alerts={alerts}
-      call={plain(call)}
+      call={plain(safeCall)}
       events={events.map(plain)}
       diagnostics={diagnostics.map(plain)}
       techs={techs.map(plain)}

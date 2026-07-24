@@ -49,8 +49,19 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "Describe the issue so we can help." }, { status: 400 });
     }
 
-    // Link to an existing project only if the ref actually resolves — never fabricate the tie.
-    const project = projectRef ? getJobByAccessId(projectRef) : null;
+    // Link to an existing project ONLY when the submitter proves they own it: the phone or email
+    // they gave must match the project's contact. Without this check, anyone who knew a project id
+    // could stamp a stranger's project onto their call — and the companion-project survey import
+    // would hand them that customer's floor plan. Unverified refs are simply dropped (the office
+    // can link the call manually later).
+    const digits = (s) => String(s || "").replace(/\D/g, "");
+    let project = projectRef ? getJobByAccessId(projectRef) : null;
+    if (project) {
+      const phoneOwns = digits(phone).length >= 7 && digits(phone) === digits(project.contact_phone);
+      const emailOwns = email && project.contact_email &&
+        email.toLowerCase() === String(project.contact_email).trim().toLowerCase();
+      if (!phoneOwns && !emailOwns) project = null;
+    }
 
     const call = createServiceCall({
       customer: project?.customer || name,
