@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
+import { SVC_RATES } from "../../../lib/spec";
 import SvcDetailClient from "./svc-detail-client";
 
 // Service-call detail — the focused gateway for one call. Staff view for now (customer/tech PIN
@@ -38,6 +39,7 @@ export default async function ServiceCallDetailPage({ params }) {
       techs={techs.map(plain)}
       invoice={plain(invoice)}
       payments={payments.map(plain)}
+      rates={canManage ? SVC_RATES : []}
     />
   );
 }

@@ -26,7 +26,7 @@ const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: 
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
-export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [] }) {
+export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [] }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -84,10 +84,9 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   }
 
   // ---- Billing (admin/manager only — the server never ships the invoice to a tech) ----
-  // Smart default: a fresh invoice starts with the standard service-call line.
-  const [rows, setRows] = useState(() =>
-    invoice?.items?.length ? invoice.items : [{ desc: `Service call — ${CATEGORY[call.category] || "diagnostic & repair"}`, qty: 1, price: 150 }]
-  );
+  // Smart default: every service call starts at Diagnostic + Roll out (the owner's rate card).
+  const DEFAULT_ROWS = [{ desc: "Diagnostic", qty: 1, price: 150 }, { desc: "Roll out", qty: 1, price: 50 }];
+  const [rows, setRows] = useState(() => (invoice?.items?.length ? invoice.items : DEFAULT_ROWS));
   const [invNotes, setInvNotes] = useState(invoice?.notes || "");
   const [voidArm, setVoidArm] = useState(false);
   const invLocked = !!invoice?.signed_name;
@@ -99,6 +98,12 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
 
   function setRow(i, k, v) { const r = rows.slice(); r[i] = { ...r[i], [k]: v }; setRows(r); }
   function addRow() { setRows([...rows, { desc: "", qty: 1, price: 0 }]); }
+  // Rate-card chip: bump qty if the line is already on the invoice, otherwise add it.
+  function addRate(rate) {
+    const i = rows.findIndex((r) => r.desc === rate.desc && +r.price === +rate.price);
+    if (i >= 0) { setRow(i, "qty", (+rows[i].qty || 0) + 1); return; }
+    setRows([...rows, { desc: rate.desc, qty: 1, price: rate.price }]);
+  }
   function delRow(i) { setRows(rows.filter((_, n) => n !== i)); }
   function saveInv() { startTx(async () => { const r = await saveSvcInvoiceAction(call.svc_id, rows, invNotes); if (r?.ok) { setRows(r.invoice.items); router.refresh(); } }); }
   function sendInv() {
@@ -112,7 +117,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   function voidInv() {
     if (!voidArm) { setVoidArm(true); setTimeout(() => setVoidArm(false), 4000); return; }
     setVoidArm(false);
-    startTx(async () => { const r = await voidSvcInvoiceAction(call.svc_id); if (r?.ok) { setRows([{ desc: `Service call — ${CATEGORY[call.category] || "diagnostic & repair"}`, qty: 1, price: 150 }]); setInvNotes(""); router.refresh(); } });
+    startTx(async () => { const r = await voidSvcInvoiceAction(call.svc_id); if (r?.ok) { setRows(DEFAULT_ROWS); setInvNotes(""); router.refresh(); } });
   }
   function recPay() {
     const amt = +payAmt || 0;
@@ -215,6 +220,17 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
               )}
               {invoice && <button className="svc-void-btn" onClick={voidInv} disabled={pending}>{voidArm ? "Confirm?" : "Void"}</button>}
             </div>
+
+            {/* Rate card — one tap adds the line (tap again to bump qty) */}
+            {!invLocked && rates.length > 0 && (
+              <div className="svc-rate-row">
+                {rates.map((r) => (
+                  <button className="svc-rate" key={r.desc} onClick={() => addRate(r)} title={`$${r.price}`}>
+                    {r.desc} <span>${r.price}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Line items */}
             <div className="svc-inv-rows">
@@ -448,6 +464,10 @@ const CSS = `
 .apx .svc-inv-signed{color:#1c8a45;background:#e7f6ec}
 .apx .svc-void-btn{margin-left:auto;font-size:.76rem;font-weight:700;color:#c9382b;background:#fdecec;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit}
 .apx .svc-void-btn:hover{background:#f8d7d7}
+.apx .svc-rate-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.apx .svc-rate{font-size:.76rem;font-weight:700;color:var(--ink);background:var(--bg-soft,#f4f4f2);border:1px solid var(--line);border-radius:20px;padding:5px 11px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s}
+.apx .svc-rate span{color:var(--gold-deep,#b08f4f);font-weight:800}
+.apx .svc-rate:hover{border-color:#C9A96E;background:#fdfaf2}
 .apx .svc-inv-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .apx .svc-inv-row{display:flex;align-items:center;gap:8px}
 .apx .svc-inv-in-desc{flex:1;height:36px;padding:0 10px;font-size:.86rem}

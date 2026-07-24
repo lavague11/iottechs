@@ -208,3 +208,20 @@ export const SECTION = {
   service:   "Service Requests",
   completed: "Completed",
 };
+
+// ---- Service-call rate card (owner-set, 2026-07-24). Retail pricing — ship it server-side to
+// admin/manager builders only; a tech's browser must never receive it. "Camera replacement" is
+// $75 camera + $25 mount under the hood; billed as one line.
+export const SVC_RATES = [
+  { desc: "Diagnostic",         price: 150 },
+  { desc: "Roll out",           price: 50 },
+  { desc: "Patch cable",        price: 100 },
+  { desc: "Cable rerun",        price: 150 },
+  { desc: "Camera replacement", price: 100 },
+  { desc: "WiFi reconnect",     price: 99 },
+  { desc: "Line drop",          price: 150 },
+  { desc: "NVR replacement",    price: 99 },
+  { desc: "NVR",                price: 150 },
+  { desc: "HDD replacement",    price: 99 },
+  { desc: "Reprogramming",      price: 99 },
+];
