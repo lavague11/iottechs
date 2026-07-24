@@ -75,15 +75,19 @@ export default async function ServiceCallTrackPage({ params }) {
     resolved_at: call.resolved_at,
   };
 
-  // Customer-safe events: drop internal-only kinds (assign is fine to show as "technician
-  // assigned"); everything the customer or the office logs about the work is theirs to see.
   const plain = (r) => ({ ...r });
+
+  // Role-visibility (DoD rule 4): the customer tracker shows the customer their OWN 60-second
+  // checks — never the technician's internal diagnostic (tester steps, "contact your supervisor"
+  // escalations). Staff previewing the tracker still see everything. Strip server-side.
+  const custDiags = auth.staff ? diagnostics : diagnostics.filter((d) => d.mode !== "tech");
+  const custEvents = auth.staff ? events : events.filter((e) => !(e.kind === "diagnostic" && String(e.detail || "").startsWith("Tech")));
 
   return (
     <SvcTrackClient
       call={safeCall}
-      events={events.map(plain)}
-      diagnostics={diagnostics.map(plain)}
+      events={custEvents.map(plain)}
+      diagnostics={custDiags.map(plain)}
       viewerName={auth.name}
       loggedIn={!!auth.loggedIn}
       staff={!!auth.staff}

@@ -64,7 +64,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
         <a href="/" className="st-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <div className="st-top-right">
           <span className="st-id mono">{call.svc_id}</span>
-          {loggedIn ? <a href="/my-projects" className="st-exit">Dashboard</a> : <a href="/" className="st-exit">Home</a>}
+          {staff ? <a href="/dashboard" className="st-exit">Dashboard</a> : loggedIn ? <a href="/my-projects" className="st-exit">Dashboard</a> : <a href="/" className="st-exit">Home</a>}
         </div>
       </header>
 
@@ -214,7 +214,7 @@ const CSS = `
 .st-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--bg-soft:#f6f7f9;--accent:#3257ff;
   min-height:100vh;background:radial-gradient(1100px 480px at 50% -10%,#f0f2f7 0%,#fff 55%);color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55}
 .st-top{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin:0 auto;padding:20px 20px 0}
-.st-brand{display:inline-flex}
+.st-brand{display:inline-flex;color:var(--ink)}
 .st-top-right{display:flex;align-items:center;gap:14px}
 .st-id{font-size:.8rem;font-weight:800;color:var(--gold-deep);letter-spacing:.5px}
 .st-exit{color:var(--muted);text-decoration:none;font-size:.85rem;font-weight:600}

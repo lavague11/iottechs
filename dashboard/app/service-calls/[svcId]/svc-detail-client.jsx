@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction } from "../actions";
+import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction } from "../actions";
+import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 
 const STAGES = [
   { key: "submitted", label: "Submitted" },
@@ -36,6 +37,51 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   function setStage(stage) { startTx(async () => { const r = await setSvcStageAction(call.svc_id, stage); if (r?.ok) router.refresh(); }); }
   function assign(id, name) { startTx(async () => { const r = await assignSvcTechAction(call.svc_id, id, name); if (r?.ok) router.refresh(); }); }
   function saveNote() { if (!note.trim()) return; startTx(async () => { const r = await addSvcNoteAction(call.svc_id, note); if (r?.ok) { setNote(""); router.refresh(); } }); }
+
+  // ---- Staff TRACE diagnostic runner (tech trees; same concept as the customer's 60-second check) ----
+  const [runOpen, setRunOpen] = useState(false);
+  const [trail, setTrail] = useState([]);       // [{tree, node, question, answer|null}] — last is current
+  const [dTitle, setDTitle] = useState("");
+  const [dStarted, setDStarted] = useState(null);
+  const [dSaved, setDSaved] = useState(false);
+  const [dSaving, setDSaving] = useState(false);
+
+  const cur = trail.length ? trail[trail.length - 1] : null;
+  const curNode = cur ? SVC_TECH_TREES[cur.tree].nodes[cur.node] : null;
+  const curIsFix = curNode && curNode.type === "fix";
+
+  function openRun() { setRunOpen(true); setTrail([]); setDTitle(""); setDSaved(false); }
+  function pickTree(entry) {
+    const tree = SVC_TECH_TREES[entry.key];
+    const nodeId = entry.start || tree.root;
+    const n = tree.nodes[nodeId];
+    setDTitle(entry.title); setDStarted(new Date().toISOString());
+    setTrail([{ tree: entry.key, node: nodeId, question: n.q || n.title, answer: null }]);
+  }
+  function answer(opt) {
+    const t = trail.slice(); t[t.length - 1] = { ...t[t.length - 1], answer: opt.label };
+    const n = SVC_TECH_TREES[cur.tree].nodes[opt.next];
+    t.push({ tree: cur.tree, node: opt.next, question: n.q || n.title, answer: null });
+    setTrail(t);
+  }
+  function jump(g) {
+    const t = trail.slice(); t[t.length - 1] = { ...t[t.length - 1], answer: `Continue → ${g.tree} check` };
+    const n = SVC_TECH_TREES[g.tree].nodes[g.node];
+    t.push({ tree: g.tree, node: g.node, question: n.q || n.title, answer: null });
+    setTrail(t);
+  }
+  function runBack() { if (trail.length > 1) { const t = trail.slice(0, -1); t[t.length - 1] = { ...t[t.length - 1], answer: null }; setTrail(t); } }
+  function saveRun() {
+    if (!curIsFix) return;
+    setDSaving(true);
+    const steps = trail.filter((s) => s.answer !== null).map((s) => ({ question: s.question, answer: s.answer }));
+    const rec = { issue: dTitle, steps, outcome: { route: curNode.route, title: curNode.title, action: curNode.detail }, started: dStarted, completed: new Date().toISOString() };
+    startTx(async () => {
+      const r = await runStaffDiagnosticAction(call.svc_id, rec);
+      setDSaving(false);
+      if (r?.ok) { setDSaved(true); router.refresh(); }
+    });
+  }
 
   return (
     <AdminShell user={user} alerts={alerts} active="service-calls">
@@ -95,7 +141,9 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
 
           {/* Diagnostics */}
           <div className="panel svc-card">
-            <div className="svc-card-h">Diagnostic reports <span className="svc-count">{diagnostics.length}</span></div>
+            <div className="svc-card-h">Diagnostic reports <span className="svc-count">{diagnostics.length}</span>
+              <button className="svc-run-btn" onClick={openRun}>Run a check</button>
+            </div>
             {diagnostics.length === 0 ? (
               <div className="svc-empty">No diagnostic run yet.</div>
             ) : diagnostics.map((d) => (
@@ -139,6 +187,55 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
           </div>
         </div>
       </div>
+
+      {/* Staff TRACE diagnostic runner */}
+      {runOpen && (
+        <div className="svc-ov" onClick={(e) => { if (e.target === e.currentTarget) setRunOpen(false); }}>
+          <div className="svc-run">
+            <button className="svc-run-x" onClick={() => setRunOpen(false)} aria-label="Close">✕</button>
+            {!cur ? (
+              <div className="svc-run-pick">
+                <div className="svc-run-tag">Technician check · TRACE</div>
+                <h2>What's the fault?</h2>
+                <p className="svc-run-sub">Full diagnostic — channel status, playback, cable tester, resets. Every step is logged to this call.</p>
+                {SVC_TECH_ENTRIES.map((en, i) => (
+                  <button className="svc-run-entry" key={i} onClick={() => pickTree(en)}>
+                    <span className="svc-run-entry-t">{en.title}</span>
+                    <span className="svc-run-entry-h">{en.hint}</span>
+                  </button>
+                ))}
+              </div>
+            ) : curIsFix ? (
+              <div className="svc-run-out">
+                <span className="svc-run-badge" style={{ color: (ROUTE[curNode.route] || [])[1], borderColor: ((ROUTE[curNode.route] || [])[1] || "#999") + "55" }}>{SVC_ROUTE_LABEL[curNode.route] || "Result"}</span>
+                <h2>{curNode.title}</h2>
+                <p className="svc-run-detail">{curNode.detail}</p>
+                {dSaved ? (
+                  <div className="svc-run-saved">✓ Logged to this call. <button className="svc-run-ghost" onClick={() => setRunOpen(false)}>Done</button></div>
+                ) : (
+                  <div className="svc-run-acts">
+                    {curNode.goto && <button className="svc-run-cont" onClick={() => jump(curNode.goto)}>Continue → {curNode.goto.tree} check</button>}
+                    <button className="svc-run-save" onClick={saveRun} disabled={dSaving}>{dSaving ? "Logging…" : "Log this check"}</button>
+                    <button className="svc-run-ghost" onClick={openRun}>Start over</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="svc-run-q">
+                <div className="svc-run-step">{dTitle} · step {trail.length}</div>
+                <h2>{curNode.q}</h2>
+                {curNode.widget === "speed" && <div className="svc-run-hint">Run a speed test on the site network (not cell data) before answering.</div>}
+                <div className="svc-run-opts">
+                  {curNode.options.map((o, i) => (
+                    <button key={i} className="svc-run-opt" onClick={() => answer(o)}>{o.label}</button>
+                  ))}
+                </div>
+                {trail.length > 1 && <button className="svc-run-back" onClick={runBack}>← Back</button>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{CSS}</style>
     </AdminShell>
@@ -206,4 +303,34 @@ const CSS = `
 .apx .svc-note-row .apx-input{flex:1}
 .apx .svc-note-btn{height:40px;padding:0 18px;border:none;border-radius:9px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit}
 .apx .svc-note-btn:disabled{opacity:.5;cursor:default}
+.apx .svc-run-btn{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--gold-deep,#b08f4f);background:#f8f0e0;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit}
+.apx .svc-run-btn:hover{background:#f2e6cf}
+/* runner modal */
+.apx-ov,.svc-ov{position:fixed;inset:0;background:rgba(14,19,32,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
+.svc-ov *{box-sizing:border-box}
+.svc-run{width:100%;max-width:470px;background:#fff;border-radius:18px;padding:26px 24px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);max-height:90vh;overflow-y:auto;color:var(--ink)}
+.svc-run-x{position:absolute;top:13px;right:15px;background:none;border:none;font-size:1.05rem;color:var(--muted);cursor:pointer;width:30px;height:30px;border-radius:8px}
+.svc-run-x:hover{background:var(--bg-soft,#f4f4f2)}
+.svc-run-tag,.svc-run-step{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-deep,#b08f4f);background:#f8f0e0;padding:4px 11px;border-radius:20px;margin-bottom:10px}
+.svc-run h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.3rem;margin:0 0 8px;line-height:1.2}
+.svc-run-sub{color:var(--muted);font-size:.9rem;margin:0 0 16px}
+.svc-run-entry{width:100%;display:flex;flex-direction:column;gap:2px;text-align:left;padding:14px 15px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;margin-bottom:9px;transition:border-color .15s,background .15s}
+.svc-run-entry:hover{border-color:#C9A96E;background:#fdfaf2}
+.svc-run-entry-t{font-weight:800;font-size:.98rem}
+.svc-run-entry-h{font-size:.8rem;color:var(--muted)}
+.svc-run-hint{background:#eef1ff;color:#2540c0;border-radius:10px;padding:9px 13px;font-size:.82rem;margin:0 0 14px;font-weight:600}
+.svc-run-opts{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.svc-run-opt{width:100%;text-align:left;padding:14px 15px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;font-size:.94rem;font-weight:600;transition:border-color .15s,background .15s}
+.svc-run-opt:hover{border-color:#C9A96E;background:#fdfaf2}
+.svc-run-back{margin-top:14px;background:none;border:none;color:var(--muted);font-size:.84rem;cursor:pointer;font-family:inherit;font-weight:600;padding:0}
+.svc-run-back:hover{color:var(--ink)}
+.svc-run-badge{display:inline-block;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:4px 12px;border:1px solid;border-radius:20px;margin-bottom:11px;background:#fff}
+.svc-run-detail{color:var(--muted);font-size:.92rem;margin:0 0 20px;line-height:1.5}
+.svc-run-acts{display:flex;flex-direction:column;gap:9px}
+.svc-run-cont{padding:13px;border:1.5px solid var(--line);border-radius:11px;background:#fff;font-weight:700;font-family:inherit;font-size:.9rem;cursor:pointer;text-transform:capitalize}
+.svc-run-cont:hover{border-color:#C9A96E}
+.svc-run-save{padding:14px;border:none;border-radius:11px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;font-weight:700;font-family:inherit;font-size:.94rem;cursor:pointer}
+.svc-run-save:disabled{opacity:.6;cursor:default}
+.svc-run-ghost{padding:12px;border:1.5px solid var(--line);border-radius:11px;background:#fff;font-weight:700;font-family:inherit;font-size:.9rem;cursor:pointer}
+.svc-run-saved{display:flex;align-items:center;gap:12px;color:#1c8a45;font-weight:700;font-size:.92rem;flex-wrap:wrap}
 `;

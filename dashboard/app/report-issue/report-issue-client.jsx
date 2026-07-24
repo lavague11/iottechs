@@ -171,7 +171,7 @@ const CSS = `
 .ri-root{--bg:#fff;--bg-soft:#f6f7f9;--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--accent:#3257ff;--accent-soft:#eef1ff;
   min-height:100vh;background:radial-gradient(1200px 500px at 50% -10%,#f0f2f7 0%,#fff 60%);color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55}
 .ri-top{display:flex;align-items:center;justify-content:space-between;max-width:640px;margin:0 auto;padding:22px 20px 0}
-.ri-brand{display:inline-flex}
+.ri-brand{display:inline-flex;color:var(--ink)}
 .ri-x{color:var(--muted);text-decoration:none;font-size:1.1rem;width:34px;height:34px;display:grid;place-items:center;border-radius:9px;transition:background .15s,color .15s}
 .ri-x:hover{background:var(--bg-soft);color:var(--ink)}
 .ri-main{max-width:640px;margin:0 auto;padding:18px 20px 60px}
