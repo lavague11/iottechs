@@ -21,12 +21,9 @@ export function generateMetadata() {
 // carries the iot_svc cookie scoped to this call. Anyone else meets the PIN gate — no call data
 // crosses to the client until authorized, so a forwarded link leaks nothing.
 async function authorize(call) {
-  const jar = await cookies();
-  const svcTok = jar.get("iot_svc")?.value;
-  const svc = svcTok ? await parseSvcToken(svcTok) : null;
-  if (svc && String(svc.svcId).toUpperCase() === String(call.svc_id).toUpperCase()) {
-    return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
-  }
+  // A real login outranks the PIN cookie — a staff member (or the owning customer) who also
+  // happens to hold a PIN grant must still get their session identity (and its Dashboard link),
+  // not be demoted to an anonymous PIN visitor.
   const user = await getSessionUser();
   if (user?.id && user.role === "customer") {
     const row = getUserById(user.id) || {};
@@ -40,6 +37,12 @@ async function authorize(call) {
   // control surface is the staff portal at /service-calls/[svcId]).
   if (user?.id && ["admin", "manager", "tech"].includes(user.role)) {
     return { ok: true, name: user.name || "Staff", loggedIn: true, staff: true };
+  }
+  const jar = await cookies();
+  const svcTok = jar.get("iot_svc")?.value;
+  const svc = svcTok ? await parseSvcToken(svcTok) : null;
+  if (svc && String(svc.svcId).toUpperCase() === String(call.svc_id).toUpperCase()) {
+    return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
   }
   return { ok: false };
 }

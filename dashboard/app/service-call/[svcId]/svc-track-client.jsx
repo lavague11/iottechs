@@ -217,8 +217,8 @@ const CSS = `
 .st-brand{display:inline-flex;color:var(--ink)}
 .st-top-right{display:flex;align-items:center;gap:14px}
 .st-id{font-size:.8rem;font-weight:800;color:var(--gold-deep);letter-spacing:.5px}
-.st-exit{color:var(--muted);text-decoration:none;font-size:.85rem;font-weight:600}
-.st-exit:hover{color:var(--ink)}
+.st-exit{color:var(--ink);text-decoration:none;font-size:.84rem;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:8px 16px;background:#fff;transition:border-color .15s,background .15s}
+.st-exit:hover{border-color:var(--gold);background:#fdfaf2}
 .st-main{max-width:680px;margin:0 auto;padding:18px 20px 60px}
 .st-hero{margin:8px 0 18px}
 .st-hero-tag{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold-deep)}
@@ -254,6 +254,9 @@ const CSS = `
 .st-route{font-size:.68rem;font-weight:800;text-transform:uppercase;padding:2px 9px;border-radius:20px}
 .st-route-solved{color:#1c8a45;background:#e7f6ec}
 .st-route-service{color:#b3541e;background:#fdf0e5}
+.st-route-field{color:#2f5fbf;background:#e6eefc}
+.st-route-replace{color:#b3541e;background:#fdf0e5}
+.st-route-escalate{color:#c9382b;background:#fdecec}
 /* timeline */
 .st-timeline{list-style:none;margin:0;padding:0}
 .st-timeline li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
