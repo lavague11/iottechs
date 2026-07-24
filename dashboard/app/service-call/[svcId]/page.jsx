@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments, ensureSvcProject } from "../../../lib/db";
-import { parseSvcToken } from "../../../lib/auth";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments, ensureSvcProject, getSvcCameras } from "../../../lib/db";
+import { parseSvcToken, parseAccessToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import SvcGate from "./svc-gate";
 import SvcTrackClient from "./svc-track-client";
@@ -42,6 +42,15 @@ async function authorize(call) {
   const svcTok = jar.get("iot_svc")?.value;
   const svc = svcTok ? await parseSvcToken(svcTok) : null;
   if (svc && String(svc.svcId).toUpperCase() === String(call.svc_id).toUpperCase()) {
+    return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
+  }
+  // Gateway grant: a customer who PIN-unlocked the call's companion project already proved the
+  // same PIN — don't re-gate them here (mirrors the server actions' authorization).
+  const accTok = jar.get("iot_access")?.value;
+  const acc = accTok ? await parseAccessToken(accTok) : null;
+  if (acc?.accessId && call.svc_project_id &&
+      String(acc.accessId).toUpperCase() === String(call.svc_project_id).toUpperCase() &&
+      (acc.role === "customer" || acc.role === "inquiry")) {
     return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
   }
   return { ok: false };
@@ -96,7 +105,13 @@ export default async function ServiceCallTrackPage({ params }) {
   // checks — never the technician's internal diagnostic (tester steps, "contact your supervisor"
   // escalations). Staff previewing the tracker still see everything. Strip server-side.
   const custDiags = auth.staff ? diagnostics : diagnostics.filter((d) => d.mode !== "tech");
-  const custEvents = auth.staff ? events : events.filter((e) => !(e.kind === "diagnostic" && String(e.detail || "").startsWith("Tech")));
+  // Internal plumbing ("Project CSC… opened", "survey imported") is ops detail, not customer
+  // progress — system-actor events stay staff-only alongside the tech diagnostics.
+  const custEvents = auth.staff ? events : events.filter((e) =>
+    e.actor_role !== "system" && !(e.kind === "diagnostic" && String(e.detail || "").startsWith("Tech")));
+
+  // Same camera picker as the gateway's check — built from the companion project's survey.
+  const cameras = call.svc_project_id ? getSvcCameras(call.svc_project_id) : [];
 
   return (
     <SvcTrackClient
@@ -108,6 +123,7 @@ export default async function ServiceCallTrackPage({ params }) {
       staff={!!auth.staff}
       invoice={invoice}
       payments={payments}
+      cameras={cameras}
     />
   );
 }

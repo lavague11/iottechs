@@ -2615,9 +2615,36 @@ export function listServiceCalls({ stage, assignee_id, project_access_id } = {})
   return db.prepare(sql).all(...args).map(decorateSvc);
 }
 
-export function getServiceCallsForCustomer(email) {
-  if (!email) return [];
-  return db.prepare("SELECT * FROM service_calls WHERE contact_email = ? COLLATE NOCASE ORDER BY id DESC").all(String(email)).map(decorateSvc);
+export function getServiceCallsForCustomer(email, phone) {
+  // Intake often captures phone-only, so match on either channel (phone compared digits-to-digits).
+  const d = String(phone || "").replace(/\D/g, "");
+  const rows = db.prepare("SELECT * FROM service_calls ORDER BY id DESC").all().filter((r) => {
+    const emailMatch = email && r.contact_email && String(r.contact_email).toLowerCase() === String(email).toLowerCase();
+    const phoneMatch = d.length >= 7 && String(r.contact_phone || "").replace(/\D/g, "") === d;
+    return emailMatch || phoneMatch;
+  });
+  return rows.map(decorateSvc);
+}
+
+// Named cameras from a project's site survey — powers the "which camera is the problem?" step of
+// the customer diagnostic. Survey names win; unnamed cam markers get a stable number; floor-tagged
+// on multi-floor sites. Empty array when there's no usable survey.
+export function getSvcCameras(accessId) {
+  let cameras = [];
+  try {
+    const sv = JSON.parse(getToolData(accessId, "survey")?.data || "null");
+    let n = 0;
+    for (const f of sv?.floors || []) {
+      const floorTag = (sv.floors.length > 1 && f?.name) ? ` (${f.name})` : "";
+      for (const m of f?.markers || []) {
+        if (!/cam/i.test(String(m?.kind || "")) && !/cam/i.test(String(m?.name || ""))) continue;
+        n += 1;
+        cameras.push((m?.name ? String(m.name).slice(0, 60) : `Camera ${n}`) + floorTag);
+      }
+    }
+    cameras = [...new Set(cameras)].slice(0, 32);
+  } catch { /* no/bad survey */ }
+  return cameras;
 }
 
 export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {}) {

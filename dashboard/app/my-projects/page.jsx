@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken } from "../../lib/auth";
-import { getProjectsByContactEmail, getUserById } from "../../lib/db";
+import { getProjectsByContactEmail, getUserById, getServiceCallsForCustomer } from "../../lib/db";
 import MyProjectsClient from "./my-projects-client";
 
 export default async function MyProjectsPage() {
@@ -33,5 +33,15 @@ export default async function MyProjectsPage() {
     customer_pin: p.customer_pin, // their OWN project PIN — used to display + copy the login link
   }));
 
-  return <MyProjectsClient user={user} projects={projects} />;
+  // Their service calls (matched by email OR phone — intake often captures phone-only), slimmed
+  // to customer-safe display fields. Renders only when at least one exists.
+  const serviceCalls = (user ? getServiceCallsForCustomer(user.email, user.phone) : []).map((c) => ({
+    svc_id: c.svc_id,
+    issue: c.issue,
+    category: c.category,
+    stage: c.stage,
+    created_at: c.created_at,
+  }));
+
+  return <MyProjectsClient user={user} projects={projects} serviceCalls={serviceCalls} />;
 }

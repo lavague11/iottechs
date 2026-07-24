@@ -1,8 +1,23 @@
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import {
   createServiceCall, getJobByAccessId,
   getUserByEmail, getUserByPhone, createCustomerUser, userHasPassword,
 } from "../../../lib/db";
+
+// Each intake creates a call + companion project + ticket (+ maybe a user) — real rows. Throttle
+// per IP so a script can't flood the pipeline. In-memory; resets on restart, which is fine.
+const HITS = new Map();
+const WINDOW_MS = 10 * 60 * 1000;
+const MAX_CALLS = 5;
+function throttled(ip) {
+  const now = Date.now();
+  const rec = HITS.get(ip);
+  if (!rec || now > rec.resetAt) { HITS.set(ip, { n: 1, resetAt: now + WINDOW_MS }); return false; }
+  rec.n += 1;
+  if (HITS.size > 5000) HITS.clear();
+  return rec.n > MAX_CALLS;
+}
 
 function capitalize(s) {
   return String(s || "").trim().split(/\s+/).map((w) => (w[0] ? w[0].toUpperCase() + w.slice(1).toLowerCase() : "")).join(" ");
@@ -13,6 +28,10 @@ function capitalize(s) {
 // track it, and hands back the Service Call ID + PIN. Mirrors /api/demo's account handling.
 export async function POST(request) {
   try {
+    const hdrs = await headers();
+    const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "local";
+    if (throttled(ip)) return Response.json({ ok: false, error: "Too many requests — give us a call instead." }, { status: 429 });
+
     const body = await request.json().catch(() => null) || {};
     const name    = capitalize(String(body.name    || "").trim());
     const email   = String(body.email   || "").trim();

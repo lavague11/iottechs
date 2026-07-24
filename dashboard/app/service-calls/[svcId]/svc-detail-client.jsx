@@ -27,6 +27,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const canManage = ["admin", "manager"].includes(user.role);
   const stageIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(call.stage)));
   const priHot = ["urgent", "high"].includes(call.priority);
@@ -158,12 +159,15 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
         <div className="svc-grid">
           {/* Details */}
           <div className="panel svc-card">
-            <div className="svc-card-h">Details</div>
-            <dl className="svc-dl">
+            <button className="svc-card-h svc-card-toggle" onClick={() => setDetailsOpen((v) => !v)}>
+              Details
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: "auto", transform: detailsOpen ? "none" : "rotate(180deg)", transition: "transform .18s" }}><polyline points="18 15 12 9 6 15" /></svg>
+            </button>
+            {detailsOpen && <dl className="svc-dl">
               <dt>Contact</dt><dd>{call.contact_name || "—"}</dd>
               <dt>Phone</dt><dd>{call.contact_phone ? <a href={`tel:${call.contact_phone}`}>{call.contact_phone}</a> : "—"}</dd>
               <dt>Email</dt><dd>{call.contact_email ? <a href={`mailto:${call.contact_email}`}>{call.contact_email}</a> : "—"}</dd>
-              <dt>Address</dt><dd>{call.address ? <a href={`https://maps.google.com/?q=${encodeURIComponent(call.address)}`} target="_blank" rel="noopener noreferrer">{call.address}</a> : "—"}</dd>
+              <dt>Address</dt><dd>{call.address ? <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(call.address)}`} target="_blank" rel="noopener noreferrer">{call.address}</a> : "—"}</dd>
               <dt>System</dt><dd>{call.project_access_id ? <Link href={`/project/${call.project_access_id}`} className="mono">{call.project_access_id}</Link> : "—"}</dd>
               <dt>Opened</dt><dd>{fmt(call.created_at)}</dd>
               <dt>Tech</dt>
@@ -176,7 +180,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
                   </select>
                 ) : (call.assignee_name || "Unassigned")}
               </dd>
-            </dl>
+            </dl>}
           </div>
 
           {/* Diagnostics */}
@@ -394,6 +398,8 @@ const CSS = `
 @media(max-width:820px){.apx .svc-grid{grid-template-columns:1fr}}
 .apx .svc-card{padding:16px 18px}
 .apx .svc-card-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.apx .svc-card-toggle{width:100%;background:none;border:none;cursor:pointer;padding:0;color:var(--ink);text-align:left;font-size:1rem}
+.apx .svc-card-toggle:hover svg{color:var(--gold-deep,#b08f4f)}
 .apx .svc-count{font-size:.72rem;font-weight:800;color:var(--gold-deep,#b08f4f);background:#f8f0e0;border-radius:20px;padding:1px 8px}
 .apx .svc-dl{display:grid;grid-template-columns:88px 1fr;gap:9px 12px;margin:0;font-size:.88rem}
 .apx .svc-dl dt{color:var(--muted);font-weight:600}

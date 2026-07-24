@@ -365,7 +365,7 @@ function ActionModal({ type, user, projects, onClose }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function MyProjectsClient({ user, projects }) {
+export default function MyProjectsClient({ user, projects, serviceCalls = [] }) {
   const [filter, setFilter]     = useState("all");
   const [userOpen, setUserOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -691,6 +691,37 @@ export default function MyProjectsClient({ user, projects }) {
             </div>
           </div>
         </section>
+
+        {/* SERVICE CALLS — renders only when the customer has at least one */}
+        {serviceCalls.length > 0 && (
+          <section className="cp-section" id="service-calls">
+            <div className="cp-wrap">
+              <div className="cp-sec-head"><h2>My Service Calls</h2></div>
+              <div className="cp-proj-list">
+                {serviceCalls.map((c) => {
+                  const step = ["resolved", "closed"].includes(c.stage) ? 3 : c.stage === "submitted" ? 1 : 2;
+                  const lbl  = step === 3 ? "Resolved" : step === 2 ? "Troubleshooting" : "Received";
+                  return (
+                    <div key={c.svc_id} className="cp-proj">
+                      <div>
+                        <div className="p-top">
+                          <h4>{c.issue || "Service call"}</h4>
+                          <span className={`cp-status ${step === 3 ? "done" : "active"}`}>{lbl}</span>
+                        </div>
+                        <div className="p-addr">{c.svc_id}{c.created_at ? ` · Opened ${String(c.created_at).slice(0, 10)}` : ""}</div>
+                        <div className="cp-bar"><span style={{ width: `${Math.round((step / 3) * 100)}%` }} /></div>
+                        <div className="cp-stage">Step {step} of 3 · <b>{lbl}</b></div>
+                      </div>
+                      <div className="cp-p-act">
+                        <Link href={`/service-call/${c.svc_id}`} className="cp-view">Track →</Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* MY PROJECTS */}
         <section className="cp-section" id="projects">

@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getToolData } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -270,21 +270,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
       }
       // Named cameras from this project's site survey (imported from the install at call
       // creation) — lets the customer point at WHICH camera is down during the 60-second check.
-      let cameras = [];
-      try {
-        const sv = JSON.parse(getToolData(p.access_id, "survey")?.data || "null");
-        let n = 0;
-        for (const f of sv?.floors || []) {
-          const floorTag = (sv.floors.length > 1 && f?.name) ? ` (${f.name})` : "";
-          for (const m of f?.markers || []) {
-            if (!/cam/i.test(String(m?.kind || "")) && !/cam/i.test(String(m?.name || ""))) continue;
-            n += 1;
-            // Named cameras use the survey's own label; unnamed ones get a stable number.
-            cameras.push((m?.name ? String(m.name).slice(0, 60) : `Camera ${n}`) + floorTag);
-          }
-        }
-        cameras = [...new Set(cameras)].slice(0, 32);
-      } catch { /* no/bad survey — picker just doesn't show */ }
+      const cameras = getSvcCameras(p.access_id);
       svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments, cameras };
     }
   }

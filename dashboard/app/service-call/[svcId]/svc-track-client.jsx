@@ -21,7 +21,7 @@ const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", ot
 const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
-export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [] }) {
+export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [], cameras = [] }) {
   const router = useRouter();
   const stageIdx = stepIndexForStage(call.stage);
   const first = (viewerName || "").trim().split(/\s+/)[0];
@@ -35,11 +35,20 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function openDiag() { setDiagOpen(true); setNode(null); setPath([]); setEntryTitle(""); setSaved(false); }
+  // Camera identify — same pre-step as the gateway's check: when the survey names the cameras,
+  // the customer points at the one that's down first; the pick logs as the record's opening step.
+  const [camPick, setCamPick] = useState(null);
+  const askCam = cameras.length > 0 && camPick === null;
+
+  function openDiag() { setDiagOpen(true); setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamPick(null); }
   function closeDiag() { setDiagOpen(false); }
-  function pickEntry(entry) { setEntryTitle(entry.title); setNode(entry.start); setPath([]); setStarted(new Date().toISOString()); }
+  function pickCam(label) { setCamPick(label); setPath([{ question: "Which camera is the problem?", answer: label }]); }
+  function pickEntry(entry) {
+    setEntryTitle(entry.title); setNode(entry.start); setStarted(new Date().toISOString());
+    setPath((p) => p.filter((s) => s.question === "Which camera is the problem?"));
+  }
   function answer(q, opt) { setPath((p) => [...p, { question: q, answer: opt.label }]); setNode(opt.next); }
-  function restart() { setNode(null); setPath([]); setEntryTitle(""); setSaved(false); }
+  function restart() { setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamPick(null); }
 
   const cur = node ? SVC_DIAG_NODES[node] : null;
   const isFix = cur && cur.type === "fix";
@@ -202,7 +211,26 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
           <div className="st-modal">
             <button className="st-modal-x" onClick={closeDiag} aria-label="Close">✕</button>
 
-            {!node ? (
+            {!node && askCam ? (
+              // camera identify — point at the one that's down before anything else
+              <div className="st-diag-pick">
+                <div className="st-tag">Quick check</div>
+                <h2>Which camera is the problem?</h2>
+                <p className="st-pick-sub">These are your cameras from our install — tap the one acting up.</p>
+                <div className="st-cams">
+                  {cameras.map((c) => (
+                    <button className="st-cam" key={c} onClick={() => pickCam(c)}>
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <button className="st-pick" onClick={() => pickCam("Not sure / more than one")}>
+                  <span className="st-pick-t">Not sure / more than one</span>
+                  <span className="st-pick-h">That&rsquo;s fine — we&rsquo;ll figure it out together</span>
+                </button>
+              </div>
+            ) : !node ? (
               // entry picker
               <div className="st-diag-pick">
                 <div className="st-tag">Quick check</div>
@@ -267,6 +295,7 @@ function prevNodeFrom(entryTitle, remainingPath) {
   if (!entry) return null;
   let n = entry.start;
   for (const step of remainingPath) {
+    if (step.question === "Which camera is the problem?") continue;   // pre-step, not a tree node
     const node = SVC_DIAG_NODES[n];
     const opt = node?.options?.find((o) => o.label === step.answer);
     if (!opt) break;
@@ -353,6 +382,10 @@ const CSS = `
 .st-pick:hover{border-color:var(--gold);background:#fdfaf2;transform:translateY(-1px)}
 .st-pick-t{font-weight:800;font-size:1rem}
 .st-pick-h{font-size:.82rem;color:var(--muted)}
+.st-cams{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.st-cam{display:inline-flex;align-items:center;gap:7px;padding:10px 15px;border:1.5px solid var(--line);border-radius:100px;background:#fff;cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:700;color:var(--ink);transition:border-color .12s,background .12s}
+.st-cam:hover{border-color:var(--gold);background:#fdfaf2}
+.st-cam svg{color:var(--gold-deep)}
 .st-q-step{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:8px}
 .st-q-hint{background:var(--accent-soft,#eef1ff);color:#2540c0;border-radius:10px;padding:9px 13px;font-size:.82rem;margin:0 0 14px;font-weight:600}
 .st-q-opts{display:flex;flex-direction:column;gap:10px;margin-top:16px}

@@ -568,13 +568,13 @@
     <div class="pl-panel" id="tabPin">
       <form id="pinForm">
         <div class="field">
-          <label for="pinAccessId">Project ID</label>
-          <input id="pinAccessId" type="text" placeholder="Last 4 or full ID — e.g. 00SK" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+          <label for="pinAccessId">Project or Service Call ID</label>
+          <input id="pinAccessId" type="text" placeholder="Last 4 or full ID — e.g. 00SK or SVC0005" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
         </div>
         <div id="pinError" class="pl-error" style="display:none;"></div>
-        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Find Project →</button>
+        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Find It →</button>
       </form>
-      <p class="pl-sub">Enter your Project ID — you&rsquo;ll enter your PIN on the next screen.</p>
+      <p class="pl-sub">Enter your Project or Service Call ID — you&rsquo;ll enter your PIN on the next screen.</p>
     </div>
     <div class="pl-panel active" id="tabSignIn">
       <form id="signinForm">
@@ -867,11 +867,13 @@
     try{
       const res=await fetch('/api/pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId})});
       const json=await res.json();
-      if(!json.ok){
-        errEl.textContent = json.error==='no_project' ? 'No project found with that ID.' : (json.error||'Something went wrong.');
-        errEl.style.display='block';btn.disabled=false;btn.textContent=old;return;
-      }
-      window.location.href='/project/'+encodeURIComponent(json.accessId||accessId);
+      if(json.ok){ window.location.href='/project/'+encodeURIComponent(json.accessId||accessId); return; }
+      // Not a project — try it as a Service Call ID (SVC…) before giving up.
+      const sres=await fetch('/api/svc-pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({svcId:accessId})});
+      const sjson=await sres.json();
+      if(sjson.ok){ window.location.href='/service-call/'+encodeURIComponent(sjson.svcId); return; }
+      errEl.textContent = json.error==='no_project' ? 'Nothing found with that ID.' : (json.error||'Something went wrong.');
+      errEl.style.display='block';btn.disabled=false;btn.textContent=old;
     }catch(err){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=old;}
   });
 

@@ -234,12 +234,17 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
     // a new tab: you "view AS that role," fully controllable, as if you'd logged in as them (no PIN
     // re-entry). This is deliberately different from the eye-icon "preview" menu, which is a
     // read-only, in-place peek you can't control. Two distinct things.
+    // Open the tab SYNCHRONOUSLY (inside the click gesture) — calling window.open after the
+    // await broke the user-gesture chain, so popup blockers silently killed it and the button
+    // looked dead. Reserve the tab first, then point it once the signed token arrives.
+    const tab = window.open("", "_blank");
     const token = await getPreviewTokenAction(accessId, role);
     // Carry the step you're currently looking at into the new role's tab (so it lands on the
     // SAME stage, not that role's default). The target seeds viewingStage from ?stage=.
     const stage = viewingStageRef?.current;
-    const qs = `preview=${role}&pt=${token}${stage ? `&stage=${encodeURIComponent(stage)}` : ""}`;
-    window.open(`/project/${accessId}?${qs}`, "_blank");
+    const url = `/project/${accessId}?preview=${role}&pt=${token}${stage ? `&stage=${encodeURIComponent(stage)}` : ""}`;
+    if (tab && !tab.closed) tab.location = url;
+    else window.location.href = url;   // popup still blocked → same-tab fallback (back button returns)
   }
 
   const pillStyle = col ? { background: col.bg, color: col.fg, borderColor: col.bg } : {};
@@ -289,6 +294,12 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
                       );
                     })}
                     <div className="doc-pill-sep" />
+                    {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") && (
+                      <button className="doc-pill-opt" onClick={() => { window.location.href = `/project/${accessId}`; }}>
+                        <span className="doc-pill-dot" style={{ background: "#6f7686" }} />
+                        Exit preview
+                      </button>
+                    )}
                     <button className="doc-pill-opt doc-pill-lock-opt" onClick={() => { setOpen(false); onReAuth(); }}>
                       <span className="doc-pill-dot doc-pill-dot-lock" />
                       Lock
@@ -1309,7 +1320,8 @@ function MapThumb({ address }) {
   }, []);
 
   const displayAddr = address || "2503 Jay Pl, Bronx, NY 10462";
-  const href = `https://maps.google.com/?q=${encodeURIComponent(displayAddr)}`;
+  // Directions, not a pin — whoever taps the map is on their way to the job site.
+  const href = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(displayAddr)}`;
   const src = mapKey
     ? `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddr)}&zoom=15&size=800x500&maptype=roadmap&markers=color:0x1a2340%7Csize:mid%7C${encodeURIComponent(displayAddr)}&key=${mapKey}`
     : null;
@@ -1972,7 +1984,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     {lp.source && <div className="pv-hfield"><span className="pv-hfl">Source</span><span className="pv-hfv" style={{textTransform:"capitalize"}}>{lp.source}</span></div>}
                     {lp.contact_message && <div className="pv-hfield pv-hfield-full"><span className="pv-hfl">Notes</span><span className="pv-hfv">{lp.contact_message}</span></div>}
                   </div>
-                  <a className="pv-addr-row" href={`https://maps.google.com/?q=${encodeURIComponent(lp.address||"2503 Jay Pl, Bronx, NY 10462")}`} target="_blank" rel="noreferrer">
+                  <a className="pv-addr-row" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address||"2503 Jay Pl, Bronx, NY 10462")}`} target="_blank" rel="noreferrer">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,color:"var(--accent)"}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                     <span className="pv-addr-text">{lp.address||"2503 Jay Pl, Bronx, NY 10462"}</span>
                     {UPCOMING[projectStage] && (
