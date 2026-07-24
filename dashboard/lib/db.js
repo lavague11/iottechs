@@ -2628,9 +2628,10 @@ export function getServiceCallsForCustomer(email, phone) {
   return rows.map(decorateSvc);
 }
 
-// Named cameras from a project's site survey — powers the "which camera is the problem?" step of
-// the customer diagnostic. Survey names win; unnamed cam markers get a stable number; floor-tagged
-// on multi-floor sites. Empty array when there's no usable survey.
+// Cameras from a project's site survey, by the survey's OWN naming — powers the "which camera is
+// the problem?" step of the customer diagnostic. Label priority per marker: the survey tag + a
+// given name ("IC1 — Front Door"), then the given name alone, then the tag alone (IC1/OC2…),
+// then a stable number. Floor-tagged on multi-floor sites. Empty array when there's no survey.
 export function getSvcCameras(accessId) {
   let cameras = [];
   try {
@@ -2641,7 +2642,10 @@ export function getSvcCameras(accessId) {
       for (const m of f?.markers || []) {
         if (!/cam/i.test(String(m?.kind || "")) && !/cam/i.test(String(m?.name || ""))) continue;
         n += 1;
-        cameras.push((m?.name ? String(m.name).slice(0, 60) : `Camera ${n}`) + floorTag);
+        const tag = String(m?._tag || "").trim();
+        const name = String(m?.name || "").trim();
+        const label = tag && name ? `${tag} — ${name}` : name || tag || `Camera ${n}`;
+        cameras.push(label.slice(0, 60) + floorTag);
       }
     }
     cameras = [...new Set(cameras)].slice(0, 32);
