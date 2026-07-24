@@ -10,7 +10,7 @@ const digits = (s) => String(s || "").replace(/\D/g, "");
 export default function QrLibraryClient({ user, alerts, codes = [] }) {
   const [rows, setRows]     = useState(codes);
   const [query, setQuery]   = useState("");
-  const [filter, setFilter] = useState("all");   // all | missing | has
+  const [filter, setFilter] = useState("has");   // has (default) | missing | all — empties hide unless searched or filtered
   const [zoom, setZoom]     = useState(null);    // the card being viewed large
   const [upload, setUpload] = useState(null);    // the project we're generating a card for
   const [flash, setFlash]   = useState("");
@@ -38,9 +38,12 @@ export default function QrLibraryClient({ user, alerts, codes = [] }) {
   const q = query.trim().toLowerCase();
   const qDigits = digits(query);
   const visible = useMemo(() => rows.filter((c) => {
-    if (filter === "missing" && c.system_qr) return false;
-    if (filter === "has" && !c.system_qr) return false;
-    if (!q) return true;
+    // A search sweeps EVERYTHING (that's how you find a missing one); otherwise the tab decides.
+    if (!q) {
+      if (filter === "missing" && c.system_qr) return false;
+      if (filter === "has" && !c.system_qr) return false;
+      return true;
+    }
     return c.customer.toLowerCase().includes(q)
       || c.access_id.toLowerCase().includes(q)
       || (c.address || "").toLowerCase().includes(q)
@@ -64,9 +67,9 @@ export default function QrLibraryClient({ user, alerts, codes = [] }) {
         <div className="sec-head">
           <input className="apx-input" style={{ maxWidth: 420 }} placeholder="Search customer, address, phone, or project ID…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
           <div className="qrl-tabs">
-            <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All {rows.length}</button>
             <button className={filter === "has" ? "on" : ""} onClick={() => setFilter("has")}>With QR {withQr}</button>
             <button className={filter === "missing" ? "on" : ""} onClick={() => setFilter("missing")}>No QR {missing}</button>
+            <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All {rows.length}</button>
           </div>
         </div>
 

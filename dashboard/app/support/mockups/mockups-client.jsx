@@ -9,13 +9,16 @@ import AdminShell from "../../components/admin-shell";
 // as count-only cards (server caps the thumb), so the page stays light.
 export default function MockupLibraryClient({ user, alerts, rows = [] }) {
   const [query, setQuery]   = useState("");
-  const [filter, setFilter] = useState("all");   // all | has | missing
+  const [filter, setFilter] = useState("has");   // has (default) | missing | all — empties hide unless searched or filtered
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => rows.filter((r) => {
-    if (filter === "has" && !r.has) return false;
-    if (filter === "missing" && r.has) return false;
-    if (!q) return true;
+    // A search sweeps EVERYTHING (that's how you find an empty one); otherwise the tab decides.
+    if (!q) {
+      if (filter === "has" && !r.has) return false;
+      if (filter === "missing" && r.has) return false;
+      return true;
+    }
     return r.customer.toLowerCase().includes(q)
       || r.access_id.toLowerCase().includes(q)
       || (r.address || "").toLowerCase().includes(q);
@@ -37,9 +40,9 @@ export default function MockupLibraryClient({ user, alerts, rows = [] }) {
         <div className="sec-head">
           <input className="apx-input" style={{ maxWidth: 420 }} placeholder="Search customer, address, or project ID…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
           <div className="mkl-tabs">
-            <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All {rows.length}</button>
             <button className={filter === "has" ? "on" : ""} onClick={() => setFilter("has")}>With mockup {withData}</button>
             <button className={filter === "missing" ? "on" : ""} onClick={() => setFilter("missing")}>Empty {rows.length - withData}</button>
+            <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All {rows.length}</button>
           </div>
         </div>
 

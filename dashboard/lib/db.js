@@ -2572,6 +2572,18 @@ export function ensureSvcProject(svcId) {
     .run(cId, call.issue || null, accessId);
   db.prepare("UPDATE service_calls SET svc_project_id = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(cId, String(call.svc_id));
   logServiceCallEvent(call.svc_id, { kind: "note", detail: `Project ${cId} opened for this call`, actor_role: "system", actor_name: null });
+
+  // The call is on a system WE installed (linked at intake) → import the install's site survey
+  // so the tech walks in with the floor plan and camera layout already on the call's project.
+  if (call.project_access_id) {
+    try {
+      const src = getToolData(call.project_access_id, "survey");
+      if (src?.data) {
+        saveToolData(cId, "survey", src.data, "Imported from " + call.project_access_id);
+        logServiceCallEvent(call.svc_id, { kind: "note", detail: `Site survey imported from ${call.project_access_id}`, actor_role: "system", actor_name: null });
+      }
+    } catch { /* survey blob unreadable — skip, never block call creation */ }
+  }
   return getJobByAccessId(cId);
 }
 
