@@ -7,15 +7,12 @@ import AdminShell from "../../components/admin-shell";
 import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction } from "../actions";
 import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 
-const STAGES = [
-  { key: "submitted", label: "Submitted" },
-  { key: "diagnosing", label: "Diagnosing" },
-  { key: "quoted", label: "Quoted" },
-  { key: "scheduled", label: "Scheduled" },
-  { key: "onsite", label: "On-site" },
-  { key: "resolved", label: "Resolved" },
-  { key: "billed", label: "Billed" },
-  { key: "closed", label: "Closed" },
+// Three steps, same as the customer tracker — the 8 internal stage keys stay in the DB, rolled
+// up here. Clicking a step sets its representative stage.
+const STEPS = [
+  { key: "submitted", label: "Submitted", stages: ["submitted"], set: "submitted" },
+  { key: "diagnosed", label: "Diagnosed", stages: ["diagnosing", "quoted", "scheduled", "onsite", "billed"], set: "diagnosing" },
+  { key: "solved", label: "Solved", stages: ["resolved", "closed"], set: "resolved" },
 ];
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Other" };
 const ROUTE = {
@@ -31,7 +28,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
   const canManage = ["admin", "manager"].includes(user.role);
-  const stageIdx = STAGES.findIndex((s) => s.key === call.stage);
+  const stageIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(call.stage)));
   const priHot = ["urgent", "high"].includes(call.priority);
 
   function setStage(stage) { startTx(async () => { const r = await setSvcStageAction(call.svc_id, stage); if (r?.ok) router.refresh(); }); }
@@ -148,9 +145,9 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
 
         {/* Stage strip */}
         <div className="panel svc-stagebar">
-          {STAGES.map((s, n) => (
+          {STEPS.map((s, n) => (
             <button key={s.key} className={`svc-stage${n < stageIdx ? " done" : ""}${n === stageIdx ? " on" : ""}`}
-              disabled={!canManage || pending} onClick={() => canManage && setStage(s.key)} title={canManage ? `Set ${s.label}` : s.label}>
+              disabled={!canManage || pending} onClick={() => canManage && setStage(s.set)} title={canManage ? `Set ${s.label}` : s.label}>
               <span className="svc-stage-dot" />
               <span className="svc-stage-lbl">{s.label}</span>
             </button>
