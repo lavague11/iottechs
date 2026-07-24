@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic } from "../../lib/db";
+import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic, saveSvcInvoice, sendSvcInvoice, voidSvcInvoice, addSvcPayment } from "../../lib/db";
 
 async function requireStaff(roles = ["admin", "manager", "tech"]) {
   const user = await getSessionUser();
@@ -51,6 +51,45 @@ export async function runStaffDiagnosticAction(svcId, record) {
   revalidatePath(`/service-calls/${svcId}`);
   revalidatePath(`/service-call/${svcId}`);
   return { ok: true };
+}
+
+// ---- Billing — admin/manager only (a tech never sees retail prices). ----
+export async function saveSvcInvoiceAction(svcId, items, notes) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  if (!getServiceCall(svcId)) return { ok: false, error: "Service call not found." };
+  const inv = saveSvcInvoice(svcId, { items, notes }, { actor_role: user.role, actor_name: user.name });
+  revalidatePath(`/service-calls/${svcId}`);
+  return { ok: true, invoice: inv };
+}
+
+export async function sendSvcInvoiceAction(svcId) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  const inv = sendSvcInvoice(svcId, { actor_role: user.role, actor_name: user.name });
+  if (!inv) return { ok: false, error: "Add at least one line first." };
+  revalidatePath(`/service-calls/${svcId}`);
+  revalidatePath(`/service-call/${svcId}`);
+  return { ok: true, invoice: inv };
+}
+
+export async function voidSvcInvoiceAction(svcId) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  voidSvcInvoice(svcId, { actor_role: user.role, actor_name: user.name });
+  revalidatePath(`/service-calls/${svcId}`);
+  revalidatePath(`/service-call/${svcId}`);
+  return { ok: true };
+}
+
+export async function recordSvcPaymentAction(svcId, amount, method, paidAt) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  if (!getServiceCall(svcId)) return { ok: false, error: "Service call not found." };
+  const payments = addSvcPayment(svcId, { amount, method, paidAt }, user.name);
+  revalidatePath(`/service-calls/${svcId}`);
+  revalidatePath(`/service-call/${svcId}`);
+  return { ok: true, payments };
 }
 
 export async function assignSvcTechAction(svcId, techId, techName) {

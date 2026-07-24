@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark } from "../../components/brand";
 import { SVC_DIAG_ENTRIES, SVC_DIAG_NODES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
-import { saveCustomerDiagnosticAction } from "./actions";
+import { saveCustomerDiagnosticAction, signSvcInvoiceAction } from "./actions";
 
 // The customer sees three plain steps — the office's 8 internal stages roll up into these. The
 // full workflow strip lives on the staff side; a customer just wants "where is this?".
@@ -21,7 +21,7 @@ const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", ot
 const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
-export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff }) {
+export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [] }) {
   const router = useRouter();
   const stageIdx = stepIndexForStage(call.stage);
   const first = (viewerName || "").trim().split(/\s+/)[0];
@@ -43,6 +43,23 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
 
   const cur = node ? SVC_DIAG_NODES[node] : null;
   const isFix = cur && cur.type === "fix";
+
+  // ---- Invoice sign state ----
+  const [signName, setSignName] = useState("");
+  const [signBusy, setSignBusy] = useState(false);
+  const [signErr, setSignErr] = useState("");
+  const paidTotal = payments.reduce((s, p) => s + (+p.amount || 0), 0);
+  const balance = invoice ? Math.max(0, Math.round((invoice.total - paidTotal) * 100) / 100) : 0;
+  const invPaid = invoice && paidTotal > 0 && balance <= 0;
+
+  async function signInvoice() {
+    if (signName.trim().length < 2 || signBusy || staff) return;
+    setSignBusy(true); setSignErr("");
+    const r = await signSvcInvoiceAction(call.svc_id, signName.trim());
+    setSignBusy(false);
+    if (r?.ok) router.refresh();
+    else setSignErr(r?.error || "Could not sign. Try again.");
+  }
 
   async function sendReport() {
     if (!cur || !isFix) return;
@@ -108,6 +125,54 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
                 <span className="st-diag-when">{fmt(d.completed || d.created_at)}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Invoice — appears only once the office sends it */}
+        {invoice && (
+          <div className="st-card st-inv">
+            <div className="st-card-h">Invoice
+              <span className={`st-inv-chip ${invPaid ? "paid" : invoice.signed_name ? "signed" : "due"}`}>
+                {invPaid ? "Paid" : invoice.signed_name ? "Approved" : "Awaiting approval"}
+              </span>
+            </div>
+            <div className="st-inv-items">
+              {invoice.items.map((it, i) => (
+                <div className="st-inv-item" key={i}>
+                  <span className="st-inv-desc">{it.desc}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
+                  <span className="st-inv-amt">${(it.qty * it.price).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="st-inv-total"><span>Total</span><b>${invoice.total.toFixed(2)}</b></div>
+            {payments.length > 0 && (
+              <>
+                {payments.map((p) => (
+                  <div className="st-inv-pay" key={p.id}><span>Payment · {p.method || "received"} · {p.paid_at}</span><span>−${(+p.amount).toFixed(2)}</span></div>
+                ))}
+                <div className="st-inv-bal"><span>Balance</span><b className={balance <= 0 ? "ok" : ""}>${balance.toFixed(2)}</b></div>
+              </>
+            )}
+            {invoice.notes && <p className="st-inv-notes">{invoice.notes}</p>}
+
+            {invoice.signed_name ? (
+              <div className="st-inv-signed">
+                <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
+                Approved by <b>{invoice.signed_name}</b> · {fmt(invoice.signed_at)}
+              </div>
+            ) : staff ? (
+              <p className="st-inv-staffnote">Awaiting the customer&rsquo;s approval.</p>
+            ) : (
+              <div className="st-inv-sign">
+                <p className="st-inv-sign-lbl">Type your full name to approve this invoice — your typed name is your signature.</p>
+                <div className="st-inv-sign-row">
+                  <input className="st-inv-sign-in" placeholder="Full name" value={signName} onChange={(e) => setSignName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signInvoice()} />
+                  <button className="st-btn st-btn-gold" onClick={signInvoice} disabled={signBusy || signName.trim().length < 2}>{signBusy ? "Signing…" : "Approve"}</button>
+                </div>
+                {signName.trim().length >= 2 && <div className="st-inv-sig-preview">{signName}</div>}
+                {signErr && <div className="st-inv-err">{signErr}</div>}
+              </div>
+            )}
           </div>
         )}
 
@@ -299,5 +364,33 @@ const CSS = `
 .st-out-actions{display:flex;flex-direction:column;gap:10px}
 .st-out-saved{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;color:#1c8a45;font-weight:700;font-size:.92rem}
 .st-out-saved svg{width:34px;height:34px;fill:none;stroke:#1c8a45;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;background:#e7f6ec;border-radius:50%;padding:6px;box-sizing:content-box}
+/* invoice */
+.st-inv .st-card-h{display:flex;align-items:center;gap:10px}
+.st-inv-chip{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:3px 10px;border-radius:20px}
+.st-inv-chip.due{color:#b3541e;background:#fdf0e5}
+.st-inv-chip.signed{color:#2f5fbf;background:#e6eefc}
+.st-inv-chip.paid{color:#1c8a45;background:#e7f6ec}
+.st-inv-items{display:flex;flex-direction:column}
+.st-inv-item{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.st-inv-desc{font-weight:600}
+.st-inv-amt{font-variant-numeric:tabular-nums;font-weight:600}
+.st-inv-total{display:flex;justify-content:space-between;align-items:center;padding:10px 0 4px;color:var(--muted);font-size:.92rem}
+.st-inv-total b{font-size:1.35rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.st-inv-pay{display:flex;justify-content:space-between;font-size:.84rem;color:var(--muted);padding:4px 0}
+.st-inv-bal{display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;border-top:1px dashed var(--line);color:var(--muted);font-size:.9rem}
+.st-inv-bal b{font-size:1.1rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.st-inv-bal b.ok{color:#1c8a45}
+.st-inv-notes{color:var(--muted);font-size:.84rem;margin:10px 0 0;font-style:italic}
+.st-inv-signed{display:flex;align-items:center;gap:8px;margin-top:14px;color:#1c8a45;font-weight:600;font-size:.88rem}
+.st-inv-signed svg{width:20px;height:20px;fill:none;stroke:#1c8a45;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.st-inv-staffnote{margin:12px 0 0;color:var(--muted);font-size:.84rem}
+.st-inv-sign{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
+.st-inv-sign-lbl{color:var(--muted);font-size:.84rem;margin:0 0 10px}
+.st-inv-sign-row{display:flex;gap:8px}
+.st-inv-sign-in{flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:11px;font-family:inherit;font-size:.94rem;background:var(--bg-soft)}
+.st-inv-sign-in:focus{outline:none;border-color:var(--gold);background:#fff}
+.st-inv-sign-row .st-btn{padding:11px 20px}
+.st-inv-sig-preview{margin-top:10px;font-family:'Brush Script MT','Segoe Script',cursive;font-size:1.6rem;color:var(--ink);border-bottom:1px solid var(--line);padding:2px 6px 6px;display:inline-block;min-width:180px}
+.st-inv-err{margin-top:10px;color:#c9382b;background:#fdecec;border:1px solid #f2c4c4;border-radius:10px;padding:8px 12px;font-size:.84rem;font-weight:600}
 @media(max-width:560px){.st-diag-cta{flex-wrap:wrap}.st-diag-cta .st-btn{width:100%}.st-hero h1{font-size:1.45rem}}
 `;

@@ -469,6 +469,33 @@ function init() {
       detail      TEXT
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS svc_invoices (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      svc_id       TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'draft',   -- draft | sent | void
+      items        TEXT,                             -- JSON: [{desc, qty, price}]
+      notes        TEXT,
+      signed_name  TEXT,
+      signed_at    TEXT,
+      sent_at      TEXT,
+      voided_at    TEXT,
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      updated_at   TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS svc_payments (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      svc_id      TEXT NOT NULL,
+      amount      REAL NOT NULL DEFAULT 0,
+      method      TEXT,
+      note        TEXT,
+      recorded_by TEXT,
+      paid_at     TEXT,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
 
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
@@ -2519,6 +2546,71 @@ export function getDiagnostics(svcId) {
 }
 
 function safeJson(s, fallback) { try { return s ? JSON.parse(s) : fallback; } catch { return fallback; } }
+
+// ---- Service-call billing: one active invoice per call (drafts are edited in place; voiding
+// archives the record and allows a fresh one — never deleted, per the money-trail rule). ----
+function decorateSvcInvoice(r) {
+  if (!r) return null;
+  const items = safeJson(r.items, []);
+  const total = items.reduce((s, it) => s + Math.max(0, +it.qty || 0) * Math.max(0, +it.price || 0), 0);
+  return { ...r, items, total: Math.round(total * 100) / 100 };
+}
+export function getSvcInvoice(svcId) {
+  // The active invoice = the latest non-void one.
+  return decorateSvcInvoice(db.prepare("SELECT * FROM svc_invoices WHERE svc_id = ? COLLATE NOCASE AND status != 'void' ORDER BY id DESC LIMIT 1").get(String(svcId)));
+}
+export function saveSvcInvoice(svcId, { items, notes }, { actor_role, actor_name } = {}) {
+  const clean = (Array.isArray(items) ? items : []).slice(0, 40).map((it) => ({
+    desc: String(it.desc || "").slice(0, 200),
+    qty: Math.max(0, Math.min(999, +it.qty || 0)),
+    price: Math.max(0, Math.min(999999, +it.price || 0)),
+  })).filter((it) => it.desc.trim());
+  const cur = getSvcInvoice(svcId);
+  if (cur) {
+    // A signed invoice is locked — void it (admin) to re-bill; edits would silently change what was agreed.
+    if (cur.signed_name) return cur;
+    db.prepare("UPDATE svc_invoices SET items=?, notes=?, updated_at=datetime('now','localtime') WHERE id=?")
+      .run(JSON.stringify(clean), String(notes || "").slice(0, 500) || null, cur.id);
+  } else {
+    db.prepare("INSERT INTO svc_invoices (svc_id, items, notes) VALUES (?,?,?)")
+      .run(String(svcId), JSON.stringify(clean), String(notes || "").slice(0, 500) || null);
+  }
+  return getSvcInvoice(svcId);
+}
+export function sendSvcInvoice(svcId, { actor_role, actor_name } = {}) {
+  const cur = getSvcInvoice(svcId);
+  if (!cur || !cur.items.length) return null;
+  db.prepare("UPDATE svc_invoices SET status='sent', sent_at=COALESCE(sent_at, datetime('now','localtime')), updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  logServiceCallEvent(svcId, { kind: "quote", detail: `Invoice sent — $${cur.total.toFixed(2)}`, actor_role, actor_name });
+  return getSvcInvoice(svcId);
+}
+export function voidSvcInvoice(svcId, { actor_role, actor_name } = {}) {
+  const cur = getSvcInvoice(svcId);
+  if (!cur) return null;
+  db.prepare("UPDATE svc_invoices SET status='void', voided_at=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  logServiceCallEvent(svcId, { kind: "note", detail: "Invoice voided", actor_role, actor_name });
+  return null;
+}
+export function signSvcInvoice(svcId, name) {
+  const cur = getSvcInvoice(svcId);
+  if (!cur || cur.status !== "sent" || cur.signed_name) return cur;
+  db.prepare("UPDATE svc_invoices SET signed_name=?, signed_at=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(name || "").slice(0, 120), cur.id);
+  logServiceCallEvent(svcId, { kind: "quote", detail: `Invoice approved & signed by ${String(name || "").slice(0, 120)}`, actor_role: "customer", actor_name: String(name || "").slice(0, 120) });
+  return getSvcInvoice(svcId);
+}
+export function getSvcPayments(svcId) {
+  return db.prepare("SELECT * FROM svc_payments WHERE svc_id = ? COLLATE NOCASE ORDER BY id DESC").all(String(svcId)).map((r) => ({ ...r }));
+}
+export function addSvcPayment(svcId, { amount, method, note, paidAt }, byName) {
+  const paid = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || "")) ? String(paidAt) : new Date().toISOString().slice(0, 10);
+  const amt = Math.max(0, +amount || 0);
+  if (!amt) return getSvcPayments(svcId);
+  db.prepare("INSERT INTO svc_payments (svc_id, amount, method, note, recorded_by, paid_at) VALUES (?,?,?,?,?,?)")
+    .run(String(svcId), amt, String(method || "").slice(0, 60) || null, String(note || "").slice(0, 500) || null, byName || null, paid);
+  logServiceCallEvent(svcId, { kind: "payment", detail: `Payment received — $${amt.toFixed(2)}${method ? ` (${method})` : ""}`, actor_role: "staff", actor_name: byName });
+  return getSvcPayments(svcId);
+}
 
 export function updateTicket(id, fields) {
   const sets = [], vals = [];

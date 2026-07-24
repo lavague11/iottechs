@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction } from "../actions";
+import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction } from "../actions";
 import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 
 const STAGES = [
@@ -26,7 +26,7 @@ const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: 
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
-export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [] }) {
+export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [] }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -81,6 +81,43 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
       setDSaving(false);
       if (r?.ok) { setDSaved(true); router.refresh(); }
     });
+  }
+
+  // ---- Billing (admin/manager only — the server never ships the invoice to a tech) ----
+  // Smart default: a fresh invoice starts with the standard service-call line.
+  const [rows, setRows] = useState(() =>
+    invoice?.items?.length ? invoice.items : [{ desc: `Service call — ${CATEGORY[call.category] || "diagnostic & repair"}`, qty: 1, price: 150 }]
+  );
+  const [invNotes, setInvNotes] = useState(invoice?.notes || "");
+  const [voidArm, setVoidArm] = useState(false);
+  const invLocked = !!invoice?.signed_name;
+  const total = rows.reduce((s, r) => s + Math.max(0, +r.qty || 0) * Math.max(0, +r.price || 0), 0);
+  const paidTotal = payments.reduce((s, p) => s + (+p.amount || 0), 0);
+  const balance = Math.round(((invoice?.total ?? total) - paidTotal) * 100) / 100;
+  const [payAmt, setPayAmt] = useState("");
+  const [payMethod, setPayMethod] = useState("Card");
+
+  function setRow(i, k, v) { const r = rows.slice(); r[i] = { ...r[i], [k]: v }; setRows(r); }
+  function addRow() { setRows([...rows, { desc: "", qty: 1, price: 0 }]); }
+  function delRow(i) { setRows(rows.filter((_, n) => n !== i)); }
+  function saveInv() { startTx(async () => { const r = await saveSvcInvoiceAction(call.svc_id, rows, invNotes); if (r?.ok) { setRows(r.invoice.items); router.refresh(); } }); }
+  function sendInv() {
+    startTx(async () => {
+      const s = await saveSvcInvoiceAction(call.svc_id, rows, invNotes);
+      if (!s?.ok) return;
+      const r = await sendSvcInvoiceAction(call.svc_id);
+      if (r?.ok) router.refresh();
+    });
+  }
+  function voidInv() {
+    if (!voidArm) { setVoidArm(true); setTimeout(() => setVoidArm(false), 4000); return; }
+    setVoidArm(false);
+    startTx(async () => { const r = await voidSvcInvoiceAction(call.svc_id); if (r?.ok) { setRows([{ desc: `Service call — ${CATEGORY[call.category] || "diagnostic & repair"}`, qty: 1, price: 150 }]); setInvNotes(""); router.refresh(); } });
+  }
+  function recPay() {
+    const amt = +payAmt || 0;
+    if (amt <= 0) return;
+    startTx(async () => { const r = await recordSvcPaymentAction(call.svc_id, amt, payMethod); if (r?.ok) { setPayAmt(""); router.refresh(); } });
   }
 
   return (
@@ -166,6 +203,77 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             ))}
           </div>
         </div>
+
+        {/* Billing — admin/manager only. Invoice lifecycle: draft → sent → signed; void to re-bill. */}
+        {canManage && (
+          <div className="panel svc-card svc-bill">
+            <div className="svc-card-h">Billing
+              {invoice && (
+                <span className={`svc-inv-st svc-inv-${invLocked ? "signed" : invoice.status}`}>
+                  {balance <= 0 && paidTotal > 0 ? "Paid" : invLocked ? "Signed" : invoice.status === "sent" ? "Sent" : "Draft"}
+                </span>
+              )}
+              {invoice && <button className="svc-void-btn" onClick={voidInv} disabled={pending}>{voidArm ? "Confirm?" : "Void"}</button>}
+            </div>
+
+            {/* Line items */}
+            <div className="svc-inv-rows">
+              {(invLocked ? invoice.items : rows).map((r, i) => (
+                <div className="svc-inv-row" key={i}>
+                  {invLocked ? (
+                    <>
+                      <span className="svc-inv-desc">{r.desc}</span>
+                      <span className="svc-inv-qty">×{r.qty}</span>
+                      <span className="svc-inv-price">${(r.qty * r.price).toFixed(2)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <input className="apx-input svc-inv-in-desc" placeholder="Description" value={r.desc} onChange={(e) => setRow(i, "desc", e.target.value)} />
+                      <input className="apx-input svc-inv-in-qty" type="number" min="0" value={r.qty} onChange={(e) => setRow(i, "qty", e.target.value)} />
+                      <input className="apx-input svc-inv-in-price" type="number" min="0" step="0.01" value={r.price} onChange={(e) => setRow(i, "price", e.target.value)} />
+                      <button className="svc-inv-del" onClick={() => delRow(i)} aria-label="Remove">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {!invLocked && <button className="svc-inv-add" onClick={addRow}>+ Add</button>}
+            </div>
+
+            <div className="svc-inv-total"><span>Total</span><b>${(invLocked ? invoice.total : total).toFixed(2)}</b></div>
+            {invLocked && <div className="svc-inv-signedby">Signed by <b>{invoice.signed_name}</b> · {fmt(invoice.signed_at)}</div>}
+
+            {!invLocked && (
+              <div className="svc-inv-actions">
+                <button className="svc-inv-btn ghost" onClick={saveInv} disabled={pending}>Save</button>
+                <button className="svc-inv-btn gold" onClick={sendInv} disabled={pending || !rows.some((r) => String(r.desc).trim())}>{invoice?.status === "sent" ? "Resend" : "Send"}</button>
+              </div>
+            )}
+
+            {/* Payments — render only once the invoice exists */}
+            {invoice && (
+              <div className="svc-pay">
+                {payments.map((p) => (
+                  <div className="svc-pay-row" key={p.id}>
+                    <span className="svc-pay-amt">${(+p.amount).toFixed(2)}</span>
+                    <span className="svc-pay-meta">{p.method || "—"} · {p.paid_at}{p.recorded_by ? ` · ${p.recorded_by}` : ""}</span>
+                  </div>
+                ))}
+                <div className="svc-pay-bal"><span>Balance</span><b className={balance <= 0 ? "ok" : ""}>${Math.max(0, balance).toFixed(2)}</b></div>
+                {balance > 0 && (
+                  <div className="svc-pay-form">
+                    <input className="apx-input svc-pay-in" type="number" min="0" step="0.01" placeholder={balance.toFixed(2)} value={payAmt} onChange={(e) => setPayAmt(e.target.value)} />
+                    <select className="apx-input svc-pay-sel" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                      {["Card", "Cash", "Check", "Zelle", "Other"].map((m) => <option key={m}>{m}</option>)}
+                    </select>
+                    <button className="svc-inv-btn gold" onClick={recPay} disabled={pending || !(+payAmt > 0)}>Record</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Timeline — the append-only log */}
         <div className="panel svc-card">
@@ -333,4 +441,41 @@ const CSS = `
 .svc-run-save:disabled{opacity:.6;cursor:default}
 .svc-run-ghost{padding:12px;border:1.5px solid var(--line);border-radius:11px;background:#fff;font-weight:700;font-family:inherit;font-size:.9rem;cursor:pointer}
 .svc-run-saved{display:flex;align-items:center;gap:12px;color:#1c8a45;font-weight:700;font-size:.92rem;flex-wrap:wrap}
+/* billing */
+.apx .svc-inv-st{font-size:.7rem;font-weight:800;text-transform:uppercase;padding:3px 10px;border-radius:20px}
+.apx .svc-inv-draft{color:var(--muted);background:var(--bg-soft,#f4f4f2);border:1px solid var(--line)}
+.apx .svc-inv-sent{color:#2f5fbf;background:#e6eefc}
+.apx .svc-inv-signed{color:#1c8a45;background:#e7f6ec}
+.apx .svc-void-btn{margin-left:auto;font-size:.76rem;font-weight:700;color:#c9382b;background:#fdecec;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit}
+.apx .svc-void-btn:hover{background:#f8d7d7}
+.apx .svc-inv-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.apx .svc-inv-row{display:flex;align-items:center;gap:8px}
+.apx .svc-inv-in-desc{flex:1;height:36px;padding:0 10px;font-size:.86rem}
+.apx .svc-inv-in-qty{width:64px;height:36px;padding:0 8px;font-size:.86rem;text-align:center}
+.apx .svc-inv-in-price{width:100px;height:36px;padding:0 8px;font-size:.86rem;text-align:right}
+.apx .svc-inv-del{width:28px;height:28px;flex-shrink:0;border:none;border-radius:7px;background:none;color:var(--muted);cursor:pointer;display:grid;place-items:center}
+.apx .svc-inv-del:hover{background:#fdecec;color:#c9382b}
+.apx .svc-inv-add{align-self:flex-start;font-size:.8rem;font-weight:700;color:var(--gold-deep,#b08f4f);background:none;border:1.5px dashed var(--line);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit}
+.apx .svc-inv-add:hover{border-color:#C9A96E}
+.apx .svc-inv-desc{flex:1;font-size:.88rem;font-weight:600}
+.apx .svc-inv-qty{color:var(--muted);font-size:.82rem}
+.apx .svc-inv-price{font-weight:700;font-size:.88rem;font-variant-numeric:tabular-nums}
+.apx .svc-inv-total{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1.5px solid var(--line);font-size:.92rem;color:var(--muted)}
+.apx .svc-inv-total b{font-size:1.25rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.apx .svc-inv-signedby{font-size:.82rem;color:#1c8a45;font-weight:600;margin-bottom:10px}
+.apx .svc-inv-actions{display:flex;gap:8px;margin-top:4px}
+.apx .svc-inv-btn{height:38px;padding:0 20px;border-radius:9px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit}
+.apx .svc-inv-btn.gold{border:none;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff}
+.apx .svc-inv-btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+.apx .svc-inv-btn:disabled{opacity:.5;cursor:default}
+.apx .svc-pay{margin-top:16px;border-top:1px dashed var(--line);padding-top:12px}
+.apx .svc-pay-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.86rem}
+.apx .svc-pay-amt{font-weight:700;font-variant-numeric:tabular-nums}
+.apx .svc-pay-meta{color:var(--muted);font-size:.8rem}
+.apx .svc-pay-bal{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:.9rem;color:var(--muted)}
+.apx .svc-pay-bal b{font-size:1.05rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.apx .svc-pay-bal b.ok{color:#1c8a45}
+.apx .svc-pay-form{display:flex;gap:8px;margin-top:6px}
+.apx .svc-pay-in{flex:1;height:38px;padding:0 10px;font-size:.88rem}
+.apx .svc-pay-sel{width:110px;height:38px;padding:0 8px;font-size:.86rem}
 `;

@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import SvcDetailClient from "./svc-detail-client";
 
@@ -16,9 +16,14 @@ export default async function ServiceCallDetailPage({ params }) {
   const alerts      = getNotifSummary(user.id);
   const events      = getServiceCallEvents(call.svc_id);
   const diagnostics = getDiagnostics(call.svc_id);
-  const techs       = ["admin", "manager"].includes(user.role)
+  const canManage   = ["admin", "manager"].includes(user.role);
+  const techs       = canManage
     ? getStaffUsers().filter((u) => u.role === "tech").map((u) => ({ id: u.id, name: u.name }))
     : [];
+  // Billing is retail-priced — admin/manager only, stripped server-side so a tech's browser
+  // never receives it (role visibility rule, not just hidden UI).
+  const invoice  = canManage ? getSvcInvoice(call.svc_id) : null;
+  const payments = canManage ? getSvcPayments(call.svc_id) : [];
 
   // node:sqlite rows are null-prototype objects; plain-clone before crossing to the client component.
   const plain = (r) => (r ? { ...r } : r);
@@ -31,6 +36,8 @@ export default async function ServiceCallDetailPage({ params }) {
       events={events.map(plain)}
       diagnostics={diagnostics.map(plain)}
       techs={techs.map(plain)}
+      invoice={plain(invoice)}
+      payments={payments.map(plain)}
     />
   );
 }

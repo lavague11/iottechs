@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import SvcGate from "./svc-gate";
@@ -60,6 +60,14 @@ export default async function ServiceCallTrackPage({ params }) {
   const events = getServiceCallEvents(call.svc_id);
   const diagnostics = getDiagnostics(call.svc_id);
 
+  // Invoice reaches the customer only once SENT — a draft the office is still building never
+  // ships. Slim to customer-safe fields (no internal ids/status plumbing).
+  const invRow = getSvcInvoice(call.svc_id);
+  const invoice = invRow && invRow.status === "sent"
+    ? { items: invRow.items, total: invRow.total, notes: invRow.notes, signed_name: invRow.signed_name, signed_at: invRow.signed_at, sent_at: invRow.sent_at }
+    : null;
+  const payments = invoice ? getSvcPayments(call.svc_id).map((p) => ({ id: p.id, amount: p.amount, method: p.method, paid_at: p.paid_at })) : [];
+
   // Customer-safe slim: only what a customer should see. No internal ids, no ticket linkage.
   const safeCall = {
     svc_id: call.svc_id,
@@ -94,6 +102,8 @@ export default async function ServiceCallTrackPage({ params }) {
       viewerName={auth.name}
       loggedIn={!!auth.loggedIn}
       staff={!!auth.staff}
+      invoice={invoice}
+      payments={payments}
     />
   );
 }
