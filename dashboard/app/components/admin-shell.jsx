@@ -59,6 +59,8 @@ const NAV_GROUPS = [
   { key: "support-grp", label: "Support", items: [
     { key: "support", label: "Support Library", href: "/support" },
     { key: "qr",      label: "QR Codes",        href: "/support/qr" },
+    { key: "surveys", label: "Site Surveys",    href: "/support/surveys" },
+    { key: "mockups", label: "Mockups",         href: "/support/mockups" },
   ]},
 ];
 

@@ -1211,6 +1211,72 @@ export function getProjectsWithSystemQr(rows) {
 
 // Admin System-QR library: every project that has a QR, with the fields you'd search by
 // (customer, address, phone, ID). The QR image itself lives in system_qr (a data URL).
+// Site-survey library — every project with its survey meta (floors, devices, last edit) in one
+// searchable place. Survey blobs are small JSON; parse server-side and ship only the numbers.
+export function getSurveyLibrary() {
+  return db.prepare(
+    `SELECT p.access_id, p.customer, p.address, p.contact_name, p.created_at,
+            t.data AS survey_data, t.updated_by, t.updated_at
+       FROM projects p
+       LEFT JOIN project_tool_data t ON t.project_access_id = p.access_id AND t.tool = 'survey'
+      ORDER BY (t.data IS NOT NULL) DESC, COALESCE(t.updated_at,'') DESC, p.id DESC`
+  ).all().map((p) => {
+    let floors = 0, devices = 0, rooms = 0, title = "";
+    try {
+      const d = JSON.parse(p.survey_data || "null");
+      if (d && Array.isArray(d.floors)) {
+        title = d.surveyTitle || "";
+        floors = d.floors.length;
+        for (const f of d.floors) {
+          devices += (f?.markers || []).length;
+          rooms += (f?.B?.rooms || []).length;
+        }
+      }
+    } catch { /* bad blob */ }
+    return {
+      access_id: p.access_id,
+      customer: p.customer || p.contact_name || p.access_id,
+      address: p.address || "",
+      has: floors > 0 || devices > 0,
+      title, floors, devices, rooms,
+      updated_by: p.updated_by || null,
+      updated_at: p.updated_at || null,
+    };
+  });
+}
+
+// Mockup library — every project's mockup with a first-photo thumbnail. Photos are inline data
+// URLs (megabytes per project), so the thumb ships only when reasonably sized; the card always
+// carries the count and links into the project's mockup tool.
+export function getMockupLibrary() {
+  const THUMB_CAP = 400 * 1024;   // chars — bigger first photos ship as count-only cards
+  return db.prepare(
+    `SELECT p.access_id, p.customer, p.address, p.contact_name, p.created_at,
+            t.data AS mockup_data, t.updated_by, t.updated_at
+       FROM projects p
+       LEFT JOIN project_tool_data t ON t.project_access_id = p.access_id AND t.tool = 'mockup'
+      ORDER BY (t.data IS NOT NULL) DESC, COALESCE(t.updated_at,'') DESC, p.id DESC`
+  ).all().map((p) => {
+    let count = 0, thumb = null;
+    try {
+      const d = JSON.parse(p.mockup_data || "null");
+      const photos = Array.isArray(d?.photos) ? d.photos.filter(Boolean) : [];
+      count = photos.length;
+      const first = photos.find((x) => typeof x === "string" && x.startsWith("data:image"));
+      if (first && first.length <= THUMB_CAP) thumb = first;
+    } catch { /* bad blob */ }
+    return {
+      access_id: p.access_id,
+      customer: p.customer || p.contact_name || p.access_id,
+      address: p.address || "",
+      has: count > 0,
+      count, thumb,
+      updated_by: p.updated_by || null,
+      updated_at: p.updated_at || null,
+    };
+  });
+}
+
 export function getSystemQrLibrary() {
   // Every project is listed, with or without a card. Ones that HAVE a card lead (that's what the
   // library is for), and within each group the newest project comes first.
