@@ -88,7 +88,7 @@ export function SvcDiagnosticPanel({ svcCall, view, preview = false }) {
                 <div className="svg-tag">Quick check</div>
                 <h3>Which camera is the problem?</h3>
                 <p className="svg-sub">This is your floor plan from our install — tap the camera acting up.</p>
-                <SvcCamMap cameras={cameras} floors={svcCall.camFloors || []} onPick={pickCam} />
+                <SvcCamMap accessId={svcCall.projectId} onPick={pickCam} />
                 <div className="svg-cams">
                   {cameras.map((c) => (
                     <button className="svg-cam" key={c.label} onClick={() => pickCam(c.label)}>

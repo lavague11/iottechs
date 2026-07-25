@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS } from "../../../lib/db";
+import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall } from "../../../lib/db";
 
 // Plain REST twin of getToolDataAction/saveToolDataAction (proposal-actions.js), used ONLY by
 // tool-sync.js and survey-approve.jsx's flushDraft — the two callers that move the mockup/survey
@@ -40,7 +40,20 @@ export async function GET(req) {
   const tool = searchParams.get("tool");
   if (!accessId || !TOOL_KEYS.has(tool)) return Response.json({ ok: false });
   const tok = await getSessionRole();
-  if (!(await canReadProject(tok, accessId))) return Response.json({ ok: false });
+  if (!(await canReadProject(tok, accessId))) {
+    // Service-call PIN visitor: the iot_svc grant covers READING the survey of the call's OWN
+    // companion project (the tap-the-camera map needs it). Survey only, that one project only.
+    if (tool === "survey") {
+      const jar = await cookies();
+      const svcTok = jar.get("iot_svc")?.value;
+      const svc = svcTok ? await parseSvcToken(svcTok) : null;
+      const call = svc?.svcId ? getServiceCall(svc.svcId) : null;
+      if (call?.svc_project_id && String(call.svc_project_id).toUpperCase() === String(accessId).toUpperCase()) {
+        return Response.json({ ok: true, saved: getToolData(accessId, tool) });
+      }
+    }
+    return Response.json({ ok: false });
+  }
   if (tool === "techs" && tok.role === "customer") return Response.json({ ok: false });
   return Response.json({ ok: true, saved: getToolData(accessId, tool) });
 }

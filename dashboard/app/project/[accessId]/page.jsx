@@ -271,7 +271,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
       // Named cameras + plan positions from this project's site survey (imported from the install
       // at call creation) — the customer taps the down camera on the map during the 60-second check.
       const { cameras, floors } = getSvcCameras(p.access_id);
-      svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments, cameras, camFloors: floors };
+      svcCall = { svc_id: sc.svc_id, stage: sc.stage, diagnostics, invoice, payments, cameras, camFloors: floors, projectId: p.access_id };
     }
   }
 

@@ -496,7 +496,10 @@
   function hasDecor(kind){return !!(PAT[kind]||SYM[kind]||SYMFILL[kind]);}
   function snapFloor(){floors[curFloor].B=B;floors[curFloor].markers=markers;floors[curFloor].uid=uid;}
   function loadFloor(i){curFloor=i;B=floors[i].B;markers=floors[i].markers;uid=floors[i].uid;hist=[];}
-  var __Q=new URLSearchParams(location.search),__PID=__Q.get('project')||'default',__RO=__Q.get('ro')==='1',__EMBED=__Q.get('embed')==='1'||!!__Q.get('project');
+  var __Q=new URLSearchParams(location.search),__PID=__Q.get('project')||'default',__PICK=__Q.get('pick')==='1',__RO=__Q.get('ro')==='1'||__PICK,__EMBED=__Q.get('embed')==='1'||!!__Q.get('project');
+  // Pick mode = the plan is a camera SELECTOR (customer diagnostic). Hide every editing surface —
+  // only the board with its pins remains, and cam pins post their tag to the parent on tap.
+  if(__PICK){var __ps=document.createElement('style');__ps.textContent='#toolbar,#side,.topbar,.tabs{display:none!important}.wrap,.main{grid-template-columns:1fr!important}.pin{padding:14px!important;margin:-14px!important}';document.addEventListener('DOMContentLoaded',function(){document.head.appendChild(__ps);});}
   var SKEY='iottechs_sitesurvey_v2_'+__PID;
   function surveyItems(){try{tagAll();var out=[];floors.forEach(function(f){(f.markers||[]).forEach(function(m){
     out.push({id:'m'+m.id,tag:m._tag,name:titleCase(m.name||TL[m.kind]||m.kind),floor:f.name});});});return out;}catch(e){return [];}}
@@ -1137,8 +1140,18 @@
     markers.forEach(function(m){var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';
       var p=document.createElement('div');p.className='pin'+(m.mode==='out'?' outdoor':'');p.setAttribute('data-kind',m.kind);p.setAttribute('data-mid',m.id);p.style.left=m.x+'%';p.style.top=m.y+'%';p.style.background=col;
       p.innerHTML=IC[m.kind]+'<span class="pnum" style="color:'+col+';border-color:'+col+'">'+m._tag+'</span>';
+      if(__PICK){
+        // Pick mode (customer diagnostic): the plan is a selector — tap a camera to report it.
+        if(m.kind==='cam'){
+          p.style.cursor='pointer';p.title=m._tag+' — tap to select';
+          p.addEventListener('click',function(e){e.stopPropagation();
+            try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurveyPick',project:__PID,tag:m._tag,name:m.name||'',floor:(floors.length>1?(floors[curFloor]&&floors[curFloor].name)||'':''),floorCount:floors.length},'*');}catch(_e){}
+          });
+        } else { p.style.cursor='default';p.title=m._tag; }
+      } else {
       p.style.cursor='crosshair';p.title=m._tag+(m.kind==='cam'?(m.mode==='out'?' · outdoor':' · indoor'):'')+' — drag to aim/size'+(m.arrow?' · drag back to center to clear':' · tap to remove');
       p.addEventListener('pointerdown',function(e){startPinArrow(e,m,p);});
+      }
       p.addEventListener('mouseenter',function(){hlMarker(m.id,true);});p.addEventListener('mouseleave',function(){hlMarker(m.id,false);});
       board.appendChild(p);pinEls.push({el:p,x:m.x,y:m.y});});
 
