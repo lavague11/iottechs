@@ -29,22 +29,26 @@ export function SvcDiagnosticPanel({ svcCall, view, preview = false }) {
   const isFix = cur && cur.type === "fix";
 
   // Camera identify — when the project's survey names the cameras, the customer points at the
-  // one that's down FIRST. Their pick is logged as the opening step of the diagnostic record.
+  // one(s) down FIRST. Taps toggle (multiple cams can be down at once); the confirmed set is
+  // logged as the opening step of the diagnostic record.
   const cameras = svcCall.cameras || [];
-  const [camPick, setCamPick] = useState(null);   // null = not asked/answered yet
-  const askCam = cameras.length > 0 && camPick === null;
+  const [camSel, setCamSel] = useState([]);
+  const [camDone, setCamDone] = useState(false);
+  const askCam = cameras.length > 0 && !camDone;
+  const CAM_Q = "Which camera(s) are the problem?";
 
-  function start() { setOpen(true); setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamPick(null); }
-  function pickCam(label) {
-    setCamPick(label);
-    setPath([{ question: "Which camera is the problem?", answer: label }]);
+  function start() { setOpen(true); setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamSel([]); setCamDone(false); }
+  function toggleCam(label) { setCamSel((s) => (s.includes(label) ? s.filter((x) => x !== label) : [...s, label])); }
+  function confirmCams(answer) {
+    setPath([{ question: CAM_Q, answer }]);
+    setCamDone(true);
   }
   function pickEntry(en) {
     setEntryTitle(en.title); setNode(en.start); setStarted(new Date().toISOString());
-    setPath((p) => p.filter((s) => s.question === "Which camera is the problem?"));
+    setPath((p) => p.filter((s) => s.question === CAM_Q));
   }
   function answer(q, opt) { setPath((p) => [...p, { question: q, answer: opt.label }]); setNode(opt.next); }
-  function restart() { setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamPick(null); }
+  function restart() { setNode(null); setPath([]); setEntryTitle(""); setSaved(false); setCamSel([]); setCamDone(false); }
 
   async function send() {
     if (!isFix || preview) return;
@@ -87,20 +91,22 @@ export function SvcDiagnosticPanel({ svcCall, view, preview = false }) {
               <>
                 <div className="svg-tag">Quick check</div>
                 <h3>Which camera is the problem?</h3>
-                <p className="svg-sub">This is your floor plan from our install — tap the camera acting up.</p>
-                <SvcCamMap accessId={svcCall.projectId} onPick={pickCam} />
+                <p className="svg-sub">This is your floor plan from our install — tap every camera acting up.</p>
+                <SvcCamMap accessId={svcCall.projectId} onPick={toggleCam} />
                 <div className="svg-cams">
                   {cameras.map((c) => (
-                    <button className="svg-cam" key={c.label} onClick={() => pickCam(c.label)}>
+                    <button className={`svg-cam${camSel.includes(c.label) ? " on" : ""}`} key={c.label} onClick={() => toggleCam(c.label)}>
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                       {c.label}
                     </button>
                   ))}
                 </div>
-                <button className="svg-pick" onClick={() => pickCam("Not sure / more than one")}>
-                  <span className="svg-pick-t">Not sure / more than one</span>
-                  <span className="svg-pick-h">That&rsquo;s fine — we&rsquo;ll figure it out together</span>
-                </button>
+                <div className="svg-outacts">
+                  <button className="svg-btn gold" disabled={!camSel.length} onClick={() => confirmCams(camSel.join(", "))}>
+                    {camSel.length > 1 ? `Continue with ${camSel.length} cameras` : "Continue"}
+                  </button>
+                  <button className="svg-btn ghost" onClick={() => confirmCams("Not sure")}>Not sure</button>
+                </div>
               </>
             ) : !node ? (
               <>
@@ -259,6 +265,8 @@ const CSS = `
 .pvx .svg-cams{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .pvx .svg-cam{display:inline-flex;align-items:center;gap:7px;padding:10px 15px;border:1.5px solid var(--line);border-radius:var(--r-pill);background:var(--bg);cursor:pointer;font-family:inherit;font-size:var(--fs-md);font-weight:700;color:var(--ink);transition:border-color .12s,background .12s}
 .pvx .svg-cam:hover{border-color:var(--gold);background:#fdfaf2}
+.pvx .svg-cam.on{border-color:var(--gold);background:var(--gold);color:#fff}
+.pvx .svg-cam.on svg{color:#fff}
 .pvx .svg-cam svg{color:var(--gold-deep)}
 .pvx .svg-step{font-size:var(--fs-xs);font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:8px}
 .pvx .svg-hint{background:var(--accent-soft);color:#2540c0;border-radius:10px;padding:8px 12px;font-size:var(--fs-sm);margin:0 0 12px;font-weight:600}
