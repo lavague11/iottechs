@@ -221,7 +221,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
                 <div className="st-tag">Quick check</div>
                 <h2>Which camera is the problem?</h2>
                 <p className="st-pick-sub">This is your floor plan from our install — tap every camera acting up.</p>
-                <SvcCamMap accessId={call.svc_project_id} onPick={toggleCam} />
+                <SvcCamMap accessId={call.svc_project_id} onPick={toggleCam} cameras={cameras} selected={camSel} />
                 <div className="st-cams">
                   {cameras.map((c) => (
                     <button className={`st-cam${camSel.includes(c.label) ? " on" : ""}`} key={c.label} onClick={() => toggleCam(c.label)}>

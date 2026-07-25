@@ -2678,6 +2678,29 @@ export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {
   return getServiceCall(svcId);
 }
 
+// Office links the call to the system it's about AFTER intake (anonymous callers often can't or
+// don't). Sets the reference, backfills a missing address, and imports the install's site survey
+// onto the companion project when the companion has none — same as a link made at intake.
+export function linkServiceCallProject(svcId, accessId, { actor_role, actor_name } = {}) {
+  const call = getServiceCall(svcId);
+  const proj = getJobByAccessId(accessId);
+  if (!call || !proj) return null;
+  db.prepare("UPDATE service_calls SET project_access_id = ?, address = COALESCE(NULLIF(address,''), ?), updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE")
+    .run(proj.access_id, proj.address || null, String(call.svc_id));
+  logServiceCallEvent(call.svc_id, { kind: "note", detail: `Linked to system ${proj.access_id}`, actor_role, actor_name });
+  if (call.svc_project_id) {
+    try {
+      const src = getToolData(proj.access_id, "survey");
+      const dst = getToolData(call.svc_project_id, "survey");
+      if (src?.data && !dst?.data) {
+        saveToolData(call.svc_project_id, "survey", src.data, "Imported from " + proj.access_id);
+        logServiceCallEvent(call.svc_id, { kind: "note", detail: `Site survey imported from ${proj.access_id}`, actor_role: "system", actor_name: null });
+      }
+    } catch { /* unreadable survey — skip */ }
+  }
+  return getServiceCall(svcId);
+}
+
 // Assign (or clear) the technician on a service call, logged to the timeline.
 export function assignServiceCallTech(svcId, techId, techName, { actor_role, actor_name } = {}) {
   const cur = getServiceCall(svcId);

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic, saveSvcInvoice, sendSvcInvoice, voidSvcInvoice, addSvcPayment } from "../../lib/db";
+import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic, saveSvcInvoice, sendSvcInvoice, voidSvcInvoice, addSvcPayment, linkServiceCallProject } from "../../lib/db";
 
 async function requireStaff(roles = ["admin", "manager", "tech"]) {
   const user = await getSessionUser();
@@ -90,6 +90,17 @@ export async function recordSvcPaymentAction(svcId, amount, method, paidAt) {
   revalidatePath(`/service-calls/${svcId}`);
   revalidatePath(`/service-call/${svcId}`);
   return { ok: true, payments };
+}
+
+// Link the call to the system it's about (post-intake). Admin/manager only.
+export async function linkSvcProjectAction(svcId, accessId) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  const r = linkServiceCallProject(svcId, accessId, { actor_role: user.role, actor_name: user.name });
+  if (!r) return { ok: false, error: "Could not link." };
+  revalidatePath(`/service-calls/${svcId}`);
+  revalidatePath(`/service-call/${svcId}`);
+  return { ok: true, call: r };
 }
 
 export async function assignSvcTechAction(svcId, techId, techName) {

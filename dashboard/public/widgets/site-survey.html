@@ -499,7 +499,13 @@
   var __Q=new URLSearchParams(location.search),__PID=__Q.get('project')||'default',__PICK=__Q.get('pick')==='1',__RO=__Q.get('ro')==='1'||__PICK,__EMBED=__Q.get('embed')==='1'||!!__Q.get('project');
   // Pick mode = the plan is a camera SELECTOR (customer diagnostic). Hide every editing surface —
   // only the board with its pins remains, and cam pins post their tag to the parent on tap.
-  if(__PICK){var __ps=document.createElement('style');__ps.textContent='#toolbar,#side,.topbar,.tabs{display:none!important}.wrap,.main{grid-template-columns:1fr!important}.pin{padding:14px!important;margin:-14px!important}';document.addEventListener('DOMContentLoaded',function(){document.head.appendChild(__ps);});}
+  var __pickSel={};
+  if(__PICK){var __ps=document.createElement('style');__ps.textContent='#toolbar,#side,.topbar,.tabs{display:none!important}.wrap,.main{grid-template-columns:1fr!important}.pin{padding:14px!important;margin:-14px!important}.pin.picked{box-shadow:0 0 0 4px #C9A96E,0 0 0 8px rgba(201,169,110,.35)!important;z-index:60!important}';document.addEventListener('DOMContentLoaded',function(){document.head.appendChild(__ps);});
+    // Parent keeps the source of truth for the selection; it mirrors it here so tapped pins glow.
+    window.addEventListener('message',function(e){var d=e&&e.data;if(!d||d.type!=='iotSurveyPickSel')return;
+      __pickSel={};(d.tags||[]).forEach(function(t){__pickSel[t]=1;});
+      document.querySelectorAll('.pin[data-tag]').forEach(function(p){p.classList.toggle('picked',!!__pickSel[p.getAttribute('data-tag')]);});
+    });}
   var SKEY='iottechs_sitesurvey_v2_'+__PID;
   function surveyItems(){try{tagAll();var out=[];floors.forEach(function(f){(f.markers||[]).forEach(function(m){
     out.push({id:'m'+m.id,tag:m._tag,name:titleCase(m.name||TL[m.kind]||m.kind),floor:f.name});});});return out;}catch(e){return [];}}
@@ -1143,6 +1149,7 @@
       if(__PICK){
         // Pick mode (customer diagnostic): the plan is a selector — tap a camera to report it.
         if(m.kind==='cam'){
+          p.setAttribute('data-tag',m._tag);if(__pickSel[m._tag])p.classList.add('picked');
           p.style.cursor='pointer';p.title=m._tag+' — tap to select';
           p.addEventListener('click',function(e){e.stopPropagation();
             try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurveyPick',project:__PID,tag:m._tag,name:m.name||'',floor:(floors.length>1?(floors[curFloor]&&floors[curFloor].name)||'':''),floorCount:floors.length},'*');}catch(_e){}

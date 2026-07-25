@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { seedToolData } from "../project/[accessId]/tool-sync";
 
 // Tap-the-camera-on-the-plan picker — embeds the REAL site-survey widget in pick mode, so the
@@ -8,8 +8,18 @@ import { seedToolData } from "../project/[accessId]/tool-sync";
 // FOV cones, every marker) and taps the camera that's down. The widget posts iotSurveyPick;
 // we hand the composed label (same format as getSvcCameras) back to the diagnostic flow.
 // Used by both 60-second-check modals (gateway + tracker).
-export default function SvcCamMap({ accessId, onPick }) {
+export default function SvcCamMap({ accessId, onPick, cameras = [], selected = [] }) {
   const [ready, setReady] = useState(false);
+  const frameRef = useRef(null);
+
+  // Mirror the selection onto the map so tapped pins glow (the parent owns the truth; the
+  // widget just paints it). Labels → survey tags via the cameras list.
+  useEffect(() => {
+    const w = frameRef.current?.contentWindow;
+    if (!w) return;
+    const tags = cameras.filter((c) => selected.includes(c.label)).map((c) => c.tag);
+    try { w.postMessage({ type: "iotSurveyPickSel", tags }, "*"); } catch { /* frame not ready */ }
+  }, [selected, cameras, ready]);
 
   // The widget reads its data from localStorage — seed it from the server first (a customer's
   // browser has no local draft; /api/tool-data authorizes their session, project grant, or
@@ -42,6 +52,7 @@ export default function SvcCamMap({ accessId, onPick }) {
     <div className="scm">
       {ready ? (
         <iframe
+          ref={frameRef}
           className="scm-frame"
           title="Tap the camera on your floor plan"
           src={`/widgets/site-survey.html?embed=1&project=${encodeURIComponent(accessId)}&ro=1&pick=1`}

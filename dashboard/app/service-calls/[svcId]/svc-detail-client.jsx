@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction } from "../actions";
+import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction, linkSvcProjectAction } from "../actions";
 import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 
 // Three steps, same as the customer tracker — the 8 internal stage keys stay in the DB, rolled
@@ -23,7 +23,7 @@ const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: 
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
-export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [] }) {
+export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [], linkable = [] }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -35,6 +35,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   function setStage(stage) { startTx(async () => { const r = await setSvcStageAction(call.svc_id, stage); if (r?.ok) router.refresh(); }); }
   function assign(id, name) { startTx(async () => { const r = await assignSvcTechAction(call.svc_id, id, name); if (r?.ok) router.refresh(); }); }
   function saveNote() { if (!note.trim()) return; startTx(async () => { const r = await addSvcNoteAction(call.svc_id, note); if (r?.ok) { setNote(""); router.refresh(); } }); }
+  function linkProject(accessId) { if (!accessId) return; startTx(async () => { const r = await linkSvcProjectAction(call.svc_id, accessId); if (r?.ok) router.refresh(); }); }
 
   // ---- Staff TRACE diagnostic runner (tech trees; same concept as the customer's 60-second check) ----
   const [runOpen, setRunOpen] = useState(false);
@@ -170,7 +171,18 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
               <dt>Phone</dt><dd>{call.contact_phone ? <a href={`tel:${call.contact_phone}`}>{call.contact_phone}</a> : "—"}</dd>
               <dt>Email</dt><dd>{call.contact_email ? <a href={`mailto:${call.contact_email}`}>{call.contact_email}</a> : "—"}</dd>
               <dt>Address</dt><dd>{call.address ? <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(call.address)}`} target="_blank" rel="noopener noreferrer">{call.address}</a> : "—"}</dd>
-              <dt>System</dt><dd>{call.project_access_id ? <Link href={`/project/${call.project_access_id}`} className="mono">{call.project_access_id}</Link> : "—"}</dd>
+              <dt>System</dt>
+              <dd>
+                {call.project_access_id ? (
+                  <Link href={`/project/${call.project_access_id}`} className="mono">{call.project_access_id}</Link>
+                ) : canManage && linkable.length > 0 ? (
+                  // Not linked at intake — pick the system this call is about (imports its survey too).
+                  <select className="apx-input svc-assign" defaultValue="" disabled={pending} onChange={(e) => linkProject(e.target.value)}>
+                    <option value="" disabled>Link a system…</option>
+                    {linkable.map((p) => <option key={p.access_id} value={p.access_id}>{p.access_id} — {p.customer}</option>)}
+                  </select>
+                ) : "—"}
+              </dd>
               <dt>Opened</dt><dd>{fmt(call.created_at)}</dd>
               <dt>Tech</dt>
               <dd>

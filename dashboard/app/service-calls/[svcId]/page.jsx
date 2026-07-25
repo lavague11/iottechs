@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments, ensureSvcProject } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments, ensureSvcProject, getAllJobs } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import { SVC_RATES } from "../../../lib/spec";
 import SvcDetailClient from "./svc-detail-client";
@@ -28,6 +28,11 @@ export default async function ServiceCallDetailPage({ params }) {
   // never receives it (role visibility rule, not just hidden UI).
   const invoice  = canManage ? getSvcInvoice(call.svc_id) : null;
   const payments = canManage ? getSvcPayments(call.svc_id) : [];
+  // Unlinked call → office picks the system it's about (companion projects excluded — a call
+  // never links to itself). Slim list, admin/manager only, only while unlinked.
+  const linkable = canManage && !call.project_access_id
+    ? getAllJobs().filter((j) => j.project_type !== "C").map((j) => ({ access_id: j.access_id, customer: j.customer }))
+    : [];
 
   // node:sqlite rows are null-prototype objects; plain-clone before crossing to the client component.
   const plain = (r) => (r ? { ...r } : r);
@@ -53,6 +58,7 @@ export default async function ServiceCallDetailPage({ params }) {
       invoice={plain(invoice)}
       payments={payments.map(plain)}
       rates={canManage ? SVC_RATES : []}
+      linkable={linkable.map(plain)}
     />
   );
 }
