@@ -3456,11 +3456,23 @@ export async function getProposalViewsWithGeo(accessId) {
 
 // ---- Proposals (versioned; see table DDL in init) ----
 // Active = newest non-superseded row for the project.
+// Older proposals stored the preparer as their login email (created_by_name = "admin@…").
+// Resolve it to the person's actual name for display — look the user up by email, and fall back
+// to a title-cased local-part so a document never shows a raw email as the "Prepared by".
+function resolvePreparerName(v) {
+  const s = String(v || "").trim();
+  if (!s || !s.includes("@")) return s;
+  const u = getUserByEmail(s);
+  if (u?.name) return u.name;
+  const local = s.split("@")[0].replace(/[._-]+/g, " ").trim();
+  return local.split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+}
+
 export function getActiveProposal(accessId) {
   const r = db.prepare(
     "SELECT * FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
   ).get(String(accessId));
-  return r ? { ...r } : null;
+  return r ? { ...r, created_by_name: resolvePreparerName(r.created_by_name) } : null;
 }
 export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at FROM proposals WHERE project_access_id=? ORDER BY version DESC")

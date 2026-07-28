@@ -117,7 +117,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     return yPos + 20;
   };
 
-  const tableRow = (num, desc, qty, unit, total, yPos) => {
+  // `strike`: waived line — the Unit & Total prices print red with a line through them (mirrors the
+  // on-screen waived treatment). A single "$300.00" fits its column, so nothing overlaps the Unit
+  // cell the way the old "$0.00 (waived $300.00)" string did.
+  const RED = [192, 57, 43];
+  const tableRow = (num, desc, qty, unit, total, yPos, strike = false) => {
     const bg = rowIdx % 2 === 0 ? WHITE : MIST;
     doc.setFillColor(...bg);
     doc.rect(lm, yPos, rw, 18, "F");
@@ -127,8 +131,18 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.text(num, lm + 12, yPos + 12, { align: "center" });
     doc.text(String(desc), lm + 22, yPos + 12, { maxWidth: rw * 0.66 });
     doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
-    doc.text(unit, lm + rw * 0.86, yPos + 12, { align: "right" });
-    doc.text(total, lm + rw - 6, yPos + 12, { align: "right" });
+    const price = (txt, x) => {
+      doc.setTextColor(...(strike ? RED : INK));
+      doc.text(txt, x, yPos + 12, { align: "right" });
+      if (strike) {   // strike-through line across the price
+        const w = doc.getTextWidth(txt);
+        doc.setDrawColor(...RED); doc.setLineWidth(0.8);
+        doc.line(x - w, yPos + 9, x, yPos + 9);
+      }
+    };
+    price(unit, lm + rw * 0.86);
+    price(total, lm + rw - 6);
+    doc.setTextColor(...INK);
     rowIdx++;
     return yPos + 18;
   };
@@ -230,10 +244,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         secTotal += tot;
         const hasSub = (it.sub || []).length > 0;
         y = tableRow(
-          String(lineNum), titleCase(it.name) + (it.waived ? "  — WAIVED" : ""),
+          String(lineNum), titleCase(it.name) + (it.waived ? "  — Waived" : ""),
           hasSub ? "1" : String(it.qty ?? 1),
           "$" + money(hasSub ? gross : it.price),
-          it.waived ? "$0.00 (waived $" + money(gross) + ")" : "$" + money(tot), y
+          "$" + money(it.waived ? gross : tot), y, !!it.waived
         );
         lineNum++;
       });
@@ -420,38 +434,44 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     } catch { return null; }
   };
 
+  // Mockup only renders when there are real photos (data-URL images); an empty tool → no page.
   const mockupPhotos = (attachments.mockupPhotos || [])
-    .filter((x) => typeof x === "string" && x.startsWith("data:image")).slice(0, 8);
+    .filter((x) => typeof x === "string" && x.startsWith("data:image")).slice(0, 16);
   const surveyImages = (attachments.surveyImages || []).filter((f) => f && f.img);
 
   if (mockupPhotos.length) {
+    // The mockups are iPhone photos (portrait) — lay them out 4 across, up to 4 rows (a 4×4 grid),
+    // each photo contained in its cell so nothing is cropped or stretched.
     let y = newPage();
     y = sectionHeader("SYSTEM MOCKUP", y) + 12;
-    const gap = 14, colW = (rw - gap) / 2, cellH = 168;
+    const cols = 4, gap = 10, colW = (rw - (cols - 1) * gap) / cols, cellH = 132;
     mockupPhotos.forEach((src, i) => {
-      const col = i % 2;
+      const col = i % cols;
       if (col === 0) y = ensureRoom(y, cellH + gap);
       const d = fit(src, colW, cellH);
       if (d) {
-        const x = lm + col * (colW + gap) + (colW - d.w) / 2;
+        const x = lm + col * (colW + gap) + (colW - d.w) / 2;   // center in the cell
         try { doc.addImage(src, d.type, x, y + (cellH - d.h) / 2, d.w, d.h); } catch { /* bad image */ }
       }
-      if (col === 1 || i === mockupPhotos.length - 1) y += cellH + gap;
+      if (col === cols - 1 || i === mockupPhotos.length - 1) y += cellH + gap;
     });
   }
 
   if (surveyImages.length) {
-    // Each floor gets its OWN page and fills nearly the whole sheet — wider than the text column
-    // (a floor plan is the point of the page, so give it the room). Portrait plans grow to the full
-    // available height; landscape/square ones grow to the full width.
-    const boxX = 28.8, boxW = W - 57.6;   // ~554pt: page width minus a slim margin each side
+    // Each floor gets its own page: a gold-bordered frame spanning the content area, with the floor
+    // plan scaled to fit inside and centered on BOTH axes within that frame.
+    const margin = 28.8, frameX = margin, frameW = W - 2 * margin, pad = 10;
     surveyImages.forEach((f) => {
       let y = newPage();
-      y = sectionHeader("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), y) + 16;
-      const maxH = (H - 46) - y;           // all remaining height down to the footer
-      const d = fit(f.img, boxW, maxH);
+      y = sectionHeader("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), y) + 14;
+      const frameTop = y, frameBot = H - 46, frameH = frameBot - frameTop;
+      const d = fit(f.img, frameW - 2 * pad, frameH - 2 * pad);
       if (!d) return;
-      try { doc.addImage(f.img, "PNG", boxX + (boxW - d.w) / 2, y, d.w, d.h); } catch { /* bad image */ }
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
+      doc.rect(frameX, frameTop, frameW, frameH, "S");                 // the border
+      const imgX = frameX + (frameW - d.w) / 2;                        // centered horizontally
+      const imgY = frameTop + (frameH - d.h) / 2;                      // centered vertically
+      try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image */ }
     });
   }
 
