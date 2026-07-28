@@ -441,19 +441,17 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   }
 
   if (surveyImages.length) {
-    let y = newPage();
-    y = sectionHeader("SITE SURVEY", y) + 14;
+    // Each floor gets its OWN page and fills nearly the whole sheet — wider than the text column
+    // (a floor plan is the point of the page, so give it the room). Portrait plans grow to the full
+    // available height; landscape/square ones grow to the full width.
+    const boxX = 28.8, boxW = W - 57.6;   // ~554pt: page width minus a slim margin each side
     surveyImages.forEach((f) => {
-      const d = fit(f.img, rw, H - 230);
+      let y = newPage();
+      y = sectionHeader("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), y) + 16;
+      const maxH = (H - 46) - y;           // all remaining height down to the footer
+      const d = fit(f.img, boxW, maxH);
       if (!d) return;
-      const need = d.h + (surveyImages.length > 1 ? 16 : 4);
-      if (y + need > H - 50) { y = newPage(); }
-      if (surveyImages.length > 1 && f.name) {
-        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
-        doc.text(String(f.name), lm, y + 2); y += 12;
-      }
-      try { doc.addImage(f.img, "PNG", lm + (rw - d.w) / 2, y, d.w, d.h); } catch { /* bad image */ }
-      y += d.h + 18;
+      try { doc.addImage(f.img, "PNG", boxX + (boxW - d.w) / 2, y, d.w, d.h); } catch { /* bad image */ }
     });
   }
 
