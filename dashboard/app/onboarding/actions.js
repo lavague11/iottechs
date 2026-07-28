@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
 import {
   getApplication, setApplicationStage, setApplicationReview, setApplicationOnboarding,
-  hireApplicant, logApplicationEvent,
+  hireApplicant, logApplicationEvent, verifyEmergencyContact,
 } from "../../lib/db";
 
 // Hiring is an admin/manager function — a tech must never review or advance applications.
@@ -56,6 +56,16 @@ export async function setAppOnboardingAction(appId, patch) {
   if (!r) return { ok: false, error: "Could not update." };
   touch(appId);
   return { ok: true, app: r };
+}
+
+// Office marks the emergency contact confirmed (they called it). Admin/manager.
+export async function verifyEmergencyAction(appId, verified, note) {
+  const { user, error } = await requireHiring();
+  if (error) return { ok: false, error };
+  const r = verifyEmergencyContact(appId, !!verified, { actor_role: user.role, actor_name: user.name, note });
+  if (!r) return { ok: false, error: "Could not update." };
+  touch(appId);
+  return { ok: true };
 }
 
 // Hiring creates a real staff account — admin only (a manager can move stages but not mint logins).

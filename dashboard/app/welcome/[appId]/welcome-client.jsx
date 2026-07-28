@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark } from "../../components/brand";
+import AddressAutocomplete from "../../components/address-autocomplete";
+import DlScanner from "../../components/dl-scanner";
 import { saveOnboardingProfileAction, signOnboardingDocAction } from "./actions";
 
 // New-hire onboarding — the part THEY fill in after applying. Two tasks: their details, and
@@ -122,6 +124,20 @@ export default function WelcomeClient({ app, staff }) {
 
           <form onSubmit={saveDetails}>
             <fieldset disabled={locked || busy} className="wl-fs">
+              {/* Scan first — it fills name, DOB, address and licence in one shot */}
+              <DlScanner onScan={(d) => {
+                setF((s) => ({
+                  ...s,
+                  legal_name:    d.legal_name    || s.legal_name,
+                  dob:           d.dob           || s.dob,
+                  address:       d.address       || s.address,
+                  license_no:    d.license_no    || s.license_no,
+                  license_state: d.license_state || s.license_state,
+                  license_exp:   d.license_exp   || s.license_exp,
+                }));
+                setSaved(false);
+              }} />
+
               <label className="wl-l" htmlFor="w-legal">Legal name (as on your ID)</label>
               <input id="w-legal" className="wl-in" value={f.legal_name} onChange={set("legal_name")} placeholder="Maria Santos" />
 
@@ -129,10 +145,16 @@ export default function WelcomeClient({ app, staff }) {
                 <div><label className="wl-l" htmlFor="w-dob">Date of birth</label>
                   <input id="w-dob" className="wl-in" type="date" value={f.dob} onChange={set("dob")} /></div>
                 <div><label className="wl-l" htmlFor="w-addr">Home address</label>
-                  <input id="w-addr" className="wl-in" value={f.address} onChange={set("address")} placeholder="Street, town, ZIP" /></div>
+                  <AddressAutocomplete id="w-addr" className="wl-in" value={f.address} placeholder="Start typing your address…"
+                    onChange={(v) => { setF((s) => ({ ...s, address: v })); setSaved(false); }} /></div>
               </div>
 
-              <div className="wl-sec">Emergency contact</div>
+              <div className="wl-sec">
+                Emergency contact
+                {app.emergency_verified
+                  ? <span className="wl-vchip ok">✓ Verified by our office</span>
+                  : <span className="wl-vchip">We&rsquo;ll call to confirm</span>}
+              </div>
               <div className="wl-three">
                 <div><label className="wl-l" htmlFor="w-en">Name</label>
                   <input id="w-en" className="wl-in" value={f.emergency_name} onChange={set("emergency_name")} placeholder="Full name" /></div>
@@ -256,7 +278,9 @@ const CSS = `
 .wl-in:focus{outline:none;border-color:var(--gold);background:#fff}
 .wl-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .wl-three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-.wl-sec{margin:20px 0 0;padding-top:16px;border-top:1px solid var(--line);font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--gold-deep)}
+.wl-sec{margin:20px 0 0;padding-top:16px;border-top:1px solid var(--line);font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--gold-deep);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.wl-vchip{font-size:.68rem;font-weight:700;text-transform:none;letter-spacing:0;color:var(--muted);background:var(--bg-soft);border-radius:20px;padding:3px 10px}
+.wl-vchip.ok{color:var(--green);background:#e7f6ec}
 .wl-err{margin-top:14px;color:#c9382b;background:#fdecec;border:1px solid #f2c4c4;border-radius:10px;padding:10px 13px;font-size:.86rem;font-weight:600}
 .wl-btn{display:inline-flex;align-items:center;justify-content:center;font-weight:700;border-radius:11px;cursor:pointer;border:none;font-size:.94rem;font-family:inherit;transition:transform .15s,background .2s}
 .wl-btn.gold{background:var(--gold);color:var(--ink);padding:13px 24px}

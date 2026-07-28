@@ -2773,10 +2773,39 @@ export function saveOnboardingProfile(appId, profile, { actor_name } = {}) {
     boot:   s(profile?.boot, 12),
     submitted_at: new Date().toISOString(),
   };
+  // An emergency contact is only worth having if someone confirmed it answers. The office
+  // verifies by calling; editing the name or number clears that verification so a changed
+  // contact can never inherit an old confirmation.
+  const prev = (cur.onboarding || {}).profile || {};
+  const same = prev.emergency_name === clean.emergency_name && prev.emergency_phone === clean.emergency_phone;
   const next = { ...(cur.onboarding || {}), profile: clean };
+  if (same && (cur.onboarding || {}).emergency_verified) next.emergency_verified = cur.onboarding.emergency_verified;
+  else delete next.emergency_verified;
   db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
     .run(JSON.stringify(next), String(cur.app_id));
   logApplicationEvent(cur.app_id, { kind: "onboarding", detail: "New hire submitted their details", actor_role: "applicant", actor_name: actor_name || cur.name });
+  return getApplication(appId);
+}
+
+// Office confirms the emergency contact actually answers. Cleared automatically if the new hire
+// later edits the name or number (see saveOnboardingProfile), so a stale contact can't look verified.
+export function verifyEmergencyContact(appId, verified, { actor_role, actor_name, note } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const prof = (cur.onboarding || {}).profile || {};
+  const next = { ...(cur.onboarding || {}) };
+  if (verified) {
+    next.emergency_verified = { at: new Date().toISOString(), by: actor_name || "Office", note: String(note || "").slice(0, 200) || null };
+  } else {
+    delete next.emergency_verified;
+  }
+  db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(next), String(cur.app_id));
+  logApplicationEvent(cur.app_id, {
+    kind: "onboarding",
+    detail: verified ? `Emergency contact verified — ${prof.emergency_name || "contact"} reached` : "Emergency contact verification cleared",
+    actor_role, actor_name,
+  });
   return getApplication(appId);
 }
 

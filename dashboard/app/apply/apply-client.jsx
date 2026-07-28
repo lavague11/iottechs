@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Wordmark } from "../components/brand";
+import AddressAutocomplete from "../components/address-autocomplete";
 
 const POSITIONS = [
   { key: "tech", label: "Technician", hint: "Install & service CCTV, low-voltage" },
@@ -105,7 +106,7 @@ export default function ApplyClient() {
               <div><label className="ap-label" htmlFor="ap-email">Email</label>
                 <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
               <div><label className="ap-label" htmlFor="ap-addr">Where are you based? <span className="ap-opt">(optional)</span></label>
-                <input id="ap-addr" className="ap-in" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Town or ZIP" autoComplete="address-level2" /></div>
+                <AddressAutocomplete id="ap-addr" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your town or address…" /></div>
             </div>
 
             <label className="ap-label">Experience in this kind of work</label>

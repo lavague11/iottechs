@@ -61,6 +61,7 @@ export default async function WelcomePage({ params }) {
     start_date: app.start_date,
     profile: ob.profile || null,
     signed: ob.signed || {},
+    emergency_verified: ob.emergency_verified || null,
   };
 
   return <WelcomeClient app={safe} staff={!!auth.staff} />;

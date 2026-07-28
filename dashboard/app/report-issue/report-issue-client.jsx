@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Wordmark } from "../components/brand";
+import AddressAutocomplete from "../components/address-autocomplete";
 
 const CATEGORIES = [
   { key: "camera", label: "Camera offline", hint: "A camera is black, frozen, or dropped off", icon: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></> },
@@ -149,8 +150,8 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
               </div>
               <div>
                 <label className="ri-label" htmlFor="ri-addr">Service address {pickedProject ? "" : <span className="ri-opt">(optional)</span>}</label>
-                <input id="ri-addr" className="ri-input" value={address} onChange={(e) => setAddress(e.target.value)}
-                  placeholder={pickedProject?.address || "Where is the system?"} autoComplete="street-address" />
+                <AddressAutocomplete id="ri-addr" className="ri-input" value={address} onChange={setAddress}
+                  placeholder={pickedProject?.address || "Where is the system?"} />
               </div>
             </div>
 

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction } from "../actions";
+import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction } from "../actions";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -37,6 +37,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const obDone = OB_ITEMS.filter(([k]) => ob[k]).length;
   const prof = ob.profile || null;        // what the new hire filled in themselves
   const signed = ob.signed || {};         // their typed signatures on the three agreements
+  const emgVerified = ob.emergency_verified || null;
 
   const run = (fn) => startTx(async () => {
     const r = await fn();
@@ -168,7 +169,27 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
                 <dt>Legal name</dt><dd>{prof.legal_name || "—"}</dd>
                 <dt>Date of birth</dt><dd>{prof.dob || "—"}</dd>
                 <dt>Address</dt><dd>{prof.address || "—"}</dd>
-                <dt>Emergency</dt><dd>{prof.emergency_name ? `${prof.emergency_name}${prof.emergency_rel ? ` (${prof.emergency_rel})` : ""}${prof.emergency_phone ? ` · ${prof.emergency_phone}` : ""}` : "—"}</dd>
+                <dt>Emergency</dt>
+                <dd>
+                  {prof.emergency_name ? (
+                    <div className="ob-emg">
+                      <span>
+                        {prof.emergency_name}{prof.emergency_rel ? ` (${prof.emergency_rel})` : ""}
+                        {prof.emergency_phone && <> · <a href={`tel:${prof.emergency_phone}`}>{prof.emergency_phone}</a></>}
+                      </span>
+                      {emgVerified ? (
+                        <>
+                          <span className="ob-vok">✓ Verified · {emgVerified.by} · {fmt(emgVerified.at)}</span>
+                          <button className="ob-vclear" disabled={pending} onClick={() => run(() => verifyEmergencyAction(app.app_id, false))}>Clear</button>
+                        </>
+                      ) : (
+                        <button className="ob-vbtn" disabled={pending}
+                          title="Call the contact, then mark it confirmed"
+                          onClick={() => run(() => verifyEmergencyAction(app.app_id, true))}>Mark verified</button>
+                      )}
+                    </div>
+                  ) : "—"}
+                </dd>
                 <dt>Licence</dt><dd>{prof.license_no ? `${prof.license_no}${prof.license_state ? ` · ${prof.license_state}` : ""}${prof.license_exp ? ` · exp ${prof.license_exp}` : ""}` : "—"}</dd>
                 <dt>Sizes</dt><dd>{[prof.shirt && `Shirt ${prof.shirt}`, prof.jacket && `Jacket ${prof.jacket}`, prof.boot && `Boot ${prof.boot}`].filter(Boolean).join(" · ") || "—"}</dd>
               </dl>
@@ -295,6 +316,11 @@ const CSS = `
 .apx .ob-check.on{border-color:#1c8a45;background:#f4fbf6;color:var(--ink)}
 .apx .ob-check-box{width:20px;height:20px;flex-shrink:0;border-radius:6px;border:1.5px solid var(--line);display:grid;place-items:center;font-size:.72rem;font-weight:800;color:#fff}
 .apx .ob-check.on .ob-check-box{background:#1c8a45;border-color:#1c8a45}
+.apx .ob-emg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.apx .ob-vok{font-size:.72rem;font-weight:700;color:#1c8a45;background:#e7f6ec;border-radius:20px;padding:2px 10px}
+.apx .ob-vbtn{font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit}
+.apx .ob-vbtn:hover{filter:brightness(1.05)}
+.apx .ob-vclear{font-size:.7rem;font-weight:700;color:var(--muted);background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline}
 .apx .ob-sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 @media(max-width:800px){.apx .ob-sigs{grid-template-columns:1fr}}
 .apx .ob-sig{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;background:#fff}
