@@ -9,7 +9,7 @@ import {
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
-  getProjectNotes, getScopedNotes, addProjectNote, setProjectPoc, maybeAutoAdvance,
+  getProjectNotes, getScopedNotes, addProjectNote, setProjectPoc, maybeAutoAdvance, advanceStageForward,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -120,11 +120,15 @@ export async function sendProposalAction(accessId) {
   const hasItems = payload.options?.some((o) => o.services?.some((s) => s.items?.length));
   if (!hasItems) return { error: "Add at least one line item first." };
   const row = markProposalSent(accessId, actorName(tok));
+  // Sending the proposal is proof we're past inquiry/site_survey — jump the project to the
+  // proposal stage (forward-only; never rewinds a job already further along). It parks there
+  // until the customer accepts an option, which is what advances it onward.
+  const stage = advanceStageForward(accessId, "proposal", actorName(tok));
   // Notify the customer their proposal is ready — fire-and-forget so a slow/failed
   // email never blocks or fails the send. No-op until RESEND_API_KEY is configured.
   emailProposalReady(accessId).catch(() => {});
   await revalidate(accessId);
-  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+  return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
 }
 
 export async function reviseProposalAction(accessId) {

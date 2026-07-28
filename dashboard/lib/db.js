@@ -4,7 +4,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
-import { missingReqs, nextStageOf, AUTO_STAGES } from "./stage-flow.js";
+import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint } from "./tool-data.js";
 import { optionTotals } from "./proposal.js";
 
@@ -1715,6 +1715,20 @@ export function maybeAutoAdvance(accessId) {
     updateStage(accessId, next);
   }
   return buildStageFacts(accessId)?.stage || null;
+}
+
+// Forward-only jump to a specific stage: moves the project TO `target` only when target is
+// strictly later in MASTER_ORDER than where it sits now — never rewinds a job that's already
+// further along. Used when an action is itself proof the earlier stages are done (e.g. sending
+// a proposal means we're past inquiry/site_survey regardless of their sign-offs). After the
+// jump it runs maybeAutoAdvance so a fully-satisfied stage still chains forward normally.
+export function advanceStageForward(accessId, target, byName) {
+  const facts = buildStageFacts(accessId);
+  if (!facts) return null;
+  const cur = MASTER_ORDER.indexOf(facts.stage);
+  const to  = MASTER_ORDER.indexOf(target);
+  if (to > cur) updateStage(accessId, target, byName);
+  return maybeAutoAdvance(accessId);
 }
 
 export function getCustomersWithStats() {
