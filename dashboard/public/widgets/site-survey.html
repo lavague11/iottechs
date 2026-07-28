@@ -496,7 +496,7 @@
   function hasDecor(kind){return !!(PAT[kind]||SYM[kind]||SYMFILL[kind]);}
   function snapFloor(){floors[curFloor].B=B;floors[curFloor].markers=markers;floors[curFloor].uid=uid;}
   function loadFloor(i){curFloor=i;B=floors[i].B;markers=floors[i].markers;uid=floors[i].uid;hist=[];}
-  var __Q=new URLSearchParams(location.search),__PID=__Q.get('project')||'default',__PICK=__Q.get('pick')==='1',__RO=__Q.get('ro')==='1'||__PICK,__EMBED=__Q.get('embed')==='1'||!!__Q.get('project');
+  var __Q=new URLSearchParams(location.search),__PID=__Q.get('project')||'default',__PICK=__Q.get('pick')==='1',__EXP=__Q.get('export')==='1',__RO=__Q.get('ro')==='1'||__PICK||__EXP,__EMBED=__Q.get('embed')==='1'||!!__Q.get('project');
   // Pick mode = the plan is a camera SELECTOR (customer diagnostic). Hide every editing surface —
   // only the board with its pins remains, and cam pins post their tag to the parent on tap.
   var __pickSel={};
@@ -1537,6 +1537,35 @@
     __buildTabs();
     // saveState() no-ops in read-only mode, so push the items snapshot separately for the customer approval panel.
     try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurvey',project:__PID,floorCount:floors.length,items:surveyItems(),hasContent:surveyHasContent()},'*');}catch(_e){}
+  }
+  /* ---- Export mode: an off-screen host iframe rasterizes every floor to a pinned PNG for the
+     proposal PDF. It posts us the survey JSON (so we never depend on this browser's localStorage),
+     we render each floor via renderFloorImage, and post the images back. Hidden the whole time. ---- */
+  if(__EXP){
+    try{document.body.style.visibility='hidden';}catch(_e){}
+    function __expRender(){
+      try{tagAll();}catch(_e){}
+      var out=[],i=0;
+      function step(){
+        if(i>=floors.length){try{window.parent.postMessage({type:'iotSurveyImages',project:__PID,title:surveyTitle||'',images:out},'*');}catch(_e){}return;}
+        var fl=floors[i],nm=fl.name||('Floor '+(i+1));i++;
+        try{renderFloorImage(fl,function(u){out.push({name:nm,img:u||''});step();});}
+        catch(_e){out.push({name:nm,img:''});step();}
+      }
+      step();
+    }
+    window.addEventListener('message',function(e){
+      var d=e&&e.data;if(!d||d.type!=='iotSurveyLoad')return;
+      try{
+        var data=(typeof d.data==='string')?JSON.parse(d.data):d.data;
+        if(data&&data.floors&&data.floors.length){
+          floors=data.floors.map(function(f){return{name:(f.name==='Ground Floor'?'Floor Plan 1':f.name),B:f.B,markers:f.markers||[],uid:f.uid||1};});
+          if(data.surveyTitle)surveyTitle=data.surveyTitle;
+        }
+      }catch(_e){}
+      __expRender();
+    });
+    try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotSurveyExportReady',project:__PID},'*');}catch(_e){}
   }
   (function(){var st=document.createElement('style');
     st.textContent='.iot-embed .ss-trigger,.iot-embed .card-head{display:none!important}'

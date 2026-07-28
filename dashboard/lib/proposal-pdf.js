@@ -8,7 +8,10 @@ import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS } from 
 // per-service proposal data model instead of the legacy flat LABOR/EQUIPMENT sections.
 const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function downloadProposalPdf(p, meta = {}) {
+// attachments (optional): { mockupPhotos: [dataURL...], surveyImages: [{name, img:dataURL}...] }.
+// Both are appended after the priced options — the mockup photos and the pinned site-survey floor
+// plans — so the customer's downloaded proposal carries the visual context, not just the numbers.
+export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const { customerName, customerAddress, customerPhone, customerEmail } = meta;
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
@@ -402,6 +405,54 @@ export function downloadProposalPdf(p, meta = {}) {
       doc.text(p.created_by_name, lm + rw - 6, y + 62, { align: "right" });
     }
   });
+
+  // ---- Appendix: system mockup photos + pinned site-survey floor plans ----
+  // Scale a data-URL image to fit within (maxW × maxH), preserving aspect ratio.
+  const fit = (dataUrl, maxW, maxH) => {
+    try {
+      const pr = doc.getImageProperties(dataUrl);
+      let w = maxW, h = (w * pr.height) / pr.width;
+      if (h > maxH) { h = maxH; w = (h * pr.width) / pr.height; }
+      return { w, h, type: pr.fileType === "PNG" ? "PNG" : "JPEG" };
+    } catch { return null; }
+  };
+
+  const mockupPhotos = (attachments.mockupPhotos || [])
+    .filter((x) => typeof x === "string" && x.startsWith("data:image")).slice(0, 8);
+  const surveyImages = (attachments.surveyImages || []).filter((f) => f && f.img);
+
+  if (mockupPhotos.length) {
+    let y = newPage();
+    y = sectionHeader("SYSTEM MOCKUP", y) + 12;
+    const gap = 14, colW = (rw - gap) / 2, cellH = 168;
+    mockupPhotos.forEach((src, i) => {
+      const col = i % 2;
+      if (col === 0) y = ensureRoom(y, cellH + gap);
+      const d = fit(src, colW, cellH);
+      if (d) {
+        const x = lm + col * (colW + gap) + (colW - d.w) / 2;
+        try { doc.addImage(src, d.type, x, y + (cellH - d.h) / 2, d.w, d.h); } catch { /* bad image */ }
+      }
+      if (col === 1 || i === mockupPhotos.length - 1) y += cellH + gap;
+    });
+  }
+
+  if (surveyImages.length) {
+    let y = newPage();
+    y = sectionHeader("SITE SURVEY", y) + 14;
+    surveyImages.forEach((f) => {
+      const d = fit(f.img, rw, H - 230);
+      if (!d) return;
+      const need = d.h + (surveyImages.length > 1 ? 16 : 4);
+      if (y + need > H - 50) { y = newPage(); }
+      if (surveyImages.length > 1 && f.name) {
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
+        doc.text(String(f.name), lm, y + 2); y += 12;
+      }
+      try { doc.addImage(f.img, "PNG", lm + (rw - d.w) / 2, y, d.w, d.h); } catch { /* bad image */ }
+      y += d.h + 18;
+    });
+  }
 
   const baseName = (customerName || "Client").replace(/[^a-zA-Z0-9]/g, "_");
   doc.save(`${baseName}_IOT-Techs_Proposal.pdf`);

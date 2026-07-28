@@ -317,7 +317,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
           />
         )}
-        {!parent && it.waived && <span className="prop-waived-banner" title="This line is waived — comped off the invoice">Waived</span>}
         {!parent && flags[it.id] && (
           <span className="prop-cflag-wrap">
             <span className={`prop-cflag ${flags[it.id].type}`} title={flags[it.id].note || (flags[it.id].type === "remove" ? "Customer requested removal" : "Customer requested a change")}>

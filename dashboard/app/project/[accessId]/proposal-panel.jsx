@@ -163,7 +163,7 @@ const PROP_CSS = `
    original price struck through on the right so you can still see the amount waived. */
 .pvx .prop-block.prop-waived{border-left-color:var(--green,#1c8a45)}
 .pvx .prop-waived-banner{font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--green,#1c8a45);border-radius:100px;padding:2px 9px;white-space:nowrap}
-.pvx .prop-waived-strike{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--green,#1c8a45)}
+.pvx .prop-waived-strike{color:var(--red,#c0392b);text-decoration:line-through;text-decoration-color:var(--red,#c0392b)}
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:800}
 .pvx .prop-item.prop-parent .prop-line-total{font-weight:800;color:var(--ink)}

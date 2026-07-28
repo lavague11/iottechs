@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction } from "./proposal-actions";
+import { exportSurveyImages } from "../../../lib/survey-export";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -31,6 +32,7 @@ function itemNameNode(name, outdoor) {
 export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false }) {
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
+  const [dlBusy, setDlBusy] = useState(false);             // building the PDF (survey rasterize can take a moment)
   const [voidPcpOpen, setVoidPcpOpen] = useState(false);   // admin void of the PCP agreement signature
   const [err, setErr] = useState(null);
   const [reqOpen, setReqOpen] = useState(false);
@@ -128,6 +130,33 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     if (r?.error) { setErr(r.error); return; }
     if (r.proposal) setP(r.proposal);
     showToast("PCP signature voided — customer can re-approve");
+  }
+
+  // Build & download the PDF — pulls the project's mockup photos and rasterizes the site-survey
+  // floor plans (if either exists) so they ride along in the document. Both are best-effort: a
+  // missing/empty tool just means fewer appendix pages, never a failed download.
+  async function handleDownload() {
+    if (dlBusy) return;
+    setDlBusy(true);
+    let mockupPhotos = [], surveyImages = [];
+    try {
+      const [mk, sv] = await Promise.all([
+        getToolDataAction(accessId, "mockup").catch(() => null),
+        getToolDataAction(accessId, "survey").catch(() => null),
+      ]);
+      try {
+        const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null;
+        if (Array.isArray(md?.photos)) mockupPhotos = md.photos.filter((x) => typeof x === "string" && x.startsWith("data:image"));
+      } catch { /* bad mockup blob */ }
+      if (sv?.saved?.data) {
+        surveyImages = await exportSurveyImages(accessId, sv.saved.data).catch(() => []);
+      }
+    } catch { /* fetch failed — download the numbers-only proposal */ }
+    try {
+      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupPhotos, surveyImages });
+    } finally {
+      setDlBusy(false);
+    }
   }
 
   if (!p || !p.payload) {
@@ -305,10 +334,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
               </button>
             </>
           )}
-          <button type="button" className="pcv-dl"
-                  onClick={() => downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail })}
-                  title="Download a PDF of this proposal">
-            ⭳ Download PDF
+          <button type="button" className="pcv-dl" disabled={dlBusy}
+                  onClick={handleDownload}
+                  title="Download a PDF of this proposal (includes the mockup & site survey)">
+            {dlBusy ? "Preparing…" : "⭳ Download PDF"}
           </button>
         </div>
       </div>
@@ -704,7 +733,7 @@ const PCV_CSS = `
 .pcv-pay-row.first{background:#fff8ee;border-left:3px solid var(--gold)}
 .pcv-pay-row.first span:first-child{color:#8a6d2f;font-weight:700}
 .pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--green);border-radius:100px;padding:2px 8px;vertical-align:middle}
-.pcv-waived-strike{color:#8a94ad;text-decoration:line-through;text-decoration-color:var(--green)}
+.pcv-waived-strike{color:#c0392b;text-decoration:line-through;text-decoration-color:#c0392b}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:#2a3050;font-weight:600;line-height:1.45;border-left:3px solid var(--gold,var(--gold-deep));padding-left:12px}
 .pcv-pcp-box{margin:0 22px;border:1px solid #d8e6dd;background:#f4faf6;border-radius:14px;padding:16px 18px}
 .pcv-pcp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
