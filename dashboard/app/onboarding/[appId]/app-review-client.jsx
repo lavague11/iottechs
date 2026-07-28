@@ -35,6 +35,8 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.key === app.stage));
   const ob = app.onboarding || {};
   const obDone = OB_ITEMS.filter(([k]) => ob[k]).length;
+  const prof = ob.profile || null;        // what the new hire filled in themselves
+  const signed = ob.signed || {};         // their typed signatures on the three agreements
 
   const run = (fn) => startTx(async () => {
     const r = await fn();
@@ -154,10 +156,41 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           </div>
         )}
 
-        {/* Onboarding checklist — only once hired */}
+        {/* What the new hire submitted on their own onboarding page */}
+        {["offer", "hired"].includes(app.stage) && (
+          <div className="panel ob-card">
+            <div className="ob-card-h">New hire submitted
+              <span className="ob-count">{prof?.submitted_at ? "Details in" : "Waiting"}</span>
+              <a className="ob-view-btn" href={`/welcome/${app.app_id}`} style={{ marginLeft: "auto" }}>Their onboarding page</a>
+            </div>
+            {prof?.submitted_at ? (
+              <dl className="ob-dl">
+                <dt>Legal name</dt><dd>{prof.legal_name || "—"}</dd>
+                <dt>Date of birth</dt><dd>{prof.dob || "—"}</dd>
+                <dt>Address</dt><dd>{prof.address || "—"}</dd>
+                <dt>Emergency</dt><dd>{prof.emergency_name ? `${prof.emergency_name}${prof.emergency_rel ? ` (${prof.emergency_rel})` : ""}${prof.emergency_phone ? ` · ${prof.emergency_phone}` : ""}` : "—"}</dd>
+                <dt>Licence</dt><dd>{prof.license_no ? `${prof.license_no}${prof.license_state ? ` · ${prof.license_state}` : ""}${prof.license_exp ? ` · exp ${prof.license_exp}` : ""}` : "—"}</dd>
+                <dt>Sizes</dt><dd>{[prof.shirt && `Shirt ${prof.shirt}`, prof.jacket && `Jacket ${prof.jacket}`, prof.boot && `Boot ${prof.boot}`].filter(Boolean).join(" · ") || "—"}</dd>
+              </dl>
+            ) : (
+              <div className="ob-hint">They haven&rsquo;t filled in their details yet — send them their onboarding link.</div>
+            )}
+            <div className="ob-sigs">
+              {[["safety", "Safety policy"], ["handbook", "Employee handbook"], ["equipment", "Tool & equipment"]].map(([k, label]) => (
+                <div key={k} className={`ob-sig${signed[k] ? " on" : ""}`}>
+                  <span className="ob-check-box">{signed[k] ? "✓" : ""}</span>
+                  <div><div className="ob-sig-t">{label}</div>
+                    <div className="ob-sig-m">{signed[k] ? `${signed[k].name} · ${fmt(signed[k].at)}` : "Not signed"}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Office checklist — only once hired */}
         {hired && (
           <div className="panel ob-card">
-            <div className="ob-card-h">Onboarding <span className="ob-count">{obDone} of {OB_ITEMS.length}</span></div>
+            <div className="ob-card-h">Office checklist <span className="ob-count">{obDone} of {OB_ITEMS.length}</span></div>
             <div className="ob-checks">
               {OB_ITEMS.map(([k, label]) => (
                 <button key={k} className={`ob-check${ob[k] ? " on" : ""}`} disabled={pending}
@@ -262,6 +295,12 @@ const CSS = `
 .apx .ob-check.on{border-color:#1c8a45;background:#f4fbf6;color:var(--ink)}
 .apx .ob-check-box{width:20px;height:20px;flex-shrink:0;border-radius:6px;border:1.5px solid var(--line);display:grid;place-items:center;font-size:.72rem;font-weight:800;color:#fff}
 .apx .ob-check.on .ob-check-box{background:#1c8a45;border-color:#1c8a45}
+.apx .ob-sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+@media(max-width:800px){.apx .ob-sigs{grid-template-columns:1fr}}
+.apx .ob-sig{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;background:#fff}
+.apx .ob-sig.on{border-color:#b9e3c8;background:#f7fcf9}
+.apx .ob-sig-t{font-size:.84rem;font-weight:700}
+.apx .ob-sig-m{font-size:.74rem;color:var(--muted)}
 .apx .ob-timeline{list-style:none;margin:0 0 14px;padding:0}
 .apx .ob-timeline li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
 .apx .ob-timeline li:last-child{border-bottom:none}

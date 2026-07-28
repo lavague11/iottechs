@@ -34,6 +34,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
   const ob = app.onboarding || {};
+  const onboardingDone = !!ob.profile?.submitted_at && ["safety", "handbook", "equipment"].every((k) => ob.signed?.[k]);
   const obItems = [
     ["w9", "W-9 on file"], ["license", "Driver's license copy"], ["insurance", "Insurance / eligibility"],
     ["background", "Background check"], ["gear", "Tools & equipment issued"], ["training", "Safety + systems training"],
@@ -76,6 +77,17 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           <div className="aq-banner">
             <b>Interview scheduled</b> — {app.interview_at}. We&rsquo;ll call you at {app.phone || "the number you gave us"}.
           </div>
+        )}
+
+        {/* Onboarding opens at offer — this is the "fill out your paperwork" hand-off */}
+        {["offer", "hired"].includes(app.stage) && (
+          <a className="aq-cta" href={`/welcome/${app.app_id}`}>
+            <div>
+              <b>{onboardingDone ? "Your onboarding is complete" : "Finish your onboarding"}</b>
+              <span>{onboardingDone ? "Details saved and all agreements signed — nothing left to do." : "Your details, emergency contact, and three agreements to sign. About five minutes."}</span>
+            </div>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+          </a>
         )}
 
         {hired && (
@@ -162,6 +174,11 @@ const CSS = `
 .aq-stage-lbl{font-size:.68rem;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap}
 .aq-stage.on .aq-stage-lbl{color:var(--ink)}
 .aq-banner{background:#e6eefc;border:1px solid #c9dbf7;color:#2540c0;border-radius:12px;padding:12px 16px;font-size:.9rem;margin-bottom:14px}
+.aq-cta{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;border-radius:14px;padding:16px 20px;margin-bottom:14px;text-decoration:none;transition:transform .15s,box-shadow .2s}
+.aq-cta:hover{transform:translateY(-2px);box-shadow:0 16px 34px -16px rgba(176,143,79,.7)}
+.aq-cta b{display:block;font-size:1rem;font-family:'Bricolage Grotesque',sans-serif}
+.aq-cta span{display:block;font-size:.85rem;opacity:.92;margin-top:2px}
+.aq-cta svg{margin-left:auto;flex-shrink:0}
 /* details */
 .aq-dl{display:grid;grid-template-columns:110px 1fr;gap:9px 12px;margin:0;font-size:.9rem}
 .aq-dl dt{color:var(--muted);font-weight:600}

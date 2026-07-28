@@ -2739,7 +2739,7 @@ export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name
   return getApplication(appId);
 }
 
-// Onboarding checklist (post-hire): { docs:{w9,license,insurance,background}, gear:[], training:[] }
+// Office-side onboarding checklist (post-hire): { w9, license, insurance, background, gear, training }
 export function setApplicationOnboarding(appId, patch, { actor_role, actor_name } = {}) {
   const cur = getApplication(appId);
   if (!cur) return null;
@@ -2747,6 +2747,54 @@ export function setApplicationOnboarding(appId, patch, { actor_role, actor_name 
   db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
     .run(JSON.stringify(next), String(appId));
   logApplicationEvent(cur.app_id, { kind: "onboarding", detail: "Onboarding checklist updated", actor_role, actor_name });
+  return getApplication(appId);
+}
+
+// New-hire onboarding form — the part THEY fill in (profile, emergency contact, licence, gear
+// sizes) plus their typed acknowledgements. Stored under onboarding.profile / onboarding.signed.
+// Deliberately collects NO bank details: payroll/direct-deposit is handled on paper so account
+// numbers never land in this database.
+export function saveOnboardingProfile(appId, profile, { actor_name } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const s = (v, n = 120) => String(v || "").trim().slice(0, n) || null;
+  const clean = {
+    legal_name:    s(profile?.legal_name),
+    dob:           s(profile?.dob, 20),
+    address:       s(profile?.address, 200),
+    emergency_name:  s(profile?.emergency_name),
+    emergency_phone: s(profile?.emergency_phone, 40),
+    emergency_rel:   s(profile?.emergency_rel, 60),
+    license_no:    s(profile?.license_no, 40),
+    license_state: s(profile?.license_state, 20),
+    license_exp:   s(profile?.license_exp, 20),
+    shirt:  s(profile?.shirt, 12),
+    jacket: s(profile?.jacket, 12),
+    boot:   s(profile?.boot, 12),
+    submitted_at: new Date().toISOString(),
+  };
+  const next = { ...(cur.onboarding || {}), profile: clean };
+  db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(next), String(cur.app_id));
+  logApplicationEvent(cur.app_id, { kind: "onboarding", detail: "New hire submitted their details", actor_role: "applicant", actor_name: actor_name || cur.name });
+  return getApplication(appId);
+}
+
+// A typed name is the signature, same convention as proposals and service-call invoices.
+// Signing is one-way: an already-signed document can't be re-signed or altered.
+export function signOnboardingDoc(appId, docKey, typedName) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const KEYS = ["safety", "handbook", "equipment"];
+  if (!KEYS.includes(docKey)) return cur;
+  const signed = { ...((cur.onboarding || {}).signed || {}) };
+  if (signed[docKey]) return cur;   // already signed — immutable
+  signed[docKey] = { name: String(typedName || "").trim().slice(0, 120), at: new Date().toISOString() };
+  const next = { ...(cur.onboarding || {}), signed };
+  db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(next), String(cur.app_id));
+  const LABEL = { safety: "Safety policy", handbook: "Employee handbook", equipment: "Tool & equipment agreement" };
+  logApplicationEvent(cur.app_id, { kind: "onboarding", detail: `${LABEL[docKey]} signed by ${signed[docKey].name}`, actor_role: "applicant", actor_name: signed[docKey].name });
   return getApplication(appId);
 }
 
