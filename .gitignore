@@ -26,5 +26,11 @@ dist/
 graphify-out/
 *.jsonl
 
-# Stray shell-mishap artifact — OS-locked, clears on reboot (see chat 2026-07-16)
+# Stray shell-mishap artifacts — files accidentally created when a shell mis-parses
+# inline `node -e` / `python -c` snippets (parens/braces/redirects become filenames).
+# No real source file starts with "(" or "{" or is literally a code fragment.
 dashboard/a.role
+(*
+{*
+console.log*
+sample-proposal.pdf
