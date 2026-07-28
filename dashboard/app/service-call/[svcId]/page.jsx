@@ -1,10 +1,18 @@
-import { cookies } from "next/headers";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getUserById, getSvcInvoice, getSvcPayments, ensureSvcProject, getSvcCameras } from "../../../lib/db";
-import { parseSvcToken, parseAccessToken } from "../../../lib/auth";
-import { getSessionUser } from "../../../lib/session";
-import SvcGate from "./svc-gate";
-import SvcTrackClient from "./svc-track-client";
+import { resolveServiceCallRef, ensureSvcProject } from "../../../lib/db";
+import ProjectLinkPage from "../../project/[accessId]/page";
 import SvcNotFound from "./svc-not-found";
+
+// THE SERVICE CALL PAGE **IS** THE PROJECT PAGE.
+//
+// Owner call (2026-07-24): "take the project page and literally duplicate it and name it the
+// service call page." Rather than fork 4,200 lines that would drift apart within a month, this
+// route resolves the call, finds its companion type-C project, and renders the project page
+// itself — the identical component, chrome, stage bar, tool cards, role views, PIN gate and all.
+// Same PIN too (both are the last 4 of the contact phone), so the customer's unlock is unchanged.
+//
+// Result: /service-call/SVC0006 and /project/CSC0050 are the same page, forever, because they are
+// literally the same code. Service-call specifics (diagnostic + invoice cards) already live in
+// that page as FlowStep tool cards, driven by the linked call.
 
 // Neutral, non-leaking social preview — a service-call link that gets texted/forwarded must
 // preview as a branded "secure access" card, never the customer's name or issue. Fetches nothing.
@@ -17,114 +25,19 @@ export function generateMetadata() {
   };
 }
 
-// A logged-in customer owns the call when their email OR phone matches its contact; a PIN visitor
-// carries the iot_svc cookie scoped to this call. Anyone else meets the PIN gate — no call data
-// crosses to the client until authorized, so a forwarded link leaks nothing.
-async function authorize(call) {
-  // A real login outranks the PIN cookie — a staff member (or the owning customer) who also
-  // happens to hold a PIN grant must still get their session identity (and its Dashboard link),
-  // not be demoted to an anonymous PIN visitor.
-  const user = await getSessionUser();
-  if (user?.id && user.role === "customer") {
-    const row = getUserById(user.id) || {};
-    const digits = (s) => String(s || "").replace(/\D/g, "");
-    const emailOwns = user.email && call.contact_email &&
-      String(user.email).trim().toLowerCase() === String(call.contact_email).trim().toLowerCase();
-    const phoneOwns = digits(row.phone).length >= 7 && digits(row.phone) === digits(call.contact_phone);
-    if (emailOwns || phoneOwns) return { ok: true, name: row.name || "Customer", loggedIn: true };
-  }
-  // Staff who happen to be logged in get read access to the customer tracker too (their real
-  // control surface is the staff portal at /service-calls/[svcId]).
-  if (user?.id && ["admin", "manager", "tech"].includes(user.role)) {
-    return { ok: true, name: user.name || "Staff", loggedIn: true, staff: true };
-  }
-  const jar = await cookies();
-  const svcTok = jar.get("iot_svc")?.value;
-  const svc = svcTok ? await parseSvcToken(svcTok) : null;
-  if (svc && String(svc.svcId).toUpperCase() === String(call.svc_id).toUpperCase()) {
-    return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
-  }
-  // Gateway grant: a customer who PIN-unlocked the call's companion project already proved the
-  // same PIN — don't re-gate them here (mirrors the server actions' authorization).
-  const accTok = jar.get("iot_access")?.value;
-  const acc = accTok ? await parseAccessToken(accTok) : null;
-  if (acc?.accessId && call.svc_project_id &&
-      String(acc.accessId).toUpperCase() === String(call.svc_project_id).toUpperCase() &&
-      (acc.role === "customer" || acc.role === "inquiry")) {
-    return { ok: true, name: call.contact_name || call.customer || "Customer", loggedIn: false };
-  }
-  return { ok: false };
-}
-
-export default async function ServiceCallTrackPage({ params }) {
+export default async function ServiceCallPage({ params, searchParams }) {
   const { svcId } = await params;
-  let call = resolveServiceCallRef(svcId);
+  const call = resolveServiceCallRef(svcId);
   if (!call) return <SvcNotFound />;
-  // Companion type-C project (lazy for pre-existing calls) — full portal for this call.
-  const svcProject = ensureSvcProject(call.svc_id);
-  if (svcProject && !call.svc_project_id) call = { ...call, svc_project_id: svcProject.access_id };
 
-  const auth = await authorize(call);
-  if (!auth.ok) {
-    return <SvcGate svcId={call.svc_id} customerName={call.contact_name || call.customer || ""} />;
-  }
+  // Companion project (created at intake; lazily repaired here for calls that predate it).
+  const project = ensureSvcProject(call.svc_id);
+  if (!project) return <SvcNotFound />;
 
-  const events = getServiceCallEvents(call.svc_id);
-  const diagnostics = getDiagnostics(call.svc_id);
-
-  // Invoice reaches the customer only once SENT — a draft the office is still building never
-  // ships. Slim to customer-safe fields (no internal ids/status plumbing).
-  const invRow = getSvcInvoice(call.svc_id);
-  const invoice = invRow && invRow.status === "sent"
-    ? { items: invRow.items, total: invRow.total, notes: invRow.notes, signed_name: invRow.signed_name, signed_at: invRow.signed_at, sent_at: invRow.sent_at }
-    : null;
-  const payments = invoice ? getSvcPayments(call.svc_id).map((p) => ({ id: p.id, amount: p.amount, method: p.method, paid_at: p.paid_at })) : [];
-
-  // Customer-safe slim: only what a customer should see. No internal ids, no ticket linkage.
-  const safeCall = {
-    svc_id: call.svc_id,
-    svc_project_id: call.svc_project_id || null,   // their own portal page — PIN-gated there too
-    customer: call.customer,
-    contact_name: call.contact_name,
-    address: call.address,
-    issue: call.issue,
-    category: call.category,
-    stage: call.stage,
-    stage_label: call.stage_label,
-    status: call.status,
-    priority: call.priority,
-    outcome_route: call.outcome_route,
-    assignee_name: call.assignee_name,   // reassuring to see "your technician" — safe
-    created_at: call.created_at,
-    resolved_at: call.resolved_at,
-  };
-
-  const plain = (r) => ({ ...r });
-
-  // Role-visibility (DoD rule 4): the customer tracker shows the customer their OWN 60-second
-  // checks — never the technician's internal diagnostic (tester steps, "contact your supervisor"
-  // escalations). Staff previewing the tracker still see everything. Strip server-side.
-  const custDiags = auth.staff ? diagnostics : diagnostics.filter((d) => d.mode !== "tech");
-  // Internal plumbing ("Project CSC… opened", "survey imported") is ops detail, not customer
-  // progress — system-actor events stay staff-only alongside the tech diagnostics.
-  const custEvents = auth.staff ? events : events.filter((e) =>
-    e.actor_role !== "system" && !(e.kind === "diagnostic" && String(e.detail || "").startsWith("Tech")));
-
-  // Same camera picker as the gateway's check — built from the companion project's survey.
-  const { cameras, floors: camFloors } = call.svc_project_id ? getSvcCameras(call.svc_project_id) : { cameras: [], floors: [] };
-
-  return (
-    <SvcTrackClient
-      call={safeCall}
-      events={custEvents.map(plain)}
-      diagnostics={custDiags.map(plain)}
-      viewerName={auth.name}
-      loggedIn={!!auth.loggedIn}
-      staff={!!auth.staff}
-      invoice={invoice}
-      payments={payments}
-      cameras={cameras}
-      camFloors={camFloors}
-    />
-  );
+  // Render the real project page for that project. Everything below — auth, role views, data
+  // loading, layout — is the project page's own logic, untouched.
+  return ProjectLinkPage({
+    params: Promise.resolve({ accessId: project.access_id }),
+    searchParams,
+  });
 }
