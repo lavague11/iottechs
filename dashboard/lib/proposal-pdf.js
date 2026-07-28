@@ -385,8 +385,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     if (accepted && p.signature_data) {
       // Drawn signature imported from the customer's on-screen acceptance.
       try { doc.addImage(p.signature_data, "PNG", sc[0], y + 50, 132, 22); } catch { /* bad data url — fall back to name */ }
+      // Green ACCEPTED stamp sits in the MIDDLE column — the right column holds PREPARED BY / the
+      // preparer's name, so a right-aligned stamp there collided with it. Middle is clear of both
+      // the signature (left) and the preparer (right).
       doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(29, 122, 58);
-      doc.text("ACCEPTED", lm + rw - 6, y + 64, { align: "right" });
+      doc.text("ACCEPTED", sc[1], y + 64);
     } else if (accepted) {
       doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
       doc.text(p.signed_name || "Accepted", sc[0], y + 64);
