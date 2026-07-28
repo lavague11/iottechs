@@ -7,7 +7,15 @@ import { startPinCanvas } from "../../project/[accessId]/gateway-pin-canvas";
 // (gw2-* structural CSS is global; GW2_LIGHT_CSS below is the light-card override, copied from the
 // project gate). The Service Call ID is already in the URL, so we only collect the PIN; a valid
 // PIN mints the scoped cookie server-side and we reload into the tracker.
-export default function SvcGate({ svcId }) {
+export default function SvcGate({
+  svcId,
+  endpoint = "/api/svc-pin-check",
+  idField = "svcId",
+  kicker = "Service Call",
+  grantedLine = "Opening your service call",
+  altHref = "/report-issue",
+  altLabel = "Report a new issue",
+}) {
   const [pin, setPin]             = useState("");
   const [dotState, setDotState]   = useState(""); // "" | "ok" | "err"
   const [attempts, setAttempts]   = useState(0);
@@ -51,9 +59,9 @@ export default function SvcGate({ svcId }) {
     syncBusy(true);
     let ok = false;
     try {
-      const res = await fetch("/api/svc-pin-check", {
+      const res = await fetch(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ svcId, pin: code }),
+        body: JSON.stringify({ [idField]: svcId, pin: code }),
       });
       const j = await res.json();
       ok = !!j.ok;
@@ -104,7 +112,7 @@ export default function SvcGate({ svcId }) {
             <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
           </div>
           <h2>ACCESS GRANTED</h2>
-          <p>Opening your service call</p>
+          <p>{grantedLine}</p>
         </div>
       )}
 
@@ -117,7 +125,7 @@ export default function SvcGate({ svcId }) {
             </svg>
           </div>
           <h1>IOT&nbsp;TECHS</h1>
-          <div className="gw2-subtag">Service Call · {svcId}</div>
+          <div className="gw2-subtag">{kicker} · {svcId}</div>
         </div>
 
         <div className={`gw2-prompt${dotState === "ok" ? " ok" : dotState === "err" ? " err" : ""}`}>
@@ -143,7 +151,7 @@ export default function SvcGate({ svcId }) {
         </div>
 
         <div className="gw2-actions">
-          <a className="gw2-lbtn" href="/report-issue">Report a new issue</a>
+          <a className="gw2-lbtn" href={altHref}>{altLabel}</a>
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>Need help?</button>
         </div>
       </div>

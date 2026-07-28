@@ -1,0 +1,26 @@
+import { redirect, notFound } from "next/navigation";
+import { resolveApplicationRef, getApplicationEvents, getStaffUsers } from "../../../lib/db";
+import { getSessionUser, getNotifSummary } from "../../../lib/session";
+import AppReviewClient from "./app-review-client";
+
+// Application review — the office's side of the hiring pipeline. Admin/manager only.
+export default async function ApplicationReviewPage({ params }) {
+  const { appId } = await params;
+  const user = await getSessionUser();
+  if (!["admin", "manager"].includes(user.role)) redirect("/dashboard");
+
+  const app = resolveApplicationRef(appId);
+  if (!app) notFound();
+
+  const alerts = getNotifSummary(user.id);
+  const events = getApplicationEvents(app.app_id).map((e) => ({ ...e }));
+  const reviewers = getStaffUsers()
+    .filter((u) => ["admin", "manager"].includes(u.role))
+    .map((u) => ({ id: u.id, name: u.name }));
+
+  // The applicant's PIN is an access credential — the office never needs it in the browser.
+  const safe = { ...app };
+  delete safe.applicant_pin;
+
+  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} />;
+}

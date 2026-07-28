@@ -500,6 +500,52 @@ function init() {
       created_at  TEXT DEFAULT (datetime('now','localtime'))
     )
   `);
+  // ---- Hiring / onboarding: a job application behaves like a project — own ID, own PIN gate,
+  // a stage bar the applicant can watch, and an event log. Once hired, the onboarding checklist
+  // (documents, equipment, training) lives on the same record.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS applications (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id        TEXT UNIQUE,
+      name          TEXT,
+      email         TEXT,
+      phone         TEXT,
+      address       TEXT,
+      position      TEXT,                              -- tech | installer | sales | office | other
+      experience    TEXT,                              -- years of experience (free text bucket)
+      skills        TEXT,                              -- certs / systems they've worked on
+      has_license   INTEGER DEFAULT 0,
+      has_vehicle   INTEGER DEFAULT 0,
+      has_tools     INTEGER DEFAULT 0,
+      availability  TEXT,                              -- full | part | weekends | flexible
+      start_date    TEXT,
+      about         TEXT,                              -- why they want to work here
+      stage         TEXT NOT NULL DEFAULT 'applied',   -- applied|reviewing|interview|offer|hired|declined
+      applicant_pin TEXT,
+      rating        INTEGER,                           -- office 1-5 gut score
+      reviewer_id   INTEGER,
+      reviewer_name TEXT,
+      interview_at  TEXT,
+      decline_reason TEXT,
+      onboarding    TEXT,                              -- JSON checklist once hired
+      user_id       INTEGER,                           -- the staff account created on hire
+      created_at    TEXT DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT DEFAULT (datetime('now','localtime')),
+      hired_at      TEXT,
+      declined_at   TEXT
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS application_events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id     TEXT NOT NULL,
+      at         TEXT DEFAULT (datetime('now','localtime')),
+      kind       TEXT NOT NULL,                        -- applied|stage|note|interview|offer|hired|declined|onboarding
+      actor_role TEXT,
+      actor_name TEXT,
+      detail     TEXT
+    )
+  `);
 
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
@@ -2590,6 +2636,162 @@ export function ensureSvcProject(svcId) {
 }
 
 // Reverse lookup: the service call living on a companion type-C project (gateway integration).
+// ============================ HIRING / ONBOARDING ============================
+// An application is a mini-project: APP id, last-4-of-phone PIN, a stage bar the applicant
+// watches, and an append-only event log. Same conventions as service calls throughout.
+
+export const APP_STAGES = [
+  { key: "applied",   label: "Applied" },
+  { key: "reviewing", label: "In review" },
+  { key: "interview", label: "Interview" },
+  { key: "offer",     label: "Offer" },
+  { key: "hired",     label: "Hired" },
+  { key: "declined",  label: "Not moving forward" },
+];
+export const APP_POSITIONS = [
+  { key: "tech",      label: "Technician" },
+  { key: "installer", label: "Installer / helper" },
+  { key: "sales",     label: "Sales" },
+  { key: "office",    label: "Office / dispatch" },
+  { key: "other",     label: "Something else" },
+];
+export function appStageLabel(key) { return APP_STAGES.find((s) => s.key === key)?.label || key; }
+export function appPositionLabel(key) { return APP_POSITIONS.find((p) => p.key === key)?.label || key || "—"; }
+export function makeAppId(counter) { return `APP${Number(counter).toString(36).toUpperCase().padStart(4, "0")}`; }
+
+function decorateApp(r) {
+  if (!r) return null;
+  return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position), onboarding: safeJson(r.onboarding, null) };
+}
+
+export function logApplicationEvent(appId, { kind, detail, actor_role, actor_name } = {}) {
+  db.prepare("INSERT INTO application_events (app_id, kind, actor_role, actor_name, detail) VALUES (?,?,?,?,?)")
+    .run(String(appId), String(kind || "note"), actor_role || null, actor_name || null, String(detail || "").slice(0, 800) || null);
+}
+export function getApplicationEvents(appId) {
+  return db.prepare("SELECT * FROM application_events WHERE app_id = ? COLLATE NOCASE ORDER BY id ASC").all(String(appId)).map((r) => ({ ...r }));
+}
+
+export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about }) {
+  const info = db.prepare(`
+    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    String(name || "").trim() || null, String(email || "").trim() || null, String(phone || "").trim() || null,
+    String(address || "").trim() || null, position || "other",
+    String(experience || "").slice(0, 60) || null, String(skills || "").slice(0, 600) || null,
+    has_license ? 1 : 0, has_vehicle ? 1 : 0, has_tools ? 1 : 0,
+    availability || null, String(start_date || "").slice(0, 20) || null,
+    String(about || "").slice(0, 2000) || null,
+    phonePin(phone)
+  );
+  const id = Number(info.lastInsertRowid);
+  const appId = makeAppId(id);
+  db.prepare("UPDATE applications SET app_id = ? WHERE id = ?").run(appId, id);
+  logApplicationEvent(appId, { kind: "applied", detail: `Applied for ${appPositionLabel(position)}`, actor_role: "applicant", actor_name: name });
+  return getApplication(appId);
+}
+
+export function getApplication(appId) {
+  return decorateApp(db.prepare("SELECT * FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId || "").trim()));
+}
+
+// Full APP id or its last 4 (unambiguous only) — mirrors resolveProjectRef/resolveServiceCallRef.
+export function resolveApplicationRef(ref) {
+  const raw = String(ref || "").trim();
+  if (!raw) return null;
+  const exact = getApplication(raw);
+  if (exact) return exact;
+  const code = raw.replace(/[^a-z0-9]/gi, "");
+  if (code.length < 3 || code.length > 8) return null;
+  const rows = db.prepare("SELECT * FROM applications WHERE app_id LIKE ? COLLATE NOCASE").all("%" + code);
+  return rows.length === 1 ? decorateApp(rows[0]) : null;
+}
+
+export function listApplications({ stage } = {}) {
+  const sql = "SELECT * FROM applications" + (stage ? " WHERE stage = ?" : "") + " ORDER BY id DESC";
+  return (stage ? db.prepare(sql).all(stage) : db.prepare(sql).all()).map(decorateApp);
+}
+
+export function setApplicationStage(appId, stage, { actor_role, actor_name, reason } = {}) {
+  if (!APP_STAGES.some((s) => s.key === stage)) return null;
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const extra = stage === "hired" ? ", hired_at = datetime('now','localtime')"
+              : stage === "declined" ? ", declined_at = datetime('now','localtime')" : "";
+  db.prepare(`UPDATE applications SET stage = ?, decline_reason = COALESCE(?, decline_reason), updated_at = datetime('now','localtime')${extra} WHERE app_id = ? COLLATE NOCASE`)
+    .run(stage, stage === "declined" ? (String(reason || "").slice(0, 400) || null) : null, String(appId));
+  logApplicationEvent(cur.app_id, { kind: "stage", detail: `${appStageLabel(cur.stage)} → ${appStageLabel(stage)}`, actor_role, actor_name });
+  return getApplication(appId);
+}
+
+export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name, interview_at }, { actor_role, actor_name } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const sets = [], vals = [];
+  if (rating != null)       { sets.push("rating = ?");        vals.push(Math.max(0, Math.min(5, +rating || 0))); }
+  if (reviewer_id !== undefined) { sets.push("reviewer_id = ?", "reviewer_name = ?"); vals.push(reviewer_id || null, reviewer_name || null); }
+  if (interview_at !== undefined) { sets.push("interview_at = ?"); vals.push(String(interview_at || "").slice(0, 30) || null); }
+  if (!sets.length) return cur;
+  vals.push(String(appId));
+  db.prepare(`UPDATE applications SET ${sets.join(", ")}, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE`).run(...vals);
+  if (interview_at) logApplicationEvent(cur.app_id, { kind: "interview", detail: `Interview set for ${interview_at}`, actor_role, actor_name });
+  return getApplication(appId);
+}
+
+// Onboarding checklist (post-hire): { docs:{w9,license,insurance,background}, gear:[], training:[] }
+export function setApplicationOnboarding(appId, patch, { actor_role, actor_name } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const next = { ...(cur.onboarding || {}), ...(patch || {}) };
+  db.prepare("UPDATE applications SET onboarding = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(next), String(appId));
+  logApplicationEvent(cur.app_id, { kind: "onboarding", detail: "Onboarding checklist updated", actor_role, actor_name });
+  return getApplication(appId);
+}
+
+// Hire: create the real staff account (password + PIN = last 4 of phone, our standing convention),
+// link it to the application, and stamp the stage. Idempotent — re-hiring returns the same user.
+// Returns { app, accountError }: the stage always moves, but the CALLER must surface accountError
+// so nobody thinks a login exists when it doesn't (users.email is UNIQUE NOT NULL, so an
+// application with no email can't become an account until the office adds one).
+export function hireApplicant(appId, role, { actor_role, actor_name } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const wanted = ["tech", "sales", "manager", "admin"].includes(role) ? role : "tech";
+  let user = cur.user_id ? getUserById(cur.user_id) : null;
+  let accountError = null;
+
+  if (!user) {
+    const email = String(cur.email || "").trim();
+    if (!email) {
+      accountError = "No email on the application — add one before creating their login.";
+    } else {
+      user = getUserByEmail(email) || (cur.phone ? getUserByPhone(cur.phone) : null);
+      if (!user) {
+        const digits = String(cur.phone || "").replace(/\D/g, "");
+        const initialPw = digits.length >= 7 ? digits : "welcome";
+        try {
+          const info = db.prepare("INSERT INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)")
+            .run(cur.name || "Team member", usernameFromEmail(email), email, cur.phone || null, hashPw(initialPw), wanted);
+          user = getUserById(Number(info.lastInsertRowid));
+        } catch (e) {
+          accountError = "Could not create the account — that email or phone may already belong to someone.";
+        }
+      }
+    }
+  }
+
+  if (user) db.prepare("UPDATE applications SET user_id = ? WHERE app_id = ? COLLATE NOCASE").run(user.id, String(cur.app_id));
+  setApplicationStage(cur.app_id, "hired", { actor_role, actor_name });
+  logApplicationEvent(cur.app_id, {
+    kind: "hired",
+    detail: user ? `Hired as ${wanted} — account ${user.email} created` : `Hired as ${wanted} — account pending (${accountError})`,
+    actor_role, actor_name,
+  });
+  return { app: getApplication(appId), accountError };
+}
+
 export function getServiceCallByProject(accessId) {
   const r = db.prepare("SELECT * FROM service_calls WHERE svc_project_id = ? COLLATE NOCASE").get(String(accessId || "").trim());
   return decorateSvc(r);

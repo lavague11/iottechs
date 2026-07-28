@@ -30,7 +30,8 @@ const NAV_GROUPS = [
     { key: "dashboard", label: "Dashboard", href: "/dashboard" },
   ]},
   { key: "admin-grp", label: "Admin", items: [
-    { key: "users",    label: "Users",        href: "/users" },
+    { key: "users",      label: "Users",   href: "/users" },
+    { key: "onboarding", label: "Hiring",  href: "/onboarding" },
     { key: "activity", label: "Activity Log", href: "/activity" },
     { key: "dev",      label: "Dev Roadmap",  href: "/dev" },
     { key: "archives", label: "Archives",     href: "/archives" },
