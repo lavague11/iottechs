@@ -486,7 +486,8 @@ rebuildCards();
 (function(){
   var Q=new URLSearchParams(location.search);
   var PID=Q.get('project')||'default';
-  var RO=Q.get('ro')==='1';
+  var EXP=Q.get('export')==='1';        // headless render for the proposal PDF
+  var RO=Q.get('ro')==='1'||EXP;
   var EMBED=Q.get('embed')==='1'||!!Q.get('project');
   var KEY='iot_cctv_'+PID;
 
@@ -545,10 +546,37 @@ rebuildCards();
   IOT_RO=RO;
   rebuildCards();  // rebind the canvas now that IOT_RO is set, so drag/drop is correctly disabled in read-only mode
 
+  // Export mode: an off-screen host iframe hands us the mockup snapshot; we load the photos, render
+  // every page (iPhone frame + camera grid) via exCanvas, and post the composited images back for
+  // the proposal PDF. Hidden the whole time; never reads localStorage (data comes from the parent).
+  if(EXP){
+    try{document.body.style.visibility='hidden';}catch(_e){}
+    window.addEventListener('message',function(ev){
+      var m=ev.data; if(!m||m.type!=='iotMockupLoad'||m.project!==PID)return;
+      function done(imgs){try{window.parent.postMessage({type:'iotMockupImages',project:PID,images:imgs},'*');}catch(_e){}}
+      try{
+        var d=(typeof m.data==='string')?JSON.parse(m.data):m.data;
+        if(!d){return done([]);}
+        if(typeof d.count==='number')S.count=d.count;
+        if(typeof d.view==='number')S.view=d.view;
+        S.names=d.names||[]; if(d.frame!=null)S.frame=d.frame; if(d.hidden)S.hidden=d.hidden;
+        var photos=d.photos||[];
+        Promise.all(photos.map(function(u){return u?loadImageURL(u):Promise.resolve(undefined);}))
+          .then(function(slots){
+            S.slots=slots;
+            var n=mockups(),imgs=[];
+            for(var p=0;p<n;p++){ try{imgs.push(exCanvas(p).toDataURL('image/jpeg',0.85));}catch(_e){imgs.push('');} }
+            done(imgs);
+          }).catch(function(){done([]);});
+      }catch(_e){done([]);}
+    });
+    try{window.parent&&window.parent!==window&&window.parent.postMessage({type:'iotMockupExportReady',project:PID},'*');}catch(_e){}
+  }
+
   // Restore this project's saved mockup. S.page stays ephemeral (never persisted).
   try{
     var raw=localStorage.getItem(KEY);
-    if(raw){
+    if(raw && !EXP){
       var d=JSON.parse(raw);
       if(typeof d.count==='number')S.count=d.count;
       if(typeof d.view==='number')S.view=d.view;

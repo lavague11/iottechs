@@ -26,6 +26,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const lm = 57.6;
   const rw = W - lm - 28.8;
 
+  // Footer page label: which section this page belongs to + the running page number
+  // (e.g. "Proposal | 1", "Mockup | 2", "Survey | 3"). Set before creating each page.
+  let currentSection = "Proposal";
+
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
   const propDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -81,7 +85,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
     doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential Proposal", W / 2 + 18, H - 10.08, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
-    doc.text("Page " + doc.getNumberOfPages(), W - 28.8, H - 10.08, { align: "right" });
+    doc.text(currentSection + " | " + doc.getNumberOfPages(), W - 28.8, H - 10.08, { align: "right" });
   }
 
   function newPage() {
@@ -434,43 +438,42 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     } catch { return null; }
   };
 
-  // Mockup only renders when there are real photos (data-URL images); an empty tool → no page.
-  const mockupPhotos = (attachments.mockupPhotos || [])
-    .filter((x) => typeof x === "string" && x.startsWith("data:image")).slice(0, 16);
+  // Mockup: each page is the iPhone-frame + camera-grid composite the mockup tool renders (landscape).
+  // Two per PDF page, stacked, each near full-width with a gold border hugging it. Only present when
+  // the tool had real photos (the caller skips the render otherwise).
+  const mockupImages = (attachments.mockupImages || []).filter((x) => typeof x === "string" && x.startsWith("data:image"));
   const surveyImages = (attachments.surveyImages || []).filter((f) => f && f.img);
+  const margin = 28.8, availW = W - 2 * margin, pad = 8;
 
-  if (mockupPhotos.length) {
-    // The mockups are iPhone photos (portrait) — lay them out 4 across, up to 4 rows (a 4×4 grid),
-    // each photo contained in its cell so nothing is cropped or stretched.
-    let y = newPage();
-    y = sectionHeader("SYSTEM MOCKUP", y) + 12;
-    const cols = 4, gap = 10, colW = (rw - (cols - 1) * gap) / cols, cellH = 132;
-    mockupPhotos.forEach((src, i) => {
-      const col = i % cols;
-      if (col === 0) y = ensureRoom(y, cellH + gap);
-      const d = fit(src, colW, cellH);
-      if (d) {
-        const x = lm + col * (colW + gap) + (colW - d.w) / 2;   // center in the cell
-        try { doc.addImage(src, d.type, x, y + (cellH - d.h) / 2, d.w, d.h); } catch { /* bad image */ }
-      }
-      if (col === cols - 1 || i === mockupPhotos.length - 1) y += cellH + gap;
+  if (mockupImages.length) {
+    currentSection = "Mockup";
+    let y = 0;
+    mockupImages.forEach((src, i) => {
+      const d = fit(src, availW - 2 * pad, 250);   // cap height so two stack on one page
+      if (!d) return;
+      if (i % 2 === 0) { y = newPage(); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
+      const imgX = margin + (availW - d.w) / 2;
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
+      doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
+      try { doc.addImage(src, "JPEG", imgX, y, d.w, d.h); } catch { /* bad image */ }
+      y += d.h + 2 * pad + 16;
     });
   }
 
   if (surveyImages.length) {
-    // Each floor gets its own page: a gold-bordered frame spanning the content area, with the floor
-    // plan scaled to fit inside and centered on BOTH axes within that frame.
-    const margin = 28.8, frameX = margin, frameW = W - 2 * margin, pad = 10;
+    currentSection = "Survey";
+    // Each floor on its own page: fit the plan to the space, then draw the border TIGHT around it
+    // (not the whole page) and center it — so it always "fits" cleanly with no awkward empty frame.
     surveyImages.forEach((f) => {
       let y = newPage();
       y = sectionHeader("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), y) + 14;
-      const frameTop = y, frameBot = H - 46, frameH = frameBot - frameTop;
-      const d = fit(f.img, frameW - 2 * pad, frameH - 2 * pad);
+      const availH = (H - 46) - y;
+      const d = fit(f.img, availW - 2 * pad, availH - 2 * pad);
       if (!d) return;
+      const imgX = margin + (availW - d.w) / 2;
+      const imgY = y + (availH - d.h) / 2;
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
-      doc.rect(frameX, frameTop, frameW, frameH, "S");                 // the border
-      const imgX = frameX + (frameW - d.w) / 2;                        // centered horizontally
-      const imgY = frameTop + (frameH - d.h) / 2;                      // centered vertically
+      doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");   // border hugs the image
       try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image */ }
     });
   }

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurveyImages } from "../../../lib/survey-export";
+import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
@@ -132,28 +133,35 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     showToast("PCP signature voided — customer can re-approve");
   }
 
-  // Build & download the PDF — pulls the project's mockup photos and rasterizes the site-survey
-  // floor plans (if either exists) so they ride along in the document. Both are best-effort: a
+  // Build & download the PDF — rasterizes BOTH tools exactly as they render on screen: each mockup
+  // page (iPhone frame + camera grid) and each site-survey floor plan (pinned). All best-effort: a
   // missing/empty tool just means fewer appendix pages, never a failed download.
   async function handleDownload() {
     if (dlBusy) return;
     setDlBusy(true);
-    let mockupPhotos = [], surveyImages = [];
+    let mockupImages = [], surveyImages = [];
     try {
       const [mk, sv] = await Promise.all([
         getToolDataAction(accessId, "mockup").catch(() => null),
         getToolDataAction(accessId, "survey").catch(() => null),
       ]);
+      const jobs = [];
+      // Only render the mockup when it actually has at least one photo.
+      let hasMockupPhoto = false;
       try {
         const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null;
-        if (Array.isArray(md?.photos)) mockupPhotos = md.photos.filter((x) => typeof x === "string" && x.startsWith("data:image"));
+        hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.startsWith("data:image"));
       } catch { /* bad mockup blob */ }
-      if (sv?.saved?.data) {
-        surveyImages = await exportSurveyImages(accessId, sv.saved.data).catch(() => []);
+      if (hasMockupPhoto && mk?.saved?.data) {
+        jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
       }
+      if (sv?.saved?.data) {
+        jobs.push(exportSurveyImages(accessId, sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
+      }
+      await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
-      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupPhotos, surveyImages });
+      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupImages, surveyImages });
     } finally {
       setDlBusy(false);
     }
