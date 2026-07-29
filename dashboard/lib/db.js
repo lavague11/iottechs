@@ -197,6 +197,7 @@ function init() {
   if (!cols.includes("customer_granted"))   db.exec("ALTER TABLE projects ADD COLUMN customer_granted INTEGER DEFAULT 0");
   if (!cols.includes("managers_granted"))   db.exec("ALTER TABLE projects ADD COLUMN managers_granted INTEGER DEFAULT 0");
   if (!cols.includes("completed_at"))       db.exec("ALTER TABLE projects ADD COLUMN completed_at TEXT");
+  if (!cols.includes("ar_archived_at"))     db.exec("ALTER TABLE projects ADD COLUMN ar_archived_at TEXT");   // hidden from the receivables portal (written off / parked)
   if (!cols.includes("warranty_months"))    db.exec("ALTER TABLE projects ADD COLUMN warranty_months INTEGER DEFAULT 6");
   if (!cols.includes("system_qr"))          db.exec("ALTER TABLE projects ADD COLUMN system_qr TEXT");
   if (!cols.includes("payout_amount"))      db.exec("ALTER TABLE projects ADD COLUMN payout_amount REAL DEFAULT 0");
@@ -1379,7 +1380,7 @@ export function getProposalLibrary() {
 export function getReceivables() {
   return db.prepare(
     `SELECT p.access_id, p.customer, p.contact_name, p.address, p.stage, p.category,
-            p.contact_phone, p.contact_email, p.completed_at, p.lost_at,
+            p.contact_phone, p.contact_email, p.completed_at, p.lost_at, p.ar_archived_at,
             pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
             pr.accepted_options, pr.selected_option, pr.signed_name, pr.sent_at, pr.updated_at
        FROM projects p
@@ -1424,6 +1425,7 @@ export function getReceivables() {
     const since = lastPay || r.sent_at || r.updated_at || null;
     let daysOut = 0;
     if (since) { const d = Math.floor((Date.now() - new Date(since.replace(" ", "T")).getTime()) / 86400000); daysOut = Number.isFinite(d) ? Math.max(0, d) : 0; }
+    const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
     return {
       access_id: r.access_id,
       customer: r.customer || r.contact_name || r.access_id,
@@ -1433,6 +1435,9 @@ export function getReceivables() {
       status: r.status,
       signed, completed, closed,
       bucket,                            // pending | signed | completed | jobs
+      archived: !!r.ar_archived_at,      // hidden from the active portal (written off / parked)
+      billedAt: dOnly(r.sent_at),        // when it became a receivable (proposal sent)
+      lastActivity: dOnly(since),        // most recent money movement, else billed date
       total,                             // full proposal total (what the job is worth)
       expected,                          // receivable due at the current state
       paid, pending, balance,
@@ -1440,6 +1445,14 @@ export function getReceivables() {
       lastPay, daysOut,
     };
   }).filter((r) => r.total > 0);
+}
+
+// Archive (or restore) a receivable — hides it from the active portal (written off / parked) while
+// keeping the project and its money intact. Non-destructive: it's a timestamp, reversible anytime.
+export function setReceivableArchived(accessId, on) {
+  const val = on ? "datetime('now','localtime')" : "NULL";
+  const info = db.prepare(`UPDATE projects SET ar_archived_at = ${val} WHERE access_id = ? COLLATE NOCASE`).run(String(accessId));
+  return info.changes > 0;
 }
 
 export function getSystemQrLibrary() {
