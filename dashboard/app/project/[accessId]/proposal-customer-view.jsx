@@ -315,50 +315,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         </div>
       </div>
 
-      <div className="pcv-toolbar">
-        <div className="pcv-tb-actions">
-          {locked && (
-            <>
-              <span className="pcv-tb-locked">✓ Accepted &amp; Signed</span>
-              <button type="button" className={`pcv-tb-btn revise${reviseMode ? " on" : ""}`}
-                      onClick={() => { setReviseMode((m) => !m); setMenuFor(null); setDeclineOpen(false); }}>
-                ✎ {reviseMode ? "Done" : "Request Modification"}
-              </button>
-            </>
-          )}
-          {canAct && (
-            <>
-              <button type="button" className={`pcv-tb-btn accept${optAccepted ? " on" : ""}`} disabled={busy}
-                      onClick={() => { choose(opt.id); setReviseMode(false); setDeclineOpen(false); setMenuFor(null); }}>
-                {optAccepted ? `✓ Accepted${p.payload.options.length > 1 ? ` ${opt.id}` : ""}` : `✓ Accept${p.payload.options.length > 1 ? ` ${opt.id}` : ""}`}
-              </button>
-              <button type="button" className={`pcv-tb-btn decline${optDeclined ? " on" : ""}`} disabled={busy}
-                      onClick={() => { if (optDeclined) { decline(); return; } setDeclineOpen((v) => !v); setReviseMode(false); setMenuFor(null); }}>
-                {optDeclined ? `✕ Declined${p.payload.options.length > 1 ? ` ${opt.id}` : ""}` : `✕ Decline${p.payload.options.length > 1 ? ` ${opt.id}` : ""}`}
-              </button>
-              <button type="button" className={`pcv-tb-btn revise${reviseMode ? " on" : ""}`}
-                      onClick={() => { setReviseMode((m) => !m); setMenuFor(null); setDeclineOpen(false); }}>
-                ✎ {reviseMode ? "Done" : "Request Change"}
-              </button>
-            </>
-          )}
-          <button type="button" className="pcv-dl" disabled={dlBusy}
-                  onClick={handleDownload}
-                  title="Download a PDF of this proposal (includes the mockup & site survey)">
-            {dlBusy ? "Preparing…" : "⭳ Download PDF"}
-          </button>
-        </div>
-      </div>
+      {/* Actions (Accept / Decline / Request / Download) live at the BOTTOM of the proposal now —
+          read first, act at the end. See the acceptance box below the totals. */}
 
-      {declineOpen && (
-        <div className="pcv-confirm-strip">
-          <span>Why are you declining?</span>
-          {["Price is too high", "Need time — still shopping around", "I need some changes first"].map((r) => (
-            <button key={r} className="pcv-btn" disabled={busy} onClick={() => decline(r)}>{r}</button>
-          ))}
-          <button className="pcv-btn" onClick={() => setDeclineOpen(false)}>Cancel</button>
-        </div>
-      )}
       {optDeclined && !declineOpen && (
         <div className="pcv-note-strip">You declined {optName(opt.id)}{declinedMap[opt.id] ? `: “${declinedMap[opt.id]}”` : ""}. Changed your mind? Accept it below.</div>
       )}
@@ -570,7 +529,15 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 {[...acceptedSet].sort().map((id) => (
                   <span key={id} className="pcv-accepted-line">✓ {optName(id)} accepted</span>
                 ))}
-                {locked && <span className="pcv-locked-note">Signed by {p.signed_name} — this agreement is locked. Need something changed? Use Request Modification above.</span>}
+                {locked && (
+                  <div className="pcv-locked-row">
+                    <span className="pcv-locked-note">Signed by {p.signed_name} — this agreement is locked.</span>
+                    <button type="button" className={`pcv-btn revise${reviseMode ? " on" : ""}`}
+                            onClick={() => { setReviseMode((m) => !m); setMenuFor(null); setDeclineOpen(false); }}>
+                      ✎ Request Modification
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {canAct && (
@@ -583,6 +550,15 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>✎ Request Change</button>
                   <button className="pcv-btn" onClick={() => { setDeclineOpen(true); setReviseMode(false); }}>✕ Decline</button>
                 </div>
+                {declineOpen && (
+                  <div className="pcv-confirm-strip">
+                    <span>Why are you declining?</span>
+                    {["Price is too high", "Need time — still shopping around", "I need some changes first"].map((r) => (
+                      <button key={r} className="pcv-btn" disabled={busy} onClick={() => decline(r)}>{r}</button>
+                    ))}
+                    <button className="pcv-btn" onClick={() => setDeclineOpen(false)}>Cancel</button>
+                  </div>
+                )}
               </>
             )}
             {/* No premature "next step" button here — once accepted, the deposit tool below is the
@@ -590,6 +566,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             {!canAct && acceptedSet.size === 0 && <p>This proposal isn’t open for action right now.</p>}
           </>
         )}
+        {/* Download is always available at the bottom of the proposal. */}
+        <div className="pcv-accept-dl">
+          <button type="button" className="pcv-dl" disabled={dlBusy} onClick={handleDownload}
+                  title="Download a PDF of this proposal (includes the mockup & site survey)">
+            {dlBusy ? "Preparing…" : "⭳ Download PDF"}
+          </button>
+        </div>
       </div>
 
       {p.signed_name && (
@@ -848,6 +831,9 @@ const PCV_CSS = `
 
 .pcv-accept-actions{display:flex;gap:10px;flex-wrap:wrap}
 .pcv-accept-actions .pcv-select{flex:1;min-width:200px}
+.pcv-locked-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
+.pcv-locked-row .pcv-locked-note{margin-top:0;flex:1;min-width:180px}
+.pcv-accept-dl{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-warm);display:flex;justify-content:flex-end}
 .pcv-send-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .pcv-send-count{font-size:.82rem;font-weight:700;color:var(--slate);flex:1;min-width:150px}
 .pcv-send-bar .pcv-select{height:40px;padding:0 18px}
