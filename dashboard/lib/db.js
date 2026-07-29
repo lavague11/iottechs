@@ -1368,13 +1368,18 @@ export function getProposalLibrary() {
   });
 }
 
-// Accounts receivable — every project that's been BILLED (proposal sent or beyond) with what it
-// owes: total (accepted/first option + approved add-ons), confirmed paid, pending, and balance.
-// Uses the same total/paid math the payment stage and auto-advance trust, so the numbers agree.
+// Accounts receivable — every BILLED project (proposal sent or beyond), bucketed by how firm the
+// money is (owner's rule):
+//   • unsigned (sent, not signed)      → "pending"   — a tentative receivable (whole total pending)
+//   • signed (agreement signed)        → "signed"    — 50% of the total is due now (the deposit)
+//   • completed (job done)             → "completed" — 100% of the total is due
+//   • closed/declined & never signed   → "jobs"      — a dead job, NOT a receivable
+// `expected` is the amount owed at the current state; balance = expected − confirmed paid. Totals
+// use the same option+add-on math the payment stage trusts, so figures agree everywhere.
 export function getReceivables() {
   return db.prepare(
     `SELECT p.access_id, p.customer, p.contact_name, p.address, p.stage, p.category,
-            p.contact_phone, p.contact_email,
+            p.contact_phone, p.contact_email, p.completed_at, p.lost_at,
             pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
             pr.accepted_options, pr.selected_option, pr.signed_name, pr.sent_at, pr.updated_at
        FROM projects p
@@ -1383,7 +1388,7 @@ export function getReceivables() {
         AND pr.id = (SELECT x.id FROM proposals x
                       WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
                       ORDER BY x.version DESC, x.id DESC LIMIT 1)
-      WHERE pr.status IN ('sent','changes_requested','accepted')
+      WHERE pr.status IN ('sent','changes_requested','accepted','declined')
       ORDER BY p.id DESC`
   ).all().map((r) => {
     let grand = 0;
@@ -1402,10 +1407,19 @@ export function getReceivables() {
     const pays = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
     const paid    = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
     const pending = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
-    const balance = Math.max(0, +(total - paid).toFixed(2));
-    const depPct  = +r.deposit_pct || 50;
-    const depositDue = Math.max(0, +((total * depPct / 100) - paid).toFixed(2));   // deposit portion still owed
-    // Aging: days since the last money moved, else since the proposal was sent.
+
+    const signed    = !!r.signed_name;
+    const completed = !!r.completed_at || r.stage === "completion" || r.category === "completed";
+    const closed    = !!r.lost_at || r.status === "declined";   // dead/lost deal
+
+    // Bucket + the receivable EXPECTED at this state (owner's rule).
+    let bucket, expected;
+    if (!signed && closed)   { bucket = "jobs";      expected = 0; }          // dead — not a receivable
+    else if (completed)      { bucket = "completed"; expected = total; }        // 100% due
+    else if (signed)         { bucket = "signed";    expected = +(total * 0.5).toFixed(2); }  // 50% due now
+    else                     { bucket = "pending";   expected = total; }        // tentative (whole total pending)
+    const balance = Math.max(0, +(expected - paid).toFixed(2));
+
     const lastPay = pays.map((x) => x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
     const since = lastPay || r.sent_at || r.updated_at || null;
     let daysOut = 0;
@@ -1416,10 +1430,13 @@ export function getReceivables() {
       address: r.address || "",
       phone: r.contact_phone || null,
       stage: r.stage,
-      status: r.status,                 // sent | changes_requested | accepted
-      signed: !!r.signed_name,
-      total, paid, pending, balance, depositDue,
-      paidInFull: balance <= 0.01 && total > 0,
+      status: r.status,
+      signed, completed, closed,
+      bucket,                            // pending | signed | completed | jobs
+      total,                             // full proposal total (what the job is worth)
+      expected,                          // receivable due at the current state
+      paid, pending, balance,
+      paidInFull: bucket !== "jobs" && balance <= 0.01 && expected > 0,
       lastPay, daysOut,
     };
   }).filter((r) => r.total > 0);
