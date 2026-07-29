@@ -1323,6 +1323,51 @@ export function getMockupLibrary() {
   });
 }
 
+// Proposal library — every project with its active (latest non-superseded) proposal in one place.
+// Mirrors the survey/mockup libraries: numbers computed server-side, status + total ship to the
+// card. Empties list too (so a project still needing a proposal is findable), but hide by default.
+export function getProposalLibrary() {
+  return db.prepare(
+    `SELECT p.access_id, p.customer, p.address, p.contact_name,
+            pr.id AS pid, pr.version, pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
+            pr.accepted_options, pr.signed_name, pr.created_by_name, pr.updated_at, pr.sent_at
+       FROM projects p
+       LEFT JOIN proposals pr
+         ON pr.project_access_id = p.access_id
+        AND pr.id = (SELECT x.id FROM proposals x
+                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
+                      ORDER BY x.version DESC, x.id DESC LIMIT 1)
+      ORDER BY (pr.id IS NOT NULL) DESC, COALESCE(pr.updated_at, pr.sent_at, '') DESC, p.id DESC`
+  ).all().map((r) => {
+    let total = 0, items = 0, options = 0;
+    const accepted = (() => { try { return JSON.parse(r.accepted_options || "[]"); } catch { return []; } })();
+    if (r.payload) {
+      try {
+        const pl = JSON.parse(r.payload);
+        options = (pl.options || []).length;
+        const opt = (pl.options || []).find((o) => accepted.includes(o.id)) || (pl.options || [])[0];
+        if (opt) {
+          total = optionTotals(opt, r.tax_rate, pl.discount, r.deposit_pct, pl.pcp_credit).grand;
+          (opt.services || []).forEach((s) => { items += (s.items || []).length; });
+        }
+      } catch { /* bad payload */ }
+    }
+    return {
+      access_id: r.access_id,
+      customer: r.customer || r.contact_name || r.access_id,
+      address: r.address || "",
+      has: !!r.pid,
+      status: r.status || null,          // draft | sent | changes_requested | accepted | declined
+      version: r.version || null,
+      total, items, options,
+      signed: !!r.signed_name,
+      accepted_count: accepted.length,
+      updated_by: resolvePreparerName(r.created_by_name),
+      updated_at: r.updated_at || r.sent_at || null,
+    };
+  });
+}
+
 export function getSystemQrLibrary() {
   // Every project is listed, with or without a card. Ones that HAVE a card lead (that's what the
   // library is for), and within each group the newest project comes first.

@@ -58,10 +58,11 @@ const NAV_GROUPS = [
     { key: "service-calls", label: "Service Calls", href: "/service-calls" },
   ]},
   { key: "support-grp", label: "Support", items: [
-    { key: "support", label: "Support Library", href: "/support" },
-    { key: "qr",      label: "QR Codes",        href: "/support/qr" },
-    { key: "surveys", label: "Site Surveys",    href: "/support/surveys" },
-    { key: "mockups", label: "Mockups",         href: "/support/mockups" },
+    { key: "support",   label: "Support Library", href: "/support" },
+    { key: "proposals", label: "Proposals",       href: "/support/proposals" },
+    { key: "qr",        label: "QR Codes",        href: "/support/qr" },
+    { key: "surveys",   label: "Site Surveys",    href: "/support/surveys" },
+    { key: "mockups",   label: "Mockups",         href: "/support/mockups" },
   ]},
 ];
 
