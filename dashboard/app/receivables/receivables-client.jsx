@@ -13,7 +13,7 @@ const BUCKET = {
   pending:   { label: "Pending",         cls: "warn" },
   signed:    { label: "Signed · 50%",    cls: "sent" },
   completed: { label: "Completed · 100%", cls: "ok"  },
-  jobs:      { label: "Job · unsigned",  cls: "dead" },
+  jobs:      { label: "Dead deal",       cls: "dead" },
 };
 
 export default function ReceivablesClient({ user, alerts, rows = [] }) {
@@ -77,7 +77,7 @@ export default function ReceivablesClient({ user, alerts, rows = [] }) {
         <div className="page-head arx-head">
           <div>
             <h1>Accounts Receivable</h1>
-            <div className="ph-sub">{money(sums.firm)} due now · {money(sums.pending)} pending · {sums.jobsCount} dead job{sums.jobsCount === 1 ? "" : "s"}</div>
+            <div className="ph-sub">{money(sums.firm)} due now · {money(sums.pending)} pending · {sums.jobsCount} dead deal{sums.jobsCount === 1 ? "" : "s"}</div>
           </div>
         </div>
 
@@ -98,7 +98,7 @@ export default function ReceivablesClient({ user, alerts, rows = [] }) {
             <span className="arx-tile-sub">of {money(sums.billed)} billed</span>
           </div>
           <div className="arx-tile">
-            <span className="arx-tile-lbl">Jobs · closed unsigned</span>
+            <span className="arx-tile-lbl">Dead deals · closed unsigned</span>
             <span className="arx-tile-val">{sums.jobsCount}</span>
             <span className="arx-tile-sub">{money(sums.jobsValue)} never closed</span>
           </div>
@@ -118,7 +118,7 @@ export default function ReceivablesClient({ user, alerts, rows = [] }) {
             <button className={filter === "pending" ? "on" : ""} onClick={() => setFilter("pending")}>Pending {sums.counts.pending}</button>
             <button className={filter === "signed" ? "on" : ""} onClick={() => setFilter("signed")}>Signed {sums.counts.signed}</button>
             <button className={filter === "completed" ? "on" : ""} onClick={() => setFilter("completed")}>Completed {sums.counts.completed}</button>
-            <button className={filter === "jobs" ? "on" : ""} onClick={() => setFilter("jobs")}>Jobs {sums.counts.jobs}</button>
+            <button className={filter === "jobs" ? "on" : ""} onClick={() => setFilter("jobs")}>Dead deals {sums.counts.jobs}</button>
             <button className={filter === "archived" ? "on" : ""} onClick={() => setFilter("archived")}>Archived {sums.counts.archived}</button>
           </div>
         </div>
