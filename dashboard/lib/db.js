@@ -1368,6 +1368,63 @@ export function getProposalLibrary() {
   });
 }
 
+// Accounts receivable — every project that's been BILLED (proposal sent or beyond) with what it
+// owes: total (accepted/first option + approved add-ons), confirmed paid, pending, and balance.
+// Uses the same total/paid math the payment stage and auto-advance trust, so the numbers agree.
+export function getReceivables() {
+  return db.prepare(
+    `SELECT p.access_id, p.customer, p.contact_name, p.address, p.stage, p.category,
+            p.contact_phone, p.contact_email,
+            pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
+            pr.accepted_options, pr.selected_option, pr.signed_name, pr.sent_at, pr.updated_at
+       FROM projects p
+       JOIN proposals pr
+         ON pr.project_access_id = p.access_id
+        AND pr.id = (SELECT x.id FROM proposals x
+                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
+                      ORDER BY x.version DESC, x.id DESC LIMIT 1)
+      WHERE pr.status IN ('sent','changes_requested','accepted')
+      ORDER BY p.id DESC`
+  ).all().map((r) => {
+    let grand = 0;
+    try {
+      const pl = JSON.parse(r.payload);
+      const acceptedIds = (() => {
+        try { const a = JSON.parse(r.accepted_options || "[]"); return a.length ? a : (r.selected_option ? [r.selected_option] : []); }
+        catch { return r.selected_option ? [r.selected_option] : []; }
+      })();
+      const acceptedOpts = (pl.options || []).filter((o) => acceptedIds.includes(o.id));
+      const shown = acceptedOpts.length ? acceptedOpts : [(pl.options || [])[0]].filter(Boolean);
+      grand = shown.reduce((s, o) => s + optionTotals(o, r.tax_rate, pl.discount, r.deposit_pct, pl.pcp_credit).grand, 0);
+    } catch { /* bad payload */ }
+    const addons = getApprovedAddons(r.access_id);
+    const total  = grand + (addons?.total || 0);
+    const pays = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
+    const paid    = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const pending = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const balance = Math.max(0, +(total - paid).toFixed(2));
+    const depPct  = +r.deposit_pct || 50;
+    const depositDue = Math.max(0, +((total * depPct / 100) - paid).toFixed(2));   // deposit portion still owed
+    // Aging: days since the last money moved, else since the proposal was sent.
+    const lastPay = pays.map((x) => x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
+    const since = lastPay || r.sent_at || r.updated_at || null;
+    let daysOut = 0;
+    if (since) { const d = Math.floor((Date.now() - new Date(since.replace(" ", "T")).getTime()) / 86400000); daysOut = Number.isFinite(d) ? Math.max(0, d) : 0; }
+    return {
+      access_id: r.access_id,
+      customer: r.customer || r.contact_name || r.access_id,
+      address: r.address || "",
+      phone: r.contact_phone || null,
+      stage: r.stage,
+      status: r.status,                 // sent | changes_requested | accepted
+      signed: !!r.signed_name,
+      total, paid, pending, balance, depositDue,
+      paidInFull: balance <= 0.01 && total > 0,
+      lastPay, daysOut,
+    };
+  }).filter((r) => r.total > 0);
+}
+
 export function getSystemQrLibrary() {
   // Every project is listed, with or without a card. Ones that HAVE a card lead (that's what the
   // library is for), and within each group the newest project comes first.

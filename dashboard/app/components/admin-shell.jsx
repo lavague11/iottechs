@@ -56,6 +56,7 @@ const NAV_GROUPS = [
   { key: "ops-grp", label: "Operations", items: [
     { key: "operations",    label: "Action Center", href: "/operations" },
     { key: "service-calls", label: "Service Calls", href: "/service-calls" },
+    { key: "receivables",   label: "Receivables",   href: "/receivables" },
   ]},
   { key: "support-grp", label: "Support", items: [
     { key: "support",   label: "Support Library", href: "/support" },
