@@ -72,6 +72,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const today = new Date().toISOString().slice(0, 10);
   const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
   const [payFormOpen, setPayFormOpen] = useState(true);   // collapsible "Record a payment" entry form
+  const [payOpen, setPayOpen] = useState(true);           // collapsible staff "Record a Payment" card (billing-open view)
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
@@ -182,7 +183,13 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             has accepted or signed. Money is never blocked by the acceptance flow. */}
         {isStaff && (
           <>
-            <ToolHead icon="card" title="Record a Payment" done={false} doneLabel="" pendingLabel="Billing open" />
+            <button type="button" className="apv-toolhead apv-th-btn" onClick={() => setPayOpen((o) => !o)} aria-expanded={payOpen}>
+              <span className="apv-th-ic">{APV_ICON.card}</span>
+              <span className="apv-th-title">Record a Payment</span>
+              <span className="apv-th-status pending">Billing open</span>
+              <span className="apv-fold-chev">{payOpen ? "▲" : "▼"}</span>
+            </button>
+            {payOpen && (
             <div className="apv-card apv-pay-card">
               {gatePayments.length > 0 && (
                 <div className="apv-hist">
@@ -242,6 +249,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               </div>
               <div className="apv-fine">Billing stays open — record a deposit or payment even before the customer accepts or signs.</div>
             </div>
+            )}
           </>
         )}
       </div>
@@ -599,6 +607,8 @@ const APV_CSS = `
 .apv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.7rem;color:var(--muted,var(--muted))}
 /* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
 .apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid var(--line-warm);border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
+.apv-th-btn{width:100%;cursor:pointer;font-family:inherit;background:#fff;text-align:left}
+.apv-th-btn .apv-fold-chev{margin-left:8px}
 .apv-th-ic{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--bg-tint);color:var(--muted);display:grid;place-items:center}
 .apv-th-ic.done{background:var(--green-soft);color:var(--green)}
 .apv-th-title{font-size:.92rem;font-weight:800;color:var(--ink)}
