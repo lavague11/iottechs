@@ -2650,6 +2650,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // System QR handover — moved here from Install so it sits at the top of the closeout steps.
         <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} />
       )}
+      {vPhase === "ph_wrap" && cView === "customer" && lp.system_qr && (
+        // Customer sees their activation QR (read-only) at closeout — scan it to set up the app.
+        <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer} systemQr={lp.system_qr} readOnly />
+      )}
       {vPhase === "ph_wrap" && (
         // Quality-control checklist — office/tech verify each device; customer sees a read-only summary.
         <QCChecklist

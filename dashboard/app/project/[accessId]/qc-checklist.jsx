@@ -53,6 +53,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   const [issueOpen, setIssueOpen] = useState(null);
   const [advancing, setAdvancing] = useState(false);
   const [err, setErr] = useState(null);
+  const [collapsed, setCollapsed] = useState(role === "customer");   // customer sees the summary folded; staff open
   const saveTimer = useRef(null);
   const first = useRef(true);
 
@@ -99,11 +100,15 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   return (
     <div className="qc-root">
       <style>{QC_CSS}</style>
-      <div className="qc-head">
+      <button type="button" className="qc-head qc-head-btn" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
         <div><span className="qc-title">Quality Control</span><span className="qc-sub">{canEdit ? "Verify each device before closing the job" : "Final quality check on your system"}</span></div>
-        <span className={`qc-badge${allPass ? " done" : ""}`}>{allPass ? "All passed" : `${passedCount} / ${items.length} passed`}</span>
-      </div>
+        <span className="qc-head-right">
+          <span className={`qc-badge${allPass ? " done" : ""}`}>{allPass ? "All passed" : `${passedCount} / ${items.length} passed`}</span>
+          <span className="qc-chev">{collapsed ? "▸" : "▾"}</span>
+        </span>
+      </button>
 
+      {!collapsed && (<>
       <div className="qc-bar"><span className="qc-bar-fill" style={{ width: `${pct}%` }} /></div>
 
       {canEdit && !allPass && (
@@ -161,6 +166,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
       ) : (
         !isCustomer && <div className="qc-pending-note">{items.length - passedCount} device{items.length - passedCount === 1 ? "" : "s"} still need a pass before the job can close.</div>
       )}
+      </>)}
     </div>
   );
 }
@@ -169,6 +175,9 @@ const QC_CSS = `
 .qc-root{margin:16px 0 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #2f7d5a;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .qc-empty{color:#6f7686;font-size:.9rem;padding:8px 2px}
 .qc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.qc-head-btn{width:100%;background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;text-align:left}
+.qc-head-right{display:flex;align-items:center;gap:10px}
+.qc-chev{color:#8a8378;font-size:.7rem;line-height:1}
 .qc-title{display:block;font-size:.94rem;font-weight:800;color:#0B0F1A}
 .qc-sub{font-size:.76rem;color:#6f7686}
 .qc-badge{background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}

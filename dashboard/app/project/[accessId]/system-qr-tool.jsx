@@ -8,7 +8,7 @@ import ConfirmDialog from "../../components/confirm-dialog";
 // Minimal System QR step. One row: red "Upload" until a card exists, green "View" after.
 // Upload opens the compact QR Cleaner; once it produces a verified card we save it and flip to
 // green. View pops the card full-screen. Customer name is prefilled from the project.
-export default function SystemQrTool({ accessId, customerName, systemQr }) {
+export default function SystemQrTool({ accessId, customerName, systemQr, readOnly = false }) {
   const [saved, setSaved] = useState(systemQr || null);
   const [mode, setMode] = useState("idle");   // idle | upload
   const [viewing, setViewing] = useState(false);
@@ -52,10 +52,16 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         </span>
         <div className="sqp-tt">
           <span className="sqp-title">System QR</span>
-          <span className="sqp-sub">{saved ? "Activation card ready" : "Upload the device QR to generate the card"}</span>
+          <span className="sqp-sub">
+            {readOnly
+              ? (saved ? "Scan to set up your cameras in the app" : "Your activation card will appear here")
+              : (saved ? "Activation card ready" : "Upload the device QR to generate the card")}
+          </span>
         </div>
         {flash && <span className="sqp-flash">Saved ✓</span>}
-        {mode === "upload" ? (
+        {readOnly ? (
+          saved && <button type="button" className="sqp-btn view" onClick={() => setViewing(true)}>View</button>
+        ) : mode === "upload" ? (
           <button type="button" className="sqp-btn ghost" onClick={() => setMode("idle")}>Close</button>
         ) : saved ? (
           <>
@@ -69,7 +75,15 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         )}
       </div>
 
-      {mode === "upload" && (
+      {readOnly && saved && (
+        // Customer view — show the code inline so they can scan it right from the page.
+        <div className="sqp-body sqp-cust">
+          <img src={saved} alt="System activation QR code" className="sqp-cust-img" onClick={() => setViewing(true)} />
+          <span className="sqp-cust-cap">Scan this code with your phone to set up your cameras in the app.</span>
+        </div>
+      )}
+
+      {!readOnly && mode === "upload" && (
         <div className="sqp-body">
           <iframe src={src} title="System QR" className="sqp-frame" allow="camera" />
         </div>
@@ -106,6 +120,9 @@ export default function SystemQrTool({ accessId, customerName, systemQr }) {
         .sqp-remove:hover{background:#fdecec;border-color:#e74c3c}
         .sqp-body{border-top:1px solid #eee}
         .sqp-frame{width:100%;height:640px;border:none;background:#0B0F1A;display:block}
+        .sqp-cust{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px 20px;background:#fbfaf8}
+        .sqp-cust-img{width:min(240px,70%);max-width:240px;height:auto;border-radius:10px;border:1px solid #e2ddd2;background:#fff;cursor:zoom-in;display:block}
+        .sqp-cust-cap{font-size:.8rem;color:#41485a;text-align:center;max-width:320px}
       `}</style>
     </div>
   );
