@@ -15,6 +15,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
   const [flash, setFlash] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(true);   // card body (QR / uploader) collapsible from the header
 
   // Removing the card clears it and drops straight into the uploader — the reason to remove one is
   // almost always to put a corrected card in its place.
@@ -50,14 +51,14 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         <span className="sqp-ic" style={{ background: saved ? "#e7f6ec" : "#f8f0e0", color: saved ? accent : "#8a6d2f" }}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h1"/></svg>
         </span>
-        <div className="sqp-tt">
-          <span className="sqp-title">System QR</span>
+        <button type="button" className="sqp-tt" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          <span className="sqp-title">System QR <span className="sqp-chev">{open ? "▾" : "▸"}</span></span>
           <span className="sqp-sub">
             {readOnly
               ? (saved ? "Scan to set up your cameras in the app" : "Your activation card will appear here")
               : (saved ? "Activation card ready" : "Upload the device QR to generate the card")}
           </span>
-        </div>
+        </button>
         {flash && <span className="sqp-flash">Saved ✓</span>}
         {readOnly ? (
           saved && <button type="button" className="sqp-btn view" onClick={() => setViewing(true)}>View</button>
@@ -75,7 +76,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         )}
       </div>
 
-      {readOnly && saved && (
+      {open && readOnly && saved && (
         // Customer view — show the code inline so they can scan it right from the page.
         <div className="sqp-body sqp-cust">
           <img src={saved} alt="System activation QR code" className="sqp-cust-img" onClick={() => setViewing(true)} />
@@ -83,7 +84,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         </div>
       )}
 
-      {!readOnly && mode === "upload" && (
+      {open && !readOnly && mode === "upload" && (
         <div className="sqp-body">
           <iframe src={src} title="System QR" className="sqp-frame" allow="camera" />
         </div>
@@ -107,8 +108,9 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         .sqp{border:1px solid #d9d4ca;border-left:3px solid var(--sq);border-radius:12px;background:#fff;margin:0;overflow:hidden;font-family:inherit}
         .sqp-head{display:flex;align-items:center;gap:10px;padding:11px 16px}
         .sqp-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
-        .sqp-tt{display:flex;flex-direction:column;min-width:0;flex:1}
+        .sqp-tt{display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;text-align:left}
         .sqp-title{font-weight:800;font-size:.9rem;color:#0B0F1A}
+        .sqp-chev{color:#8a8378;font-size:.7rem;font-weight:700}
         .sqp-sub{font-size:.76rem;color:#6f7686}
         .sqp-flash{font-size:.76rem;font-weight:800;color:#1c8a45;white-space:nowrap}
         .sqp-btn{height:30px;padding:0 16px;border:none;border-radius:8px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
