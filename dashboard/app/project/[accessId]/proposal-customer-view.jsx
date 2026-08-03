@@ -195,11 +195,17 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const depositPct = +p.deposit_pct || 50;
   const finalPct = 100 - depositPct;
   const payPlan = p.payload.payment_plan || "custom";
+  // [phase, trigger, %, days-after-base] — due dates are scheduled off the signed date (once signed)
+  // or the proposal's issue date, using standard offsets: deposit on signing, progress ~2 weeks,
+  // final Net-30. Concrete dates so the customer knows exactly what's owed and by when.
   const payPhases = payPlan === "50_30_20"
-    ? [["Deposit", "To begin", 50], ["Progress", "At project midpoint", 30], ["Final", "Upon completion (or Net 30)", 20]]
+    ? [["Deposit", "To begin", 50, 0], ["Progress", "At project midpoint", 30, 14], ["Final", "Upon completion (or Net 30)", 20, 30]]
     : payPlan === "50_50"
-    ? [["Deposit", "Before we begin", 50], ["Final", "Upon completion", 50]]
-    : [["Deposit", "Before project start", depositPct], ["Final", "Upon completion", finalPct]];
+    ? [["Deposit", "Before we begin", 50, 0], ["Final", "Upon completion", 50, 30]]
+    : [["Deposit", "Before project start", depositPct, 0], ["Final", "Upon completion", finalPct, 30]];
+  const payBase = p.signed_at || p.sent_at || p.created_at || null;
+  const payBaseDate = payBase ? new Date(String(payBase).replace(" ", "T")) : new Date();
+  const dueOn = (days) => { const d = new Date(payBaseDate); d.setDate(d.getDate() + (+days || 0)); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
   const payTerms = PAYMENT_PLANS[payPlan]?.terms || "";
   // PCP (Performance Credit Program) — a pending, discretionary labor-subtotal credit.
   const pcpRaw = p.payload.pcp_credit;
@@ -461,10 +467,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
       <div className="pcv-section-hd">Payment Terms</div>
       <div className="pcv-pay-table">
-        <div className="pcv-pay-head"><span>Phase</span><span>Trigger</span><span className="r">%</span><span className="r">Amount</span></div>
-        {payPhases.map(([ph, trig, pct], i) => (
+        <div className="pcv-pay-head"><span>Phase</span><span>Due date</span><span className="r">%</span><span className="r">Amount</span></div>
+        {payPhases.map(([ph, trig, pct, days], i) => (
           <div key={ph} className={"pcv-pay-row" + (i === 0 ? " first" : "")}>
-            <span>{ph}</span><span>{trig}</span><span className="r">{pct}%</span><span className="r b">{money(t.grand * pct / 100)}</span>
+            <span className="pcv-pay-phase">{ph}<em>{trig}</em></span>
+            <span className="pcv-pay-due">{dueOn(days)}</span>
+            <span className="r">{pct}%</span>
+            <span className="r b">{money(t.grand * pct / 100)}</span>
           </div>
         ))}
       </div>
@@ -716,13 +725,16 @@ const PCV_CSS = `
 .pcv-loc-total{font-weight:700;color:var(--slate);font-size:.8rem;padding:8px 4px 4px}
 
 .pcv-pay-table{margin:0 22px}
-.pcv-pay-head{display:grid;grid-template-columns:1fr 1.6fr 60px 100px;gap:6px;background:var(--slate);color:var(--bg-paper);
+.pcv-pay-head{display:grid;grid-template-columns:1.5fr 1.2fr 50px 110px;gap:6px;background:var(--slate);color:var(--bg-paper);
   font-size:.72rem;font-weight:700;padding:8px 10px;border-bottom:2px solid var(--gold)}
 .pcv-pay-head .r{text-align:right}
-.pcv-pay-row{display:grid;grid-template-columns:1fr 1.6fr 60px 100px;gap:6px;padding:8px 10px;font-size:.8rem;
+.pcv-pay-row{display:grid;grid-template-columns:1.5fr 1.2fr 50px 110px;gap:6px;padding:8px 10px;font-size:.8rem;
   color:var(--ink);background:#F0ECE8;border-bottom:1px solid #ece8e0;align-items:center}
 .pcv-pay-row.first{background:#fff8ee;border-left:3px solid var(--gold)}
-.pcv-pay-row.first span:first-child{color:#8a6d2f;font-weight:700}
+.pcv-pay-row.first .pcv-pay-phase{color:#8a6d2f;font-weight:700}
+.pcv-pay-phase{display:flex;flex-direction:column;font-weight:700}
+.pcv-pay-phase em{font-style:normal;font-size:.68rem;font-weight:500;color:var(--muted)}
+.pcv-pay-due{font-weight:700;color:var(--slate)}
 .pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--green);border-radius:100px;padding:2px 8px;vertical-align:middle}
 .pcv-waived-strike{color:#c0392b;text-decoration:line-through;text-decoration-color:#c0392b}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:#2a3050;font-weight:600;line-height:1.45;border-left:3px solid var(--gold,var(--gold-deep));padding-left:12px}
