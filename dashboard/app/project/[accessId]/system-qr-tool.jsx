@@ -76,11 +76,12 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         )}
       </div>
 
-      {open && readOnly && saved && (
-        // Customer view — show the code inline so they can scan it right from the page.
+      {open && saved && mode !== "upload" && (
+        // Show the code inline — customer scans it; staff see it at a glance. Gives the fold real
+        // content to hide, and the whole card collapses from the header chevron.
         <div className="sqp-body sqp-cust">
           <img src={saved} alt="System activation QR code" className="sqp-cust-img" onClick={() => setViewing(true)} />
-          <span className="sqp-cust-cap">Scan this code with your phone to set up your cameras in the app.</span>
+          <span className="sqp-cust-cap">{readOnly ? "Scan this code with your phone to set up your cameras in the app." : "The customer scans this to activate the app."}</span>
         </div>
       )}
 
