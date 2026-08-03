@@ -369,6 +369,13 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       y += 20;
     });
     y += 7.2;
+    // Accepted payment methods — mirrors the options offered at the payment stage.
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
+    doc.text("Payment methods:", lm, y);
+    const mLbl = doc.getTextWidth("Payment methods: ");
+    doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
+    doc.text("Zelle (preferred), Certified Check, Cash, Card, Wire", lm + mLbl, y);
+    y += 12;
     const planTerms = PAYMENT_PLANS[payPlan]?.terms;
     if (planTerms) {
       doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);

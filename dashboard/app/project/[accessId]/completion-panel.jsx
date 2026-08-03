@@ -130,7 +130,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
     <div className="cmp-root">
       <style>{CMP_CSS}</style>
 
-      {/* Hero — also the collapse toggle for the whole completion card */}
+      {/* Hero — also the collapse toggle for the entire completion card */}
       <button type="button" className="cmp-hero cmp-hero-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <div className="cmp-hero-ic">
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>
