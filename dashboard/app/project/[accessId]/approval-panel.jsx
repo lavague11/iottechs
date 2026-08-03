@@ -73,6 +73,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
   const [payFormOpen, setPayFormOpen] = useState(true);   // collapsible "Record a payment" entry form
   const [payOpen, setPayOpen] = useState(true);           // collapsible staff "Record a Payment" card (billing-open view)
+  const [gateOpen, setGateOpen] = useState(true);         // collapsible customer "accept to continue" prompt
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
@@ -170,11 +171,16 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             </div>
             <div className="apv-gate-body">
-              <div className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</div>
-              <div className="apv-gate-sub">{sub}</div>
-              {onBrowseStage && showBtn && (
-                <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
-              )}
+              <button type="button" className="apv-gate-hd" onClick={() => setGateOpen((o) => !o)} aria-expanded={gateOpen}>
+                <span className="apv-gate-title">{isFinal ? "Final Payment" : "Approval & Deposit"}</span>
+                <span className="apv-fold-chev">{gateOpen ? "▲" : "▼"}</span>
+              </button>
+              {gateOpen && (<>
+                <div className="apv-gate-sub">{sub}</div>
+                {onBrowseStage && showBtn && (
+                  <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
+                )}
+              </>)}
             </div>
           </div>
         )}
@@ -618,6 +624,8 @@ const APV_CSS = `
 .apv-empty{padding:34px 22px;text-align:center;color:var(--muted);font-size:.86rem}
 .apv-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid var(--gold);border-radius:12px;padding:18px 20px;margin:18px 0}
 .apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
+.apv-gate-body{flex:1;min-width:0}
+.apv-gate-hd{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left}
 .apv-gate-title{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#9a8a5f}
 .apv-gate-sub{font-size:.83rem;color:var(--muted);line-height:1.45;max-width:520px;margin-top:6px}
 .apv-gate-btn{margin-top:12px;height:38px;padding:0 20px;border:none;border-radius:9px;background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--ink);font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
