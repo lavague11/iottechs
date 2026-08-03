@@ -164,7 +164,16 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     const payDone = gHasNums && !payOwed;
     const payAccent = !gHasNums ? "#C9A96E" : payDone ? "#2f7d5a" : "#D64545";
     const payIcon = !gHasNums ? { background: "#f8f0e0", color: "#8a6d2f" } : payDone ? { background: "#e7f6ec", color: "#2f7d5a" } : { background: "#fdecec", color: "#c0392b" };
-    const payStatus = !gHasNums ? { cls: "pending", txt: "Billing open" } : payDone ? { cls: "done", txt: "Paid" } : { cls: "due", txt: "Balance due" };
+    const payStatus = !gHasNums
+      ? { cls: "pending", txt: "Billing open" }
+      : payDone ? { cls: "done", txt: "Paid" }
+      : { cls: "due", txt: isFinal ? "Balance due" : "Deposit due" };
+    // Surface the actual money owed right on the card header (the owner asked for the remaining
+    // balance to be visible without opening the card).
+    const paySub = !gHasNums ? "Log a deposit or payment against the balance"
+      : payDone ? `Paid in full — ${money(gTotal)}`
+      : isFinal ? `${money(gRemaining)} remaining of ${money(gTotal)}`
+      : `${money(gDepDue)} deposit due · ${money(gRemaining)} balance`;
     return (
       <div className="apv-root">
         <style>{APV_CSS}</style>
@@ -173,7 +182,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             the Revise/Send controls), and billing stays open right below. It's the customer's
             "accept a proposal option to continue" guidance, so show it to them only. */}
         {!isStaff && (
-          <div className="apv-gate" style={{ margin: "16px 22px 0" }}>
+          <div className="apv-gate" style={{ margin: "16px 0 0" }}>
             <div className="apv-gate-ic">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             </div>
@@ -200,7 +209,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               <span className="apv-th-ic" style={payIcon}>{APV_ICON.card}</span>
               <span className="apv-th-tt">
                 <span className="apv-th-title">Record a Payment <span className="apv-th-chev">{payOpen ? "▾" : "▸"}</span></span>
-                <span className="apv-th-sub">Log a deposit or payment against the balance</span>
+                <span className="apv-th-sub">{paySub}</span>
               </span>
               <span className={`apv-th-status ${payStatus.cls}`}>{payStatus.txt}</span>
             </button>
@@ -611,8 +620,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
 }
 
 const APV_CSS = `
-.apv-root{background:#fff;border-radius:14px;border:1px solid var(--line,var(--line));border-left:3px solid var(--gold,var(--gold));overflow:hidden;margin:12px 0;padding-bottom:16px;
-  font-family:var(--font)}
+/* Transparent wrapper — the inner tool-cards (billing / signature / WO) each carry their own
+   border + status accent, so the panel itself must NOT be a bordered card (that produced a
+   card-in-a-card double border on the billing tool). */
+.apv-root{background:transparent;margin:0;font-family:var(--font)}
 .apv-titlebar{padding:0}
 .apv-foldbtn{display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .apv-foldbtn:hover{background:var(--bg-soft,var(--bg-soft))}
@@ -621,8 +632,10 @@ const APV_CSS = `
 .apv-titlebar-h{font-family:'Bricolage Grotesque',sans-serif;font-size:.97rem;font-weight:700;color:var(--ink,var(--ink));letter-spacing:-.01em}
 .apv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.7rem;color:var(--muted,var(--muted))}
 /* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
-.apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid var(--line-warm);border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
+.apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 0 0;background:#fff;border:1px solid var(--line-warm);border-bottom:none;border-radius:12px 12px 0 0;padding:11px 14px}
 .apv-th-btn{width:100%;cursor:pointer;font-family:inherit;background:#fff;text-align:left}
+/* Collapsed billing tool = a self-contained rounded card (no dangling square bottom). */
+.apv-th-btn[aria-expanded="false"]{border-bottom:1px solid var(--line-warm);border-radius:12px}
 /* Payment tool-head matches the System QR / QC card language: status-colored left accent,
    tinted icon square, title + inline chevron + subtitle. Scoped to .apv-th-btn so the
    acceptance-stage ToolHead cards keep their own compact styling. */
@@ -665,7 +678,7 @@ const APV_CSS = `
 .apv-due{color:var(--red)}
 .apv-fine{margin:0;font-size:.7rem;color:var(--muted);font-style:italic}
 
-.apv-card{margin:0 22px;background:#fff;border:1px solid var(--line-warm);border-top:none;border-radius:0 0 10px 10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.apv-card{margin:0;background:#fff;border:1px solid var(--line-warm);border-top:none;border-radius:0 0 12px 12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .apv-card p{margin:0;font-size:.8rem;color:#4a5270}
 .apv-await{font-size:.82rem;color:var(--muted)}
 .apv-signed{display:flex;flex-direction:column;gap:4px}
