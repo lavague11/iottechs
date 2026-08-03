@@ -191,9 +191,11 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           <>
             <button type="button" className="apv-toolhead apv-th-btn" onClick={() => setPayOpen((o) => !o)} aria-expanded={payOpen}>
               <span className="apv-th-ic">{APV_ICON.card}</span>
-              <span className="apv-th-title">Record a Payment</span>
+              <span className="apv-th-tt">
+                <span className="apv-th-title">Record a Payment <span className="apv-th-chev">{payOpen ? "▾" : "▸"}</span></span>
+                <span className="apv-th-sub">Log a deposit or payment against the balance</span>
+              </span>
               <span className="apv-th-status pending">Billing open</span>
-              <span className="apv-fold-chev">{payOpen ? "▲" : "▼"}</span>
             </button>
             {payOpen && (
             <div className="apv-card apv-pay-card">
@@ -614,7 +616,16 @@ const APV_CSS = `
 /* Status tool-head — icon + title + Complete/pending chip, stacked directly on its .apv-card */
 .apv-toolhead{display:flex;align-items:center;gap:10px;margin:16px 22px 0;background:#fff;border:1px solid var(--line-warm);border-bottom:none;border-radius:10px 10px 0 0;padding:11px 14px}
 .apv-th-btn{width:100%;cursor:pointer;font-family:inherit;background:#fff;text-align:left}
-.apv-th-btn .apv-fold-chev{margin-left:8px}
+/* Payment tool-head matches the System QR / QC card language: status-colored left accent,
+   tinted icon square, title + inline chevron + subtitle. Scoped to .apv-th-btn so the
+   acceptance-stage ToolHead cards keep their own compact styling. */
+.apv-toolhead.apv-th-btn{border-left:3px solid #C9A96E}
+.apv-th-btn .apv-th-ic{width:30px;height:30px;background:#f8f0e0;color:#8a6d2f}
+.apv-th-tt{display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1}
+.apv-th-chev{color:#8a8378;font-size:.7rem;font-weight:700;margin-left:2px}
+.apv-th-sub{font-size:.76rem;color:#6f7686;font-weight:500}
+.apv-th-btn .apv-th-title{font-size:.9rem}
+.apv-th-btn .apv-th-status{margin-left:0}
 .apv-th-ic{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--bg-tint);color:var(--muted);display:grid;place-items:center}
 .apv-th-ic.done{background:var(--green-soft);color:var(--green)}
 .apv-th-title{font-size:.92rem;font-weight:800;color:var(--ink)}
@@ -699,7 +710,7 @@ select.apv-input{cursor:pointer}
 .apv-pay-form .apv-input:not(.num):not(select){flex:1;min-width:130px}
 
 /* ---- Redesigned payments card ---- */
-.apv-pay-card{gap:16px}
+.apv-pay-card{gap:16px;border-left:3px solid #C9A96E}
 .apv-bal{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
   background:var(--ink);border-radius:12px;padding:16px 18px;color:var(--bg-paper)}
 .apv-bal.paid{background:#12321f}

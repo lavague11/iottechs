@@ -98,17 +98,20 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   }
 
   return (
-    <div className="qc-root">
+    <div className="qc-root" style={{ "--qc": allPass ? "#2f7d5a" : "#C9A96E" }}>
       <style>{QC_CSS}</style>
       <button type="button" className="qc-head qc-head-btn" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
-        <div><span className="qc-title">Quality Control</span><span className="qc-sub">{canEdit ? "Verify each device before closing the job" : "Final quality check on your system"}</span></div>
-        <span className="qc-head-right">
-          <span className={`qc-badge${allPass ? " done" : ""}`}>{allPass ? "All passed" : `${passedCount} / ${items.length} passed`}</span>
-          <span className="qc-chev">{collapsed ? "▸" : "▾"}</span>
+        <span className="qc-ic" style={{ background: allPass ? "#e7f6ec" : "#f8f0e0", color: allPass ? "#2f7d5a" : "#8a6d2f" }}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
         </span>
+        <span className="qc-tt">
+          <span className="qc-title">Quality Control <span className="qc-chev">{collapsed ? "▸" : "▾"}</span></span>
+          <span className="qc-sub">{canEdit ? "Verify each device before closing the job" : "Final quality check on your system"}</span>
+        </span>
+        <span className={`qc-badge${allPass ? " done" : ""}`}>{allPass ? "All passed" : `${passedCount} / ${items.length} passed`}</span>
       </button>
 
-      {!collapsed && (<>
+      {!collapsed && (<div className="qc-body">
       <div className="qc-bar"><span className="qc-bar-fill" style={{ width: `${pct}%` }} /></div>
 
       {canEdit && !allPass && (
@@ -166,21 +169,22 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
       ) : (
         !isCustomer && <div className="qc-pending-note">{items.length - passedCount} device{items.length - passedCount === 1 ? "" : "s"} still need a pass before the job can close.</div>
       )}
-      </>)}
+      </div>)}
     </div>
   );
 }
 
 const QC_CSS = `
-.qc-root{margin:16px 0 4px;background:#fff;border:1px solid #d9d4ca;border-top:4px solid #2f7d5a;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-.qc-empty{color:#6f7686;font-size:.9rem;padding:8px 2px}
-.qc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.qc-head-btn{width:100%;background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;text-align:left}
-.qc-head-right{display:flex;align-items:center;gap:10px}
-.qc-chev{color:#8a8378;font-size:.7rem;line-height:1}
-.qc-title{display:block;font-size:.94rem;font-weight:800;color:#0B0F1A}
+.qc-root{margin:16px 0 4px;background:#fff;border:1px solid #d9d4ca;border-left:3px solid var(--qc,#C9A96E);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.qc-empty{color:#6f7686;font-size:.9rem;padding:14px 16px}
+.qc-head-btn{display:flex;align-items:center;gap:10px;padding:11px 16px;width:100%;background:none;border:none;margin:0;cursor:pointer;font-family:inherit;text-align:left}
+.qc-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.qc-tt{display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1}
+.qc-chev{color:#8a8378;font-size:.7rem;font-weight:700}
+.qc-title{font-size:.9rem;font-weight:800;color:#0B0F1A}
 .qc-sub{font-size:.76rem;color:#6f7686}
-.qc-badge{background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}
+.qc-body{border-top:1px solid #eee;padding:12px 16px 14px;display:flex;flex-direction:column;gap:12px}
+.qc-badge{background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap;flex-shrink:0}
 .qc-badge.done{background:#f2f9f4;border-color:#bfe0c9;color:#1d7a3a}
 .qc-bar{height:7px;background:#eee9df;border-radius:100px;overflow:hidden}
 .qc-bar-fill{display:block;height:100%;background:linear-gradient(90deg,#2f7d5a,#4bbd86);border-radius:100px;transition:width .3s}
