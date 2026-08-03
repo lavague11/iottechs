@@ -98,10 +98,11 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   }
 
   return (
-    <div className="qc-root" style={{ "--qc": allPass ? "#2f7d5a" : "#C9A96E" }}>
+    <div className="qc-root" style={{ "--qc": allPass ? "#2f7d5a" : "#D64545" }}>
       <style>{QC_CSS}</style>
       <button type="button" className="qc-head qc-head-btn" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
-        <span className="qc-ic" style={{ background: allPass ? "#e7f6ec" : "#f8f0e0", color: allPass ? "#2f7d5a" : "#8a6d2f" }}>
+        {/* QC is a REQUIRED step (Manager QC approval gates completion) → red until every device passes, then green. */}
+        <span className="qc-ic" style={{ background: allPass ? "#e7f6ec" : "#fdecec", color: allPass ? "#2f7d5a" : "#c0392b" }}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
         </span>
         <span className="qc-tt">

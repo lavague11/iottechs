@@ -158,6 +158,13 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       gRemaining = Math.max(0, gTotal - paid);
       gHasNums = grand > 0;
     }
+    // Payment is a REQUIRED step (deposit, then final balance): red while money is still owed,
+    // green once it's settled, gold only before there are any numbers to bill against.
+    const payOwed = isFinal ? gRemaining > 0 : gDepDue > 0;
+    const payDone = gHasNums && !payOwed;
+    const payAccent = !gHasNums ? "#C9A96E" : payDone ? "#2f7d5a" : "#D64545";
+    const payIcon = !gHasNums ? { background: "#f8f0e0", color: "#8a6d2f" } : payDone ? { background: "#e7f6ec", color: "#2f7d5a" } : { background: "#fdecec", color: "#c0392b" };
+    const payStatus = !gHasNums ? { cls: "pending", txt: "Billing open" } : payDone ? { cls: "done", txt: "Paid" } : { cls: "due", txt: "Balance due" };
     return (
       <div className="apv-root">
         <style>{APV_CSS}</style>
@@ -189,16 +196,16 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             has accepted or signed. Money is never blocked by the acceptance flow. */}
         {isStaff && (
           <>
-            <button type="button" className="apv-toolhead apv-th-btn" onClick={() => setPayOpen((o) => !o)} aria-expanded={payOpen}>
-              <span className="apv-th-ic">{APV_ICON.card}</span>
+            <button type="button" className="apv-toolhead apv-th-btn" onClick={() => setPayOpen((o) => !o)} aria-expanded={payOpen} style={{ borderLeftColor: payAccent }}>
+              <span className="apv-th-ic" style={payIcon}>{APV_ICON.card}</span>
               <span className="apv-th-tt">
                 <span className="apv-th-title">Record a Payment <span className="apv-th-chev">{payOpen ? "▾" : "▸"}</span></span>
                 <span className="apv-th-sub">Log a deposit or payment against the balance</span>
               </span>
-              <span className="apv-th-status pending">Billing open</span>
+              <span className={`apv-th-status ${payStatus.cls}`}>{payStatus.txt}</span>
             </button>
             {payOpen && (
-            <div className="apv-card apv-pay-card">
+            <div className="apv-card apv-pay-card" style={{ borderLeftColor: payAccent }}>
               {gatePayments.length > 0 && (
                 <div className="apv-hist">
                   <div className="apv-hist-hd">Payment history</div>
@@ -632,6 +639,7 @@ const APV_CSS = `
 .apv-th-status{margin-left:auto;font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 11px;border-radius:100px;white-space:nowrap}
 .apv-th-status.done{background:var(--green-soft);color:var(--green)}
 .apv-th-status.pending{background:#f7f0df;color:#7a5f1f}
+.apv-th-status.due{background:#fdecec;color:#c0392b}
 .apv-empty{padding:34px 22px;text-align:center;color:var(--muted);font-size:.86rem}
 .apv-gate{display:flex;gap:14px;background:#fff;border:1px solid #e5d3a1;border-left:4px solid var(--gold);border-radius:12px;padding:18px 20px;margin:18px 0}
 .apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#faf4e8;color:#a3812f;display:grid;place-items:center}
