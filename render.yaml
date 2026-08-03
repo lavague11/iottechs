@@ -8,7 +8,7 @@ services:
     rootDir: dashboard
     plan: starter            # ~$7/mo; needed for a persistent disk (free plan has none)
     buildCommand: npm install && npm run build
-    startCommand: npm start  # next start — honors the PORT Render assigns
+    startCommand: TZ=America/New_York npm start  # next start — honors PORT; TZ pins timestamps to Eastern
     healthCheckPath: /api/health
     autoDeploy: true         # every push to the connected branch redeploys
     disk:
@@ -18,6 +18,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TZ
+        value: America/New_York   # so SQLite datetime('now','localtime') = Eastern (DST-aware), not UTC
       - key: DB_DIR
         value: /data         # point the app at the mounted disk
       - key: SESSION_SECRET
