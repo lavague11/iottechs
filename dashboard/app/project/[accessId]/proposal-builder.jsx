@@ -240,10 +240,12 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   }
 
   return (
-    <div className="prop-card">
+    <div className="prop-card" style={{ "--prop-accent": status === "accepted" ? "#2f7d5a" : status === "sent" ? "#C9A96E" : "#D64545" }}>
       {/* Card header — matches the one project-page tool-card format: icon · title · status chip
-          on the left, actions + collapse chevron on the right (same as FlowStep / the other cards). */}
-      <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--gold)" }}>
+          on the left, actions + collapse chevron on the right (same as FlowStep / the other cards).
+          Left accent follows the red/gold/green rule: red = draft/changes (staff action needed),
+          gold = sent (awaiting customer), green = accepted (done). */}
+      <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
         <button type="button" className="pv-tool-toggle" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>
           <span className="pv-tool-icon">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
@@ -264,7 +266,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
       </div>
 
-      {bodyOpen && (<div style={{ display: "contents" }}>
+      {bodyOpen && (<div className="prop-body">
       {status === "changes_requested" && meta?.change_note && (
         <div className="prop-note-strip">Customer: “{meta.change_note}”</div>
       )}

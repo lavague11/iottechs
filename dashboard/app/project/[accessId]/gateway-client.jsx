@@ -331,7 +331,10 @@ function ProjectHeader({ accessId, view, onReAuth, onViewChange, previewRole = n
 //   collapsed) · "open" (neutral numbered, available, no glow/dim — for work steps with no clean
 //   completion signal). `bare` wraps a self-contained child card (install/inquiry tools that render
 //   their own header) — just the numbered rail, no FlowStep header or collapse.
-function FlowStep({ n, total, status, color, icon, title, sub, chip, headerAction, bare, completable, canComplete = true, cantHint, autoComplete, flowKey, children }) {
+function FlowStep({ n, total, status, color, required, icon, title, sub, chip, headerAction, bare, completable, canComplete = true, cantHint, autoComplete, flowKey, children }) {
+  // Accent semantics: red = a REQUIRED step still outstanding, gold = optional/not-yet-done.
+  // Done flips green via the `.shaded` CSS override, so this only drives the not-done state.
+  const toolC = required ? "#D64545" : (color || "#C9A96E");
   const expandedByDefault = (s) => s === "active" || s === "open";   // current + available work expand; done/upcoming collapse
   const [localOpen, setLocalOpen] = useState(expandedByDefault(status));
   useEffect(() => { setLocalOpen(expandedByDefault(status)); }, [status]);   // re-flow when status changes (all still toggleable)
@@ -366,7 +369,7 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
 
   if (bare && title) {
     return (
-      <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
+      <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": toolC }}>
         <div className="flow-card flow-bare">
           <div className="flow-bare-head">
             <button type="button" className="flow-bare-toggle" onClick={toggleOpen}>
@@ -386,13 +389,13 @@ function FlowStep({ n, total, status, color, icon, title, sub, chip, headerActio
   }
   if (bare) {   // title-less bare — just the child (backward-compatible)
     return (
-      <div className={`flow-step ${status}`} style={{ "--tool-c": color }}>
+      <div className={`flow-step ${status}`} style={{ "--tool-c": toolC }}>
         <div className="flow-card flow-bare">{children}</div>
       </div>
     );
   }
   return (
-    <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": color }}>
+    <div className={`flow-step ${status}${shaded ? " shaded" : ""}`} style={{ "--tool-c": toolC }}>
       <div className="flow-card pv-tool-panel">
         <div className="pv-tool-head">
           <button type="button" className="pv-tool-toggle" onClick={toggleOpen}>
@@ -2447,12 +2450,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           Survey + Mockup review below. Staff keep the scheduling + notes/POC tools. */}
       {vPhase === "ph_survey" && cView === "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
-          <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#C9A96E"
+          <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
             title="Your Information" sub="Confirm the details we have — or fix anything that's wrong.">
             <LeadInfoStep accessId={lp.access_id} project={lp} preview={!!previewRole} onConfirmed={() => setLeadConfirmed(true)} />
           </FlowStep>
-          <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#C9A96E"
+          <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             title="Schedule Your Appointment" sub="Pick a time for your free walkthrough & demo."
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
@@ -2471,7 +2474,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {vPhase === "ph_survey" && cView !== "customer" && (
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
           {/* Survey Scheduling + Details & Notes merged into one card (booking + POC + questions). */}
-          <FlowStep status={lp.date ? "done" : "active"} color="#C9A96E"
+          <FlowStep status={lp.date ? "done" : "active"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             title="Survey Scheduling &amp; Notes" sub="Book the visit · Point of contact · Questions"
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
@@ -2528,7 +2531,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap">
           {/* Site Survey tool */}
           {showSurvey && (
-            <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E"
+            <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E" required
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
               title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
               chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
@@ -2714,7 +2717,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
+                  <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
                   </FlowStep>
                   <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
@@ -2731,7 +2734,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Office builds/customizes the install work order (add/delete line items, payout toggle).
         <AccordionProvider key="install-staff">
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
+          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" required title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             sub="Book the install visit · Pick a time window" bare>
             <SchedulingWidget
@@ -2752,7 +2755,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             canComplete={shipStatus.count > 0} cantHint="Add a tracking number first" bare>
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
           <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
@@ -2765,7 +2768,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Customer just watches the install progress — no editing, no pricing.
         <AccordionProvider key="install-cust">
         <div className="pv-survey-tools flow-wrap">
-          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" title="Install Scheduling"
+          <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" required title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             sub="Your install visit" bare>
             <SchedulingWidget
@@ -2789,7 +2792,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
           )}
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" title="Installation Work Order" completable bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
           {/* Job-Site Add-ons — hidden until the office submits a change order for them to approve. */}

@@ -30,7 +30,10 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
 
 const PROP_CSS = `
 .pvx .prop-wrap{display:flex;flex-direction:column;gap:14px;margin:18px 0}
-.pvx .prop-card{background:#fff;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+/* Flush tool-card (matches .pv-tool-panel / System QR): no card padding — the header bar sits
+   edge-to-edge and the body is a divided, padded section below. Left accent = status color. */
+.pvx .prop-card{background:#fff;border:1px solid var(--line);border-left:3px solid var(--prop-accent,var(--gold));border-radius:14px;overflow:hidden}
+.pvx .prop-body{border-top:1px solid var(--line);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:'Bricolage Grotesque',sans-serif;font-size:.97rem;font-weight:700;color:var(--ink)}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--muted);cursor:pointer}
