@@ -30,6 +30,12 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // (e.g. "Proposal | 1", "Mockup | 2", "Survey | 3"). Set before creating each page.
   let currentSection = "Proposal";
 
+  // Payment schedule due dates — off the signed date (once signed) else the issue date, standard
+  // offsets: deposit on signing, progress ~2 weeks, final Net-30. Matches the on-screen customer view.
+  const payBaseRaw = p.signed_at || p.sent_at || p.created_at || null;
+  const payBaseDate = payBaseRaw ? new Date(String(payBaseRaw).replace(" ", "T")) : new Date();
+  const dueOn = (days) => { const d = new Date(payBaseDate); d.setDate(d.getDate() + (+days || 0)); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
+
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
   const propDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -174,7 +180,12 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     return yPos + 28.8;
   };
 
-  p.payload.options.forEach((opt, oi) => {
+  // Only render options that actually have line items — an empty B/C never makes a blank page.
+  // (Fall back to all options if somehow none have items, so the proposal is never empty.)
+  const optionsWithData = p.payload.options.filter((o) => (o.services || []).some((s) => (s.items || []).length));
+  const renderOptions = optionsWithData.length ? optionsWithData : p.payload.options;
+
+  renderOptions.forEach((opt, oi) => {
     if (oi > 0) doc.addPage();
     drawHeader();
     drawFooter();
@@ -242,7 +253,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
       let secTotal = 0;
       svc.items.forEach((it) => {
-        y = ensureRoom(y, 30);
+        // Hard page break every 12 line items (owner rule) — re-draw the column header on the new page.
+        if (lineNum > 1 && (lineNum - 1) % 12 === 0) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
+        else y = ensureRoom(y, 30);
         const tot = itemTotal(it);
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
@@ -315,7 +328,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.line(lm, y + 20, lm + rw, y + 20);
     doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
     doc.text("Phase", lm + 10, y + 13);
-    doc.text("Trigger", lm + rw * 0.28, y + 13);
+    doc.text("Due date", lm + rw * 0.28, y + 13);
     doc.text("%", lm + rw * 0.75, y + 13, { align: "right" });
     doc.text("Amount", lm + rw - 6, y + 13, { align: "right" });
     y += 20;
@@ -325,18 +338,18 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     const payPlan = p.payload.payment_plan || "custom";
     const payments = payPlan === "50_30_20"
       ? [
-          ["Deposit", "To begin", "50%", "$" + money(t.grand * 0.5)],
-          ["Progress", "At project midpoint", "30%", "$" + money(t.grand * 0.3)],
-          ["Final", "Upon completion (or Net 30)", "20%", "$" + money(t.grand * 0.2)],
+          ["Deposit", dueOn(0), "50%", "$" + money(t.grand * 0.5)],
+          ["Progress", dueOn(14), "30%", "$" + money(t.grand * 0.3)],
+          ["Final", dueOn(30), "20%", "$" + money(t.grand * 0.2)],
         ]
       : payPlan === "50_50"
       ? [
-          ["Deposit", "Before we begin", "50%", "$" + money(t.grand * 0.5)],
-          ["Final", "Upon completion", "50%", "$" + money(t.grand * 0.5)],
+          ["Deposit", dueOn(0), "50%", "$" + money(t.grand * 0.5)],
+          ["Final", dueOn(30), "50%", "$" + money(t.grand * 0.5)],
         ]
       : [
-          ["Deposit", "Before project start", depositPct + "%", "$" + money(t.grand * depositPct / 100)],
-          ["Final", "Upon completion", finalPct + "%", "$" + money(t.grand * finalPct / 100)],
+          ["Deposit", dueOn(0), depositPct + "%", "$" + money(t.grand * depositPct / 100)],
+          ["Final", dueOn(30), finalPct + "%", "$" + money(t.grand * finalPct / 100)],
         ];
     payments.forEach(([phase, trigger, pct, amt], i) => {
       const bg = i % 2 === 0 ? [255, 251, 242] : MIST;
@@ -462,16 +475,21 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
   if (surveyImages.length) {
     currentSection = "Survey";
-    // Each floor on its own page: fit the plan to the space, then draw the border TIGHT around it
-    // (not the whole page) and center it — so it always "fits" cleanly with no awkward empty frame.
+    // Each floor on its own page. The header spans the SAME centered box as the image (symmetric
+    // margins) so they line up, and the plan is centered on both axes with a tight border.
     surveyImages.forEach((f) => {
       let y = newPage();
-      y = sectionHeader("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), y) + 14;
+      // Symmetric section header (matches the centered image box, not the asymmetric text column).
+      doc.setFillColor(...SLATE); doc.rect(margin, y, availW, 22, "F");
+      doc.setFillColor(...GOLD); doc.rect(margin, y, 3, 22, "F");
+      doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
+      doc.text("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), margin + 10, y + 14.4);
+      y += 22 + 14;
       const availH = (H - 46) - y;
       const d = fit(f.img, availW - 2 * pad, availH - 2 * pad);
       if (!d) return;
-      const imgX = margin + (availW - d.w) / 2;
-      const imgY = y + (availH - d.h) / 2;
+      const imgX = margin + (availW - d.w) / 2;   // centered horizontally on the page
+      const imgY = y + (availH - d.h) / 2;         // centered vertically in the remaining space
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
       doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");   // border hugs the image
       try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image */ }
