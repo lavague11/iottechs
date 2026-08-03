@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, copyFileSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
@@ -991,7 +991,56 @@ function init() {
     for (const a of TECH_SUPPORT_SEED) seedTech.run(a.title, a.body, a.category, a.pinned ? 1 : 0, "IOT TECHS");
   }
 
+  // One-time backfill: correct timestamps written while the server ran in UTC (see below).
+  shiftTimestampsToEastern(db, path.join(dir, "dashboard.db"));
+
   return db;
+}
+
+// One-time data repair. Production rows were written while the server OS was UTC, where SQLite's
+// datetime('now','localtime') === datetime('now') === UTC. Every stored wall-clock timestamp is
+// therefore 4–5h ahead of Eastern. Now that the process runs with TZ=America/New_York,
+// datetime(col,'localtime') re-reads each stored value AS UTC and converts it to Eastern —
+// DST-aware per row (−4h in EDT, −5h in EST). Runs exactly once, only in production (local dev
+// already wrote Eastern), only once the server is actually on Eastern, and takes a file backup first.
+function shiftTimestampsToEastern(db, dbPath) {
+  try {
+    db.exec("CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT)");
+    if (db.prepare("SELECT 1 FROM app_meta WHERE k='tz_shift_eastern_v1'").get()) return; // already handled
+    if (process.env.NODE_ENV !== "production") {
+      // Local dev data is already Eastern — never shift it; mark done so this stays a no-op here.
+      db.prepare("INSERT OR REPLACE INTO app_meta (k,v) VALUES ('tz_shift_eastern_v1','skipped-nonprod')").run();
+      return;
+    }
+    // Only proceed once TZ is actually Eastern — if localtime still equals UTC the fix hasn't taken
+    // effect yet, so bail WITHOUT marking done and retry on the next boot.
+    const offH = db.prepare("SELECT CAST(ROUND((julianday(datetime('now')) - julianday(datetime('now','localtime'))) * 24) AS INTEGER) AS h").get().h;
+    if (!offH) { console.warn("[tz-shift] localtime still == UTC; deferring backfill until TZ=Eastern is live"); return; }
+
+    try { copyFileSync(dbPath, dbPath + ".pre-tzshift.bak"); } catch (e) { console.error("[tz-shift] backup failed, aborting:", e); return; }
+
+    let total = 0;
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
+    db.exec("BEGIN");
+    for (const { name } of tables) {
+      if (name === "app_meta") continue;
+      for (const c of db.prepare(`PRAGMA table_info("${name}")`).all()) {
+        if (!/(^|_)at$/.test(c.name)) continue; // only wall-clock event columns (…_at / at)
+        // Shift only values in SQLite's exact "YYYY-MM-DD HH:MM:SS" form (skip nulls, dates, ISO/epoch).
+        const r = db.prepare(
+          `UPDATE "${name}" SET "${c.name}" = datetime("${c.name}",'localtime') ` +
+          `WHERE "${c.name}" LIKE '____-__-__ __:__:__' AND length("${c.name}") = 19`
+        ).run();
+        total += Number(r.changes || 0);
+      }
+    }
+    db.prepare("INSERT OR REPLACE INTO app_meta (k,v) VALUES ('tz_shift_eastern_v1', ?)").run(`${total} rows, offset ${offH}h`);
+    db.exec("COMMIT");
+    console.log(`[tz-shift] converted ${total} timestamp values UTC→Eastern (backup: ${dbPath}.pre-tzshift.bak)`);
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    console.error("[tz-shift] failed:", e);
+  }
 }
 
 // The Mobile App Setup walkthrough — a sequence of animated steps rendered by GuideWalkthrough.
