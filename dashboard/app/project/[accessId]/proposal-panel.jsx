@@ -246,7 +246,16 @@ const PROP_CSS = `
 .pvx .prop-mcell .v.ok{color:var(--green)}
 .pvx .prop-empty{font-size:.82rem;color:var(--muted);font-weight:600;padding:6px 0}
 @media(max-width:640px){
-  .pvx .prop-item,.pvx .prop-cols{grid-template-columns:1fr 52px 80px 80px}
-  .pvx .prop-item .prop-line-total,.pvx .prop-cols .hcell-lt{display:none}
+  /* The dense multi-column pricing grid doesn't fit a phone — the fixed qty/price/cost/total
+     columns eat the width and collapse the item NAME to nothing. On mobile, stack each line:
+     the name gets its own full-width row, then a compact qty · price · total row underneath. */
+  .pvx .prop-item,.pvx .prop-item.nocost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+  .pvx .prop-item>span:first-child{flex:1 1 100%;min-width:0}
+  .pvx .prop-item>span:first-child input{width:100%}
+  .pvx .prop-item .prop-name-ac{flex:1;min-width:0}
+  .pvx .prop-item input.num{flex:0 0 60px;width:60px}
+  .pvx .prop-item .prop-line-total{margin-left:auto;font-size:.82rem}
+  .pvx .prop-item .prop-item-x{flex:0 0 auto}
+  .pvx .prop-cols{display:none}
 }
 `;
