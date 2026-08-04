@@ -3,16 +3,18 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
-import { STAGES } from "../../lib/spec";
+import { PHASES, phasesForType, masterToPhaseKey, phaseLabelOf } from "../../lib/spec";
 import { TaglinePill } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 
-const STAGE_KEYS  = STAGES.map((s) => s.key);
-const STAGE_TOTAL = STAGES.length;
-
-function stageNum(key) { return STAGE_KEYS.indexOf(key) + 1; }
-function stagePct(key) { const i = STAGE_KEYS.indexOf(key); return i < 0 ? 0 : Math.round(((i + 1) / STAGE_TOTAL) * 100); }
-function stageLabel(key) { return STAGES.find((s) => s.key === key)?.label || key; }
+// Customers see a 5-phase journey (Consulting · Proposal · Install · Closeout · Completion) — the
+// same bar the project page shows — NOT the 9 internal sub-stages. Map each project's raw stage to
+// its phase and count against the phases that apply to its type (service calls have fewer).
+const phaseListFor = (p) => (p?.type ? phasesForType(p.type) : PHASES);
+function stageNum(p)   { const k = masterToPhaseKey(p.stage); const l = phaseListFor(p); const i = l.findIndex((x) => x.key === k); return i < 0 ? 1 : i + 1; }
+function stageTotal(p) { return phaseListFor(p).length; }
+function stagePct(p)   { return Math.round((stageNum(p) / stageTotal(p)) * 100); }
+function stageLabel(p) { return phaseLabelOf(masterToPhaseKey(p.stage)); }
 
 function filterState(p) {
   if (p.stage === "completion" || p.category === "completed") return "completed";
@@ -747,9 +749,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                 {visible.length===0
                   ? <div className="cp-empty-proj">No projects in this view.</div>
                   : visible.map(p=>{
-                      const pct   = stagePct(p.stage);
-                      const snum  = stageNum(p.stage);
-                      const slbl  = stageLabel(p.stage);
+                      const pct   = stagePct(p);
+                      const snum  = stageNum(p);
+                      const total = stageTotal(p);
+                      const slbl  = stageLabel(p);
                       const badge = statusBadge(p);
                       return (
                         <div key={p.access_id} className="cp-proj">
@@ -760,7 +763,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                             </div>
                             <div className="p-addr">{p.customer}{p.address?` · ${p.address}`:""}</div>
                             <div className="cp-bar"><span style={{width:`${pct}%`}}/></div>
-                            <div className="cp-stage">Stage {snum} of {STAGE_TOTAL} · <b>{slbl}{p.date?` — ${p.date}`:""}</b></div>
+                            <div className="cp-stage">Stage {snum} of {total} · <b>{slbl}{p.date?` — ${p.date}`:""}</b></div>
                             <div className="cp-p-foot">
                               {p.customer_pin && (
                                 <span className="cp-pin">
