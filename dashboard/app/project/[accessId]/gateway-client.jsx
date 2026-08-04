@@ -2531,7 +2531,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap">
           {/* Site Survey tool */}
           {showSurvey && (
-            <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E" required
+            <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E"
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
               title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
               chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}

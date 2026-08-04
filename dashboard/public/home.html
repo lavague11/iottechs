@@ -1119,6 +1119,7 @@
     const pw2=document.getElementById('svPw2').value;
     const pin=_demoPin; // auto-assigned last-4-of-phone; not a user field anymore
     if(pw!==pw2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
+    if(!document.getElementById('svAgree').checked){errEl.textContent='Please agree to the Terms & Conditions to continue.';errEl.style.display='block';return;}
     btn.disabled=true; btn.textContent='Creating account…';
     try{
       const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1369,6 +1370,10 @@
             <span style="font-size:.8rem;color:var(--muted,#6b7280)">Set automatically — the last 4 digits of your phone.</span>
           </div>
         </div>
+        <label class="tc-agree" style="display:flex;align-items:flex-start;gap:9px;font-size:.82rem;color:var(--muted,#6b7280);margin:2px 0 4px;cursor:pointer;line-height:1.45">
+          <input type="checkbox" id="svAgree" style="width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--gold,#C9A96E);cursor:pointer">
+          <span>I agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--accent,#3257ff);font-weight:600;text-decoration:underline">Terms &amp; Conditions</a>.</span>
+        </label>
         <div id="svErr" class="pl-error" style="display:none;"></div>
         <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:6px;">Create Account &amp; View My Project →</button>
       </form>

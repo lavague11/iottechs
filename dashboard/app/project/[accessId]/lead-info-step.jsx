@@ -10,6 +10,7 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
   const [editing, setEditing]     = useState(false);
   const [saving, setSaving]       = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [agreed, setAgreed]       = useState(false);   // must accept Terms & Conditions before confirming
   const [err, setErr]             = useState("");
   const [f, setF] = useState({
     contact_name:  project.contact_name  || "",
@@ -30,6 +31,7 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
 
   async function save() {
     if (preview) return;
+    if (!agreed) { setErr("Please agree to the Terms & Conditions to continue."); return; }
     setSaving(true); setErr("");
     const r = await updateProjectInfoAction(accessId, f);
     setSaving(false);
@@ -38,8 +40,17 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
   }
   function confirm() {
     if (preview) return;
+    if (!agreed) { setErr("Please agree to the Terms & Conditions to continue."); return; }
     setConfirmed(true); onConfirmed?.();
   }
+  // The Terms & Conditions agreement row — required before confirming or saving. Hidden once
+  // confirmed (the acknowledgment is locked in).
+  const AgreeRow = !confirmed ? (
+    <label className="lis-agree">
+      <input type="checkbox" checked={agreed} disabled={preview} onChange={(e) => { setAgreed(e.target.checked); if (e.target.checked) setErr(""); }} />
+      <span>I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" className="lis-tc-link">Terms &amp; Conditions</a>.</span>
+    </label>
+  ) : null;
 
   return (
     <div className="lis">
@@ -55,8 +66,9 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
             ))}
           </div>
           {err && <div className="lis-err">{err}</div>}
+          {AgreeRow}
           <div className="lis-actions">
-            <button type="button" className="lis-save" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>
+            <button type="button" className="lis-save" disabled={saving || !agreed} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>
             <button type="button" className="lis-edit" onClick={() => { setEditing(false); setErr(""); }}>Cancel</button>
           </div>
         </>
@@ -72,11 +84,13 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
               </div>
             ))}
           </div>
+          {err && !confirmed && <div className="lis-err">{err}</div>}
+          {AgreeRow}
           <div className="lis-actions">
             {confirmed ? (
               <span className="lis-confirmed"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Confirmed — thanks!</span>
             ) : (
-              <button type="button" className="lis-save" disabled={preview} onClick={confirm}>Looks right — Confirm</button>
+              <button type="button" className="lis-save" disabled={preview || !agreed} onClick={confirm}>Looks right — Confirm</button>
             )}
             <button type="button" className="lis-edit" onClick={() => setEditing(true)}>Edit</button>
           </div>
@@ -105,4 +119,8 @@ const LIS_CSS = `
 .lis-edit{height:40px;padding:0 16px;border:1px solid #d9d4ca;border-radius:9px;background:#fff;color:#5b6275;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit}
 .lis-edit:hover{border-color:#C9A96E;color:#0B0F1A}
 .lis-confirmed{display:inline-flex;align-items:center;gap:6px;font-size:.86rem;font-weight:800;color:#1d7a3a}
+.lis-agree{display:flex;align-items:flex-start;gap:9px;margin-top:14px;font-size:.84rem;font-weight:600;color:#5b6275;line-height:1.45;cursor:pointer}
+.lis-agree input{width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:#C9A96E;cursor:pointer}
+.lis-tc-link{color:#8a6d2f;font-weight:800;text-decoration:underline}
+.lis-tc-link:hover{color:#0B0F1A}
 `;
