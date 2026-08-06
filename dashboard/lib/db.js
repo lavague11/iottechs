@@ -547,6 +547,30 @@ function init() {
       detail     TEXT
     )
   `);
+  // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
+  // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
+  // point total at submit; `stage` walks applied → scheduled → completed.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS adt_applications (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      adt_id        TEXT UNIQUE,
+      name          TEXT,
+      email         TEXT,
+      phone         TEXT,
+      address       TEXT,
+      equipment     TEXT,                              -- JSON { itemId: qty }
+      points        REAL DEFAULT 0,
+      notes         TEXT,
+      stage         TEXT NOT NULL DEFAULT 'applied',   -- applied | scheduled | completed
+      schedule_date TEXT,
+      schedule_window TEXT,
+      access_pin    TEXT,
+      created_at    TEXT DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT DEFAULT (datetime('now','localtime')),
+      scheduled_at  TEXT,
+      completed_at  TEXT
+    )
+  `);
 
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
@@ -3169,6 +3193,49 @@ export function getProjectCameraLabels(accessId) {
     }
   } catch { /* no/bad proposal */ }
   return [];
+}
+
+// ===== ADT project portal (Apply → Schedule → Complete) =====
+function nextAdtId() {
+  const row = db.prepare("SELECT adt_id FROM adt_applications WHERE adt_id LIKE 'ADT%' ORDER BY id DESC LIMIT 1").get();
+  const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
+  return "ADT" + String(n).padStart(4, "0");
+}
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes }) {
+  const adtId = nextAdtId();
+  const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
+  const equip = JSON.stringify(equipment || {});
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin);
+  return getAdtApplication(adtId);
+}
+export function getAdtApplication(adtId) {
+  const r = db.prepare("SELECT * FROM adt_applications WHERE adt_id = ? COLLATE NOCASE").get(String(adtId || "").trim());
+  if (!r) return null;
+  try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
+  return r;
+}
+export function listAdtApplications() {
+  return db.prepare("SELECT * FROM adt_applications ORDER BY id DESC").all().map((r) => {
+    try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
+    return r;
+  });
+}
+export function scheduleAdtApplication(adtId, { date, window } = {}) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare(`UPDATE adt_applications SET schedule_date = ?, schedule_window = ?, stage = 'scheduled',
+              scheduled_at = COALESCE(scheduled_at, datetime('now','localtime')), updated_at = datetime('now','localtime')
+              WHERE adt_id = ? COLLATE NOCASE`).run(date || null, window || null, String(adtId));
+  return getAdtApplication(adtId);
+}
+export function completeAdtApplication(adtId) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare(`UPDATE adt_applications SET stage = 'completed', completed_at = datetime('now','localtime'),
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`).run(String(adtId));
+  return getAdtApplication(adtId);
 }
 
 export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {}) {
