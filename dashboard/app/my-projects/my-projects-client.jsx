@@ -207,12 +207,12 @@ function QuestionForm({ user, onDone }) {
   );
 }
 
-function ChoiceCard({ icon, title, sub, onClick }) {
+function ChoiceCard({ icon, title, sub, onClick, tone = "slate" }) {
   return (
-    <button className="am-choice" onClick={onClick} type="button">
+    <button className={`am-choice tone-${tone}`} onClick={onClick} type="button">
       <span className="am-choice-ic">{icon}</span>
-      <div><div className="am-choice-title">{title}</div><div className="am-choice-sub">{sub}</div></div>
-      <span className="am-choice-arr">→</span>
+      <div className="am-choice-tx"><div className="am-choice-title">{title}</div><div className="am-choice-sub">{sub}</div></div>
+      <span className="am-choice-arr" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
     </button>
   );
 }
@@ -297,6 +297,7 @@ function ActionModal({ type, user, projects, onClose }) {
               <ChoiceCard
                 icon={<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>}
                 title="Add to a project we did"
+                tone="gold"
                 sub="Expand cameras, audio, access, or storage on an existing IOT TECHS installation"
                 onClick={()=>setStep("existing")}
               />
@@ -304,6 +305,7 @@ function ActionModal({ type, user, projects, onClose }) {
             <ChoiceCard
               icon={<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>}
               title="New location or system"
+              tone="blue"
               sub="Brand new site or a system installed by someone else"
               onClick={()=>setStep("new")}
             />
@@ -352,6 +354,7 @@ function ActionModal({ type, user, projects, onClose }) {
               <ChoiceCard
                 icon={<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>}
                 title="A project we did"
+                tone="gold"
                 sub="Something isn't working or needs attention on a system IOT TECHS installed"
                 onClick={()=>setStep("existing")}
               />
@@ -359,6 +362,7 @@ function ActionModal({ type, user, projects, onClose }) {
             <ChoiceCard
               icon={<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>}
               title="New service call"
+              tone="slate"
               sub="System installed by someone else, or a new site that needs attention"
               onClick={()=>setStep("new")}
             />
@@ -586,19 +590,24 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .am-icon svg{width:20px;height:20px;fill:none;stroke-width:2}
         .am-icon-blue{background:var(--accent-soft)}.am-icon-blue svg{stroke:var(--accent)}
         .am-icon-gold{background:#faf4e8}.am-icon-gold svg{stroke:var(--gold-deep)}
-        .am-icon-red{background:var(--red-soft)}.am-icon-red svg{stroke:var(--red)}
+        .am-icon-red{background:var(--red-soft,#fdecec)}.am-icon-red svg{stroke:var(--red,#d64545)}
         .am-icon-purple{background:#f3eeff}.am-icon-purple svg{stroke:#7c3aed}
         .am-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:6px}
         .am-head p{color:var(--muted);font-size:.92rem}
-        .am-choices{display:grid;gap:10px}
-        .am-choice{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;font-family:inherit;transition:border-color .2s,box-shadow .2s}
-        .am-choice:hover{border-color:var(--gold);box-shadow:0 10px 24px -14px rgba(14,19,32,.3)}
-        .am-choice-ic{width:36px;height:36px;border-radius:9px;background:var(--bg-soft);display:grid;place-items:center;flex-shrink:0}
-        .am-choice-ic svg{width:17px;height:17px;stroke:var(--ink);fill:none;stroke-width:2}
-        .am-choice-title{font-weight:700;font-size:.94rem;margin-bottom:2px;color:var(--ink)}
-        .am-choice-sub{font-size:.82rem;color:var(--muted)}
-        .am-choice-arr{margin-left:auto;color:var(--muted);font-size:.9rem;flex-shrink:0;transition:transform .2s}
-        .am-choice:hover .am-choice-arr{transform:translateX(3px)}
+        .am-choices{display:grid;gap:12px}
+        .am-choice{display:flex;align-items:center;gap:15px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;cursor:pointer;width:100%;text-align:left;font-family:inherit;transition:border-color .18s,box-shadow .18s,transform .18s,background .18s}
+        .am-choice:hover{border-color:var(--gold);background:#fffdf9;box-shadow:0 16px 34px -20px rgba(14,19,32,.4);transform:translateY(-2px)}
+        .am-choice-ic{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;flex-shrink:0;transition:transform .18s}
+        .am-choice:hover .am-choice-ic{transform:scale(1.05)}
+        .am-choice-ic svg{width:21px;height:21px;fill:none;stroke-width:2}
+        .am-choice.tone-gold  .am-choice-ic{background:#f8efd9}.am-choice.tone-gold  .am-choice-ic svg{stroke:var(--gold-deep)}
+        .am-choice.tone-slate .am-choice-ic{background:#eef1f8}.am-choice.tone-slate .am-choice-ic svg{stroke:#3a4a72}
+        .am-choice.tone-blue  .am-choice-ic{background:var(--accent-soft)}.am-choice.tone-blue  .am-choice-ic svg{stroke:var(--accent)}
+        .am-choice-tx{min-width:0;flex:1}
+        .am-choice-title{font-weight:800;font-size:.98rem;margin-bottom:3px;color:var(--ink);letter-spacing:-.01em}
+        .am-choice-sub{font-size:.83rem;color:var(--muted);line-height:1.45}
+        .am-choice-arr{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--bg-soft);color:var(--muted);flex-shrink:0;transition:background .18s,color .18s,transform .18s}
+        .am-choice:hover .am-choice-arr{background:var(--gold);color:#fff;transform:translateX(3px)}
         .am-form{display:grid;gap:14px}
         .am-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
         .am-field{display:flex;flex-direction:column;gap:6px}
@@ -734,37 +743,6 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
           </div>
         </section>
 
-        {/* SERVICE CALLS — renders only when the customer has at least one */}
-        {serviceCalls.length > 0 && (
-          <section className="cp-section" id="service-calls">
-            <div className="cp-wrap">
-              <div className="cp-sec-head"><h2>My Service Calls</h2></div>
-              <div className="cp-proj-list">
-                {serviceCalls.map((c) => {
-                  const step = ["resolved", "closed"].includes(c.stage) ? 3 : c.stage === "submitted" ? 1 : 2;
-                  const lbl  = step === 3 ? "Resolved" : step === 2 ? "Troubleshooting" : "Received";
-                  return (
-                    <div key={c.svc_id} className="cp-proj">
-                      <div>
-                        <div className="p-top">
-                          <h4>{c.issue || "Service call"}</h4>
-                          <span className={`cp-status ${step === 3 ? "done" : "active"}`}>{lbl}</span>
-                        </div>
-                        <div className="p-addr">{c.svc_id}{c.created_at ? ` · Opened ${String(c.created_at).slice(0, 10)}` : ""}</div>
-                        <div className="cp-bar"><span style={{ width: `${Math.round((step / 3) * 100)}%` }} /></div>
-                        <div className="cp-stage">Step {step} of 3 · <b>{lbl}</b></div>
-                      </div>
-                      <div className="cp-p-act">
-                        <Link href={`/service-call/${c.svc_id}`} className="cp-view">Track →</Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        )}
-
         {/* MY PROJECTS */}
         <section className="cp-section" id="projects">
           <div className="cp-wrap">
@@ -828,6 +806,37 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
             )}
           </div>
         </section>
+
+        {/* MY SERVICE CALLS — its own section under Projects; renders only when the customer has one */}
+        {serviceCalls.length > 0 && (
+          <section className="cp-section" id="service-calls">
+            <div className="cp-wrap">
+              <div className="cp-sec-head"><h2>My Service Calls</h2></div>
+              <div className="cp-proj-list">
+                {serviceCalls.map((c) => {
+                  const step = ["resolved", "closed"].includes(c.stage) ? 3 : c.stage === "submitted" ? 1 : 2;
+                  const lbl  = step === 3 ? "Resolved" : step === 2 ? "Troubleshooting" : "Received";
+                  return (
+                    <div key={c.svc_id} className="cp-proj">
+                      <div>
+                        <div className="p-top">
+                          <h4>{c.issue || "Service call"}</h4>
+                          <span className={`cp-status ${step === 3 ? "done" : "active"}`}>{lbl}</span>
+                        </div>
+                        <div className="p-addr">{c.svc_id}{c.created_at ? ` · Opened ${String(c.created_at).slice(0, 10)}` : ""}</div>
+                        <div className="cp-bar"><span style={{ width: `${Math.round((step / 3) * 100)}%` }} /></div>
+                        <div className="cp-stage">Step {step} of 3 · <b>{lbl}</b></div>
+                      </div>
+                      <div className="cp-p-act">
+                        <Link href={`/service-call/${c.svc_id}`} className="cp-view">Track →</Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
 
         <footer className="cp-footer">
           <div className="cp-wrap cp-foot-inner">
