@@ -3141,6 +3141,36 @@ export function getSvcCameras(accessId) {
   return { cameras, floors };
 }
 
+// Flat list of a project's camera location NAMES, for the "which camera is the problem?" picker in
+// the customer service-call flow. Survey-named cameras first (they carry the real on-site labels);
+// if there's no survey, fall back to the accepted proposal's camera line items (which are also named,
+// e.g. "Back Door Camera — FP1"). Returns [] when the project has no camera data of ours.
+export function getProjectCameraLabels(accessId) {
+  try {
+    const { cameras } = getSvcCameras(accessId);
+    if (cameras?.length) return cameras.map((c) => c.label);
+  } catch { /* fall through */ }
+  try {
+    const prop = db.prepare(
+      "SELECT payload, selected_option, accepted_options FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
+    ).get(String(accessId));
+    if (prop?.payload) {
+      const pl = JSON.parse(prop.payload);
+      const ids = (() => { try { const a = JSON.parse(prop.accepted_options || "[]"); return a.length ? a : (prop.selected_option ? [prop.selected_option] : []); } catch { return prop.selected_option ? [prop.selected_option] : []; } })();
+      const opts = ids.length ? (pl.options || []).filter((o) => ids.includes(o.id)) : (pl.options || []).slice(0, 1);
+      const out = [];
+      for (const opt of opts) for (const s of (opt.services || [])) {
+        if (s.key !== "camera") continue;
+        for (const it of (s.items || [])) {
+          if ((it.sub || []).length > 0 && it.name && !out.includes(it.name)) out.push(String(it.name).slice(0, 60));
+        }
+      }
+      if (out.length) return out;
+    }
+  } catch { /* no/bad proposal */ }
+  return [];
+}
+
 export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {}) {
   if (!SVC_STAGES.some((s) => s.key === stage)) return null;
   const cur = getServiceCall(svcId);

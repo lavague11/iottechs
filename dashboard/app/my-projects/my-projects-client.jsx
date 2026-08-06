@@ -99,19 +99,40 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
   );
 }
 
+// What's-not-working categories for a service call. Everything that isn't one of these three
+// common cases falls under "Something else" (free-text describes it).
+const ISSUE_TYPES = [
+  { v: "camera", label: "A camera (1–2)" },
+  { v: "nvr",    label: "NVR / Recorder" },
+  { v: "app",    label: "Phone app / remote viewing" },
+  { v: "other",  label: "Something else" },
+];
+
 function ExistingProjectForm({ user, projects, actionLabel, placeholder, serviceHint, onDone }) {
+  const isServiceCall = serviceHint === "Service Call";
   const [projectId, setProjectId] = useState(projects[0]?.access_id||"");
+  const [issueType, setIssueType] = useState("");
+  const [camera, setCamera]   = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const proj = projects.find(p=>p.access_id===projectId);
+  const cams = proj?.cameraLabels || [];   // named camera locations (survey → proposal fallback)
   async function submit(e){
-    e.preventDefault(); setErr(""); setBusy(true);
-    const proj = projects.find(p=>p.access_id===projectId);
+    e.preventDefault(); setErr("");
+    if (isServiceCall && !issueType) { setErr("Please tell us what's not working."); return; }
+    setBusy(true);
     try {
+      // Prefix the note with the structured selections so the office/tech sees exactly what and where.
+      const itLabel = ISSUE_TYPES.find(t=>t.v===issueType)?.label;
+      const tags = [];
+      if (isServiceCall && itLabel) tags.push(itLabel);
+      if (issueType==="camera" && camera) tags.push(`Camera: ${camera}`);
+      const prefix = tags.length ? `[${tags.join(" · ")}] ` : "";
       const r = await fetch("/api/demo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
         name: user?.name||"", email: user?.email||"", phone: user?.phone||"",
         address: proj?.address||"", service: serviceHint||(proj?.service||""),
-        message: `[Project: ${projectId}] ${message}`,
+        message: `[Project: ${projectId}] ${prefix}${message}`.trim(),
       })});
       const j = await r.json();
       if(j.ok) onDone(j);
@@ -123,15 +144,34 @@ function ExistingProjectForm({ user, projects, actionLabel, placeholder, service
     <form onSubmit={submit} className="am-form">
       <div className="am-field">
         <label>Select Project</label>
-        <select value={projectId} onChange={e=>setProjectId(e.target.value)} required>
+        <select value={projectId} onChange={e=>{setProjectId(e.target.value); setCamera("");}} required>
           {projects.map(p=>(
             <option key={p.access_id} value={p.access_id}>{p.service||p.service_code} — {p.address||p.customer} ({p.access_id})</option>
           ))}
         </select>
       </div>
+      {isServiceCall && (
+        <div className="am-field">
+          <label>What&apos;s not working?</label>
+          <select value={issueType} onChange={e=>{setIssueType(e.target.value); setCamera("");}} required>
+            <option value="">Select…</option>
+            {ISSUE_TYPES.map(t=>(<option key={t.v} value={t.v}>{t.label}</option>))}
+          </select>
+        </div>
+      )}
+      {isServiceCall && issueType==="camera" && cams.length>0 && (
+        <div className="am-field">
+          <label>Which camera?</label>
+          <select value={camera} onChange={e=>setCamera(e.target.value)}>
+            <option value="">Select the camera…</option>
+            {cams.map((c,i)=>(<option key={i} value={c}>{c}</option>))}
+            <option value="Not sure / more than one">Not sure / more than one</option>
+          </select>
+        </div>
+      )}
       <div className="am-field">
-        <label>{actionLabel}</label>
-        <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={4} placeholder={placeholder} required/>
+        <label>{actionLabel}{isServiceCall ? <span className="am-opt"> (optional)</span> : null}</label>
+        <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={4} placeholder={placeholder} required={!isServiceCall}/>
       </div>
       {err && <div className="am-err">{err}</div>}
       <button className="am-submit" type="submit" disabled={busy}>{busy?"Sending…":"Submit"}</button>

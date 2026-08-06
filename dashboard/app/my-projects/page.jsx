@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken } from "../../lib/auth";
-import { getProjectsByContactEmail, getUserById, getServiceCallsForCustomer } from "../../lib/db";
+import { getProjectsByContactEmail, getUserById, getServiceCallsForCustomer, getProjectCameraLabels } from "../../lib/db";
 import MyProjectsClient from "./my-projects-client";
 
 export default async function MyProjectsPage() {
@@ -28,6 +28,9 @@ export default async function MyProjectsPage() {
     status: p.status,
     category: p.category,
     cameras: p.cameras,
+    // Named camera locations (survey-first, proposal fallback) for the service-call "which camera?"
+    // picker. Customer-safe: these are the customer's own camera location labels, no pricing/internals.
+    cameraLabels: getProjectCameraLabels(p.access_id),
     date: p.date,
     issue: p.issue,
     customer_pin: p.customer_pin, // their OWN project PIN — used to display + copy the login link
