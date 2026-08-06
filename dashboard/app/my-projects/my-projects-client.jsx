@@ -11,6 +11,17 @@ import AddressAutocomplete from "../components/address-autocomplete";
 // same bar the project page shows — NOT the 9 internal sub-stages. Map each project's raw stage to
 // its phase and count against the phases that apply to its type (service calls have fewer).
 const phaseListFor = (p) => (p?.type ? phasesForType(p.type) : PHASES);
+
+// Project kind, from the access-id type letter: A = a full new system, B = an add-on (extra
+// cameras/upgrade to an existing system), C = a service call. Shown as a pill so a customer with
+// several "Security Cameras" entries can tell a system apart from an add-on or a service visit.
+const KIND = {
+  A: { label: "New System",   cls: "k-new" },
+  B: { label: "Add-on",       cls: "k-addon" },
+  C: { label: "Service Call", cls: "k-svc" },
+};
+// The type letter is the access-id's first char (A/B/C), falling back to the `type` column.
+const kindOf = (p) => KIND[String(p.type || (p.access_id || "")[0] || "").toUpperCase()] || null;
 function stageNum(p)   { const k = masterToPhaseKey(p.stage); const l = phaseListFor(p); const i = l.findIndex((x) => x.key === k); return i < 0 ? 1 : i + 1; }
 function stageTotal(p) { return phaseListFor(p).length; }
 function stagePct(p)   { return Math.round((stageNum(p) / stageTotal(p)) * 100); }
@@ -108,7 +119,7 @@ const ISSUE_TYPES = [
   { v: "other",  label: "Something else" },
 ];
 
-function ExistingProjectForm({ user, projects, actionLabel, placeholder, serviceHint, onDone }) {
+function ExistingProjectForm({ user, projects, openSvcProjectIds, actionLabel, placeholder, serviceHint, onDone }) {
   const isServiceCall = serviceHint === "Service Call";
   const [projectId, setProjectId] = useState(projects[0]?.access_id||"");
   const [issueType, setIssueType] = useState("");
@@ -118,8 +129,11 @@ function ExistingProjectForm({ user, projects, actionLabel, placeholder, service
   const [err, setErr] = useState("");
   const proj = projects.find(p=>p.access_id===projectId);
   const cams = proj?.cameraLabels || [];   // named camera locations (survey → proposal fallback)
+  // One open service call per project — if this project already has one, send them to track it.
+  const hasOpenCall = isServiceCall && !!openSvcProjectIds?.has(projectId);
   async function submit(e){
     e.preventDefault(); setErr("");
+    if (hasOpenCall) { setErr("You already have an open service call for this project. Please track that one — we'll add your note there."); return; }
     if (isServiceCall && !issueType) { setErr("Please tell us what's not working."); return; }
     setBusy(true);
     try {
@@ -173,8 +187,9 @@ function ExistingProjectForm({ user, projects, actionLabel, placeholder, service
         <label>{actionLabel}{isServiceCall ? <span className="am-opt"> (optional)</span> : null}</label>
         <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={4} placeholder={placeholder} required={!isServiceCall}/>
       </div>
+      {hasOpenCall && <div className="am-note">You already have an open service call for this project. We&apos;ll add anything new to that one — no need to open another.</div>}
       {err && <div className="am-err">{err}</div>}
-      <button className="am-submit" type="submit" disabled={busy}>{busy?"Sending…":"Submit"}</button>
+      <button className="am-submit" type="submit" disabled={busy || hasOpenCall}>{busy?"Sending…":"Submit"}</button>
     </form>
   );
 }
@@ -249,7 +264,7 @@ function SuccessView({ name, data, onClose }) {
   );
 }
 
-function ActionModal({ type, user, projects, onClose }) {
+function ActionModal({ type, user, projects, openSvcProjectIds, onClose }) {
   const [step, setStep]       = useState("start");
   const [doneData, setDoneData] = useState(null);
 
@@ -376,7 +391,7 @@ function ActionModal({ type, user, projects, onClose }) {
           <button className="am-x" onClick={onClose}>×</button>
           <button className="am-back" onClick={()=>setStep("start")}>← Back</button>
           <div className="am-head"><h2>Service Call — Existing Project</h2><p>Select the project and describe the issue.</p></div>
-          <ExistingProjectForm user={user} projects={projects} actionLabel="Describe the issue" placeholder="e.g. Camera on the east side is offline, NVR not recording…" serviceHint="Service Call" onDone={handleDone}/>
+          <ExistingProjectForm user={user} projects={projects} openSvcProjectIds={openSvcProjectIds} actionLabel="Describe the issue" placeholder="e.g. Camera on the east side is offline, NVR not recording…" serviceHint="Service Call" onDone={handleDone}/>
         </div>
       </div>
     );
@@ -420,6 +435,11 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
   const notifRef = useRef(null);
   const [copiedId, setCopiedId] = useState(null);
   const [origin, setOrigin]     = useState("");
+  // Projects that already have an OPEN service call — a customer may only have one open at a time
+  // per project (a second request just adds noise to the same open ticket).
+  const openSvcProjectIds = new Set(
+    serviceCalls.filter((c) => c.project_access_id && !["resolved", "closed"].includes(c.stage)).map((c) => c.project_access_id)
+  );
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => {
@@ -546,6 +566,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-proj .p-top{display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap}
         .cp-proj h4{font-family:'Bricolage Grotesque',sans-serif;font-size:1.08rem;font-weight:700}
         .cp-proj .p-addr{color:var(--muted);font-size:.9rem;margin-bottom:14px}
+        .cp-kind{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:100px;border:1px solid transparent}
+        .cp-kind.k-new{background:#eef1f8;color:#3a4a72;border-color:#d6def0}
+        .cp-kind.k-addon{background:#f8f0e0;color:var(--gold-deep,#a8894e);border-color:#e6d3a8}
+        .cp-kind.k-svc{background:#fdecec;color:#b03a3a;border-color:#f0c9c9}
         .cp-status{font-size:.74rem;font-weight:700;letter-spacing:.02em;padding:4px 11px;border-radius:100px;text-transform:uppercase}
         .s-active{background:var(--accent-soft);color:var(--accent)}
         .s-review{background:#faf4e8;color:var(--gold-deep)}
@@ -617,6 +641,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .am-field input:focus,.am-field select:focus,.am-field textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.15)}
         .am-field textarea{resize:vertical;min-height:90px}
         .am-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
+        .am-note{font-size:.83rem;color:#7a5f1f;background:#faf4e8;border:1px solid #ecdcb4;border-left:3px solid var(--gold,#C9A96E);border-radius:0 8px 8px 0;padding:9px 12px;line-height:1.45}
         .am-submit{width:100%;padding:13px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:background .18s,transform .15s}
         .am-submit:hover:not(:disabled){background:var(--ink);color:var(--gold);transform:translateY(-1px)}
         .am-submit:disabled{opacity:.6;cursor:not-allowed}
@@ -777,6 +802,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                           <div>
                             <div className="p-top">
                               <h4>{p.service||p.service_code}</h4>
+                              {kindOf(p) && <span className={`cp-kind ${kindOf(p).cls}`}>{kindOf(p).label}</span>}
                               <span className={`cp-status ${badge.cls}`}>{badge.label}</span>
                             </div>
                             <div className="p-addr">{p.customer}{p.address?` · ${p.address}`:""}</div>
@@ -856,6 +882,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
           type={activeModal}
           user={user}
           projects={projects}
+          openSvcProjectIds={openSvcProjectIds}
           onClose={()=>setActiveModal(null)}
         />
       )}

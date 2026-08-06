@@ -76,6 +76,7 @@ export default function CustomerTour({ accessId, phone = "(646) 396-0775", onClo
         <div className="ctour-foot">
           <div className="ctour-dots">{STEPS.map((_, k) => <span key={k} className={k === i ? "on" : ""} />)}</div>
           <div className="ctour-btns">
+            {!last && <button className="ctour-skip" onClick={finish}>Skip</button>}
             {i > 0 && <button className="ctour-back" onClick={() => setI(i - 1)}>Back</button>}
             <button className="ctour-next" onClick={next}>{last ? "Got it" : "Next →"}</button>
           </div>
@@ -106,7 +107,9 @@ const CSS = `
 .ctour-dots{display:flex;gap:6px}
 .ctour-dots span{width:7px;height:7px;border-radius:50%;background:#dcd8cf;transition:.2s}
 .ctour-dots span.on{background:var(--gold);width:20px;border-radius:4px}
-.ctour-btns{display:flex;gap:8px}
+.ctour-btns{display:flex;gap:8px;align-items:center}
+.ctour-skip{height:36px;padding:0 10px;border:none;background:none;color:#9aa1af;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
+.ctour-skip:hover{color:var(--ink)}
 .ctour-back{height:36px;padding:0 14px;border:1px solid var(--line-warm);border-radius:9px;background:#fff;color:var(--muted);font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit}
 .ctour-back:hover{border-color:var(--gold);color:var(--ink)}
 .ctour-next{height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--ink);color:#fff;font-size:.85rem;font-weight:800;cursor:pointer;font-family:inherit}

@@ -24,6 +24,7 @@ export default async function MyProjectsPage() {
     address: p.address,
     service: p.service,
     service_code: p.service_code,
+    type: p.type,   // A = New System · B = Upgrade/Add-on · C = Service Call — drives the kind badge
     stage: p.stage,
     status: p.status,
     category: p.category,
@@ -44,6 +45,7 @@ export default async function MyProjectsPage() {
     category: c.category,
     stage: c.stage,
     created_at: c.created_at,
+    project_access_id: c.project_access_id || null,   // which project this call is about (for the 1-open-per-project rule)
   }));
 
   return <MyProjectsClient user={user} projects={projects} serviceCalls={serviceCalls} />;
