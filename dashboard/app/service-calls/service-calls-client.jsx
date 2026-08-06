@@ -24,16 +24,21 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
   const [tab, setTab] = useState(initialFilter);
   const [q, setQ] = useState("");
 
+  // A call not linked to one of our projects is about a new site / a system we didn't install —
+  // a new-install (new-business) opportunity, not a warranty repair.
+  const isNewInstall = (c) => !c.project_access_id;
+
   const counts = useMemo(() => ({
     all: calls.length,
     open: calls.filter((c) => OPEN.has(c.stage)).length,
     urgent: calls.filter((c) => OPEN.has(c.stage) && URGENT.has(c.priority)).length,
+    new: calls.filter((c) => OPEN.has(c.stage) && isNewInstall(c)).length,
     closed: calls.filter((c) => !OPEN.has(c.stage)).length,
   }), [calls]);
 
   const query = q.trim().toLowerCase();
   const visible = useMemo(() => calls
-    .filter((c) => tab === "all" ? true : tab === "open" ? OPEN.has(c.stage) : tab === "urgent" ? (OPEN.has(c.stage) && URGENT.has(c.priority)) : !OPEN.has(c.stage))
+    .filter((c) => tab === "all" ? true : tab === "open" ? OPEN.has(c.stage) : tab === "urgent" ? (OPEN.has(c.stage) && URGENT.has(c.priority)) : tab === "new" ? (OPEN.has(c.stage) && isNewInstall(c)) : !OPEN.has(c.stage))
     .filter((c) => !query || [c.svc_id, c.customer, c.issue, c.address].some((v) => (v || "").toLowerCase().includes(query))),
     [calls, tab, query]);
 
@@ -47,7 +52,7 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
 
         <div className="sec-head svc-head">
           <div className="filters">
-            {[["open", "Open"], ["urgent", "Urgent"], ["all", "All"], ["closed", "Closed"]].map(([k, l]) => (
+            {[["open", "Open"], ["urgent", "Urgent"], ["new", "New installs"], ["all", "All"], ["closed", "Closed"]].map(([k, l]) => (
               <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l} <span style={{ opacity: .6 }}>{counts[k]}</span></button>
             ))}
           </div>
@@ -66,7 +71,7 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
                   return (
                     <tr key={c.svc_id}>
                       <td>
-                        <div className="svc-cust">{c.customer || "—"}</div>
+                        <div className="svc-cust">{c.customer || "—"}{isNewInstall(c) && <span className="svc-new" title="Not linked to a system we installed — a new-install / new-business opportunity">New install</span>}</div>
                         <div className="svc-id mono">{c.svc_id}{c.address ? ` · ${c.address}` : ""}</div>
                       </td>
                       <td className="svc-issue">{c.issue || "—"}</td>
@@ -97,7 +102,8 @@ const CSS = `
 .apx .svc-table td{padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:.88rem}
 .apx .svc-table tr:last-child td{border-bottom:none}
 .apx .svc-table tr:hover td{background:var(--bg-soft,#fafaf8)}
-.apx .svc-cust{font-weight:700;color:var(--ink)}
+.apx .svc-cust{font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.apx .svc-new{font-size:.62rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a5a00;background:#fdf0d6;border:1px solid #e6c98a;border-radius:100px;padding:2px 8px;white-space:nowrap}
 .apx .svc-id{font-size:.72rem;color:var(--muted)}
 .apx .svc-id.mono{font-family:Menlo,Consolas,monospace}
 .apx .svc-issue{color:var(--muted);max-width:280px}

@@ -16,6 +16,9 @@ export default async function ServiceCallsPage({ searchParams }) {
     category: c.category, stage: c.stage, stage_label: c.stage_label,
     priority: c.priority, assignee_name: c.assignee_name, created_at: c.created_at,
     outcome_route: c.outcome_route,
+    // Linked to one of OUR projects = a repair on a system we installed; unlinked = a new site or
+    // someone else's system = a new-install opportunity to route to sales.
+    project_access_id: c.project_access_id || null,
   }));
   return <ServiceCallsClient user={user} alerts={alerts} calls={calls} initialFilter={sp?.filter || "open"} />;
 }
