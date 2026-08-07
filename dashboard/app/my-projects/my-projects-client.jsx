@@ -543,7 +543,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-section{padding:34px 0}
         .cp-sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap}
         .cp-sec-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.35rem;font-weight:700}
-        .cp-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+        .cp-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px}
         .cp-action{display:flex;flex-direction:row;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;transition:transform .18s,box-shadow .22s,border-color .2s;cursor:pointer;font-family:inherit;font-size:inherit;text-align:left;width:100%}
         .cp-action:hover{transform:translateY(-4px);box-shadow:0 22px 44px -20px rgba(14,19,32,.45);border-color:rgba(201,169,110,.6)}
         .cp-action .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
@@ -553,6 +553,8 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-a-gold .ic{background:#faf4e8}.cp-a-gold .ic svg{stroke:var(--gold-deep)}
         .cp-a-red .ic{background:var(--red-soft)}.cp-a-red .ic svg{stroke:var(--red)}
         .cp-a-purple .ic{background:#f3eeff}.cp-a-purple .ic svg{stroke:#7c3aed}
+        .cp-a-slate{text-decoration:none;color:inherit}
+        .cp-a-slate .ic{background:#eef1f8}.cp-a-slate .ic svg{stroke:#3a4a72}
 
         .cp-filters{display:inline-flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:50px;padding:5px}
         .cp-filters button{border:none;background:transparent;font-family:inherit;font-weight:600;font-size:.88rem;color:var(--muted);padding:8px 16px;border-radius:50px;cursor:pointer;transition:.18s}
@@ -764,6 +766,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                 <span className="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
                 <h3>Quick Question</h3>
               </button>
+              <Link href="/adt" className="cp-action cp-a-slate">
+                <span className="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+                <h3>24/7 Monitoring</h3>
+              </Link>
             </div>
           </div>
         </section>
