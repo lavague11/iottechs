@@ -755,6 +755,18 @@ function init() {
     for (const t of DEV_SEED) insD.run(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[6] ? new Date().toISOString().slice(0,19).replace("T"," ") : null);
   }
 
+  // ---- API key vault (Development ▸ API Keys) ----
+  // One row per integration key. The raw value lives here on the persistent disk, never in git.
+  // Readers prefer this store, then fall back to process.env. Admin-only surface.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_secrets (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_by TEXT
+    )
+  `);
+
   // ---- Archive (soft-delete store — deleted records land here, restorable or purgeable) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS archive (
@@ -3585,6 +3597,77 @@ export function addDevTask({ category, title, detail, route, routeStatus }) {
 export function deleteDevTask(id) {
   // Only user-added custom tasks may be removed; seeded roadmap items are protected.
   db.prepare("DELETE FROM dev_tasks WHERE id=? AND is_custom=1").run(Number(id));
+}
+
+// ---- API key vault -------------------------------------------------------
+// The single place third-party API keys live at runtime. Store wins over env,
+// so a key pasted in Development ▸ API Keys overrides any .env value.
+export function getSecret(key) {
+  const k = String(key || "").trim();
+  if (!k) return "";
+  try {
+    const row = db.prepare("SELECT value FROM app_secrets WHERE key=?").get(k);
+    return row ? String(row.value) : "";
+  } catch { return ""; }   // table not created yet (pre-restart) — fall back to env
+}
+// The value an integration should actually use: stored key first, then env.
+export function secretValue(key) {
+  return getSecret(key) || process.env[String(key || "").trim()] || "";
+}
+export function setSecret(key, value, actorName) {
+  const k = String(key || "").trim();
+  const v = String(value ?? "");
+  if (!k) return { ok: false, error: "Key name required." };
+  if (!/^[A-Z0-9_]+$/.test(k)) return { ok: false, error: "Key name must be UPPER_SNAKE_CASE." };
+  if (!v.trim()) return { ok: false, error: "Value required." };
+  db.prepare(`
+    INSERT INTO app_secrets (key, value, updated_at, updated_by) VALUES (?,?,datetime('now','localtime'),?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, updated_by=excluded.updated_by
+  `).run(k, v.trim(), actorName ? String(actorName) : null);
+  return { ok: true };
+}
+export function deleteSecret(key) {
+  db.prepare("DELETE FROM app_secrets WHERE key=?").run(String(key || "").trim());
+  return { ok: true };
+}
+// Mask a value for display — never ship raw secrets to the browser.
+function maskSecret(v) {
+  const s = String(v || "");
+  if (!s) return "";
+  if (s.length <= 4) return "••••";
+  return "••••••••" + s.slice(-4);
+}
+// Merge the known-integration registry with what's actually stored / in env,
+// returning display-safe metadata only (masked value, source, timestamp).
+export function listSecretsMeta(registry = []) {
+  let stored = [];
+  try { stored = db.prepare("SELECT key, value, updated_at, updated_by FROM app_secrets").all(); } catch { stored = []; }
+  const storedMap = new Map(stored.map(r => [r.key, r]));
+  const seen = new Set();
+  const rows = [];
+  const push = (key, meta) => {
+    const s = storedMap.get(key);
+    const envVal = process.env[key] || "";
+    const source = s ? "stored" : (envVal ? "env" : "none");
+    const val = s ? s.value : envVal;
+    rows.push({
+      key,
+      name: meta?.name || key,
+      powers: meta?.powers || "",
+      docs: meta?.docs || "",
+      clientExposed: !!meta?.clientExposed,
+      known: !!meta,
+      source,
+      masked: val ? maskSecret(val) : "",
+      updated_at: s?.updated_at || null,
+      updated_by: s?.updated_by || null,
+    });
+    seen.add(key);
+  };
+  for (const item of registry) push(item.key, item);
+  // Any stored key that isn't in the registry (custom keys the user added)
+  for (const r of stored) if (!seen.has(r.key)) push(r.key, null);
+  return rows;
 }
 
 // ---- Archive / soft-delete system ----------------------------------------

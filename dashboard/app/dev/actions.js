@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseToken } from "../../lib/auth";
-import { toggleDevTask, addDevTask, archiveAndDelete } from "../../lib/db";
+import { toggleDevTask, addDevTask, archiveAndDelete, setSecret, deleteSecret } from "../../lib/db";
 
 async function requireAdmin() {
   const jar   = await cookies();
@@ -32,6 +32,23 @@ export async function deleteDevTaskAction(id) {
   if (!actor) return { error: "Unauthorized." };
   const r = archiveAndDelete("dev_task", id, actor);
   if (!r.ok) return { error: r.error };
+  revalidatePath("/dev");
+  return { ok: true };
+}
+
+// ---- API key vault ----
+export async function saveSecretAction(key, value) {
+  const actor = await requireAdmin();
+  if (!actor) return { error: "Unauthorized." };
+  const r = setSecret(key, value, actor.name || actor.email || "admin");
+  if (!r.ok) return { error: r.error };
+  revalidatePath("/dev");
+  return { ok: true };
+}
+
+export async function clearSecretAction(key) {
+  if (!(await requireAdmin())) return { error: "Unauthorized." };
+  deleteSecret(key);
   revalidatePath("/dev");
   return { ok: true };
 }

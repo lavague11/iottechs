@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
-import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction } from "./actions";
+import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction } from "./actions";
 
 const ROUTE_BADGE = {
   exists:  { label: "Live",            cls: "rs-live" },
@@ -103,7 +103,123 @@ function buildPrompt(task, route) {
   ].filter(Boolean).join("\n");
 }
 
-export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId }) {
+const SRC_BADGE = {
+  stored: { label: "Stored",   cls: "kv-stored" },
+  env:    { label: "From env", cls: "kv-env" },
+  none:   { label: "Missing",  cls: "kv-none" },
+};
+
+function KeyRow({ row, onFlash }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState("");
+  const [reveal, setReveal] = useState(false);
+  const [busy, startTx] = useTransition();
+  const [rows, setRows] = useState(row);
+  const badge = SRC_BADGE[rows.source] || SRC_BADGE.none;
+
+  function save() {
+    const v = val.trim();
+    if (!v) return;
+    startTx(async () => {
+      const r = await saveSecretAction(rows.key, v);
+      if (r?.error) { onFlash(r.error); return; }
+      setRows(p => ({ ...p, source: "stored", masked: "••••••••" + v.slice(-4), updated_at: "just now" }));
+      setVal(""); setOpen(false); setReveal(false);
+      onFlash(`${rows.key} saved`);
+    });
+  }
+  function clear() {
+    startTx(async () => {
+      const r = await clearSecretAction(rows.key);
+      if (r?.error) { onFlash(r.error); return; }
+      setRows(p => ({ ...p, source: "none", masked: "", updated_at: null }));
+      onFlash(`${rows.key} cleared`);
+    });
+  }
+
+  return (
+    <div className="kv-row">
+      <div className="kv-main">
+        <div className="kv-line">
+          <span className="kv-name">{rows.name}</span>
+          <span className={`kv-badge ${badge.cls}`}>{badge.label}</span>
+          {rows.clientExposed && <span className="kv-badge kv-pub" title="Served to the browser (inherent to client-side Maps)">Browser key</span>}
+          {!rows.known && <span className="kv-badge kv-custom">Custom</span>}
+        </div>
+        <code className="kv-key">{rows.key}</code>
+        {rows.powers && <div className="kv-powers">{rows.powers}</div>}
+        {rows.masked && <div className="kv-masked">{rows.masked}{rows.updated_at ? <span className="kv-when"> · updated {rows.updated_at}</span> : null}</div>}
+      </div>
+      <div className="kv-actions">
+        {rows.docs && <a className="kv-doc" href={rows.docs} target="_blank" rel="noreferrer">Get key ↗</a>}
+        <button className="kv-edit" onClick={() => setOpen(v => !v)}>{open ? "Cancel" : rows.source === "none" ? "+ Add" : "Replace"}</button>
+        {rows.source === "stored" && <button className="kv-clear" disabled={busy} onClick={clear} title="Remove stored value (falls back to env)">Clear</button>}
+      </div>
+      {open && (
+        <div className="kv-edit-row">
+          <input
+            className="kv-input"
+            type={reveal ? "text" : "password"}
+            value={val}
+            placeholder={`Paste ${rows.key}…`}
+            autoComplete="off" spellCheck={false}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") save(); }}
+          />
+          <button className="kv-eye" type="button" onClick={() => setReveal(v => !v)}>{reveal ? "Hide" : "Show"}</button>
+          <button className="kv-save" disabled={busy || !val.trim()} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApiKeysCard({ secrets, onFlash }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [nk, setNk] = useState(""); const [nv, setNv] = useState("");
+  const [busy, startTx] = useTransition();
+  const [extra, setExtra] = useState([]);   // custom keys added this session
+  const rows = [...secrets, ...extra];
+
+  function addCustom() {
+    const key = nk.trim().toUpperCase().replace(/\s+/g, "_");
+    const v = nv.trim();
+    if (!key || !v) return;
+    startTx(async () => {
+      const r = await saveSecretAction(key, v);
+      if (r?.error) { onFlash(r.error); return; }
+      if (!rows.some(x => x.key === key)) {
+        setExtra(e => [...e, { key, name: key, powers: "", docs: "", clientExposed: false, known: false, source: "stored", masked: "••••••••" + v.slice(-4), updated_at: "just now" }]);
+      }
+      setNk(""); setNv(""); setShowAdd(false);
+      onFlash(`${key} saved`);
+    });
+  }
+
+  return (
+    <div className="kv-card">
+      <div className="kv-head">
+        <div>
+          <div className="kv-title">API Keys</div>
+          <div className="kv-sub">Central vault for every integration key. Stored on the server disk (never in git); the app reads here first, then falls back to environment variables.</div>
+        </div>
+        <button className="kv-addbtn" onClick={() => setShowAdd(v => !v)}>{showAdd ? "Cancel" : "+ Add key"}</button>
+      </div>
+      {showAdd && (
+        <div className="kv-addform">
+          <input className="kv-input kv-addkey" value={nk} placeholder="KEY_NAME" onChange={e => setNk(e.target.value)} spellCheck={false} autoComplete="off" />
+          <input className="kv-input" value={nv} placeholder="Value" onChange={e => setNv(e.target.value)} spellCheck={false} autoComplete="off" onKeyDown={e => { if (e.key === "Enter") addCustom(); }} />
+          <button className="kv-save" disabled={busy || !nk.trim() || !nv.trim()} onClick={addCustom}>{busy ? "Saving…" : "Save"}</button>
+        </div>
+      )}
+      <div className="kv-list">
+        {rows.map(r => <KeyRow key={r.key} row={r} onFlash={onFlash} />)}
+      </div>
+    </div>
+  );
+}
+
+export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [] }) {
   const [tasks, setTasks] = useState(initTasks);
   const [pending, startTx] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
@@ -210,6 +326,9 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
             </div>
           </div>
         </div>
+
+        {/* API key vault */}
+        <ApiKeysCard secrets={secrets} onFlash={flash} />
 
         {/* Add form */}
         {showAdd && (
@@ -349,4 +468,43 @@ const DV_CSS = `
 .apx .dv-allclear{text-align:center;padding:30px;color:var(--muted);font-size:.9rem;background:#fff;border:1px dashed var(--line);border-radius:14px;margin-bottom:14px}
 .apx .dv-toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:11px;font-size:.85rem;font-weight:600;z-index:2000;box-shadow:0 8px 28px rgba(0,0,0,.22);animation:dvToastIn .2s ease}
 @keyframes dvToastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* API key vault */
+.apx .kv-card{background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:18px;overflow:hidden}
+.apx .kv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line);background:var(--bg-soft,#faf9f7)}
+.apx .kv-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem}
+.apx .kv-sub{color:var(--muted);font-size:.79rem;margin-top:4px;line-height:1.45;max-width:62ch}
+.apx .kv-addbtn{flex-shrink:0;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.8rem;font-weight:600;font-family:inherit;cursor:pointer}
+.apx .kv-addform{display:flex;gap:8px;padding:12px 18px;border-bottom:1px solid var(--line);background:#fbfaf8}
+.apx .kv-addkey{max-width:220px}
+.apx .kv-list{display:flex;flex-direction:column}
+.apx .kv-row{padding:14px 18px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:start}
+.apx .kv-row:last-child{border-bottom:none}
+.apx .kv-main{min-width:0}
+.apx .kv-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.apx .kv-name{font-weight:700;font-size:.9rem}
+.apx .kv-badge{font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:100px;white-space:nowrap}
+.apx .kv-stored{background:rgba(28,138,69,.1);color:#1c8a45}
+.apx .kv-env{background:rgba(99,117,155,.12);color:#5a6d8a}
+.apx .kv-none{background:rgba(224,154,58,.14);color:#8a5f00}
+.apx .kv-pub{background:rgba(46,120,210,.1);color:#2668b8}
+.apx .kv-custom{background:rgba(120,90,180,.1);color:#6b4fa0}
+.apx .kv-key{display:inline-block;margin-top:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;color:var(--muted);background:var(--bg-soft,#f4f2ee);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+.apx .kv-powers{font-size:.78rem;color:var(--muted);margin-top:6px;line-height:1.4}
+.apx .kv-masked{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--ink);margin-top:6px;letter-spacing:.04em}
+.apx .kv-when{font-family:inherit;color:var(--muted);letter-spacing:normal}
+.apx .kv-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.apx .kv-doc{font-size:.76rem;font-weight:600;color:var(--accent-primary,#C9A96E);text-decoration:none;white-space:nowrap}
+.apx .kv-doc:hover{text-decoration:underline}
+.apx .kv-edit{background:#fff;color:var(--ink);border:1.5px solid var(--line);border-radius:8px;padding:5px 12px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer;transition:.12s}
+.apx .kv-edit:hover{border-color:var(--accent-primary,#C9A96E)}
+.apx .kv-clear{background:none;border:1.5px solid transparent;color:var(--muted);border-radius:8px;padding:5px 8px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer}
+.apx .kv-clear:hover{color:#e74c3c;background:rgba(231,76,60,.08)}
+.apx .kv-edit-row{grid-column:1 / -1;display:flex;gap:8px;margin-top:4px}
+.apx .kv-input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.84rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);background:#fff}
+.apx .kv-input:focus{outline:none;border-color:var(--accent-primary,#C9A96E)}
+.apx .kv-eye{background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:0 12px;font-size:.76rem;font-weight:600;font-family:inherit;cursor:pointer;color:var(--muted)}
+.apx .kv-save{background:var(--accent-primary,#C9A96E);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap}
+.apx .kv-save:disabled{opacity:.5;cursor:default}
+@media(max-width:640px){.apx .kv-row{grid-template-columns:1fr}.apx .kv-actions{justify-content:flex-start}}
 `;

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { getDevTasks, getAllJobs } from "../../lib/db";
+import { getDevTasks, getAllJobs, listSecretsMeta } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
+import { INTEGRATIONS } from "../../lib/integrations";
 import DevClient from "./dev-client";
 
 export default async function DevPage() {
@@ -10,6 +11,8 @@ export default async function DevPage() {
   const alerts = getNotifSummary(user.id);
   const tasks  = getDevTasks();
   const sample = getAllJobs()[0]?.access_id || null;
+  // Display-safe key metadata only (masked values, source, timestamp) — never raw secrets.
+  const secrets = listSecretsMeta(INTEGRATIONS);
 
-  return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} />;
+  return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} secrets={secrets} />;
 }
