@@ -45,24 +45,43 @@ export default function ApplyClient() {
   const [availability, setAvailability] = useState("full");
   const [startDate, setStartDate] = useState("");
   const [about, setAbout] = useState("");
+  const [resume, setResume] = useState(null);   // { name, data, size }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
 
+  const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+
+  const RESUME_TYPES = /\.(pdf|docx?|png|jpe?g|heic)$/i;
+  function onResume(e) {
+    setErr("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!RESUME_TYPES.test(file.name)) { setErr("Résumé must be a PDF, Word doc, or image."); e.target.value = ""; return; }
+    if (file.size > 4 * 1024 * 1024) { setErr("Résumé is too large — keep it under 4 MB."); e.target.value = ""; return; }
+    const r = new FileReader();
+    r.onload = () => setResume({ name: file.name, data: String(r.result), size: file.size });
+    r.readAsDataURL(file);
+  }
+
   async function submit(e) {
     e.preventDefault();
     setErr("");
-    if (!name.trim()) { setErr("Tell us your name."); return; }
-    if (!phone.trim()) { setErr("We need a phone number — it also becomes your tracking PIN."); return; }
-    if (!email.trim() || !email.includes("@")) { setErr("We need your email — that's how we send offers and set up your login."); return; }
+    const cleanName = titleCase(name.trim());
+    if (!cleanName) { setErr("Tell us your name."); return; }
+    if (phone.replace(/\D/g, "").length < 10) { setErr("Enter a valid phone number (at least 10 digits)."); return; }
+    if (!emailOk(email)) { setErr("Enter a valid email address."); return; }
+    setName(cleanName);
     setBusy(true);
     try {
       const res = await fetch("/api/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, phone, email, address, position, experience, skills,
+          name: cleanName, phone, email, address, position, experience, skills,
           has_license: hasLicense, has_vehicle: hasVehicle, has_tools: hasTools,
           availability, start_date: startDate, about,
+          resume_name: resume?.name || "", resume_data: resume?.data || "",
         }),
       });
       const j = await res.json();
@@ -130,7 +149,7 @@ export default function ApplyClient() {
 
               <div className="ap-two">
                 <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
-                  <input id="ap-name" className="ap-in" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" autoComplete="name" /></div>
+                  <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>
                 <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone</label>
                   <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" /></div>
               </div>
@@ -151,6 +170,22 @@ export default function ApplyClient() {
               <label className="ap-label" htmlFor="ap-skills">Systems or certifications <span className="ap-opt">(optional)</span></label>
               <textarea id="ap-skills" className="ap-in" rows={2} value={skills} onChange={(e) => setSkills(e.target.value)}
                 placeholder="e.g. Hikvision, Dahua, Cat6 termination, OSHA 30, lift certified" />
+
+              <label className="ap-label">Résumé <span className="ap-opt">(optional)</span></label>
+              {resume ? (
+                <div className="ap-file">
+                  <span className="ap-file-ic"><Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></Icon></span>
+                  <span className="ap-file-nm">{resume.name}</span>
+                  <span className="ap-file-sz">{resume.size >= 1024 * 1024 ? (resume.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(resume.size / 1024)) + " KB"}</span>
+                  <button type="button" className="ap-file-x" onClick={() => setResume(null)} aria-label="Remove résumé">✕</button>
+                </div>
+              ) : (
+                <label className="ap-upload">
+                  <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={onResume} hidden />
+                  <span className="ap-upload-ic"><Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></Icon></span>
+                  <span className="ap-upload-tx"><b>Upload résumé</b><em>PDF, Word, or image · up to 4 MB</em></span>
+                </label>
+              )}
 
               <label className="ap-label">Do you have…</label>
               <div className="ap-chips">
@@ -242,7 +277,22 @@ const CSS = `
 .ap-pick.on .ap-pick-dot{border-color:var(--gold);background:var(--gold);box-shadow:inset 0 0 0 3px #fff}
 .ap-in{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-family:inherit;font-size:.94rem;background:var(--soft);color:var(--ink);transition:border-color .15s,background .15s,box-shadow .15s}
 .ap-in:focus{outline:none;border-color:var(--gold);background:#fff;box-shadow:0 0 0 3px rgba(201,169,110,.14)}
+.ap-in.cap{text-transform:capitalize}
 textarea.ap-in{resize:vertical}
+.ap-upload{display:flex;align-items:center;gap:13px;padding:13px 15px;border:1.5px dashed var(--line);border-radius:12px;background:var(--soft);cursor:pointer;transition:border-color .15s,background .15s}
+.ap-upload:hover{border-color:var(--gold);background:#fffdf8}
+.ap-upload-ic{width:38px;height:38px;flex-shrink:0;border-radius:10px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--gold-deep)}
+.ap-upload-ic svg{width:18px;height:18px}
+.ap-upload-tx{display:flex;flex-direction:column;line-height:1.3}
+.ap-upload-tx b{font-size:.9rem;font-weight:800}
+.ap-upload-tx em{font-style:normal;font-size:.76rem;color:var(--muted)}
+.ap-file{display:flex;align-items:center;gap:11px;padding:11px 14px;border:1.5px solid var(--gold);border-radius:12px;background:#fdfaf2}
+.ap-file-ic{width:34px;height:34px;flex-shrink:0;border-radius:9px;background:#f3e6c9;display:grid;place-items:center;color:var(--gold-deep)}
+.ap-file-ic svg{width:16px;height:16px}
+.ap-file-nm{flex:1;min-width:0;font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ap-file-sz{font-size:.76rem;color:var(--muted);flex-shrink:0}
+.ap-file-x{flex-shrink:0;width:26px;height:26px;border:none;background:#fff;border-radius:7px;color:var(--muted);cursor:pointer;font-size:.8rem}
+.ap-file-x:hover{background:#fdecec;color:#c0392b}
 .ap-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .ap-fld{min-width:0}
 .ap-chips{display:flex;flex-wrap:wrap;gap:8px}

@@ -88,6 +88,9 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
                   <dt>Based in</dt><dd>{app.address ? <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a> : "—"}</dd>
                   <dt>Availability</dt><dd>{app.availability || "—"}{app.start_date ? ` · from ${app.start_date}` : ""}</dd>
                   <dt>Ready with</dt><dd>{[app.has_license && "License", app.has_vehicle && "Vehicle", app.has_tools && "Tools"].filter(Boolean).join(" · ") || "—"}</dd>
+                  <dt>Résumé</dt><dd>{app.resume_name
+                    ? <a href={`/api/apply/resume?id=${encodeURIComponent(app.app_id)}`} target="_blank" rel="noopener noreferrer">{app.resume_name} ↓</a>
+                    : <span className="ob-none">Not attached</span>}</dd>
                   <dt>Applied</dt><dd>{fmt(app.created_at)}</dd>
                 </dl>
                 {app.skills && <div className="ob-block"><span className="ob-block-l">Systems / certs</span>{app.skills}</div>}

@@ -33,15 +33,31 @@ export async function POST(request) {
     const phone = String(b.phone || "").trim();
     const email = String(b.email || "").trim();
     if (!name)  return Response.json({ ok: false, error: "Tell us your name." }, { status: 400 });
-    if (!phone) return Response.json({ ok: false, error: "We need a phone number to reach you — it also becomes your PIN." }, { status: 400 });
-    // Email is required: users.email is UNIQUE NOT NULL, so without one the hire can't mint a login.
-    if (!email || !email.includes("@")) return Response.json({ ok: false, error: "We need your email — that's how we send offers and set up your login." }, { status: 400 });
+    // Phone must be a real, dialable number (≥10 digits) — it also becomes their tracking PIN.
+    if (phone.replace(/\D/g, "").length < 10) return Response.json({ ok: false, error: "Enter a valid phone number (at least 10 digits)." }, { status: 400 });
+    // Email is required + must be well-formed: users.email is UNIQUE NOT NULL, so without a real one
+    // the hire can't mint a login, and offers/updates go there.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return Response.json({ ok: false, error: "Enter a valid email address." }, { status: 400 });
+
+    // Optional résumé: a base64 data URL (PDF / Word / image), capped so a row stays sane.
+    let resume_name = null, resume_data = null;
+    const rn = String(b.resume_name || "").trim();
+    const rd = String(b.resume_data || "");
+    if (rn && rd) {
+      if (!/^data:(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|image\/(png|jpe?g|heic));base64,/i.test(rd)) {
+        return Response.json({ ok: false, error: "Résumé must be a PDF, Word doc, or image." }, { status: 400 });
+      }
+      if (rd.length > 6_000_000) return Response.json({ ok: false, error: "Résumé is too large — keep it under 4 MB." }, { status: 400 });
+      resume_name = rn.slice(0, 200);
+      resume_data = rd;
+    }
 
     const app = createApplication({
       name, email, phone,
       address: b.address, position: b.position, experience: b.experience, skills: b.skills,
       has_license: b.has_license, has_vehicle: b.has_vehicle, has_tools: b.has_tools,
       availability: b.availability, start_date: b.start_date, about: b.about,
+      resume_name, resume_data,
     });
 
     revalidatePath("/onboarding");

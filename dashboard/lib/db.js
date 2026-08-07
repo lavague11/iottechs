@@ -572,6 +572,11 @@ function init() {
     )
   `);
 
+  // Résumé upload on job applications (base64 data URL + original filename), added after launch.
+  const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
+  if (!appCols.includes("resume_name")) db.exec("ALTER TABLE applications ADD COLUMN resume_name TEXT");
+  if (!appCols.includes("resume_data")) db.exec("ALTER TABLE applications ADD COLUMN resume_data TEXT");
+
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
     const URGENT = /offline|down|not\s+(working|record)|no\s+signal|dead|fail/i;
@@ -2891,10 +2896,10 @@ export function getApplicationEvents(appId) {
   return db.prepare("SELECT * FROM application_events WHERE app_id = ? COLLATE NOCASE ORDER BY id ASC").all(String(appId)).map((r) => ({ ...r }));
 }
 
-export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about }) {
+export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data }) {
   const info = db.prepare(`
-    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin, resume_name, resume_data)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     String(name || "").trim() || null, String(email || "").trim() || null, String(phone || "").trim() || null,
     String(address || "").trim() || null, position || "other",
@@ -2902,7 +2907,9 @@ export function createApplication({ name, email, phone, address, position, exper
     has_license ? 1 : 0, has_vehicle ? 1 : 0, has_tools ? 1 : 0,
     availability || null, String(start_date || "").slice(0, 20) || null,
     String(about || "").slice(0, 2000) || null,
-    phonePin(phone)
+    phonePin(phone),
+    resume_name ? String(resume_name).slice(0, 200) : null,
+    resume_data || null
   );
   const id = Number(info.lastInsertRowid);
   const appId = makeAppId(id);

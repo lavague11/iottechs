@@ -18,9 +18,11 @@ export default async function ApplicationReviewPage({ params }) {
     .filter((u) => ["admin", "manager"].includes(u.role))
     .map((u) => ({ id: u.id, name: u.name }));
 
-  // The applicant's PIN is an access credential — the office never needs it in the browser.
+  // The applicant's PIN is an access credential — the office never needs it in the browser. The
+  // résumé blob stays server-side too (downloaded via /api/apply/resume); only its filename ships.
   const safe = { ...app };
   delete safe.applicant_pin;
+  delete safe.resume_data;
 
   return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} />;
 }
