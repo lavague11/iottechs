@@ -1,8 +1,9 @@
 // Live package tracking via a pluggable carrier-aggregator API.
 //
-// Configure with environment variables (never commit these):
+// Configure via the API Keys vault (Development ▸ API Keys) or environment:
 //   TRACKING_API_KEY   — your aggregator key (required for live data)
 //   TRACKING_PROVIDER  — "aftership" (default) | "trackingmore"
+// Read through secretValue(): vault first, then env.
 //
 // Returns a normalized record:
 //   { ok:true, live:true, status, stage, eta, deliveredAt, lastLocation,
@@ -12,6 +13,8 @@
 //
 // One aggregator call covers every carrier (UPS/FedEx/USPS/…), so the office never
 // touches a carrier website — paste the number, we fetch the real status + ETA + last scan.
+
+import { secretValue } from "./db";
 
 const CARRIER_SLUG = { UPS: "ups", FedEx: "fedex", USPS: "usps", Amazon: "amazon" };
 const SHIP_STAGES = ["Order Placed", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
@@ -53,8 +56,8 @@ const TRK_TTL_ERR = 30 * 60 * 1000;
 
 // `force` (a deliberate staff Refresh click) skips the cache read for one real lookup.
 export async function fetchTracking(number, carrier, { force = false } = {}) {
-  const key = process.env.TRACKING_API_KEY;
-  const provider = (process.env.TRACKING_PROVIDER || "aftership").toLowerCase();
+  const key = secretValue("TRACKING_API_KEY");
+  const provider = (secretValue("TRACKING_PROVIDER") || "aftership").toLowerCase();
   const num = String(number || "").trim().replace(/\s+/g, "");
   if (!num) return { ok: false, reason: "no_number" };
   if (!key) return { ok: false, reason: "no_key" };
