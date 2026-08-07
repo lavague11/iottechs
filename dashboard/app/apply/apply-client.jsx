@@ -68,17 +68,28 @@ export default function ApplyClient() {
   async function submit(e) {
     e.preventDefault();
     setErr("");
-    const cleanName = titleCase(name.trim());
+    // Browser autofill fills the input's DOM value but often skips React's onChange, leaving
+    // state empty — so read the live field values as source of truth, falling back to state.
+    const form = e.currentTarget;
+    const domVal = (id, fallback) => (form?.querySelector("#" + id)?.value ?? fallback) || fallback;
+    const rawName = domVal("ap-name", name);
+    const rawPhone = domVal("ap-phone", phone);
+    const rawEmail = domVal("ap-email", email);
+    if (rawName !== name) setName(rawName);
+    if (rawPhone !== phone) setPhone(rawPhone);
+    if (rawEmail !== email) setEmail(rawEmail);
+
+    const cleanName = titleCase(rawName.trim());
     if (!cleanName) { setErr("Tell us your name."); return; }
-    if (phone.replace(/\D/g, "").length < 10) { setErr("Enter a valid phone number (at least 10 digits)."); return; }
-    if (!emailOk(email)) { setErr("Enter a valid email address."); return; }
+    if (rawPhone.replace(/\D/g, "").length < 10) { setErr("Enter a valid phone number (at least 10 digits)."); return; }
+    if (!emailOk(rawEmail)) { setErr("Enter a valid email address."); return; }
     setName(cleanName);
     setBusy(true);
     try {
       const res = await fetch("/api/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: cleanName, phone, email, address, position, experience, skills,
+          name: cleanName, phone: rawPhone, email: rawEmail, address, position, experience, skills,
           has_license: hasLicense, has_vehicle: hasVehicle, has_tools: hasTools,
           availability, start_date: startDate, about,
           resume_name: resume?.name || "", resume_data: resume?.data || "",
