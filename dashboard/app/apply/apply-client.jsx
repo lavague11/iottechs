@@ -1,8 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Wordmark, TaglinePill } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
+
+// Default earliest-start = tomorrow, but never a Sunday (skip to Monday). Local date parts,
+// not toISOString, so it doesn't slip a day near midnight.
+function nextStartDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Sunday → Monday
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const POSITIONS = [
   { key: "tech",   label: "Technician", hint: "Install & service CCTV, low-voltage",
@@ -49,6 +58,9 @@ export default function ApplyClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+
+  // Prefill earliest-start with tomorrow (never Sunday) once mounted — keeps SSR/CSR markup identical.
+  useEffect(() => { setStartDate((v) => v || nextStartDate()); }, []);
 
   const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
@@ -171,16 +183,16 @@ export default function ApplyClient() {
                   <AddressAutocomplete id="ap-addr" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your town…" /></div>
               </div>
 
-              <label className="ap-label">Experience in this kind of work</label>
-              <div className="ap-chips">
-                {EXPERIENCE.map((x) => (
-                  <button type="button" key={x} className={`ap-chip${experience === x ? " on" : ""}`} onClick={() => setExperience(x)}>{x}</button>
-                ))}
+              <div className="ap-two">
+                <div className="ap-fld"><label className="ap-label" htmlFor="ap-exp">Experience</label>
+                  <select id="ap-exp" className="ap-in ap-sel" value={experience} onChange={(e) => setExperience(e.target.value)}>
+                    {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select></div>
+                <div className="ap-fld"><label className="ap-label" htmlFor="ap-avail">Availability</label>
+                  <select id="ap-avail" className="ap-in ap-sel" value={availability} onChange={(e) => setAvailability(e.target.value)}>
+                    {AVAILABILITY.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+                  </select></div>
               </div>
-
-              <label className="ap-label" htmlFor="ap-skills">Systems or certifications <span className="ap-opt">(optional)</span></label>
-              <textarea id="ap-skills" className="ap-in" rows={2} value={skills} onChange={(e) => setSkills(e.target.value)}
-                placeholder="e.g. Hikvision, Dahua, Cat6 termination, OSHA 30, lift certified" />
 
               <label className="ap-label">Résumé <span className="ap-opt">(optional)</span></label>
               {resume ? (
@@ -205,24 +217,10 @@ export default function ApplyClient() {
                 <button type="button" className={`ap-chip check${hasTools ? " on" : ""}`} onClick={() => setHasTools((v) => !v)}>Own tools</button>
               </div>
 
-              <div className="ap-two">
-                <div className="ap-fld">
-                  <label className="ap-label">Availability</label>
-                  <div className="ap-chips">
-                    {AVAILABILITY.map((a) => (
-                      <button type="button" key={a.key} className={`ap-chip${availability === a.key ? " on" : ""}`} onClick={() => setAvailability(a.key)}>{a.label}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="ap-fld">
-                  <label className="ap-label" htmlFor="ap-start">Earliest start <span className="ap-opt">(optional)</span></label>
-                  <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                </div>
+              <div className="ap-fld">
+                <label className="ap-label" htmlFor="ap-start">Earliest start</label>
+                <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
-
-              <label className="ap-label" htmlFor="ap-about">Anything else? <span className="ap-opt">(optional)</span></label>
-              <textarea id="ap-about" className="ap-in" rows={3} value={about} onChange={(e) => setAbout(e.target.value)}
-                placeholder="A bit about your background and why you're interested." />
 
               {err && <div className="ap-err">{err}</div>}
               <button className="ap-btn ap-btn-gold ap-submit" type="submit" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>
@@ -290,6 +288,9 @@ const CSS = `
 .ap-in:focus{outline:none;border-color:var(--gold);background:#fff;box-shadow:0 0 0 3px rgba(201,169,110,.14)}
 .ap-in.cap{text-transform:capitalize}
 textarea.ap-in{resize:vertical}
+.ap-sel{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:38px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b6275' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 13px center}
 .ap-upload{display:flex;align-items:center;gap:13px;padding:13px 15px;border:1.5px dashed var(--line);border-radius:12px;background:var(--soft);cursor:pointer;transition:border-color .15s,background .15s}
 .ap-upload:hover{border-color:var(--gold);background:#fffdf8}
 .ap-upload-ic{width:38px;height:38px;flex-shrink:0;border-radius:10px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--gold-deep)}
