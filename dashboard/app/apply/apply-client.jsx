@@ -5,14 +5,14 @@ import { Wordmark, TaglinePill } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 
 const POSITIONS = [
-  { key: "tech",      label: "Technician",       hint: "Install & service CCTV, low-voltage",
+  { key: "tech",   label: "Technician", hint: "Install & service CCTV, low-voltage",
     icon: <><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></> },
-  { key: "installer", label: "Installer / helper", hint: "Pull cable, mount, assist the lead",
-    icon: <><path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/></> },
-  { key: "sales",     label: "Sales",            hint: "Walkthroughs, proposals, follow-up",
+  { key: "sales",  label: "Sales", hint: "Walkthroughs, proposals, follow-up",
     icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
-  { key: "office",    label: "Office / dispatch", hint: "Scheduling, customers, paperwork",
-    icon: <><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></> },
+  { key: "pm",     label: "Project Manager", hint: "Coordinate crews, schedules & clients",
+    icon: <><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/></> },
+  { key: "helper", label: "Helper / part time", hint: "Pull cable, mount, assist the lead",
+    icon: <><path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/></> },
 ];
 const EXPERIENCE = ["None yet", "Under 1 year", "1–3 years", "3–5 years", "5+ years"];
 const AVAILABILITY = [
