@@ -1434,7 +1434,7 @@ export default function IdCapture({
       const res = await fetch("/api/read-licence", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-haiku-4-5", max_tokens: 1000,
+          model: "claude-sonnet-4-6", max_tokens: 1000,
           messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: shot.mediaType, data: shot.data } },
             { type: "text", text: 'Read ONLY the driver licence number from this card, character by character, exactly as printed. Ignore every other field and any other document. Reply with JSON and nothing else: {"dlNumber": "..."}' },
@@ -1513,7 +1513,7 @@ export default function IdCapture({
     try {
       const res = await fetch("/api/read-licence", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
       });
       // Config errors (no API key / not authorized) aren't a bad photo — surface the real reason
       // instead of blaming the image, and don't bother with the non-streaming retry.
@@ -1548,7 +1548,7 @@ export default function IdCapture({
       try {
         const res = await fetch("/api/read-licence", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, messages: [{ role: "user", content }] }),
+          body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content }] }),
         });
         const data = await res.json();
         finish((data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n"));

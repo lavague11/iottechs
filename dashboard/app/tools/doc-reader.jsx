@@ -74,7 +74,7 @@ export default function DocReader({ docType, accessId = "", onSaved }) {
     try {
       const res = await fetch("/api/read-licence", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
       });
       if (res.status === 503 || res.status === 403) {
         const j = await res.json().catch(() => ({}));
@@ -100,7 +100,7 @@ export default function DocReader({ docType, accessId = "", onSaved }) {
       try {
         const res = await fetch("/api/read-licence", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, messages: [{ role: "user", content }] }),
+          body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content }] }),
         });
         const data2 = await res.json();
         finish((data2.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n"));
