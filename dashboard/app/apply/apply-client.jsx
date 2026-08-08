@@ -34,7 +34,7 @@ const PITCH = {
   tech: {
     h: "Build a career keeping people safe.",
     p: "Install and service security systems across NYC & NJ. Paid training — no experience needed.",
-    pay: "$20–$40 / hour",
+    pay: "$20–$40 / hour + bonuses",
     perks: ["Paid hands-on training", "Company van, tools & gear", "Weekly pay, real growth path", "Steady work across NYC & NJ"],
   },
   sales: {
