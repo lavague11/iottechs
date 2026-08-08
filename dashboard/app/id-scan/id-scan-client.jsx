@@ -57,6 +57,9 @@ export default function IdScanClient({ user, alerts }) {
 }
 
 const CSS = `
+/* Full-width scanner — the reader defaults to a narrow 560px card; let it fill the page. */
+.apx .idc{max-width:none;width:100%}
+.apx .idc .c-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .apx .ids-sub{color:var(--muted);font-size:.9rem;margin-top:4px;max-width:70ch}
 .apx .ids-out{background:#fff;border:1px solid var(--line);border-radius:14px;margin-top:18px;overflow:hidden}
 .apx .ids-out-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--bg-soft,#faf9f7);flex-wrap:wrap}

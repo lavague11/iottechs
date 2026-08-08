@@ -124,6 +124,23 @@ function loadImage(src) {
   });
 }
 
+// Shrink a phone photo to a sane size for the vision read (keeps it under the API's
+// per-image cap and holds token cost down) without cropping. Returns the original url
+// unchanged when it's already small enough.
+async function downscale(url, maxEdge = 1600, q = 0.9) {
+  try {
+    const img = await loadImage(url);
+    const long = Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const scale = long > maxEdge ? maxEdge / long : 1;
+    if (scale >= 1) return url;
+    const cv = document.createElement("canvas");
+    cv.width = Math.round((img.naturalWidth || img.width) * scale);
+    cv.height = Math.round((img.naturalHeight || img.height) * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", q);
+  } catch { return url; }
+}
+
 function otsu(vals) {
   const hist = new Float64Array(256);
   for (let i = 0; i < vals.length; i++) hist[Math.min(255, Math.max(0, vals[i] | 0))]++;
@@ -1359,26 +1376,22 @@ export default function IdCapture({
     setError("");
     const DEF = [[0.08, 0.2], [0.92, 0.2], [0.92, 0.8], [0.08, 0.8]];
     setShots([{ side: "Front", orig: url, origType: type, url, data: url.split(",")[1], mediaType: type, quad: DEF, spin: 0, found: false, working: true, q: null }]);
+    // The image we actually send to the reader: the ORIGINAL, just downscaled if it's huge.
+    // No auto-crop — detection is over-eager and mis-crops, which starves the read.
+    let readUrl = url, readType = type;
+    try { const d = await downscale(url); if (d && d !== url) { readUrl = d; readType = "image/jpeg"; } } catch (_) {}
+    // detectQuad is advisory only now — it seeds the OPTIONAL crop editor's corners.
     let quad = DEF, found = false, others = 0;
     try {
       const res = await detectQuad(url);
       if (res) { quad = res.quad; others = res.others; found = true; }
     } catch (_) {}
-    let spin = 0, portrait = false;
-    let flat = await warpCard(url, quad, 0);
-    if (flat && found) {
-      try {
-        if ((await textAxis(flat)) === "vertical") { portrait = true; spin = 1; flat = await warpCard(url, quad, 1); }
-        if (await looksUpsideDown(flat, portrait)) { spin = (spin + 2) % 4; flat = await warpCard(url, quad, spin); }
-      } catch (_) {}
-    }
     let qm = null;
-    try { qm = await quality(flat || url); } catch (_) {}
-    if (!qm && flat) { try { qm = await quality(url); } catch (_) {} }
+    try { qm = await quality(readUrl); } catch (_) {}
     setShots((prev) => prev.map((s) => ({
-      ...s, quad, spin, found, others, working: false, q: qm,
-      url: flat || s.orig, data: (flat || s.orig).split(",")[1],
-      mediaType: flat ? "image/jpeg" : s.origType, flat: flat || null,
+      ...s, quad, spin: 0, found, others, working: false, q: qm,
+      url: readUrl, data: readUrl.split(",")[1],
+      mediaType: readType, flat: null,
     })));
   }
 
