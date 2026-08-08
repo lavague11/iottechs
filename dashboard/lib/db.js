@@ -767,6 +767,25 @@ function init() {
     )
   `);
 
+  // ---- Document library (Tools ▸ readers) ----
+  // One row per captured document (registration / insurance / business licence / …). `fields`
+  // is the full JSON the reader produced; subject_name + doc_number are denormalized for search.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_type      TEXT NOT NULL,
+      subject_name  TEXT,
+      doc_number    TEXT,
+      fields        TEXT,
+      score         INTEGER DEFAULT 0,
+      access_id     TEXT,
+      captured_by   TEXT,
+      captured_at   TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(doc_type)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_documents_access ON documents(access_id)");
+
   // ---- Archive (soft-delete store — deleted records land here, restorable or purgeable) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS archive (
@@ -3628,6 +3647,55 @@ export function setSecret(key, value, actorName) {
 }
 export function deleteSecret(key) {
   db.prepare("DELETE FROM app_secrets WHERE key=?").run(String(key || "").trim());
+  return { ok: true };
+}
+
+// ---- Document library ----------------------------------------------------
+export function createDocument({ doc_type, subject_name, doc_number, fields, score, access_id, captured_by }) {
+  const info = db.prepare(
+    "INSERT INTO documents (doc_type, subject_name, doc_number, fields, score, access_id, captured_by) VALUES (?,?,?,?,?,?,?)"
+  ).run(
+    String(doc_type || "").slice(0, 40),
+    subject_name ? String(subject_name).slice(0, 200) : null,
+    doc_number ? String(doc_number).slice(0, 80) : null,
+    fields ? JSON.stringify(fields) : null,
+    Number.isFinite(score) ? Math.round(score) : 0,
+    access_id ? String(access_id).slice(0, 40) : null,
+    captured_by ? String(captured_by).slice(0, 120) : null,
+  );
+  return { id: Number(info.lastInsertRowid) };
+}
+function rowToDoc(r) {
+  let fields = {};
+  try { fields = r.fields ? JSON.parse(r.fields) : {}; } catch { fields = {}; }
+  return { ...r, fields };
+}
+export function listDocuments({ type, accessId, limit = 100 } = {}) {
+  const where = [], args = [];
+  if (type)     { where.push("doc_type = ?"); args.push(type); }
+  if (accessId) { where.push("access_id = ?"); args.push(accessId); }
+  const sql = "SELECT * FROM documents" + (where.length ? " WHERE " + where.join(" AND ") : "") +
+    " ORDER BY captured_at DESC, id DESC LIMIT ?";
+  return db.prepare(sql).all(...args, Math.min(Number(limit) || 100, 500)).map(rowToDoc);
+}
+// Free-text search across the denormalized columns + the raw fields JSON.
+export function searchDocuments(q, { limit = 50 } = {}) {
+  const term = String(q || "").trim();
+  if (!term) return [];
+  const like = "%" + term.replace(/[%_]/g, (m) => "\\" + m) + "%";
+  return db.prepare(`
+    SELECT * FROM documents
+    WHERE subject_name LIKE ? ESCAPE '\\' OR doc_number LIKE ? ESCAPE '\\'
+       OR fields LIKE ? ESCAPE '\\' OR doc_type LIKE ? ESCAPE '\\'
+    ORDER BY captured_at DESC, id DESC LIMIT ?
+  `).all(like, like, like, like, Math.min(Number(limit) || 50, 200)).map(rowToDoc);
+}
+export function getDocument(id) {
+  const r = db.prepare("SELECT * FROM documents WHERE id=?").get(Number(id));
+  return r ? rowToDoc(r) : null;
+}
+export function deleteDocument(id) {
+  db.prepare("DELETE FROM documents WHERE id=?").run(Number(id));
   return { ok: true };
 }
 // Mask a value for display — never ship raw secrets to the browser.

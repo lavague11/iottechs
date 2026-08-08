@@ -58,6 +58,7 @@ const NAV_GROUPS = [
     { key: "service-calls", label: "Service Calls", href: "/service-calls" },
     { key: "adt",           label: "24/7 Monitoring", href: "/adt-applications" },
     { key: "id-scan",       label: "ID Scanner",    href: "/id-scan" },
+    { key: "tools",         label: "Document Tools", href: "/tools" },
     { key: "receivables",   label: "Receivables",   href: "/receivables" },
   ]},
   { key: "support-grp", label: "Support", items: [

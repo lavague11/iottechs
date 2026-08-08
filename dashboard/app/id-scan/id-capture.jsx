@@ -1643,10 +1643,10 @@ export default function IdCapture({
         </div>
       )}
 
-      {front && !front.working && !front.found && status !== "reading" && (
+      {front && !front.working && !front.found && status !== "reading" && !hasData && (
         <p className="c-warn">Card edges weren't found — check the crop.</p>
       )}
-      {front && !front.working && qualityNote(front.q)?.tone === "bad" && (
+      {front && !front.working && qualityNote(front.q)?.tone === "bad" && !hasData && (
         <p className="c-warn">{qualityNote(front.q).msg}</p>
       )}
       {error && <p className="c-err">{error}</p>}
