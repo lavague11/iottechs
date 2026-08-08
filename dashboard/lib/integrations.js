@@ -28,4 +28,18 @@ export const INTEGRATIONS = [
     docs: "https://resend.com/api-keys",
     clientExposed: false,
   },
+  {
+    key: "ANTHROPIC_API_KEY",
+    name: "Anthropic (ID Scanner)",
+    powers: "Reads driver's licenses on the ID Scanner (/id-scan) via Claude vision",
+    docs: "https://console.anthropic.com/settings/keys",
+    clientExposed: false,
+  },
+  {
+    key: "GOOGLE_ADDRESS_KEY",
+    name: "Google Address Validation",
+    powers: "Server-side USPS/CASS address verification for scanned IDs",
+    docs: "https://console.cloud.google.com/google/maps-apis/credentials",
+    clientExposed: false,
+  },
 ];
