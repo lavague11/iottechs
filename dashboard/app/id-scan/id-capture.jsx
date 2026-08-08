@@ -1499,6 +1499,14 @@ export default function IdCapture({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
       });
+      // Config errors (no API key / not authorized) aren't a bad photo — surface the real reason
+      // instead of blaming the image, and don't bother with the non-streaming retry.
+      if (res.status === 503 || res.status === 403) {
+        const j = await res.json().catch(() => ({}));
+        setStatus("error");
+        setError(j.error || "The ID reader isn't configured yet.");
+        return;
+      }
       if (!res.body || !res.ok) throw new Error("no stream");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
