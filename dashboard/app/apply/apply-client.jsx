@@ -40,7 +40,7 @@ const PITCH = {
   sales: {
     h: "Sell security. Earn with no ceiling.",
     p: "Run walkthroughs, build proposals, and close across NYC & NJ.",
-    pay: "Competitive commission",
+    pay: "Base + commission",
     perks: ["Uncapped commission", "Residual, recurring pay", "Flexible, hybrid work", "Warm leads & real support"],
   },
   pm: {
