@@ -65,7 +65,8 @@ Rules:
 - "state" and "jurisdiction" as the 2-letter code.
 - "sex" as M or F exactly as printed.
 - "eyes" as the printed abbreviation (BRO, BLU, etc.).
-- "dlNumber" exactly as printed including letters.
+- "dlNumber" the licence/ID number (often labelled DL, LIC, ID or 4d/5), exactly as printed including letters and spaces. It must not be left blank if a number is printed.
+- "firstName" the given/first name and "lastName" the family/last name, in their SEPARATE fields. Licences usually label them (LN/FN, or "1"/"2", or Last/First). Never merge the whole name into one field and never leave firstName blank when a first name is printed; if only a full name is shown, split it (last word or the part after the comma is usually the given name).
 - "street" is the street line only — no city, state, ZIP, or apartment.
 - "unit" is the apartment, suite or floor if one is printed (e.g. APT A5), otherwise "".
 - "realId": "Y" if the card is REAL ID compliant (star marking), "N" if it says NOT FOR "REAL ID" PURPOSES, "" if unclear.
@@ -1483,6 +1484,10 @@ export default function IdCapture({
       setAddrRaw({ street: clean.street, unit: clean.unit, city: clean.city });
       const n = normalizeAddress(clean.street, clean.unit, clean.city);
       setFields({ ...clean, street: n.street, unit: n.unit, city: n.city });
+      // The read is complete — snap every field to its full value. Otherwise any field still
+      // mid-typewriter (e.g. the long licence number) renders truncated/empty even though it read.
+      revealQ.current = [];
+      setReveal({});
       setStatus("done");
       if (clean.dlNumber) verifyDl(clean.dlNumber);
     };
