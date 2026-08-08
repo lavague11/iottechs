@@ -58,6 +58,13 @@ export default function ApplyClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+  const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = résumé
+
+  const STEPS = [
+    { n: 1, label: "Job" },
+    { n: 2, label: "Your info" },
+    { n: 3, label: "Résumé" },
+  ];
 
   // Prefill earliest-start with tomorrow (never Sunday) once mounted — keeps SSR/CSR markup identical.
   useEffect(() => { setStartDate((v) => v || nextStartDate()); }, []);
@@ -77,31 +84,44 @@ export default function ApplyClient() {
     r.readAsDataURL(file);
   }
 
-  async function submit(e) {
-    e.preventDefault();
-    setErr("");
-    // Browser autofill fills the input's DOM value but often skips React's onChange, leaving
-    // state empty — so read the live field values as source of truth, falling back to state.
-    const form = e.currentTarget;
-    const domVal = (id, fallback) => (form?.querySelector("#" + id)?.value ?? fallback) || fallback;
+  // Browser autofill fills the input's DOM value but often skips React's onChange — read the live
+  // field value as source of truth. Must run while Step 2 is still mounted (on the → Résumé step).
+  const domVal = (id, fallback) => (document.getElementById(id)?.value ?? fallback) || fallback;
+
+  // Validate + capture Step 2 before advancing; leaving it unmounts the inputs.
+  function captureInfo() {
     const rawName = domVal("ap-name", name);
     const rawPhone = domVal("ap-phone", phone);
     const rawEmail = domVal("ap-email", email);
-    if (rawName !== name) setName(rawName);
-    if (rawPhone !== phone) setPhone(rawPhone);
-    if (rawEmail !== email) setEmail(rawEmail);
-
     const cleanName = titleCase(rawName.trim());
-    if (!cleanName) { setErr("Tell us your name."); return; }
-    if (rawPhone.replace(/\D/g, "").length < 10) { setErr("Enter a valid phone number (at least 10 digits)."); return; }
-    if (!emailOk(rawEmail)) { setErr("Enter a valid email address."); return; }
-    setName(cleanName);
+    if (!cleanName) return "Tell us your name.";
+    if (rawPhone.replace(/\D/g, "").length < 10) return "Enter a valid phone number (at least 10 digits).";
+    if (!emailOk(rawEmail)) return "Enter a valid email address.";
+    setName(cleanName); setPhone(rawPhone); setEmail(rawEmail);
+    return null;
+  }
+
+  function next() {
+    setErr("");
+    if (step === 2) { const e = captureInfo(); if (e) { setErr(e); return; } }
+    setStep((s) => Math.min(3, s + 1));
+  }
+  function back() { setErr(""); setStep((s) => Math.max(1, s - 1)); }
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr("");
+    // name/phone/email were captured + validated leaving Step 2; guard anyway.
+    const cleanName = titleCase(name.trim());
+    if (!cleanName || phone.replace(/\D/g, "").length < 10 || !emailOk(email)) {
+      setStep(2); setErr("Please finish your details."); return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: cleanName, phone: rawPhone, email: rawEmail, address, position, experience, skills,
+          name: cleanName, phone, email, address, position, experience, skills,
           has_license: hasLicense, has_vehicle: hasVehicle, has_tools: hasTools,
           availability, start_date: startDate, about,
           resume_name: resume?.name || "", resume_data: resume?.data || "",
@@ -154,77 +174,104 @@ export default function ApplyClient() {
             </div>
           ) : (
             <form className="ap-form" onSubmit={submit}>
-              <div className="ap-form-head">
-                <h2>Tell us about yourself</h2>
-                <p className="ap-sub">The starred basics are all we need to reach you.</p>
-              </div>
-
-              <label className="ap-label">What are you applying for?</label>
-              <div className="ap-grid2">
-                {POSITIONS.map((p) => (
-                  <button type="button" key={p.key} className={`ap-pick${position === p.key ? " on" : ""}`} onClick={() => setPosition(p.key)}>
-                    <span className="ap-pick-ic"><Icon>{p.icon}</Icon></span>
-                    <span className="ap-pick-tx"><span className="ap-pick-t">{p.label}</span><span className="ap-pick-h">{p.hint}</span></span>
-                    <span className="ap-pick-dot" aria-hidden="true" />
-                  </button>
+              {/* stepper */}
+              <div className="ap-steps">
+                {STEPS.map((s) => (
+                  <div key={s.n} className={`ap-step${step === s.n ? " on" : ""}${step > s.n ? " done" : ""}`}>
+                    <span className="ap-step-n">{step > s.n ? <Icon><path d="M20 6 9 17l-5-5" /></Icon> : s.n}</span>
+                    <span className="ap-step-l">{s.label}</span>
+                  </div>
                 ))}
               </div>
 
-              <div className="ap-two">
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
-                  <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone</label>
-                  <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" /></div>
-              </div>
-              <div className="ap-two">
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
-                  <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-addr">Where are you based? <span className="ap-opt">(optional)</span></label>
-                  <AddressAutocomplete id="ap-addr" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your town…" /></div>
-              </div>
-
-              <div className="ap-two">
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-exp">Experience</label>
-                  <select id="ap-exp" className="ap-in ap-sel" value={experience} onChange={(e) => setExperience(e.target.value)}>
-                    {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select></div>
-                <div className="ap-fld"><label className="ap-label" htmlFor="ap-avail">Availability</label>
-                  <select id="ap-avail" className="ap-in ap-sel" value={availability} onChange={(e) => setAvailability(e.target.value)}>
-                    {AVAILABILITY.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
-                  </select></div>
-              </div>
-
-              <label className="ap-label">Résumé <span className="ap-opt">(optional)</span></label>
-              {resume ? (
-                <div className="ap-file">
-                  <span className="ap-file-ic"><Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></Icon></span>
-                  <span className="ap-file-nm">{resume.name}</span>
-                  <span className="ap-file-sz">{resume.size >= 1024 * 1024 ? (resume.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(resume.size / 1024)) + " KB"}</span>
-                  <button type="button" className="ap-file-x" onClick={() => setResume(null)} aria-label="Remove résumé">✕</button>
+              {/* STEP 1 — job */}
+              {step === 1 && (
+                <div className="ap-pane">
+                  <div className="ap-form-head"><h2>What are you applying for?</h2><p className="ap-sub">Pick the role that fits you best.</p></div>
+                  <div className="ap-grid2">
+                    {POSITIONS.map((p) => (
+                      <button type="button" key={p.key} className={`ap-pick${position === p.key ? " on" : ""}`} onClick={() => setPosition(p.key)}>
+                        <span className="ap-pick-ic"><Icon>{p.icon}</Icon></span>
+                        <span className="ap-pick-tx"><span className="ap-pick-t">{p.label}</span><span className="ap-pick-h">{p.hint}</span></span>
+                        <span className="ap-pick-dot" aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <label className="ap-upload">
-                  <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={onResume} hidden />
-                  <span className="ap-upload-ic"><Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></Icon></span>
-                  <span className="ap-upload-tx"><b>Upload résumé</b><em>PDF, Word, or image · up to 4 MB</em></span>
-                </label>
               )}
 
-              <label className="ap-label">Do you have…</label>
-              <div className="ap-chips">
-                <button type="button" className={`ap-chip check${hasLicense ? " on" : ""}`} onClick={() => setHasLicense((v) => !v)}>Driver&rsquo;s license</button>
-                <button type="button" className={`ap-chip check${hasVehicle ? " on" : ""}`} onClick={() => setHasVehicle((v) => !v)}>Own vehicle</button>
-                <button type="button" className={`ap-chip check${hasTools ? " on" : ""}`} onClick={() => setHasTools((v) => !v)}>Own tools</button>
-              </div>
+              {/* STEP 2 — applicant info */}
+              {step === 2 && (
+                <div className="ap-pane">
+                  <div className="ap-form-head"><h2>Tell us about yourself</h2><p className="ap-sub">How we reach you, and when you can start.</p></div>
+                  <div className="ap-two">
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
+                      <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone</label>
+                      <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" /></div>
+                  </div>
+                  <div className="ap-two">
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
+                      <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-addr">Where are you based? <span className="ap-opt">(optional)</span></label>
+                      <AddressAutocomplete id="ap-addr" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your town…" /></div>
+                  </div>
+                  <div className="ap-two">
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-exp">Experience</label>
+                      <select id="ap-exp" className="ap-in ap-sel" value={experience} onChange={(e) => setExperience(e.target.value)}>
+                        {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
+                      </select></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-avail">Availability</label>
+                      <select id="ap-avail" className="ap-in ap-sel" value={availability} onChange={(e) => setAvailability(e.target.value)}>
+                        {AVAILABILITY.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+                      </select></div>
+                  </div>
+                  <label className="ap-label">Do you have…</label>
+                  <div className="ap-chips">
+                    <button type="button" className={`ap-chip check${hasLicense ? " on" : ""}`} onClick={() => setHasLicense((v) => !v)}>Driver&rsquo;s license</button>
+                    <button type="button" className={`ap-chip check${hasVehicle ? " on" : ""}`} onClick={() => setHasVehicle((v) => !v)}>Own vehicle</button>
+                    <button type="button" className={`ap-chip check${hasTools ? " on" : ""}`} onClick={() => setHasTools((v) => !v)}>Own tools</button>
+                  </div>
+                  <div className="ap-fld">
+                    <label className="ap-label" htmlFor="ap-start">Earliest start</label>
+                    <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  </div>
+                </div>
+              )}
 
-              <div className="ap-fld">
-                <label className="ap-label" htmlFor="ap-start">Earliest start</label>
-                <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
+              {/* STEP 3 — résumé */}
+              {step === 3 && (
+                <div className="ap-pane">
+                  <div className="ap-form-head"><h2>Add your résumé</h2><p className="ap-sub">Optional — you can submit without one and add it later.</p></div>
+                  {resume ? (
+                    <div className="ap-file">
+                      <span className="ap-file-ic"><Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></Icon></span>
+                      <span className="ap-file-nm">{resume.name}</span>
+                      <span className="ap-file-sz">{resume.size >= 1024 * 1024 ? (resume.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(resume.size / 1024)) + " KB"}</span>
+                      <button type="button" className="ap-file-x" onClick={() => setResume(null)} aria-label="Remove résumé">✕</button>
+                    </div>
+                  ) : (
+                    <label className="ap-upload ap-upload-lg">
+                      <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={onResume} hidden />
+                      <span className="ap-upload-ic"><Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></Icon></span>
+                      <span className="ap-upload-tx"><b>Upload résumé</b><em>PDF, Word, or image · up to 4 MB</em></span>
+                    </label>
+                  )}
+                  <div className="ap-recap">
+                    <span className="ap-recap-k">Applying for</span>
+                    <span className="ap-recap-v">{(POSITIONS.find((p) => p.key === position) || {}).label}</span>
+                  </div>
+                  <p className="ap-note">Your PIN is the last 4 digits of your phone — you&rsquo;ll use it with your Application ID to check your status.</p>
+                </div>
+              )}
 
               {err && <div className="ap-err">{err}</div>}
-              <button className="ap-btn ap-btn-gold ap-submit" type="submit" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>
-              <p className="ap-note">Your PIN is the last 4 digits of your phone — you&rsquo;ll use it with your Application ID to check your status.</p>
+              <div className="ap-nav">
+                {step > 1 && <button type="button" className="ap-btn ap-btn-ghost" onClick={back}>← Back</button>}
+                {step < 3
+                  ? <button type="button" className="ap-btn ap-btn-gold" onClick={next}>Continue →</button>
+                  : <button type="submit" className="ap-btn ap-btn-gold" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>}
+              </div>
             </form>
           )}
         </main>
@@ -320,7 +367,28 @@ textarea.ap-in{resize:vertical}
 .ap-btn-ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);padding:14px 24px}
 .ap-btn-ghost:hover{border-color:var(--ink)}
 .ap-submit{width:100%;margin-top:24px}
-.ap-note{text-align:center;color:var(--muted);font-size:.8rem;margin:12px 0 0}
+.ap-note{text-align:center;color:var(--muted);font-size:.8rem;margin:16px 0 0}
+/* ---- wizard: stepper, panes, nav ---- */
+.ap-steps{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.ap-step{display:flex;align-items:center;gap:8px;flex:1}
+.ap-step-n{width:28px;height:28px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font-size:.82rem;font-weight:800;background:var(--soft);color:var(--muted);border:1.5px solid var(--line);transition:.18s}
+.ap-step-n svg{width:15px;height:15px;stroke-width:2.8}
+.ap-step.on .ap-step-n{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#fff;border-color:var(--gold)}
+.ap-step.done .ap-step-n{background:#e7f6ec;color:#1c8a45;border-color:#bfe6cd}
+.ap-step-l{font-size:.82rem;font-weight:700;color:var(--muted);white-space:nowrap}
+.ap-step.on .ap-step-l{color:var(--ink)}
+.ap-step:not(:last-child)::after{content:"";flex:1;height:2px;border-radius:2px;background:var(--line)}
+.ap-step.done:not(:last-child)::after{background:#bfe6cd}
+.ap-pane{animation:apFade .22s ease}
+@keyframes apFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ap-nav{display:flex;gap:10px;margin-top:26px}
+.ap-nav .ap-btn{flex:1}
+.ap-upload-lg{padding:30px 18px;flex-direction:column;text-align:center}
+.ap-upload-lg .ap-upload-ic{width:48px;height:48px}
+.ap-upload-lg .ap-upload-ic svg{width:22px;height:22px}
+.ap-recap{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding:12px 15px;background:var(--soft);border-radius:11px;border:1px solid var(--line)}
+.ap-recap-k{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.ap-recap-v{font-weight:800;font-size:.92rem}
 .mono{font-family:Menlo,Consolas,monospace;letter-spacing:.5px}
 /* success */
 .ap-success{text-align:center;padding:26px 4px}
