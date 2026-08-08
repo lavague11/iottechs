@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Wordmark, TaglinePill } from "../components/brand";
-import AddressAutocomplete from "../components/address-autocomplete";
 
 // Default earliest-start = tomorrow, but never a Sunday (skip to Monday). Local date parts,
 // not toISOString, so it doesn't slip a day near midnight.
@@ -30,12 +29,34 @@ const AVAILABILITY = [
   { key: "weekends", label: "Weekends" },
   { key: "flexible", label: "Flexible" },
 ];
-const PERKS = [
-  { t: "Paid hands-on training", i: <><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 2.7 3 6 3s6-2 6-3v-5"/></> },
-  { t: "Company van, tools & gear", i: <><rect x="1" y="6" width="13" height="10" rx="1"/><path d="M14 9h4l3 3v4h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></> },
-  { t: "Weekly pay, real growth path", i: <><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></> },
-  { t: "Steady work across NYC & NJ", i: <><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></> },
-];
+// The left panel is tailored to the position chosen in step 1 — headline, blurb, pay, and perks.
+const PITCH = {
+  tech: {
+    h: "Build a career keeping people safe.",
+    p: "Install and service security systems across NYC & NJ. Paid training — no experience needed.",
+    pay: "$20–$40 / hour",
+    perks: ["Paid hands-on training", "Company van, tools & gear", "Weekly pay, real growth path", "Steady work across NYC & NJ"],
+  },
+  sales: {
+    h: "Sell security. Earn with no ceiling.",
+    p: "Run walkthroughs, build proposals, and close across NYC & NJ.",
+    pay: "Competitive commission · no cap",
+    perks: ["Uncapped commission", "Residual, recurring pay", "Flexible, hybrid work", "Warm leads & real support"],
+  },
+  pm: {
+    h: "Run the jobs. Grow the team.",
+    p: "Coordinate crews, schedules, and clients across NYC & NJ.",
+    pay: "$60,000–$90,000 + bonuses",
+    perks: ["Salary $60k–$90k plus bonuses", "Own the schedule & crews", "Clear path to leadership", "Weekly pay, real growth"],
+  },
+  helper: {
+    h: "Learn the trade. Get paid to grow.",
+    p: "Pull cable, mount, and assist the lead across NYC & NJ.",
+    pay: "Paid training · flexible hours",
+    perks: ["Paid hands-on training", "Flexible part-time hours", "Weekly pay", "Move up to Technician"],
+  },
+};
+const CHECK = <path d="M20 6 9 17l-5-5" />;
 const Icon = ({ children }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 );
@@ -51,19 +72,19 @@ export default function ApplyClient() {
   const [hasLicense, setHasLicense] = useState(false);
   const [hasVehicle, setHasVehicle] = useState(false);
   const [hasTools, setHasTools] = useState(false);
-  const [availability, setAvailability] = useState("full");
+  const [availability, setAvailability] = useState("flexible");
   const [startDate, setStartDate] = useState("");
   const [about, setAbout] = useState("");
   const [resume, setResume] = useState(null);   // { name, data, size }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
-  const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = résumé
+  const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = resume
 
   const STEPS = [
-    { n: 1, label: "Job" },
+    { n: 1, label: "Position" },
     { n: 2, label: "Your info" },
-    { n: 3, label: "Résumé" },
+    { n: 3, label: "Resume" },
   ];
 
   // Prefill earliest-start with tomorrow (never Sunday) once mounted — keeps SSR/CSR markup identical.
@@ -71,21 +92,22 @@ export default function ApplyClient() {
 
   const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+  const pitch = PITCH[position] || PITCH.tech;   // left panel tailors to the chosen position
 
   const RESUME_TYPES = /\.(pdf|docx?|png|jpe?g|heic)$/i;
   function onResume(e) {
     setErr("");
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!RESUME_TYPES.test(file.name)) { setErr("Résumé must be a PDF, Word doc, or image."); e.target.value = ""; return; }
-    if (file.size > 4 * 1024 * 1024) { setErr("Résumé is too large — keep it under 4 MB."); e.target.value = ""; return; }
+    if (!RESUME_TYPES.test(file.name)) { setErr("Resume must be a PDF, Word doc, or image."); e.target.value = ""; return; }
+    if (file.size > 4 * 1024 * 1024) { setErr("Resume is too large — keep it under 4 MB."); e.target.value = ""; return; }
     const r = new FileReader();
     r.onload = () => setResume({ name: file.name, data: String(r.result), size: file.size });
     r.readAsDataURL(file);
   }
 
   // Browser autofill fills the input's DOM value but often skips React's onChange — read the live
-  // field value as source of truth. Must run while Step 2 is still mounted (on the → Résumé step).
+  // field value as source of truth. Must run while Step 2 is still mounted (on the → Resume step).
   const domVal = (id, fallback) => (document.getElementById(id)?.value ?? fallback) || fallback;
 
   // Validate + capture Step 2 before advancing; leaving it unmounts the inputs.
@@ -144,11 +166,12 @@ export default function ApplyClient() {
           </div>
           <div className="ap-aside-body">
             <div className="ap-tag">Careers · Now hiring</div>
-            <h1 className="ap-hero-h">Build a career keeping people safe.</h1>
-            <p className="ap-hero-p">We install and service security systems across NYC &amp; NJ. No résumé needed — this takes about two minutes.</p>
+            <h1 className="ap-hero-h">{pitch.h}</h1>
+            <p className="ap-hero-p">{pitch.p}</p>
+            <div className="ap-pay"><span className="ap-pay-lbl">{POSITIONS.find((p) => p.key === position)?.label}</span>{pitch.pay}</div>
             <ul className="ap-perks">
-              {PERKS.map((p) => (
-                <li key={p.t}><span className="ap-perk-ic"><Icon>{p.i}</Icon></span>{p.t}</li>
+              {pitch.perks.map((t) => (
+                <li key={t}><span className="ap-perk-ic"><Icon>{CHECK}</Icon></span>{t}</li>
               ))}
             </ul>
           </div>
@@ -213,8 +236,8 @@ export default function ApplyClient() {
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
                       <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-addr">Where are you based? <span className="ap-opt">(optional)</span></label>
-                      <AddressAutocomplete id="ap-addr" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your town…" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-zip">ZIP code</label>
+                      <input id="ap-zip" className="ap-in" value={address} onChange={(e) => setAddress(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))} placeholder="07093" inputMode="numeric" autoComplete="postal-code" /></div>
                   </div>
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-exp">Experience</label>
@@ -239,22 +262,22 @@ export default function ApplyClient() {
                 </div>
               )}
 
-              {/* STEP 3 — résumé */}
+              {/* STEP 3 — resume */}
               {step === 3 && (
                 <div className="ap-pane">
-                  <div className="ap-form-head"><h2>Add your résumé</h2><p className="ap-sub">Optional — you can submit without one and add it later.</p></div>
+                  <div className="ap-form-head"><h2>Add your resume</h2><p className="ap-sub">Optional — you can submit without one and add it later.</p></div>
                   {resume ? (
                     <div className="ap-file">
                       <span className="ap-file-ic"><Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></Icon></span>
                       <span className="ap-file-nm">{resume.name}</span>
                       <span className="ap-file-sz">{resume.size >= 1024 * 1024 ? (resume.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(resume.size / 1024)) + " KB"}</span>
-                      <button type="button" className="ap-file-x" onClick={() => setResume(null)} aria-label="Remove résumé">✕</button>
+                      <button type="button" className="ap-file-x" onClick={() => setResume(null)} aria-label="Remove resume">✕</button>
                     </div>
                   ) : (
                     <label className="ap-upload ap-upload-lg">
                       <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={onResume} hidden />
                       <span className="ap-upload-ic"><Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></Icon></span>
-                      <span className="ap-upload-tx"><b>Upload résumé</b><em>PDF, Word, or image · up to 4 MB</em></span>
+                      <span className="ap-upload-tx"><b>Upload resume</b><em>PDF, Word, or image · up to 4 MB</em></span>
                     </label>
                   )}
                   <div className="ap-recap">
@@ -301,7 +324,10 @@ const CSS = `
 .ap-tag{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);
   background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.3);padding:5px 12px;border-radius:100px;margin-bottom:16px}
 .ap-hero-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:2rem;line-height:1.08;margin:0 0 12px;position:relative;z-index:1}
-.ap-hero-p{color:#b9c0d0;font-size:.95rem;margin:0 0 24px;position:relative;z-index:1;max-width:34ch}
+.ap-hero-p{color:#b9c0d0;font-size:.95rem;margin:0 0 18px;position:relative;z-index:1;max-width:34ch}
+.ap-pay{display:inline-flex;flex-direction:column;gap:1px;align-self:flex-start;margin:0 0 22px;padding:9px 16px;border-radius:12px;
+  background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.35);color:var(--gold-hi);font-weight:800;font-size:1.02rem;line-height:1.15;position:relative;z-index:1}
+.ap-pay-lbl{font-size:.6rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#c9b48a}
 .ap-perks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:13px;position:relative;z-index:1}
 .ap-perks li{display:flex;align-items:center;gap:12px;font-size:.92rem;font-weight:600;color:#e7eaf1}
 .ap-perk-ic{width:34px;height:34px;flex-shrink:0;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;color:var(--gold-hi)}
