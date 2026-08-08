@@ -11,8 +11,8 @@ import { getSessionUser } from "../../../lib/session";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // Only vision-capable models this tool actually uses — an allowlist so the proxy
 // can't be repurposed into an open Anthropic relay.
-const ALLOWED_MODELS = new Set(["claude-sonnet-4-6", "claude-opus-5", "claude-opus-4-8"]);
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const ALLOWED_MODELS = new Set(["claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-5", "claude-opus-4-8"]);
+const DEFAULT_MODEL = "claude-haiku-4-5";
 
 export async function POST(request) {
   const user = await getSessionUser();

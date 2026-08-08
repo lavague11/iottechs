@@ -1434,7 +1434,7 @@ export default function IdCapture({
       const res = await fetch("/api/read-licence", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6", max_tokens: 1000,
+          model: "claude-haiku-4-5", max_tokens: 1000,
           messages: [{ role: "user", content: [
             { type: "image", source: { type: "base64", media_type: shot.mediaType, data: shot.data } },
             { type: "text", text: 'Read ONLY the driver licence number from this card, character by character, exactly as printed. Ignore every other field and any other document. Reply with JSON and nothing else: {"dlNumber": "..."}' },
@@ -1458,6 +1458,7 @@ export default function IdCapture({
     setLive([]);
     setUncertain([]);
     setReveal({});
+    setFill(null);
     revealQ.current = [];
     setDlCheck({ state: "idle", second: "" });
 
@@ -1483,12 +1484,13 @@ export default function IdCapture({
       setUncertain(Array.isArray(parsed._uncertain) ? parsed._uncertain.filter((k) => KEYS.includes(k) && !OPTIONAL.includes(k)) : []);
       setAddrRaw({ street: clean.street, unit: clean.unit, city: clean.city });
       const n = normalizeAddress(clean.street, clean.unit, clean.city);
-      setFields({ ...clean, street: n.street, unit: n.unit, city: n.city });
-      // The read is complete — snap every field to its full value. Otherwise any field still
-      // mid-typewriter (e.g. the long licence number) renders truncated/empty even though it read.
-      revealQ.current = [];
-      setReveal({});
+      const finalF = { ...clean, street: n.street, unit: n.unit, city: n.city };
+      setFields(finalF);
       setStatus("done");
+      // Fill the form deterministically, top to bottom in field order — every field with a value,
+      // one after another. (Replaces the old out-of-order streaming animation that left fields blank.)
+      const order = [...PRIMARY, ...MORE].map((f) => f.k).filter((k) => String(finalF[k] || "").trim());
+      setFill(order.length ? { order, i: 0, n: 0 } : null);
       if (clean.dlNumber) verifyDl(clean.dlNumber);
     };
 
@@ -1504,10 +1506,6 @@ export default function IdCapture({
         try { v = JSON.parse(`"${m[2]}"`); } catch (_) { v = m[2]; }
         const val = scrub(v.trim());
         setFields((f) => ({ ...f, [k]: val }));
-        if (val) {
-          revealQ.current = [...revealQ.current, k];
-          setReveal((r) => ({ ...r, [k]: 0 }));
-        }
         setLive((l) => [...l, { k, hit: !!val }]);
       }
     };
@@ -1515,7 +1513,7 @@ export default function IdCapture({
     try {
       const res = await fetch("/api/read-licence", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
+        body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, stream: true, messages: [{ role: "user", content }] }),
       });
       // Config errors (no API key / not authorized) aren't a bad photo — surface the real reason
       // instead of blaming the image, and don't bother with the non-streaming retry.
@@ -1550,7 +1548,7 @@ export default function IdCapture({
       try {
         const res = await fetch("/api/read-licence", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content }] }),
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1000, messages: [{ role: "user", content }] }),
         });
         const data = await res.json();
         finish((data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n"));
@@ -1562,6 +1560,7 @@ export default function IdCapture({
   }
 
   function set(k, v) {
+    setFill(null);   // editing snaps the whole form to its full values and stops the ordered fill
     if (reveal[k] !== undefined) {
       revealQ.current = revealQ.current.filter((x) => x !== k);
       setReveal((r) => { const { [k]: _d, ...rest } = r; return rest; });
@@ -1571,7 +1570,7 @@ export default function IdCapture({
 
   function clearAll() {
     setShots([]); setFields(BLANK); setStatus("idle"); setError("");
-    setLive([]); setUncertain([]); setReveal({}); revealQ.current = [];
+    setLive([]); setUncertain([]); setReveal({}); setFill(null); revealQ.current = [];
     setDlCheck({ state: "idle", second: "" }); setAddrRaw(null);
     setAddrCheck(null);
     autoKey.current = ""; warned.current = ""; issueKey.current = ""; addrKey.current = "";
@@ -1582,6 +1581,24 @@ export default function IdCapture({
     toast("good", "Record copied", 3000);
   }
 
+  // Ordered fill: after a read completes, populate every field top-to-bottom, one at a time.
+  const [fill, setFill] = useState(null);   // { order:[keys], i, n } while filling; null = show all
+  useEffect(() => {
+    if (!fill) return;
+    const id = setInterval(() => {
+      setFill((cur) => {
+        if (!cur) return cur;
+        const key = cur.order[cur.i];
+        if (key === undefined) return null;                 // reached the end — show everything
+        const full = String(fieldsRef.current[key] || "");
+        const step = full.length > 12 ? 2 : 1;
+        if (cur.n + step >= full.length) return { ...cur, i: cur.i + 1, n: 0 };
+        return { ...cur, n: cur.n + step };
+      });
+    }, 22);
+    return () => clearInterval(id);
+  }, [fill != null]);
+
   const total = KEYS.length - OPTIONAL.length;
   const got = live.filter((x) => x.hit && !OPTIONAL.includes(x.k)).length;
 
@@ -1590,8 +1607,13 @@ export default function IdCapture({
     const opt = OPTIONAL.includes(f.k);
     const bad = badKeys.has(f.k);
     const doubt = uncertain.includes(f.k);
-    const typing = reveal[f.k] !== undefined;
-    const shown = typing ? String(fields[f.k] || "").slice(0, reveal[f.k]) : fields[f.k];
+    // Ordered reveal — fields above the cursor show full, the cursor field types in, below = blank.
+    const oidx = fill ? fill.order.indexOf(f.k) : -1;
+    const typing = !!fill && oidx === fill.i;
+    let shown;
+    if (status === "reading") shown = "";
+    else if (fill && oidx !== -1) shown = oidx < fill.i ? String(fields[f.k] || "") : oidx === fill.i ? String(fields[f.k] || "").slice(0, fill.n) : "";
+    else shown = fields[f.k];
     const cls = bad ? "bad" : doubt ? "doubt" : typing ? "live" : hasData && empty && !opt ? "gap" : "";
     return (
       <label key={f.k} className={`c-f w${f.w}${bad ? " err" : ""}`}>
