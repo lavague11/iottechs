@@ -13,13 +13,13 @@ function nextStartDate() {
 }
 
 const POSITIONS = [
-  { key: "tech",   label: "Technician", hint: "Install & service CCTV, low-voltage",
+  { key: "tech",   label: "Technician / Helper", hint: "Install & service CCTV, low-voltage",
     icon: <><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></> },
   { key: "sales",  label: "Sales", hint: "Walkthroughs, proposals, follow-up",
     icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
   { key: "pm",     label: "Project Manager", hint: "Coordinate crews, schedules & clients",
     icon: <><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/></> },
-  { key: "helper", label: "Helper / part time", hint: "Pull cable, mount, assist the lead",
+  { key: "sub",    label: "Subcontractor", hint: "Crew installs, paid per day",
     icon: <><path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/></> },
 ];
 const EXPERIENCE = ["None yet", "Under 1 year", "1–3 years", "3–5 years", "5+ years"];
@@ -34,7 +34,7 @@ const PITCH = {
   tech: {
     h: "Build a career keeping people safe.",
     p: "Install and service security systems across NYC & NJ. Paid training — no experience needed.",
-    pay: "$20–$40 / hour + bonuses",
+    pay: "$15–$40 / hour + bonuses",
     perks: ["Paid hands-on training", "Company van, tools & gear", "Weekly pay, real growth path", "Steady work across NYC & NJ"],
   },
   sales: {
@@ -49,11 +49,11 @@ const PITCH = {
     pay: "$60,000–$90,000 + bonuses",
     perks: ["Salary $60k–$90k plus bonuses", "Own the schedule & crews", "Clear path to leadership", "Weekly pay, real growth"],
   },
-  helper: {
-    h: "Learn the trade. Get paid to grow.",
-    p: "Pull cable, mount, and assist the lead across NYC & NJ.",
-    pay: "Paid training · flexible hours",
-    perks: ["Paid hands-on training", "Flexible part-time hours", "Weekly pay", "Move up to Technician"],
+  sub: {
+    h: "Run installs on your own terms.",
+    p: "Take on CCTV & low-voltage installs across NYC & NJ as a subcontractor.",
+    pay: "$250–$400 / day · per diem",
+    perks: ["$250–$400 per diem", "Take the jobs you want", "Fast, reliable pay", "Steady volume year-round"],
   },
 };
 const CHECK = <path d="M20 6 9 17l-5-5" />;
