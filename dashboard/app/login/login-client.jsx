@@ -27,9 +27,11 @@ export default function LoginClient({ next }) {
   const speedRunId = useRef(0);
   const canvasRef  = useRef(null);
   const canvasCtrl = useRef(null);
-  const [mode, setMode]           = useState("password");   // password | face
+  const [mode, setMode]           = useState("password");   // password | face | pin
   const [faceState, setFaceState] = useState("idle");
   const [faceMsg, setFaceMsg]     = useState("");
+  const [pinId, setPinId]         = useState("");
+  const [pinErr, setPinErr]       = useState("");
   const faceVideoRef  = useRef(null);
   const faceStreamRef = useRef(null);
 
@@ -110,6 +112,13 @@ export default function LoginClient({ next }) {
   function stopFaceCam() {
     if (faceStreamRef.current) { faceStreamRef.current.getTracks().forEach((t) => t.stop()); faceStreamRef.current = null; }
   }
+  // "Use PIN" path — customers with a project link enter their ID, then their PIN on the gate.
+  function findProject() {
+    const id = pinId.trim().toUpperCase();
+    if (!id) { setPinErr("Enter your Project or Service Call ID."); return; }
+    setPinErr("");
+    window.location.href = (/^SVC/i.test(id) ? "/service-call/" : "/project/") + encodeURIComponent(id);
+  }
   useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
   // Opening Face ID starts the scan immediately — no extra tap.
   useEffect(() => { if (mode === "face" && faceState === "idle") { const t = setTimeout(runFaceScan, 300); return () => clearTimeout(t); } }, [mode]); // eslint-disable-line
@@ -175,7 +184,7 @@ export default function LoginClient({ next }) {
         <div className="gw2-brand">
           <h1 style={{ display: "flex", justifyContent: "center" }}><a href="/" aria-label="IOT TECHS home" style={{ display: "inline-flex" }}><Wordmark height={30} techsColor="#C9A96E" /></a></h1>
           <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "6px 0 4px" }} />
-          <div className="gw2-subtag">Staff Portal</div>
+          <div className="gw2-subtag">Secure Access</div>
         </div>
 
         {mode === "password" ? (
@@ -201,7 +210,7 @@ export default function LoginClient({ next }) {
             {pending ? "Signing in…" : "Sign In →"}
           </button>
         </form>
-        ) : (
+        ) : mode === "face" ? (
         <div className="lgf">
           <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
             {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
@@ -215,16 +224,29 @@ export default function LoginClient({ next }) {
             {faceState === "scanning" ? "Scanning…" : "Scan my face"}
           </button>
         </div>
+        ) : (
+        <div className="lgf">
+          <div className="lgf-prompt">Find your project</div>
+          <div className="lg-field">
+            <label className="lg-label">Project or Service Call ID</label>
+            <input className="lg-input" value={pinId} onChange={(e) => setPinId(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && findProject()} placeholder="e.g. 00SK or SVC0005" autoComplete="off" spellCheck={false} />
+          </div>
+          {pinErr && <div className="lg-err">{pinErr}</div>}
+          <button className="lg-btn" type="button" onClick={findProject}>Find it →</button>
+          <p className="lgf-hint">You&rsquo;ll enter your PIN on the next screen.</p>
+        </div>
         )}
 
         <div className="gw2-actions">
-          <button className="gw2-lbtn" onClick={() => { const m = mode === "password" ? "face" : "password"; setMode(m); setFaceState("idle"); setFaceMsg(""); if (m === "face") warmFace(); }}>
-            {mode === "password" ? "Face ID" : "← Password"}
-          </button>
-          <button className="gw2-lbtn" onClick={() => setShowLoc(true)}>
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" opacity=".5"/></svg>
-            Network
-          </button>
+          {mode === "password" ? (
+            <>
+              <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
+              <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
+            </>
+          ) : (
+            <button className="gw2-lbtn" onClick={() => setMode("password")}>← Password</button>
+          )}
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>Need help?</button>
         </div>
       </div>
@@ -249,10 +271,12 @@ export default function LoginClient({ next }) {
           <div className="gw2-modal">
             <div className="gw2-mhd"><span>Need help signing in?</span><button className="gw2-mclose" onClick={() => setShowHelp(false)}>✕</button></div>
             <div className="gw2-mbd">
-              <p>Forgot your password? Reset it yourself, or reach our team and we&apos;ll get you back in fast.</p>
+              <p>New here, or need a hand getting in? Create an account, reset your password, or reach our team.</p>
+              <a className="gw2-hrow" href="/#demo"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><div><div className="gw2-hk">Create an account</div><div className="gw2-hv">New customer? Start here</div></div></a>
               <a className="gw2-hrow" href="/forgot"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div><div className="gw2-hk">Reset my password</div><div className="gw2-hv">Verify with the last 4 of your phone</div></div></a>
               <a className="gw2-hrow" href="mailto:support@iot-techs.com?subject=Login%20help%20-%20IOT%20TECHS"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div><div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div></a>
               <a className="gw2-hrow" href="sms:+16463960775"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div><div><div className="gw2-hk">Text us</div><div className="gw2-hv">646-396-0775</div></div></a>
+              <button className="gw2-hrow" onClick={() => { setShowHelp(false); setShowLoc(true); }} style={{ width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" opacity=".5"/></svg></div><div><div className="gw2-hk">Network diagnostics</div><div className="gw2-hv">Check your connection</div></div></button>
             </div>
           </div>
         </div>
@@ -334,4 +358,5 @@ const CSS = `
 .lgf-msg{text-align:center;font-size:.8rem;line-height:1.5;color:rgba(255,255,255,.72);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 11px}
 .lgf-stage{position:relative;width:168px;height:168px;margin:2px auto 0;display:grid;place-items:center}
 .lgf-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none}
+.lgf-hint{text-align:center;font-size:.72rem;color:rgba(255,255,255,.42);margin-top:2px}
 `;

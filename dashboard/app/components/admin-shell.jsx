@@ -32,11 +32,17 @@ const NAV_GROUPS = [
   ]},
   { key: "admin-grp", label: "Admin", items: [
     { key: "users",      label: "Users",   href: "/users" },
-    { key: "identity",   label: "Identity Library", href: "/identity" },
     { key: "onboarding", label: "Hiring",  href: "/onboarding" },
     { key: "activity", label: "Activity Log", href: "/activity" },
     { key: "dev",      label: "Dev Roadmap",  href: "/dev" },
     { key: "archives", label: "Archives",     href: "/archives" },
+  ]},
+  { key: "bio-grp", label: "Biometrics", items: [
+    { key: "identity",    label: "Identity Library", href: "/identity" },
+    { key: "enroll",      label: "Face Enroll",      href: "/enroll" },
+    { key: "face-verify", label: "Face Verify",      href: "/face-verify" },
+    { key: "id-scan",     label: "ID Scanner",       href: "/id-scan" },
+    { key: "tools",       label: "Document Tools",   href: "/tools" },
   ]},
   { key: "mgmt-grp", label: "Management", items: [
     { key: "finances",  label: "Finances",  href: "/finances" },
@@ -59,10 +65,6 @@ const NAV_GROUPS = [
     { key: "operations",    label: "Action Center", href: "/operations" },
     { key: "service-calls", label: "Service Calls", href: "/service-calls" },
     { key: "adt",           label: "24/7 Monitoring", href: "/adt-applications" },
-    { key: "id-scan",       label: "ID Scanner",    href: "/id-scan" },
-    { key: "face-verify",   label: "Face Verify",   href: "/face-verify" },
-    { key: "enroll",        label: "Face Enroll",   href: "/enroll" },
-    { key: "tools",         label: "Document Tools", href: "/tools" },
     { key: "receivables",   label: "Receivables",   href: "/receivables" },
   ]},
   { key: "support-grp", label: "Support", items: [

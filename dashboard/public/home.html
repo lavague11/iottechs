@@ -807,7 +807,7 @@
     document.getElementById('loginModal').style.display='none';
     document.body.style.overflow='';
   }
-  document.getElementById('loginTrigger').addEventListener('click',()=>openLoginModal('signin'));
+  document.getElementById('loginTrigger').addEventListener('click',()=>{ window.location.href='/login'; });
   document.getElementById('loginModalClose').addEventListener('click',closeLoginModal);
   document.getElementById('loginModal').addEventListener('click',function(e){
     if(e.target===this) closeLoginModal();
@@ -1394,7 +1394,7 @@
         <h3>You already have an account</h3>
         <p class="sv-sub">Your request is in — we've got it. Log in to track your project, or reset your password if you've forgotten it.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:20px">
-          <button class="btn btn-gold" onclick="closeDemoModal();openLoginModal('signin')" style="padding:13px 24px;">Log In</button>
+          <button class="btn btn-gold" onclick="window.location.href='/login'" style="padding:13px 24px;">Log In</button>
           <a class="btn btn-ghost" href="/forgot" style="padding:13px 24px;">Reset Password</a>
         </div>
       </div>
