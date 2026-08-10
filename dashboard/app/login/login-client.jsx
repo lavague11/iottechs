@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { loginAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { TaglinePill, Wordmark } from "../components/brand";
+import FaceScan from "../components/face-scan";
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -26,6 +27,11 @@ export default function LoginClient({ next }) {
   const speedRunId = useRef(0);
   const canvasRef  = useRef(null);
   const canvasCtrl = useRef(null);
+  const [mode, setMode]           = useState("password");   // password | face
+  const [faceState, setFaceState] = useState("idle");
+  const [faceMsg, setFaceMsg]     = useState("");
+  const faceVideoRef  = useRef(null);
+  const faceStreamRef = useRef(null);
 
   useEffect(() => {
     const ctrl = startPinCanvas(canvasRef.current);
@@ -91,6 +97,58 @@ export default function LoginClient({ next }) {
     });
   }
 
+  // ---- Face ID (same 1:N flow as the PIN gate) ----
+  function warmFace() {
+    if (window.IOTFace) { window.IOTFace.ready?.().catch(() => {}); return; }
+    if (!document.getElementById("iot-face-js")) {
+      const s = document.createElement("script");
+      s.id = "iot-face-js"; s.src = "/face-engine.js"; s.async = true;
+      s.onload = () => window.IOTFace?.ready?.().catch(() => {});
+      document.head.appendChild(s);
+    }
+  }
+  function stopFaceCam() {
+    if (faceStreamRef.current) { faceStreamRef.current.getTracks().forEach((t) => t.stop()); faceStreamRef.current = null; }
+  }
+  useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
+
+  async function runFaceScan() {
+    if (faceState === "scanning") return;
+    setFaceMsg(""); setFaceState("scanning");
+    let stream = null;
+    try {
+      if (!window.IOTFace) { warmFace(); await new Promise((r) => setTimeout(r, 400)); }
+      await window.IOTFace?.ready?.();
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } }, audio: false });
+      faceStreamRef.current = stream;
+      const v = faceVideoRef.current;
+      v.srcObject = stream; await v.play().catch(() => {});
+      await new Promise((r) => setTimeout(r, 700));
+      let emb = null;
+      for (let i = 0; i < 4 && !emb; i++) {
+        const c = document.createElement("canvas");
+        c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
+        c.getContext("2d").drawImage(v, 0, 0);
+        emb = await window.IOTFace.embed(c);
+        if (!emb) await new Promise((r) => setTimeout(r, 250));
+      }
+      stopFaceCam();
+      if (!emb) { setFaceState("fail"); setFaceMsg("No face detected — center your face and try again."); return; }
+      const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
+      const j = await res.json();
+      if (j.ok) {
+        setFaceState("ok"); setFaceMsg("Welcome, " + j.name);
+        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 120);
+        setTimeout(() => window.location.assign(next || j.home || "/dashboard"), 1100);
+      } else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your password."); }
+    } catch (e) {
+      stopFaceCam();
+      const secure = location.protocol === "https:" || location.hostname === "localhost";
+      setFaceState("fail");
+      setFaceMsg(secure ? "Camera unavailable — allow access, or use your password." : "Face ID needs a secure (HTTPS) connection.");
+    }
+  }
+
   return (
     <div className="gw2-root">
       <style>{CSS}</style>
@@ -118,6 +176,7 @@ export default function LoginClient({ next }) {
           <div className="gw2-subtag">Staff Portal</div>
         </div>
 
+        {mode === "password" ? (
         <form className="lg-form" onSubmit={handleSubmit}>
           <input type="hidden" name="next" value={next} />
           <div className="lg-field">
@@ -140,8 +199,26 @@ export default function LoginClient({ next }) {
             {pending ? "Signing in…" : "Sign In →"}
           </button>
         </form>
+        ) : (
+        <div className="lgf">
+          <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
+            {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
+          </div>
+          {faceMsg && <div className="lgf-msg">{faceMsg}</div>}
+          <div className="lgf-stage">
+            <video ref={faceVideoRef} className="lgf-vid" playsInline muted />
+            <FaceScan state={faceState} size={168} />
+          </div>
+          <button className="lg-btn" type="button" onClick={runFaceScan} disabled={granted || faceState === "scanning"}>
+            {faceState === "scanning" ? "Scanning…" : "Scan my face"}
+          </button>
+        </div>
+        )}
 
         <div className="gw2-actions">
+          <button className="gw2-lbtn" onClick={() => { const m = mode === "password" ? "face" : "password"; setMode(m); setFaceState("idle"); setFaceMsg(""); if (m === "face") warmFace(); }}>
+            {mode === "password" ? "Face ID" : "← Password"}
+          </button>
           <button className="gw2-lbtn" onClick={() => setShowLoc(true)}>
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" opacity=".5"/></svg>
             Network
@@ -247,4 +324,12 @@ const CSS = `
 .gw2-speed-reload:hover{color:rgba(255,255,255,.7)}
 @keyframes gw2SpinIcon{to{transform:rotate(360deg)}}
 .mono{font-family:Menlo,Consolas,monospace;letter-spacing:.3px}
+/* Face ID mode */
+.lgf{display:flex;flex-direction:column;gap:14px}
+.lgf-prompt{text-align:center;font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,169,110,.7)}
+.lgf-prompt.ok{color:#5DB87A}
+.lgf-prompt.err{color:#E05A5A}
+.lgf-msg{text-align:center;font-size:.8rem;line-height:1.5;color:rgba(255,255,255,.72);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 11px}
+.lgf-stage{position:relative;width:168px;height:168px;margin:2px auto 0;display:grid;place-items:center}
+.lgf-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none}
 `;
