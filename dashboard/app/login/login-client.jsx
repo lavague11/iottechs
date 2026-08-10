@@ -149,8 +149,10 @@ export default function LoginClient({ next }) {
       const j = await res.json();
       if (j.ok) {
         setFaceState("ok"); setFaceMsg("Welcome, " + j.name);
-        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 120);
-        setTimeout(() => window.location.assign(next || j.home || "/dashboard"), 1100);
+        // Let the green Face-ID success animation finish BEFORE the warp takes over.
+        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 1000);
+        setTimeout(() => setGranted(true), 2100);
+        setTimeout(() => window.location.assign(next || j.home || "/dashboard"), 2650);
       } else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your password."); }
     } catch (e) {
       stopFaceCam();

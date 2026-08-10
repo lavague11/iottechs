@@ -553,50 +553,8 @@
   </div>
 </div>
 
-<!-- LOGIN MODAL -->
-<div id="loginModal" class="lm-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Sign in">
-  <div class="lm-box">
-    <button class="lm-close" id="loginModalClose" aria-label="Close">&#x2715;</button>
-    <div class="lm-head">
-      <h3 class="display">Access your account.</h3>
-      <p>Find your project or sign in to your dashboard.</p>
-    </div>
-    <div class="pl-tabs">
-      <button class="pl-tab active" id="tabSignInBtn">Sign In</button>
-      <button class="pl-tab" id="tabPinBtn">Project ID</button>
-    </div>
-    <div class="pl-panel" id="tabPin">
-      <form id="pinForm">
-        <div class="field">
-          <label for="pinAccessId">Project or Service Call ID</label>
-          <input id="pinAccessId" type="text" placeholder="Last 4 or full ID — e.g. 00SK or SVC0005" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
-        </div>
-        <div id="pinError" class="pl-error" style="display:none;"></div>
-        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Find It →</button>
-      </form>
-      <p class="pl-sub">Enter your Project or Service Call ID — you&rsquo;ll enter your PIN on the next screen.</p>
-    </div>
-    <div class="pl-panel active" id="tabSignIn">
-      <form id="signinForm">
-        <div class="field">
-          <label for="siIdentifier">Email, Phone, or Username</label>
-          <input id="siIdentifier" type="text" autocomplete="username">
-        </div>
-        <div class="field">
-          <label for="siPassword">Password</label>
-          <div class="pw-wrap">
-            <input id="siPassword" type="password" autocomplete="current-password">
-            <button type="button" class="pw-toggle" onclick="togglePw('siPassword',this)" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-        </div>
-        <label class="pl-remember"><input type="checkbox" id="siRemember"> Remember this device for 7 days</label>
-        <div id="siError" class="pl-error" style="display:none;"></div>
-        <button class="btn btn-gold" type="submit" style="width:100%;justify-content:center;margin-top:4px;">Sign In →</button>
-      </form>
-      <p class="pl-sub"><a href="#demo" id="createAcctLink" onclick="closeLoginModal()" style="color:var(--accent);font-weight:600;">Create new account</a></p>
-    </div>
-  </div>
-</div>
+<!-- Login modal removed — login is unified at /login -->
+
 
 <!-- SERVICES -->
 <section id="services">
@@ -791,45 +749,7 @@
     }catch(e){}
   })();
 
-  function openLoginModal(tab){
-    const m=document.getElementById('loginModal');
-    m.style.display='flex';
-    document.body.style.overflow='hidden';
-    if(tab==='signin'){
-      document.getElementById('tabSignInBtn').click();
-      setTimeout(()=>document.getElementById('siIdentifier').focus(),120);
-    } else {
-      document.getElementById('tabPinBtn').click();
-      setTimeout(()=>document.getElementById('pinAccessId').focus(),120);
-    }
-  }
-  function closeLoginModal(){
-    document.getElementById('loginModal').style.display='none';
-    document.body.style.overflow='';
-  }
   document.getElementById('loginTrigger').addEventListener('click',()=>{ window.location.href='/login'; });
-  document.getElementById('loginModalClose').addEventListener('click',closeLoginModal);
-  document.getElementById('loginModal').addEventListener('click',function(e){
-    if(e.target===this) closeLoginModal();
-  });
-
-  document.addEventListener('keydown',function(e){
-    if(e.key==='Escape') closeLoginModal();
-  });
-
-  // tab switching
-  document.getElementById('tabPinBtn').addEventListener('click',()=>{
-    document.getElementById('tabPinBtn').classList.add('active');
-    document.getElementById('tabSignInBtn').classList.remove('active');
-    document.getElementById('tabPin').classList.add('active');
-    document.getElementById('tabSignIn').classList.remove('active');
-  });
-  document.getElementById('tabSignInBtn').addEventListener('click',()=>{
-    document.getElementById('tabSignInBtn').classList.add('active');
-    document.getElementById('tabPinBtn').classList.remove('active');
-    document.getElementById('tabSignIn').classList.add('active');
-    document.getElementById('tabPin').classList.remove('active');
-  });
 
   // check session on load
   fetch('/api/me').then(r=>r.json()).then(({user})=>{
@@ -855,45 +775,7 @@
     });
   }
 
-  // project ID search — resolve the ID (full or last-4), then hand off to the project's
-  // animated PIN gate. No PIN is entered here; the portal collects it.
-  document.getElementById('pinForm').addEventListener('submit',async function(e){
-    e.preventDefault();
-    const errEl=document.getElementById('pinError');
-    errEl.style.display='none';
-    const accessId=document.getElementById('pinAccessId').value.trim().toUpperCase();
-    if(!accessId){errEl.textContent='Enter a Project ID.';errEl.style.display='block';return;}
-    const btn=this.querySelector('button[type=submit]');const old=btn.textContent;btn.disabled=true;btn.textContent='Finding…';
-    try{
-      const res=await fetch('/api/pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId})});
-      const json=await res.json();
-      if(json.ok){ window.location.href='/project/'+encodeURIComponent(json.accessId||accessId); return; }
-      // Not a project — try it as a Service Call ID (SVC…) before giving up.
-      const sres=await fetch('/api/svc-pin-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({svcId:accessId})});
-      const sjson=await sres.json();
-      if(sjson.ok){ window.location.href='/service-call/'+encodeURIComponent(sjson.svcId); return; }
-      errEl.textContent = json.error==='no_project' ? 'Nothing found with that ID.' : (json.error||'Something went wrong.');
-      errEl.style.display='block';btn.disabled=false;btn.textContent=old;
-    }catch(err){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=old;}
-  });
-
-  // sign-in form
-  document.getElementById('signinForm').addEventListener('submit',async function(e){
-    e.preventDefault();
-    const btn=this.querySelector('button[type=submit]');
-    const errEl=document.getElementById('siError');
-    errEl.style.display='none';
-    btn.disabled=true; btn.textContent='Signing in…';
-    try{
-      const res=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({identifier:document.getElementById('siIdentifier').value,
-                             password:document.getElementById('siPassword').value,
-                             remember:document.getElementById('siRemember').checked})});
-      const {ok,user,error}=await res.json();
-      if(ok){closeLoginModal();window.location.href=user.home||'/dashboard';}
-      else{errEl.textContent=error||'Invalid credentials.';errEl.style.display='block';btn.disabled=false;btn.textContent='Sign In →';}
-    }catch(err){errEl.textContent='Connection error. Try again.';errEl.style.display='block';btn.disabled=false;btn.textContent='Sign In →';}
-  });
+  // (Sign-in + Project-ID lookup moved to the unified /login screen.)
 
   // Finder widget
   var _finderType = '', _finderService = '', _finderPrevStep = 's1';

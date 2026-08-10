@@ -3268,7 +3268,13 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
       if (!emb) { setFaceState("fail"); setFaceMsg("No face detected — center your face and try again."); return; }
       const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
       const j = await res.json();
-      if (j.ok) { setFaceState("ok"); setFaceMsg("Welcome, " + j.name); setTimeout(() => window.location.assign(j.home || "/dashboard"), 950); }
+      if (j.ok) {
+        setFaceState("ok"); setFaceMsg("Welcome, " + j.name);
+        // Finish the green Face-ID success animation, THEN warp + access-granted.
+        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 1000);
+        setTimeout(() => setGranted(true), 2100);
+        setTimeout(() => window.location.assign(j.home || "/dashboard"), 2650);
+      }
       else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your PIN."); }
     } catch (e) {
       stopFaceCam();
