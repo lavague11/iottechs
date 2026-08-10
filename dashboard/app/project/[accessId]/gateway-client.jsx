@@ -8,6 +8,7 @@ import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoActio
 import { startPinCanvas } from "./gateway-pin-canvas";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
+import FaceScan from "../../components/face-scan";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
@@ -3049,6 +3050,9 @@ const GW2_LIGHT_CSS = `
 .gw2-light .gw2-lf-input:focus{border-color:#C9A96E;}
 .gw2-light .gw2-lf-btn{background:#C9A96E;color:#0e1320;}
 .gw2-light .gw2-lf-btn:hover:not(:disabled){background:#b08f4f;color:#fff;}
+.gw2-light .gw2-face{display:flex;flex-direction:column;align-items:center;gap:12px;}
+.gw2-light .gw2-face-stage{margin:2px 0;}
+.gw2-light .gw2-face-btn{width:100%;margin-top:2px;}
 `;
 
 // ---- PIN gateway screen (light card on the animated starfield) ----
@@ -3060,6 +3064,8 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
   const [busy, setBusy]           = useState(false);
   const [bannerMsg, setBannerMsg] = useState("");
   const [mode, setMode]           = useState("pin");
+  const [faceState, setFaceState] = useState("idle");  // idle | scanning | ok | fail
+  const [faceMsg,   setFaceMsg]   = useState("");
   const [showHelp, setShowHelp]   = useState(false);
   const [showLoc,     setShowLoc]     = useState(false);
   const [speedTesting, setSpeedTesting] = useState(false);
@@ -3212,6 +3218,18 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
     if (res.ok) { setGranted(true); setTimeout(() => onAuthenticated(res.view), 700); }
   }
 
+  // Face ID entry. The camera capture → embedding → 1:N match → session is the
+  // next step (needs enrolled faces to match against); for now this runs the
+  // scan visual and tells the user how to proceed, without faking a login.
+  function runFaceScan() {
+    if (faceState === "scanning") return;
+    setFaceMsg(""); setFaceState("scanning");
+    setTimeout(() => {
+      setFaceState("idle");
+      setFaceMsg("Face ID activates once you've enrolled your face. Use your PIN for now.");
+    }, 2400);
+  }
+
   async function loginWithCredentials(emailOrPhone, password) {
     setBusy(true);
     const res = await attemptAccess({ emailOrPhone, password });
@@ -3297,11 +3315,25 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
               </button>
             </div>
           </>
+        ) : mode === "face" ? (
+          <div className="gw2-face">
+            <div className={`gw2-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
+              {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
+            </div>
+            {faceMsg && <div className="gw2-banner">{faceMsg}</div>}
+            <div className="gw2-face-stage"><FaceScan state={faceState} size={172} /></div>
+            <button className="gw2-lf-btn gw2-face-btn" onClick={runFaceScan} disabled={busy || faceState === "scanning"}>
+              {faceState === "scanning" ? "Scanning…" : "Scan my face"}
+            </button>
+          </div>
         ) : (
           <LoginForm busy={busy} onSubmit={loginWithCredentials} />
         )}
 
         <div className="gw2-actions">
+          {mode === "pin" && (
+            <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); }}>Face ID</button>
+          )}
           <button className="gw2-lbtn" onClick={() => setMode(mode === "pin" ? "login" : "pin")}>
             {mode === "pin" ? "Log in instead" : "← Use PIN"}
           </button>

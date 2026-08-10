@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, copyFileSync } from "node:fs";
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
@@ -785,6 +785,48 @@ function init() {
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(doc_type)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_documents_access ON documents(access_id)");
+
+  // ---- Identity / biometrics (Face ID + Driver's Licence library) ----
+  // One row per user who enrols. Photos (id_image, face_image) are AES-256-GCM
+  // encrypted at rest (see encBlob/decBlob). Embeddings are ArcFace vectors kept
+  // as plain JSON so the 1:N login matcher can cosine-compare fast — a vector is
+  // not reversible into a face image. status: unverified|pending|verified|rejected.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_identity (
+      user_id         INTEGER PRIMARY KEY,
+      status          TEXT DEFAULT 'unverified',
+      id_type         TEXT,
+      id_image        TEXT,
+      id_embedding    TEXT,
+      id_fields       TEXT,
+      id_verdict      TEXT,
+      face_image      TEXT,
+      face_embedding  TEXT,
+      enroll_score    REAL,
+      consent_at      TEXT,
+      consent_version TEXT,
+      enrolled_at     TEXT,
+      updated_at      TEXT DEFAULT (datetime('now','localtime')),
+      updated_by      TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_identity_status ON user_identity(status)");
+
+  // Every consent, enrolment, login match/miss, and admin action — an audit trail
+  // for a system that holds government IDs and biometrics.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS identity_events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER,
+      kind       TEXT,
+      detail     TEXT,
+      score      REAL,
+      actor_role TEXT,
+      actor_name TEXT,
+      at         TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_identity_events_user ON identity_events(user_id)");
 
   // ---- Archive (soft-delete store — deleted records land here, restorable or purgeable) ----
   db.exec(`
@@ -1731,7 +1773,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v35";
+const DB_VER = "v36";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -3648,6 +3690,173 @@ export function setSecret(key, value, actorName) {
 export function deleteSecret(key) {
   db.prepare("DELETE FROM app_secrets WHERE key=?").run(String(key || "").trim());
   return { ok: true };
+}
+
+// ---- Identity / biometrics (Face ID + Driver's Licence library) ----------
+// AES-256-GCM at rest for the stored photos. The key lives in the vault
+// (BIOMETRIC_ENC_KEY); it's generated once on first use so a fresh deploy is
+// self-provisioning. Losing the key makes stored photos unrecoverable — which
+// is the point: the DB alone is not enough to see anyone's ID or face.
+let _bioKey = null;
+function biometricKey() {
+  if (_bioKey) return _bioKey;
+  let hex = secretValue("BIOMETRIC_ENC_KEY");
+  if (!hex || hex.length < 64) {
+    hex = randomBytes(32).toString("hex");
+    try { setSecret("BIOMETRIC_ENC_KEY", hex, "system"); } catch {}
+  }
+  _bioKey = Buffer.from(hex.slice(0, 64), "hex");
+  return _bioKey;
+}
+// "v1:<iv>:<tag>:<cipher>", all base64. Returns "" for empty input.
+export function encBlob(plain) {
+  const s = plain == null ? "" : String(plain);
+  if (!s) return "";
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", biometricKey(), iv);
+  const enc = Buffer.concat([c.update(s, "utf8"), c.final()]);
+  return `v1:${iv.toString("base64")}:${c.getAuthTag().toString("base64")}:${enc.toString("base64")}`;
+}
+export function decBlob(blob) {
+  const s = String(blob || "");
+  if (!s.startsWith("v1:")) return "";
+  try {
+    const [, ivB, tagB, dataB] = s.split(":");
+    const d = createDecipheriv("aes-256-gcm", biometricKey(), Buffer.from(ivB, "base64"));
+    d.setAuthTag(Buffer.from(tagB, "base64"));
+    return Buffer.concat([d.update(Buffer.from(dataB, "base64")), d.final()]).toString("utf8");
+  } catch { return ""; }
+}
+
+const _jparse = (v, fb) => { try { return v ? JSON.parse(v) : fb; } catch { return fb; } };
+
+export function logIdentityEvent(userId, { kind, detail, score, actor_role, actor_name } = {}) {
+  db.prepare("INSERT INTO identity_events (user_id, kind, detail, score, actor_role, actor_name) VALUES (?,?,?,?,?,?)")
+    .run(Number(userId) || null, kind || "event", detail == null ? null : String(detail),
+         score == null ? null : Number(score), actor_role || null, actor_name || null);
+}
+export function getIdentityEvents(userId, limit = 100) {
+  return db.prepare("SELECT * FROM identity_events WHERE user_id=? ORDER BY id DESC LIMIT ?")
+    .all(Number(userId) || 0, Math.min(500, Math.max(1, limit)));
+}
+
+// Full row. Embeddings/fields/verdict come back parsed. Photos are decrypted
+// ONLY when withImages is set — list views never pull them.
+export function getUserIdentity(userId, { withImages = false } = {}) {
+  const row = db.prepare("SELECT * FROM user_identity WHERE user_id=?").get(Number(userId) || 0);
+  if (!row) return null;
+  const out = {
+    ...row,
+    id_embedding: _jparse(row.id_embedding, null),
+    face_embedding: _jparse(row.face_embedding, null),
+    id_fields: _jparse(row.id_fields, null),
+    id_verdict: _jparse(row.id_verdict, null),
+    hasIdImage: !!row.id_image,
+    hasFaceImage: !!row.face_image,
+  };
+  if (withImages) {
+    out.id_image = decBlob(row.id_image);
+    out.face_image = decBlob(row.face_image);
+  } else {
+    delete out.id_image; delete out.face_image;
+  }
+  return out;
+}
+
+// Decrypt a single stored photo on demand (for a gated thumbnail route).
+export function getIdentityImage(userId, which) {
+  const col = which === "face" ? "face_image" : "id_image";
+  const row = db.prepare(`SELECT ${col} AS blob FROM user_identity WHERE user_id=?`).get(Number(userId) || 0);
+  return row ? decBlob(row.blob) : "";
+}
+
+// Create/patch a user's identity row. Image fields in the patch are encrypted;
+// array/object fields are JSON-encoded. Only provided keys are written.
+export function upsertUserIdentity(userId, patch = {}, { actor_role, actor_name } = {}) {
+  const uid = Number(userId) || 0;
+  if (!uid) return null;
+  db.prepare("INSERT INTO user_identity (user_id) VALUES (?) ON CONFLICT(user_id) DO NOTHING").run(uid);
+  const map = {
+    status: (v) => String(v),
+    id_type: (v) => String(v),
+    id_image: (v) => encBlob(v),
+    face_image: (v) => encBlob(v),
+    id_embedding: (v) => JSON.stringify(v),
+    face_embedding: (v) => JSON.stringify(v),
+    id_fields: (v) => JSON.stringify(v),
+    id_verdict: (v) => JSON.stringify(v),
+    enroll_score: (v) => Number(v),
+    consent_at: (v) => String(v),
+    consent_version: (v) => String(v),
+    enrolled_at: (v) => String(v),
+  };
+  const sets = [], vals = [];
+  for (const k of Object.keys(map)) {
+    if (patch[k] === undefined) continue;
+    sets.push(`${k}=?`); vals.push(patch[k] === null ? null : map[k](patch[k]));
+  }
+  if (!sets.length && !patch.touch) return getUserIdentity(uid);
+  sets.push("updated_at=datetime('now','localtime')");
+  if (actor_name || actor_role) { sets.push("updated_by=?"); vals.push(actor_name || actor_role); }
+  vals.push(uid);
+  db.prepare(`UPDATE user_identity SET ${sets.join(", ")} WHERE user_id=?`).run(...vals);
+  return getUserIdentity(uid);
+}
+
+export function setIdentityStatus(userId, status, { actor_role, actor_name } = {}) {
+  const ok = ["unverified", "pending", "verified", "rejected"].includes(status);
+  if (!ok) return null;
+  const r = upsertUserIdentity(userId, { status }, { actor_role, actor_name });
+  logIdentityEvent(userId, { kind: "status", detail: status, actor_role, actor_name });
+  return r;
+}
+
+// Hard purge — biometrics must be deletable on request (admin action).
+export function deleteUserIdentity(userId, { actor_role, actor_name } = {}) {
+  const uid = Number(userId) || 0;
+  db.prepare("DELETE FROM user_identity WHERE user_id=?").run(uid);
+  logIdentityEvent(uid, { kind: "delete", detail: "identity purged", actor_role, actor_name });
+  return { ok: true };
+}
+
+// The library view: one row per user with an identity, joined to the account.
+// No photos, no embeddings — just what the admin libraries render.
+export function listIdentities() {
+  return db.prepare(`
+    SELECT ui.user_id, ui.status, ui.id_type, ui.enroll_score, ui.enrolled_at, ui.consent_at,
+           ui.updated_at,
+           (ui.id_image IS NOT NULL)   AS has_id_image,
+           (ui.face_image IS NOT NULL) AS has_face_image,
+           ui.id_fields,
+           u.name, u.email, u.role
+    FROM user_identity ui JOIN users u ON u.id = ui.user_id
+    ORDER BY (ui.status='verified') DESC, u.name
+  `).all().map((r) => ({ ...r, id_fields: _jparse(r.id_fields, null) }));
+}
+
+// For the 1:N face login matcher: every enrolled user's face + ID embeddings.
+// Vectors only — the raw photos never leave the DB for this.
+export function listEnrolledFaces() {
+  return db.prepare(`
+    SELECT ui.user_id, ui.status, ui.face_embedding, ui.id_embedding, u.name, u.role
+    FROM user_identity ui JOIN users u ON u.id = ui.user_id
+    WHERE ui.face_embedding IS NOT NULL AND (u.disabled IS NULL OR u.disabled = 0)
+  `).all().map((r) => ({
+    user_id: r.user_id, status: r.status, name: r.name, role: r.role,
+    face_embedding: _jparse(r.face_embedding, null),
+    id_embedding: _jparse(r.id_embedding, null),
+  }));
+}
+
+export function identityStats() {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS total,
+      SUM(CASE WHEN status='verified' THEN 1 ELSE 0 END) AS verified,
+      SUM(CASE WHEN status='pending'  THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN face_embedding IS NOT NULL THEN 1 ELSE 0 END) AS enrolled
+    FROM user_identity
+  `).get();
+  return { total: row.total || 0, verified: row.verified || 0, pending: row.pending || 0, enrolled: row.enrolled || 0 };
 }
 
 // ---- Document library ----------------------------------------------------

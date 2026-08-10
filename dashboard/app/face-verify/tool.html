@@ -132,6 +132,39 @@ ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing
 @keyframes sp{to{transform:rotate(360deg)}}
 #boot p{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:rgba(250,248,244,.5);margin:0}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- Customer-facing Face-ID animation (hides the camera lens) ----
+   Overlays the scan circle in the External/customer view. The <video> underneath
+   keeps playing (detection reads its frames); this opaque overlay means a person
+   on a login/PIN page never sees the raw camera. Technician view reveals the lens. */
+/* Cover blends into the page (no visible circle) — it only exists to hide the
+   lens; the animation floats on the flat background. */
+.faceid{position:absolute;inset:0;background:var(--ink);z-index:3;overflow:visible;display:block}
+/* No lens means no round frame either — kill the progress ring in customer view. */
+.faceid svg{position:absolute!important;top:18%!important;left:18%!important;width:64%!important;height:64%!important;
+  transform:none!important;overflow:visible;pointer-events:none}
+.fa-frame path{fill:none;stroke:var(--gold);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);filter:drop-shadow(0 0 4px rgba(201,169,110,.35))}
+.faceid.draw .fa-frame path{animation:fadraw .55s ease forwards}
+.fa-face path,.fa-face line{fill:none;stroke:var(--gold);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);opacity:0}
+.faceid.draw .fa-face path,.faceid.draw .fa-face line{animation:fadraw .5s ease .35s forwards,faappear .01s .35s forwards}
+.fa-cross line{fill:none;stroke:var(--bad);stroke-width:7;stroke-linecap:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);opacity:0}
+.faceid.fail .fa-cross line{animation:fadraw .3s ease forwards,faappear .01s forwards}
+@keyframes fadraw{to{stroke-dashoffset:0}}
+@keyframes faappear{to{opacity:1}}
+.faceid.scanning{animation:fapulse 1.5s ease-in-out .8s infinite}
+@keyframes fapulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+.faceid.ok .fa-frame path,.faceid.ok .fa-face path,.faceid.ok .fa-face line{stroke:var(--ok);transition:stroke .4s}
+.faceid.fail .fa-frame path{stroke:var(--bad);transition:stroke .3s}
+.faceid.fail .fa-face{display:none}
+/* Default / External (customer): lens + ring + check-glyph hidden, animation shown */
+body:not(.internal) .scanvid{opacity:0}
+body:not(.internal) #scanWrap>svg{display:none}
+body:not(.internal) #glyph{display:none}
+/* Internal (technician): real lens + ring, no animation overlay */
+body.internal .faceid{display:none}
 </style>
 <script src="/barcode-reader.js"></script>
 </head>
@@ -174,6 +207,27 @@ ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing
                   stroke-dasharray="295.3" stroke-dashoffset="295.3"></circle>
         </svg>
         <div class="glyph" id="glyph"><svg viewBox="0 0 100 100"><path id="glyphPath"/></svg></div>
+        <!-- Customer-facing Face-ID animation. Covers the lens on login/PIN pages so
+             the person never sees the raw camera; the video keeps running underneath
+             for the actual match. Hidden in the technician (Internal) view. -->
+        <div class="faceid" id="faceid" aria-hidden="true">
+          <svg class="fa-frame" viewBox="0 0 100 100">
+            <path d="M8 26 V16 Q8 8 16 8 H26" style="--len:44"/>
+            <path d="M74 8 H84 Q92 8 92 16 V26" style="--len:44"/>
+            <path d="M92 74 V84 Q92 92 84 92 H74" style="--len:44"/>
+            <path d="M26 92 H16 Q8 92 8 84 V74" style="--len:44"/>
+          </svg>
+          <svg class="fa-face" viewBox="0 0 100 100">
+            <line x1="37" y1="42" x2="37" y2="50" style="--len:8"/>
+            <line x1="63" y1="42" x2="63" y2="50" style="--len:8"/>
+            <path d="M50 46 V58 Q50 61 47 61" style="--len:20"/>
+            <path d="M38 68 Q50 78 62 68" style="--len:30"/>
+          </svg>
+          <svg class="fa-cross" viewBox="0 0 100 100">
+            <line x1="36" y1="36" x2="64" y2="64" style="--len:40"/>
+            <line x1="64" y1="36" x2="36" y2="64" style="--len:40"/>
+          </svg>
+        </div>
       </div>
       <div class="cue" id="cue">Starting</div>
       <div class="actions"><button class="ghost" id="cancelScan">Cancel</button></div>
@@ -335,6 +389,18 @@ function glyph(kind){
   g.className = 'glyph ' + kind;
   requestAnimationFrame(() => g.classList.add('on'));
   $('scanWrap').classList.add('done');
+}
+/* Drives the customer-facing Face-ID animation (the lens replacement).
+   'scan' draws the frame+features and pulses while we wait; 'ok'/'fail' recolor
+   the already-drawn frame (green / red + X); 'idle' clears it. */
+function setFace(state){
+  const f = $('faceid'); if(!f) return;
+  if(state==='scan'){ f.className='faceid'; void f.offsetWidth; f.classList.add('draw','scanning'); return; }
+  if(state==='idle'){ f.className='faceid'; return; }
+  f.classList.remove('scanning');            // result states keep the drawn frame
+  if(state==='ok') f.classList.add('ok');
+  else if(state==='fail') f.classList.add('draw','fail');
+  // 'review' just stops the pulse and stays gold
 }
 
 /* ============================================================
@@ -867,19 +933,19 @@ $('begin').addEventListener('click', () => {
 $('scanIdBtn').addEventListener('click', () => idCam.click());
 $('againBtn').addEventListener('click', () => { attempt=0; bestAttempt=null; retriesOff=false;
   resetScan(); startScan(); });
-$('doneBtn').addEventListener('click', () => { releaseCamera(); glyph(null);
+$('doneBtn').addEventListener('click', () => { releaseCamera(); glyph(null); setFace('idle');
   $('scanWrap').classList.remove('done'); resetZoom(); go('ready'); });
 $('cancelScan').addEventListener('click', () => { releaseCamera(); resetScan();
   glyph(null); $('scanWrap').classList.remove('done'); resetZoom(); go('ready'); });
 
-function resetScan(){ resetPresence(); resetZoom(); }
+function resetScan(){ resetPresence(); resetZoom(); setFace('idle'); }
 
 async function startScan(){
   if(!idFace){ go('ready'); syncReady(); note('idNote','Scan the ID before the face.'); return; }
   lockCount=0; capturing=false; liveStats=null;
   resetScan();
   glyph(null); $('scanWrap').classList.remove('done'); ring(0);
-  go('scan'); cue('Starting');
+  go('scan'); cue('Starting'); setFace('scan');
   try{ await ensureStream(); }
   catch(e){
     const https = location.protocol==='https:'||location.hostname==='localhost';
@@ -1115,19 +1181,19 @@ function judge(){
 }
 
 function finishPass(title, sub, conf){
-  ring(1,'good'); glyph('ok');
+  ring(1,'good'); glyph('ok'); setFace('ok');
   $('vline').className='verdictline ok'; $('vline').textContent=title;
   $('vsub').textContent = sub + (conf!=null ? '' : '');
   settle();
 }
 function finishReview(conf){
-  ring(1); glyph('ok');
+  ring(1); glyph('ok'); setFace('review');
   $('vline').className='verdictline warn'; $('vline').textContent='Review';
   $('vsub').textContent='Close, but not conclusive. Check with the technician.';
   settle();
 }
 function finishFail(sub, title){
-  ring(1,'fail'); glyph('bad');
+  ring(1,'fail'); glyph('bad'); setFace('fail');
   $('vline').className='verdictline bad'; $('vline').textContent=title||'Failed';
   $('vsub').textContent=sub;
   settle();

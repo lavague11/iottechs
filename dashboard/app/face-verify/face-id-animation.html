@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Face ID</title>
+<style>
+:root{ --gold:#D4B27A; --ink:#0A0A0B; --ok:#3E9B72; --bad:#C2534E; }
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--ink);overflow:hidden;
+  font-family:-apple-system,"Helvetica Neue",sans-serif}
+#stage{position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:34px}
+.wrap{position:relative;width:170px;height:170px}
+svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+
+.frame path{fill:none;stroke:var(--gold);stroke-width:6;stroke-linecap:round;
+  stroke-linejoin:round;stroke-dasharray:var(--len);stroke-dashoffset:var(--len);
+  filter:drop-shadow(0 0 4px rgba(212,178,122,.35))}
+.frame.draw path{animation:draw .55s ease forwards}
+
+.face path,.face line{fill:none;stroke:var(--gold);stroke-width:6;
+  stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);opacity:0}
+.face.draw path,.face.draw line{animation:draw .5s ease forwards, appear .01s forwards}
+
+.cross line{fill:none;stroke:var(--bad);stroke-width:7;stroke-linecap:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);opacity:0}
+.cross.draw line{animation:draw .3s ease forwards, appear .01s forwards}
+
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes appear{to{opacity:1}}
+
+.wrap.scan{animation:nod 1.1s ease .2s}
+@keyframes nod{0%{transform:scale(1)}25%{transform:scale(1.04) translateY(-2px)}
+  55%{transform:scale(.98) translateY(1px)}100%{transform:scale(1)}}
+
+.wrap.ok .frame path,.wrap.ok .face path,.wrap.ok .face line{stroke:var(--ok);transition:stroke .4s}
+
+/* fail: frame turns red, face features REMOVED entirely, only the X remains */
+.wrap.fail .frame path{stroke:var(--bad);transition:stroke .3s}
+.wrap.fail .face{display:none}
+.wrap.fail{animation:shake .5s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-9px)}40%{transform:translateX(8px)}
+  60%{transform:translateX(-6px)}80%{transform:translateX(4px)}}
+
+#label{color:var(--gold);font-size:12px;letter-spacing:.32em;text-transform:uppercase;
+  opacity:0;transition:opacity .4s,color .4s}
+#label.on{opacity:.8}
+#label.ok{color:var(--ok)} #label.bad{color:var(--bad)}
+
+.controls{position:absolute;bottom:30px;left:0;right:0;display:flex;gap:10px;justify-content:center}
+.controls button{background:none;border:1px solid rgba(212,178,122,.4);color:var(--gold);
+  font-family:inherit;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  padding:9px 18px;border-radius:2px;cursor:pointer}
+.controls button:hover{border-color:var(--gold)}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="wrap" id="wrap">
+    <svg class="frame" id="frame" viewBox="0 0 100 100">
+      <path d="M8 26 V16 Q8 8 16 8 H26" style="--len:44"/>
+      <path d="M74 8 H84 Q92 8 92 16 V26" style="--len:44"/>
+      <path d="M92 74 V84 Q92 92 84 92 H74" style="--len:44"/>
+      <path d="M26 92 H16 Q8 92 8 84 V74" style="--len:44"/>
+    </svg>
+    <svg class="face" id="face" viewBox="0 0 100 100">
+      <line x1="37" y1="42" x2="37" y2="50" style="--len:8"/>
+      <line x1="63" y1="42" x2="63" y2="50" style="--len:8"/>
+      <path d="M50 46 V58 Q50 61 47 61" style="--len:20"/>
+      <path d="M38 68 Q50 78 62 68" style="--len:30"/>
+    </svg>
+    <svg class="cross" id="cross" viewBox="0 0 100 100">
+      <line x1="36" y1="36" x2="64" y2="64" style="--len:40"/>
+      <line x1="64" y1="36" x2="36" y2="64" style="--len:40"/>
+    </svg>
+  </div>
+  <div id="label">Face ID</div>
+</div>
+
+<div class="controls">
+  <button id="btnPass">Show Success</button>
+  <button id="btnFail">Show Fail</button>
+</div>
+
+<script>
+const wrap=document.getElementById('wrap'),
+      frame=document.getElementById('frame'),
+      face=document.getElementById('face'),
+      cross=document.getElementById('cross'),
+      label=document.getElementById('label');
+
+function run(success){
+  wrap.className='wrap';
+  frame.classList.remove('draw'); face.classList.remove('draw'); cross.classList.remove('draw');
+  face.style.display='';
+  label.className='';
+  void wrap.offsetWidth;
+
+  label.textContent='Scanning'; label.classList.add('on');
+  frame.classList.add('draw');
+  setTimeout(()=>face.classList.add('draw'), 350);
+  setTimeout(()=>wrap.classList.add('scan'), 800);
+
+  setTimeout(()=>{
+    if(success){
+      wrap.classList.add('ok');
+      label.textContent='Verified'; label.classList.add('ok');
+    } else {
+      wrap.classList.add('fail');       // frame red, face removed
+      cross.classList.add('draw');      // red X draws in
+      label.textContent='No match'; label.classList.add('bad');
+    }
+  }, 2100);
+}
+
+document.getElementById('btnPass').addEventListener('click',()=>run(true));
+document.getElementById('btnFail').addEventListener('click',()=>run(false));
+wrap.addEventListener('click',()=>run(true));
+run(true);
+</script>
+</body>
+</html>
