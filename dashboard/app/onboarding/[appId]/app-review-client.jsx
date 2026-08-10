@@ -16,7 +16,24 @@ const OB_ITEMS = [
   ["w9", "W-9 on file"], ["license", "Driver's license copy"], ["insurance", "Insurance / eligibility"],
   ["background", "Background check"], ["gear", "Tools & equipment issued"], ["training", "Safety + systems training"],
 ];
-const EVENT_ICON = { applied: "📋", stage: "→", interview: "🗓", offer: "✉", hired: "✓", declined: "•", onboarding: "☑", note: "✎" };
+// Timeline glyphs — inline SVG only (no emoji), per the house standard.
+const EVENT_PATHS = {
+  applied:   <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h4" /></>,
+  stage:     <path d="M5 12h13M13 7l5 5-5 5" />,
+  interview: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></>,
+  offer:     <><rect x="3" y="6" width="18" height="12" rx="2" /><path d="m3 8 9 6 9-6" /></>,
+  hired:     <path d="M20 6 9 17l-5-5" />,
+  declined:  <><circle cx="12" cy="12" r="8" /><path d="M8 12h8" /></>,
+  onboarding:<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12 3 3 5-6" /></>,
+  note:      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />,
+};
+function EventIcon({ kind }) {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {EVENT_PATHS[kind] || <circle cx="12" cy="12" r="3" />}
+    </svg>
+  );
+}
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 
 export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [] }) {
@@ -233,7 +250,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           <ul className="ob-timeline">
             {events.map((e) => (
               <li key={e.id}>
-                <span className="ob-tl-dot">{EVENT_ICON[e.kind] || "•"}</span>
+                <span className="ob-tl-dot"><EventIcon kind={e.kind} /></span>
                 <div>
                   <div className="ob-tl-detail">{e.detail || e.kind}</div>
                   <div className="ob-tl-meta">{fmt(e.at)}{e.actor_name ? ` · ${e.actor_name}` : ""}{e.actor_role ? ` (${e.actor_role})` : ""}</div>
@@ -333,7 +350,7 @@ const CSS = `
 .apx .ob-timeline{list-style:none;margin:0 0 14px;padding:0}
 .apx .ob-timeline li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
 .apx .ob-timeline li:last-child{border-bottom:none}
-.apx .ob-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#f8f0e0;display:grid;place-items:center;font-size:.8rem}
+.apx .ob-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#f8f0e0;color:var(--gold-deep,#b08f4f);display:grid;place-items:center}
 .apx .ob-tl-detail{font-size:.86rem;font-weight:600}
 .apx .ob-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .apx .ob-note-row{display:flex;gap:8px}

@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IOT TECHS — Verify</title>
+<style>
+:root{
+  --ink:#0B0F1A; --slate:#2C3347; --gold:#C9A96E; --cream:#FAF8F4;
+  --line:rgba(201,169,110,.20); --line2:rgba(250,248,244,.09);
+  --ok:#3E9B72; --warn:#D6A23C; --bad:#C2534E;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:Helvetica,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--cream);font-family:var(--sans);
+  overscroll-behavior:none}
+
+/* ---------- customer shell ---------- */
+#app{position:fixed;inset:0;display:flex;flex-direction:column;
+  padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom))}
+.top{display:flex;align-items:center;flex:0 0 auto;position:relative;z-index:45;height:40px}
+.mark{font-size:13px;font-weight:700;letter-spacing:.18em;color:rgba(250,248,244,.55)}
+.mark span{color:var(--gold)}
+.dlbar{width:100%;max-width:300px;margin:0 auto}
+.dltrack{height:5px;background:rgba(250,248,244,.1);border-radius:3px;overflow:hidden}
+.dlfill{height:100%;width:0;background:var(--gold);border-radius:3px;transition:width .2s ease}
+.dlfill.done{background:var(--ok)}
+.dlfill.indet{width:35%;animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+.dltext{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:rgba(250,248,244,.5);
+  text-align:center;margin-top:7px;text-transform:uppercase}
+
+.viewtog{margin-left:auto;display:flex;border:1px solid var(--line2);border-radius:20px;overflow:hidden;background:rgba(250,248,244,.03)}
+.vt{flex:0 0 auto;padding:6px 14px;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;border:none;background:none;color:rgba(250,248,244,.4);border-radius:0;cursor:pointer;transition:.2s}
+.vt.on{background:var(--gold);color:var(--ink);font-weight:700}
+.vt:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+
+.deck{flex:1 1 auto;position:relative;min-height:0}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:22px;text-align:center;
+  opacity:0;transform:translateX(26px);pointer-events:none;
+  transition:opacity .3s ease,transform .3s cubic-bezier(.32,.72,0,1)}
+.slide.on{opacity:1;transform:none;pointer-events:auto}
+.slide.out{opacity:0;transform:translateX(-26px)}
+
+h1{font-size:19px;font-weight:400;letter-spacing:.01em;margin:0;color:var(--cream);max-width:19ch;line-height:1.35}
+.sub{font-size:13px;color:rgba(250,248,244,.45);margin:0;max-width:26ch;line-height:1.5}
+
+/* ---------- the scanner ---------- */
+.scan{position:relative;width:min(66vw,250px);aspect-ratio:1;flex:0 0 auto}
+.scanvid{position:absolute;inset:0;border-radius:50%;overflow:hidden;background:#05070d}
+.scan video{width:100%;height:100%;object-fit:cover;display:block;
+  background:#05070d;transform:scaleX(-1);transition:filter .4s;will-change:transform;
+  image-rendering:auto;backface-visibility:hidden}
+.scan.done video{filter:saturate(.35) brightness(.7)}
+.scan svg{position:absolute;inset:-9px;width:calc(100% + 18px);height:calc(100% + 18px);
+  transform:rotate(-90deg);pointer-events:none;z-index:2}
+.track{fill:none;stroke:rgba(250,248,244,.09);stroke-width:2.5}
+.prog{fill:none;stroke:var(--gold);stroke-width:2.5;stroke-linecap:round;
+  transition:stroke-dashoffset .25s linear,stroke .3s}
+.prog.good{stroke:var(--ok)} .prog.fail{stroke:var(--bad)}
+
+.glyph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .35s}
+.glyph.on{opacity:1}
+.glyph svg{position:static;inset:auto;width:72px;height:72px;transform:none}
+.glyph path{fill:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:60;stroke-dashoffset:60;transition:stroke-dashoffset .45s ease .1s}
+.glyph.on path{stroke-dashoffset:0}
+.glyph.ok path{stroke:var(--ok)} .glyph.bad path{stroke:var(--bad)}
+
+.cue{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--gold);min-height:14px;transition:color .3s}
+.cue.quiet{color:rgba(250,248,244,.35)}
+
+.actions{flex:0 0 auto;display:flex;gap:9px;width:100%;max-width:330px}
+button{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:14px 16px;border-radius:3px;border:1px solid var(--gold);background:none;color:var(--gold);
+  cursor:pointer;flex:1;transition:.15s}
+button.primary{background:var(--gold);color:var(--ink)}
+button.ghost{border-color:var(--line2);color:rgba(250,248,244,.55)}
+button:disabled{opacity:.3;cursor:not-allowed}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input[type=file]{display:none}
+
+.verdictline{font-size:26px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+.verdictline.ok{color:var(--ok)} .verdictline.warn{color:var(--warn)} .verdictline.bad{color:var(--bad)}
+
+/* ---------- tech panel ---------- */
+#tech{position:fixed;left:0;right:0;bottom:0;top:56px;background:#0d1220;z-index:40;overflow-y:auto;
+  transform:translateY(100%);transition:transform .34s cubic-bezier(.32,.72,0,1);
+  padding:16px 14px 50px}
+#tech.on{transform:none}
+.thead{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.thead b{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
+.thead button{flex:0 0 auto;padding:8px 14px;font-size:11px}
+
+h4{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);
+  margin:20px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+h4:first-of-type{margin-top:0}
+table.data{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10.5px}
+table.data td{padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+table.data td:first-child{color:rgba(250,248,244,.45)}
+table.data td:last-child{text-align:right;white-space:nowrap;color:var(--cream)}
+.g{color:var(--ok)!important}.y{color:var(--warn)!important}.r{color:var(--bad)!important}
+.dim{color:rgba(250,248,244,.3)!important}
+
+.idrow{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.idrow canvas,.idrow img{width:76px;height:76px;object-fit:cover;background:#000;
+  border:1px solid var(--line);border-radius:3px;flex:0 0 auto}
+.idmeta{font-family:var(--mono);font-size:10px;line-height:1.6;color:rgba(250,248,244,.55)}
+
+ul.why{list-style:none;padding:0;margin:6px 0 0;font-size:11px;line-height:1.45}
+ul.why li{padding:8px 10px;margin-bottom:5px;border-radius:3px;background:rgba(250,248,244,.04);
+  border-left:2px solid var(--line2)}
+ul.why li.big{border-left-color:var(--warn)}
+ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  display:block;margin-bottom:2px;text-transform:uppercase}
+
+.note{font-family:var(--mono);font-size:10.5px;line-height:1.55;padding:8px 10px;border-radius:3px;
+  background:rgba(250,248,244,.05);border-left:2px solid var(--gold);color:rgba(250,248,244,.7);margin-top:9px}
+.note.err{border-left-color:var(--bad);color:#f0b3b0}
+.hintp{font-size:11px;line-height:1.5;color:rgba(250,248,244,.45);margin:0 0 8px}
+
+#boot{position:fixed;inset:0;background:var(--ink);z-index:60;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:30px;text-align:center}
+#boot.off{display:none}
+.spin{width:28px;height:28px;border:2px solid rgba(201,169,110,.18);border-top-color:var(--gold);
+  border-radius:50%;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#boot p{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:rgba(250,248,244,.5);margin:0}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="boot"><div class="spin"></div><p id="bootMsg">LOADING</p></div>
+
+<div id="app">
+  <div class="top">
+    <div class="mark">IOT <span>TECHS</span></div>
+    <div class="viewtog" id="viewTog" role="tablist" aria-label="View mode">
+      <button class="vt on" id="vtExt" role="tab" aria-selected="true">External</button>
+      <button class="vt" id="vtInt" role="tab" aria-selected="false">Internal</button>
+    </div>
+  </div>
+
+  <div class="deck">
+
+    <!-- READY -->
+    <section class="slide on" data-slide="ready">
+      <h1 id="readyTitle">Identity check</h1>
+      <p class="sub" id="readySub">Look at the camera and follow the prompt.</p>
+      <div class="dlbar" id="dlBar" hidden>
+        <div class="dltrack"><div class="dlfill" id="dlFill"></div></div>
+        <div class="dltext" id="dlText">Loading recognition model…</div>
+      </div>
+      <div class="actions" style="flex-direction:column">
+        <button class="primary" id="begin">Begin</button>
+        <button class="ghost" id="scanIdBtn">Scan ID first</button>
+      </div>
+    </section>
+
+    <!-- SCAN -->
+    <section class="slide" data-slide="scan">
+      <div class="scan" id="scanWrap">
+        <div class="scanvid"><video id="vid" playsinline muted autoplay></video></div>
+        <svg viewBox="0 0 100 100">
+          <circle class="track" cx="50" cy="50" r="47"></circle>
+          <circle class="prog" id="ring" cx="50" cy="50" r="47"
+                  stroke-dasharray="295.3" stroke-dashoffset="295.3"></circle>
+        </svg>
+        <div class="glyph" id="glyph"><svg viewBox="0 0 100 100"><path id="glyphPath"/></svg></div>
+      </div>
+      <div class="cue" id="cue">Starting</div>
+      <div class="actions"><button class="ghost" id="cancelScan">Cancel</button></div>
+    </section>
+
+    <!-- RESULT -->
+    <section class="slide" data-slide="result">
+      <div class="verdictline" id="vline">—</div>
+      <p class="sub" id="vsub"></p>
+      <div class="actions">
+        <button class="primary" id="againBtn">Scan again</button>
+        <button class="ghost" id="doneBtn">Done</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ================= TECH PANEL ================= -->
+<div id="tech">
+  <div class="thead">
+    <b>Technician</b>
+    <button class="ghost" id="techClose" style="margin-left:auto">External view</button>
+  </div>
+
+  <h4>Reference ID <span id="idState" class="dim" style="float:right;font-size:9px">none</span></h4>
+  <p class="hintp">Optional. With an ID loaded the scan verifies identity against it. Without one it only confirms a live person is present.</p>
+  <div class="idrow">
+    <canvas id="faceA" width="180" height="180"></canvas>
+    <canvas id="faceB" width="180" height="180"></canvas>
+    <div class="idmeta" id="idMeta">license / live</div>
+  </div>
+  <div class="actions" style="max-width:none">
+    <button onclick="idCam.click()">Shoot ID</button>
+    <button onclick="idFile.click()">Upload</button>
+    <button class="ghost" id="clearId">Clear</button>
+  </div>
+  <input type="file" id="idCam" accept="image/*" capture="environment">
+  <input type="file" id="idFile" accept="image/*">
+  <div class="note" id="idNote" style="display:none"></div>
+
+  <h4>Engine <span id="engineState" class="dim" style="float:right;font-size:9px">—</span></h4>
+  <table class="data" id="resultTable"></table>
+
+  <h4>What's pulling the score down</h4>
+  <ul class="why" id="whyList"></ul>
+
+  <h4>Capture quality</h4>
+  <table class="data" id="qualTable"></table>
+
+  <h4>Structural biometrics <span id="structScore" style="float:right">—</span></h4>
+  <table class="data" id="geoTable"></table>
+
+  <h4>Region similarity</h4>
+  <table class="data" id="regionTable"></table>
+
+  <h4>Attributes</h4>
+  <table class="data" id="attrTable"></table>
+
+  <h4>Calibration</h4>
+  <p class="hintp" id="calSummary">Log same-person and different-person scans to find your real threshold.</p>
+  <div class="actions" style="max-width:none">
+    <button id="logSame">Same</button>
+    <button id="logDiff">Different</button>
+    <button class="ghost" id="exportCsv">CSV</button>
+  </div>
+  <div class="actions" style="max-width:none;margin-top:9px">
+    <button class="ghost" id="copyJson">Copy JSON</button>
+  </div>
+  <div class="note" id="techNote" style="display:none"></div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const SELF_HOSTED_MODELS = null;              // e.g. '/models'
+const ARCFACE_MODEL_URL  = '/models/w600k_mbf.onnx';
+const ARCFACE_FALLBACK   = 'https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx';
+
+const LIB_SOURCES = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js',
+  'https://unpkg.com/@vladmandic/face-api@1.7.13/dist/face-api.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/face-api.js/0.22.2/face-api.min.js'
+];
+const MODEL_SOURCES = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model',
+  'https://unpkg.com/@vladmandic/face-api@1.7.13/model',
+  'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'
+];
+const ORT_SOURCES = [
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.19.2/ort.min.js'
+];
+
+const ACCEPT = 0.52, REVIEW = 0.62;           // face-api euclidean
+const ARC_ACCEPT = 0.42, ARC_REVIEW = 0.32;   // arcface cosine
+const BURST_FRAMES = 5, BURST_GAP = 100, LOCK_FRAMES = 2;
+const MIN_FACE = 0.12, POSE_GATE = 22;   // MIN_FACE only a floor now — auto-zoom handles framing
+
+/* Lightweight presence check — no head turn. Detects the natural micro-motion
+   of a live face (blinks, lip movement, sub-degree sway) vs a rigid photo.
+   Stops a printed photo; does NOT stop a video replay (that needs the depth
+   sensor — see native-app-plan.md). */
+const PRES_MIN = 8;            // frames before judging (~0.7s)
+const PRES_MOTION_MIN = 0.010; // motion floor; below this = rigid = photo
+const RETRY_BELOW = 70, MAX_ATTEMPTS = 3;
+
+const ALIGN = 220;
+const EYE_L = {x:.34,y:.40}, EYE_R = {x:.66,y:.40};
+const ARC_REF = [[38.2946,51.6963],[73.5318,51.5014],[56.0252,71.7366],[41.5493,92.3655],[70.7299,92.2041]];
+const RING = 295.3;
+
+/* ---------- state ---------- */
+let idFace=null, liveStats=null, lastResult=null, lastStruct=null;
+let stream=null, facing='user', rafId=null, running=false, acquiring=false;
+let lockCount=0, capturing=false, attempt=0, bestAttempt=null, retriesOff=false, retryTimer=null;
+let arcSession=null, arcReady=false, arcError=null;
+let calLog=[];
+
+const $ = id => document.getElementById(id);
+const note = (el,msg,err) => { const n=$(el); n.textContent=msg; n.className='note'+(err?' err':''); n.style.display='block'; };
+
+/* ---------- slides ---------- */
+let slide = 'ready';
+function go(name){
+  document.querySelectorAll('.slide').forEach(s => {
+    const me = s.dataset.slide === name;
+    s.classList.toggle('on', me);
+    s.classList.toggle('out', !me && s.classList.contains('on'));
+  });
+  slide = name;
+}
+function cue(text, quiet){ $('cue').textContent = text; $('cue').className = 'cue' + (quiet?' quiet':''); }
+function ring(frac, cls){
+  $('ring').style.strokeDashoffset = RING * (1 - Math.max(0, Math.min(1, frac)));
+  $('ring').className.baseVal = 'prog' + (cls ? ' ' + cls : '');
+}
+const CHECK = 'M28 52 L44 68 L73 33';
+const CROSS = 'M33 33 L67 67 M67 33 L33 67';
+function glyph(kind){
+  const g = $('glyph');
+  if (!kind){ g.className = 'glyph'; return; }
+  $('glyphPath').setAttribute('d', kind === 'ok' ? CHECK : CROSS);
+  g.className = 'glyph ' + kind;
+  requestAnimationFrame(() => g.classList.add('on'));
+  $('scanWrap').classList.add('done');
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+function loadScript(src){
+  return new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=()=>rej(new Error(src)); document.head.appendChild(s); });
+}
+async function boot(){
+  let ok=false;
+  for (const s of LIB_SOURCES){ try{ await loadScript(s); if(window.faceapi){ok=true;break;} }catch(e){} }
+  if(!ok) return $('boot').innerHTML='<p style="color:#f0b3b0">Face engine failed to load.</p>';
+  const bases = SELF_HOSTED_MODELS ? [SELF_HOSTED_MODELS,...MODEL_SOURCES] : MODEL_SOURCES;
+  for (const b of bases){
+    try{
+      $('bootMsg').textContent='LOADING MODELS';
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(b);
+      await faceapi.nets.tinyFaceDetector.loadFromUri(b);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(b);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(b);
+      try{ await faceapi.nets.ageGenderNet.loadFromUri(b); }catch(e){}
+      $('boot').classList.add('off');
+      bootArc();
+      return;
+    }catch(e){}
+  }
+  $('boot').innerHTML='<p style="color:#f0b3b0">Models failed to load. Self-host the face-api weights.</p>';
+}
+async function bootArc(){
+  let ortOk=false;
+  for (const s of ORT_SOURCES){ try{ await loadScript(s); if(window.ort){ortOk=true;break;} }catch(e){} }
+  if(!ortOk){ arcError='runtime unavailable'; return paintEngine(); }
+  try{ ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/'; ort.env.wasm.numThreads=1; }catch(e){}
+
+  showDl(0, 'Loading recognition model…');
+  for (const url of [ARCFACE_MODEL_URL, ARCFACE_FALLBACK]){
+    try{
+      // Fetch the bytes ourselves so we can show real progress; ONNX's own
+      // loader gives none. Then hand the finished buffer to the session.
+      const buf = await fetchWithProgress(url);
+      showDl(1, 'Initializing…');
+      arcSession = await ort.InferenceSession.create(buf, {executionProviders:['wasm']});
+      arcReady=true; arcError=null;
+      finishDl(true);
+      return paintEngine();
+    }catch(e){ arcError = e && e.message ? e.message.slice(0,40) : 'model not reachable'; }
+  }
+  finishDl(false);
+  paintEngine();
+}
+
+/* Streamed download with a byte counter. Content-Length lets us show an exact
+   percentage; without it (some CDNs omit it) we fall back to an indeterminate
+   sweep so the customer still sees motion. */
+async function fetchWithProgress(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const total = +res.headers.get('content-length') || 0;
+  if(!res.body || !total){
+    // No stream or no length — indeterminate, then resolve to the full buffer.
+    $('dlFill').classList.add('indet');
+    $('dlText').textContent = 'Downloading model…';
+    const ab = await res.arrayBuffer();
+    $('dlFill').classList.remove('indet');
+    return ab;
+  }
+  const reader = res.body.getReader();
+  const chunks = []; let received = 0;
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    chunks.push(value); received += value.length;
+    const frac = received/total;
+    showDl(frac, 'Downloading ' + (received/1048576).toFixed(1) + ' / ' + (total/1048576).toFixed(1) + ' MB');
+  }
+  const out = new Uint8Array(received); let pos=0;
+  for(const c of chunks){ out.set(c, pos); pos += c.length; }
+  return out.buffer;
+}
+
+function showDl(frac, text){
+  $('dlBar').hidden = false;
+  const f = $('dlFill');
+  f.classList.remove('done');
+  if(frac>=0) f.style.width = Math.round(Math.max(0,Math.min(1,frac))*100) + '%';
+  if(text) $('dlText').textContent = text;
+}
+function finishDl(ok){
+  const f = $('dlFill');
+  f.classList.remove('indet');
+  if(ok){
+    f.style.width='100%'; f.classList.add('done');
+    $('dlText').textContent = 'Recognition model ready';
+    setTimeout(()=>{ $('dlBar').hidden = true; }, 1400);
+  } else {
+    // Falls back to face-api — still fully functional, just note it quietly.
+    $('dlText').textContent = 'Using built-in model';
+    setTimeout(()=>{ $('dlBar').hidden = true; }, 1800);
+  }
+}
+function paintEngine(){
+  $('engineState').textContent = arcReady ? 'ArcFace + face-api' : 'face-api only (' + (arcError||'') + ')';
+  $('engineState').className = arcReady ? 'g' : 'dim';
+}
+boot();
+
+/* ============================================================
+   GEOMETRY / IMAGE HELPERS
+   ============================================================ */
+const centroid = p => ({x:p.reduce((s,q)=>s+q.x,0)/p.length, y:p.reduce((s,q)=>s+q.y,0)/p.length});
+const dist2 = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+const median = a => { const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+
+function fileToImage(f){ return new Promise((res,rej)=>{ const i=new Image();
+  i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(f); }); }
+
+function upscale(img,minW=1100){
+  const k = img.naturalWidth<minW ? Math.min(3,minW/img.naturalWidth) : 1;
+  const c=document.createElement('canvas'); c.width=img.naturalWidth*k; c.height=img.naturalHeight*k;
+  const x=c.getContext('2d'); x.imageSmoothingQuality='high'; x.drawImage(img,0,0,c.width,c.height); return c;
+}
+async function describe(src){
+  let d = await faceapi.detectSingleFace(src, new faceapi.SsdMobilenetv1Options({minConfidence:.2}))
+    .withFaceLandmarks().withFaceDescriptor();
+  if(d) return d;
+  return await faceapi.detectSingleFace(src, new faceapi.TinyFaceDetectorOptions({inputSize:608,scoreThreshold:.2}))
+    .withFaceLandmarks().withFaceDescriptor();
+}
+async function attrsOf(src){
+  if(!faceapi.nets.ageGenderNet.isLoaded) return null;
+  try{ const r=await faceapi.detectSingleFace(src,new faceapi.SsdMobilenetv1Options({minConfidence:.2})).withAgeAndGender();
+    return r?{age:r.age,gender:r.gender,genderProbability:r.genderProbability}:null; }catch(e){ return null; }
+}
+function alignFace(src, lm){
+  const le=centroid(lm.getLeftEye()), re=centroid(lm.getRightEye());
+  const dx=re.x-le.x, dy=re.y-le.y, ang=Math.atan2(dy,dx);
+  const k=((EYE_R.x-EYE_L.x)*ALIGN)/(Math.hypot(dx,dy)||1);
+  const c=document.createElement('canvas'); c.width=c.height=ALIGN;
+  const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,ALIGN,ALIGN);
+  g.translate(EYE_L.x*ALIGN, EYE_L.y*ALIGN); g.rotate(-ang); g.scale(k,k); g.translate(-le.x,-le.y);
+  g.imageSmoothingQuality='high'; g.drawImage(src,0,0); return c;
+}
+function grayData(c,x,y,w,h){
+  const d=c.getContext('2d').getImageData(x,y,w,h).data, o=new Float32Array(d.length/4);
+  for(let i=0,j=0;i<d.length;i+=4,j++) o[j]=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+  return o;
+}
+function ncc(a,b){
+  if(a.length!==b.length) return 0;
+  let ma=0,mb=0; for(let i=0;i<a.length;i++){ma+=a[i];mb+=b[i];} ma/=a.length; mb/=b.length;
+  let n=0,da=0,db=0;
+  for(let i=0;i<a.length;i++){const x=a[i]-ma,y=b[i]-mb; n+=x*y; da+=x*x; db+=y*y;}
+  const d=Math.sqrt(da*db); return d?n/d:0;
+}
+function qualityOf(c, box){
+  const x=Math.max(0,Math.round(box.x)), y=Math.max(0,Math.round(box.y));
+  const w=Math.min(c.width-x,Math.round(box.width)), h=Math.min(c.height-y,Math.round(box.height));
+  const g=grayData(c,x,y,w,h);
+  let s=0; for(let i=0;i<g.length;i++) s+=g[i];
+  const mean=s/g.length;
+  let v=0,blown=0; for(let i=0;i<g.length;i++){const d=g[i]-mean; v+=d*d; if(g[i]>247) blown++;}
+  let ls=0,lq=0,n=0;
+  for(let r=1;r<h-1;r++) for(let cc=1;cc<w-1;cc++){
+    const i=r*w+cc, lap=4*g[i]-g[i-1]-g[i+1]-g[i-w]-g[i+w]; ls+=lap; lq+=lap*lap; n++; }
+  const lm=n?ls/n:0;
+  return {faceWidthPx:Math.round(w), brightness:mean, contrast:Math.sqrt(v/g.length),
+          sharpness:n?(lq/n-lm*lm):0, glare:blown/g.length};
+}
+function poseOf(lm){
+  const le=centroid(lm.getLeftEye()), re=centroid(lm.getRightEye());
+  const nose=lm.getNose(), tip=nose[nose.length-4]||nose[3], jaw=lm.getJawOutline();
+  const mid={x:(le.x+re.x)/2,y:(le.y+re.y)/2}, iod=dist2(le,re)||1;
+  return { roll: Math.atan2(re.y-le.y,re.x-le.x)*180/Math.PI,
+           yaw: ((tip.x-mid.x)/iod)*90,
+           pitch: (((jaw[8].y-mid.y)/iod)-1.55)*45 };
+}
+
+/* ---------- structural biometrics ---------- */
+function angleAt(a,b,c){
+  const v1={x:a.x-b.x,y:a.y-b.y}, v2={x:c.x-b.x,y:c.y-b.y};
+  const m=(Math.hypot(v1.x,v1.y)*Math.hypot(v2.x,v2.y))||1;
+  return Math.acos(Math.max(-1,Math.min(1,(v1.x*v2.x+v1.y*v2.y)/m)))*180/Math.PI;
+}
+function perpHeight(p,a,b){
+  return Math.abs((b.y-a.y)*p.x-(b.x-a.x)*p.y+b.x*a.y-b.y*a.x)/(Math.hypot(b.y-a.y,b.x-a.x)||1);
+}
+const PATCH={browL:[.20,.255,.24,.085],browR:[.56,.255,.24,.085],forehead:[.36,.10,.28,.09],
+             cheekL:[.20,.50,.14,.12],cheekR:[.66,.50,.14,.12]};
+function patchStats(a,key){
+  const r=PATCH[key], x=Math.round(r[0]*ALIGN), y=Math.round(r[1]*ALIGN);
+  const w=Math.round(r[2]*ALIGN), h=Math.round(r[3]*ALIGN);
+  const d=a.getContext('2d').getImageData(x,y,w,h).data;
+  let R=0,G=0,B=0,L=0,n=0;
+  for(let i=0;i<d.length;i+=4){R+=d[i];G+=d[i+1];B+=d[i+2];L+=.299*d[i]+.587*d[i+1]+.114*d[i+2];n++;}
+  const s=(R+G+B)||1; return {lum:L/n,r:R/s,g:G/s,b:B/s};
+}
+function structuralOf(lm, aligned){
+  const le=centroid(lm.getLeftEye()), re=centroid(lm.getRightEye()), iod=dist2(le,re)||1;
+  const mid={x:(le.x+re.x)/2,y:(le.y+re.y)/2};
+  const jaw=lm.getJawOutline(), nose=lm.getNose(), mouth=lm.getMouth();
+  const eL=lm.getLeftEye(), eR=lm.getRightEye(), bL=lm.getLeftEyeBrow(), bR=lm.getRightEyeBrow();
+  const eyeH=e=>(dist2(e[1],e[5])+dist2(e[2],e[4]))/2, eyeW=e=>dist2(e[0],e[3]);
+  const fh=patchStats(aligned,'forehead'), brL=patchStats(aligned,'browL'), brR=patchStats(aligned,'browR');
+  const chL=patchStats(aligned,'cheekL'), chR=patchStats(aligned,'cheekR');
+  const den=b=>Math.max(0,(fh.lum-b.lum)/(fh.lum+1));
+  return {
+    'Jaw': {'Jaw width':dist2(jaw[2],jaw[14])/iod,'Gonial width':dist2(jaw[4],jaw[12])/iod,
+      'Taper':dist2(jaw[4],jaw[12])/(dist2(jaw[2],jaw[14])||1),'Jaw angle':angleAt(jaw[2],jaw[4],jaw[8])/180},
+    'Chin': {'Chin width':dist2(jaw[6],jaw[10])/iod,'Chin height':dist2(mouth[9],jaw[8])/iod,
+      'Chin angle':angleAt(jaw[6],jaw[8],jaw[10])/180,'Projection':perpHeight(jaw[8],jaw[5],jaw[11])/iod},
+    'Nose': {'Width':dist2(nose[4],nose[8])/iod,'Length':dist2(nose[0],nose[3])/iod,
+      'Tip drop':dist2(nose[3],centroid([nose[4],nose[8]]))/iod,'To mouth':dist2(nose[6],mouth[3])/iod},
+    'Eyes': {'Width L':eyeW(eL)/iod,'Width R':eyeW(eR)/iod,'Height L':eyeH(eL)/iod,'Height R':eyeH(eR)/iod,
+      'Aspect L':eyeH(eL)/(eyeW(eL)||1),'Aspect R':eyeH(eR)/(eyeW(eR)||1)},
+    'Eyebrows': {'Length L':dist2(bL[0],bL[4])/iod,'Length R':dist2(bR[0],bR[4])/iod,
+      'To eye L':dist2(centroid(bL),le)/iod,'To eye R':dist2(centroid(bR),re)/iod,
+      'Arch L':perpHeight(bL[2],bL[0],bL[4])/iod,'Arch R':perpHeight(bR[2],bR[0],bR[4])/iod,
+      'Density L':den(brL),'Density R':den(brR)},
+    'Proportions': {'Face width':dist2(jaw[0],jaw[16])/iod,'Face height':dist2(mid,jaw[8])/iod,
+      'Mouth width':dist2(mouth[0],mouth[6])/iod,'Upper/lower':dist2(mid,nose[3])/(dist2(nose[3],jaw[8])||1)},
+    _tone: {chroma:[(chL.r+chR.r)/2,(chL.g+chR.g)/2], lum:(chL.lum+chR.lum)/2}
+  };
+}
+const STRUCT_TOL=.18;
+function structuralCompare(A,B){
+  const groups={}, flat=[]; let gs=0,gn=0;
+  for(const g of Object.keys(A)){
+    if(g.startsWith('_')) continue;
+    const items=[]; let sum=0;
+    for(const k of Object.keys(A[g])){
+      const a=A[g][k], b=B[g][k];
+      const m=(Math.abs(a)+Math.abs(b))/2||1, pct=Math.abs(a-b)/m;
+      const sc=Math.max(0,1-pct/STRUCT_TOL);
+      items.push({name:k,a,b,pct,score:sc}); flat.push({name:k,pct,score:sc}); sum+=sc;
+    }
+    const s=items.length?sum/items.length:0; groups[g]={score:s,items}; gs+=s; gn++;
+  }
+  flat.sort((x,y)=>x.score-y.score);
+  return {overall:gn?(gs/gn)*100:0, groups, weakest:flat.slice(0,3)};
+}
+const REGIONS={Eyes:[.18,.30,.64,.18],Eyebrows:[.18,.19,.64,.12],Nose:[.34,.40,.32,.24],
+               Mouth:[.28,.62,.44,.16],Jawline:[.22,.74,.56,.20]};
+function regionScores(a,b){
+  const o={};
+  for(const [n,r] of Object.entries(REGIONS)){
+    const x=Math.round(r[0]*ALIGN),y=Math.round(r[1]*ALIGN),w=Math.round(r[2]*ALIGN),h=Math.round(r[3]*ALIGN);
+    o[n]=ncc(grayData(a,x,y,w,h), grayData(b,x,y,w,h));
+  }
+  return o;
+}
+
+/* ---------- ArcFace ---------- */
+function similarityTransform(src,dst){
+  const n=src.length;
+  const mp={x:src.reduce((s,p)=>s+p[0],0)/n,y:src.reduce((s,p)=>s+p[1],0)/n};
+  const mq={x:dst.reduce((s,p)=>s+p[0],0)/n,y:dst.reduce((s,p)=>s+p[1],0)/n};
+  let nR=0,nI=0,de=0;
+  for(let i=0;i<n;i++){
+    const px=src[i][0]-mp.x, py=src[i][1]-mp.y, qx=dst[i][0]-mq.x, qy=dst[i][1]-mq.y;
+    nR+=qx*px+qy*py; nI+=qy*px-qx*py; de+=px*px+py*py;
+  }
+  de=de||1; const ax=nR/de, ay=nI/de;
+  return {ax,ay,bx:mq.x-(ax*mp.x-ay*mp.y),by:mq.y-(ay*mp.x+ax*mp.y)};
+}
+function fivePoints(lm){
+  const p=lm.positions, le=centroid(lm.getLeftEye()), re=centroid(lm.getRightEye());
+  return [[le.x,le.y],[re.x,re.y],[p[30].x,p[30].y],[p[48].x,p[48].y],[p[54].x,p[54].y]];
+}
+async function arcEmbed(src, lm){
+  if(!arcReady) return null;
+  try{
+    const t=similarityTransform(fivePoints(lm), ARC_REF);
+    const c=document.createElement('canvas'); c.width=c.height=112;
+    const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,112,112);
+    g.imageSmoothingQuality='high'; g.setTransform(t.ax,t.ay,-t.ay,t.ax,t.bx,t.by); g.drawImage(src,0,0);
+    const d=c.getContext('2d').getImageData(0,0,112,112).data;
+    const f=new Float32Array(3*112*112), pl=112*112;
+    for(let i=0,j=0;i<d.length;i+=4,j++){
+      f[j]=(d[i]-127.5)/127.5; f[j+pl]=(d[i+1]-127.5)/127.5; f[j+2*pl]=(d[i+2]-127.5)/127.5;
+    }
+    const feeds={}; feeds[arcSession.inputNames[0]]=new ort.Tensor('float32',f,[1,3,112,112]);
+    const out=await arcSession.run(feeds);
+    const v=out[arcSession.outputNames[0]].data;
+    let nm=0; for(let i=0;i<v.length;i++) nm+=v[i]*v[i]; nm=Math.sqrt(nm)||1;
+    const e=new Float32Array(v.length); for(let i=0;i<v.length;i++) e[i]=v[i]/nm;
+    return e;
+  }catch(e){ return null; }
+}
+const cosine=(a,b)=>{ if(!a||!b) return null; let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s; };
+
+/* ============================================================
+   REFERENCE ID  (tech side only — never shown to the customer)
+   ============================================================ */
+['idCam','idFile'].forEach(id => $(id).addEventListener('change', e => handleId(e.target.files[0])));
+$('clearId').addEventListener('click', () => {
+  idFace=null; $('idState').textContent='none'; $('idState').className='dim';
+  $('faceA').getContext('2d').clearRect(0,0,180,180);
+  $('idMeta').textContent='license / live';
+  note('idNote','Reference cleared. Scans will confirm a live person only.');
+  syncReady();
+});
+
+async function handleId(file){
+  if(!file) return;
+  $('idState').textContent='reading';
+  const img=await fileToImage(file);
+  const canvas=upscale(img);
+  const det=await describe(canvas);
+  if(!det){ $('idState').textContent='no face'; $('idState').className='r';
+    return note('idNote','No face found on that image. Closer, less glare, whole portrait in frame.',true); }
+
+  const quality=qualityOf(canvas, det.detection.box);
+  const cand={ descriptor:det.descriptor, box:det.detection.box, canvas, quality,
+    aligned:alignFace(canvas,det.landmarks), pose:poseOf(det.landmarks),
+    struct:structuralOf(det.landmarks, alignFace(canvas,det.landmarks)),
+    attrs:await attrsOf(canvas), arc:await arcEmbed(canvas,det.landmarks) };
+  const rank=q=>q.sharpness*(1-Math.min(.9,q.glare*4));
+  const better = !idFace || rank(cand.quality)>rank(idFace.quality);
+  idFace = better ? cand : idFace;
+
+  drawFace($('faceA'), idFace.canvas, idFace.box);
+  attempt=0; bestAttempt=null; retriesOff=false;
+  $('idState').textContent='loaded'; $('idState').className='g';
+  $('idMeta').textContent = idFace.quality.faceWidthPx+'px portrait · glare '
+    + (idFace.quality.glare*100).toFixed(1)+'% · sharp '+idFace.quality.sharpness.toFixed(0);
+  note('idNote', better?'Kept this shot — sharpest so far.':'Kept the earlier shot, it was sharper.');
+  syncReady();
+  // If the ID was shot from the customer-facing "Scan ID first" button,
+  // land back on the ready slide primed to scan.
+  if(slide==='ready'){ $('tech').classList.remove('on'); }
+}
+function drawFace(cv, src, box){
+  const c=cv.getContext('2d'), pad=box.width*.35;
+  const sx=Math.max(0,box.x-pad), sy=Math.max(0,box.y-pad);
+  const sw=Math.min(src.width-sx, box.width+pad*2), sh=Math.min(src.height-sy, box.height+pad*2);
+  c.fillStyle='#000'; c.fillRect(0,0,cv.width,cv.height);
+  c.drawImage(src,sx,sy,sw,sh,0,0,cv.width,cv.height);
+}
+function syncReady(){
+  const has = !!idFace;
+  $('begin').disabled = !has;
+  $('readyTitle').textContent = has ? 'Identity check' : 'Scan the ID first';
+  $('readySub').textContent = has
+    ? 'Look at the camera and turn your head slightly.'
+    : 'Load the customer\u2019s license before the face scan. Tap "Scan ID first".';
+  $('scanIdBtn').textContent = has ? 'Replace ID' : 'Scan ID first';
+}
+
+/* ============================================================
+   CAMERA
+   ============================================================ */
+const isLive = () => { const t=stream&&stream.getVideoTracks()[0]; return !!(t&&t.readyState==='live'); };
+async function ensureStream(){
+  if(isLive()){ stream.getVideoTracks().forEach(t=>t.enabled=true); return stream; }
+  if(acquiring) return stream;
+  acquiring=true;
+  try{
+    // Ask for 4K and continuous autofocus up front — this webcam has PDAF.
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:facing,
+        width:{ideal:3840}, height:{ideal:2160},
+        frameRate:{ideal:30},
+        // non-standard but honored by Chrome/Edge on UVC cams like this one
+        focusMode:'continuous',
+        advanced:[{focusMode:'continuous'}]
+      },
+      audio:false
+    });
+    await applyCameraTuning();
+    return stream;
+  } catch(e){
+    // Fall back to a plain request if the ideal constraints were rejected.
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920}},audio:false});
+    await applyCameraTuning();
+    return stream;
+  } finally { acquiring=false; }
+}
+
+/* Drive the hardware autofocus. Browsers only expose focus controls through
+   applyConstraints on the track's capabilities, and only over HTTPS. We turn
+   on continuous autofocus if the camera reports it, so the face stays sharp
+   as the customer settles in — the webcam's PDAF does the actual focusing. */
+async function applyCameraTuning(){
+  const track = stream && stream.getVideoTracks()[0];
+  if(!track || !track.getCapabilities) return;
+  let caps={};
+  try{ caps = track.getCapabilities(); }catch(e){ return; }
+  const adv=[];
+  if(caps.focusMode && caps.focusMode.includes('continuous')) adv.push({focusMode:'continuous'});
+  if(caps.exposureMode && caps.exposureMode.includes('continuous')) adv.push({exposureMode:'continuous'});
+  if(caps.whiteBalanceMode && caps.whiteBalanceMode.includes('continuous')) adv.push({whiteBalanceMode:'continuous'});
+  if(adv.length){
+    try{ await track.applyConstraints({advanced:adv}); }catch(e){}
+  }
+  hwFocus = !!(caps.focusMode && caps.focusMode.includes('continuous'));
+  hwZoom  = !!caps.zoom;   // some UVC cams expose optical/driver zoom too
+}
+let hwFocus=false, hwZoom=false;
+
+/* Nudge focus toward the face region. Some cameras support point-of-interest
+   focus; when they do, aim it where the face is instead of frame center. */
+async function focusOnFace(box, fw, fh){
+  const track = stream && stream.getVideoTracks()[0];
+  if(!track || !track.getCapabilities) return;
+  let caps={}; try{ caps=track.getCapabilities(); }catch(e){ return; }
+  if(!caps.pointsOfInterest) return;
+  const cx=(box.x+box.width/2)/fw, cy=(box.y+box.height/2)/fh;
+  try{ await track.applyConstraints({advanced:[{pointsOfInterest:[{x:cx,y:cy}]}]}); }catch(e){}
+}
+/* Between retries the track is only disabled, so there's no new permission
+   prompt. When the flow ends the camera is released outright — that's what
+   turns the indicator light off. */
+function pauseCamera(){
+  running=false; if(rafId) cancelAnimationFrame(rafId);
+  if(isLive()) stream.getVideoTracks().forEach(t=>t.enabled=false);
+}
+function releaseCamera(){
+  running=false; if(rafId) cancelAnimationFrame(rafId);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  $('vid').srcObject=null;
+}
+window.addEventListener('pagehide', releaseCamera);
+document.addEventListener('visibilitychange', () => { if(document.hidden) releaseCamera(); });
+
+/* ============================================================
+   SCAN FLOW
+   ============================================================ */
+$('begin').addEventListener('click', () => {
+  if(!idFace){ note('idNote','Load the ID first.'); return; }
+  startScan();
+});
+$('scanIdBtn').addEventListener('click', () => idCam.click());
+$('againBtn').addEventListener('click', () => { attempt=0; bestAttempt=null; retriesOff=false;
+  resetScan(); startScan(); });
+$('doneBtn').addEventListener('click', () => { releaseCamera(); glyph(null);
+  $('scanWrap').classList.remove('done'); resetZoom(); go('ready'); });
+$('cancelScan').addEventListener('click', () => { releaseCamera(); resetScan();
+  glyph(null); $('scanWrap').classList.remove('done'); resetZoom(); go('ready'); });
+
+function resetScan(){ resetPresence(); resetZoom(); }
+
+async function startScan(){
+  if(!idFace){ go('ready'); syncReady(); note('idNote','Scan the ID before the face.'); return; }
+  lockCount=0; capturing=false; liveStats=null;
+  resetScan();
+  glyph(null); $('scanWrap').classList.remove('done'); ring(0);
+  go('scan'); cue('Starting');
+  try{ await ensureStream(); }
+  catch(e){
+    const https = location.protocol==='https:'||location.hostname==='localhost';
+    ring(1,'fail'); glyph('bad');
+    cue(https ? 'Camera blocked' : 'Needs HTTPS');
+    return;
+  }
+  const v=$('vid');
+  if(v.srcObject!==stream) v.srcObject=stream;
+  if(v.readyState<2) await new Promise(r=>v.onloadedmetadata=r);
+  await v.play().catch(()=>{});
+  running=true; loop();
+}
+
+let lastTick=0, lastFocus=0;
+async function loop(){
+  if(!running) return;
+  const v=$('vid'), now=performance.now();
+  if(now-lastTick>90){
+    lastTick=now;
+    const det = await faceapi.detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({inputSize:288,scoreThreshold:.4}))
+      .withFaceLandmarks();
+    if(det){
+      const b=det.detection.box, pose=poseOf(det.landmarks);
+      const frameW = v.videoWidth||1280, frameH = v.videoHeight||960;
+
+      // AUTO-ZOOM: instead of asking the person to move closer, scale the
+      // video so the detected face fills a comfortable portion of the ring.
+      autoZoom(b, frameW, frameH);
+
+      // Aim hardware focus at the face, throttled so the lens doesn't hunt.
+      if(now-lastFocus>1200){ lastFocus=now; focusOnFace(b, frameW, frameH); }
+
+      // Lightweight presence check — natural eye/mouth micro-motion. Stops a
+      // static printed photo. No head turn, ever.
+      const present = presenceCheck(det);
+
+      const dYaw = idFace ? Math.abs(pose.yaw-idFace.pose.yaw) : 0;
+      const posedOff = idFace && dYaw>POSE_GATE;
+
+      if(posedOff){ cue('Look at the camera', true); ring(.4,'good'); lockCount=0; }
+      else if(!present){ cue('Hold still'); ring(.2 + presenceFrac()*.5); lockCount=0; }
+      else {
+        lockCount++;
+        cue('Hold still'); ring(.72 + .28*Math.min(1,lockCount/LOCK_FRAMES),'good');
+        if(lockCount>=LOCK_FRAMES && !capturing) return runBurst(v);
+      }
+    } else { cue('Center your face', true); ring(.02); lockCount=0; resetZoom(); }
+  }
+  rafId=requestAnimationFrame(loop);
+}
+
+/* ---------- auto-zoom ----------
+   Smoothly scale + recenter the video so the face occupies a target fraction
+   of the circle. Digital zoom on the 4K feed — no user movement needed. */
+let zoomK=1, zoomX=0, zoomY=0;
+const ZOOM_TARGET=0.62;   // desired face-width as fraction of the shorter frame side
+function autoZoom(box, fw, fh){
+  const shorter = Math.min(fw, fh);
+  const want = (ZOOM_TARGET*shorter) / (box.width||1);
+  const target = Math.max(1, Math.min(2.6, want));   // never zoom out past 1, cap at 2.6x
+  // face center in frame, as -0.5..0.5 offsets
+  const cx = (box.x + box.width/2)/fw - 0.5;
+  const cy = (box.y + box.height/2)/fh - 0.5;
+  // ease toward target so it glides instead of snapping
+  zoomK += (target - zoomK)*0.18;
+  zoomX += (-cx*100*(zoomK-1) - zoomX)*0.18;
+  zoomY += (-cy*100*(zoomK-1) - zoomY)*0.18;
+  applyZoom();
+}
+function applyZoom(){
+  const v=$('vid');
+  // preserve the mirror (scaleX(-1)) while scaling/translating
+  v.style.transform = `translate(${zoomX.toFixed(2)}%, ${zoomY.toFixed(2)}%) scale(${zoomK.toFixed(3)}) scaleX(-1)`;
+  v.style.transformOrigin = 'center center';
+}
+function resetZoom(){ zoomK=1; zoomX=0; zoomY=0; applyZoom(); }
+
+/* ---------- presence check ----------
+   A real face makes constant tiny motion: eyelids, lips, sub-degree head sway.
+   Track landmark jitter over a short window. A printed photo held still is
+   rigid — its jitter is essentially zero. This stops a photo without any
+   instruction. (It does NOT stop a video replay — that requires the depth
+   sensor, which is the native-app path.) */
+let presFrames=[], presStart=0;
+function presenceCheck(det){
+  const le=centroid(det.landmarks.getLeftEye()), re=centroid(det.landmarks.getRightEye());
+  const iod=dist2(le,re)||1;
+  const eye=e=>(dist2(e[1],e[5])+dist2(e[2],e[4]))/2/iod;   // eye openness, normalized
+  const mouth=det.landmarks.getMouth();
+  const snap={
+    t:performance.now(),
+    ear:(eye(det.landmarks.getLeftEye())+eye(det.landmarks.getRightEye()))/2,
+    mar:dist2(mouth[3],mouth[9])/iod,
+    yaw:poseOf(det.landmarks).yaw
+  };
+  if(!presStart) presStart=snap.t;
+  presFrames.push(snap);
+  if(presFrames.length>30) presFrames.shift();
+  if(presFrames.length<PRES_MIN) return false;
+
+  // variance of eye-openness + mouth + micro-yaw over the window
+  const varOf=k=>{const a=presFrames.map(f=>f[k]);const m=a.reduce((s,x)=>s+x,0)/a.length;
+    return a.reduce((s,x)=>s+(x-m)*(x-m),0)/a.length;};
+  const motion = Math.sqrt(varOf('ear'))*4 + Math.sqrt(varOf('mar'))*2 + Math.sqrt(varOf('yaw'))*0.03;
+  return motion > PRES_MOTION_MIN;
+}
+function presenceFrac(){ return Math.min(1, presFrames.length/PRES_MIN); }
+function resetPresence(){ presFrames=[]; presStart=0; }
+
+async function runBurst(video){
+  if(capturing) return;
+  capturing=true; running=false;
+  if(rafId) cancelAnimationFrame(rafId);
+  cue('Checking');
+
+  const frames=[];
+  for(let i=0;i<BURST_FRAMES;i++){
+    ring(.8+.2*((i+1)/BURST_FRAMES),'good');
+    const c=document.createElement('canvas');
+    c.width=video.videoWidth; c.height=video.videoHeight;
+    c.getContext('2d').drawImage(video,0,0);
+    const det=await describe(c);
+    if(det) frames.push({canvas:c,det,pose:poseOf(det.landmarks)});
+    if(i<BURST_FRAMES-1) await new Promise(r=>setTimeout(r,BURST_GAP));
+  }
+  if(frames.length<3){
+    capturing=false; lockCount=0; running=true;
+    cue('Hold steady'); return loop();
+  }
+
+  const best0 = frames.reduce((a,f)=> f.det.detection.score>a.det.detection.score?f:a, frames[0]);
+
+  // No reference ID: liveness alone is the whole answer.
+  if(!idFace){
+    capturing=false;
+    liveStats={ attempt:attempt+1, frames:frames.length, quality:qualityOf(best0.canvas,best0.det.detection.box),
+                pose:best0.pose, face:{canvas:best0.canvas,box:best0.det.detection.box},
+                struct:structuralOf(best0.det.landmarks, alignFace(best0.canvas,best0.det.landmarks)) };
+    attempt++;
+    drawFace($('faceB'), best0.canvas, best0.det.detection.box);
+    finishPass('Live person confirmed', 'Present', null);
+    return;
+  }
+
+  const gated = frames.filter(f =>
+    Math.abs(f.pose.yaw-idFace.pose.yaw)<=POSE_GATE && Math.abs(f.pose.roll-idFace.pose.roll)<=POSE_GATE);
+  const used = gated.length>=3 ? gated : frames;
+  const descriptors = used.map(f=>f.det.descriptor);
+  const distances = descriptors.map(d=>faceapi.euclideanDistance(idFace.descriptor,d));
+
+  let arcCos=null;
+  if(arcReady && idFace.arc){
+    const sims=[];
+    for(const f of used){ const c=cosine(idFace.arc, await arcEmbed(f.canvas,f.det.landmarks)); if(c!==null) sims.push(c); }
+    if(sims.length) arcCos={median:median(sims),best:Math.max(...sims),n:sims.length};
+  }
+
+  let bi=0; for(let i=1;i<distances.length;i++) if(distances[i]<distances[bi]) bi=i;
+  const best=used[bi], aligned=alignFace(best.canvas,best.det.landmarks);
+
+  const stats={ attempt:attempt+1, frames:used.length, captured:frames.length,
+    dropped:frames.length-gated.length, median:median(distances),
+    best:Math.min(...distances), worst:Math.max(...distances), arcCos,
+    quality:qualityOf(best.canvas,best.det.detection.box), pose:best.pose,
+    struct:structuralOf(best.det.landmarks,aligned),
+    regions:regionScores(idFace.aligned,aligned),
+    attrs:await attrsOf(best.canvas),
+    face:{canvas:best.canvas,box:best.det.detection.box} };
+
+  attempt++;
+  const betterThan=(a,b)=> (a.arcCos&&b.arcCos) ? a.arcCos.median>b.arcCos.median : a.median<b.median;
+  if(!bestAttempt || betterThan(stats,bestAttempt)) bestAttempt=stats;
+  liveStats=bestAttempt;
+  capturing=false;
+  drawFace($('faceB'), liveStats.face.canvas, liveStats.face.box);
+  judge();
+}
+
+/* ============================================================
+   VERDICT
+   ============================================================ */
+function confidenceOf(d){
+  if(d<=.20) return 100;
+  if(d<=ACCEPT) return 100-(d-.20)/(ACCEPT-.20)*30;
+  if(d<=REVIEW) return 70-(d-ACCEPT)/(REVIEW-ACCEPT)*20;
+  if(d>=.90) return 0;
+  return 50-(d-REVIEW)/(.90-REVIEW)*50;
+}
+function confidenceArc(c){
+  if(c>=.80) return 100;
+  if(c>=ARC_ACCEPT) return 70+(c-ARC_ACCEPT)/(.80-ARC_ACCEPT)*30;
+  if(c>=ARC_REVIEW) return 50+(c-ARC_REVIEW)/(ARC_ACCEPT-ARC_REVIEW)*20;
+  return c<=0?0:(c/ARC_REVIEW)*50;
+}
+
+function judge(){
+  const d=liveStats.median, arc=liveStats.arcCos, useArc=!!arc;
+  const conf = useArc ? confidenceArc(arc.median) : confidenceOf(d);
+  const passes = useArc ? arc.median>=ARC_ACCEPT : d<=ACCEPT;
+  const grey   = useArc ? arc.median>=ARC_REVIEW : d<=REVIEW;
+
+  buildTech(d, arc, useArc, conf, passes, grey);
+
+  // A clear non-match is decided on the first attempt. We only retry when a
+  // better capture could plausibly change the answer — i.e. the score is
+  // borderline (in the review band) OR the capture itself was poor (soft,
+  // glared, or the head was turned off-axis). A confident miss with clean
+  // capture is just a different person; retrying won't help and only stalls.
+  const q = liveStats.quality || {};
+  const idq = idFace.quality || {};
+  const poseOff = Math.abs((liveStats.pose?.yaw||0) - (idFace.pose?.yaw||0)) > POSE_GATE;
+  const poorCapture =
+        (q.sharpness!=null && q.sharpness<110) ||
+        (q.faceWidthPx!=null && q.faceWidthPx<160) ||
+        (idq.glare!=null && idq.glare>0.03) ||
+        poseOff;
+
+  const retryWorthwhile = !passes && (grey || poorCapture);
+
+  if(retryWorthwhile && attempt<MAX_ATTEMPTS && !retriesOff){
+    cue('One more time');
+    ring(.15,'good');
+    pauseCamera();
+    clearTimeout(retryTimer);
+    retryTimer=setTimeout(()=>{ lockCount=0; capturing=false; startScan(); }, 900);
+    return;
+  }
+
+  if(passes) finishPass('Verified', 'Match confirmed', conf);
+  else if(grey) finishReview(conf);
+  else finishFail('Not a match against the ID on file.', 'No match');
+}
+
+function finishPass(title, sub, conf){
+  ring(1,'good'); glyph('ok');
+  $('vline').className='verdictline ok'; $('vline').textContent=title;
+  $('vsub').textContent = sub + (conf!=null ? '' : '');
+  settle();
+}
+function finishReview(conf){
+  ring(1); glyph('ok');
+  $('vline').className='verdictline warn'; $('vline').textContent='Review';
+  $('vsub').textContent='Close, but not conclusive. Check with the technician.';
+  settle();
+}
+function finishFail(sub, title){
+  ring(1,'fail'); glyph('bad');
+  $('vline').className='verdictline bad'; $('vline').textContent=title||'Failed';
+  $('vsub').textContent=sub;
+  settle();
+}
+/* Every path out of the scan lands here, and every one of them releases
+   the camera. That is what stops the in-use indicator hanging around. */
+function settle(){
+  releaseCamera();
+  setTimeout(()=>go('result'), 620);
+}
+
+/* ============================================================
+   TECH PANEL
+   ============================================================ */
+function setView(mode){
+  const internal = mode === 'internal';
+  document.body.classList.toggle('internal', internal);
+  $('tech').classList.toggle('on', internal);
+  $('vtInt').classList.toggle('on', internal); $('vtInt').setAttribute('aria-selected', internal);
+  $('vtExt').classList.toggle('on', !internal); $('vtExt').setAttribute('aria-selected', !internal);
+}
+$('vtInt').addEventListener('click', ()=>setView('internal'));
+$('vtExt').addEventListener('click', ()=>setView('external'));
+$('techClose').addEventListener('click', ()=>setView('external'));
+
+const row=(l,v,c)=>'<tr><td>'+l+'</td><td class="'+(c||'')+'">'+v+'</td></tr>';
+
+function buildTech(d, arc, useArc, conf, passes, grey){
+  const st = structuralCompare(idFace.struct, liveStats.struct);
+  lastStruct=st;
+
+  $('resultTable').innerHTML =
+    row('VERDICT', passes?'MATCH':grey?'REVIEW':'NO MATCH', passes?'g':grey?'y':'r') +
+    row('CONFIDENCE', Math.round(conf)+'%', conf>=70?'g':conf>=50?'y':'r') +
+    (useArc ? row('ARCFACE COSINE', arc.median.toFixed(4)+'  (≥'+ARC_ACCEPT+')', arc.median>=ARC_ACCEPT?'g':'y') : '') +
+    row('FACE-API DISTANCE', d.toFixed(4)+'  (≤'+ACCEPT+')', d<=ACCEPT?'g':'y') +
+    row('STRUCTURAL', st.overall.toFixed(0)+'%', st.overall>=80?'g':'y') +
+    row('LIVENESS', 'PASS · presence (photo-safe, not video-safe)', 'g') +
+    row('AUTOFOCUS', hwFocus?'continuous (hardware)':'fixed / not exposed', hwFocus?'g':'dim') +
+    row('ATTEMPT', liveStats.attempt+' of '+attempt) +
+    row('FRAMES', liveStats.frames+' of '+liveStats.captured);
+
+  buildWhy(d);
+  buildQuality();
+  buildStruct(st);
+  buildRegions();
+  buildAttrs();
+
+  lastResult={
+    verdict: passes?'MATCH':grey?'REVIEW':'NO MATCH',
+    verified: passes, confidence_pct: Math.round(conf),
+    distance_median: +d.toFixed(4),
+    arcface_cosine: arc?+arc.median.toFixed(4):null,
+    engine_active: useArc?'arcface-w600k_mbf':'face-api-resnet34',
+    structural_pct: +st.overall.toFixed(1),
+    structural_groups: Object.fromEntries(Object.entries(st.groups).map(([k,v])=>[k,+(v.score*100).toFixed(1)])),
+    liveness: {method:'presence-motion', passed:true, stops:'photo', does_not_stop:'video-replay'},
+    attempts:{used:liveStats.attempt,total:attempt,max:MAX_ATTEMPTS},
+    quality:{id:idFace.quality, live:liveStats.quality},
+    regions: liveStats.regions,
+    captured_at:new Date().toISOString()
+  };
+}
+
+function buildWhy(d){
+  const L=[], q1=idFace.quality, q2=liveStats.quality;
+  const dYaw=Math.abs(liveStats.pose.yaw-idFace.pose.yaw), dRoll=Math.abs(liveStats.pose.roll-idFace.pose.roll);
+  const add=(w,t,b)=>L.push({w,t,b});
+  if(dYaw>8) add(dYaw,'Head turn mismatch','Live face is '+dYaw.toFixed(0)+'° off the portrait. Roughly 0.05 of distance per 10°.');
+  if(dRoll>6) add(dRoll*.8,'Head tilt','Tilted '+dRoll.toFixed(0)+'° off the portrait.');
+  if(q1.glare>.02) add(q1.glare*300,'Glare on the ID',(q1.glare*100).toFixed(1)+'% of the portrait is blown out. Re-shoot the card at an angle.');
+  if(q1.faceWidthPx<90) add((90-q1.faceWidthPx)/2,'ID portrait small','Only '+q1.faceWidthPx+'px wide. Under ~90px the descriptor gets unreliable.');
+  if(q1.sharpness<120) add((120-q1.sharpness)/6,'ID photo soft','Sharpness '+q1.sharpness.toFixed(0)+'. Tap to focus and re-shoot.');
+  if(q2.sharpness<120) add((120-q2.sharpness)/6,'Live capture soft','Live sharpness '+q2.sharpness.toFixed(0)+'.');
+  const db=Math.abs(q1.brightness-q2.brightness);
+  if(db>55) add(db/8,'Lighting mismatch',db.toFixed(0)+' levels of brightness apart. Even out the light.');
+  if(liveStats.regions && liveStats.regions.Eyes<.45)
+    add((.45-liveStats.regions.Eyes)*30,'Eye region','Correlates at '+liveStats.regions.Eyes.toFixed(2)+'. Glasses on in one capture only will do this.');
+  L.sort((a,b)=>b.w-a.w);
+  $('whyList').innerHTML = L.length
+    ? L.slice(0,5).map((it,i)=>'<li class="'+(i===0?'big':'')+'"><b>'+it.t+'</b>'+it.b+'</li>').join('')
+    : '<li><b>Nothing measurable</b>Capture is clean on both sides. Distance '+d.toFixed(3)+' reflects the faces, not the photography.</li>';
+}
+function buildQuality(){
+  const a=idFace.quality, b=liveStats.quality;
+  const band=(v,g,o)=>v>=g?'g':v>=o?'y':'r';
+  $('qualTable').innerHTML =
+    row('ID PORTRAIT', a.faceWidthPx+'px', band(a.faceWidthPx,110,80)) +
+    row('LIVE FACE', b.faceWidthPx+'px', band(b.faceWidthPx,250,160)) +
+    row('ID SHARPNESS', a.sharpness.toFixed(0), band(a.sharpness,220,110)) +
+    row('LIVE SHARPNESS', b.sharpness.toFixed(0), band(b.sharpness,220,110)) +
+    row('ID GLARE', (a.glare*100).toFixed(1)+'%', a.glare<.01?'g':a.glare<.03?'y':'r') +
+    row('BRIGHTNESS Δ', Math.abs(a.brightness-b.brightness).toFixed(0), Math.abs(a.brightness-b.brightness)<35?'g':'y') +
+    row('YAW ID/LIVE', idFace.pose.yaw.toFixed(0)+'° / '+liveStats.pose.yaw.toFixed(0)+'°',
+        Math.abs(idFace.pose.yaw-liveStats.pose.yaw)<8?'g':'y');
+}
+function buildStruct(S){
+  let html='';
+  for(const [g,data] of Object.entries(S.groups)){
+    const p=data.score*100, c=p>=80?'g':p>=55?'y':'r';
+    html+='<tr><td style="color:var(--gold)">'+g.toUpperCase()+'</td><td class="'+c+'"><b>'+p.toFixed(0)+'%</b></td></tr>';
+    for(const it of data.items){
+      const ic=it.score>=.8?'g':it.score>=.55?'y':'r';
+      html+='<tr><td class="dim">&nbsp;&nbsp;'+it.name+'</td><td class="'+ic+'">'+it.a.toFixed(3)+' / '+it.b.toFixed(3)+'  ±'+(it.pct*100).toFixed(1)+'%</td></tr>';
+    }
+  }
+  const t1=idFace.struct._tone, t2=liveStats.struct._tone;
+  const cd=Math.hypot(t1.chroma[0]-t2.chroma[0], t1.chroma[1]-t2.chroma[1])*100;
+  html+='<tr><td style="color:var(--gold)">TONE — NOT SCORED</td><td class="dim">reference only</td></tr>';
+  html+=row('&nbsp;&nbsp;Skin chroma Δ', cd.toFixed(1), 'dim');
+  $('geoTable').innerHTML=html;
+  $('structScore').textContent=S.overall.toFixed(0)+'%';
+  $('structScore').className=S.overall>=80?'g':S.overall>=55?'y':'r';
+}
+function buildRegions(){
+  let h='';
+  for(const [k,v] of Object.entries(liveStats.regions||{}))
+    h+=row(k.toUpperCase(), v.toFixed(3), v>.55?'g':v>.35?'y':'r');
+  $('regionTable').innerHTML = h || row('REGIONS','n/a','dim');
+}
+function buildAttrs(){
+  const A=idFace.attrs, B=liveStats.attrs;
+  let h='';
+  if(A&&B){
+    h+=row('SEX ESTIMATE', A.gender+' / '+B.gender, A.gender===B.gender?'g':'r');
+    h+=row('AGE ESTIMATE', Math.round(A.age)+' / '+Math.round(B.age)+' yrs','dim');
+    h+=row('AGE GAP', Math.abs(A.age-B.age).toFixed(0)+' yrs', Math.abs(A.age-B.age)<12?'g':'y');
+  } else h+=row('SEX / AGE','model not loaded','dim');
+  h+=row('NOTE','informational — not scored','dim');
+  $('attrTable').innerHTML=h;
+}
+
+/* ---------- calibration ---------- */
+function separation(s,d,hi){
+  if(s.length<3||d.length<3) return null;
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const sd=a=>{const m=mean(a); return Math.sqrt(a.reduce((x,v)=>x+(v-m)*(v-m),0)/a.length);};
+  const pooled=Math.sqrt((sd(s)**2+sd(d)**2)/2)||1e-6;
+  return { d:(hi?mean(s)-mean(d):mean(d)-mean(s))/pooled,
+           overlap: hi ? Math.min(...s)<=Math.max(...d) : Math.max(...s)>=Math.min(...d) };
+}
+function logResult(label){
+  if(!lastResult) return;
+  calLog.push({label, ts:new Date().toISOString(), distance:lastResult.distance_median,
+    arcface:lastResult.arcface_cosine, structural:lastResult.structural_pct,
+    confidence:lastResult.confidence_pct,
+    liveness:1,
+    idGlare:+(idFace.quality.glare*100).toFixed(2), idWidth:idFace.quality.faceWidthPx});
+  paintCal();
+  note('techNote','Logged as '+label.toUpperCase()+'. '+calLog.length+' rows — export before closing the tab.');
+}
+function paintCal(){
+  if(!calLog.length) return;
+  const s=calLog.filter(r=>r.label==='same'), d=calLog.filter(r=>r.label==='different');
+  let t=s.length+' same · '+d.length+' different. ';
+  if(s.length>=3&&d.length>=3){
+    const board=[['face-api',separation(s.map(r=>r.distance),d.map(r=>r.distance),false)],
+                 ['structural',separation(s.map(r=>r.structural),d.map(r=>r.structural),true)]];
+    if(s.every(r=>r.arcface!=null)&&d.every(r=>r.arcface!=null))
+      board.push(['ArcFace',separation(s.map(r=>r.arcface),d.map(r=>r.arcface),true)]);
+    t+=board.map(([n,x])=>n+' '+x.d.toFixed(2)+(x.overlap?'*':'')).join(' · ')+'. ';
+    board.sort((a,b)=>b[1].d-a[1].d);
+    t+=board[0][0]+' separates best (* = ranges overlap). ';
+    if(s.length>=5&&d.length>=5){
+      const hi=Math.max(...s.map(r=>r.distance)), lo=Math.min(...d.map(r=>r.distance));
+      t += hi<lo ? 'Set ACCEPT to '+((hi+lo)/2).toFixed(2)+'.'
+                 : 'Distances overlap '+lo.toFixed(3)+'–'+hi.toFixed(3)+' — that band goes to a human.';
+    }
+  } else t+='Need 3+ of each before separation means anything.';
+  $('calSummary').textContent=t;
+}
+$('logSame').addEventListener('click',()=>logResult('same'));
+$('logDiff').addEventListener('click',()=>logResult('different'));
+$('exportCsv').addEventListener('click',()=>{
+  if(!calLog.length) return note('techNote','Nothing logged yet.',true);
+  const cols=Object.keys(calLog[0]);
+  const csv=[cols.join(',')].concat(calLog.map(r=>cols.map(c=>r[c]).join(','))).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='face-match-calibration.csv'; a.click();
+});
+$('copyJson').addEventListener('click',async()=>{
+  if(!lastResult) return note('techNote','No result yet.',true);
+  try{ await navigator.clipboard.writeText(JSON.stringify(lastResult,null,2)); note('techNote','Copied.'); }
+  catch(e){ note('techNote',JSON.stringify(lastResult)); }
+});
+
+syncReady();
+</script>
+</body>
+</html>
