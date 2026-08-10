@@ -3838,11 +3838,11 @@ export function listIdentities() {
 // Vectors only — the raw photos never leave the DB for this.
 export function listEnrolledFaces() {
   return db.prepare(`
-    SELECT ui.user_id, ui.status, ui.face_embedding, ui.id_embedding, u.name, u.role
+    SELECT ui.user_id, ui.status, ui.face_embedding, ui.id_embedding, u.name, u.role, u.email
     FROM user_identity ui JOIN users u ON u.id = ui.user_id
     WHERE ui.face_embedding IS NOT NULL AND (u.disabled IS NULL OR u.disabled = 0)
   `).all().map((r) => ({
-    user_id: r.user_id, status: r.status, name: r.name, role: r.role,
+    user_id: r.user_id, status: r.status, name: r.name, role: r.role, email: r.email,
     face_embedding: _jparse(r.face_embedding, null),
     id_embedding: _jparse(r.id_embedding, null),
   }));

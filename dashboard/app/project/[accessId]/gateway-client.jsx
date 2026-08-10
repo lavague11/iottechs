@@ -3051,7 +3051,9 @@ const GW2_LIGHT_CSS = `
 .gw2-light .gw2-lf-btn{background:#C9A96E;color:#0e1320;}
 .gw2-light .gw2-lf-btn:hover:not(:disabled){background:#b08f4f;color:#fff;}
 .gw2-light .gw2-face{display:flex;flex-direction:column;align-items:center;gap:12px;}
-.gw2-light .gw2-face-stage{margin:2px 0;}
+.gw2-light .gw2-face-stage{position:relative;width:172px;height:172px;display:grid;place-items:center;margin:2px 0;}
+/* Camera runs here for the match, but stays invisible — the person sees only the animation. */
+.gw2-light .gw2-face-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;}
 .gw2-light .gw2-face-btn{width:100%;margin-top:2px;}
 `;
 
@@ -3081,6 +3083,8 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
   const needsClearRef = useRef(false);
   const lockedRef    = useRef(false);
   const busyRef      = useRef(false);
+  const faceVideoRef = useRef(null);
+  const faceStreamRef = useRef(null);
 
   function syncPin(v)    { pinRef.current = v;        setPin(v); }
   function syncLocked(v) { lockedRef.current = v;     setLocked(v); }
@@ -3218,16 +3222,58 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
     if (res.ok) { setGranted(true); setTimeout(() => onAuthenticated(res.view), 700); }
   }
 
-  // Face ID entry. The camera capture → embedding → 1:N match → session is the
-  // next step (needs enrolled faces to match against); for now this runs the
-  // scan visual and tells the user how to proceed, without faking a login.
-  function runFaceScan() {
+  // Warm the face engine when the user opens Face ID — models download while
+  // they read the prompt, so the scan itself is fast (not blocked on a download).
+  function warmFace() {
+    if (window.IOTFace) { window.IOTFace.ready?.().catch(() => {}); return; }
+    if (!document.getElementById("iot-face-js")) {
+      const s = document.createElement("script");
+      s.id = "iot-face-js"; s.src = "/face-engine.js"; s.async = true;
+      s.onload = () => window.IOTFace?.ready?.().catch(() => {});
+      document.head.appendChild(s);
+    }
+  }
+  function stopFaceCam() {
+    if (faceStreamRef.current) { faceStreamRef.current.getTracks().forEach((t) => t.stop()); faceStreamRef.current = null; }
+  }
+  // Drop the camera whenever we leave face mode (or unmount).
+  useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
+
+  // Face-first login: capture a live frame behind the animation, embed it, and
+  // 1:N match server-side. On a clean match the server mints the session and we
+  // land on the user's home. Camera stays hidden (the person sees the animation).
+  async function runFaceScan() {
     if (faceState === "scanning") return;
     setFaceMsg(""); setFaceState("scanning");
-    setTimeout(() => {
-      setFaceState("idle");
-      setFaceMsg("Face ID activates once you've enrolled your face. Use your PIN for now.");
-    }, 2400);
+    let stream = null;
+    try {
+      if (!window.IOTFace) { warmFace(); await new Promise((r) => setTimeout(r, 400)); }
+      await window.IOTFace?.ready?.();
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } }, audio: false });
+      faceStreamRef.current = stream;
+      const v = faceVideoRef.current;
+      v.srcObject = stream; await v.play().catch(() => {});
+      await new Promise((r) => setTimeout(r, 700));   // let exposure/focus settle
+      let emb = null;
+      for (let i = 0; i < 4 && !emb; i++) {
+        const c = document.createElement("canvas");
+        c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
+        c.getContext("2d").drawImage(v, 0, 0);
+        emb = await window.IOTFace.embed(c);
+        if (!emb) await new Promise((r) => setTimeout(r, 250));
+      }
+      stopFaceCam();
+      if (!emb) { setFaceState("fail"); setFaceMsg("No face detected — center your face and try again."); return; }
+      const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
+      const j = await res.json();
+      if (j.ok) { setFaceState("ok"); setFaceMsg("Welcome, " + j.name); setTimeout(() => window.location.assign(j.home || "/dashboard"), 950); }
+      else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your PIN."); }
+    } catch (e) {
+      stopFaceCam();
+      const secure = location.protocol === "https:" || location.hostname === "localhost";
+      setFaceState("fail");
+      setFaceMsg(secure ? "Camera unavailable — allow access, or use your PIN." : "Face ID needs a secure (HTTPS) connection.");
+    }
   }
 
   async function loginWithCredentials(emailOrPhone, password) {
@@ -3321,7 +3367,10 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
               {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
             </div>
             {faceMsg && <div className="gw2-banner">{faceMsg}</div>}
-            <div className="gw2-face-stage"><FaceScan state={faceState} size={172} /></div>
+            <div className="gw2-face-stage">
+              <video ref={faceVideoRef} className="gw2-face-vid" playsInline muted />
+              <FaceScan state={faceState} size={172} />
+            </div>
             <button className="gw2-lf-btn gw2-face-btn" onClick={runFaceScan} disabled={busy || faceState === "scanning"}>
               {faceState === "scanning" ? "Scanning…" : "Scan my face"}
             </button>
@@ -3332,7 +3381,7 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
 
         <div className="gw2-actions">
           {mode === "pin" && (
-            <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); }}>Face ID</button>
+            <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
           )}
           <button className="gw2-lbtn" onClick={() => setMode(mode === "pin" ? "login" : "pin")}>
             {mode === "pin" ? "Log in instead" : "← Use PIN"}
