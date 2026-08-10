@@ -3255,14 +3255,13 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
       faceStreamRef.current = stream;
       const v = faceVideoRef.current;
       v.srcObject = stream; await v.play().catch(() => {});
-      // Active liveness — must blink + turn (stops photos, printed IDs, still screens).
+      // Liveness — a natural head turn + real eye micro-motion (stops photos, IDs, still screens).
       const live = await window.IOTFace.scanLive(v, { onCue: (t) => setFaceMsg(t) });
       stopFaceCam();
       if (!live.ok) {
         setFaceState("fail");
-        setFaceMsg(live.reason === "no_blink" ? "Couldn't confirm a live person — blink and try again."
-          : live.reason === "no_turn" ? "Almost — turn your head slightly and retry."
-          : "Liveness timed out — good light, face centered, and retry.");
+        setFaceMsg(live.reason === "no_turn" ? "Turn your head slowly, then try again."
+          : "Couldn't confirm a live person — face the camera in good light and retry.");
         return;
       }
       const emb = live.embedding;

@@ -168,13 +168,14 @@
     let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s;
   }
 
-  /* ---- Active liveness scan ----
-     Watches the live video and requires TWO things a flat photo / printed ID /
-     still phone-screen can't do: a real BLINK (eye-openness dips then recovers)
-     and a HEAD TURN (yaw swings past a threshold). Only after both, and once the
-     face is frontal again, does it capture + embed. Stops photos and cards; a
-     video replay still needs hardware depth (native app) — documented limit.
-       onCue(text) → drive a prompt ("Blink", "Turn your head", …)
+  /* ---- Liveness scan (natural, low-friction) ----
+     One deliberate gesture the user is comfortable with — a slow HEAD TURN — plus
+     a PASSIVE signal a flat photo can't fake even when moved: real EYE micro-motion.
+     A held photo/ID never turns; a photo waved to fake a turn has frozen eyes
+     (eye-openness variance ~0) while a live face's eyes always drift/blink a little.
+     No "blink on command". Captures a frontal frame once both are satisfied.
+     Documented limit: a video replay still needs hardware depth (native app).
+       onCue(text) → "Turn your head slowly", "Hold still", …
        returns { ok:true, embedding } | { ok:false, reason } */
   async function scanLive(video, opts = {}) {
     await ready();
@@ -183,9 +184,9 @@
     const t0 = performance.now();
 
     const ears = [];
-    let baseline = null, blinkArmed = false, blinked = false, turned = false;
-    let sawFace = 0, lastCue = "";
+    let turned = false, sawFace = 0, lastCue = "";
     const cue = (t) => { if (t !== lastCue) { lastCue = t; onCue(t); } };
+    const std = (a) => { if (a.length < 4) return 0; const m = a.reduce((s, x) => s + x, 0) / a.length; return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); };
     cue("Look at the camera");
 
     while (performance.now() - t0 < timeoutMs) {
@@ -201,33 +202,30 @@
       const iod = dist2(le, re) || 1;
       const earOf = (e) => (dist2(e[1], e[5]) + dist2(e[2], e[4])) / (2 * iod);
       const ear = (earOf(lm.getLeftEye()) + earOf(lm.getRightEye())) / 2;
-      ears.push(ear); if (ears.length > 45) ears.shift();
-      if (baseline == null && ears.length >= 6) baseline = median(ears);
-
-      // Blink = openness dips well under baseline, then recovers.
-      if (baseline) {
-        if (ear < baseline * 0.6) blinkArmed = true;
-        else if (blinkArmed && ear > baseline * 0.82) { blinked = true; blinkArmed = false; }
-      }
+      ears.push(ear); if (ears.length > 60) ears.shift();
 
       // Head turn — nose offset from the eye-midline, normalized (either direction).
       const nose = lm.getNose(); const tip = nose[nose.length - 4] || nose[3];
       const mid = { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
       const yaw = ((tip.x - mid.x) / iod) * 90;
-      if (Math.abs(yaw) > 16) turned = true;
+      if (Math.abs(yaw) > 15) turned = true;
 
-      if (sawFace < 4 || baseline == null) cue("Hold still");
-      else if (!blinked) cue("Blink");
-      else if (!turned) cue("Turn your head");
+      // Passive vitality: real eyes drift/blink; a photo's are frozen. NOT yaw
+      // (a moved photo changes yaw), so this is what a moved photo can't fake.
+      const vitality = std(ears);
+      const alive = ears.length >= 10 && vitality > 0.005;
+
+      if (sawFace < 4) cue("Hold still");
+      else if (!turned) cue("Turn your head slowly");
+      else if (!alive) cue("Keep looking at the camera");
       else if (Math.abs(yaw) > 12) cue("Look at the camera");
       else {
-        // Live + frontal → capture the match frame.
-        const emb = await embed(video);
+        const emb = await embed(video);   // live + frontal → capture
         if (emb) return { ok: true, embedding: emb };
       }
       await sleep(60);
     }
-    return { ok: false, reason: !blinked ? "no_blink" : !turned ? "no_turn" : "timeout" };
+    return { ok: false, reason: !turned ? "no_turn" : "no_life" };
   }
 
   window.IOTFace = { ready, embed, cosine, scanLive, status: () => ({ ready: faceReady, engine: arcReady ? "arcface" : faceReady ? "faceapi" : "loading" }) };
