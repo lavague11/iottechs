@@ -31,6 +31,7 @@ const NAV_GROUPS = [
   ]},
   { key: "admin-grp", label: "Admin", items: [
     { key: "users",      label: "Users",   href: "/users" },
+    { key: "identity",   label: "Identity Library", href: "/identity" },
     { key: "onboarding", label: "Hiring",  href: "/onboarding" },
     { key: "activity", label: "Activity Log", href: "/activity" },
     { key: "dev",      label: "Dev Roadmap",  href: "/dev" },
