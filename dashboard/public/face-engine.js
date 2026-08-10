@@ -21,15 +21,28 @@
     "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js",
     "https://unpkg.com/@vladmandic/face-api@1.7.13/dist/face-api.js",
   ];
+  // Self-hosted first (fast, no CDN round-trip, cacheable) — populate /public/models
+  // with scripts/fetch-face-models.mjs. Falls through to CDN when absent, so this
+  // is a zero-risk speedup: it just gets faster once the files are local.
   const MODEL_SOURCES = [
+    "/models/faceapi",
     "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model",
     "https://unpkg.com/@vladmandic/face-api@1.7.13/model",
   ];
+  // WASM runtime — verified reliable. (WebGPU was tried but hard-fails instead of
+  // gracefully falling back on devices without it, and we run only one inference
+  // per scan, so WASM's speed is plenty — the win is load time, not inference.)
   const ORT_SOURCES = [
     "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.19.2/ort.min.js",
   ];
-  const ARC_MODEL = "https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx";
+  // Self-hosted first, then our same-origin proxy (GitHub releases have no CORS
+  // header, so a direct browser fetch is blocked — the proxy is what makes real
+  // ArcFace embeddings actually load in the browser).
+  const ARC_MODELS = [
+    "/models/w600k_mbf.onnx",
+    "/api/face-model",
+  ];
   const ALIGN = 220;
   const ARC_REF = [[38.2946,51.6963],[73.5318,51.5014],[56.0252,71.7366],[41.5493,92.3655],[70.7299,92.2041]];
 
@@ -62,10 +75,15 @@
         let ortOk = false;
         for (const s of ORT_SOURCES) { try { await loadScript(s); if (window.ort) { ortOk = true; break; } } catch (e) {} }
         if (ortOk) {
-          try { ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/"; ort.env.wasm.numThreads = 1; } catch (e) {}
-          const buf = await (await fetch(ARC_MODEL)).arrayBuffer();
-          arcSession = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
-          arcReady = true;
+          try { ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/"; ort.env.wasm.numThreads = 1; ort.env.wasm.simd = true; } catch (e) {}
+          for (const url of ARC_MODELS) {
+            try {
+              const r = await fetch(url); if (!r.ok) continue;
+              const buf = await r.arrayBuffer();
+              arcSession = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
+              arcReady = true; break;
+            } catch (e) {}
+          }
         }
       } catch (e) { arcReady = false; }
       return true;

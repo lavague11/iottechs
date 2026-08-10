@@ -320,7 +320,9 @@ body.internal .faceid{display:none}
    ============================================================ */
 const SELF_HOSTED_MODELS = null;              // e.g. '/models'
 const ARCFACE_MODEL_URL  = '/models/w600k_mbf.onnx';
-const ARCFACE_FALLBACK   = 'https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx';
+// Same-origin proxy — GitHub releases send no CORS header, so a direct browser
+// fetch is blocked and ArcFace silently never loads. /api/face-model fixes it.
+const ARCFACE_FALLBACK   = '/api/face-model';
 
 const LIB_SOURCES = [
   'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js',
