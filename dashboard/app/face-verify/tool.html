@@ -214,6 +214,11 @@ ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing
   <input type="file" id="idFile" accept="image/*">
   <div class="note" id="idNote" style="display:none"></div>
 
+  <h4>Document check <span id="docState" class="dim" style="float:right;font-size:9px">—</span></h4>
+  <p class="hintp">Reads the licence front (server-side) and flags expiry, tampering, and screen/photocopy shots. Text read only — the face match stays on this device.</p>
+  <table class="data" id="docTable"></table>
+  <div class="note" id="docNote" style="display:none"></div>
+
   <h4>Engine <span id="engineState" class="dim" style="float:right;font-size:9px">—</span></h4>
   <table class="data" id="resultTable"></table>
 
@@ -620,6 +625,8 @@ $('clearId').addEventListener('click', () => {
   idFace=null; $('idState').textContent='none'; $('idState').className='dim';
   $('faceA').getContext('2d').clearRect(0,0,180,180);
   $('idMeta').textContent='license / live';
+  $('docTable').innerHTML=''; $('docNote').style.display='none';
+  $('docState').textContent='—'; $('docState').className='dim';
   note('idNote','Reference cleared. Scans will confirm a live person only.');
   syncReady();
 });
@@ -649,9 +656,77 @@ async function handleId(file){
     + (idFace.quality.glare*100).toFixed(1)+'% · sharp '+idFace.quality.sharpness.toFixed(0);
   note('idNote', better?'Kept this shot — sharpest so far.':'Kept the earlier shot, it was sharper.');
   syncReady();
+  // Read + validate the document itself (expiry, tampering, screen/photocopy).
+  // Runs against the shot just provided; face matching is untouched by this.
+  verifyDocument(file);
   // If the ID was shot from the customer-facing "Scan ID first" button,
   // land back on the ready slide primed to scan.
   if(slide==='ready'){ $('tech').classList.remove('on'); }
+}
+
+/* ---------- document verification (server-side text read) ----------
+   Sends the licence front to /api/verify-document, which reads the printed
+   fields with Claude and runs deterministic checks (expiry, screen/photocopy,
+   not-an-ID, front↔barcode when a barcode is supplied). Text only — no face
+   ever goes to the server. The verdict is shown; nothing is stored. */
+async function fileToResizedB64(file, maxEdge){
+  const img = await fileToImage(file);
+  const scale = Math.min(1, maxEdge/Math.max(img.naturalWidth||1, img.naturalHeight||1));
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round((img.naturalWidth||1)*scale));
+  c.height=Math.max(1,Math.round((img.naturalHeight||1)*scale));
+  const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.9).split(',')[1];
+}
+async function verifyDocument(file){
+  const ds=$('docState'), dn=$('docNote');
+  if(!file){ return; }
+  ds.textContent='reading'; ds.className='dim'; dn.style.display='none';
+  try{
+    const b64 = await fileToResizedB64(file, 1600);
+    const res = await fetch('/api/verify-document',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({frontImageBase64:b64, mediaType:'image/jpeg'})
+    });
+    if(res.status===503||res.status===403){
+      const j=await res.json().catch(()=>({}));
+      ds.textContent='off'; ds.className='y';
+      dn.style.display='block'; dn.className='note err';
+      dn.textContent = j.error || 'Document reader unavailable.';
+      return;
+    }
+    const j = await res.json();
+    if(j.error){ ds.textContent='error'; ds.className='r';
+      dn.style.display='block'; dn.className='note err'; dn.textContent=j.error; return; }
+    paintDoc(j);
+  }catch(e){
+    ds.textContent='error'; ds.className='r';
+    dn.style.display='block'; dn.className='note err';
+    dn.textContent='Document read failed — check the connection and re-shoot.';
+  }
+}
+function paintDoc(j){
+  const ds=$('docState'), dt=$('docTable'), dn=$('docNote');
+  const st=(j.status||'—');
+  const stc = st==='pass'?'g':st==='review'?'y':'r';
+  ds.textContent=st.toUpperCase(); ds.className=stc;
+  const f=j.fields||{}, exp=j.expiry||{};
+  const name=[f.first_name,f.middle_name,f.last_name].filter(Boolean).join(' ')||'—';
+  const expDays = exp.days_remaining;
+  const expc = expDays==null?'dim':expDays<0?'r':expDays<30?'y':'g';
+  dt.innerHTML =
+    row('STATUS', st.toUpperCase(), stc) +
+    row('DOC TYPE', (f.document_type||'—').replace(/_/g,' '), f.document_type==='not_an_id'?'r':'dim') +
+    row('NAME', name) +
+    row('DOB', f.date_of_birth||'—') +
+    row('LICENSE', f.license_number||'—') +
+    row('STATE', f.issuing_state||f.state||'—') +
+    row('EXPIRES', (exp.date||'—')+(expDays!=null?'  ('+expDays+'d)':''), expc);
+  const issues=[...(j.blockers||[]).map(b=>['BLOCK',b]),...(j.warnings||[]).map(w=>['WARN',w])];
+  if(issues.length){
+    dn.style.display='block'; dn.className='note'+((j.blockers&&j.blockers.length)?' err':'');
+    dn.textContent = issues.map(([k,v])=>k+': '+String(v).replace(/_/g,' ')).join('  ·  ');
+  } else { dn.style.display='none'; }
 }
 function drawFace(cv, src, box){
   const c=cv.getContext('2d'), pad=box.width*.35;
