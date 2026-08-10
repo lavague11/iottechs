@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import AdminShell from "../components/admin-shell";
 import FaceScan from "../components/face-scan";
+import { Wordmark } from "../components/brand";
 
 // Self-service enrolment: consent → scan ID → capture face → cross-match → store.
 // The face engine is warmed on mount so the model download isn't in the critical
@@ -29,7 +30,7 @@ function downscaleToDataUrl(img, maxEdge = 1600, q = 0.9) {
   return c.toDataURL("image/jpeg", q);
 }
 
-export default function EnrollClient({ user, alerts, current }) {
+export default function EnrollClient({ user, alerts, current, invite }) {
   const [step, setStep]       = useState(current?.status === "verified" ? "done" : "consent");
   const [consent, setConsent] = useState(false);
   const [idType, setIdType]   = useState(current?.id_type === "passport" ? "passport" : "drivers_license");
@@ -131,7 +132,7 @@ export default function EnrollClient({ user, alerts, current }) {
       const res = await fetch("/api/enroll", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          consent: true, consent_version: "v1", id_type: idType,
+          consent: true, consent_version: "v1", id_type: idType, token: invite?.token,
           id_image: idImage, id_embedding: idEmbed, id_fields: idFields, id_verdict: idVerdict,
           face_image: faceImage, face_embedding: faceEmbed, enroll_score: matchScore,
         }),
@@ -145,13 +146,15 @@ export default function EnrollClient({ user, alerts, current }) {
 
   const idName = idType === "passport" ? "passport" : "driver's licence";
 
-  return (
-    <AdminShell user={user} alerts={alerts} active="enroll">
+  const body = (
+    <>
       <style>{CSS}</style>
       <div className="apx-wrap enr">
         <div className="welcome">
           <h1>Face <em>Enrollment</em></h1>
-          <p className="enr-sub">Verify your account with your {idName} and a face scan. Your photos are encrypted; only you and an admin can ever access them. You can remove them anytime.</p>
+          <p className="enr-sub">
+            {invite ? `Hi${invite.name ? " " + invite.name.split(" ")[0] : ""} — verify your account` : "Verify your account"} with your {idName} and a face scan. Your photos are encrypted; only you and an admin can ever access them. You can remove them anytime.
+          </p>
         </div>
 
         {engineMsg && step !== "done" && <div className="enr-warm">{engineMsg}</div>}
@@ -248,8 +251,18 @@ export default function EnrollClient({ user, alerts, current }) {
           </div>
         )}
       </div>
-    </AdminShell>
+    </>
   );
+
+  if (invite) {
+    return (
+      <div className="apx enr-standalone" style={{ minHeight: "100vh" }}>
+        <div className="enr-topbar"><a href="/" aria-label="IOT TECHS"><Wordmark height={24} /></a></div>
+        {body}
+      </div>
+    );
+  }
+  return <AdminShell user={user} alerts={alerts} active="enroll">{body}</AdminShell>;
 }
 
 const CSS = `
@@ -291,4 +304,6 @@ const CSS = `
 .apx .enr-badge{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;margin-bottom:8px}
 .apx .enr-badge.ok{background:#eaf6ee;color:#1c8a45}
 .apx .enr-badge.pend{background:#fef8ec;color:#8a5f00}
+.apx.enr-standalone{background:radial-gradient(1100px 500px at 50% -10%,#f4f5f8,#eceef3)}
+.apx .enr-topbar{display:flex;justify-content:center;padding:22px 16px 2px}
 `;

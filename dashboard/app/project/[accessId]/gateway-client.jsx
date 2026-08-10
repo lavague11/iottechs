@@ -3238,6 +3238,8 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
   }
   // Drop the camera whenever we leave face mode (or unmount).
   useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
+  // Opening Face ID starts the scan immediately — no extra tap.
+  useEffect(() => { if (mode === "face" && faceState === "idle") { const t = setTimeout(runFaceScan, 300); return () => clearTimeout(t); } }, [mode]); // eslint-disable-line
 
   // Face-first login: capture a live frame behind the animation, embed it, and
   // 1:N match server-side. On a clean match the server mints the session and we

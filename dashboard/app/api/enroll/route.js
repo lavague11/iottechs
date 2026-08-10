@@ -1,5 +1,5 @@
 import { getSessionUser } from "../../../lib/session";
-import { upsertUserIdentity, logIdentityEvent } from "../../../lib/db";
+import { upsertUserIdentity, logIdentityEvent, getEnrollInvite, useEnrollInvite } from "../../../lib/db";
 
 // Face + ID enrolment. A signed-in user enrols THEIR OWN face and ID; the row is
 // keyed to their user id, so one account can never enrol as another. Photos are
@@ -22,11 +22,22 @@ function cosine(a, b) {
 }
 
 export async function POST(request) {
-  const user = await getSessionUser();
-  if (!user?.id) return Response.json({ error: "Sign in to enrol." }, { status: 403 });
+  const sessionUser = await getSessionUser();
 
   let b;
   try { b = await request.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
+
+  // Who is enrolling: the signed-in user, or a valid one-time invite token.
+  let targetId = sessionUser?.id || null;
+  let actorRole = sessionUser?.role || "invite";
+  let actorName = sessionUser?.name || "invited";
+  let invite = null;
+  if (!targetId && b?.token) {
+    invite = getEnrollInvite(b.token);
+    if (invite && invite.valid) { targetId = invite.user_id; actorName = invite.name || "invited"; actorRole = invite.role || "invite"; }
+    else return Response.json({ error: invite ? (invite.reason === "used" ? "This invite link was already used." : "This invite link has expired.") : "Invalid invite link." }, { status: 403 });
+  }
+  if (!targetId) return Response.json({ error: "Sign in or open a valid invite link to enrol." }, { status: 403 });
 
   if (!b?.consent) return Response.json({ error: "Consent is required to enrol." }, { status: 400 });
 
@@ -46,7 +57,7 @@ export async function POST(request) {
   }
   const status = verified ? "verified" : "pending";
 
-  const r = upsertUserIdentity(user.id, {
+  const r = upsertUserIdentity(targetId, {
     status,
     id_type: b.id_type === "passport" ? "passport" : "drivers_license",
     id_image: b.id_image || null,
@@ -59,13 +70,14 @@ export async function POST(request) {
     consent_at: new Date().toISOString(),
     consent_version: b.consent_version || "v1",
     enrolled_at: new Date().toISOString(),
-  }, { actor_role: user.role, actor_name: user.name });
+  }, { actor_role: actorRole, actor_name: actorName });
 
-  logIdentityEvent(user.id, {
+  logIdentityEvent(targetId, {
     kind: "enroll",
-    detail: `Enrolled ${b.id_type === "passport" ? "passport" : "licence"} — ${status}${score != null ? ` (match ${score.toFixed(3)})` : ""}`,
-    score, actor_role: user.role, actor_name: user.name,
+    detail: `Enrolled ${b.id_type === "passport" ? "passport" : "licence"} — ${status}${score != null ? ` (match ${score.toFixed(3)})` : ""}${invite ? " (via invite)" : ""}`,
+    score, actor_role: actorRole, actor_name: actorName,
   });
+  if (invite) useEnrollInvite(b.token);
 
   return Response.json({
     ok: true,

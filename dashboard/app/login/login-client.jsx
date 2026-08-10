@@ -111,6 +111,8 @@ export default function LoginClient({ next }) {
     if (faceStreamRef.current) { faceStreamRef.current.getTracks().forEach((t) => t.stop()); faceStreamRef.current = null; }
   }
   useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
+  // Opening Face ID starts the scan immediately — no extra tap.
+  useEffect(() => { if (mode === "face" && faceState === "idle") { const t = setTimeout(runFaceScan, 300); return () => clearTimeout(t); } }, [mode]); // eslint-disable-line
 
   async function runFaceScan() {
     if (faceState === "scanning") return;
@@ -171,7 +173,7 @@ export default function LoginClient({ next }) {
       <div className={`gw2-card${cardWarp ? " gw2-warp" : ""}`}>
         <div className="gw2-ring" />
         <div className="gw2-brand">
-          <h1 style={{ display: "flex", justifyContent: "center" }}><Wordmark height={30} techsColor="#C9A96E" /></h1>
+          <h1 style={{ display: "flex", justifyContent: "center" }}><a href="/" aria-label="IOT TECHS home" style={{ display: "inline-flex" }}><Wordmark height={30} techsColor="#C9A96E" /></a></h1>
           <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "6px 0 4px" }} />
           <div className="gw2-subtag">Staff Portal</div>
         </div>

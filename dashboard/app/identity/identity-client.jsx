@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition } from "react";
 import AdminShell from "../components/admin-shell";
-import { setIdentityStatusAction, deleteIdentityAction } from "./actions";
+import { setIdentityStatusAction, deleteIdentityAction, createEnrollInviteAction } from "./actions";
 
 // The Face ID / Driver's Licence library. One card per enrolled account with its
 // two photos (face + ID), status, and admin controls. Photos load on demand from
@@ -16,13 +16,29 @@ const STATUS = {
 function initials(n) { return (n || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 10) : "—"; }
 
-export default function IdentityClient({ user, alerts, rows = [], stats }) {
+export default function IdentityClient({ user, alerts, rows = [], stats, staff = [] }) {
   const isAdmin = user.role === "admin";
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [pending, startTx] = useTransition();
   const [confirmDel, setConfirmDel] = useState(null);   // userId awaiting delete confirm
   const [zoom, setZoom] = useState(null);               // { userId, which, name }
+  const [inviteUser, setInviteUser] = useState("");     // selected staff id for an invite
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function makeInvite() {
+    if (!inviteUser) return;
+    setInviteBusy(true); setInviteLink(""); setCopied(false);
+    const r = await createEnrollInviteAction(Number(inviteUser));
+    setInviteBusy(false);
+    if (r?.ok) setInviteLink(`${window.location.origin}/enroll?token=${r.token}`);
+    else alert(r?.error || "Couldn't create the link.");
+  }
+  function copyInvite() {
+    navigator.clipboard?.writeText(inviteLink).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {});
+  }
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => rows.filter((r) => {
@@ -61,8 +77,28 @@ export default function IdentityClient({ user, alerts, rows = [], stats }) {
           </div>
         </div>
 
+        <div className="panel idl-invite">
+          <div className="idl-invite-h">
+            <b>Invite someone to enroll</b>
+            <span>Creates a one-time link — they scan their ID + face without signing in first.</span>
+          </div>
+          <div className="idl-invite-row">
+            <select className="apx-input" value={inviteUser} onChange={(e) => { setInviteUser(e.target.value); setInviteLink(""); }}>
+              <option value="">Choose a person…</option>
+              {staff.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.role}</option>)}
+            </select>
+            <button className="idl-btn ok" disabled={!inviteUser || inviteBusy} onClick={makeInvite}>{inviteBusy ? "Creating…" : "Create link"}</button>
+          </div>
+          {inviteLink && (
+            <div className="idl-invite-link">
+              <input className="apx-input mono" readOnly value={inviteLink} onFocus={(e) => e.target.select()} />
+              <button className="idl-btn" onClick={copyInvite}>{copied ? "Copied" : "Copy"}</button>
+            </div>
+          )}
+        </div>
+
         {visible.length === 0 ? (
-          <div className="panel"><div className="empty">{q ? "No matches." : "No one has enrolled yet — share the Face Enroll link and records land here."}</div></div>
+          <div className="panel"><div className="empty">{q ? "No matches." : "No one has enrolled yet — invite someone above, or share the Face Enroll link."}</div></div>
         ) : (
           <div className="idl-grid">
             {visible.map((r) => {
@@ -168,4 +204,13 @@ const CSS = `
 .apx .idl-mhd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:.9rem}
 .apx .idl-mhd button{border:none;background:none;font-size:1rem;cursor:pointer;color:var(--muted)}
 .apx .idl-modal img{width:100%;display:block;max-height:70vh;object-fit:contain;background:#0B0F1A}
+.apx .idl-invite{padding:14px 16px;margin-bottom:14px}
+.apx .idl-invite-h{display:flex;flex-direction:column;gap:1px;margin-bottom:10px}
+.apx .idl-invite-h b{font-weight:800;font-size:.92rem}
+.apx .idl-invite-h span{font-size:.78rem;color:var(--muted)}
+.apx .idl-invite-row{display:flex;gap:8px;flex-wrap:wrap}
+.apx .idl-invite-row select{max-width:280px;height:36px}
+.apx .idl-invite-link{display:flex;gap:8px;margin-top:9px}
+.apx .idl-invite-link .apx-input{flex:1;font-size:.8rem}
+.apx .idl-invite .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 `;

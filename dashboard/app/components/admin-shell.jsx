@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { logoutAction } from "../login/actions";
 import AddressAutocomplete from "./address-autocomplete";
 import { TaglinePill, Wordmark } from "./brand";
+import EnrollBanner from "./enroll-banner";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -367,6 +368,7 @@ export default function AdminShell({ user, alerts, active, children }) {
         </div>
       </header>
 
+      <EnrollBanner />
       {children}
 
       {npOpen && <NewProjectModal onClose={() => setNpOpen(false)} />}

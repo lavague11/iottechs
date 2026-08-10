@@ -828,6 +828,19 @@ function init() {
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_identity_events_user ON identity_events(user_id)");
 
+  // One-time enrolment invites — an admin mints a tokenized link a user opens to
+  // enrol WITHOUT logging in first (new hires, controlled onboarding).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS enroll_invites (
+      token       TEXT PRIMARY KEY,
+      user_id     INTEGER NOT NULL,
+      created_by  TEXT,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      expires_at  TEXT,
+      used_at     TEXT
+    )
+  `);
+
   // ---- Archive (soft-delete store — deleted records land here, restorable or purgeable) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS archive (
@@ -1773,7 +1786,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v36";
+const DB_VER = "v37";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -3846,6 +3859,30 @@ export function listEnrolledFaces() {
     face_embedding: _jparse(r.face_embedding, null),
     id_embedding: _jparse(r.id_embedding, null),
   }));
+}
+
+// ---- One-time enrolment invites ----
+export function createEnrollInvite(userId, { createdBy, days = 7 } = {}) {
+  const uid = Number(userId) || 0;
+  if (!uid) return null;
+  const token = randomBytes(18).toString("base64url");
+  const expires_at = new Date(Date.now() + days * 86400000).toISOString();
+  db.prepare("INSERT INTO enroll_invites (token, user_id, created_by, expires_at) VALUES (?,?,?,?)")
+    .run(token, uid, createdBy || null, expires_at);
+  return { token, user_id: uid, expires_at };
+}
+// Returns { user_id, name, valid, reason } — validity checked (unused + unexpired).
+export function getEnrollInvite(token) {
+  const row = db.prepare("SELECT * FROM enroll_invites WHERE token=?").get(String(token || ""));
+  if (!row) return null;
+  const u = db.prepare("SELECT name, role FROM users WHERE id=?").get(row.user_id);
+  let valid = true, reason = "";
+  if (row.used_at) { valid = false; reason = "used"; }
+  else if (row.expires_at && new Date(row.expires_at) < new Date()) { valid = false; reason = "expired"; }
+  return { user_id: row.user_id, name: u?.name || null, role: u?.role || null, valid, reason, expires_at: row.expires_at };
+}
+export function useEnrollInvite(token) {
+  db.prepare("UPDATE enroll_invites SET used_at=datetime('now','localtime') WHERE token=? AND used_at IS NULL").run(String(token || ""));
 }
 
 export function identityStats() {
