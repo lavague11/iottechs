@@ -3255,17 +3255,17 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
       faceStreamRef.current = stream;
       const v = faceVideoRef.current;
       v.srcObject = stream; await v.play().catch(() => {});
-      await new Promise((r) => setTimeout(r, 700));   // let exposure/focus settle
-      let emb = null;
-      for (let i = 0; i < 4 && !emb; i++) {
-        const c = document.createElement("canvas");
-        c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
-        c.getContext("2d").drawImage(v, 0, 0);
-        emb = await window.IOTFace.embed(c);
-        if (!emb) await new Promise((r) => setTimeout(r, 250));
-      }
+      // Active liveness — must blink + turn (stops photos, printed IDs, still screens).
+      const live = await window.IOTFace.scanLive(v, { onCue: (t) => setFaceMsg(t) });
       stopFaceCam();
-      if (!emb) { setFaceState("fail"); setFaceMsg("No face detected — center your face and try again."); return; }
+      if (!live.ok) {
+        setFaceState("fail");
+        setFaceMsg(live.reason === "no_blink" ? "Couldn't confirm a live person — blink and try again."
+          : live.reason === "no_turn" ? "Almost — turn your head slightly and retry."
+          : "Liveness timed out — good light, face centered, and retry.");
+        return;
+      }
+      const emb = live.embedding;
       const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
       const j = await res.json();
       if (j.ok) {

@@ -64,6 +64,7 @@
       for (const b of MODEL_SOURCES) {
         try {
           await faceapi.nets.ssdMobilenetv1.loadFromUri(b);
+          await faceapi.nets.tinyFaceDetector.loadFromUri(b);   // fast per-frame detect for the liveness loop
           await faceapi.nets.faceLandmark68Net.loadFromUri(b);
           await faceapi.nets.faceRecognitionNet.loadFromUri(b);
           faceReady = true; break;
@@ -92,6 +93,9 @@
   }
 
   const centroid = (p) => ({ x: p.reduce((s, q) => s + q.x, 0) / p.length, y: p.reduce((s, q) => s + q.y, 0) / p.length });
+  const dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const median = (a) => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   function upscale(img, minW = 1100) {
     const w = img.naturalWidth || img.width || img.videoWidth || 0;
@@ -164,5 +168,67 @@
     let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s;
   }
 
-  window.IOTFace = { ready, embed, cosine, status: () => ({ ready: faceReady, engine: arcReady ? "arcface" : faceReady ? "faceapi" : "loading" }) };
+  /* ---- Active liveness scan ----
+     Watches the live video and requires TWO things a flat photo / printed ID /
+     still phone-screen can't do: a real BLINK (eye-openness dips then recovers)
+     and a HEAD TURN (yaw swings past a threshold). Only after both, and once the
+     face is frontal again, does it capture + embed. Stops photos and cards; a
+     video replay still needs hardware depth (native app) — documented limit.
+       onCue(text) → drive a prompt ("Blink", "Turn your head", …)
+       returns { ok:true, embedding } | { ok:false, reason } */
+  async function scanLive(video, opts = {}) {
+    await ready();
+    const onCue = opts.onCue || (() => {});
+    const timeoutMs = opts.timeoutMs || 15000;
+    const t0 = performance.now();
+
+    const ears = [];
+    let baseline = null, blinkArmed = false, blinked = false, turned = false;
+    let sawFace = 0, lastCue = "";
+    const cue = (t) => { if (t !== lastCue) { lastCue = t; onCue(t); } };
+    cue("Look at the camera");
+
+    while (performance.now() - t0 < timeoutMs) {
+      let det = null;
+      try {
+        det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.4 })).withFaceLandmarks();
+      } catch (e) {}
+      if (!det) { sawFace = 0; cue("Center your face"); await sleep(70); continue; }
+      sawFace++;
+
+      const lm = det.landmarks;
+      const le = centroid(lm.getLeftEye()), re = centroid(lm.getRightEye());
+      const iod = dist2(le, re) || 1;
+      const earOf = (e) => (dist2(e[1], e[5]) + dist2(e[2], e[4])) / (2 * iod);
+      const ear = (earOf(lm.getLeftEye()) + earOf(lm.getRightEye())) / 2;
+      ears.push(ear); if (ears.length > 45) ears.shift();
+      if (baseline == null && ears.length >= 6) baseline = median(ears);
+
+      // Blink = openness dips well under baseline, then recovers.
+      if (baseline) {
+        if (ear < baseline * 0.6) blinkArmed = true;
+        else if (blinkArmed && ear > baseline * 0.82) { blinked = true; blinkArmed = false; }
+      }
+
+      // Head turn — nose offset from the eye-midline, normalized (either direction).
+      const nose = lm.getNose(); const tip = nose[nose.length - 4] || nose[3];
+      const mid = { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
+      const yaw = ((tip.x - mid.x) / iod) * 90;
+      if (Math.abs(yaw) > 16) turned = true;
+
+      if (sawFace < 4 || baseline == null) cue("Hold still");
+      else if (!blinked) cue("Blink");
+      else if (!turned) cue("Turn your head");
+      else if (Math.abs(yaw) > 12) cue("Look at the camera");
+      else {
+        // Live + frontal → capture the match frame.
+        const emb = await embed(video);
+        if (emb) return { ok: true, embedding: emb };
+      }
+      await sleep(60);
+    }
+    return { ok: false, reason: !blinked ? "no_blink" : !turned ? "no_turn" : "timeout" };
+  }
+
+  window.IOTFace = { ready, embed, cosine, scanLive, status: () => ({ ready: faceReady, engine: arcReady ? "arcface" : faceReady ? "faceapi" : "loading" }) };
 })();
