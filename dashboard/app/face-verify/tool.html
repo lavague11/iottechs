@@ -133,6 +133,7 @@ ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing
 #boot p{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:rgba(250,248,244,.5);margin:0}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
+<script src="/barcode-reader.js"></script>
 </head>
 <body>
 
@@ -213,6 +214,15 @@ ul.why b{color:var(--gold);font-family:var(--mono);font-size:10px;letter-spacing
   <input type="file" id="idCam" accept="image/*" capture="environment">
   <input type="file" id="idFile" accept="image/*">
   <div class="note" id="idNote" style="display:none"></div>
+
+  <div class="actions" style="max-width:none;margin-top:9px;align-items:center">
+    <button onclick="bcCam.click()">Shoot back</button>
+    <button onclick="bcFile.click()">Upload back</button>
+    <span id="bcState" class="dim" style="flex:0 0 auto;font-family:var(--mono);font-size:9px;letter-spacing:.06em">barcode: none</span>
+  </div>
+  <p class="hintp">Optional — the PDF417 barcode on the back. Read on-device; becomes the source of truth and cross-checks the printed front.</p>
+  <input type="file" id="bcCam" accept="image/*" capture="environment">
+  <input type="file" id="bcFile" accept="image/*">
 
   <h4>Document check <span id="docState" class="dim" style="float:right;font-size:9px">—</span></h4>
   <p class="hintp">Reads the licence front (server-side) and flags expiry, tampering, and screen/photocopy shots. Text read only — the face match stays on this device.</p>
@@ -627,6 +637,8 @@ $('clearId').addEventListener('click', () => {
   $('idMeta').textContent='license / live';
   $('docTable').innerHTML=''; $('docNote').style.display='none';
   $('docState').textContent='—'; $('docState').className='dim';
+  lastBarcode=null; lastIdFile=null;
+  $('bcState').textContent='barcode: none'; $('bcState').className='dim';
   note('idNote','Reference cleared. Scans will confirm a live person only.');
   syncReady();
 });
@@ -658,7 +670,8 @@ async function handleId(file){
   syncReady();
   // Read + validate the document itself (expiry, tampering, screen/photocopy).
   // Runs against the shot just provided; face matching is untouched by this.
-  verifyDocument(file);
+  lastIdFile = file;
+  verifyDocument(file, lastBarcode);
   // If the ID was shot from the customer-facing "Scan ID first" button,
   // land back on the ready slide primed to scan.
   if(slide==='ready'){ $('tech').classList.remove('on'); }
@@ -669,6 +682,7 @@ async function handleId(file){
    fields with Claude and runs deterministic checks (expiry, screen/photocopy,
    not-an-ID, front↔barcode when a barcode is supplied). Text only — no face
    ever goes to the server. The verdict is shown; nothing is stored. */
+let lastIdFile=null, lastBarcode=null;
 async function fileToResizedB64(file, maxEdge){
   const img = await fileToImage(file);
   const scale = Math.min(1, maxEdge/Math.max(img.naturalWidth||1, img.naturalHeight||1));
@@ -678,7 +692,7 @@ async function fileToResizedB64(file, maxEdge){
   const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(img,0,0,c.width,c.height);
   return c.toDataURL('image/jpeg',0.9).split(',')[1];
 }
-async function verifyDocument(file){
+async function verifyDocument(file, barcodeFields){
   const ds=$('docState'), dn=$('docNote');
   if(!file){ return; }
   ds.textContent='reading'; ds.className='dim'; dn.style.display='none';
@@ -686,7 +700,7 @@ async function verifyDocument(file){
     const b64 = await fileToResizedB64(file, 1600);
     const res = await fetch('/api/verify-document',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({frontImageBase64:b64, mediaType:'image/jpeg'})
+      body:JSON.stringify({frontImageBase64:b64, mediaType:'image/jpeg', barcodeFields:barcodeFields||undefined})
     });
     if(res.status===503||res.status===403){
       const j=await res.json().catch(()=>({}));
@@ -727,6 +741,27 @@ function paintDoc(j){
     dn.style.display='block'; dn.className='note'+((j.blockers&&j.blockers.length)?' err':'');
     dn.textContent = issues.map(([k,v])=>k+': '+String(v).replace(/_/g,' ')).join('  ·  ');
   } else { dn.style.display='none'; }
+}
+
+/* ---------- back barcode (PDF417 / AAMVA, decoded on-device) ----------
+   Reads the machine-readable strip on the back with the shared IOTBarcode
+   engine — exact fields, no OCR guessing. Becomes the source of truth and is
+   handed to the document check so the front↔barcode cross-check can run. */
+['bcCam','bcFile'].forEach(id => $(id).addEventListener('change', e => handleBack(e.target.files[0])));
+async function handleBack(file){
+  const bs=$('bcState');
+  if(!file) return;
+  bs.textContent='barcode: reading…'; bs.className='dim';
+  try{
+    if(!window.IOTBarcode){ bs.textContent='barcode: engine unavailable'; bs.className='y'; return; }
+    const raw = await IOTBarcode.decode(file);
+    if(!raw){ bs.textContent='barcode: not read — fill the frame, kill glare'; bs.className='y'; lastBarcode=null; return; }
+    lastBarcode = IOTBarcode.barcodeFields(raw);
+    const nm=[lastBarcode.firstName,lastBarcode.lastName].filter(Boolean).join(' ');
+    bs.textContent='barcode: read '+(nm?('· '+nm):''); bs.className='g';
+    // Re-run the document check now that we can cross-check against the barcode.
+    if(lastIdFile) verifyDocument(lastIdFile, lastBarcode);
+  }catch(e){ bs.textContent='barcode: error'; bs.className='r'; }
 }
 function drawFace(cv, src, box){
   const c=cv.getContext('2d'), pad=box.width*.35;

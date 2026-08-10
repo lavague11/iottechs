@@ -1273,11 +1273,15 @@ export default function IdCapture({
   const [more, setMore] = useState(false);
   const [addrRaw, setAddrRaw] = useState(null);
   const [addrCheck, setAddrCheck] = useState(null);
+  const [barcode, setBarcode] = useState(null);              // { fields, mismatches, at } once the back is read
+  const [bc, setBc] = useState({ status: "idle", msg: "" });  // idle | reading | done | none | error
 
   const revealQ = useRef([]);
   const fieldsRef = useRef(BLANK);
   const fileRef = useRef(null);
   const camRef = useRef(null);
+  const backFileRef = useRef(null);
+  const backCamRef = useRef(null);
   const toastId = useRef(0);
   const warned = useRef("");
   const issueKey = useRef("");
@@ -1292,9 +1296,17 @@ export default function IdCapture({
   const issues = useMemo(() => (hasData ? validate(fields) : []), [fields, hasData]);
   const badKeys = useMemo(() => new Set(issues.map((i) => i.k)), [issues]);
   const scores = useMemo(
-    () => (hasData ? scoreCapture({ fields, uncertain, issues, dlCheck, fromBarcode: false, shots }) : []),
-    [fields, uncertain, issues, dlCheck, shots, hasData]
+    () => (hasData ? scoreCapture({ fields, uncertain, issues, dlCheck, fromBarcode: !!barcode, shots }) : []),
+    [fields, uncertain, issues, dlCheck, shots, hasData, barcode]
   );
+
+  // Load the shared PDF417/AAMVA decoder once (client-side, offline after first load).
+  useEffect(() => {
+    if (typeof window === "undefined" || window.IOTBarcode || document.getElementById("iot-barcode-js")) return;
+    const s = document.createElement("script");
+    s.id = "iot-barcode-js"; s.src = "/barcode-reader.js"; s.async = true;
+    document.head.appendChild(s);
+  }, []);
   const overall = overallScore(scores);
 
   /* ---------- report upward ---------- */
@@ -1309,9 +1321,11 @@ export default function IdCapture({
       addressVerified: addrCheck?.dpv === "Y",
       addressStatus: addrCheck?.dpv || "",
       addressFormatted: addrCheck?.formatted || "",
+      fromBarcode: !!barcode,
+      barcodeMismatches: barcode?.mismatches || [],
       capturedAt: new Date().toISOString(),
     });
-  }, [fields, hasData, overall, expDays, issues.length, addrCheck]);
+  }, [fields, hasData, overall, expDays, issues.length, addrCheck, barcode]);
 
   const addrKey = useRef("");
   useEffect(() => {
@@ -1415,6 +1429,38 @@ export default function IdCapture({
     if (!file) return;
     if (!OK_TYPES.includes(file.type)) { setError("Use a JPG, PNG or WEBP photo."); return; }
     await ingest(await readFile(file), file.type);
+  }
+
+  /* ---------- back barcode (PDF417 / AAMVA) ----------
+     Decodes the machine-readable strip with the shared IOTBarcode engine — exact
+     fields, no OCR guessing. The barcode wins over the front read; anything the
+     front OCR disagrees on is surfaced. */
+  async function pickBack(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!OK_TYPES.includes(file.type)) { setBc({ status: "error", msg: "Use a JPG, PNG or WEBP photo of the back." }); return; }
+    setBc({ status: "reading", msg: "Reading barcode…" });
+    try {
+      if (!window.IOTBarcode) { setBc({ status: "error", msg: "Barcode engine still loading — try again in a moment." }); return; }
+      const raw = await window.IOTBarcode.decode(file);
+      if (!raw) { setBc({ status: "none", msg: "Couldn't read the barcode — fill the frame, kill glare, and hold steady." }); return; }
+      const parsed = parseAAMVA(raw);
+      if (!parsed) { setBc({ status: "none", msg: "Read a barcode, but it isn't a licence (AAMVA) format." }); return; }
+      const cur = fieldsRef.current || {};
+      const nk = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const mism = ["dlNumber", "lastName", "firstName", "dob", "expirationDate"]
+        .filter((k) => parsed[k] && cur[k] && nk(parsed[k]) !== nk(cur[k]));
+      setFields((f) => ({ ...f, ...parsed }));           // barcode is the source of truth
+      if (parsed.dlNumber) setDlCheck({ state: "match", second: "" });
+      setBarcode({ fields: parsed, mismatches: mism, at: Date.now() });
+      setBc({
+        status: "done",
+        msg: mism.length
+          ? `Barcode loaded — ${mism.length} field${mism.length > 1 ? "s" : ""} differed from the photo (barcode kept).`
+          : "Barcode verified — matches the photo.",
+      });
+    } catch (_) { setBc({ status: "error", msg: "Barcode read failed. Re-shoot the back." }); }
   }
 
   /* ---------- read ---------- */
@@ -1674,6 +1720,27 @@ export default function IdCapture({
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={pick} />
       <input ref={camRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden onChange={pick} />
 
+      <div className="c-back">
+        <div className="c-acts">
+          <button className="c-btn" onClick={() => backCamRef.current?.click()}>
+            {barcode ? "Rescan back" : "Scan back"}
+          </button>
+          <button className="c-btn" onClick={() => backFileRef.current?.click()}>Upload back</button>
+        </div>
+        {bc.status !== "idle" && (
+          <p className={`c-bc ${bc.status === "done" ? (barcode?.mismatches?.length ? "warn" : "ok") : bc.status === "reading" ? "wait" : "bad"}`}>
+            {bc.msg}
+          </p>
+        )}
+        {barcode?.mismatches?.length > 0 && (
+          <ul className="c-issues c-bc-mis">
+            {barcode.mismatches.map((k) => (<li key={k}><b>{LABELS[k] || k}</b> photo read differs — barcode value kept</li>))}
+          </ul>
+        )}
+      </div>
+      <input ref={backFileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={pickBack} />
+      <input ref={backCamRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden onChange={pickBack} />
+
       {status === "reading" && (
         <div className="c-load">
           <div className={`c-bar${got ? "" : " idle"}`}>
@@ -1845,6 +1912,15 @@ font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;tra
 .c-btn.gold:hover{filter:brightness(1.08);background:var(--gold);color:var(--ink)}
 .c-btn.danger{color:var(--red);border-color:rgba(194,57,46,.35)}
 .c-btn.danger:hover{background:var(--red);border-color:var(--red);color:#fff}
+
+.c-back{margin-top:9px}
+.c-back .c-acts{margin-top:0}
+.c-bc{margin:8px 0 0;font-size:10.5px;line-height:1.45;border-radius:4px;padding:7px 9px}
+.c-bc.ok{color:#1c6b3a;background:#EAF6EE;border-left:2px solid #3E9B72}
+.c-bc.warn{color:#8A6A1F;background:#FCF3E2;border-left:2px solid var(--amber)}
+.c-bc.wait{color:#5a6d8a;background:#EEF1F6;border-left:2px solid #9fb0cc}
+.c-bc.bad{color:#8A241B;background:#FBEEEC;border-left:2px solid var(--red)}
+.c-bc-mis{margin-top:7px}
 
 .c-load{margin-top:11px}
 .c-bar{height:6px;background:#EDE9E1;border-radius:99px;overflow:hidden}
