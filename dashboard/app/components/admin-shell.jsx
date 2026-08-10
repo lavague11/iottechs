@@ -59,6 +59,7 @@ const NAV_GROUPS = [
     { key: "adt",           label: "24/7 Monitoring", href: "/adt-applications" },
     { key: "id-scan",       label: "ID Scanner",    href: "/id-scan" },
     { key: "face-verify",   label: "Face Verify",   href: "/face-verify" },
+    { key: "enroll",        label: "Face Enroll",   href: "/enroll" },
     { key: "tools",         label: "Document Tools", href: "/tools" },
     { key: "receivables",   label: "Receivables",   href: "/receivables" },
   ]},
