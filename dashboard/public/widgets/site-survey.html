@@ -485,6 +485,9 @@
     var bw=board.clientWidth||1,bh=board.clientHeight||1,thr=22,ax=m0.x/100*bw,ay=m0.y/100*bh,group=[id];
     markers.forEach(function(mm){if(mm.id===id||mm.kind!=='cam')return;var bx=mm.x/100*bw,by=mm.y/100*bh;if(Math.hypot(bx-ax,by-ay)<thr)group.push(mm.id);});
     return group;}
+  // Label/cone orbit radius (board px): sit the badge OUT ON the icon's white border ring,
+  // not over the gold face. Icon radius = 15*pinScale, so ride just past it. Scales with pin size.
+  function badgeR(){return 15*pinScale+9;}
   var lineW=3,lineColor='#0B0F1A',fillColor='#C9A96E',fillOpacity=0,drawLevel='top',drawGroup=null;
   var floors=[{name:'Floor Plan 1',B:B,markers:markers,uid:uid}],curFloor=0,pendingReset=false,floorMenuOpen=false;
   function freshFloor(name){return{name:name,B:{bg:'blank',img:null,imgSource:null,imgRatio:1,imgRotate:0,ftWide:0,rooms:[],strokes:[],notes:[],sat:null,zoom:{s:1,tx:0,ty:0}},markers:[],uid:1};}
@@ -702,7 +705,7 @@
       // The cone/aim-line originates from the camera's LABEL (which sits toward its facing
       // direction), not the icon's center — matches the DOM badge offset (--bx/--by, 18 CSS px).
       var sx=m.x/100*W,sy=m.y/100*H;
-      if(m.kind==='cam'){var _bs=W/(board.clientWidth||1);sx+=Math.cos(rad)*18*_bs;sy+=Math.sin(rad)*18*_bs;}
+      if(m.kind==='cam'){var _bs=W/(board.clientWidth||1),_r=badgeR()*_bs;sx+=Math.cos(rad)*_r;sy+=Math.sin(rad)*_r;}
       if(CONE[m.kind]){var half=(m.fov||defFov(m.kind))/2*Math.PI/180,p1=rad-half,p2=rad+half;dctx.save();dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(p1)*L,sy+Math.sin(p1)*L);dctx.arc(sx,sy,L,p1,p2);dctx.closePath();
         var g=dctx.createRadialGradient(sx,sy,0,sx,sy,L);g.addColorStop(0,hexA(col,.40));g.addColorStop(1,hexA(col,.08));dctx.fillStyle=g;dctx.fill();dctx.strokeStyle=hexA(col,.55);dctx.lineWidth=1.5;dctx.stroke();
         dctx.strokeStyle=col;dctx.lineWidth=2;var ax=sx+Math.cos(rad)*L,ay=sy+Math.sin(rad)*L;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(ax,ay);dctx.stroke();arrowHead(ax,ay,rad,13,col);
@@ -731,7 +734,7 @@
       if(dist<10){if(m.arrow){m.arrow=null;redrawStrokes();hideAngle();}return;}
       var deg=Math.atan2(dy,dx)*180/Math.PI,near=Math.round(deg/45)*45,snap=false;if(Math.abs(deg-near)<=7){deg=near;snap=true;}
       var lenPct=dist/br.width*100;m.arrow={angle:+deg.toFixed(1),len:+lenPct.toFixed(2)};
-      if(m.kind==='cam'){var _a2=m.arrow.angle*Math.PI/180;p.style.setProperty('--bx',(Math.cos(_a2)*18).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_a2)*18).toFixed(1)+'px');}
+      if(m.kind==='cam'){var _a2=m.arrow.angle*Math.PI/180,_r2=badgeR();p.style.setProperty('--bx',(Math.cos(_a2)*_r2).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_a2)*_r2).toFixed(1)+'px');}
       drawIds=coLocatedGroup(m.id);redrawStrokes();
       if(m.kind==='spk'||m.kind==='tap')showBadge(ev,'\u2299 r '+(B.ftWide?fmtFeet(lenPct/100*B.ftWide):Math.round(lenPct)+'%'),false);
       else showBadge(ev,'\u2199 '+(((Math.round(deg)%360)+360)%360)+'\u00b0',snap);}
@@ -832,7 +835,7 @@
           // yet aimed). Reads as "one spot, IC1 aims right, IC2 aims left".
           var n=cluster.length;
           cluster.forEach(function(c,k){c.el.classList.add('stacked');if(k>0)c.el.classList.add('stack-sub');
-            var ang=(c.m&&c.m.arrow)?(c.m.arrow.angle*Math.PI/180):((k/n)*2*Math.PI);var R=18;
+            var ang=(c.m&&c.m.arrow)?(c.m.arrow.angle*Math.PI/180):((k/n)*2*Math.PI);var R=badgeR();
             c.el.style.setProperty('--bx',(Math.cos(ang)*R).toFixed(1)+'px');
             c.el.style.setProperty('--by',(Math.sin(ang)*R).toFixed(1)+'px');
             // Each .pin is its own stacking context, so a higher z-index pin paints its
@@ -1220,7 +1223,7 @@
       p.innerHTML=IC[m.kind]+'<span class="pnum" style="color:'+col+';border-color:'+col+'">'+m._tag+'</span>';
       // Every aimed camera's label rotates to sit on the side it's facing (co-located
       // clusters below may further re-space these to avoid overlap).
-      if(m.kind==='cam'&&m.arrow){var _ang=m.arrow.angle*Math.PI/180,_R=18;p.style.setProperty('--bx',(Math.cos(_ang)*_R).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_ang)*_R).toFixed(1)+'px');}
+      if(m.kind==='cam'){var _ang=m.arrow?m.arrow.angle*Math.PI/180:(-Math.PI/4),_R=badgeR();p.style.setProperty('--bx',(Math.cos(_ang)*_R).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_ang)*_R).toFixed(1)+'px');}
       if(__PICK){
         // Pick mode (customer diagnostic): the plan is a selector — tap a camera to report it.
         if(m.kind==='cam'){
