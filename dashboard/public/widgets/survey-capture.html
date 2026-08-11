@@ -5,12 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Site Survey — Capture</title>
 <style>
-  /* ---- reference minimal system: white ground, ink, hairlines, black pills ---- */
+  /* reference minimal system: white ground, ink, hairlines, black pills */
   :root{
     color-scheme:light;
     --ink:#101112; --body:#2c3036; --muted:#6b7076; --faint:#9aa0a6;
     --line:#e3e5e8; --hair:#eef0f2; --soft:#f6f7f8; --panel:#fbfbfc; --bg:#ffffff;
-    --accent:#1a73e8;
     --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
     --r:10px;
@@ -19,15 +18,12 @@
   html,body{height:100%;margin:0}
   body{font:15px/1.5 var(--sans);color:var(--ink);background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
 
-  /* header */
   header{padding:12px 16px 11px;border-bottom:1px solid var(--line);flex:none;display:flex;align-items:center;gap:12px}
   .brand{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
   .crumbs{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;color:var(--faint)}
   .crumbs b{color:var(--ink);font-weight:600}
-  .crumbs .sep{color:var(--faint)}
 
-  button{font:inherit;font-weight:500;cursor:pointer;border-radius:var(--r);border:1px solid var(--ink);
-    background:var(--ink);color:#fff;padding:10px 16px}
+  button{font:inherit;font-weight:500;cursor:pointer;border-radius:var(--r);border:1px solid var(--ink);background:var(--ink);color:#fff;padding:10px 16px}
   button:active{opacity:.7}
   button:disabled{opacity:.4;cursor:default}
   .lite{border-color:var(--line);background:#fff;color:var(--ink);padding:9px 13px;font-size:13px;font-weight:500}
@@ -38,18 +34,16 @@
   .screen{position:absolute;inset:0;display:none;flex-direction:column}
   .screen.on{display:flex}
 
-  /* ---------- STAGE 1a: background chooser ---------- */
+  /* STAGE 1a: background chooser */
   #chooser{align-items:center;justify-content:center;background:var(--bg);padding:24px}
   .choose-in{width:100%;max-width:440px}
   .choose-in .eyebrow{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:center}
   .choose-in h1{font-weight:660;font-size:22px;letter-spacing:-.01em;text-align:center;margin:9px 0 4px}
   .choose-in .sub{text-align:center;color:var(--muted);font-size:14px;margin:0 0 24px}
   .opts{display:flex;flex-direction:column;gap:10px}
-  .opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:#fff;color:var(--ink);
-    border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;font-weight:500}
+  .opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;font-weight:500}
   .opt:hover{border-color:var(--ink)}
-  .opt .ic{width:34px;height:34px;flex:none;border-radius:8px;background:var(--soft);border:1px solid var(--line);
-    display:grid;place-items:center;color:var(--ink)}
+  .opt .ic{width:34px;height:34px;flex:none;border-radius:8px;background:var(--soft);border:1px solid var(--line);display:grid;place-items:center;color:var(--ink)}
   .opt .tt{flex:1}
   .opt .tt .t{display:block;font-size:15px;font-weight:600}
   .opt .tt .d{display:block;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:2px}
@@ -57,19 +51,22 @@
   .opt.primary{border-color:var(--ink)}
   .opt.primary .ic{background:var(--ink);color:#fff;border-color:var(--ink)}
 
-  /* ---------- STAGE 1b: satellite capture (address path) ---------- */
+  /* STAGE 1b: satellite capture */
   #capHead{padding:11px 16px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;gap:8px;background:#fff}
   #capHead input{flex:1;min-width:0;padding:11px 13px;font-size:16px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
   #capHead input:focus{border-color:var(--ink)}
-  #map{flex:1 1 auto;position:relative;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-size:13px;text-align:center}
-  #map .ph{max-width:260px}
-  #map .ph .k{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+  .capstage{flex:1 1 auto;position:relative;min-height:120px;background:var(--soft);overflow:hidden}
+  #mapRot{position:absolute;inset:-60%;transform-origin:center center;will-change:transform}
+  #mapRot #map{position:absolute;inset:0}
+  #mapMsg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--faint);font-size:13px;padding:20px;z-index:8}
+  #mapMsg.on{display:grid}
+  #draw{position:absolute;inset:0;z-index:6;display:none;touch-action:none;cursor:crosshair}
+  #draw.on{display:block}
+  #drawCv{position:absolute;inset:0;width:100%;height:100%}
 
-  /* wizard bar */
   #wiz{flex:none;border-top:1px solid var(--line);background:#fff}
   .steps{display:flex;padding:8px 12px 0}
-  .steps .s{flex:1;text-align:center;font-size:11.5px;color:var(--muted);padding-bottom:9px;
-    border-bottom:2px solid var(--line);letter-spacing:.01em;cursor:pointer;background:none;border-radius:0;border-top:0;border-left:0;border-right:0;font-weight:500}
+  .steps .s{flex:1;text-align:center;font-size:11.5px;color:var(--muted);padding-bottom:9px;border-bottom:2px solid var(--line);cursor:pointer;background:none;border-radius:0;border-top:0;border-left:0;border-right:0;font-weight:500}
   .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--ink)}
   .steps .s.done{color:var(--ink)}
   .steps .s:disabled{color:var(--faint);cursor:default}
@@ -86,144 +83,336 @@
   .seg button{border:0;border-radius:0;background:#fff;color:var(--muted);padding:8px 12px;font-size:13px}
   .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
   .spacer{flex:1}
-  .stub{font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
-    border:1px dashed var(--line);border-radius:6px;padding:4px 7px;align-self:center}
 
-  /* ---------- STAGE 2: placements (board handoff placeholder) ---------- */
-  #board{align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);text-align:center;padding:24px}
-  #board .mk{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-  #board h2{font-size:17px;font-weight:660;color:var(--ink);margin:2px 0 0}
-  #board p{max-width:320px;font-size:13.5px;margin:0}
+  /* STAGE 2: result / placements handoff */
+  #board{background:#fff}
+  #boardHead{padding:10px 16px;border-bottom:1px solid var(--line);flex:none;display:flex;align-items:center;gap:12px}
+  #boardHead .mk{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  #boardHead .sc{margin-left:auto;font:500 12px/1 var(--mono);color:var(--ink)}
+  #boardHead .sc b{color:var(--muted);font-weight:500}
+  #boardCanvasWrap{flex:1 1 auto;min-height:0;display:grid;place-items:center;background:var(--soft);padding:14px;overflow:hidden}
+  #boardImg{max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff}
+  #boardEmpty{color:var(--muted);text-align:center;font-size:13.5px;max-width:320px}
+  #boardBar{padding:12px 16px;border-top:1px solid var(--line);flex:none;display:flex;gap:8px;align-items:center}
+
+  .toast{position:fixed;left:50%;bottom:78px;transform:translate(-50%,8px);background:var(--ink);color:#fff;font-size:13px;padding:9px 15px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:86%;text-align:center;z-index:70}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand">Site Survey</div>
-  <div class="crumbs">
-    <b id="cbBg">Background</b><span class="sep">→</span><span id="cbPl">Placements</span>
-  </div>
+  <div class="crumbs"><b id="cbBg">Background</b><span>&rarr;</span><span id="cbPl">Placements</span></div>
 </header>
 
 <div class="stage">
 
-  <!-- STAGE 1a — choose a background -->
+  <!-- STAGE 1a -->
   <div class="screen on" id="chooser">
     <div class="choose-in">
-      <div class="eyebrow">Step 1 · Background</div>
+      <div class="eyebrow">Step 1 &middot; Background</div>
       <h1>Start the floor plan</h1>
       <p class="sub">Pick how the canvas begins. You can change it later.</p>
       <div class="opts">
         <button class="opt primary" data-go="capture">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></span>
           <span class="tt"><span class="t">Search address</span><span class="d">Pull satellite imagery, level &amp; crop the property</span></span>
-          <span class="arw">›</span>
+          <span class="arw">&rsaquo;</span>
         </button>
         <button class="opt" data-go="upload">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
           <span class="tt"><span class="t">Upload image</span><span class="d">A photo, floor plan, or existing drawing</span></span>
-          <span class="arw">›</span>
+          <span class="arw">&rsaquo;</span>
         </button>
         <button class="opt" data-go="draw">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
           <span class="tt"><span class="t">Draw</span><span class="d">Start on a blank canvas</span></span>
-          <span class="arw">›</span>
+          <span class="arw">&rsaquo;</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- STAGE 1b — satellite capture wizard (address path) -->
+  <!-- STAGE 1b -->
   <div class="screen" id="capture">
     <div id="capHead">
       <input id="q" type="text" placeholder="Address or business" autocomplete="off" enterkeyhint="search">
       <button id="show">Show</button>
     </div>
-
-    <div id="map">
-      <div class="ph"><div class="k">Live map</div>Google satellite mounts here in P1.<br>Level · Zoom · Crop run on it.</div>
+    <div class="capstage">
+      <div id="mapRot"><div id="map"></div></div>
+      <div id="mapMsg"></div>
+      <div id="draw"><canvas id="drawCv"></canvas></div>
     </div>
-
     <div id="wiz">
       <div class="steps">
-        <button class="s active" data-step="0">1 · Level</button>
-        <button class="s" data-step="1">2 · Zoom</button>
-        <button class="s" data-step="2">3 · Crop</button>
-        <button class="s" data-step="3" disabled>4 · Enhance</button>
-        <button class="s" data-step="4" disabled>5 · Use it</button>
+        <button class="s active" data-step="0">1 &middot; Level</button>
+        <button class="s" data-step="1">2 &middot; Zoom</button>
+        <button class="s" data-step="2">3 &middot; Crop</button>
+        <button class="s" data-step="3" disabled title="Coming in P2">4 &middot; Enhance</button>
       </div>
-
       <div class="panel on" data-panel="0">
-        <div class="ctl"><label>Level</label><input id="rot" type="range" min="-180" max="180" value="0"><button class="rz" id="rotZero">0°</button><div class="val" id="rotVal">0°</div></div>
-        <div class="ctl"><button class="lite" style="flex:1">Draw a level line</button></div>
-        <div class="hint">Tap two points along an edge that should be flat — a curb, roofline, or fence.</div>
+        <div class="ctl"><label>Level</label><input id="rot" type="range" min="-180" max="180" value="0"><button class="rz" id="rotZero">0&deg;</button><div class="val" id="rotVal">0&deg;</div></div>
+        <div class="ctl"><button class="lite" id="lineBtn" style="flex:1">Draw a level line</button></div>
+        <div class="hint" id="hint">Tap two points along an edge that should be flat &mdash; a curb, roofline, or fence.</div>
       </div>
       <div class="panel" data-panel="1">
         <div class="ctl"><label>Zoom</label><input id="zoom" type="range" min="17" max="21" step="0.05" value="20"><div class="val" id="zoomVal">20.0</div></div>
-        <div class="ctl"><button class="lite" style="flex:1">Tap-to-center: off</button></div>
-        <div class="hint">Zoom with the slider, wheel, or pinch. Tap-to-center recenters on a point.</div>
+        <div class="ctl"><button class="lite" id="centerBtn" style="flex:1">Tap-to-center: off</button></div>
+        <div class="hint" id="hint2">Zoom with the slider, wheel, or pinch. Tap-to-center recenters on a point.</div>
       </div>
       <div class="panel" data-panel="2">
-        <div class="hint">Tap one corner, then the opposite corner (or drag a box). Then crop.</div>
+        <div class="hint" id="hint3">Tap one corner, then the opposite corner (or drag a box).</div>
       </div>
-
       <div class="nav">
         <button id="capBack" class="lite">Back</button>
-        <div class="seg"><button aria-pressed="true">Satellite</button><button aria-pressed="false">Labels</button></div>
-        <span class="stub">P1 · not wired</span>
+        <div class="seg"><button id="mSat" aria-pressed="true">Satellite</button><button id="mHyb" aria-pressed="false">Labels</button></div>
         <div class="spacer"></div>
         <button id="capNext">Next</button>
+        <button id="capture-btn" style="display:none">Crop</button>
       </div>
     </div>
   </div>
 
-  <!-- STAGE 2 — placements board (existing survey board slots in here) -->
+  <!-- STAGE 2 -->
   <div class="screen" id="board">
-    <div class="mk">Step 2 · Placements</div>
-    <h2>Add icons on the plan</h2>
-    <p>The existing survey board — cameras, FOV cones, rooms — mounts here, now over the chosen background. Single-click to add, double-click to remove, right-click for options.</p>
-    <button id="boardBack" class="lite">← Change background</button>
+    <div id="boardHead">
+      <span class="mk">Step 2 &middot; Placements</span>
+      <span class="sc" id="scaleReadout"></span>
+    </div>
+    <div id="boardCanvasWrap">
+      <img id="boardImg" alt="captured background" style="display:none">
+      <div id="boardEmpty">The survey board mounts here &mdash; cameras, FOV cones, rooms &mdash; over the chosen background.</div>
+    </div>
+    <div id="boardBar">
+      <button id="boardBack" class="lite">&larr; Change background</button>
+      <div class="spacer"></div>
+      <button id="placeBtn">Place icons &rarr;</button>
+    </div>
   </div>
 
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-  var $=function(s){return document.querySelector(s);};
-  function show(id){
-    document.querySelectorAll('.screen').forEach(function(el){el.classList.toggle('on', el.id===id);});
-    // breadcrumb state
-    var onBoard = id==='board';
-    $('#cbBg').style.color = onBoard ? 'var(--faint)' : 'var(--ink)';
-    $('#cbPl').style.color = onBoard ? 'var(--ink)' : 'var(--faint)';
-    $('#cbBg').style.fontWeight = onBoard ? '400':'600';
-    $('#cbPl').style.fontWeight = onBoard ? '600':'400';
-  }
-  // chooser routes
-  document.querySelectorAll('.opt').forEach(function(b){
-    b.addEventListener('click', function(){
-      var go=b.getAttribute('data-go');
-      if(go==='capture') show('capture');
-      else show('board');           // upload / draw jump straight to the board (stubbed)
-    });
+var API_KEY=null, DEMO="2503 Jay Pl, Union, NJ 07083", FT=3.28084;
+var map, marker, geocoder, place=null, viewRot=0, step=0, mapsBooted=false;
+var lastCanvas=null, lastMpp=null;
+
+function $(id){ return document.getElementById(id); }
+function toast(m){ var t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove("show");},2500); }
+function norm(d){ return ((d+180)%360+360)%360-180; }
+function mapMsg(m){ var el=$("mapMsg"); if(!m){el.classList.remove("on");return;} el.textContent=m; el.classList.add("on"); }
+
+/* ---------- screen routing ---------- */
+function show(id){
+  document.querySelectorAll('.screen').forEach(function(el){ el.classList.toggle('on', el.id===id); });
+  var onBoard=id==='board';
+  $("cbBg").style.color=onBoard?'var(--faint)':'var(--ink)'; $("cbBg").style.fontWeight=onBoard?'400':'600';
+  $("cbPl").style.color=onBoard?'var(--ink)':'var(--faint)'; $("cbPl").style.fontWeight=onBoard?'600':'400';
+  if(id==='capture'){ bootMaps(); setTimeout(function(){ if(map) google.maps.event.trigger(map,'resize'); },60); }
+}
+document.querySelectorAll('.opt').forEach(function(b){
+  b.addEventListener('click', function(){
+    var go=b.getAttribute('data-go');
+    if(go==='capture') show('capture');
+    else if(go==='upload'){ $("boardImg").style.display='none'; $("boardEmpty").style.display=''; $("scaleReadout").textContent=''; show('board'); toast('Upload wiring comes with the board merge'); }
+    else { $("boardImg").style.display='none'; $("boardEmpty").style.display=''; $("scaleReadout").textContent=''; show('board'); }
   });
-  // capture wizard tab switching (visual outline only)
-  var step=0;
-  function gotoStep(n){
-    step=n;
-    document.querySelectorAll('.steps .s').forEach(function(el,i){ el.classList.toggle('active',i===n); el.classList.toggle('done',i<n); });
-    document.querySelectorAll('[data-panel]').forEach(function(el){ el.classList.toggle('on', +el.dataset.panel===n); });
-    $('#capBack').textContent = n===0 ? 'Back' : 'Back';
-    $('#capNext').textContent = n<2 ? 'Next' : 'Crop';
-  }
-  document.querySelectorAll('.steps .s').forEach(function(el){
-    el.addEventListener('click', function(){ if(el.disabled) return; gotoStep(+el.dataset.step); });
+});
+
+/* ---------- boot Google Maps with the vault key ---------- */
+function bootMaps(){
+  if(mapsBooted) return; mapsBooted=true;
+  mapMsg("Loading map…");
+  fetch('/api/config').then(function(r){return r.json();}).then(function(cfg){
+    var key=cfg&&cfg.googleMapsApiKey;
+    if(!key){ mapMsg("Add GOOGLE_MAPS_API_KEY in Development ▸ API Keys, then reopen."); mapsBooted=false; return; }
+    API_KEY=key;
+    var s=document.createElement('script');
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=places,geometry&callback=initMap&v=weekly";
+    s.async=true; s.onerror=function(){ mapMsg("Map failed to load — check the key + billing."); };
+    document.head.appendChild(s);
+  }).catch(function(){ mapMsg("Couldn't reach /api/config."); mapsBooted=false; });
+}
+window.gm_authFailure=function(){ mapMsg("Key rejected — enable Maps JS API + billing, and allow this referrer."); };
+
+function initMap(){
+  mapMsg("");
+  map=new google.maps.Map($("map"),{
+    center:{lat:40.6588,lng:-74.2957}, zoom:20, mapTypeId:"satellite", tilt:0,
+    streetViewControl:false, mapTypeControl:false, fullscreenControl:false, rotateControl:false,
+    zoomControl:false, gestureHandling:"greedy", keyboardShortcuts:false, isFractionalZoomEnabled:true
   });
-  $('#capNext').addEventListener('click', function(){ if(step<2) gotoStep(step+1); else show('board'); });
-  $('#capBack').addEventListener('click', function(){ if(step>0) gotoStep(step-1); else show('chooser'); });
-  $('#show').addEventListener('click', function(){ /* P1: runs geocode + satellite */ });
-  $('#rot') && $('#rot').addEventListener('input', function(){ $('#rotVal').textContent=this.value+'°'; });
-  $('#zoom') && $('#zoom').addEventListener('input', function(){ $('#zoomVal').textContent=parseFloat(this.value).toFixed(1); });
-  $('#boardBack').addEventListener('click', function(){ show('chooser'); });
+  geocoder=new google.maps.Geocoder();
+  map.addListener("zoom_changed", function(){ var z=map.getZoom(); $("zoom").value=Math.max(17,Math.min(21,z)); $("zoomVal").textContent=z.toFixed(1); });
+  $("go") && 0;
+  $("show").addEventListener("click", function(){ runSearch($("q").value.trim()); });
+  $("q").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runSearch($("q").value.trim()); }});
+  $("mSat").addEventListener("click", function(){ setType("satellite"); });
+  $("mHyb").addEventListener("click", function(){ setType("hybrid"); });
+  $("rot").addEventListener("input", function(){ setRot(parseInt(this.value,10)); });
+  $("rotZero").addEventListener("click", function(){ setRot(0); });
+  $("zoom").addEventListener("input", function(){ map.setZoom(parseFloat(this.value)); $("zoomVal").textContent=parseFloat(this.value).toFixed(1); });
+  initDraw();
+  runSearch(DEMO);
+}
+window.initMap=initMap;
+
+function setType(t){ map.setMapTypeId(t); $("mSat").setAttribute("aria-pressed",t==="satellite"); $("mHyb").setAttribute("aria-pressed",t==="hybrid"); }
+function setRot(deg){ viewRot=norm(deg); $("rot").value=viewRot; $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
+
+/* ---------- wizard ---------- */
+function gotoStep(n){
+  step=n;
+  document.querySelectorAll(".steps .s").forEach(function(el,i){ el.classList.toggle("active",i===n); el.classList.toggle("done",i<n); });
+  document.querySelectorAll("[data-panel]").forEach(function(el){ el.classList.toggle("on", parseInt(el.dataset.panel,10)===n); });
+  $("capNext").style.display = n<2 ? "" : "none";
+  $("capture-btn").style.display = n===2 ? "" : "none";
+  lineArmed=false; linePts=[]; $("lineBtn").textContent="Draw a level line";
+  centerArmed=false; $("centerBtn").textContent="Tap-to-center: off";
+  if(n===2){ setDrawLayer("crop"); clearRect(); } else setDrawLayer(null);
+}
+$("capNext").addEventListener("click", function(){ if(step<2) gotoStep(step+1); });
+$("capBack").addEventListener("click", function(){ if(step>0) gotoStep(step-1); else show('chooser'); });
+$("capture-btn").addEventListener("click", doCapture);
+document.querySelectorAll(".steps .s").forEach(function(el){ el.addEventListener("click", function(){ if(el.disabled) return; if(!place){ toast("Search an address first"); return; } gotoStep(parseInt(el.dataset.step,10)); }); });
+
+/* ---------- interaction layer (line / center / crop) — ported from reference ---------- */
+var rect=null, drag=null, drawMode="crop", linePts=[], lineArmed=false;
+var activePointers=0, pinch=null, cropStage=0, cornerA=null, movedWhileDown=false, centerArmed=false, pts={};
+
+function initDraw(){
+  var layer=$("draw");
+  layer.addEventListener("wheel", function(e){ e.preventDefault(); var z=map.getZoom()+(e.deltaY<0?0.35:-0.35); map.setZoom(Math.max(1,Math.min(21,z))); }, {passive:false});
+  layer.addEventListener("pointerdown", function(e){
+    activePointers++; var r=layer.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+    if(activePointers===2){ drag=null; pinch={d:pointerDist(),z:map.getZoom()}; if(cropStage!==1) rect=null; paintOverlay(); return; }
+    if(drawMode==="line"){ e.preventDefault(); if(linePts.length>=2) linePts=[]; linePts.push({x:x,y:y}); if(linePts.length===2) applyLevelLine(); paintOverlay(); return; }
+    if(drawMode==="center"){ e.preventDefault(); centerOnScreen(x,y); return; }
+    e.preventDefault(); layer.setPointerCapture(e.pointerId);
+    if(cropStage===0){ cornerA={x:x,y:y}; cropStage=1; rect=null; movedWhileDown=false; $("hint3").textContent="Tap the opposite corner (or drag)."; }
+    else{ finishRect(x,y); }
+    drag={x:x,y:y}; paintOverlay();
+  });
+  layer.addEventListener("pointermove", function(e){
+    trackPointer(e);
+    if(pinch){ var d=pointerDist(); if(d&&pinch.d){ map.setZoom(Math.max(1,Math.min(21,pinch.z+Math.log2(d/pinch.d)))); } return; }
+    if(drawMode!=="crop") return; e.preventDefault();
+    var r=layer.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+    if(cropStage===1&&cornerA){ if(drag&&(Math.abs(x-drag.x)>3||Math.abs(y-drag.y)>3)) movedWhileDown=true;
+      rect={x:Math.min(cornerA.x,x),y:Math.min(cornerA.y,y),w:Math.abs(x-cornerA.x),h:Math.abs(y-cornerA.y)}; paintOverlay(); }
+  });
+  layer.addEventListener("pointerup", endPointer); layer.addEventListener("pointercancel", endPointer);
+  function endPointer(e){ if(e&&pts[e.pointerId]) delete pts[e.pointerId]; activePointers=Math.max(0,activePointers-1); if(activePointers<2) pinch=null;
+    if(drawMode!=="crop") return; if(activePointers>0) return;
+    if(cropStage===1&&movedWhileDown&&rect&&rect.w>=16&&rect.h>=16) settleRect(); drag=null; }
+  window.addEventListener("resize", paintOverlay);
+  $("lineBtn").addEventListener("click", function(){ lineArmed=!lineArmed; linePts=[]; setDrawLayer(lineArmed?"line":null);
+    $("lineBtn").textContent=lineArmed?"Tap two points… (cancel)":"Draw a level line";
+    $("hint").textContent=lineArmed?"Tap the two ends of an edge that should be flat.":"Tap two points along an edge that should be flat — a curb, roofline, or fence."; paintOverlay(); });
+  $("centerBtn").addEventListener("click", function(){ centerArmed=!centerArmed; setDrawLayer(centerArmed?"center":null);
+    $("centerBtn").textContent=centerArmed?"Tap-to-center: on":"Tap-to-center: off";
+    $("hint2").textContent=centerArmed?"Tap the property to recenter.":"Zoom with the slider, wheel, or pinch."; });
+}
+function finishRect(x,y){ rect={x:Math.min(cornerA.x,x),y:Math.min(cornerA.y,y),w:Math.abs(x-cornerA.x),h:Math.abs(y-cornerA.y)}; settleRect(); }
+function settleRect(){ cropStage=0; cornerA=null; movedWhileDown=false;
+  if(rect&&(rect.w<16||rect.h<16)){ rect=null; $("hint3").textContent="Too small — tap two corners, or drag."; }
+  else if(rect){ $("hint3").textContent=Math.round(rect.w)+" × "+Math.round(rect.h)+" px — tap Crop, or tap again to redo."; } paintOverlay(); }
+function trackPointer(e){ pts[e.pointerId]={x:e.clientX,y:e.clientY}; }
+function pointerDist(){ var ids=Object.keys(pts); if(ids.length<2) return 0; var a=pts[ids[0]],b=pts[ids[1]]; return Math.hypot(a.x-b.x,a.y-b.y); }
+function setDrawLayer(mode){ pts={}; activePointers=0; pinch=null; if(mode){ drawMode=mode; $("draw").classList.add("on"); } else { $("draw").classList.remove("on"); drawMode="crop"; } paintOverlay(); }
+function applyLevelLine(){ var a=linePts[0],b=linePts[1]; var angleOfLine=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
+  setRot(Math.round(norm(viewRot-angleOfLine))); lineArmed=false; linePts=[]; setDrawLayer(null); $("lineBtn").textContent="Draw a level line";
+  $("hint").textContent="Leveled. Adjust with the slider if needed, or draw again."; }
+function centerOnScreen(x,y){ var stage=$("draw"), sw=stage.clientWidth, sh=stage.clientHeight;
+  var dx=x-sw/2, dy=y-sh/2, t=-viewRot*Math.PI/180, cs=Math.cos(t), sn=Math.sin(t); map.panBy(dx*cs-dy*sn, dx*sn+dy*cs); toast("Centered"); }
+function clearRect(){ rect=null; cropStage=0; cornerA=null; movedWhileDown=false; paintOverlay(); $("hint3").textContent="Tap one corner, then the opposite corner (or drag)."; }
+
+function paintOverlay(){
+  var cv=$("drawCv"), box=$("draw"), dpr=window.devicePixelRatio||1, W=box.clientWidth, H=box.clientHeight; if(!W||!H) return;
+  cv.width=W*dpr; cv.height=H*dpr; var g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  if(drawMode==="line"){ linePts.forEach(function(p){ g.beginPath(); g.arc(p.x,p.y,6,0,Math.PI*2); g.fillStyle="#fff"; g.fill(); g.lineWidth=2; g.strokeStyle="rgba(16,17,18,.6)"; g.stroke(); });
+    if(linePts.length===2){ g.beginPath(); g.moveTo(linePts[0].x,linePts[0].y); g.lineTo(linePts[1].x,linePts[1].y); g.strokeStyle="#fff"; g.lineWidth=3; g.stroke(); } return; }
+  if(drawMode==="crop"&&cropStage===1&&cornerA&&!rect){ g.beginPath(); g.arc(cornerA.x,cornerA.y,7,0,Math.PI*2); g.fillStyle="#fff"; g.fill(); g.lineWidth=2; g.strokeStyle="rgba(16,17,18,.6)"; g.stroke(); return; }
+  if(!rect) return;
+  g.fillStyle="rgba(16,17,18,.34)"; g.beginPath(); g.rect(0,0,W,H); g.rect(rect.x,rect.y,rect.w,rect.h); g.fill("evenodd");
+  g.strokeStyle="#fff"; g.lineWidth=2; g.strokeRect(rect.x,rect.y,rect.w,rect.h);
+  [[rect.x,rect.y],[rect.x+rect.w,rect.y],[rect.x+rect.w,rect.y+rect.h],[rect.x,rect.y+rect.h]].forEach(function(c){ g.beginPath(); g.arc(c[0],c[1],4,0,Math.PI*2); g.fillStyle="#fff"; g.fill(); });
+}
+
+/* ---------- capture: stitch tiles, rotate, cut the rect (verbatim math from the handoff) ---------- */
+var MAX_TILES=16, tileCache={}, capturing=false, MAX_EDGE=2600;
+function loadTile(url){ if(tileCache[url]) return Promise.resolve(tileCache[url]); var k=Object.keys(tileCache); if(k.length>120) delete tileCache[k[0]];
+  return new Promise(function(res,rej){ var n=0; (function go(){ var im=new Image(); im.crossOrigin="anonymous"; im.onload=function(){tileCache[url]=im;res(im);}; im.onerror=function(){(++n<2)?setTimeout(go,350):rej(0);}; im.src=url+(n?"&r="+n:""); })(); }); }
+function wx(ll){ return (ll.lng()+180)/360*256; }
+function wy(ll){ var s=Math.sin(ll.lat()*Math.PI/180); return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*256; }
+function unproject(x,y){ var lng=x/256*360-180,n=Math.PI-2*Math.PI*y/256; return new google.maps.LatLng(180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))),lng); }
+
+function doCapture(){
+  if(!place||capturing) return; if(!rect){ toast("Draw a rectangle first"); return; }
+  capturing=true; $("capture-btn").disabled=true; $("capture-btn").textContent="Working…";
+  var stage=$("draw"), sw=stage.clientWidth, sh=stage.clientHeight;
+  var c=map.getCenter(), zView=map.getZoom(), mppView=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zView);
+  var stageDiagM=Math.sqrt(sw*sw+sh*sh)*mppView, need=stageDiagM*1.06;
+  var zt=Math.min(21,Math.round(zView)), mppTile, sf, span, cols, rows, box;
+  while(true){ mppTile=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zt); sf=Math.pow(2,zt)*2;
+    var halfWU=(need/mppTile)/sf/2, cxW=wx(c), cyW=wy(c); box={x0:cxW-halfWU,x1:cxW+halfWU,y0:cyW-halfWU,y1:cyW+halfWU,cxW:cxW,cyW:cyW};
+    span=640/Math.pow(2,zt); cols=Math.ceil((box.x1-box.x0)/span); rows=Math.ceil((box.y1-box.y0)/span);
+    if(cols*rows<=MAX_TILES||zt<=15) break; zt--; }
+  var oX=box.x0, oY=box.y0, W=Math.ceil((box.x1-box.x0)*sf), H=Math.ceil((box.y1-box.y0)*sf), mppMosaic=mppTile/2;
+  toast("Fetching "+(cols*rows)+" tiles…");
+  var mosaic=document.createElement("canvas"); mosaic.width=W; mosaic.height=H; var mg=mosaic.getContext("2d"), jobs=[], missed=0;
+  for(var r=0;r<rows;r++) for(var cc=0;cc<cols;cc++){ (function(col,row){
+    var cxw=oX+(col+0.5)*span, cyw=oY+(row+0.5)*span, ll=unproject(cxw,cyw);
+    var url="https://maps.googleapis.com/maps/api/staticmap?center="+ll.lat().toFixed(7)+","+ll.lng().toFixed(7)+"&zoom="+zt+"&size=640x640&scale=2&format=png&maptype="+(map.getMapTypeId()==="hybrid"?"hybrid":"satellite")+"&key="+API_KEY;
+    var dx=Math.round((cxw-span/2-oX)*sf), dy=Math.round((cyw-span/2-oY)*sf), dsz=Math.round(span*sf);
+    jobs.push(loadTile(url).then(function(im){ mg.drawImage(im,dx,dy,dsz,dsz); }).catch(function(){ missed++; }));
+  })(cc,r); }
+  Promise.all(jobs).then(function(){
+    capturing=false; $("capture-btn").disabled=false; $("capture-btn").textContent="Crop";
+    if(missed>=cols*rows){ toast("Tiles failed — check Maps Static API + billing"); return; }
+    var scale=mppView/mppMosaic;
+    var stageCv=document.createElement("canvas"); stageCv.width=Math.round(sw*scale); stageCv.height=Math.round(sh*scale);
+    var sg=stageCv.getContext("2d"), mcx=(box.cxW-oX)*sf, mcy=(box.cyW-oY)*sf;
+    sg.translate(stageCv.width/2, stageCv.height/2); sg.rotate(viewRot*Math.PI/180); sg.drawImage(mosaic,-mcx,-mcy);
+    var cutCv=document.createElement("canvas"); cutCv.width=Math.max(4,Math.round(rect.w*scale)); cutCv.height=Math.max(4,Math.round(rect.h*scale));
+    cutCv.getContext("2d").drawImage(stageCv, Math.round(rect.x*scale), Math.round(rect.y*scale), Math.round(rect.w*scale), Math.round(rect.h*scale), 0,0, cutCv.width, cutCv.height);
+    finishCapture(cutCv, mppMosaic, c);
+  });
+}
+function finishCapture(src, mpp, center){
+  var longest=Math.max(src.width,src.height);
+  if(longest>MAX_EDGE){ var s=MAX_EDGE/longest, ds=document.createElement("canvas"); ds.width=Math.round(src.width*s); ds.height=Math.round(src.height*s);
+    var dg=ds.getContext("2d"); dg.imageSmoothingQuality="high"; dg.drawImage(src,0,0,ds.width,ds.height); src=ds; mpp=mpp/s; }
+  var w=src.width, h=src.height, cv=document.createElement("canvas"); cv.width=w; cv.height=h; var g=cv.getContext("2d"); g.drawImage(src,0,0);
+  // scale bar (bottom-left)
+  var fpp=mpp*FT, steps=[5,10,20,25,50,75,100,150,200,300,500], want=w*0.26*fpp, bar=steps[steps.length-1];
+  for(var i=0;i<steps.length;i++){ if(steps[i]>=want){ bar=steps[i]; break; } }
+  var bpx=bar/fpp, bx=20, by=h-22;
+  g.strokeStyle="rgba(16,17,18,.5)"; g.lineWidth=7; g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+bpx,by); g.stroke();
+  g.strokeStyle="#fff"; g.lineWidth=3; g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+bpx,by); g.moveTo(bx,by-6); g.lineTo(bx,by+6); g.moveTo(bx+bpx,by-6); g.lineTo(bx+bpx,by+6); g.stroke();
+  g.font="600 19px "+"-apple-system,Helvetica,Arial,sans-serif"; g.fillStyle="#fff"; g.fillText(bar+" ft", bx, by-12);
+  lastCanvas=cv; lastMpp=mpp;
+  var acrossFt=Math.round(fpp*w);
+  $("boardImg").src=cv.toDataURL("image/jpeg",0.92); $("boardImg").style.display=""; $("boardEmpty").style.display="none";
+  $("scaleReadout").innerHTML="<b>scale</b> "+acrossFt+" ft wide &middot; "+fpp.toFixed(3)+" ft/px";
+  show('board');
+  toast("Captured — leveled &amp; to scale");
+}
+
+/* ---------- search ---------- */
+function runSearch(qStr){ if(!qStr){ toast("Type an address"); return; } if(!geocoder) return; $("show").disabled=true;
+  geocoder.geocode({address:qStr}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length){ toast("Not found — "+st); return; }
+    var r=res[0], loc=r.geometry.location; landPlace(r.formatted_address, loc.lat(), loc.lng()); }); }
+function landPlace(address,lat,lng){ var loc=new google.maps.LatLng(lat,lng); place={address:address,lat:lat,lng:lng};
+  setRot(0); map.setCenter(loc); map.setZoom(20); if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc}); $("q").value=address; gotoStep(0); }
+
+/* ---------- board handoff ---------- */
+$("boardBack").addEventListener("click", function(){ show('chooser'); });
+$("placeBtn").addEventListener("click", function(){ toast("Next: the survey board mounts here (P1c merge)"); });
 </script>
 </body>
 </html>
