@@ -463,8 +463,10 @@
   var AREACOLOR={building:'#C9A96E',room:'#2C3347',bathroom:'#7FB0C0',stairs:'#6CA0F0',entrance:'#9AA3B2',parking:'#8A93A8',counter:'#B0966E',fridge:'#6FB3CF',aisle:'#9FB0C8',dining:'#E0A36E',booth:'#D98E5A',register:'#4A90D9'};
   function hexA(h,a){var n=parseInt(h.slice(1),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
   function centroid(pts){var x=0,y=0,i;for(i=0;i<pts.length;i++){x+=pts[i].x;y+=pts[i].y;}return {x:x/pts.length,y:y/pts.length};}
-  var show={cctv:true,sound:true,toast:true,alarm:true,misc:true,range:true,builder:true};
-  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey';
+  // range = the FOV/coverage cones. OFF by default so the plan stays clean —
+  // cones appear when you HOVER a camera (per-item) or flip the "FOV" toggle (all).
+  var show={cctv:true,sound:true,toast:true,alarm:true,misc:true,range:false,builder:true};
+  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey',hovId=null;
   var lineW=3,lineColor='#0B0F1A',fillColor='#C9A96E',fillOpacity=0,drawLevel='top',drawGroup=null;
   var floors=[{name:'Floor Plan 1',B:B,markers:markers,uid:uid}],curFloor=0,pendingReset=false,floorMenuOpen=false;
   function freshFloor(name){return{name:name,B:{bg:'blank',img:null,imgSource:null,imgRatio:1,imgRotate:0,ftWide:0,rooms:[],strokes:[],notes:[],sat:null,zoom:{s:1,tx:0,ty:0}},markers:[],uid:1};}
@@ -619,7 +621,9 @@
   var hist=[];
   function pushHist(arr,item){hist.push({arr:arr,item:item});}
   function undoLast(){if(!hist.length){showToast('Nothing to undo');return;}var h=hist.pop();var i=h.arr.indexOf(h.item);if(i>=0)h.arr.splice(i,1);redrawStrokes();render();}
-  function hlMarker(id,on){var p=board.querySelector('.pin[data-mid="'+id+'"]');if(p)p.classList.toggle('hl',on);var r=list.querySelector('.item[data-mid="'+id+'"]');if(r)r.classList.toggle('hl',on);}
+  function hlMarker(id,on){var p=board.querySelector('.pin[data-mid="'+id+'"]');if(p)p.classList.toggle('hl',on);var r=list.querySelector('.item[data-mid="'+id+'"]');if(r)r.classList.toggle('hl',on);
+    // Hovering a camera reveals just its FOV cone (when the global FOV toggle is off).
+    hovId=on?id:(hovId===id?null:hovId);if(!show.range)redrawStrokes();}
   function placeMarker(x,y){if(!canPlaceKind(activeType)){blockPlace(activeType);return;}var m={id:uid++,mode:placeMode,kind:activeType,x:+x.toFixed(2),y:+y.toFixed(2)};markers.push(m);pushHist(markers,m);out.classList.remove('show');render();}
   function removeMarker(id){markers=markers.filter(function(m){return m.id!==id;});out.classList.remove('show');render();}
 
@@ -669,7 +673,7 @@
         arrowHead(ax,ay,ang+Math.PI,11,'#2C3347');arrowHead(bx,by,ang,11,'#2C3347');
         var tkx=Math.cos(ang+Math.PI/2),tky=Math.sin(ang+Math.PI/2),tl=9;dctx.strokeStyle='#2C3347';dctx.lineWidth=2;dctx.beginPath();dctx.moveTo(ax-tkx*tl,ay-tky*tl);dctx.lineTo(ax+tkx*tl,ay+tky*tl);dctx.moveTo(bx-tkx*tl,by-tky*tl);dctx.lineTo(bx+tkx*tl,by+tky*tl);dctx.stroke();
         var ff=segFeet(a,b),lab=st.feet?feetLabel(st.feet):(ff!=null?fmtFeet(ff):(Math.round(segUnits(a,b)/W*100)+'%'));var mmx=(ax+bx)/2,mmy=(ay+by)/2;dctx.save();dctx.font='bold 13px -apple-system,Helvetica,Arial';dctx.textAlign='center';dctx.textBaseline='middle';var lw=dctx.measureText(lab).width;dctx.fillStyle='rgba(255,255,255,.92)';dctx.fillRect(mmx-lw/2-5,mmy-10,lw+10,20);dctx.fillStyle='#2C3347';dctx.fillText(lab,mmx,mmy);dctx.restore();}});
-    markers.forEach(function(m){if(!m.arrow||!show.range)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=m.arrow.len/100*W;
+    markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&m.id!==hovId)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=m.arrow.len/100*W;
       if(CONE[m.kind]){var half=(m.fov||defFov(m.kind))/2*Math.PI/180,p1=rad-half,p2=rad+half;dctx.save();dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(p1)*L,sy+Math.sin(p1)*L);dctx.arc(sx,sy,L,p1,p2);dctx.closePath();
         var g=dctx.createRadialGradient(sx,sy,0,sx,sy,L);g.addColorStop(0,hexA(col,.40));g.addColorStop(1,hexA(col,.08));dctx.fillStyle=g;dctx.fill();dctx.strokeStyle=hexA(col,.55);dctx.lineWidth=1.5;dctx.stroke();
         dctx.strokeStyle=col;dctx.lineWidth=2;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(rad)*L,sy+Math.sin(rad)*L);dctx.stroke();dctx.restore();}
@@ -966,7 +970,7 @@
         allBtn.addEventListener('click',function(e){e.stopPropagation();var v=!allOn;SHOWKEYS.forEach(function(k){show[k]=v;});buildEquipMenu();paintBoard();});
         shHd.appendChild(allBtn);equipMenuDiv.appendChild(shHd);
         var chipWrap=document.createElement('div');chipWrap.style.cssText='display:flex;flex-wrap:wrap;gap:5px;padding:3px 10px 8px;';
-        [['cctv','Cams'],['sound','Sound'],['toast','Toast'],['alarm','Alarms'],['misc','Misc'],['range','Angles'],['builder','Areas']].forEach(function(p){
+        [['cctv','Cams'],['sound','Sound'],['toast','Toast'],['alarm','Alarms'],['misc','Misc'],['range','FOV'],['builder','Areas']].forEach(function(p){
           var c=document.createElement('button');c.className='tbtn'+(show[p[0]]?' active':'');c.style.cssText='padding:3px 9px;font-size:11px;opacity:'+(show[p[0]]?'1':'.45')+';';c.textContent=p[1];
           c.addEventListener('pointerdown',function(e){e.stopPropagation();});
           c.addEventListener('click',function(e){e.stopPropagation();show[p[0]]=!show[p[0]];c.classList.toggle('active',show[p[0]]);c.style.opacity=show[p[0]]?'1':'.45';paintBoard();});
