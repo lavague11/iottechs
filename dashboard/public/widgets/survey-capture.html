@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Site Survey — Capture</title>
+<style>
+  /* ---- reference minimal system: white ground, ink, hairlines, black pills ---- */
+  :root{
+    color-scheme:light;
+    --ink:#101112; --body:#2c3036; --muted:#6b7076; --faint:#9aa0a6;
+    --line:#e3e5e8; --hair:#eef0f2; --soft:#f6f7f8; --panel:#fbfbfc; --bg:#ffffff;
+    --accent:#1a73e8;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{font:15px/1.5 var(--sans);color:var(--ink);background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+
+  /* header */
+  header{padding:12px 16px 11px;border-bottom:1px solid var(--line);flex:none;display:flex;align-items:center;gap:12px}
+  .brand{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+  .crumbs{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;color:var(--faint)}
+  .crumbs b{color:var(--ink);font-weight:600}
+  .crumbs .sep{color:var(--faint)}
+
+  button{font:inherit;font-weight:500;cursor:pointer;border-radius:var(--r);border:1px solid var(--ink);
+    background:var(--ink);color:#fff;padding:10px 16px}
+  button:active{opacity:.7}
+  button:disabled{opacity:.4;cursor:default}
+  .lite{border-color:var(--line);background:#fff;color:var(--ink);padding:9px 13px;font-size:13px;font-weight:500}
+  .lite:hover{border-color:var(--muted)}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .stage{flex:1 1 auto;position:relative;min-height:0;background:var(--soft);overflow:hidden;display:flex}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+
+  /* ---------- STAGE 1a: background chooser ---------- */
+  #chooser{align-items:center;justify-content:center;background:var(--bg);padding:24px}
+  .choose-in{width:100%;max-width:440px}
+  .choose-in .eyebrow{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:center}
+  .choose-in h1{font-weight:660;font-size:22px;letter-spacing:-.01em;text-align:center;margin:9px 0 4px}
+  .choose-in .sub{text-align:center;color:var(--muted);font-size:14px;margin:0 0 24px}
+  .opts{display:flex;flex-direction:column;gap:10px}
+  .opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:#fff;color:var(--ink);
+    border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;font-weight:500}
+  .opt:hover{border-color:var(--ink)}
+  .opt .ic{width:34px;height:34px;flex:none;border-radius:8px;background:var(--soft);border:1px solid var(--line);
+    display:grid;place-items:center;color:var(--ink)}
+  .opt .tt{flex:1}
+  .opt .tt .t{display:block;font-size:15px;font-weight:600}
+  .opt .tt .d{display:block;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:2px}
+  .opt .arw{color:var(--faint);font-size:17px}
+  .opt.primary{border-color:var(--ink)}
+  .opt.primary .ic{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* ---------- STAGE 1b: satellite capture (address path) ---------- */
+  #capHead{padding:11px 16px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;gap:8px;background:#fff}
+  #capHead input{flex:1;min-width:0;padding:11px 13px;font-size:16px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
+  #capHead input:focus{border-color:var(--ink)}
+  #map{flex:1 1 auto;position:relative;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-size:13px;text-align:center}
+  #map .ph{max-width:260px}
+  #map .ph .k{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+
+  /* wizard bar */
+  #wiz{flex:none;border-top:1px solid var(--line);background:#fff}
+  .steps{display:flex;padding:8px 12px 0}
+  .steps .s{flex:1;text-align:center;font-size:11.5px;color:var(--muted);padding-bottom:9px;
+    border-bottom:2px solid var(--line);letter-spacing:.01em;cursor:pointer;background:none;border-radius:0;border-top:0;border-left:0;border-right:0;font-weight:500}
+  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--ink)}
+  .steps .s.done{color:var(--ink)}
+  .steps .s:disabled{color:var(--faint);cursor:default}
+  .panel{padding:12px 16px;display:none;flex-direction:column;gap:10px}
+  .panel.on{display:flex}
+  .ctl{display:flex;align-items:center;gap:10px}
+  .ctl label{font-size:12px;color:var(--muted);width:48px;flex:none}
+  .ctl input[type=range]{flex:1;accent-color:var(--ink)}
+  .ctl .val{font-size:13px;color:var(--ink);min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
+  .ctl .rz{border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 11px;font-size:13px;border-radius:var(--r)}
+  .hint{font-size:12px;color:var(--muted);min-height:15px}
+  .nav{display:flex;gap:8px;align-items:center;padding:2px 16px 12px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;flex:none}
+  .seg button{border:0;border-radius:0;background:#fff;color:var(--muted);padding:8px 12px;font-size:13px}
+  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .stub{font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+    border:1px dashed var(--line);border-radius:6px;padding:4px 7px;align-self:center}
+
+  /* ---------- STAGE 2: placements (board handoff placeholder) ---------- */
+  #board{align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);text-align:center;padding:24px}
+  #board .mk{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  #board h2{font-size:17px;font-weight:660;color:var(--ink);margin:2px 0 0}
+  #board p{max-width:320px;font-size:13.5px;margin:0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Site Survey</div>
+  <div class="crumbs">
+    <b id="cbBg">Background</b><span class="sep">→</span><span id="cbPl">Placements</span>
+  </div>
+</header>
+
+<div class="stage">
+
+  <!-- STAGE 1a — choose a background -->
+  <div class="screen on" id="chooser">
+    <div class="choose-in">
+      <div class="eyebrow">Step 1 · Background</div>
+      <h1>Start the floor plan</h1>
+      <p class="sub">Pick how the canvas begins. You can change it later.</p>
+      <div class="opts">
+        <button class="opt primary" data-go="capture">
+          <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></span>
+          <span class="tt"><span class="t">Search address</span><span class="d">Pull satellite imagery, level &amp; crop the property</span></span>
+          <span class="arw">›</span>
+        </button>
+        <button class="opt" data-go="upload">
+          <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+          <span class="tt"><span class="t">Upload image</span><span class="d">A photo, floor plan, or existing drawing</span></span>
+          <span class="arw">›</span>
+        </button>
+        <button class="opt" data-go="draw">
+          <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+          <span class="tt"><span class="t">Draw</span><span class="d">Start on a blank canvas</span></span>
+          <span class="arw">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STAGE 1b — satellite capture wizard (address path) -->
+  <div class="screen" id="capture">
+    <div id="capHead">
+      <input id="q" type="text" placeholder="Address or business" autocomplete="off" enterkeyhint="search">
+      <button id="show">Show</button>
+    </div>
+
+    <div id="map">
+      <div class="ph"><div class="k">Live map</div>Google satellite mounts here in P1.<br>Level · Zoom · Crop run on it.</div>
+    </div>
+
+    <div id="wiz">
+      <div class="steps">
+        <button class="s active" data-step="0">1 · Level</button>
+        <button class="s" data-step="1">2 · Zoom</button>
+        <button class="s" data-step="2">3 · Crop</button>
+        <button class="s" data-step="3" disabled>4 · Enhance</button>
+        <button class="s" data-step="4" disabled>5 · Use it</button>
+      </div>
+
+      <div class="panel on" data-panel="0">
+        <div class="ctl"><label>Level</label><input id="rot" type="range" min="-180" max="180" value="0"><button class="rz" id="rotZero">0°</button><div class="val" id="rotVal">0°</div></div>
+        <div class="ctl"><button class="lite" style="flex:1">Draw a level line</button></div>
+        <div class="hint">Tap two points along an edge that should be flat — a curb, roofline, or fence.</div>
+      </div>
+      <div class="panel" data-panel="1">
+        <div class="ctl"><label>Zoom</label><input id="zoom" type="range" min="17" max="21" step="0.05" value="20"><div class="val" id="zoomVal">20.0</div></div>
+        <div class="ctl"><button class="lite" style="flex:1">Tap-to-center: off</button></div>
+        <div class="hint">Zoom with the slider, wheel, or pinch. Tap-to-center recenters on a point.</div>
+      </div>
+      <div class="panel" data-panel="2">
+        <div class="hint">Tap one corner, then the opposite corner (or drag a box). Then crop.</div>
+      </div>
+
+      <div class="nav">
+        <button id="capBack" class="lite">Back</button>
+        <div class="seg"><button aria-pressed="true">Satellite</button><button aria-pressed="false">Labels</button></div>
+        <span class="stub">P1 · not wired</span>
+        <div class="spacer"></div>
+        <button id="capNext">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STAGE 2 — placements board (existing survey board slots in here) -->
+  <div class="screen" id="board">
+    <div class="mk">Step 2 · Placements</div>
+    <h2>Add icons on the plan</h2>
+    <p>The existing survey board — cameras, FOV cones, rooms — mounts here, now over the chosen background. Single-click to add, double-click to remove, right-click for options.</p>
+    <button id="boardBack" class="lite">← Change background</button>
+  </div>
+
+</div>
+
+<script>
+  var $=function(s){return document.querySelector(s);};
+  function show(id){
+    document.querySelectorAll('.screen').forEach(function(el){el.classList.toggle('on', el.id===id);});
+    // breadcrumb state
+    var onBoard = id==='board';
+    $('#cbBg').style.color = onBoard ? 'var(--faint)' : 'var(--ink)';
+    $('#cbPl').style.color = onBoard ? 'var(--ink)' : 'var(--faint)';
+    $('#cbBg').style.fontWeight = onBoard ? '400':'600';
+    $('#cbPl').style.fontWeight = onBoard ? '600':'400';
+  }
+  // chooser routes
+  document.querySelectorAll('.opt').forEach(function(b){
+    b.addEventListener('click', function(){
+      var go=b.getAttribute('data-go');
+      if(go==='capture') show('capture');
+      else show('board');           // upload / draw jump straight to the board (stubbed)
+    });
+  });
+  // capture wizard tab switching (visual outline only)
+  var step=0;
+  function gotoStep(n){
+    step=n;
+    document.querySelectorAll('.steps .s').forEach(function(el,i){ el.classList.toggle('active',i===n); el.classList.toggle('done',i<n); });
+    document.querySelectorAll('[data-panel]').forEach(function(el){ el.classList.toggle('on', +el.dataset.panel===n); });
+    $('#capBack').textContent = n===0 ? 'Back' : 'Back';
+    $('#capNext').textContent = n<2 ? 'Next' : 'Crop';
+  }
+  document.querySelectorAll('.steps .s').forEach(function(el){
+    el.addEventListener('click', function(){ if(el.disabled) return; gotoStep(+el.dataset.step); });
+  });
+  $('#capNext').addEventListener('click', function(){ if(step<2) gotoStep(step+1); else show('board'); });
+  $('#capBack').addEventListener('click', function(){ if(step>0) gotoStep(step-1); else show('chooser'); });
+  $('#show').addEventListener('click', function(){ /* P1: runs geocode + satellite */ });
+  $('#rot') && $('#rot').addEventListener('input', function(){ $('#rotVal').textContent=this.value+'°'; });
+  $('#zoom') && $('#zoom').addEventListener('input', function(){ $('#zoomVal').textContent=parseFloat(this.value).toFixed(1); });
+  $('#boardBack').addEventListener('click', function(){ show('chooser'); });
+</script>
+</body>
+</html>
