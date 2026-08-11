@@ -35,4 +35,15 @@ for (const n of files) {
 console.log("Fetching ArcFace weights…");
 await dl("https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/w600k_mbf.onnx", path.join(OUT_MODELS, "w600k_mbf.onnx"));
 
+// onnxruntime-web runtime — the WASM engine that runs ArcFace. Self-hosted so the
+// first scan doesn't wait on a CDN for ~13MB of runtime. ort.min.js loads the
+// SIMD-threaded wasm + its glue .mjs from ort.env.wasm.wasmPaths (= /models/ort/).
+console.log("Fetching onnxruntime-web runtime…");
+const ORT_VER = "1.19.2";
+const OUT_ORT = path.join(OUT_MODELS, "ort");
+const ORT_FILES = ["ort.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"];
+for (const f of ORT_FILES) {
+  await dl(`https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VER}/dist/${f}`, path.join(OUT_ORT, f));
+}
+
 console.log("Done. Restart the dev server — the engine now loads /models first.");

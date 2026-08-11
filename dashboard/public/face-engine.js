@@ -32,9 +32,13 @@
   // WASM runtime — verified reliable. (WebGPU was tried but hard-fails instead of
   // gracefully falling back on devices without it, and we run only one inference
   // per scan, so WASM's speed is plenty — the win is load time, not inference.)
+  // Self-hosted first (same-origin, no CDN wait on ~10MB of wasm), then CDNs.
+  // Each entry pairs the loader script with the dir its wasm/glue lives in —
+  // ort.env.wasm.wasmPaths must match whichever script actually loaded.
   const ORT_SOURCES = [
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.19.2/ort.min.js",
+    { js: "/models/ort/ort.min.js", wasm: "/models/ort/" },
+    { js: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js", wasm: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/" },
+    { js: "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.19.2/ort.min.js", wasm: "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.19.2/" },
   ];
   // Self-hosted first, then our same-origin proxy (GitHub releases have no CORS
   // header, so a direct browser fetch is blocked — the proxy is what makes real
@@ -73,10 +77,10 @@
       if (!faceReady) throw new Error("face models failed to load");
       // ArcFace (best accuracy); falls back to the face-api descriptor if it can't load
       try {
-        let ortOk = false;
-        for (const s of ORT_SOURCES) { try { await loadScript(s); if (window.ort) { ortOk = true; break; } } catch (e) {} }
-        if (ortOk) {
-          try { ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/"; ort.env.wasm.numThreads = 1; ort.env.wasm.simd = true; } catch (e) {}
+        let ortWasm = null;
+        for (const s of ORT_SOURCES) { try { await loadScript(s.js); if (window.ort) { ortWasm = s.wasm; break; } } catch (e) {} }
+        if (window.ort && ortWasm) {
+          try { ort.env.wasm.wasmPaths = ortWasm; ort.env.wasm.numThreads = 1; ort.env.wasm.simd = true; } catch (e) {}
           for (const url of ARC_MODELS) {
             try {
               const r = await fetch(url); if (!r.ok) continue;
