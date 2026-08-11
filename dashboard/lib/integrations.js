@@ -42,4 +42,25 @@ export const INTEGRATIONS = [
     docs: "https://console.cloud.google.com/google/maps-apis/credentials",
     clientExposed: false,
   },
+  {
+    key: "AWS_REGION",
+    name: "AWS Region (Face Liveness)",
+    powers: "Region for AWS Rekognition Face Liveness, e.g. us-east-1",
+    docs: "https://docs.aws.amazon.com/rekognition/latest/dg/face-liveness.html",
+    clientExposed: false,
+  },
+  {
+    key: "AWS_ACCESS_KEY_ID",
+    name: "AWS Access Key ID (Face Liveness)",
+    powers: "Certified anti-spoof liveness on Face ID login (Rekognition)",
+    docs: "https://console.aws.amazon.com/iam/home#/security_credentials",
+    clientExposed: false,
+  },
+  {
+    key: "AWS_SECRET_ACCESS_KEY",
+    name: "AWS Secret Access Key (Face Liveness)",
+    powers: "Paired secret for the AWS access key above — server-side only",
+    docs: "https://console.aws.amazon.com/iam/home#/security_credentials",
+    clientExposed: false,
+  },
 ];

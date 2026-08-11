@@ -43,6 +43,7 @@ const NAV_GROUPS = [
     { key: "face-verify", label: "Face Verify",      href: "/face-verify" },
     { key: "id-scan",     label: "ID Scanner",       href: "/id-scan" },
     { key: "tools",       label: "Document Tools",   href: "/tools" },
+    { key: "liveness",    label: "Liveness Test",    href: "/liveness" },
   ]},
   { key: "mgmt-grp", label: "Management", items: [
     { key: "finances",  label: "Finances",  href: "/finances" },

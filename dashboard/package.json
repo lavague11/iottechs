@@ -12,7 +12,12 @@
     "start:local": "next start -p 3100"
   },
   "dependencies": {
+    "@aws-amplify/ui-react": "^6.15.5",
+    "@aws-amplify/ui-react-liveness": "^3.6.8",
+    "@aws-sdk/client-rekognition": "^3.1107.0",
+    "@aws-sdk/client-sts": "^3.1107.0",
     "@zxing/library": "^0.23.0",
+    "aws-amplify": "^6.20.0",
     "jspdf": "^4.2.1",
     "next": "^16.2.9",
     "react": "19.0.0",
