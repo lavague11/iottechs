@@ -211,8 +211,10 @@
   .pin .pnum{position:absolute;top:-7px;right:-9px;min-width:16px;height:16px;padding:0 3px;background:#0B0F1A;border-radius:9px;
     font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1px solid;color:#fff;}
   .pin[data-kind="cam"] .pnum{color:var(--gold-bright);border-color:var(--gold);}
-  /* Co-located cameras merge to one icon: each camera's badge floats out toward its FOV. */
-  .pin[data-kind="cam"] .pnum{transform:translate(var(--bx,0),var(--by,0));transition:transform .15s ease;box-shadow:0 1px 5px rgba(0,0,0,.45);}
+  /* Camera badge ORBITS THE ICON CENTER — anchored at the icon's middle, then pushed out
+     toward the camera's facing side so it rides the icon's perimeter (and shares the same
+     pivot as the FOV cone origin). Unaimed default sits up-right, like the old corner. */
+  .pin[data-kind="cam"] .pnum{top:50%;left:50%;right:auto;transform:translate(-50%,-50%) translate(var(--bx,13px),var(--by,-13px));box-shadow:0 1px 5px rgba(0,0,0,.45);}
   .pin.stack-sub{background:transparent!important;border-color:transparent!important;box-shadow:none!important;pointer-events:none;}
   .pin.stack-sub>svg{visibility:hidden;}
   .pin.stack-sub .pnum{pointer-events:auto;cursor:pointer;}
