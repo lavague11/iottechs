@@ -214,7 +214,8 @@
   /* Camera badge ORBITS THE ICON CENTER — anchored at the icon's middle, then pushed out
      toward the camera's facing side so it rides the icon's perimeter (and shares the same
      pivot as the FOV cone origin). Unaimed default sits up-right, like the old corner. */
-  .pin[data-kind="cam"] .pnum{top:50%;left:50%;right:auto;transform:translate(-50%,-50%) translate(var(--bx,13px),var(--by,-13px));box-shadow:0 1px 5px rgba(0,0,0,.45);}
+  .pin[data-kind="cam"] .pnum{top:50%;left:50%;right:auto;transform:translate(-50%,-50%) translate(var(--bx,13px),var(--by,-13px));box-shadow:0 1px 5px rgba(0,0,0,.45);
+    height:calc(var(--pin-size,30px)*0.53);min-width:calc(var(--pin-size,30px)*0.53);padding:0 calc(var(--pin-size,30px)*0.1);border-radius:calc(var(--pin-size,30px)*0.3);font-size:calc(var(--pin-size,30px)*0.31);}
   .pin.stack-sub{background:transparent!important;border-color:transparent!important;box-shadow:none!important;pointer-events:none;}
   .pin.stack-sub>svg{visibility:hidden;}
   .pin.stack-sub .pnum{pointer-events:auto;cursor:pointer;}
@@ -486,8 +487,9 @@
     markers.forEach(function(mm){if(mm.id===id||mm.kind!=='cam')return;var bx=mm.x/100*bw,by=mm.y/100*bh;if(Math.hypot(bx-ax,by-ay)<thr)group.push(mm.id);});
     return group;}
   // Label/cone orbit radius (board px): sit the badge OUT ON the icon's white border ring,
-  // not over the gold face. Icon radius = 15*pinScale, so ride just past it. Scales with pin size.
-  function badgeR(){return 15*pinScale+9;}
+  // not over the gold face. Icon radius = 15*pinScale + the badge's own half-height, all
+  // scaled by pinScale so the label rides the border AND the cone starts from it at any size.
+  function badgeR(){return 24*pinScale;}
   var lineW=3,lineColor='#0B0F1A',fillColor='#C9A96E',fillOpacity=0,drawLevel='top',drawGroup=null;
   var floors=[{name:'Floor Plan 1',B:B,markers:markers,uid:uid}],curFloor=0,pendingReset=false,floorMenuOpen=false;
   function freshFloor(name){return{name:name,B:{bg:'blank',img:null,imgSource:null,imgRatio:1,imgRotate:0,ftWide:0,rooms:[],strokes:[],notes:[],sat:null,zoom:{s:1,tx:0,ty:0}},markers:[],uid:1};}
@@ -1012,7 +1014,7 @@
         var szrow=document.createElement('div');szrow.style.cssText='padding:4px 12px 10px;';
         var sr=document.createElement('input');sr.type='range';sr.min='0.6';sr.max='2.4';sr.step='0.1';sr.value=pinScale;sr.style.cssText='width:100%;accent-color:var(--gold);cursor:pointer;';
         sr.addEventListener('pointerdown',function(e){e.stopPropagation();});sr.addEventListener('click',function(e){e.stopPropagation();});
-        sr.addEventListener('input',function(){pinScale=+sr.value;board.style.setProperty('--pin-size',(30*pinScale)+'px');autoSave();});
+        sr.addEventListener('input',function(){pinScale=+sr.value;board.style.setProperty('--pin-size',(30*pinScale)+'px');render();autoSave();}); // render() re-lays the IC labels + cone origins to the new icon size
         szrow.addEventListener('click',function(e){e.stopPropagation();});szrow.appendChild(sr);equipMenuDiv.appendChild(szrow);
         // ---- View options merged into Add menu (compact) ----
         var vsep=document.createElement('div');vsep.style.cssText='border-top:1px solid var(--slate-line);margin:5px 0 2px;';equipMenuDiv.appendChild(vsep);
