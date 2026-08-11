@@ -208,7 +208,7 @@
       const nose = lm.getNose(); const tip = nose[nose.length - 4] || nose[3];
       const mid = { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
       const yaw = ((tip.x - mid.x) / iod) * 90;
-      if (Math.abs(yaw) > 15) turned = true;
+      if (Math.abs(yaw) > 10) turned = true;
 
       // Passive vitality: real eyes drift/blink; a photo's are frozen. NOT yaw
       // (a moved photo changes yaw), so this is what a moved photo can't fake.
@@ -218,7 +218,7 @@
       if (sawFace < 4) cue("Hold still");
       else if (!turned) cue("Turn your head slowly");
       else if (!alive) cue("Keep looking at the camera");
-      else if (Math.abs(yaw) > 12) cue("Look at the camera");
+      else if (Math.abs(yaw) > 18) cue("Look at the camera");
       else {
         const emb = await embed(video);   // live + frontal → capture
         if (emb) return { ok: true, embedding: emb };
