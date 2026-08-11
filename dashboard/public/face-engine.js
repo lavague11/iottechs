@@ -209,22 +209,22 @@
       const mid = { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
       const yaw = ((tip.x - mid.x) / iod) * 90;
 
-      // Passive vitality: real eyes drift/blink; a photo's are frozen. No gesture
-      // needed — this is what keeps the scan fast AND stops a still photo. ~8
-      // frames of a live eye signal is enough; a frozen photo reads ~0.
+      // Passive vitality: real eyes drift/blink; a photo's are frozen. Prefer to
+      // capture on a live-eye signal, but HARD-CAP the wait so a still subject
+      // never stalls the scan — after a few frontal frames we capture regardless.
       const vitality = std(ears);
-      const alive = ears.length >= 8 && vitality > 0.004;
+      const alive = ears.length >= 4 && vitality > 0.0035;
+      const frontal = Math.abs(yaw) <= 20;
 
-      if (sawFace < 3) cue("Hold still");
-      else if (!alive) cue("Look at the camera");
-      else if (Math.abs(yaw) > 20) cue("Face forward");
-      else {
-        const emb = await embed(video);   // live + frontal → capture
+      if (sawFace < 2) cue("Hold still");
+      else if (!frontal) cue("Face forward");
+      else if (alive || sawFace >= 6) {   // live signal, or give up waiting → capture (~<0.8s)
+        const emb = await embed(video);
         if (emb) return { ok: true, embedding: emb };
-      }
-      await sleep(40);
+      } else cue("Look at the camera");
+      await sleep(35);
     }
-    return { ok: false, reason: ears.length < 8 ? "no_turn" : "no_life" };
+    return { ok: false, reason: "no_face" };
   }
 
   window.IOTFace = { ready, embed, cosine, scanLive, status: () => ({ ready: faceReady, engine: arcReady ? "arcface" : faceReady ? "faceapi" : "loading" }) };
