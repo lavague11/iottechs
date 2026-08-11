@@ -43,6 +43,13 @@ export const INTEGRATIONS = [
     clientExposed: false,
   },
   {
+    key: "OPENAI_API_KEY",
+    name: "OpenAI (Satellite Enhance)",
+    powers: "AI cleanup of the cropped satellite in the site survey (server-side only)",
+    docs: "https://platform.openai.com/api-keys",
+    clientExposed: false,
+  },
+  {
     key: "AWS_REGION",
     name: "AWS Region (Face Liveness)",
     powers: "Region for AWS Rekognition Face Liveness, e.g. us-east-1",

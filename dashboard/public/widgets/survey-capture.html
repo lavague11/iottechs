@@ -144,13 +144,14 @@
       <div id="mapRot"><div id="map"></div></div>
       <div id="mapMsg"></div>
       <div id="draw"><canvas id="drawCv"></canvas></div>
+      <img id="capResult" alt="capture" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--soft);z-index:7">
     </div>
     <div id="wiz">
       <div class="steps">
         <button class="s active" data-step="0">1 &middot; Level</button>
         <button class="s" data-step="1">2 &middot; Zoom</button>
         <button class="s" data-step="2">3 &middot; Crop</button>
-        <button class="s" data-step="3" disabled title="Coming in P2">4 &middot; Enhance</button>
+        <button class="s" data-step="3" disabled>4 &middot; Enhance</button>
       </div>
       <div class="panel on" data-panel="0">
         <div class="ctl"><label>Level</label><input id="rot" type="range" min="-180" max="180" value="0"><button class="rz" id="rotZero">0&deg;</button><div class="val" id="rotVal">0&deg;</div></div>
@@ -165,12 +166,18 @@
       <div class="panel" data-panel="2">
         <div class="hint" id="hint3">Tap one corner, then the opposite corner (or drag a box).</div>
       </div>
+      <div class="panel" data-panel="3">
+        <div class="hint" id="hint4">Optional AI cleanup — tidies the imagery while keeping the framing exactly as cropped. Measurements come from the crop, not this.</div>
+      </div>
       <div class="nav">
         <button id="capBack" class="lite">Back</button>
-        <div class="seg"><button id="mSat" aria-pressed="true">Satellite</button><button id="mHyb" aria-pressed="false">Labels</button></div>
+        <div class="seg" id="typeSeg"><button id="mSat" aria-pressed="true">Satellite</button><button id="mHyb" aria-pressed="false">Labels</button></div>
         <div class="spacer"></div>
         <button id="capNext">Next</button>
         <button id="capture-btn" style="display:none">Crop</button>
+        <button id="redoBtn" class="lite" style="display:none">Redo</button>
+        <button id="enhanceBtn" style="display:none">Enhance</button>
+        <button id="useBtn" style="display:none">Use it &rarr;</button>
       </div>
     </div>
   </div>
@@ -269,8 +276,14 @@ function gotoStep(n){
   step=n;
   document.querySelectorAll(".steps .s").forEach(function(el,i){ el.classList.toggle("active",i===n); el.classList.toggle("done",i<n); });
   document.querySelectorAll("[data-panel]").forEach(function(el){ el.classList.toggle("on", parseInt(el.dataset.panel,10)===n); });
+  var enh = n===3;
   $("capNext").style.display = n<2 ? "" : "none";
   $("capture-btn").style.display = n===2 ? "" : "none";
+  $("enhanceBtn").style.display = enh ? "" : "none";
+  $("useBtn").style.display = enh ? "" : "none";
+  $("redoBtn").style.display = (enh && capEnhanced) ? "" : "none";
+  $("typeSeg").style.display = enh ? "none" : "";
+  $("capResult").style.display = enh ? "" : "none";   // the captured image sits over the map on the Enhance step
   lineArmed=false; linePts=[]; $("lineBtn").textContent="Draw a level line";
   centerArmed=false; $("centerBtn").textContent="Tap-to-center: off";
   if(n===2){ setDrawLayer("crop"); clearRect(); } else setDrawLayer(null);
@@ -395,13 +408,51 @@ function finishCapture(src, mpp, center){
   g.strokeStyle="rgba(16,17,18,.5)"; g.lineWidth=7; g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+bpx,by); g.stroke();
   g.strokeStyle="#fff"; g.lineWidth=3; g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+bpx,by); g.moveTo(bx,by-6); g.lineTo(bx,by+6); g.moveTo(bx+bpx,by-6); g.lineTo(bx+bpx,by+6); g.stroke();
   g.font="600 19px "+"-apple-system,Helvetica,Arial,sans-serif"; g.fillStyle="#fff"; g.fillText(bar+" ft", bx, by-12);
-  lastCanvas=cv; lastMpp=mpp;
-  var acrossFt=Math.round(fpp*w);
-  $("boardImg").src=cv.toDataURL("image/jpeg",0.92); $("boardImg").style.display=""; $("boardEmpty").style.display="none";
-  $("scaleReadout").innerHTML="<b>scale</b> "+acrossFt+" ft wide &middot; "+fpp.toFixed(3)+" ft/px";
-  show('board');
-  toast("Captured — leveled &amp; to scale");
+  capBase=cv; capEnhanced=null; lastMpp=mpp; capFtPerPx=fpp; capAcrossFt=Math.round(fpp*w);
+  $("capResult").src=cv.toDataURL("image/jpeg",0.92);
+  var s3=document.querySelector('.steps .s[data-step="3"]'); if(s3) s3.disabled=false;
+  gotoStep(3);
+  toast("Captured — leveled & to scale");
 }
+
+/* ---------- enhance (P2, server-proxied) ---------- */
+var capBase=null, capEnhanced=null, capFtPerPx=0, capAcrossFt=0, enhancing=false;
+function enhance(){
+  if(!capBase||enhancing) return; enhancing=true;
+  var btn=$("enhanceBtn"); btn.disabled=true; btn.textContent="Enhancing…";
+  var ow=capBase.width, oh=capBase.height, side=Math.max(ow,oh);
+  var offX=Math.round((side-ow)/2), offY=Math.round((side-oh)/2);
+  var sq=document.createElement("canvas"); sq.width=side; sq.height=side; var sg=sq.getContext("2d");
+  // stretch edge pixels into the pad so the AI blends it, not black bars
+  sg.drawImage(capBase,0,0,ow,1,0,0,side,offY+2);
+  sg.drawImage(capBase,0,oh-1,ow,1,0,offY+oh-2,side,side-(offY+oh-2));
+  sg.drawImage(capBase,0,0,1,oh,0,0,offX+2,side);
+  sg.drawImage(capBase,ow-1,0,1,oh,offX+ow-2,0,side-(offX+ow-2),side);
+  sg.drawImage(capBase,offX,offY);
+  sq.toBlob(function(blob){
+    var fd=new FormData(); fd.append("image",blob,"c.png");
+    fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(d.error) throw new Error(d.error);
+      var ai=new Image(); ai.onload=function(){
+        var R=ai.naturalWidth/side, cv=document.createElement("canvas"); cv.width=ow; cv.height=oh;
+        cv.getContext("2d").drawImage(ai, offX*R, offY*R, ow*R, oh*R, 0,0, ow, oh);
+        capEnhanced=cv; $("capResult").src=cv.toDataURL("image/jpeg",0.92);
+        $("redoBtn").style.display=""; btn.textContent="Enhance"; btn.disabled=false; enhancing=false; toast("Enhanced");
+      };
+      ai.src="data:image/png;base64,"+d.b64;
+    }).catch(function(e){ btn.textContent="Enhance"; btn.disabled=false; enhancing=false; toast(String(e.message||"Enhance failed")); });
+  },"image/png");
+}
+function redoEnhance(){ capEnhanced=null; if(capBase) $("capResult").src=capBase.toDataURL("image/jpeg",0.92); $("redoBtn").style.display="none"; }
+function toPlacements(){
+  var out=capEnhanced||capBase; if(!out) return;
+  $("boardImg").src=out.toDataURL("image/jpeg",0.92); $("boardImg").style.display=""; $("boardEmpty").style.display="none";
+  $("scaleReadout").innerHTML="<b>scale</b> "+capAcrossFt+" ft wide &middot; "+capFtPerPx.toFixed(3)+" ft/px";
+  show('board');
+}
+$("enhanceBtn").addEventListener("click", enhance);
+$("redoBtn").addEventListener("click", redoEnhance);
+$("useBtn").addEventListener("click", toPlacements);
 
 /* ---------- search ---------- */
 function runSearch(qStr){ if(!qStr){ toast("Type an address"); return; } if(!geocoder) return; $("show").disabled=true;
