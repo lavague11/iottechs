@@ -729,8 +729,11 @@
     angleEl.textContent=text;angleEl.classList.toggle('snap',!!snap);}
   function showAngle(e,dev){showBadge(e,dev===0?'0\u00b0 \u00b7 level':(dev===90?'90\u00b0 \u00b7 plumb':dev+'\u00b0'),dev===0||dev===90);}
   // drag from any placed device to draw its pointer/view (window-level so a re-render can't drop a new item)
-  function startPinArrow(e,m,p){if(e.button&&e.button!==0)return;e.stopPropagation();e.preventDefault();pinDragging=m;var br=board.getBoundingClientRect();var cx=br.left+m.x/100*br.width,cy=br.top+m.y/100*br.height;var movedA=false,maxDist=0;
-    function mv(ev){var dx=ev.clientX-cx,dy=ev.clientY-cy,dist=Math.hypot(dx,dy);if(dist>maxDist)maxDist=dist;if(maxDist<12)return;movedA=true;
+  function startPinArrow(e,m,p){if(e.button&&e.button!==0)return;e.stopPropagation();e.preventDefault();pinDragging=m;var br=board.getBoundingClientRect();var cx=br.left+m.x/100*br.width,cy=br.top+m.y/100*br.height;var movedA=false,maxDist=0,holdFired=false;
+    // Long-press (touch or mouse) opens the camera dropdown menu — same as right-click.
+    var holdT=setTimeout(function(){if(movedA||m.kind!=='cam')return;holdFired=true;
+      var g=coLocatedGroup(m.id).map(function(id){return markers.find(function(x){return x.id===id;});}).filter(Boolean).filter(function(mm){return mm.kind==='cam';});openCamMenu(g,e.clientX,e.clientY);},500);
+    function mv(ev){var dx=ev.clientX-cx,dy=ev.clientY-cy,dist=Math.hypot(dx,dy);if(dist>maxDist)maxDist=dist;if(maxDist<12)return;clearTimeout(holdT);movedA=true;
       if(dist<10){if(m.arrow){m.arrow=null;redrawStrokes();hideAngle();}return;}
       var deg=Math.atan2(dy,dx)*180/Math.PI,near=Math.round(deg/45)*45,snap=false;if(Math.abs(deg-near)<=7){deg=near;snap=true;}
       var lenPct=dist/br.width*100;m.arrow={angle:+deg.toFixed(1),len:+lenPct.toFixed(2)};
@@ -738,12 +741,12 @@
       drawIds=coLocatedGroup(m.id);redrawStrokes();
       if(m.kind==='spk'||m.kind==='tap')showBadge(ev,'\u2299 r '+(B.ftWide?fmtFeet(lenPct/100*B.ftWide):Math.round(lenPct)+'%'),false);
       else showBadge(ev,'\u2199 '+(((Math.round(deg)%360)+360)%360)+'\u00b0',snap);}
-    function up(){window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);hideAngle();lastPinDrag=Date.now();pinDragging=null;
-      // A no-drag tap: on an AIMED camera, pin/unpin its FOV (touch-friendly — no hover needed);
-      // on an un-aimed one, remove it (unchanged).
-      if(!movedA){if(m.arrow){var _grp=coLocatedGroup(m.id),_was=selIds.indexOf(m.id)>=0;selIds=_was?[]:_grp;
+    function up(){clearTimeout(holdT);window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);hideAngle();lastPinDrag=Date.now();pinDragging=null;
+      if(holdFired){return;}   // long-press already opened the menu — no tap action
+      // A no-drag tap selects the camera(s) here and shows their FOV. Delete is via
+      // double-click or the long-press/right-click menu now (never on a plain tap).
+      if(!movedA){var _grp=coLocatedGroup(m.id),_was=selIds.indexOf(m.id)>=0;selIds=_was?[]:_grp;
           if(!_was)startFovAnim(_grp.filter(function(gid){var mm=markers.find(function(x){return x.id===gid;});return mm&&mm.arrow;}));else redrawStrokes();}
-        else removeMarker(m.id);}
       else{if(drawTimer)clearTimeout(drawTimer);drawTimer=setTimeout(function(){drawIds=[];drawTimer=null;redrawStrokes();},1800);} // keep the just-drawn cone(s) up ~1.8s, then hide
       render();}
     window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);}
@@ -847,9 +850,9 @@
         }
       }}}
   function hideAngle(){if(angleEl){angleEl.remove();angleEl=null;}}
-  // Placement is now a deliberate DOUBLE-click/tap (single clicks no longer drop pins,
-  // so panning/aiming never adds one by accident). Cross-platform via pointer timing.
-  var lastPlaceTap=0,lastPlacePt=null,camCtx=null;
+  // Single click on empty board adds a camera; double-click a camera removes it;
+  // right-click / long-press opens its dropdown menu (Delete lives there).
+  var camCtx=null;
   board.addEventListener('pointerdown',function(e){
     if(e.button&&e.button!==0)return;
     if(cropping)return;if(e.target.closest('.pin')||e.target.closest('.room')||e.target.closest('.spot'))return;
@@ -885,35 +888,34 @@
     if(tool==='areapoly'){if(!moved)startArea(e);panStart=null;moved=false;return;}
     if(tool==='room'){if(roomEl){var rr=roomEl.getBoundingClientRect(),br=board.getBoundingClientRect();var w=rr.width/br.width*100,h=rr.height/br.height*100,x=(rr.left-br.left)/br.width*100,y=(rr.top-br.top)/br.height*100;roomEl.remove();roomEl=null;roomStart=null;if(w>3&&h>3)addRoom(x,y,w,h);}moved=false;return;}
     if(tool==='note'){if(!moved){var pn=pct(e);addNote(pn.x,pn.y);}panStart=null;moved=false;return;}
-    if(!moved){
-      // Double-click/tap to place: a single click does nothing; a second within ~320ms
-      // at the same spot drops the marker. Rapid double-click = add a camera.
-      var now=Date.now();
-      if(now-lastPlaceTap<320&&lastPlacePt&&Math.hypot(e.clientX-lastPlacePt.x,e.clientY-lastPlacePt.y)<24){
-        var p=pct(e);placeMarker(p.x,p.y);lastPlaceTap=0;lastPlacePt=null;
-      } else { lastPlaceTap=now;lastPlacePt={x:e.clientX,y:e.clientY}; }
-    }
+    if(!moved){var p=pct(e);placeMarker(p.x,p.y);}   // single click on empty board = add a camera
     panStart=null;moved=false;
   });
-  // Right-click a camera (or a stacked cluster) to delete it. Multiple co-located → chooser.
+  // ---- camera dropdown menu (right-click OR long-press); Delete lives inside it ----
   function closeCamCtx(){if(camCtx){camCtx.remove();camCtx=null;document.removeEventListener('pointerdown',closeCamCtx,true);}}
-  board.addEventListener('contextmenu',function(e){
-    if(__RO||cropping)return;
-    e.preventDefault();closeCamCtx();
-    var bw=board.clientWidth||1,bh=board.clientHeight||1,p=pct(e),px=p.x/100*bw,py=p.y/100*bh,thr=22;
-    var near;var pinEl=e.target.closest('.pin[data-mid]');
-    if(pinEl){near=coLocatedGroup(+pinEl.getAttribute('data-mid')).map(function(id){return markers.find(function(x){return x.id===id;});}).filter(Boolean).filter(function(m){return m.kind==='cam';});}
-    else{near=markers.filter(function(m){return m.kind==='cam'&&Math.hypot(m.x/100*bw-px,m.y/100*bh-py)<thr;});}
-    if(!near.length)return;
-    if(near.length===1){uiModal({title:'Delete '+near[0]._tag+'?',okText:'Delete',onOk:function(){removeMarker(near[0].id);}});return;}
-    // multiple co-located → ask which one
+  function camsAt(pinEl,px,py){var bw=board.clientWidth||1,bh=board.clientHeight||1,thr=22;
+    if(pinEl){return coLocatedGroup(+pinEl.getAttribute('data-mid')).map(function(id){return markers.find(function(x){return x.id===id;});}).filter(Boolean).filter(function(m){return m.kind==='cam';});}
+    return markers.filter(function(m){return m.kind==='cam'&&Math.hypot(m.x/100*bw-px,m.y/100*bh-py)<thr;});}
+  function openCamMenu(cams,cx,cy){
+    closeCamCtx();if(!cams||!cams.length)return;
     var menu=document.createElement('div');menu.className='cam-ctx';
-    menu.style.cssText='position:fixed;z-index:6000;left:'+e.clientX+'px;top:'+e.clientY+'px;background:var(--panel);border:1px solid var(--slate-line);border-radius:10px;padding:6px;box-shadow:0 10px 40px rgba(0,0,0,.4);min-width:150px;';
-    var hd=document.createElement('div');hd.textContent='Delete which camera?';hd.style.cssText='font-size:11px;color:var(--muted);padding:4px 8px 6px;font-weight:700;';menu.appendChild(hd);
-    near.forEach(function(m){var r=document.createElement('div');r.textContent='Delete '+m._tag;r.style.cssText='padding:7px 10px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--danger);font-weight:600;';r.addEventListener('mouseenter',function(){r.style.background='var(--panel-2)';});r.addEventListener('mouseleave',function(){r.style.background='none';});r.addEventListener('pointerdown',function(ev){ev.stopPropagation();closeCamCtx();removeMarker(m.id);});menu.appendChild(r);});
-    var all=document.createElement('div');all.textContent='Delete all '+near.length;all.style.cssText='padding:7px 10px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--danger);font-weight:700;border-top:1px solid var(--slate-line);margin-top:4px;';all.addEventListener('pointerdown',function(ev){ev.stopPropagation();var ids=near.map(function(m){return m.id;});closeCamCtx();markers=markers.filter(function(x){return ids.indexOf(x.id)<0;});render();});menu.appendChild(all);
+    menu.style.cssText='position:fixed;z-index:6000;left:'+cx+'px;top:'+cy+'px;background:var(--panel);border:1px solid var(--slate-line);border-radius:10px;padding:6px;box-shadow:0 10px 40px rgba(0,0,0,.4);min-width:158px;max-width:90vw;';
+    var hd=document.createElement('div');hd.textContent=cams.length>1?('Cameras here ('+cams.length+')'):cams[0]._tag;hd.style.cssText='font-size:11px;color:var(--muted);padding:4px 8px 6px;font-weight:700;';menu.appendChild(hd);
+    function row(label,color,fn){var r=document.createElement('div');r.textContent=label;r.style.cssText='padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:'+(color||'var(--cream)')+';';r.addEventListener('mouseenter',function(){r.style.background='var(--panel-2)';});r.addEventListener('mouseleave',function(){r.style.background='none';});r.addEventListener('pointerdown',function(ev){ev.stopPropagation();closeCamCtx();fn();});menu.appendChild(r);}
+    cams.forEach(function(m){row('Delete '+m._tag,'var(--danger)',function(){removeMarker(m.id);});});
+    if(cams.length>1)row('Delete all '+cams.length,'var(--danger)',function(){var ids=cams.map(function(x){return x.id;});markers=markers.filter(function(x){return ids.indexOf(x.id)<0;});render();});
     document.body.appendChild(menu);camCtx=menu;
     setTimeout(function(){document.addEventListener('pointerdown',closeCamCtx,true);},0);
+  }
+  board.addEventListener('contextmenu',function(e){
+    if(__RO||cropping)return;e.preventDefault();
+    var p=pct(e),bw=board.clientWidth||1,bh=board.clientHeight||1;
+    openCamMenu(camsAt(e.target.closest('.pin[data-mid]'),p.x/100*bw,p.y/100*bh),e.clientX,e.clientY);
+  });
+  board.addEventListener('dblclick',function(e){   // double-click a camera = remove it
+    if(__RO||cropping)return;var pinEl=e.target.closest('.pin[data-mid]');if(!pinEl)return;
+    e.preventDefault();e.stopPropagation();var m=markers.find(function(x){return x.id===+pinEl.getAttribute('data-mid');});
+    if(m&&m.kind==='cam')removeMarker(m.id);
   });
 
   // ---------- crop ----------
