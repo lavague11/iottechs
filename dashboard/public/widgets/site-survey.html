@@ -817,7 +817,10 @@
             var ang=(c.m&&c.m.arrow)?(c.m.arrow.angle*Math.PI/180):((k/n)*2*Math.PI);var R=18;
             c.el.style.setProperty('--bx',(Math.cos(ang)*R).toFixed(1)+'px');
             c.el.style.setProperty('--by',(Math.sin(ang)*R).toFixed(1)+'px');
-            c.el.style.zIndex=(k===0?9:8);});
+            // Each .pin is its own stacking context, so a higher z-index pin paints its
+            // WHOLE opaque circle over a lower one's badge — even one floated outside its
+            // bounds. The main icon (k===0) must sit BELOW every sub badge, not above.
+            c.el.style.zIndex=(k===0?7:(20+k));});
         } else {
           var R=13+(cluster.length-2)*4;cluster.forEach(function(c,k){var ang=(k/cluster.length)*2*Math.PI-Math.PI/2;c.el.style.marginLeft=(Math.cos(ang)*R)+'px';c.el.style.marginTop=(Math.sin(ang)*R)+'px';c.el.style.zIndex=8;});
         }
