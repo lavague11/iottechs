@@ -211,6 +211,11 @@
   .pin .pnum{position:absolute;top:-7px;right:-9px;min-width:16px;height:16px;padding:0 3px;background:#0B0F1A;border-radius:9px;
     font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1px solid;color:#fff;}
   .pin[data-kind="cam"] .pnum{color:var(--gold-bright);border-color:var(--gold);}
+  /* Co-located cameras merge to one icon: each camera's badge floats out toward its FOV. */
+  .pin.stacked .pnum{transform:translate(var(--bx,0),var(--by,0));transition:transform .18s ease;box-shadow:0 1px 5px rgba(0,0,0,.45);}
+  .pin.stack-sub{background:transparent!important;border-color:transparent!important;box-shadow:none!important;pointer-events:none;}
+  .pin.stack-sub>svg{visibility:hidden;}
+  .pin.stack-sub .pnum{pointer-events:auto;cursor:pointer;}
   .pin[data-kind="nvr"] .pnum{color:var(--nvr);border-color:var(--nvr);}
   .pin[data-kind="isp"] .pnum{color:var(--isp);border-color:var(--isp);}
 
@@ -686,7 +691,10 @@
     markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&m.id!==hovId&&m.id!==selId&&m.id!==drawId)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=Math.max(1,m.arrow.len/100*W*easeOutCubic(fovProg(m.id)));
       if(CONE[m.kind]){var half=(m.fov||defFov(m.kind))/2*Math.PI/180,p1=rad-half,p2=rad+half;dctx.save();dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(p1)*L,sy+Math.sin(p1)*L);dctx.arc(sx,sy,L,p1,p2);dctx.closePath();
         var g=dctx.createRadialGradient(sx,sy,0,sx,sy,L);g.addColorStop(0,hexA(col,.40));g.addColorStop(1,hexA(col,.08));dctx.fillStyle=g;dctx.fill();dctx.strokeStyle=hexA(col,.55);dctx.lineWidth=1.5;dctx.stroke();
-        dctx.strokeStyle=col;dctx.lineWidth=2;var ax=sx+Math.cos(rad)*L,ay=sy+Math.sin(rad)*L;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(ax,ay);dctx.stroke();arrowHead(ax,ay,rad,13,col);dctx.restore();}
+        dctx.strokeStyle=col;dctx.lineWidth=2;var ax=sx+Math.cos(rad)*L,ay=sy+Math.sin(rad)*L;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(ax,ay);dctx.stroke();arrowHead(ax,ay,rad,13,col);
+        // Tag pill at the cone tip so co-located cameras (e.g. IC1 aimed right, IC2 aimed left on the same corner) are each identifiable.
+        if(m._tag){dctx.font='bold 10px -apple-system,Helvetica,Arial';dctx.textAlign='center';dctx.textBaseline='middle';var lx=sx+Math.cos(rad)*(L+15),ly=sy+Math.sin(rad)*(L+15),pw=dctx.measureText(m._tag).width+8,ph=15,rx=lx-pw/2,ry=ly-ph/2,rr=5;dctx.beginPath();dctx.moveTo(rx+rr,ry);dctx.arcTo(rx+pw,ry,rx+pw,ry+ph,rr);dctx.arcTo(rx+pw,ry+ph,rx,ry+ph,rr);dctx.arcTo(rx,ry+ph,rx,ry,rr);dctx.arcTo(rx,ry,rx+pw,ry,rr);dctx.closePath();dctx.fillStyle=col;dctx.fill();dctx.fillStyle='#fff';dctx.fillText(m._tag,lx,ly);}
+        dctx.restore();}
       else if(m.kind==='spk'||m.kind==='tap'){dctx.save();dctx.globalAlpha=0.15;dctx.fillStyle=col;dctx.beginPath();dctx.arc(sx,sy,L,0,2*Math.PI);dctx.fill();dctx.globalAlpha=1;dctx.strokeStyle=col;dctx.lineWidth=2;dctx.setLineDash([7,5]);dctx.beginPath();dctx.arc(sx,sy,L,0,2*Math.PI);dctx.stroke();dctx.setLineDash([]);dctx.restore();}
       else{var ex=sx+Math.cos(rad)*L,ey=sy+Math.sin(rad)*L;dctx.strokeStyle=col;dctx.lineWidth=3;dctx.lineCap='round';dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(ex,ey);dctx.stroke();arrowHead(ex,ey,rad,18,col);}});}
 
@@ -798,7 +806,22 @@
   function fanOverlaps(pinEls){var bw=board.clientWidth||1,bh=board.clientHeight||1,thr=22,used=[];
     for(var i=0;i<pinEls.length;i++){if(used[i])continue;var cluster=[pinEls[i]];used[i]=true;var ax=pinEls[i].x/100*bw,ay=pinEls[i].y/100*bh;
       for(var j=i+1;j<pinEls.length;j++){if(used[j])continue;var bx=pinEls[j].x/100*bw,by=pinEls[j].y/100*bh;if(Math.hypot(bx-ax,by-ay)<thr){cluster.push(pinEls[j]);used[j]=true;}}
-      if(cluster.length>1){var R=13+(cluster.length-2)*4;cluster.forEach(function(c,k){var ang=(k/cluster.length)*2*Math.PI-Math.PI/2;c.el.style.marginLeft=(Math.cos(ang)*R)+'px';c.el.style.marginTop=(Math.sin(ang)*R)+'px';c.el.style.zIndex=8;});}}}
+      if(cluster.length>1){
+        var allCam=cluster.every(function(c){return c.m&&c.m.kind==='cam';});
+        if(allCam){
+          // Co-located cameras (e.g. two on one corner): show ONE icon, and float each
+          // camera's IC badge out toward the side its FOV points (opposite sides if not
+          // yet aimed). Reads as "one spot, IC1 aims right, IC2 aims left".
+          var n=cluster.length;
+          cluster.forEach(function(c,k){c.el.classList.add('stacked');if(k>0)c.el.classList.add('stack-sub');
+            var ang=(c.m&&c.m.arrow)?(c.m.arrow.angle*Math.PI/180):((k/n)*2*Math.PI);var R=18;
+            c.el.style.setProperty('--bx',(Math.cos(ang)*R).toFixed(1)+'px');
+            c.el.style.setProperty('--by',(Math.sin(ang)*R).toFixed(1)+'px');
+            c.el.style.zIndex=(k===0?9:8);});
+        } else {
+          var R=13+(cluster.length-2)*4;cluster.forEach(function(c,k){var ang=(k/cluster.length)*2*Math.PI-Math.PI/2;c.el.style.marginLeft=(Math.cos(ang)*R)+'px';c.el.style.marginTop=(Math.sin(ang)*R)+'px';c.el.style.zIndex=8;});
+        }
+      }}}
   function hideAngle(){if(angleEl){angleEl.remove();angleEl=null;}}
   board.addEventListener('pointerdown',function(e){
     if(e.button&&e.button!==0)return;
@@ -1188,7 +1211,7 @@
       p.addEventListener('pointerdown',function(e){startPinArrow(e,m,p);});
       }
       p.addEventListener('mouseenter',function(){hlMarker(m.id,true);});p.addEventListener('mouseleave',function(){hlMarker(m.id,false);});
-      board.appendChild(p);pinEls.push({el:p,x:m.x,y:m.y});});
+      board.appendChild(p);pinEls.push({el:p,x:m.x,y:m.y,m:m});});
 
     // note pins
     B.notes.forEach(function(nt,idx){var tag='N'+(idx+1);
