@@ -212,7 +212,7 @@
     font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1px solid;color:#fff;}
   .pin[data-kind="cam"] .pnum{color:var(--gold-bright);border-color:var(--gold);}
   /* Co-located cameras merge to one icon: each camera's badge floats out toward its FOV. */
-  .pin.stacked .pnum{transform:translate(var(--bx,0),var(--by,0));transition:transform .18s ease;box-shadow:0 1px 5px rgba(0,0,0,.45);}
+  .pin[data-kind="cam"] .pnum{transform:translate(var(--bx,0),var(--by,0));transition:transform .15s ease;box-shadow:0 1px 5px rgba(0,0,0,.45);}
   .pin.stack-sub{background:transparent!important;border-color:transparent!important;box-shadow:none!important;pointer-events:none;}
   .pin.stack-sub>svg{visibility:hidden;}
   .pin.stack-sub .pnum{pointer-events:auto;cursor:pointer;}
@@ -471,11 +471,18 @@
   // range = the FOV/coverage cones. OFF by default so the plan stays clean —
   // cones appear when you HOVER a camera (per-item) or flip the "FOV" toggle (all).
   var show={cctv:true,sound:true,toast:true,alarm:true,misc:true,range:false,builder:true};
-  // hovId = camera under the cursor (desktop hover); selId = camera tapped to pin
-  // its FOV open (touch/tablets, where there is no hover). Either reveals a cone.
-  // drawId = a camera whose cone is shown transiently because it's being aimed right
-  // now (or was, in the last ~2s) — so you can SEE the FOV while drawing it.
-  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey',hovId=null,selId=null,drawId=null,drawTimer=null;
+  // hovIds = camera(s) under the cursor (desktop hover); selIds = camera(s) tapped
+  // to pin their FOV open (touch/tablets, where there is no hover); drawIds = camera(s)
+  // shown transiently because one is being aimed right now (or was, in the last ~2s).
+  // Each is a GROUP (array), not a single id — co-located cameras (same corner, different
+  // facing) reveal together so you can compare both cones at once.
+  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey',hovIds=[],selIds=[],drawIds=[],drawTimer=null;
+  // Cameras sharing the same spot (within the same fan-out threshold fanOverlaps uses)
+  // are treated as one group for hover/tap/draw FOV reveal — see them all at once.
+  function coLocatedGroup(id){var m0=markers.find(function(mm){return mm.id===id;});if(!m0||m0.kind!=='cam')return [id];
+    var bw=board.clientWidth||1,bh=board.clientHeight||1,thr=22,ax=m0.x/100*bw,ay=m0.y/100*bh,group=[id];
+    markers.forEach(function(mm){if(mm.id===id||mm.kind!=='cam')return;var bx=mm.x/100*bw,by=mm.y/100*bh;if(Math.hypot(bx-ax,by-ay)<thr)group.push(mm.id);});
+    return group;}
   var lineW=3,lineColor='#0B0F1A',fillColor='#C9A96E',fillOpacity=0,drawLevel='top',drawGroup=null;
   var floors=[{name:'Floor Plan 1',B:B,markers:markers,uid:uid}],curFloor=0,pendingReset=false,floorMenuOpen=false;
   function freshFloor(name){return{name:name,B:{bg:'blank',img:null,imgSource:null,imgRatio:1,imgRotate:0,ftWide:0,rooms:[],strokes:[],notes:[],sat:null,zoom:{s:1,tx:0,ty:0}},markers:[],uid:1};}
@@ -631,8 +638,9 @@
   function pushHist(arr,item){hist.push({arr:arr,item:item});}
   function undoLast(){if(!hist.length){showToast('Nothing to undo');return;}var h=hist.pop();var i=h.arr.indexOf(h.item);if(i>=0)h.arr.splice(i,1);redrawStrokes();render();}
   function hlMarker(id,on){var p=board.querySelector('.pin[data-mid="'+id+'"]');if(p)p.classList.toggle('hl',on);var r=list.querySelector('.item[data-mid="'+id+'"]');if(r)r.classList.toggle('hl',on);
-    // Hovering a camera reveals its FOV cone with a sweep-out animation (when the global FOV toggle is off).
-    hovId=on?id:(hovId===id?null:hovId);if(on)startFovAnim([id]);else redrawStrokes();}
+    // Hovering a camera reveals its FOV cone (+ any co-located siblings') with a sweep-out animation.
+    if(on){var grp=coLocatedGroup(id);hovIds=grp;startFovAnim(grp.filter(function(gid){var mm=markers.find(function(x){return x.id===gid;});return mm&&mm.arrow;}));}
+    else{hovIds=[];redrawStrokes();}}
   // ---- FOV reveal animation: the cone "shoots out" from the camera instead of popping in ----
   var FOV_DUR=380,fovAnims={},fovRAF=null;
   function easeOutCubic(p){return 1-Math.pow(1-p,3);}
@@ -688,7 +696,11 @@
         arrowHead(ax,ay,ang+Math.PI,11,'#2C3347');arrowHead(bx,by,ang,11,'#2C3347');
         var tkx=Math.cos(ang+Math.PI/2),tky=Math.sin(ang+Math.PI/2),tl=9;dctx.strokeStyle='#2C3347';dctx.lineWidth=2;dctx.beginPath();dctx.moveTo(ax-tkx*tl,ay-tky*tl);dctx.lineTo(ax+tkx*tl,ay+tky*tl);dctx.moveTo(bx-tkx*tl,by-tky*tl);dctx.lineTo(bx+tkx*tl,by+tky*tl);dctx.stroke();
         var ff=segFeet(a,b),lab=st.feet?feetLabel(st.feet):(ff!=null?fmtFeet(ff):(Math.round(segUnits(a,b)/W*100)+'%'));var mmx=(ax+bx)/2,mmy=(ay+by)/2;dctx.save();dctx.font='bold 13px -apple-system,Helvetica,Arial';dctx.textAlign='center';dctx.textBaseline='middle';var lw=dctx.measureText(lab).width;dctx.fillStyle='rgba(255,255,255,.92)';dctx.fillRect(mmx-lw/2-5,mmy-10,lw+10,20);dctx.fillStyle='#2C3347';dctx.fillText(lab,mmx,mmy);dctx.restore();}});
-    markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&m.id!==hovId&&m.id!==selId&&m.id!==drawId)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=Math.max(1,m.arrow.len/100*W*easeOutCubic(fovProg(m.id)));
+    markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&hovIds.indexOf(m.id)<0&&selIds.indexOf(m.id)<0&&drawIds.indexOf(m.id)<0)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var rad=m.arrow.angle*Math.PI/180,L=Math.max(1,m.arrow.len/100*W*easeOutCubic(fovProg(m.id)));
+      // The cone/aim-line originates from the camera's LABEL (which sits toward its facing
+      // direction), not the icon's center — matches the DOM badge offset (--bx/--by, 18 CSS px).
+      var sx=m.x/100*W,sy=m.y/100*H;
+      if(m.kind==='cam'){var _bs=W/(board.clientWidth||1);sx+=Math.cos(rad)*18*_bs;sy+=Math.sin(rad)*18*_bs;}
       if(CONE[m.kind]){var half=(m.fov||defFov(m.kind))/2*Math.PI/180,p1=rad-half,p2=rad+half;dctx.save();dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(p1)*L,sy+Math.sin(p1)*L);dctx.arc(sx,sy,L,p1,p2);dctx.closePath();
         var g=dctx.createRadialGradient(sx,sy,0,sx,sy,L);g.addColorStop(0,hexA(col,.40));g.addColorStop(1,hexA(col,.08));dctx.fillStyle=g;dctx.fill();dctx.strokeStyle=hexA(col,.55);dctx.lineWidth=1.5;dctx.stroke();
         dctx.strokeStyle=col;dctx.lineWidth=2;var ax=sx+Math.cos(rad)*L,ay=sy+Math.sin(rad)*L;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(ax,ay);dctx.stroke();arrowHead(ax,ay,rad,13,col);
@@ -716,14 +728,18 @@
     function mv(ev){var dx=ev.clientX-cx,dy=ev.clientY-cy,dist=Math.hypot(dx,dy);if(dist>maxDist)maxDist=dist;if(maxDist<12)return;movedA=true;
       if(dist<10){if(m.arrow){m.arrow=null;redrawStrokes();hideAngle();}return;}
       var deg=Math.atan2(dy,dx)*180/Math.PI,near=Math.round(deg/45)*45,snap=false;if(Math.abs(deg-near)<=7){deg=near;snap=true;}
-      var lenPct=dist/br.width*100;m.arrow={angle:+deg.toFixed(1),len:+lenPct.toFixed(2)};drawId=m.id;redrawStrokes();
+      var lenPct=dist/br.width*100;m.arrow={angle:+deg.toFixed(1),len:+lenPct.toFixed(2)};
+      if(m.kind==='cam'){var _a2=m.arrow.angle*Math.PI/180;p.style.setProperty('--bx',(Math.cos(_a2)*18).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_a2)*18).toFixed(1)+'px');}
+      drawIds=coLocatedGroup(m.id);redrawStrokes();
       if(m.kind==='spk'||m.kind==='tap')showBadge(ev,'\u2299 r '+(B.ftWide?fmtFeet(lenPct/100*B.ftWide):Math.round(lenPct)+'%'),false);
       else showBadge(ev,'\u2199 '+(((Math.round(deg)%360)+360)%360)+'\u00b0',snap);}
     function up(){window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);hideAngle();lastPinDrag=Date.now();pinDragging=null;
       // A no-drag tap: on an AIMED camera, pin/unpin its FOV (touch-friendly — no hover needed);
       // on an un-aimed one, remove it (unchanged).
-      if(!movedA){if(m.arrow){selId=(selId===m.id?null:m.id);if(selId===m.id)startFovAnim([m.id]);}else removeMarker(m.id);}
-      else{if(drawTimer)clearTimeout(drawTimer);drawTimer=setTimeout(function(){drawId=null;drawTimer=null;redrawStrokes();},1800);} // keep the just-drawn cone up ~1.8s, then hide
+      if(!movedA){if(m.arrow){var _grp=coLocatedGroup(m.id),_was=selIds.indexOf(m.id)>=0;selIds=_was?[]:_grp;
+          if(!_was)startFovAnim(_grp.filter(function(gid){var mm=markers.find(function(x){return x.id===gid;});return mm&&mm.arrow;}));else redrawStrokes();}
+        else removeMarker(m.id);}
+      else{if(drawTimer)clearTimeout(drawTimer);drawTimer=setTimeout(function(){drawIds=[];drawTimer=null;redrawStrokes();},1800);} // keep the just-drawn cone(s) up ~1.8s, then hide
       render();}
     window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);}
   // ---- measurement (feet) ----
@@ -1200,6 +1216,9 @@
     markers.forEach(function(m){var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';
       var p=document.createElement('div');p.className='pin'+(m.mode==='out'?' outdoor':'');p.setAttribute('data-kind',m.kind);p.setAttribute('data-mid',m.id);p.style.left=m.x+'%';p.style.top=m.y+'%';p.style.background=col;
       p.innerHTML=IC[m.kind]+'<span class="pnum" style="color:'+col+';border-color:'+col+'">'+m._tag+'</span>';
+      // Every aimed camera's label rotates to sit on the side it's facing (co-located
+      // clusters below may further re-space these to avoid overlap).
+      if(m.kind==='cam'&&m.arrow){var _ang=m.arrow.angle*Math.PI/180,_R=18;p.style.setProperty('--bx',(Math.cos(_ang)*_R).toFixed(1)+'px');p.style.setProperty('--by',(Math.sin(_ang)*_R).toFixed(1)+'px');}
       if(__PICK){
         // Pick mode (customer diagnostic): the plan is a selector — tap a camera to report it.
         if(m.kind==='cam'){
