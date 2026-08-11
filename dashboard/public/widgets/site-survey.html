@@ -889,7 +889,9 @@
     if(tool==='areapoly'){if(!moved)startArea(e);panStart=null;moved=false;return;}
     if(tool==='room'){if(roomEl){var rr=roomEl.getBoundingClientRect(),br=board.getBoundingClientRect();var w=rr.width/br.width*100,h=rr.height/br.height*100,x=(rr.left-br.left)/br.width*100,y=(rr.top-br.top)/br.height*100;roomEl.remove();roomEl=null;roomStart=null;if(w>3&&h>3)addRoom(x,y,w,h);}moved=false;return;}
     if(tool==='note'){if(!moved){var pn=pct(e);addNote(pn.x,pn.y);}panStart=null;moved=false;return;}
-    if(!moved){var p=pct(e);placeMarker(p.x,p.y);}   // single click on empty board = add a camera
+    // Single click on empty board adds — but ONLY when the Place tool is armed and no menu
+    // is open (so using the toolbar / closing a dropdown never drops a phantom camera).
+    if(!moved&&tool==='place'&&!document.querySelector('.dd.open')){var p=pct(e);placeMarker(p.x,p.y);}
     panStart=null;moved=false;
   });
   // Right-click / long-press use the SHARED context menu (markerMenuFn, defined in the
@@ -1014,7 +1016,7 @@
         var szrow=document.createElement('div');szrow.style.cssText='padding:4px 12px 10px;';
         var sr=document.createElement('input');sr.type='range';sr.min='0.6';sr.max='2.4';sr.step='0.1';sr.value=pinScale;sr.style.cssText='width:100%;accent-color:var(--gold);cursor:pointer;';
         sr.addEventListener('pointerdown',function(e){e.stopPropagation();});sr.addEventListener('click',function(e){e.stopPropagation();});
-        sr.addEventListener('input',function(){pinScale=+sr.value;board.style.setProperty('--pin-size',(30*pinScale)+'px');render();autoSave();}); // render() re-lays the IC labels + cone origins to the new icon size
+        sr.addEventListener('input',function(){pinScale=+sr.value;board.style.setProperty('--pin-size',(30*pinScale)+'px');paintBoard();autoSave();}); // paintBoard (NOT render) re-lays IC labels + cones without rebuilding the toolbar/menu
         szrow.addEventListener('click',function(e){e.stopPropagation();});szrow.appendChild(sr);equipMenuDiv.appendChild(szrow);
         // ---- View options merged into Add menu (compact) ----
         var vsep=document.createElement('div');vsep.style.cssText='border-top:1px solid var(--slate-line);margin:5px 0 2px;';equipMenuDiv.appendChild(vsep);
@@ -1155,8 +1157,9 @@
     g2.appendChild(btn('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg> Center',function(){resetZoom();render();}));
     toolbar.appendChild(g2);
 
-    // View toggles: FOV (all coverage cones) + Dim (darken background) — both reflect on/off state.
+    // View toggles: Place (arm/freeze single-click add) + FOV + Dim — all reflect on/off state.
     var g3=grp();
+    g3.appendChild(btn('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8Z"/></svg> '+(tool==='place'?'Placing':'Add'),function(){tool=(tool==='place'?'idle':'place');render();},tool==='place'));
     g3.appendChild(btn('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg> FOV',function(){show.range=!show.range;if(show.range)startFovAnim(markers.filter(function(mm){return mm.arrow;}).map(function(mm){return mm.id;}));render();},show.range));
     g3.appendChild(btn('<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:-2px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg> Dim',function(){dimmed=!dimmed;render();},dimmed));
     toolbar.appendChild(g3);
@@ -1750,7 +1753,7 @@
       if(mod&&k==='z'){e.preventDefault();undoLast();closeCtx();}
       else if(mod&&k==='d'){if(lastHover!=null){e.preventDefault();var md=markerById(lastHover);if(md)duplicate(md);}}
       else if((e.key==='Delete'||e.key==='Backspace')&&lastHover!=null){e.preventDefault();removeMarker(lastHover);lastHover=null;}
-      else if(e.key==='Escape'){closeCtx();}
+      else if(e.key==='Escape'){closeCtx();if(tool==='place'){tool='idle';render();}}   // Esc also freezes placement
       else if(e.key==='?'){e.preventDefault();shortcutsHelp();}
     });
 
