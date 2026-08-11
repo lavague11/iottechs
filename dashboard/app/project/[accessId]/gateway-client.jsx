@@ -3260,8 +3260,7 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
       stopFaceCam();
       if (!live.ok) {
         setFaceState("fail");
-        setFaceMsg(live.reason === "no_turn" ? "Turn your head slowly, then try again."
-          : "Couldn't confirm a live person — face the camera in good light and retry.");
+        setFaceMsg("Couldn't confirm a live person — face the camera in good light and retry.");
         return;
       }
       const emb = live.embedding;

@@ -184,7 +184,7 @@
     const t0 = performance.now();
 
     const ears = [];
-    let turned = false, sawFace = 0, lastCue = "";
+    let sawFace = 0, lastCue = "";
     const cue = (t) => { if (t !== lastCue) { lastCue = t; onCue(t); } };
     const std = (a) => { if (a.length < 4) return 0; const m = a.reduce((s, x) => s + x, 0) / a.length; return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); };
     cue("Look at the camera");
@@ -192,9 +192,9 @@
     while (performance.now() - t0 < timeoutMs) {
       let det = null;
       try {
-        det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.4 })).withFaceLandmarks();
+        det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 })).withFaceLandmarks();
       } catch (e) {}
-      if (!det) { sawFace = 0; cue("Center your face"); await sleep(70); continue; }
+      if (!det) { sawFace = 0; cue("Center your face"); await sleep(40); continue; }
       sawFace++;
 
       const lm = det.landmarks;
@@ -204,28 +204,27 @@
       const ear = (earOf(lm.getLeftEye()) + earOf(lm.getRightEye())) / 2;
       ears.push(ear); if (ears.length > 60) ears.shift();
 
-      // Head turn — nose offset from the eye-midline, normalized (either direction).
+      // Frontal-face check — nose offset from the eye-midline, normalized.
       const nose = lm.getNose(); const tip = nose[nose.length - 4] || nose[3];
       const mid = { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
       const yaw = ((tip.x - mid.x) / iod) * 90;
-      if (Math.abs(yaw) > 10) turned = true;
 
-      // Passive vitality: real eyes drift/blink; a photo's are frozen. NOT yaw
-      // (a moved photo changes yaw), so this is what a moved photo can't fake.
+      // Passive vitality: real eyes drift/blink; a photo's are frozen. No gesture
+      // needed — this is what keeps the scan fast AND stops a still photo. ~8
+      // frames of a live eye signal is enough; a frozen photo reads ~0.
       const vitality = std(ears);
-      const alive = ears.length >= 10 && vitality > 0.005;
+      const alive = ears.length >= 8 && vitality > 0.004;
 
-      if (sawFace < 4) cue("Hold still");
-      else if (!turned) cue("Turn your head slowly");
-      else if (!alive) cue("Keep looking at the camera");
-      else if (Math.abs(yaw) > 18) cue("Look at the camera");
+      if (sawFace < 3) cue("Hold still");
+      else if (!alive) cue("Look at the camera");
+      else if (Math.abs(yaw) > 20) cue("Face forward");
       else {
         const emb = await embed(video);   // live + frontal → capture
         if (emb) return { ok: true, embedding: emb };
       }
-      await sleep(60);
+      await sleep(40);
     }
-    return { ok: false, reason: !turned ? "no_turn" : "no_life" };
+    return { ok: false, reason: ears.length < 8 ? "no_turn" : "no_life" };
   }
 
   window.IOTFace = { ready, embed, cosine, scanLive, status: () => ({ ready: faceReady, engine: arcReady ? "arcface" : faceReady ? "faceapi" : "loading" }) };
