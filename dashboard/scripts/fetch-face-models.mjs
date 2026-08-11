@@ -13,7 +13,7 @@ const ROOT = process.cwd().endsWith("dashboard") ? process.cwd() : path.join(pro
 const OUT_FA = path.join(ROOT, "public", "models", "faceapi");
 const OUT_MODELS = path.join(ROOT, "public", "models");
 const FA_VER = "1.7.13";
-const NEED = ["ssd_mobilenetv1", "face_landmark_68", "face_recognition"]; // only the nets the engine uses
+const NEED = ["ssd_mobilenetv1", "tiny_face_detector", "face_landmark_68", "face_recognition"]; // every net the engine loads (missing one forces a full CDN fallback)
 
 async function dl(url, dest) {
   const r = await fetch(url);
