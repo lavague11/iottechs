@@ -603,12 +603,13 @@
     var bx=(mx-z.tx)/prev,by=(my-z.ty)/prev;z.tx=mx-bx*ns;z.ty=my-by*ns;z.s=ns;clampPan();applyZoom();},{passive:false});
 
   // ---------- geometry ----------
-  var DEFAULT_RATIO=1600/1000; // blank board defaults to a 1600x1000 (16:10) canvas
-  function ratio(){return B.bg==='image'&&B.img?B.imgRatio:DEFAULT_RATIO;}
-  // Fit a board of the current aspect ratio inside the viewport (letterbox, never
-  // stretch). Image backgrounds use their own ratio; a blank board uses 16:10.
-  function layoutBoard(){var vw=viewport.clientWidth||800,vh=viewport.clientHeight||520,r=ratio();
-    var w=vw,h=w/r;if(h>vh){h=vh;w=h*r;}board.style.width=Math.round(w)+'px';board.style.height=Math.round(h)+'px';
+  // The board follows the PHOTO: an image background sizes to its own aspect ratio
+  // (fit-to-viewport, never stretched). A blank board just fills the available
+  // space — no forced aspect, so nothing is locked until a photo defines it.
+  function ratio(){return B.bg==='image'?B.imgRatio:1;}
+  function layoutBoard(){var vw=viewport.clientWidth||800,vh=viewport.clientHeight||520,r;
+    if(B.bg==='image'&&B.img){r=ratio();var w=vw,h=w/r;if(h>vh){h=vh;w=h*r;}board.style.width=Math.round(w)+'px';board.style.height=Math.round(h)+'px';}
+    else{board.style.width=vw+'px';board.style.height=vh+'px';r=vw/vh;}
     var W=1200,H=Math.max(1,Math.round(1200/r));drawCanvas.width=W;drawCanvas.height=H;}
   function pct(e){var r=board.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*100,y:(e.clientY-r.top)/r.height*100};}
 
