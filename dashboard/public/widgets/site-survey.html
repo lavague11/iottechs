@@ -1735,6 +1735,7 @@
       } else {
         var p=pct(e);
         showCtxMenu(e.clientX,e.clientY,[
+          {label:'Add camera here',on:function(){var m={id:uid++,mode:placeMode,kind:'cam',x:+p.x.toFixed(2),y:+p.y.toFixed(2)};markers.push(m);pushHist(markers,m);render();showToast('Camera added');}},
           {label:'Add note here',on:function(){addNote(p.x,p.y);}},
           {label:'Undo',hint:'Ctrl+Z',on:undoLast},
           {sep:true},
