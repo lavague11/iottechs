@@ -5,13 +5,6 @@ import { loginAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { TaglinePill, Wordmark } from "../components/brand";
 import FaceScan from "../components/face-scan";
-import dynamic from "next/dynamic";
-
-// AWS liveness UI is heavy — load it only when Face ID is opened.
-const LivenessGate = dynamic(() => import("../components/liveness-gate"), {
-  ssr: false,
-  loading: () => <div className="lgf-msg">Loading secure check…</div>,
-});
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -127,30 +120,45 @@ export default function LoginClient({ next }) {
     window.location.href = (/^SVC/i.test(id) ? "/service-call/" : "/project/") + encodeURIComponent(id);
   }
   useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
-  // Opening Face ID warms the match engine; AWS liveness (LivenessGate) self-starts.
-  useEffect(() => { if (mode === "face") warmFace(); }, [mode]); // eslint-disable-line
+  // Opening Face ID starts the scan immediately — no extra tap.
+  useEffect(() => { if (mode === "face" && faceState === "idle") { const t = setTimeout(runFaceScan, 300); return () => clearTimeout(t); } }, [mode]); // eslint-disable-line
 
-  const loadImage = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
-
-  // AWS confirmed a live person → match its reference frame against enrolled faces.
-  async function matchFace(referenceImage) {
-    if (!referenceImage) { setFaceState("fail"); setFaceMsg("Couldn't capture your face — try again."); return; }
-    setFaceState("scanning"); setFaceMsg("Matching your face…");
+  async function runFaceScan() {
+    if (faceState === "scanning") return;
+    setFaceMsg(""); setFaceState("scanning");
+    let stream = null;
     try {
       if (!window.IOTFace) { warmFace(); await new Promise((r) => setTimeout(r, 400)); }
       await window.IOTFace?.ready?.();
-      const img = await loadImage(referenceImage);
-      const emb = await window.IOTFace.embed(img);
-      if (!emb) { setFaceState("fail"); setFaceMsg("Couldn't read your face clearly — try again."); return; }
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } }, audio: false });
+      faceStreamRef.current = stream;
+      const v = faceVideoRef.current;
+      v.srcObject = stream; await v.play().catch(() => {});
+      // Liveness — a natural head turn + real eye micro-motion (stops photos, IDs, still screens).
+      const live = await window.IOTFace.scanLive(v, { onCue: (t) => setFaceMsg(t) });
+      stopFaceCam();
+      if (!live.ok) {
+        setFaceState("fail");
+        setFaceMsg(live.reason === "no_turn" ? "Turn your head slowly, then try again."
+          : "Couldn't confirm a live person — face the camera in good light and retry.");
+        return;
+      }
+      const emb = live.embedding;
       const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
       const j = await res.json();
       if (j.ok) {
         setFaceState("ok"); setFaceMsg("Welcome, " + j.name);
+        // Let the green Face-ID success animation finish BEFORE the warp takes over.
         setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 1000);
         setTimeout(() => setGranted(true), 2100);
         setTimeout(() => window.location.assign(next || j.home || "/dashboard"), 2650);
       } else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your password."); }
-    } catch (e) { setFaceState("fail"); setFaceMsg("Match failed — try again, or use your password."); }
+    } catch (e) {
+      stopFaceCam();
+      const secure = location.protocol === "https:" || location.hostname === "localhost";
+      setFaceState("fail");
+      setFaceMsg(secure ? "Camera unavailable — allow access, or use your password." : "Face ID needs a secure (HTTPS) connection.");
+    }
   }
 
   return (
@@ -205,26 +213,17 @@ export default function LoginClient({ next }) {
         </form>
         ) : mode === "face" ? (
         <div className="lgf">
-          {faceState === "idle" ? (
-            <LivenessGate
-              onPass={(r) => matchFace(r.referenceImage)}
-              onFail={(r) => { setFaceState("fail"); setFaceMsg(
-                r?.reason === "unconfigured" ? "Face ID isn't set up yet — use your password."
-                : r?.reason === "not_live" ? "That wasn't a live person — hold still and retry."
-                : "Liveness check failed — try again."); }}
-            />
-          ) : (
-            <>
-              <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
-                {faceState === "ok" ? "Recognized" : faceState === "fail" ? "Try again" : "Matching…"}
-              </div>
-              {faceMsg && <div className="lgf-msg">{faceMsg}</div>}
-              <div className="lgf-stage"><FaceScan state={faceState} size={168} /></div>
-              {faceState === "fail" && (
-                <button className="lg-btn" type="button" onClick={() => { setFaceState("idle"); setFaceMsg(""); }}>Try again</button>
-              )}
-            </>
-          )}
+          <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
+            {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
+          </div>
+          {faceMsg && <div className="lgf-msg">{faceMsg}</div>}
+          <div className="lgf-stage">
+            <video ref={faceVideoRef} className="lgf-vid" playsInline muted />
+            <FaceScan state={faceState} size={168} />
+          </div>
+          <button className="lg-btn" type="button" onClick={runFaceScan} disabled={granted || faceState === "scanning"}>
+            {faceState === "scanning" ? "Scanning…" : "Scan my face"}
+          </button>
         </div>
         ) : (
         <div className="lgf">
