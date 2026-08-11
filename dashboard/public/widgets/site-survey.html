@@ -731,8 +731,7 @@
   // drag from any placed device to draw its pointer/view (window-level so a re-render can't drop a new item)
   function startPinArrow(e,m,p){if(e.button&&e.button!==0)return;e.stopPropagation();e.preventDefault();pinDragging=m;var br=board.getBoundingClientRect();var cx=br.left+m.x/100*br.width,cy=br.top+m.y/100*br.height;var movedA=false,maxDist=0,holdFired=false;
     // Long-press (touch or mouse) opens the camera dropdown menu — same as right-click.
-    var holdT=setTimeout(function(){if(movedA||m.kind!=='cam')return;holdFired=true;
-      var g=coLocatedGroup(m.id).map(function(id){return markers.find(function(x){return x.id===id;});}).filter(Boolean).filter(function(mm){return mm.kind==='cam';});openCamMenu(g,e.clientX,e.clientY);},500);
+    var holdT=setTimeout(function(){if(movedA)return;holdFired=true;if(markerMenuFn)markerMenuFn(m,e.clientX,e.clientY);},500);
     function mv(ev){var dx=ev.clientX-cx,dy=ev.clientY-cy,dist=Math.hypot(dx,dy);if(dist>maxDist)maxDist=dist;if(maxDist<12)return;clearTimeout(holdT);movedA=true;
       if(dist<10){if(m.arrow){m.arrow=null;redrawStrokes();hideAngle();}return;}
       var deg=Math.atan2(dy,dx)*180/Math.PI,near=Math.round(deg/45)*45,snap=false;if(Math.abs(deg-near)<=7){deg=near;snap=true;}
@@ -852,7 +851,7 @@
   function hideAngle(){if(angleEl){angleEl.remove();angleEl=null;}}
   // Single click on empty board adds a camera; double-click a camera removes it;
   // right-click / long-press opens its dropdown menu (Delete lives there).
-  var camCtx=null;
+  var markerMenuFn=null;   // set by the power-tools IIFE; opens the shared marker context menu
   board.addEventListener('pointerdown',function(e){
     if(e.button&&e.button!==0)return;
     if(cropping)return;if(e.target.closest('.pin')||e.target.closest('.room')||e.target.closest('.spot'))return;
@@ -891,27 +890,8 @@
     if(!moved){var p=pct(e);placeMarker(p.x,p.y);}   // single click on empty board = add a camera
     panStart=null;moved=false;
   });
-  // ---- camera dropdown menu (right-click OR long-press); Delete lives inside it ----
-  function closeCamCtx(){if(camCtx){camCtx.remove();camCtx=null;document.removeEventListener('pointerdown',closeCamCtx,true);}}
-  function camsAt(pinEl,px,py){var bw=board.clientWidth||1,bh=board.clientHeight||1,thr=22;
-    if(pinEl){return coLocatedGroup(+pinEl.getAttribute('data-mid')).map(function(id){return markers.find(function(x){return x.id===id;});}).filter(Boolean).filter(function(m){return m.kind==='cam';});}
-    return markers.filter(function(m){return m.kind==='cam'&&Math.hypot(m.x/100*bw-px,m.y/100*bh-py)<thr;});}
-  function openCamMenu(cams,cx,cy){
-    closeCamCtx();if(!cams||!cams.length)return;
-    var menu=document.createElement('div');menu.className='cam-ctx';
-    menu.style.cssText='position:fixed;z-index:6000;left:'+cx+'px;top:'+cy+'px;background:var(--panel);border:1px solid var(--slate-line);border-radius:10px;padding:6px;box-shadow:0 10px 40px rgba(0,0,0,.4);min-width:158px;max-width:90vw;';
-    var hd=document.createElement('div');hd.textContent=cams.length>1?('Cameras here ('+cams.length+')'):cams[0]._tag;hd.style.cssText='font-size:11px;color:var(--muted);padding:4px 8px 6px;font-weight:700;';menu.appendChild(hd);
-    function row(label,color,fn){var r=document.createElement('div');r.textContent=label;r.style.cssText='padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:'+(color||'var(--cream)')+';';r.addEventListener('mouseenter',function(){r.style.background='var(--panel-2)';});r.addEventListener('mouseleave',function(){r.style.background='none';});r.addEventListener('pointerdown',function(ev){ev.stopPropagation();closeCamCtx();fn();});menu.appendChild(r);}
-    cams.forEach(function(m){row('Delete '+m._tag,'var(--danger)',function(){removeMarker(m.id);});});
-    if(cams.length>1)row('Delete all '+cams.length,'var(--danger)',function(){var ids=cams.map(function(x){return x.id;});markers=markers.filter(function(x){return ids.indexOf(x.id)<0;});render();});
-    document.body.appendChild(menu);camCtx=menu;
-    setTimeout(function(){document.addEventListener('pointerdown',closeCamCtx,true);},0);
-  }
-  board.addEventListener('contextmenu',function(e){
-    if(__RO||cropping)return;e.preventDefault();
-    var p=pct(e),bw=board.clientWidth||1,bh=board.clientHeight||1;
-    openCamMenu(camsAt(e.target.closest('.pin[data-mid]'),p.x/100*bw,p.y/100*bh),e.clientX,e.clientY);
-  });
+  // Right-click / long-press use the SHARED context menu (markerMenuFn, defined in the
+  // power-tools IIFE below) — Rename / Duplicate / Clear aim / Delete all live there.
   board.addEventListener('dblclick',function(e){   // double-click a camera = remove it
     if(__RO||cropping)return;var pinEl=e.target.closest('.pin[data-mid]');if(!pinEl)return;
     e.preventDefault();e.stopPropagation();var m=markers.find(function(x){return x.id===+pinEl.getAttribute('data-mid');});
@@ -1726,16 +1706,27 @@
     document.addEventListener('pointerdown',function(e){if(menu&&!menu.contains(e.target))closeCtx();},true);
     window.addEventListener('blur',closeCtx);
 
+    // Shared marker menu — used by right-click AND long-press. For a camera that shares
+    // its spot with others, lists a Delete row per co-located camera + Delete all.
+    function openMarkerMenu(m,cx,cy){
+      if(!m)return;
+      var items=[{label:'Rename',on:function(){renamePrompt(m);}},{label:'Duplicate',hint:'Ctrl+D',on:function(){duplicate(m);}}];
+      if(m.kind==='cam')items.push({label:m.mode==='out'?'Set indoor':'Set outdoor',on:function(){m.mode=m.mode==='out'?'in':'out';render();autoSave();}});
+      if(m.arrow)items.push({label:'Clear aim / FOV',on:function(){m.arrow=null;render();autoSave();}});
+      items.push({sep:true});
+      var grp=(m.kind==='cam')?coLocatedGroup(m.id).map(markerById).filter(Boolean).filter(function(x){return x.kind==='cam';}):[m];
+      if(grp.length>1){
+        grp.forEach(function(cm){items.push({label:'Delete '+cm._tag,danger:true,on:function(){removeMarker(cm.id);}});});
+        items.push({label:'Delete all '+grp.length,danger:true,on:function(){var ids=grp.map(function(x){return x.id;});markers=markers.filter(function(x){return ids.indexOf(x.id)<0;});render();}});
+      } else { items.push({label:'Delete',danger:true,hint:'Del',on:function(){removeMarker(m.id);}}); }
+      showCtxMenu(cx,cy,items);
+    }
+    markerMenuFn=openMarkerMenu;   // expose to the long-press handler (outside this IIFE)
     board.addEventListener('contextmenu',function(e){
       if(isRO())return; e.preventDefault();
       var pin=e.target.closest('.pin');
       if(pin&&pin.getAttribute('data-kind')!=='note'){
-        var m=markerById(+pin.getAttribute('data-mid')); if(!m)return;
-        var items=[{label:'Rename',on:function(){renamePrompt(m);}},{label:'Duplicate',hint:'Ctrl+D',on:function(){duplicate(m);}}];
-        if(m.kind==='cam')items.push({label:m.mode==='out'?'Set indoor':'Set outdoor',on:function(){m.mode=m.mode==='out'?'in':'out';render();autoSave();}});
-        if(m.arrow)items.push({label:'Clear aim / FOV',on:function(){m.arrow=null;render();autoSave();}});
-        items.push({sep:true},{label:'Delete',danger:true,hint:'Del',on:function(){removeMarker(m.id);}});
-        showCtxMenu(e.clientX,e.clientY,items);
+        openMarkerMenu(markerById(+pin.getAttribute('data-mid')),e.clientX,e.clientY);
       } else {
         var p=pct(e);
         showCtxMenu(e.clientX,e.clientY,[
