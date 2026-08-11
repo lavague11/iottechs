@@ -466,7 +466,9 @@
   // range = the FOV/coverage cones. OFF by default so the plan stays clean —
   // cones appear when you HOVER a camera (per-item) or flip the "FOV" toggle (all).
   var show={cctv:true,sound:true,toast:true,alarm:true,misc:true,range:false,builder:true};
-  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey',hovId=null;
+  // hovId = camera under the cursor (desktop hover); selId = camera tapped to pin
+  // its FOV open (touch/tablets, where there is no hover). Either reveals a cone.
+  var showOpen=false,dimmed=false,theme='light',equipLevel='groups',equipGroup=null,pinScale=1,surveyTitle='Survey',hovId=null,selId=null;
   var lineW=3,lineColor='#0B0F1A',fillColor='#C9A96E',fillOpacity=0,drawLevel='top',drawGroup=null;
   var floors=[{name:'Floor Plan 1',B:B,markers:markers,uid:uid}],curFloor=0,pendingReset=false,floorMenuOpen=false;
   function freshFloor(name){return{name:name,B:{bg:'blank',img:null,imgSource:null,imgRatio:1,imgRotate:0,ftWide:0,rooms:[],strokes:[],notes:[],sat:null,zoom:{s:1,tx:0,ty:0}},markers:[],uid:1};}
@@ -622,8 +624,14 @@
   function pushHist(arr,item){hist.push({arr:arr,item:item});}
   function undoLast(){if(!hist.length){showToast('Nothing to undo');return;}var h=hist.pop();var i=h.arr.indexOf(h.item);if(i>=0)h.arr.splice(i,1);redrawStrokes();render();}
   function hlMarker(id,on){var p=board.querySelector('.pin[data-mid="'+id+'"]');if(p)p.classList.toggle('hl',on);var r=list.querySelector('.item[data-mid="'+id+'"]');if(r)r.classList.toggle('hl',on);
-    // Hovering a camera reveals just its FOV cone (when the global FOV toggle is off).
-    hovId=on?id:(hovId===id?null:hovId);if(!show.range)redrawStrokes();}
+    // Hovering a camera reveals its FOV cone with a sweep-out animation (when the global FOV toggle is off).
+    hovId=on?id:(hovId===id?null:hovId);if(on)startFovAnim([id]);else redrawStrokes();}
+  // ---- FOV reveal animation: the cone "shoots out" from the camera instead of popping in ----
+  var FOV_DUR=380,fovAnims={},fovRAF=null;
+  function easeOutCubic(p){return 1-Math.pow(1-p,3);}
+  function fovProg(id){var s=fovAnims[id];if(s==null)return 1;var p=(performance.now()-s)/FOV_DUR;return p>=1?1:p;}
+  function tickFov(){var now=performance.now(),any=false;for(var k in fovAnims){if(now-fovAnims[k]<FOV_DUR)any=true;else delete fovAnims[k];}redrawStrokes();fovRAF=any?requestAnimationFrame(tickFov):null;}
+  function startFovAnim(ids){var now=performance.now();ids.forEach(function(id){fovAnims[id]=now;});if(!fovRAF)fovRAF=requestAnimationFrame(tickFov);}
   function placeMarker(x,y){if(!canPlaceKind(activeType)){blockPlace(activeType);return;}var m={id:uid++,mode:placeMode,kind:activeType,x:+x.toFixed(2),y:+y.toFixed(2)};markers.push(m);pushHist(markers,m);out.classList.remove('show');render();}
   function removeMarker(id){markers=markers.filter(function(m){return m.id!==id;});out.classList.remove('show');render();}
 
@@ -673,7 +681,7 @@
         arrowHead(ax,ay,ang+Math.PI,11,'#2C3347');arrowHead(bx,by,ang,11,'#2C3347');
         var tkx=Math.cos(ang+Math.PI/2),tky=Math.sin(ang+Math.PI/2),tl=9;dctx.strokeStyle='#2C3347';dctx.lineWidth=2;dctx.beginPath();dctx.moveTo(ax-tkx*tl,ay-tky*tl);dctx.lineTo(ax+tkx*tl,ay+tky*tl);dctx.moveTo(bx-tkx*tl,by-tky*tl);dctx.lineTo(bx+tkx*tl,by+tky*tl);dctx.stroke();
         var ff=segFeet(a,b),lab=st.feet?feetLabel(st.feet):(ff!=null?fmtFeet(ff):(Math.round(segUnits(a,b)/W*100)+'%'));var mmx=(ax+bx)/2,mmy=(ay+by)/2;dctx.save();dctx.font='bold 13px -apple-system,Helvetica,Arial';dctx.textAlign='center';dctx.textBaseline='middle';var lw=dctx.measureText(lab).width;dctx.fillStyle='rgba(255,255,255,.92)';dctx.fillRect(mmx-lw/2-5,mmy-10,lw+10,20);dctx.fillStyle='#2C3347';dctx.fillText(lab,mmx,mmy);dctx.restore();}});
-    markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&m.id!==hovId)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=m.arrow.len/100*W;
+    markers.forEach(function(m){if(!m.arrow)return;if(!show.range&&m.id!==hovId&&m.id!==selId)return;var mg=TYPE[m.kind]?TYPE[m.kind].group:'cctv';if(!show[mg])return;var col=TYPE[m.kind]?TYPE[m.kind].color:'#C9A96E';var sx=m.x/100*W,sy=m.y/100*H,rad=m.arrow.angle*Math.PI/180,L=Math.max(1,m.arrow.len/100*W*easeOutCubic(fovProg(m.id)));
       if(CONE[m.kind]){var half=(m.fov||defFov(m.kind))/2*Math.PI/180,p1=rad-half,p2=rad+half;dctx.save();dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(p1)*L,sy+Math.sin(p1)*L);dctx.arc(sx,sy,L,p1,p2);dctx.closePath();
         var g=dctx.createRadialGradient(sx,sy,0,sx,sy,L);g.addColorStop(0,hexA(col,.40));g.addColorStop(1,hexA(col,.08));dctx.fillStyle=g;dctx.fill();dctx.strokeStyle=hexA(col,.55);dctx.lineWidth=1.5;dctx.stroke();
         dctx.strokeStyle=col;dctx.lineWidth=2;dctx.beginPath();dctx.moveTo(sx,sy);dctx.lineTo(sx+Math.cos(rad)*L,sy+Math.sin(rad)*L);dctx.stroke();dctx.restore();}
@@ -701,7 +709,11 @@
       var lenPct=dist/br.width*100;m.arrow={angle:+deg.toFixed(1),len:+lenPct.toFixed(2)};redrawStrokes();
       if(m.kind==='spk'||m.kind==='tap')showBadge(ev,'\u2299 r '+(B.ftWide?fmtFeet(lenPct/100*B.ftWide):Math.round(lenPct)+'%'),false);
       else showBadge(ev,'\u2199 '+(((Math.round(deg)%360)+360)%360)+'\u00b0',snap);}
-    function up(){window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);hideAngle();lastPinDrag=Date.now();pinDragging=null;if(!movedA&&!m.arrow)removeMarker(m.id);render();}
+    function up(){window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);hideAngle();lastPinDrag=Date.now();pinDragging=null;
+      // A no-drag tap: on an AIMED camera, pin/unpin its FOV (touch-friendly — no hover needed);
+      // on an un-aimed one, remove it (unchanged).
+      if(!movedA){if(m.arrow){selId=(selId===m.id?null:m.id);if(selId===m.id)startFovAnim([m.id]);}else removeMarker(m.id);}
+      render();}
     window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);}
   // ---- measurement (feet) ----
   function segUnits(a,b){var W=drawCanvas.width,H=drawCanvas.height;return Math.hypot((b.x-a.x)/100*W,(b.y-a.y)/100*H);}
@@ -973,7 +985,7 @@
         [['cctv','Cams'],['sound','Sound'],['toast','Toast'],['alarm','Alarms'],['misc','Misc'],['range','FOV'],['builder','Areas']].forEach(function(p){
           var c=document.createElement('button');c.className='tbtn'+(show[p[0]]?' active':'');c.style.cssText='padding:3px 9px;font-size:11px;opacity:'+(show[p[0]]?'1':'.45')+';';c.textContent=p[1];
           c.addEventListener('pointerdown',function(e){e.stopPropagation();});
-          c.addEventListener('click',function(e){e.stopPropagation();show[p[0]]=!show[p[0]];c.classList.toggle('active',show[p[0]]);c.style.opacity=show[p[0]]?'1':'.45';paintBoard();});
+          c.addEventListener('click',function(e){e.stopPropagation();show[p[0]]=!show[p[0]];c.classList.toggle('active',show[p[0]]);c.style.opacity=show[p[0]]?'1':'.45';if(p[0]==='range'&&show.range){startFovAnim(markers.filter(function(mm){return mm.arrow;}).map(function(mm){return mm.id;}));}paintBoard();});
           chipWrap.appendChild(c);});
         equipMenuDiv.appendChild(chipWrap);
       }
