@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
@@ -37,6 +38,12 @@ import { missingReqs }   from "../../../lib/stage-flow";
 import { getAcceptancesAction, getLiveSnapshotAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
+
+// AWS Face Liveness gate — loaded client-only (heavy Amplify bundle, ssr:false).
+const LivenessGate = dynamic(() => import("../../components/liveness-gate"), {
+  ssr: false,
+  loading: () => <div className="gw2-banner">Loading secure check…</div>,
+});
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 
@@ -3238,33 +3245,22 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
   }
   // Drop the camera whenever we leave face mode (or unmount).
   useEffect(() => { if (mode !== "face") stopFaceCam(); return stopFaceCam; }, [mode]);
-  // Opening Face ID starts the scan immediately — no extra tap.
-  useEffect(() => { if (mode === "face" && faceState === "idle") { const t = setTimeout(runFaceScan, 300); return () => clearTimeout(t); } }, [mode]); // eslint-disable-line
+  // Opening Face ID warms the match engine; AWS liveness (LivenessGate) self-starts.
+  useEffect(() => { if (mode === "face") warmFace(); }, [mode]); // eslint-disable-line
 
-  // Face-first login: capture a live frame behind the animation, embed it, and
-  // 1:N match server-side. On a clean match the server mints the session and we
-  // land on the user's home. Camera stays hidden (the person sees the animation).
-  async function runFaceScan() {
-    if (faceState === "scanning") return;
-    setFaceMsg(""); setFaceState("scanning");
-    let stream = null;
+  const loadImage = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+
+  // AWS confirmed a live person → match its reference frame against enrolled faces.
+  // On a clean 1:N match the server mints the session and we land on the user's home.
+  async function matchFace(referenceImage) {
+    if (!referenceImage) { setFaceState("fail"); setFaceMsg("Couldn't capture your face — try again."); return; }
+    setFaceState("scanning"); setFaceMsg("Matching your face…");
     try {
       if (!window.IOTFace) { warmFace(); await new Promise((r) => setTimeout(r, 400)); }
       await window.IOTFace?.ready?.();
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } }, audio: false });
-      faceStreamRef.current = stream;
-      const v = faceVideoRef.current;
-      v.srcObject = stream; await v.play().catch(() => {});
-      // Liveness — a natural head turn + real eye micro-motion (stops photos, IDs, still screens).
-      const live = await window.IOTFace.scanLive(v, { onCue: (t) => setFaceMsg(t) });
-      stopFaceCam();
-      if (!live.ok) {
-        setFaceState("fail");
-        setFaceMsg(live.reason === "no_turn" ? "Turn your head slowly, then try again."
-          : "Couldn't confirm a live person — face the camera in good light and retry.");
-        return;
-      }
-      const emb = live.embedding;
+      const img = await loadImage(referenceImage);
+      const emb = await window.IOTFace.embed(img);
+      if (!emb) { setFaceState("fail"); setFaceMsg("Couldn't read your face clearly — try again."); return; }
       const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
       const j = await res.json();
       if (j.ok) {
@@ -3275,12 +3271,7 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
         setTimeout(() => window.location.assign(j.home || "/dashboard"), 2650);
       }
       else { setFaceState("fail"); setFaceMsg(j.error || "Not recognized. Use your PIN."); }
-    } catch (e) {
-      stopFaceCam();
-      const secure = location.protocol === "https:" || location.hostname === "localhost";
-      setFaceState("fail");
-      setFaceMsg(secure ? "Camera unavailable — allow access, or use your PIN." : "Face ID needs a secure (HTTPS) connection.");
-    }
+    } catch (e) { setFaceState("fail"); setFaceMsg("Match failed — try again, or use your PIN."); }
   }
 
   async function loginWithCredentials(emailOrPhone, password) {
@@ -3370,17 +3361,30 @@ function GatewayScreen({ onAuthenticated, attemptAccess }) {
           </>
         ) : mode === "face" ? (
           <div className="gw2-face">
-            <div className={`gw2-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
-              {faceState === "scanning" ? "Scanning…" : faceState === "ok" ? "Recognized" : "Look at the camera"}
-            </div>
-            {faceMsg && <div className="gw2-banner">{faceMsg}</div>}
-            <div className="gw2-face-stage">
-              <video ref={faceVideoRef} className="gw2-face-vid" playsInline muted />
-              <FaceScan state={faceState} size={172} />
-            </div>
-            <button className="gw2-lf-btn gw2-face-btn" onClick={runFaceScan} disabled={busy || faceState === "scanning"}>
-              {faceState === "scanning" ? "Scanning…" : "Scan my face"}
-            </button>
+            {faceState === "idle" ? (
+              <LivenessGate
+                onPass={(r) => matchFace(r.referenceImage)}
+                onFail={(r) => { setFaceState("fail"); setFaceMsg(
+                  r?.reason === "unconfigured" ? "Face ID isn't set up yet — use your PIN."
+                  : r?.reason === "not_live" ? "That wasn't a live person — hold still and retry."
+                  : "Liveness check failed — try again."); }}
+              />
+            ) : (
+              <>
+                <div className={`gw2-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
+                  {faceState === "ok" ? "Recognized" : faceState === "fail" ? "Try again" : "Matching…"}
+                </div>
+                {faceMsg && <div className="gw2-banner">{faceMsg}</div>}
+                <div className="gw2-face-stage">
+                  <FaceScan state={faceState} size={172} />
+                </div>
+                {faceState === "fail" && (
+                  <button className="gw2-lf-btn gw2-face-btn" onClick={() => { setFaceState("idle"); setFaceMsg(""); }}>
+                    Try again
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <LoginForm busy={busy} onSubmit={loginWithCredentials} />

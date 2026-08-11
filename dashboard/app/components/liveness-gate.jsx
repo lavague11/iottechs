@@ -25,7 +25,11 @@ export default function LivenessGate({ onPass, onFail, threshold = 80 }) {
         const r = await fetch("/api/liveness/session", { method: "POST" });
         const j = await r.json();
         if (!alive) return;
-        if (!r.ok) { setErr(j.error || "Couldn't start the liveness check."); return; }
+        if (!r.ok) {
+          onFail?.({ reason: r.status === 503 ? "unconfigured" : "session_error" });
+          setErr(j.error || "Couldn't start the liveness check.");
+          return;
+        }
         try { Amplify.configure({}); } catch (e) {}
         setSession(j);
       } catch (e) { if (alive) setErr("Connection error — try again."); }
