@@ -44,8 +44,8 @@ export const INTEGRATIONS = [
   },
   {
     key: "OPENAI_API_KEY",
-    name: "OpenAI (Satellite Enhance)",
-    powers: "AI cleanup of the cropped satellite in the site survey (server-side only)",
+    name: "OpenAI (Survey AI)",
+    powers: "Satellite Enhance + Floor-Plan Generate in the site survey (server-side only)",
     docs: "https://platform.openai.com/api-keys",
     clientExposed: false,
   },
