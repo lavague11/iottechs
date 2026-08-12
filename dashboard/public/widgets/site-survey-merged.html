@@ -142,6 +142,14 @@
   .devmenu .mi .ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7}
   .card.sel{border-color:var(--gold)}
 
+  /* read-only (customer) view: hide editing, show the finished plan + cones */
+  body.ro #addDeviceBtn,body.ro .devmenu,body.ro .utils{display:none}
+  body.ro .wiz .nav .b,body.ro .wiz .floorTabs{display:none}
+  body.ro .card .x,body.ro .card .fov input{display:none}
+  body.ro .devNode .fovWrap{display:block}
+  body.ro .devNode .icLabel{pointer-events:none;cursor:default}
+  body.ro .devNode .devDot{cursor:default}
+
   @media (max-width:900px){ .side{display:none} .canvasCol{padding-right:18px} .doors{grid-template-columns:1fr} }
 </style>
 </head>
@@ -254,6 +262,8 @@
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
     var PID = new URLSearchParams(location.search).get("project") || "";
+    var RO = new URLSearchParams(location.search).get("ro")==="1";   // customer read-only view
+    if(RO) document.body.classList.add("ro");
     var projectAddress = "";
     function cityState(a){ var p=String(a||"").split(",").map(function(s){return s.trim();});
       if(p.length>=3){ var st=(p[2]||"").split(" ")[0]; return p[1]+(st?", "+st:""); } return a||""; }
@@ -309,7 +319,7 @@
     });
 
     function applyBackground(dataUrl){
-      bgHasImage=true;
+      bgHasImage=true; bgData=dataUrl||null;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
@@ -366,7 +376,7 @@
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
       else if(curStep===1) setHint("Add cameras & devices, then place them on the plan."); }
     // click empty plan → drop the armed device; stays armed for the next one
-    work.addEventListener("pointerdown", function(e){ if(!armedK) return;
+    work.addEventListener("pointerdown", function(e){ if(RO||!armedK) return;
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu")) return;
       var r=document.getElementById("canvas").getBoundingClientRect();
       addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100); });
@@ -375,7 +385,7 @@
       var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
       var nType=devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type
       var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,fov:it.fov||60,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
-      devices.push(d); mountDevice(d); renderPanel(); updateCount(); }
+      devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(curStep===2&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
@@ -410,25 +420,48 @@
         card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")) select(d.id); });
         card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
         if(showFov){ var rng=card.querySelector("input"),v=card.querySelector(".v");
-          rng.addEventListener("input", function(){ d.fov=+rng.value; v.textContent=d.fov+"°"; renderDevice(d); }); }
+          rng.addEventListener("input", function(){ d.fov=+rng.value; v.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
         panelBody.appendChild(card);
       });
     }
     function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
-      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); }
+      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); queueSave(); }
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
+
+    // ---- persistence: autosave the survey per project (localStorage; the host also backs it up server-side) ----
+    var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null;
+    function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
+    function save(){ try{ localStorage.setItem(PKEY, JSON.stringify({
+      bg:bgData, step:curStep,
+      devices:devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov}; }) })); }catch(e){} }
+    function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
+      var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
+      var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||60,tag:"I"+g.letter+nG,name:it.name+" "+nT};
+      devices.push(d); mountDevice(d); }
+    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s) return; var st=JSON.parse(s);
+      if(!st || (!st.bg && !(st.devices&&st.devices.length))) return;
+      bgHasImage=true; bgData=st.bg||null;
+      var img=document.getElementById("stageImg");
+      if(bgData){ img.style.backgroundImage="url("+bgData+")"; } else { img.style.background="#fff"; }
+      document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block";
+      surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
+      (st.devices||[]).forEach(reAdd); renderPanel(); updateCount();
+      goStep(typeof st.step==="number"?st.step:1);
+    }catch(e){} }
+
     // move: drag the icon
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ e.preventDefault(); e.stopPropagation(); select(d.id); dot.setPointerCapture(e.pointerId);
+      dot.addEventListener("pointerdown", function(e){ if(RO) return; e.preventDefault(); e.stopPropagation(); select(d.id); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("canvas").getBoundingClientRect();
         function mv(ev){ d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
-        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); }
+        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); queueSave(); }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
-    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(curStep!==2||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
+    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||curStep!==2||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
         function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); renderDevice(d); }
-        function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); }
+        function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); queueSave(); }
         lab.addEventListener("pointermove",mv); lab.addEventListener("pointerup",up); }); }
 
     // Upload a picture → file picker → drop the image onto the plan as the background
@@ -457,6 +490,7 @@
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
       var hints={1:"Add cameras & devices, then place them on the plan.",2:"Aim each camera — drag its IC label around to set the angle.",3:"Review the plan, then submit — or add another floor."};
       setHint(hints[idx]||"");
+      queueSave();
     }
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
     nextBtn.addEventListener("click", function(){ if(curStep<3) goStep(curStep+1); });
@@ -473,6 +507,8 @@
       tabs.querySelectorAll(".ftab").forEach(function(t){t.classList.remove("on");});
       var nt=document.createElement("button"); nt.className="ftab on"; nt.textContent="Floor "+n; tabs.appendChild(nt);
     });
+
+    restore();   // reopen the saved survey for this project (if any)
   </script>
 </body>
 </html>

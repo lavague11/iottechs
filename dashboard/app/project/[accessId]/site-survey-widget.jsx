@@ -14,11 +14,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [fs, setFs] = useState(false);
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
-  // Staff get the full capture-first Site Survey tool (survey-capture wraps the device engine
-  // and relays its events up here); customers get the read-only device board directly.
-  const src = readOnly
-    ? `/widgets/site-survey.html?embed=1&project=${encodeURIComponent(accessId)}&ro=1`
-    : `/widgets/survey-capture.html?project=${encodeURIComponent(accessId)}`;
+  // The redesigned Site Survey tool (chooser → Satellite/Upload/Draw → Place → Angles → Submit).
+  // Staff edit; customers get ?ro=1. It persists to its own store (survey2) so the swap doesn't
+  // disturb existing "survey" data / downstream consumers while the redesign is wired up.
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.
@@ -31,10 +30,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     // their own working draft, so don't force there.
     const viewerRefresh = view === "customer";
     (async () => {
-      await seedToolData(accessId, "survey", `iottechs_sitesurvey_v2_${accessId}`, { force: viewerRefresh });
+      await seedToolData(accessId, "survey2", `iottechs_survey2_${accessId}`, { force: viewerRefresh });
       if (!live) return;
       setSynced(true);
-      stop = startToolAutosync(accessId, "survey", `iottechs_sitesurvey_v2_${accessId}`);
+      stop = startToolAutosync(accessId, "survey2", `iottechs_survey2_${accessId}`);
     })();
     return () => { live = false; if (stop) stop(); };
   }, [accessId]);
