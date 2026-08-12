@@ -14,6 +14,8 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [fs, setFs] = useState(false);
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
+  const [capture, setCapture] = useState(false);   // satellite→floor→placements pipeline overlay (staff)
+  const [reloadKey, setReloadKey] = useState(0);    // bump to remount the editor after a capture writes new state
 
   const src = `/widgets/site-survey.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}`;
 
@@ -69,6 +71,17 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomImg]);
 
+  // Capture overlay: lock page scroll + Esc to close, then remount the editor so it
+  // reloads the state the pipeline just wrote (same per-project localStorage key).
+  function closeCapture() { setCapture(false); setReloadKey((k) => k + 1); }
+  useEffect(() => {
+    if (!capture) return;
+    function onKey(e) { if (e.key === "Escape") closeCapture(); }
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [capture]);
+
   return (
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       <div className="ss-embed-bar">
@@ -76,6 +89,12 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           {readOnly ? "Customer view — tap the plan to zoom" : "Live survey editor"}
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
+        {!readOnly && !fs && (
+          <button className="ss-embed-open" onClick={() => setCapture(true)} title="Satellite capture → floor plan → placements">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", marginRight: "4px" }}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+            Capture
+          </button>
+        )}
         {fs ? (
           <button className="ss-embed-open ss-embed-close" onClick={() => setFs(false)}>
             ✕ Exit
@@ -88,7 +107,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       </div>
       {synced ? (
         <iframe
-          key={src}
+          key={`${src}:${reloadKey}`}
           className="ss-embed-frame"
           src={src}
           title="Site Survey"
@@ -97,6 +116,21 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       ) : (
         <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
           Loading survey…
+        </div>
+      )}
+
+      {capture && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#fff", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderBottom: "1px solid var(--slate-line,#e3e5e8)", background: "#fff" }}>
+            <button className="ss-embed-open" onClick={closeCapture}>✕ Done</button>
+            <span style={{ fontSize: ".8rem", color: "var(--muted,#6f7686)" }}>Satellite capture → floor plan → placements</span>
+          </div>
+          <iframe
+            title="Survey capture"
+            src={`/widgets/survey-capture.html?project=${encodeURIComponent(accessId)}`}
+            style={{ flex: "1 1 auto", border: 0, width: "100%", minHeight: 0 }}
+            allow="geolocation"
+          />
         </div>
       )}
 
