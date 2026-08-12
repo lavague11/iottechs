@@ -235,7 +235,7 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html";
+    var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"");
     var surveyWiz=document.getElementById("surveyWiz");
     var bgWiz=document.getElementById("bgWiz");
     var bgHasImage=false;   // once a background exists, Back can return to editing it

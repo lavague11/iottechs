@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Satellite Capture</title>
+<style>
+  :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--r:10px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{font:15px/1.45 var(--sans);color:var(--ink);background:#fff;display:flex;flex-direction:column;overflow:hidden}
+
+  .head{flex:none;display:flex;align-items:center;gap:10px;padding:12px 16px 11px;border-bottom:1px solid var(--line)}
+  .head .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;flex:none}
+  .head input{flex:1;min-width:0;padding:10px 13px;font-size:15px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
+  .head input:focus{border-color:var(--ink)}
+  .head button{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  .head button:disabled{opacity:.5;cursor:default}
+
+  .stage{flex:1;position:relative;min-height:0;background:var(--soft)}
+  #map{position:absolute;inset:0}
+  #msg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:24px;z-index:5}
+  #msg.on{display:grid}
+
+  .foot{flex:none;display:flex;align-items:center;gap:8px;padding:11px 16px;border-top:1px solid var(--line);background:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .seg button{border:0;background:#fff;color:var(--muted);padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .foot .grow{flex:1}
+  .foot .save{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:var(--r);padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  .foot .save:disabled{opacity:.5;cursor:default}
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="lbl">Satellite Capture</span>
+    <input id="q" type="text" placeholder="Address or business" autocomplete="off" enterkeyhint="search">
+    <button id="show">Show</button>
+  </div>
+  <div class="stage">
+    <div id="map"></div>
+    <div id="msg" class="on">Loading map…</div>
+  </div>
+  <div class="foot">
+    <div class="seg"><button id="mTop" aria-pressed="true">Top down</button><button id="mHyb" aria-pressed="false">Labels</button></div>
+    <div class="grow"></div>
+    <button class="save" id="save">Use this view</button>
+  </div>
+
+<script>
+  var API_KEY=null, map=null, geocoder=null, marker=null, booted=false;
+  var PID=new URLSearchParams(location.search).get("project")||"";
+  var DEMO="2503 Jay Pl, Union, NJ 07083";
+  function $(id){return document.getElementById(id);}
+  function msg(m){ var el=$("msg"); if(!m){el.classList.remove("on");return;} el.textContent=m; el.classList.add("on"); }
+
+  // Boot Google Maps with the vault key; prefill + search the project address.
+  fetch("/api/config"+(PID?"?project="+encodeURIComponent(PID):"")).then(function(r){return r.json();}).then(function(c){
+    if(c&&c.address) $("q").value=c.address;
+    var key=c&&c.googleMapsApiKey;
+    if(!key){ msg("Add GOOGLE_MAPS_API_KEY in Development ▸ API Keys, then reopen."); return; }
+    API_KEY=key;
+    var s=document.createElement("script");
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=geometry&callback=initMap&v=weekly";
+    s.async=true; s.onerror=function(){ msg("Map failed to load — check the key + billing."); };
+    document.head.appendChild(s);
+  }).catch(function(){ msg("Couldn't reach /api/config."); });
+  window.gm_authFailure=function(){ msg("Key rejected — enable Maps JS API + billing for this referrer."); };
+
+  window.initMap=function(){
+    msg("");
+    map=new google.maps.Map($("map"),{ center:{lat:40.6588,lng:-74.2957}, zoom:20, mapTypeId:"satellite", tilt:0,
+      streetViewControl:false, mapTypeControl:false, fullscreenControl:false, rotateControl:false, gestureHandling:"greedy", isFractionalZoomEnabled:true });
+    geocoder=new google.maps.Geocoder();
+    $("show").addEventListener("click", function(){ search($("q").value.trim()); });
+    $("q").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); search($("q").value.trim()); }});
+    $("mTop").addEventListener("click", function(){ setType("satellite"); });
+    $("mHyb").addEventListener("click", function(){ setType("hybrid"); });
+    search(($("q").value||DEMO).trim());
+  };
+  function setType(t){ map.setMapTypeId(t); $("mTop").setAttribute("aria-pressed",t==="satellite"); $("mHyb").setAttribute("aria-pressed",t==="hybrid"); }
+  function search(q){ if(!q||!geocoder) return; $("show").disabled=true;
+    geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length) return;
+      var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
+      if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc}); $("q").value=res[0].formatted_address; }); }
+
+  // Capture the current view as a Static Maps satellite image and hand it to the host.
+  function capture(){
+    if(!map||!API_KEY){ return; }
+    var btn=$("save"); btn.disabled=true; btn.textContent="Capturing…";
+    var c=map.getCenter(), z=Math.round(map.getZoom());
+    var el=$("map"), w=Math.min(640,Math.round(el.clientWidth)), h=Math.min(640,Math.round(el.clientHeight));
+    var type=map.getMapTypeId()==="hybrid"?"hybrid":"satellite";
+    var url="https://maps.googleapis.com/maps/api/staticmap?center="+c.lat().toFixed(7)+","+c.lng().toFixed(7)+
+      "&zoom="+z+"&size="+w+"x"+h+"&scale=2&format=png&maptype="+type+"&key="+API_KEY;
+    var im=new Image(); im.crossOrigin="anonymous";
+    im.onload=function(){ var cv=document.createElement("canvas"); cv.width=im.naturalWidth; cv.height=im.naturalHeight;
+      cv.getContext("2d").drawImage(im,0,0);
+      try{ parent.postMessage({type:"satellite-capture-result", dataUrl:cv.toDataURL("image/jpeg",0.92)}, "*"); }catch(e){}
+      btn.disabled=false; btn.textContent="Use this view"; };
+    im.onerror=function(){ btn.disabled=false; btn.textContent="Use this view"; msg("Capture failed — check Maps Static API + billing."); setTimeout(function(){msg("");},2200); };
+    im.src=url;
+  }
+  $("save").addEventListener("click", capture);
+  // The host shell can also request the capture from its own "Use as background" button.
+  window.addEventListener("message", function(e){ if(e&&e.data&&e.data.type==="request-capture") capture(); });
+</script>
+</body>
+</html>
