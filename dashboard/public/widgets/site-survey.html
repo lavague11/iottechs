@@ -1602,6 +1602,18 @@
   setThemeIcon();
   /* ---- IOT TECHS embed: auto-open inside the dashboard panel + customer read-only mode ---- */
   if(__EMBED){ssWidget.classList.add('open');document.body.classList.add('iot-embed');setTimeout(function(){layoutBoard();redrawStrokes();render();},60);}
+  /* ---- Survey pipeline handoff: the capture/floor-plan stage posts the finished
+     background here so devices are placed on the leveled, scaled image. Sets the
+     current floor's background only — existing markers/floors are preserved. ---- */
+  window.addEventListener('message',function(e){
+    var d=e&&e.data; if(!d||d.type!=='iotSetBackground'||!d.img||__RO) return;
+    var im=new Image(); im.onload=function(){
+      B.img=d.img; B.imgSource='upload'; B.sat=null; B.imgRatio=im.naturalWidth/im.naturalHeight; B.bg='image';
+      if(d.ftWide){ var fw=parseFloat(d.ftWide); if(fw>0) B.ftWide=fw; }
+      resetZoom(); render(); saveState();
+    };
+    im.src=d.img;
+  });
   if(__RO){
     document.body.classList.add('iot-ro');
     // Customer view: light theme to match the site.

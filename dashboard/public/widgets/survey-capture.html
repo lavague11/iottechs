@@ -97,13 +97,56 @@
 
   .toast{position:fixed;left:50%;bottom:78px;transform:translate(-50%,8px);background:var(--ink);color:#fff;font-size:13px;padding:9px 15px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:86%;text-align:center;z-index:70}
   .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* ===== floor plan editor (ported from the standalone builder) ===== */
+  #floor{position:fixed;inset:0;background:#fff;z-index:65;display:none;flex-direction:column}
+  #floor.show{display:flex}
+  #floor > header{padding:12px 16px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  #fpStage{flex:1 1 auto;min-height:200px;position:relative;background:#0f1012;overflow:hidden;touch-action:none}
+  #fpStage canvas{position:absolute;inset:0;width:100%;height:100%}
+  #fpBg{opacity:.45}
+  #fpWiz{flex:none;border-top:1px solid var(--line);background:#fff}
+  .fptools{display:flex;gap:6px;padding:10px 12px 0;overflow-x:auto}
+  .fptool{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 13px;font-size:13px;border-radius:var(--r);font-weight:500}
+  .fptool[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fpbar{display:flex;gap:8px;align-items:center;padding:11px 12px 12px}
+
+  #labelModal{position:fixed;inset:0;background:rgba(16,17,18,.4);z-index:80;display:none;align-items:center;justify-content:center}
+  #labelModal.show{display:flex}
+  #labelBox{background:#fff;border-radius:14px;padding:16px;width:min(360px,88vw);box-shadow:0 20px 60px rgba(16,17,18,.3)}
+  #labelChips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .chip{border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:7px 11px;font-size:13px;border-radius:20px;cursor:pointer}
+  .chip:active{background:var(--ink);color:#fff}
+  #labelInput{width:100%;padding:10px 12px;font-size:15px;border:1px solid var(--line);border-radius:var(--r);outline:none}
+  #labelInput:focus{border-color:var(--ink)}
+
+  /* ===== stage 3: placements (nested device engine) ===== */
+  #place{position:fixed;inset:0;background:#0f1012;z-index:66;display:none;flex-direction:column}
+  #place.show{display:flex}
+  #placeBar{flex:none;display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border-bottom:1px solid var(--line)}
+  #placeFrame{flex:1 1 auto;border:0;width:100%;min-height:0;background:#0f1012}
+
+  /* ===== admin prompt editor ===== */
+  .prompt-edit{display:none}            /* revealed only for admins */
+  .prompt-edit.reveal{display:inline-flex}
+  .rev-in{width:100%;padding:8px 11px;font-size:13px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
+  .rev-in:focus{border-color:var(--ink)}
+  #promptModal{position:fixed;inset:0;background:rgba(16,17,18,.45);z-index:82;display:none;align-items:center;justify-content:center;padding:16px}
+  #promptModal.show{display:flex}
+  #promptBox{background:#fff;border-radius:14px;padding:16px;width:min(580px,94vw);max-height:90vh;box-shadow:0 20px 60px rgba(16,17,18,.3);display:flex;flex-direction:column;gap:10px}
+  #promptBox h3{margin:0;font-size:15px;font-weight:660}
+  #promptBox .sub{font-size:12px;color:var(--muted);margin:0}
+  #promptText{width:100%;min-height:210px;resize:vertical;padding:11px 12px;font:13px/1.55 var(--sans);border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
+  #promptText:focus{border-color:var(--ink)}
+  #promptBox .row{display:flex;gap:8px;align-items:center}
+  #promptBox .row .spacer{flex:1}
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand">Site Survey</div>
-  <div class="crumbs"><b id="cbBg">Background</b><span>&rarr;</span><span id="cbPl">Placements</span></div>
+  <div class="crumbs"><span id="cbBg">Background</span><span>&rarr;</span><span id="cbFp">Floor plan</span><span>&rarr;</span><span id="cbPl">Placements</span></div>
 </header>
 
 <div class="stage">
@@ -168,6 +211,8 @@
       </div>
       <div class="panel" data-panel="3">
         <div class="hint" id="hint4">Optional AI cleanup — tidies the imagery while keeping the framing exactly as cropped. Measurements come from the crop, not this.</div>
+        <input id="enhRev" class="rev-in" placeholder="Revision for this render (optional) — e.g. remove the pool, keep the black area" autocomplete="off">
+        <button class="lite prompt-edit" data-pmode="aerial" style="align-self:flex-start">Edit prompt</button>
       </div>
       <div class="nav">
         <button id="capBack" class="lite">Back</button>
@@ -177,7 +222,7 @@
         <button id="capture-btn" style="display:none">Crop</button>
         <button id="redoBtn" class="lite" style="display:none">Redo</button>
         <button id="enhanceBtn" style="display:none">Enhance</button>
-        <button id="useBtn" style="display:none">Use it &rarr;</button>
+        <button id="useBtn" style="display:none">Floor plan &rarr;</button>
       </div>
     </div>
   </div>
@@ -201,10 +246,82 @@
 
 </div>
 
+<!-- ===================== FLOOR PLAN EDITOR ===================== -->
+<div id="floor">
+  <header>
+    <div class="brand">Floor Plan</div>
+    <div id="fpMeta" style="font-size:12px;color:var(--muted)"></div>
+  </header>
+  <div id="fpStage">
+    <canvas id="fpBg"></canvas>
+    <canvas id="fpDraw"></canvas>
+    <canvas id="fpLive"></canvas>
+  </div>
+  <div id="fpWiz">
+    <div class="fptools">
+      <button class="fptool" data-tool="select" aria-pressed="true">Select</button>
+      <button class="fptool" data-tool="line">Line</button>
+      <button class="fptool" data-tool="rect">Room</button>
+      <button class="fptool" data-tool="poly">Multipoint</button>
+      <button class="fptool" data-tool="measure">Measure</button>
+      <button class="fptool" data-tool="door">Door</button>
+    </div>
+    <input id="fpRev" class="rev-in" placeholder="Revision for Generate (optional) — e.g. simpler walls, add dimensions" autocomplete="off" style="margin:8px 12px 0;width:auto">
+    <div class="fpbar">
+      <button id="fpBack" class="lite">Back</button>
+      <button id="fpUndo" class="lite">Undo</button>
+      <button id="fpClear" class="lite">Clear</button>
+      <div id="fpHint" style="flex:1;font-size:12px;color:var(--muted);text-align:center"></div>
+      <button class="lite prompt-edit" data-pmode="floorplan">Edit prompt</button>
+      <button id="fpExport" class="lite">Export JSON</button>
+      <button id="fpRender" class="lite">Generate</button>
+      <button id="fpPlace">Placements &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== STAGE 3: PLACEMENTS (device engine) ===================== -->
+<div id="place">
+  <div id="placeBar">
+    <button id="placeBack" class="lite">&larr; Floor plan</button>
+    <div class="brand" style="margin-left:2px">Placements</div>
+  </div>
+  <iframe id="placeFrame" title="Device placement" allow="clipboard-write"></iframe>
+</div>
+
+<div id="labelModal">
+  <div id="labelBox">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px">Label this <span id="labelWhat">shape</span></div>
+    <div id="labelChips"></div>
+    <input id="labelInput" type="text" placeholder="or type a label" autocomplete="off">
+    <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+      <button id="labelSkip" class="lite">Skip</button>
+      <button id="labelSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="promptModal">
+  <div id="promptBox">
+    <h3 id="promptTitle">Edit prompt</h3>
+    <p class="sub">The instruction sent to the AI. Saving sets it as the default for all future surveys.</p>
+    <textarea id="promptText" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="promptReset" class="lite">Reset to default</button>
+      <span id="promptState" class="sub"></span>
+      <div class="spacer"></div>
+      <button id="promptCancel" class="lite">Close</button>
+      <button id="promptSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 var API_KEY=null, DEMO="2503 Jay Pl, Union, NJ 07083", FT=3.28084;
+var PID = new URLSearchParams(location.search).get("project") || "default";
+var projectAddress="";   // filled from /api/config?project=… — the address we prefill + search
 var map, marker, geocoder, place=null, viewRot=0, step=0, mapsBooted=false;
 var lastCanvas=null, lastMpp=null;
 
@@ -214,11 +331,13 @@ function norm(d){ return ((d+180)%360+360)%360-180; }
 function mapMsg(m){ var el=$("mapMsg"); if(!m){el.classList.remove("on");return;} el.textContent=m; el.classList.add("on"); }
 
 /* ---------- screen routing ---------- */
+function crumb(active){  // 'bg' | 'fp' | 'pl' — bold the current pipeline stage
+  [["cbBg","bg"],["cbFp","fp"],["cbPl","pl"]].forEach(function(p){ var el=$(p[0]); if(!el) return;
+    var on=p[1]===active; el.style.color=on?'var(--ink)':'var(--faint)'; el.style.fontWeight=on?'600':'400'; });
+}
 function show(id){
   document.querySelectorAll('.screen').forEach(function(el){ el.classList.toggle('on', el.id===id); });
-  var onBoard=id==='board';
-  $("cbBg").style.color=onBoard?'var(--faint)':'var(--ink)'; $("cbBg").style.fontWeight=onBoard?'400':'600';
-  $("cbPl").style.color=onBoard?'var(--ink)':'var(--faint)'; $("cbPl").style.fontWeight=onBoard?'600':'400';
+  crumb('bg');
   if(id==='capture'){ bootMaps(); setTimeout(function(){ if(map) google.maps.event.trigger(map,'resize'); },60); }
 }
 document.querySelectorAll('.opt').forEach(function(b){
@@ -234,8 +353,9 @@ document.querySelectorAll('.opt').forEach(function(b){
 function bootMaps(){
   if(mapsBooted) return; mapsBooted=true;
   mapMsg("Loading map…");
-  fetch('/api/config').then(function(r){return r.json();}).then(function(cfg){
+  fetch('/api/config?project='+encodeURIComponent(PID)).then(function(r){return r.json();}).then(function(cfg){
     var key=cfg&&cfg.googleMapsApiKey;
+    if(cfg&&cfg.address){ projectAddress=cfg.address; if($("q")) $("q").value=projectAddress; }  // prefill immediately
     if(!key){ mapMsg("Add GOOGLE_MAPS_API_KEY in Development ▸ API Keys, then reopen."); mapsBooted=false; return; }
     API_KEY=key;
     var s=document.createElement('script');
@@ -264,7 +384,7 @@ function initMap(){
   $("rotZero").addEventListener("click", function(){ setRot(0); });
   $("zoom").addEventListener("input", function(){ map.setZoom(parseFloat(this.value)); $("zoomVal").textContent=parseFloat(this.value).toFixed(1); });
   initDraw();
-  runSearch(DEMO);
+  runSearch(projectAddress || DEMO);   // project address when embedded, demo otherwise
 }
 window.initMap=initMap;
 
@@ -431,6 +551,7 @@ function enhance(){
   sg.drawImage(capBase,offX,offY);
   sq.toBlob(function(blob){
     var fd=new FormData(); fd.append("image",blob,"c.png");
+    if($("enhRev")&&$("enhRev").value.trim()) fd.append("revision",$("enhRev").value.trim());
     fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){
       if(d.error) throw new Error(d.error);
       var ai=new Image(); ai.onload=function(){
@@ -452,7 +573,7 @@ function toPlacements(){
 }
 $("enhanceBtn").addEventListener("click", enhance);
 $("redoBtn").addEventListener("click", redoEnhance);
-$("useBtn").addEventListener("click", toPlacements);
+$("useBtn").addEventListener("click", openFloor);   // Enhance → Floor plan (skips the old bare board)
 
 /* ---------- search ---------- */
 function runSearch(qStr){ if(!qStr){ toast("Type an address"); return; } if(!geocoder) return; $("show").disabled=true;
@@ -463,7 +584,257 @@ function landPlace(address,lat,lng){ var loc=new google.maps.LatLng(lat,lng); pl
 
 /* ---------- board handoff ---------- */
 $("boardBack").addEventListener("click", function(){ show('chooser'); });
-$("placeBtn").addEventListener("click", function(){ toast("Next: the survey board mounts here (P1c merge)"); });
+$("placeBtn").addEventListener("click", openFloor);
+
+/* ===================== FLOOR PLAN EDITOR ===================== *
+ * Ported from the standalone builder. Draws labeled shapes over the captured image
+ * and exports structured data ({address, scale_px_per_ft, image_px, shapes:[…]}).
+ * Two dashboard adaptations: (1) scale is pre-set from the satellite capture
+ * (capFtPerPx), so Measure is an override not a requirement; (2) Generate goes
+ * through /api/enhance?mode=floorplan (vault key, server-side), never a client key.
+ * State model (per sheet): { image, shapes:[{type,pts,label,feet}] } */
+var fpShapes=[], fpTool="line", fpLive=null, fpBgImg=null, fpScale=null, fpT={x:0,y:0,s:1};
+
+function openFloor(){
+  var src = capEnhanced || capBase;
+  if(!src){ toast("Capture an image first"); return; }
+  if(fpBgImg!==src){ fpBgImg=src; fpShapes=[]; fpScale = capFtPerPx ? { ppf: 1/capFtPerPx } : null; }  // fresh capture → reset; re-entry keeps shapes
+  fpLive=null;
+  crumb('fp');
+  $("floor").classList.add("show");
+  setTool("line");
+  requestAnimationFrame(fpResize);
+}
+function closeFloor(){ $("floor").classList.remove("show"); crumb('bg'); }
+
+function fpResize(){
+  var stage=$("fpStage"), W=stage.clientWidth, H=stage.clientHeight, dpr=window.devicePixelRatio||1;
+  ["fpBg","fpDraw","fpLive"].forEach(function(id){ var c=$(id); c.width=W*dpr; c.height=H*dpr; c.getContext("2d").setTransform(dpr,0,0,dpr,0,0); });
+  fpFit(); drawBg(); redrawShapes(); drawLive();
+}
+function fpFit(){
+  var stage=$("fpStage"), W=stage.clientWidth, H=stage.clientHeight; if(!fpBgImg) return;
+  var s=Math.min(W/fpBgImg.width, H/fpBgImg.height);
+  fpT={ s:s, x:(W-fpBgImg.width*s)/2, y:(H-fpBgImg.height*s)/2 };
+}
+function drawBg(){
+  var g=$("fpBg").getContext("2d"), stage=$("fpStage");
+  g.clearRect(0,0,stage.clientWidth,stage.clientHeight);
+  if(fpBgImg) g.drawImage(fpBgImg, fpT.x, fpT.y, fpBgImg.width*fpT.s, fpBgImg.height*fpT.s);
+}
+function setTool(t){
+  fpTool=t; fpLive=null;
+  document.querySelectorAll(".fptool").forEach(function(b){ b.setAttribute("aria-pressed", b.dataset.tool===t); });
+  var hints={ select:"Tap a shape to relabel it.", line:"Tap start, tap end — draws a wall/line.",
+    rect:"Tap one corner, tap the opposite — draws a room.", poly:"Tap each corner; double-tap or Enter to close.",
+    measure:"Draw a line over a known length to reset the scale.", door:"Tap where a door goes." };
+  $("fpHint").textContent = hints[t]||"";
+  drawLive();
+}
+function initFloor(){
+  document.querySelectorAll(".fptool").forEach(function(b){ b.addEventListener("click", function(){ setTool(b.dataset.tool); }); });
+  $("fpBack").addEventListener("click", closeFloor);
+  $("fpUndo").addEventListener("click", function(){ fpShapes.pop(); redrawShapes(); });
+  $("fpClear").addEventListener("click", function(){ if(fpShapes.length && confirm("Clear all shapes?")){ fpShapes=[]; redrawShapes(); } });
+  $("fpExport").addEventListener("click", exportFloor);
+  $("fpRender").addEventListener("click", renderFloor);
+  window.addEventListener("resize", function(){ if($("floor").classList.contains("show")) fpResize(); });
+
+  var live=$("fpLive"), pts=[], lastTap=0;
+  function xy(e){ var r=live.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+  live.addEventListener("pointerdown", function(e){
+    e.preventDefault(); var p=xy(e), now=Date.now();
+    if(fpTool==="select"){ selectAt(p); return; }
+    if(fpTool==="door"){ commitShape({type:"door", pts:[p]}); return; }
+    if(fpTool==="poly"){
+      if(now-lastTap<300 && pts.length>=3){ finishPoly(pts.slice()); pts=[]; lastTap=0; return; }
+      pts.push(p); fpLive={type:"poly", pts:pts.slice()}; drawLive(); lastTap=now; return;
+    }
+    if(!pts.length){ pts=[p]; fpLive={type:fpTool,pts:[p,p]}; drawLive(); }
+    else{ var shape={type:fpTool,pts:[pts[0],p]}; pts=[]; fpLive=null;
+      if(fpTool==="measure") calibrate(shape); else commitShape(shape); }
+  });
+  live.addEventListener("pointermove", function(e){
+    if(!fpLive) return; var p=xy(e);
+    if(fpTool==="poly"){ var a=fpLive.pts.slice(); a.push(p); drawLive(a); }
+    else { fpLive.pts[1]=p; drawLive(); }
+  });
+  window.addEventListener("keydown", function(e){
+    if(!$("floor").classList.contains("show")) return;
+    if(e.key==="Enter" && fpTool==="poly" && fpLive && fpLive.pts.length>=3){ finishPoly(fpLive.pts.slice()); pts=[]; fpLive=null; }
+    if(e.key==="Escape"){ pts=[]; fpLive=null; drawLive(); }
+  });
+}
+function finishPoly(p){ commitShape({type:"poly", pts:p}); }
+function calibrate(shape){
+  var px=dist(shape.pts[0],shape.pts[1])/fpT.s;
+  var ft=parseFloat(window.prompt("This line is how many feet in real life?",""));
+  if(ft && ft>0){ fpScale={ppf: px/ft}; toast("Scale set: "+Math.round(px/ft)+" px/ft"); }
+  fpLive=null; drawLive(); redrawShapes();
+}
+function commitShape(shape){
+  fpLive=null;
+  askLabel(shape.type, function(label){
+    shape.label=label||"";
+    if(fpScale && (shape.type==="line"||shape.type==="rect")) shape.feet=shapeFeet(shape);
+    fpShapes.push(shape); redrawShapes();
+  });
+}
+function shapeFeet(s){
+  if(s.type==="line"){ return +(dist(s.pts[0],s.pts[1])/fpT.s/fpScale.ppf).toFixed(1); }
+  if(s.type==="rect"){ var w=Math.abs(s.pts[1].x-s.pts[0].x)/fpT.s/fpScale.ppf, h=Math.abs(s.pts[1].y-s.pts[0].y)/fpT.s/fpScale.ppf; return {w:+w.toFixed(1), h:+h.toFixed(1)}; }
+  return null;
+}
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+
+var labelCb=null;
+function askLabel(kind, cb){
+  labelCb=cb;
+  $("labelWhat").textContent = kind==="rect"?"room":kind==="line"?"wall/line":kind;
+  var presets = kind==="rect" ? ["Room","Office","Lobby","Storage","Restroom","Kitchen","Sales floor","Hallway"]
+              : kind==="line" ? ["Wall","Window","Counter","Fence","Property line"]
+              : kind==="door" ? ["Door","Entrance","Emergency exit","Gate"]
+              : kind==="poly" ? ["Room","Building","Parking","Zone"] : ["Label"];
+  var box=$("labelChips"); box.innerHTML="";
+  presets.forEach(function(t){ var c=document.createElement("button"); c.className="chip"; c.textContent=t;
+    c.addEventListener("click", function(){ finishLabel(t); }); box.appendChild(c); });
+  $("labelInput").value=""; $("labelModal").classList.add("show"); setTimeout(function(){ $("labelInput").focus(); },50);
+}
+function finishLabel(v){ $("labelModal").classList.remove("show"); var cb=labelCb; labelCb=null; if(cb) cb(v); }
+function initLabel(){
+  $("labelSave").addEventListener("click", function(){ finishLabel($("labelInput").value.trim()); });
+  $("labelSkip").addEventListener("click", function(){ finishLabel(""); });
+  $("labelInput").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); finishLabel($("labelInput").value.trim()); } });
+}
+function selectAt(p){
+  for(var i=fpShapes.length-1;i>=0;i--){ var s=fpShapes[i];
+    if(near(s,p)){ askLabel(s.type, function(v){ if(v!==undefined) s.label=v; redrawShapes(); }); return; } }
+}
+function near(s,p){ var q=s.pts; for(var i=0;i<q.length;i++){ if(dist(q[i],p)<14) return true; }
+  if(q.length===2){ return distToSeg(p,q[0],q[1])<10; } return false; }
+function distToSeg(p,a,b){ var dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy; if(!l) return dist(p,a);
+  var t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l)); return dist(p,{x:a.x+t*dx,y:a.y+t*dy}); }
+
+function drawLive(overridePts){
+  var g=$("fpLive").getContext("2d"), stage=$("fpStage"); g.clearRect(0,0,stage.clientWidth,stage.clientHeight);
+  if(!fpLive) return;
+  strokeShape(g, {type:fpLive.type, pts:overridePts||fpLive.pts}, true);
+}
+function redrawShapes(){
+  var g=$("fpDraw").getContext("2d"), stage=$("fpStage"); g.clearRect(0,0,stage.clientWidth,stage.clientHeight);
+  fpShapes.forEach(function(s){ strokeShape(g, s, false); });
+  $("fpMeta").textContent = (place?place.address+"  ·  ":"") + fpShapes.length + " shape"+(fpShapes.length!==1?"s":"") + (fpScale?"  ·  to scale":"  ·  tap Measure to set scale");
+}
+function strokeShape(g, s, live){
+  g.lineWidth=2; g.strokeStyle=live?"#7bd88f":"#fff"; g.fillStyle="rgba(123,216,143,.12)";
+  g.font="600 12px -apple-system,Helvetica,Arial,sans-serif";
+  var p=s.pts;
+  if(s.type==="door"){ g.fillStyle="#f5c451"; g.beginPath(); g.arc(p[0].x,p[0].y,6,0,Math.PI*2); g.fill(); if(s.label){ g.fillStyle="#fff"; g.fillText(s.label,p[0].x+9,p[0].y+4);} return; }
+  if(s.type==="line"||s.type==="measure"){ g.beginPath(); g.moveTo(p[0].x,p[0].y); g.lineTo(p[1].x,p[1].y); g.stroke(); dot(g,p[0]); dot(g,p[1]); midLabel(g,s,p[0],p[1]); return; }
+  if(s.type==="rect"){ var x=Math.min(p[0].x,p[1].x),y=Math.min(p[0].y,p[1].y),w=Math.abs(p[1].x-p[0].x),h=Math.abs(p[1].y-p[0].y);
+    g.fillRect(x,y,w,h); g.strokeRect(x,y,w,h); label(g,s,x+6,y+16); return; }
+  if(s.type==="poly"){ g.beginPath(); p.forEach(function(q,i){ i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y); }); if(!live) g.closePath(); g.fill(); g.stroke(); p.forEach(function(q){ dot(g,q); }); if(p[0]) label(g,s,p[0].x+6,p[0].y-6); return; }
+}
+function dot(g,q){ g.save(); g.fillStyle="#fff"; g.beginPath(); g.arc(q.x,q.y,3,0,Math.PI*2); g.fill(); g.restore(); }
+function label(g,s,x,y){ if(!s.label && !s.feet) return; var t=(s.label||"")+feetStr(s); g.save(); g.fillStyle="#fff"; g.fillText(t,x,y); g.restore(); }
+function midLabel(g,s,a,b){ var t=(s.label||"")+(s.feet?" "+s.feet+" ft":""); if(!t.trim())return; g.save(); g.fillStyle="#fff"; g.fillText(t,(a.x+b.x)/2+6,(a.y+b.y)/2-4); g.restore(); }
+function feetStr(s){ if(s.type==="rect"&&s.feet) return " ("+s.feet.w+"×"+s.feet.h+" ft)"; if(s.feet) return " ("+s.feet+" ft)"; return ""; }
+
+function exportFloor(){
+  var data={ address: place?place.address:null, scale_px_per_ft: fpScale?+fpScale.ppf.toFixed(3):null,
+    image_px:{w:fpBgImg.width,h:fpBgImg.height},
+    shapes: fpShapes.map(function(s){ return { type:s.type, label:s.label||null, feet:s.feet||null,
+      points: s.pts.map(function(q){ return { x:+((q.x-fpT.x)/fpT.s).toFixed(1), y:+((q.y-fpT.y)/fpT.s).toFixed(1) }; }) }; }) };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=slug(place?place.address:"floorplan")+"-plan.json"; a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},4000);
+  toast("Exported "+fpShapes.length+" shapes");
+}
+function slug(s){ return String(s||"floorplan").replace(/,/g,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase().slice(0,60); }
+
+function renderFloor(){
+  if(!fpShapes.length){ toast("Draw something first"); return; }
+  var btn=$("fpRender"); btn.disabled=true; btn.textContent="Generating…";
+  var side=Math.max(fpBgImg.width,fpBgImg.height);
+  var cv=document.createElement("canvas"); cv.width=side; cv.height=side;
+  var g=cv.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,side,side);
+  var ox=(side-fpBgImg.width)/2, oy=(side-fpBgImg.height)/2;
+  g.globalAlpha=.5; g.drawImage(fpBgImg,ox,oy); g.globalAlpha=1;
+  fpShapes.forEach(function(s){ var ip=s.pts.map(function(q){ return {x:(q.x-fpT.x)/fpT.s+ox, y:(q.y-fpT.y)/fpT.s+oy}; });
+    strokeShape(g, {type:s.type, pts:ip, label:s.label, feet:s.feet}, false); });
+  var labels=fpShapes.filter(function(s){return s.label;}).map(function(s){return s.label;}).join(", ");
+  cv.toBlob(function(blob){
+    var fd=new FormData(); fd.append("mode","floorplan"); fd.append("labels",labels); fd.append("image",blob,"sketch.png");
+    if($("fpRev")&&$("fpRev").value.trim()) fd.append("revision",$("fpRev").value.trim());
+    fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(d.error) throw new Error(d.error);
+      var ai=new Image(); ai.onload=function(){
+        var out=document.createElement("canvas"); out.width=ai.naturalWidth; out.height=ai.naturalHeight; out.getContext("2d").drawImage(ai,0,0);
+        fpBgImg=out; fpShapes=[]; fpScale=null; fpFit(); drawBg(); redrawShapes();
+        toast("Floor plan generated — draw more, or export");
+      }; ai.src="data:image/png;base64,"+d.b64;
+    }).catch(function(e){ toast(String(e.message||"Generate failed")); }).then(function(){ btn.disabled=false; btn.textContent="Generate"; });
+  },"image/png");
+}
+
+/* ===================== STAGE 3: PLACEMENTS handoff ===================== *
+ * Loads the canonical device-placement engine (site-survey.html) in a nested iframe
+ * and posts the finished background + real-world scale. The engine keeps its own
+ * per-project state; we only set the board background so cameras/Toast/ADT devices
+ * land on the leveled, scaled image. */
+var placeLoaded=false;
+function postBackground(){
+  var fr=$("placeFrame"); if(!fr||!fr.contentWindow||!fpBgImg) return;
+  fr.contentWindow.postMessage({ type:"iotSetBackground", img:fpBgImg.toDataURL("image/jpeg",0.92), ftWide: capAcrossFt||0 }, "*");
+}
+function openPlace(){
+  if(!fpBgImg){ toast("Build a background first"); return; }
+  crumb('pl'); $("place").classList.add("show");
+  var fr=$("placeFrame");
+  if(!placeLoaded){
+    placeLoaded=true;
+    fr.addEventListener("load", function(){ setTimeout(postBackground,250); });
+    fr.src="/widgets/site-survey.html?project="+encodeURIComponent(PID)+"&embed=1";
+  } else { postBackground(); }
+}
+function closePlace(){ $("place").classList.remove("show"); crumb('fp'); }
+$("fpPlace").addEventListener("click", openPlace);
+$("placeBack").addEventListener("click", closePlace);
+
+/* ===================== ADMIN PROMPT EDITOR ===================== *
+ * The default AI prompts live server-side (lib/survey-prompts.js). Admins can override
+ * either from here; the edit persists as the new default (stored in the vault). The
+ * editor reveals only when GET /api/survey-prompts returns 200 (admin session). */
+var promptData=null, promptMode="aerial";
+function initPromptEditor(){
+  fetch("/api/survey-prompts").then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(d){
+    promptData=d;
+    document.querySelectorAll(".prompt-edit").forEach(function(b){ b.classList.add("reveal"); b.addEventListener("click", function(){ openPromptEditor(b.dataset.pmode); }); });
+  }).catch(function(){ /* not admin → editor stays hidden */ });
+}
+function openPromptEditor(mode){
+  if(!promptData) return; promptMode = mode==="floorplan" ? "floorplan" : "aerial";
+  var m = promptData[promptMode] || {};
+  $("promptTitle").textContent = promptMode==="floorplan" ? "Floor-plan prompt" : "Enhance prompt";
+  $("promptText").value = m.current || "";
+  $("promptState").textContent = m.custom ? "custom" : "default";
+  $("promptModal").classList.add("show"); setTimeout(function(){ $("promptText").focus(); },50);
+}
+function closePromptEditor(){ $("promptModal").classList.remove("show"); }
+function savePrompt(text){
+  fetch("/api/survey-prompts",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ mode:promptMode, prompt:text }) })
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(d.error) throw new Error(d.error);
+      promptData[promptMode] = { current:d.current, default:d.default, custom:d.custom };
+      $("promptText").value = d.current; $("promptState").textContent = d.custom ? "custom" : "default";
+      toast(text.trim() ? "Prompt saved" : "Reset to default");
+    }).catch(function(e){ toast(String(e.message||"Save failed")); });
+}
+$("promptSave").addEventListener("click", function(){ savePrompt($("promptText").value); });
+$("promptReset").addEventListener("click", function(){ savePrompt(""); });   // empty → server resets to default
+$("promptCancel").addEventListener("click", closePromptEditor);
+
+initFloor(); initLabel(); initPromptEditor();
 </script>
 </body>
 </html>
