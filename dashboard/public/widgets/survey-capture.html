@@ -165,15 +165,16 @@
         </button>
         <button class="opt" data-go="upload">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
-          <span class="tt"><span class="t">Upload image</span><span class="d">A photo, floor plan, or existing drawing</span></span>
+          <span class="tt"><span class="t">Upload</span><span class="d">A photo, floor plan, or existing drawing</span></span>
           <span class="arw">&rsaquo;</span>
         </button>
         <button class="opt" data-go="draw">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
-          <span class="tt"><span class="t">Draw</span><span class="d">Start on a blank canvas</span></span>
+          <span class="tt"><span class="t">Draw floor plans</span><span class="d">Sketch rooms &amp; walls &mdash; optionally clean it up with AI &mdash; then place devices</span></span>
           <span class="arw">&rsaquo;</span>
         </button>
       </div>
+      <input id="upIn" type="file" accept="image/*" style="display:none">
     </div>
   </div>
 
@@ -222,7 +223,7 @@
         <button id="capture-btn" style="display:none">Crop</button>
         <button id="redoBtn" class="lite" style="display:none">Redo</button>
         <button id="enhanceBtn" style="display:none">Enhance</button>
-        <button id="useBtn" style="display:none">Floor plan &rarr;</button>
+        <button id="useBtn" style="display:none">Place devices &rarr;</button>
       </div>
     </div>
   </div>
@@ -283,8 +284,8 @@
 <!-- ===================== STAGE 3: PLACEMENTS (device engine) ===================== -->
 <div id="place">
   <div id="placeBar">
-    <button id="placeBack" class="lite">&larr; Floor plan</button>
-    <div class="brand" style="margin-left:2px">Placements</div>
+    <button id="placeBack" class="lite">&larr; Change background</button>
+    <div class="brand" style="margin-left:2px">Site Survey</div>
   </div>
   <iframe id="placeFrame" title="Device placement" allow="clipboard-write"></iframe>
 </div>
@@ -343,10 +344,15 @@ function show(id){
 document.querySelectorAll('.opt').forEach(function(b){
   b.addEventListener('click', function(){
     var go=b.getAttribute('data-go');
-    if(go==='capture') show('capture');
-    else if(go==='upload'){ $("boardImg").style.display='none'; $("boardEmpty").style.display=''; $("scaleReadout").textContent=''; show('board'); toast('Upload wiring comes with the board merge'); }
-    else { $("boardImg").style.display='none'; $("boardEmpty").style.display=''; $("scaleReadout").textContent=''; show('board'); }
+    if(go==='capture') show('capture');                                  // satellite wizard → device editor
+    else if(go==='upload') $("upIn").click();                            // pick a file → device editor
+    else if(go==='draw') openFloor(true);                                // sketch (AI Generate optional) → device editor
   });
+});
+$("upIn").addEventListener("change", function(e){
+  var f=e.target.files[0]; if(!f) return;
+  var r=new FileReader(); r.onload=function(ev){ boardBg=ev.target.result; capAcrossFt=0; openPlace(); };
+  r.readAsDataURL(f); e.target.value="";
 });
 
 /* ---------- boot Google Maps with the vault key ---------- */
@@ -573,7 +579,9 @@ function toPlacements(){
 }
 $("enhanceBtn").addEventListener("click", enhance);
 $("redoBtn").addEventListener("click", redoEnhance);
-$("useBtn").addEventListener("click", openFloor);   // Enhance → Floor plan (skips the old bare board)
+$("useBtn").addEventListener("click", function(){   // Enhance step → device editor (Enhance itself is optional)
+  boardBg = capEnhanced || capBase; openPlace();
+});
 
 /* ---------- search ---------- */
 function runSearch(qStr){ if(!qStr){ toast("Type an address"); return; } if(!geocoder) return; $("show").disabled=true;
@@ -595,17 +603,21 @@ $("placeBtn").addEventListener("click", openFloor);
  * State model (per sheet): { image, shapes:[{type,pts,label,feet}] } */
 var fpShapes=[], fpTool="line", fpLive=null, fpBgImg=null, fpScale=null, fpT={x:0,y:0,s:1};
 
-function openFloor(){
+function openFloor(blankOk){
   var src = capEnhanced || capBase;
-  if(!src){ toast("Capture an image first"); return; }
-  if(fpBgImg!==src){ fpBgImg=src; fpShapes=[]; fpScale = capFtPerPx ? { ppf: 1/capFtPerPx } : null; }  // fresh capture → reset; re-entry keeps shapes
+  if(!src){
+    if(!blankOk){ toast("Capture an image first"); return; }
+    src = document.createElement("canvas"); src.width=1200; src.height=850;   // blank sketch surface for the AI path
+    var bg=src.getContext("2d"); bg.fillStyle="#fff"; bg.fillRect(0,0,src.width,src.height);
+  }
+  if(fpBgImg!==src){ fpBgImg=src; fpShapes=[]; fpScale = capFtPerPx ? { ppf: 1/capFtPerPx } : null; }  // fresh source → reset; re-entry keeps shapes
   fpLive=null;
   crumb('fp');
   $("floor").classList.add("show");
   setTool("line");
   requestAnimationFrame(fpResize);
 }
-function closeFloor(){ $("floor").classList.remove("show"); crumb('bg'); }
+function closeFloor(){ $("floor").classList.remove("show"); show('chooser'); crumb('bg'); }
 
 function fpResize(){
   var stage=$("fpStage"), W=stage.clientWidth, H=stage.clientHeight, dpr=window.devicePixelRatio||1;
@@ -725,19 +737,33 @@ function redrawShapes(){
   fpShapes.forEach(function(s){ strokeShape(g, s, false); });
   $("fpMeta").textContent = (place?place.address+"  ·  ":"") + fpShapes.length + " shape"+(fpShapes.length!==1?"s":"") + (fpScale?"  ·  to scale":"  ·  tap Measure to set scale");
 }
+var fpExportInk=false;   // true = render shapes in dark ink for a light background (draw-without-AI handoff)
+function fpInk(){ return fpExportInk ? "#101112" : "#fff"; }
 function strokeShape(g, s, live){
-  g.lineWidth=2; g.strokeStyle=live?"#7bd88f":"#fff"; g.fillStyle="rgba(123,216,143,.12)";
+  g.lineWidth=2; g.strokeStyle=live?"#7bd88f":fpInk(); g.fillStyle=fpExportInk?"rgba(16,17,18,.05)":"rgba(123,216,143,.12)";
   g.font="600 12px -apple-system,Helvetica,Arial,sans-serif";
   var p=s.pts;
-  if(s.type==="door"){ g.fillStyle="#f5c451"; g.beginPath(); g.arc(p[0].x,p[0].y,6,0,Math.PI*2); g.fill(); if(s.label){ g.fillStyle="#fff"; g.fillText(s.label,p[0].x+9,p[0].y+4);} return; }
+  if(s.type==="door"){ g.fillStyle="#f5c451"; g.beginPath(); g.arc(p[0].x,p[0].y,6,0,Math.PI*2); g.fill(); if(s.label){ g.fillStyle=fpInk(); g.fillText(s.label,p[0].x+9,p[0].y+4);} return; }
   if(s.type==="line"||s.type==="measure"){ g.beginPath(); g.moveTo(p[0].x,p[0].y); g.lineTo(p[1].x,p[1].y); g.stroke(); dot(g,p[0]); dot(g,p[1]); midLabel(g,s,p[0],p[1]); return; }
   if(s.type==="rect"){ var x=Math.min(p[0].x,p[1].x),y=Math.min(p[0].y,p[1].y),w=Math.abs(p[1].x-p[0].x),h=Math.abs(p[1].y-p[0].y);
     g.fillRect(x,y,w,h); g.strokeRect(x,y,w,h); label(g,s,x+6,y+16); return; }
   if(s.type==="poly"){ g.beginPath(); p.forEach(function(q,i){ i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y); }); if(!live) g.closePath(); g.fill(); g.stroke(); p.forEach(function(q){ dot(g,q); }); if(p[0]) label(g,s,p[0].x+6,p[0].y-6); return; }
 }
-function dot(g,q){ g.save(); g.fillStyle="#fff"; g.beginPath(); g.arc(q.x,q.y,3,0,Math.PI*2); g.fill(); g.restore(); }
-function label(g,s,x,y){ if(!s.label && !s.feet) return; var t=(s.label||"")+feetStr(s); g.save(); g.fillStyle="#fff"; g.fillText(t,x,y); g.restore(); }
-function midLabel(g,s,a,b){ var t=(s.label||"")+(s.feet?" "+s.feet+" ft":""); if(!t.trim())return; g.save(); g.fillStyle="#fff"; g.fillText(t,(a.x+b.x)/2+6,(a.y+b.y)/2-4); g.restore(); }
+function dot(g,q){ g.save(); g.fillStyle=fpInk(); g.beginPath(); g.arc(q.x,q.y,3,0,Math.PI*2); g.fill(); g.restore(); }
+function label(g,s,x,y){ if(!s.label && !s.feet) return; var t=(s.label||"")+feetStr(s); g.save(); g.fillStyle=fpInk(); g.fillText(t,x,y); g.restore(); }
+function midLabel(g,s,a,b){ var t=(s.label||"")+(s.feet?" "+s.feet+" ft":""); if(!t.trim())return; g.save(); g.fillStyle=fpInk(); g.fillText(t,(a.x+b.x)/2+6,(a.y+b.y)/2-4); g.restore(); }
+// Bake the sketched shapes onto the background in dark ink, so "Draw floor plans" carries
+// a visible line drawing into the device editor even when AI Generate is skipped.
+function composeFloorImage(){
+  if(!fpBgImg) return null;
+  var cv=document.createElement("canvas"); cv.width=fpBgImg.width; cv.height=fpBgImg.height;
+  var g=cv.getContext("2d"); g.drawImage(fpBgImg,0,0);
+  if(fpShapes.length){ fpExportInk=true;
+    fpShapes.forEach(function(s){ var ip=s.pts.map(function(q){ return {x:(q.x-fpT.x)/fpT.s, y:(q.y-fpT.y)/fpT.s}; });
+      strokeShape(g, {type:s.type, pts:ip, label:s.label, feet:s.feet}, false); });
+    fpExportInk=false; }
+  return cv;
+}
 function feetStr(s){ if(s.type==="rect"&&s.feet) return " ("+s.feet.w+"×"+s.feet.h+" ft)"; if(s.feet) return " ("+s.feet+" ft)"; return ""; }
 
 function exportFloor(){
@@ -782,13 +808,16 @@ function renderFloor(){
  * and posts the finished background + real-world scale. The engine keeps its own
  * per-project state; we only set the board background so cameras/Toast/ADT devices
  * land on the leveled, scaled image. */
-var placeLoaded=false;
+var placeLoaded=false, boardBg=null;   // background to hand off: a canvas, a dataURL string, or null for a blank board
+function bgUrl(){
+  if(!boardBg) return null;
+  return typeof boardBg==="string" ? boardBg : (boardBg.toDataURL ? boardBg.toDataURL("image/jpeg",0.92) : null);
+}
 function postBackground(){
-  var fr=$("placeFrame"); if(!fr||!fr.contentWindow||!fpBgImg) return;
-  fr.contentWindow.postMessage({ type:"iotSetBackground", img:fpBgImg.toDataURL("image/jpeg",0.92), ftWide: capAcrossFt||0 }, "*");
+  var fr=$("placeFrame"), url=bgUrl(); if(!fr||!fr.contentWindow||!url) return;   // blank → nothing to set
+  fr.contentWindow.postMessage({ type:"iotSetBackground", img:url, ftWide: capAcrossFt||0 }, "*");
 }
 function openPlace(){
-  if(!fpBgImg){ toast("Build a background first"); return; }
   crumb('pl'); $("place").classList.add("show");
   var fr=$("placeFrame");
   if(!placeLoaded){
@@ -797,9 +826,33 @@ function openPlace(){
     fr.src="/widgets/site-survey.html?project="+encodeURIComponent(PID)+"&embed=1";
   } else { postBackground(); }
 }
-function closePlace(){ $("place").classList.remove("show"); crumb('fp'); }
-$("fpPlace").addEventListener("click", openPlace);
+function closePlace(){ $("place").classList.remove("show"); show('chooser'); crumb('bg'); }
+$("fpPlace").addEventListener("click", function(){ boardBg = composeFloorImage(); openPlace(); });   // bake sketch (or AI plan) → editor
 $("placeBack").addEventListener("click", closePlace);
+
+// Relay the nested device engine's host events (iotSurvey / iotSurveyZoom / iotSurveyPick /
+// iotSurveyImages / …) up to the dashboard, so approve/proposal/zoom/hasContent still reach
+// the project page now that this tool wraps the engine. (No-op when loaded standalone.)
+window.addEventListener("message", function(e){
+  var d=e&&e.data;
+  if(d && typeof d.type==="string" && d.type.indexOf("iotSurvey")===0 && window.parent && window.parent!==window){
+    try{ window.parent.postMessage(d,"*"); }catch(_e){}
+  }
+});
+
+// At the chooser the device engine isn't loaded yet, so tell the host what's already saved
+// (content presence + floor count) straight from storage — keeps the project page's
+// submit/approve state correct on load instead of reading as empty until you open the editor.
+function reportStoredState(){
+  if(!(window.parent && window.parent!==window)) return;
+  try{
+    var raw=localStorage.getItem("iottechs_sitesurvey_v2_"+PID); if(!raw) return;
+    var d=JSON.parse(raw), fl=(d&&d.floors)||[];
+    var has = fl.length>1 || fl.some(function(f){ var B=(f&&f.B)||{};
+      return (f.markers&&f.markers.length) || B.img || B.imgSource || B.sat || (B.rooms&&B.rooms.length) || (B.strokes&&B.strokes.length) || (B.notes&&B.notes.length); });
+    window.parent.postMessage({ type:"iotSurvey", project:PID, floorCount:fl.length||1, hasContent:!!has }, "*");
+  }catch(_e){}
+}
 
 /* ===================== ADMIN PROMPT EDITOR ===================== *
  * The default AI prompts live server-side (lib/survey-prompts.js). Admins can override
@@ -834,7 +887,7 @@ $("promptSave").addEventListener("click", function(){ savePrompt($("promptText")
 $("promptReset").addEventListener("click", function(){ savePrompt(""); });   // empty → server resets to default
 $("promptCancel").addEventListener("click", closePromptEditor);
 
-initFloor(); initLabel(); initPromptEditor();
+initFloor(); initLabel(); initPromptEditor(); reportStoredState();
 </script>
 </body>
 </html>
