@@ -9,11 +9,15 @@ function fileFallback() {
 export async function GET(req) {
   // Vault (Development ▸ API Keys) wins, then env, then legacy config.json.
   const googleMapsApiKey = secretValue("GOOGLE_MAPS_API_KEY") || fileFallback().googleMapsApiKey || "";
-  // When embedded for a project, hand back its address so the survey tool prefills + searches it.
-  let address = "";
+  // When embedded for a project, hand back its name + address so the survey tool can title
+  // its header and prefill/search the property.
+  let address = "", name = "";
   try {
     const pid = new URL(req.url).searchParams.get("project");
-    if (pid && pid !== "default") { const p = getJobByAccessId(pid); address = (p && p.address) || ""; }
-  } catch { /* address stays empty → tool falls back to the demo address */ }
-  return Response.json({ googleMapsApiKey, address });
+    if (pid && pid !== "default") {
+      const p = getJobByAccessId(pid);
+      if (p) { address = p.address || ""; name = p.company_name || p.customer || p.contact_name || ""; }
+    }
+  } catch { /* stays empty → tool falls back to defaults */ }
+  return Response.json({ googleMapsApiKey, address, name });
 }

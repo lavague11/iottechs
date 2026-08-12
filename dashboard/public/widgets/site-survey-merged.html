@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Survey — Background as one step</title>
+<style>
+  :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--r:10px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--soft);display:flex;flex-direction:column;overflow:hidden}
+
+  .top{flex:none;background:#fff;border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:14px}
+  .brand{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .top .job{font-size:14px;font-weight:600}
+  .top .sub{font-size:12px;color:var(--muted)}
+  .grow{flex:1}
+  .pill{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .pill .g{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+
+  .work{flex:1;display:flex;min-height:0}
+  .canvasCol{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px 0 0 18px}
+  .canvasWrap{flex:1;margin-bottom:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r);position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center}
+
+  /* ---- Background step: one question, three doors ---- */
+  .bgstep{width:100%;max-width:640px;padding:30px;text-align:center}
+  .bgstep .q{font-size:17px;font-weight:600;margin:0 0 4px}
+  .bgstep .qsub{font-size:13px;color:var(--muted);margin:0 0 22px}
+  .doors{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .door{border:1px solid var(--line);border-radius:12px;padding:22px 14px;cursor:pointer;transition:border-color .15s,background .15s,transform .1s;background:#fff}
+  .door:hover{border-color:var(--ink);background:var(--soft)}
+  .door:active{transform:translateY(1px)}
+  .door svg{width:30px;height:30px;stroke:var(--ink);fill:none;stroke-width:1.4;margin-bottom:12px}
+  .door .dt{font-size:14px;font-weight:600}
+  .door .dd{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35}
+
+  /* device + FOV (used when a background is set) */
+  .stage-img{position:absolute;inset:0;background:#fff;background-size:cover;background-position:center}
+  .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
+  .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
+  .devDot svg{width:19px;height:19px;stroke:var(--ink);fill:none;stroke-width:1.6}
+  .devTag{position:absolute;left:34px;top:9px;background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px}
+  .fovWrap{position:absolute;left:33%;top:55%;z-index:2;transform-origin:0 50%;transform:rotate(-12deg)}
+  .cone{position:absolute;left:0;top:0;width:230px;height:140px;transform:translateY(-70px);
+        background:linear-gradient(90deg,rgba(185,138,46,.22),rgba(185,138,46,.04));clip-path:polygon(0 50%,100% 0,100% 100%);
+        border-top:1px solid rgba(185,138,46,.5);border-right:1px solid rgba(185,138,46,.5);border-bottom:1px solid rgba(185,138,46,.5)}
+  .coneArrow{position:absolute;left:16px;top:-1px;width:196px;height:2px;background:var(--gold)}
+  .coneArrow::after{content:"";position:absolute;right:-1px;top:-4px;border-left:10px solid var(--gold);border-top:5px solid transparent;border-bottom:5px solid transparent}
+  .coneTip{position:absolute;left:216px;top:-9px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px}
+
+  .ctxbar{position:absolute;left:14px;top:14px;z-index:4;display:flex;gap:8px}
+  .ctxbtn{background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(16,17,18,.12)}
+  .ctxbtn svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .ctxnote{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font-size:12px;color:var(--muted);box-shadow:0 2px 10px rgba(16,17,18,.08)}
+  .utils{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;z-index:4}
+  .ubtn{background:#fff;border:1px solid var(--line);border-radius:8px;height:34px;padding:0 12px;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
+  .ubtn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .zoombar{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .zoombar button{border:0;background:#fff;color:var(--ink);width:34px;height:34px;font-size:17px;cursor:pointer}
+  .zoombar button:first-child{border-bottom:1px solid var(--line)}
+
+  /* right panel + collapse rail (same as survey tool) */
+  .side{flex:none;width:300px;padding:14px 18px 0 14px;display:flex;flex-direction:column;min-height:0}
+  .panel{flex:1;background:#fff;border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0;overflow:hidden;margin-bottom:14px}
+  .panelHead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .panelHead .t{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .panelBody{flex:1;overflow-y:auto;padding:8px}
+  .card{border:1px solid var(--line);border-radius:9px;padding:11px;margin:4px}
+  .card .r1{display:flex;align-items:center;gap:9px}
+  .card .chip{width:26px;height:26px;border-radius:7px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .card .nm{flex:1;font-size:14px;font-weight:500}
+  .card .x{color:var(--muted);cursor:pointer}
+  .card .fov{display:flex;align-items:center;gap:9px;margin-top:9px}
+  .card .fov label{font-size:11px;color:var(--muted);width:28px}
+  .card .fov input{flex:1;accent-color:var(--gold)}
+  .card .fov .v{font-size:12px;width:34px;text-align:right}
+  .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--muted);padding:26px}
+  .empty svg{width:28px;height:28px;stroke:var(--line);fill:none;stroke-width:1.5}
+  .empty p{margin:0;font-size:13px;max-width:180px}
+
+  /* bottom wizard */
+  .wiz{flex:none;background:#fff;border-top:1px solid var(--line)}
+  .steps{display:flex;padding:9px 16px 0}
+  .steps .s{flex:1;text-align:center;font-size:11px;color:var(--muted);padding-bottom:9px;border-bottom:2px solid var(--line);letter-spacing:.02em;cursor:pointer}
+  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--ink)}
+  .steps .s.done{color:var(--ink)}
+  .steps .s.done::before{content:"\2713  ";color:var(--gold)}
+  .nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
+  .floorTabs{display:flex;gap:6px;align-items:center;overflow-x:auto}
+  .ftab{flex:none;background:#fff;border:1px solid var(--line);border-radius:20px;padding:7px 13px;font-size:12px;color:var(--muted);cursor:pointer}
+  .ftab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .ftab.add{color:var(--ink);font-weight:600}
+  .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
+  button.b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
+  button.b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
+
+  /* background-build mode strip */
+  .bgstrip{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)}
+  .bgstrip .back{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--ink)}
+  .bgstrip .back:hover{border-color:var(--ink)}
+  .bgstriplbl{font-size:12px;color:var(--muted)}
+  #bgWiz .steps{padding:9px 16px 10px}
+
+  /* ===== satellite overlay (the sub-tool, opened from the Satellite door) ===== */
+  .satov{position:fixed;inset:0;background:#fff;z-index:50;display:none;flex-direction:column}
+  .satov.show{display:flex}
+  .satTop{flex:none;border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:12px}
+  .satTop .back{border:1px solid var(--line);background:#fff;border-radius:var(--r);padding:8px 13px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .satTop .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .satBody{flex:1;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+  .satMap{position:absolute;inset:0;background:linear-gradient(135deg,#cbd3cb,#e7e2d6)}
+  .satFrame{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64%;height:58%;border:2px solid #fff;border-radius:6px;box-shadow:0 0 0 9999px rgba(16,17,18,.28)}
+  .satWiz{flex:none;border-top:1px solid var(--line);background:#fff}
+  .satUse{padding:12px 16px;display:flex;justify-content:flex-end}
+
+  @media (max-width:900px){ .side{display:none} .canvasCol{padding-right:18px} .doors{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+  <div class="top">
+    <div class="brand">Site Survey</div>
+    <div><div class="job" id="jobName">Site Survey</div><div class="sub" id="jobSub"></div></div>
+    <div class="grow"></div>
+    <button class="pill"><span class="g"></span>Draft</button>
+  </div>
+
+  <div class="work">
+    <div class="canvasCol">
+      <div class="canvasWrap" id="canvas">
+
+        <!-- inline satellite tool: fills the canvas while building the background -->
+        <iframe id="satFrame" title="Satellite Capture"
+          style="display:none;position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--soft);z-index:6"
+          allow="geolocation"></iframe>
+
+        <!-- STATE A: Background step, nothing chosen yet — one question, three doors -->
+        <div class="bgstep" id="bgstep">
+          <p class="q">What's the base for this floor?</p>
+          <p class="qsub">Pick how you want to start. Indoors or outdoors, it's the same from here.</p>
+          <div class="doors">
+            <div class="door" id="doorSat">
+              <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              <div class="dt">Satellite view</div>
+              <div class="dd">Pull an aerial of the property</div>
+            </div>
+            <div class="door">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+              <div class="dt">Upload a picture</div>
+              <div class="dd">A blueprint or photo you have</div>
+            </div>
+            <div class="door">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+              <div class="dt">Draw one</div>
+              <div class="dd">Sketch the layout by hand</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
+        <div id="working" style="display:none;position:absolute;inset:0">
+          <div class="stage-img" id="stageImg"></div>
+          <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add device</button></div>
+          <div class="utils">
+            <button class="ubtn"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg>Undo</button>
+            <button class="ubtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Center</button>
+          </div>
+          <div class="zoombar"><button>+</button><button>&minus;</button></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="panelHead"><div class="t">Survey</div><div class="n" style="font-size:12px;color:var(--muted)">0 devices</div></div>
+        <div class="panelBody">
+          <div class="empty">
+            <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            <p>Set a background, then place cameras and devices here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- survey wizard (default bottom bar) -->
+  <div class="wiz" id="surveyWiz">
+    <div class="steps">
+      <div class="s active" data-step="0">Background</div>
+      <div class="s" data-step="1">Place</div>
+      <div class="s" data-step="2">Angles</div>
+      <div class="s" data-step="3">Submit</div>
+    </div>
+    <div class="nav">
+      <div class="floorTabs">
+        <button class="ftab on">Floor 1</button>
+      </div>
+      <div class="hint" id="wizHint">Choose a background to begin.</div>
+      <button class="b lite" id="addFloorBtn" style="display:none">+ Add a new floor</button>
+      <button class="b lite">Back</button>
+      <button class="b" id="nextBtn">Next</button>
+    </div>
+  </div>
+
+  <!-- background-build mode: the satellite tool's OWN bar takes over this slot;
+       a slim strip on top keeps the breadcrumb so Back is obvious -->
+  <div class="wiz" id="bgWiz" style="display:none">
+    <div class="bgstrip">
+      <button class="back" id="satBack"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;pointer-events:none"><path d="M15 18l-6-6 6-6"/></svg>Background</button>
+      <div class="bgstriplbl">Building the base — finish, then it drops onto your plan</div>
+      <div class="grow"></div>
+      <button class="b" id="useBgBtn">Use as background</button>
+    </div>
+    <div class="steps" id="satSteps">
+      <div class="s active">Level</div>
+      <div class="s">Zoom</div>
+      <div class="s">Crop</div>
+      <div class="s">Enhance</div>
+    </div>
+  </div>
+
+  <script>
+    // ---- project context: title the header from the real job (?project=<accessId>) ----
+    var PID = new URLSearchParams(location.search).get("project") || "";
+    var projectAddress = "";
+    function cityState(a){ var p=String(a||"").split(",").map(function(s){return s.trim();});
+      if(p.length>=3){ var st=(p[2]||"").split(" ")[0]; return p[1]+(st?", "+st:""); } return a||""; }
+    if(PID){
+      fetch("/api/config?project="+encodeURIComponent(PID)).then(function(r){return r.json();}).then(function(c){
+        if(c&&c.name) document.getElementById("jobName").textContent=c.name;
+        if(c&&c.address){ projectAddress=c.address; document.getElementById("jobSub").textContent=cityState(c.address); }
+      }).catch(function(){});
+    }
+
+    var satFrame=document.getElementById("satFrame");
+    var SAT_SRC="satellite-capture.html";
+    var surveyWiz=document.getElementById("surveyWiz");
+    var bgWiz=document.getElementById("bgWiz");
+    var bgHasImage=false;   // once a background exists, Back can return to editing it
+
+    // enter background-build mode: satellite tool fills the canvas, its bar takes the bottom
+    function enterBg(){
+      if(!satFrame.src) satFrame.src=SAT_SRC;
+      satFrame.style.display="block";
+      document.getElementById("bgstep").style.display="none";
+      surveyWiz.style.display="none";
+      bgWiz.style.display="";
+    }
+    // leave build mode; if committed, show the working canvas, else show the door chooser
+    function exitBg(committed){
+      satFrame.style.display="none";
+      bgWiz.style.display="none";
+      surveyWiz.style.display="";
+      if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
+      else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
+      else { document.getElementById("working").style.display="block"; }
+    }
+
+    document.getElementById("doorSat").addEventListener("click", enterBg);
+    // Back on the strip returns to the three-source chooser (Satellite / Upload / Draw)
+    document.getElementById("satBack").addEventListener("click", function(){
+      satFrame.style.display="none";
+      bgWiz.style.display="none";
+      surveyWiz.style.display="";
+      if(bgHasImage){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
+      else { document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
+    });
+    // Use as background: pull the current image from the tool (it also posts on Download)
+    document.getElementById("useBgBtn").addEventListener("click", function(){
+      try{ satFrame.contentWindow.postMessage({type:"request-capture"}, "*"); }catch(e){}
+    });
+
+    // the satellite tool posts its finished image here
+    window.addEventListener("message", function(ev){
+      if(!ev.data || ev.data.type!=="satellite-capture-result") return;
+      applyBackground(ev.data.dataUrl);
+    });
+
+    function applyBackground(dataUrl){
+      bgHasImage=true;
+      var img=document.getElementById("stageImg");
+      if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
+      else { img.style.backgroundImage=""; img.style.background="#fff"; }
+      exitBg(true);
+      var s=surveyWiz.querySelectorAll(".steps .s");
+      s[0].classList.remove("active"); s[0].classList.add("done");
+      s[1].classList.add("active");
+      document.getElementById("wizHint").textContent="Tap Add device, then drop it on the plan.";
+      // survey stays empty until a device is actually placed
+    }
+
+    // Add device (mockup): drop a clean camera + FOV onto the plan and list it
+    var placed=0;
+    document.getElementById("addDeviceBtn").addEventListener("click", function(){
+      placed++;
+      var work=document.getElementById("working");
+      var wrap=document.createElement("div"); wrap.className="placed";
+      wrap.style.cssText="position:absolute;left:"+(30+placed*6)+"%;top:"+(48+placed*4)+"%;z-index:3";
+      wrap.innerHTML=
+        '<div class="fovWrap" style="position:absolute;left:20px;top:20px"><div class="cone"></div><div class="coneArrow"></div><div class="coneTip">IC'+placed+'</div></div>'+
+        '<div class="dev" style="position:static"><div class="devDot"><svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg></div><div class="devTag">IC'+placed+'</div></div>';
+      work.insertBefore(wrap, work.querySelector(".utils"));
+      // survey list
+      var body=document.querySelector(".panelBody");
+      if(placed===1) body.innerHTML="";
+      var card=document.createElement("div"); card.className="card";
+      card.innerHTML='<div class="r1"><div class="chip">C'+placed+'</div><div class="nm">Camera '+placed+'</div><div class="x">&times;</div></div>'+
+        '<div class="fov"><label>FOV</label><input type="range" min="10" max="180" value="60"><div class="v">60&deg;</div></div>';
+      body.appendChild(card);
+      document.querySelector(".panelHead .n").textContent=placed+(placed===1?" device":" devices");
+    });
+
+    // Upload / Draw doors (mockup): commit without a real image
+    document.querySelectorAll(".door").forEach(function(d,i){ if(i>0) d.addEventListener("click",function(){ applyBackground(null); }); });
+
+    // survey steps — scoped to the survey bar only
+    var stepEls=surveyWiz.querySelectorAll(".steps .s");
+    var addFloorBtn=document.getElementById("addFloorBtn");
+    var nextBtn=document.getElementById("nextBtn");
+    function goStep(idx){
+      stepEls.forEach(function(x){x.classList.remove("active");});
+      stepEls[idx].classList.add("active");
+      // pressing Background again after it's built reopens the satellite builder
+      if(idx===0 && bgHasImage){ enterBg(); return; }
+      var onSubmit=(idx===3);
+      addFloorBtn.style.display = onSubmit ? "" : "none";
+      nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
+      if(onSubmit) document.getElementById("wizHint").textContent="Review the plan, then submit — or add another floor.";
+    }
+    stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
+
+    addFloorBtn.addEventListener("click",function(){
+      bgHasImage=false;
+      document.getElementById("working").style.display="none";
+      document.getElementById("bgstep").style.display="";
+      stepEls[0].classList.remove("done");
+      goStep(0);
+      document.getElementById("wizHint").textContent="Choose a background to begin.";
+      var tabs=document.querySelector(".floorTabs");
+      var n=tabs.querySelectorAll(".ftab").length+1;
+      tabs.querySelectorAll(".ftab").forEach(function(t){t.classList.remove("on");});
+      var nt=document.createElement("button"); nt.className="ftab on"; nt.textContent="Floor "+n; tabs.appendChild(nt);
+    });
+  </script>
+</body>
+</html>
