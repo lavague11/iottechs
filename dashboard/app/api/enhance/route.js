@@ -1,4 +1,6 @@
+import { createHash } from "crypto";
 import { secretValue } from "../../../lib/db";
+import { DEFAULT_AERIAL, DEFAULT_FLOORPLAN, PROMPT_KEYS } from "../../../lib/survey-prompts";
 
 // Server-side proxy for the satellite "Enhance" pass. The browser sends a padded
 // SQUARE PNG of the crop; we call OpenAI images/edits with the vault key (never the
@@ -6,8 +8,18 @@ import { secretValue } from "../../../lib/db";
 // result back to the original proportions. Key handling stays entirely server-side.
 export const runtime = "nodejs";
 
-// Verbatim from the handoff (§5) — polish an already-leveled aerial, don't restyle.
-const PROMPT = "This is a real aerial photograph taken straight down over a residential property. Return a photorealistic aerial photograph, not an illustration, render, painting, 3D render, game asset, map graphic or cartoon. Keep it looking like genuine satellite imagery with natural daylight, real photographic grain, soft realistic shadows in the same direction as the original, and muted true-to-life colour. Do not stylise, saturate, cel-shade, outline or flatten anything. Clean up capture artefacts and tidy the grounds so the property looks well kept: reduce noise and compression blocking, repair seams and blurred patches, render lawn and yard as healthy even green grass (remove brown or bare spots, dirt, debris), make patios, pavers, driveways and pool decking read as clean evenly-coloured surfaces with crisp joints, and give garden beds, shrubs and tree canopy crisp natural detail. Present the property perfectly level and square to the frame: roof ridges, walls, driveways, fences, property lines and the street should read as straight horizontal or vertical lines, with no tilt, skew, rotation or keystone. If anything sits slightly crooked, straighten it so the whole image looks squared-up and level, but keep every structure in the same place at the same size and shape. Keep the framing and every edge exactly as given. Do not add, remove, move, crop, zoom or invent anything.";
+// Cost guard: identical (mode,labels,image) requests — a Redo, or the same crop sent
+// twice — return the stored result instead of re-billing OpenAI. Small LRU, in-memory.
+const CACHE = new Map();
+const CACHE_MAX = 24;
+function cacheGet(h) { const v = CACHE.get(h); if (v) { CACHE.delete(h); CACHE.set(h, v); } return v; }
+function cacheSet(h, v) { CACHE.set(h, v); if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value); }
+
+// Prompts live in lib/survey-prompts.js (shared with the editor). An admin can override
+// either from the survey tool; the override is stored in the vault and wins over the default.
+function promptFor(mode) {
+  return secretValue(PROMPT_KEYS[mode]) || (mode === "floorplan" ? DEFAULT_FLOORPLAN : DEFAULT_AERIAL);
+}
 
 export async function POST(req) {
   const key = secretValue("OPENAI_API_KEY");
@@ -18,14 +30,38 @@ export async function POST(req) {
   const image = inForm.get("image");
   if (!image || typeof image === "string") return Response.json({ error: "No image" }, { status: 400 });
 
+  // Pick the prompt server-side by mode (never trust a client-supplied prompt); the
+  // floor-plan mode may append a short, sanitized label list to name each space.
+  const mode = inForm.get("mode") === "floorplan" ? "floorplan" : "aerial";
+  let prompt = promptFor(mode), labels = "";
+  if (mode === "floorplan") {
+    labels = String(inForm.get("labels") || "").replace(/[\r\n]+/g, " ").trim().slice(0, 400);
+    if (labels) prompt += ` The labels are: ${labels}.`;
+  }
+  // Per-render revision: a one-off operator nudge for THIS image, appended to the base
+  // prompt (not saved). Sanitized + capped; folded into the cache key so it's distinct.
+  const revision = String(inForm.get("revision") || "").replace(/[\r\n]+/g, " ").trim().slice(0, 300);
+  if (revision) prompt += ` Apply this specific revision to this image, without otherwise changing the framing or inventing structures: ${revision}.`;
+
+  // Cost controls: MEDIUM quality is ≈4× cheaper than high and plenty for a cleanup pass
+  // and a sketch→plan. Aerial keeps input_fidelity HIGH so the model preserves the exact
+  // framing (this is the over-crop fix); floor-plan uses low since it deliberately redraws.
+  const quality = "medium";
+  const inputFidelity = mode === "aerial" ? "high" : "low";
+
+  const buf = Buffer.from(await image.arrayBuffer());
+  const hash = createHash("sha256").update(mode).update("|").update(labels).update("|").update(revision).update("|").update(buf).digest("hex");
+  const hit = cacheGet(hash);
+  if (hit) return Response.json({ b64: hit, cached: true });
+
   async function call(model) {
     const fd = new FormData();
     fd.append("model", model);
-    fd.append("image", image, "crop.png");
-    fd.append("prompt", PROMPT);
+    fd.append("image", new Blob([buf], { type: "image/png" }), "crop.png");
+    fd.append("prompt", prompt);
     fd.append("size", "1024x1024");
-    fd.append("quality", "high");
-    fd.append("input_fidelity", "high");
+    fd.append("quality", quality);
+    fd.append("input_fidelity", inputFidelity);
     const ctrl = new AbortController();
     const killer = setTimeout(() => ctrl.abort(), 90000);
     try {
@@ -37,12 +73,13 @@ export async function POST(req) {
   }
 
   try {
-    let d = await call("gpt-image-2");
-    // model-name drift → fall back one generation
-    if (d?.error && /model/i.test(d.error.message || "")) d = await call("gpt-image-1.5");
+    let d = await call("gpt-image-1.5");   // cheaper + preserves input framing better than gpt-image-2
+    // model-name drift / unavailable → fall back a generation
+    if (d?.error && /model/i.test(d.error.message || "")) d = await call("gpt-image-2");
     if (d?.error) return Response.json({ error: d.error.message || "Enhance failed" }, { status: 502 });
     const b64 = d?.data?.[0]?.b64_json;
     if (!b64) return Response.json({ error: "No image returned" }, { status: 502 });
+    cacheSet(hash, b64);
     return Response.json({ b64 });
   } catch (e) {
     return Response.json({ error: e?.name === "AbortError" ? "Enhance timed out" : "Enhance failed" }, { status: 502 });
