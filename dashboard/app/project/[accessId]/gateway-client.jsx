@@ -9,6 +9,7 @@ import { startPinCanvas } from "./gateway-pin-canvas";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import FaceScan from "../../components/face-scan";
+import DeckView         from "./deck-view";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
@@ -1470,6 +1471,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
+  // Additive deck shell: ?deck=1 renders the redesigned horizontal stage deck instead of the
+  // legacy stacked page. Set after mount (not during SSR) to avoid a hydration mismatch. The
+  // live page is the default until every stage × role is validated in deck form.
+  const [deckMode, setDeckMode] = useState(false);
+  useEffect(() => { setDeckMode(new URLSearchParams(window.location.search).get("deck") === "1"); }, []);
   const [busy, setBusy]                 = useState(false);
   const [err,  setErr]                  = useState("");
   const [jumpToast, setJumpToast]       = useState(null);
@@ -1910,6 +1916,67 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   }
 
   const showInquiryCard = viewingStage === "inquiry";
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Additive deck shell (?deck=1). Same inner tool widgets + role gates as the legacy
+  // page — only the outer chrome changes (top bar · job bar · swipeable stage deck).
+  // Wired stage-by-stage: Consulting is real; the other phases scaffold in as we port.
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (deckMode) {
+    const deckToolsFor = (pk) => {
+      if (pk === "ph_survey") {
+        return [
+          { name: "Survey Scheduling & Notes", label: "Scheduler", state: lp.date ? "done" : "active",
+            node: <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+                    currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} /> },
+          { name: "Site Survey", label: "Site Survey tool", heavy: true, state: "active",
+            node: <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} /> },
+          { name: "Mockups", label: "Mockup generator", heavy: true,
+            node: <MockupWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                    customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} /> },
+        ];
+      }
+      return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
+    };
+    const canAdv = ["admin", "manager"].includes(cView);
+    const deckStages = phaseList.map((p, i) => {
+      const next = phaseList[i + 1];
+      return {
+        name: p.label,
+        pill: phaseStatusWord(p.key),
+        tint: p.key === "ph_complete" ? "green" : p.key === "ph_survey" ? "blue" : "gold",
+        tools: deckToolsFor(p.key),
+        advance: next ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
+      };
+    });
+    const deckCustomer = {
+      code: lp.access_id,
+      name: lp.customer,
+      statusText: stageShortLabel(barMarker),
+      fields: [
+        lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "" },
+        lp.address && { k: "Job site", v: lp.address },
+        lp.contact_email && { k: "Email", v: lp.contact_email },
+      ].filter(Boolean),
+      actions: [
+        lp.contact_phone && { label: "Call", href: `tel:${lp.contact_phone}` },
+        lp.contact_email && { label: "Message", href: `mailto:${lp.contact_email}` },
+        { label: "Directions", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
+      ].filter(Boolean),
+    };
+    return (
+      <DeckView
+        stages={deckStages}
+        idx={Math.max(0, phaseList.findIndex((p) => p.key === vPhase))}
+        onIdx={(i) => browse(phaseList[i]?.primary)}
+        canAdvance={canAdv}
+        customer={deckCustomer}
+        menu={[]}
+        roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
+      />
+    );
+  }
 
   return (
     <>
