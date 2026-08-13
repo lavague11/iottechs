@@ -337,8 +337,12 @@ const CSS = `
 /* Embedded tools (Site Survey…) carry .pvx-scoped CSS that isn't present here — restyle the
    embed shell so its iframe fills the overlay instead of collapsing to a default 150px box. */
 .dv-overlay-body .ss-embed{display:flex;flex-direction:column;height:100%;padding:0}
-.dv-overlay-body .ss-embed-bar{display:none}
-.dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto;min-height:0;border:none;background:var(--dv-raise);display:block}
+/* keep the tool's own control bar (mockup Upload/Layout/Cameras live here) but drop the
+   redundant Full-screen button — the overlay is already full-screen. */
+.dv-overlay-body .ss-embed-bar{flex:0 0 auto;padding:11px 18px;border-bottom:1px solid var(--dv-line);margin:0}
+.dv-overlay-body .ss-embed-bar:empty{display:none}
+.dv-overlay-body .ss-embed-open{display:none}
+.dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto!important;min-height:0;border:none;background:var(--dv-raise);display:block}
 
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft)}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}

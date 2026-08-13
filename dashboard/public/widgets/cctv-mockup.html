@@ -8,7 +8,7 @@
   :root{--gold:#C9A96E;--ink:#1A1A1A;--line:#d9dce1;--soft:#ECEEF1;--green:#2a9d54}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
-  body{font-family:Helvetica,Arial,sans-serif;background:var(--soft);color:var(--ink);
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;background:var(--soft);color:var(--ink);
        display:flex;flex-direction:column;height:100vh;overflow:hidden}
   /* ---- top bar ---- */
   .topbar{background:#fff;border-bottom:2px solid var(--gold);box-shadow:0 1px 6px rgba(0,0,0,.05);
@@ -73,7 +73,7 @@
   .parrow:hover{background:#f3f4f6;border-color:#c7a86b}
   .pageind{font-size:13px;font-weight:bold;letter-spacing:.04em;color:#3a3f48;min-width:120px;text-align:center}
   #nameEdit{position:fixed;display:none;z-index:2000;background:#fff;border:2px solid var(--gold);
-       color:var(--ink);font:bold 15px Helvetica,Arial,sans-serif;padding:5px 8px;outline:none;min-width:120px}
+       color:var(--ink);font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;padding:5px 8px;outline:none;min-width:120px}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:2200;
        background:var(--ink);border:1px solid var(--gold);color:#fff;
        font-size:12px;padding:9px 18px;display:none}
@@ -219,7 +219,7 @@ function cliBase(){return (S.client||'IOT-CCTV').replace(/[^\w]+/g,'-').replace(
 function drawCover(c,img,x,y,w,h){const ir=img.width/img.height,tr=w/h;let sx,sy,sw,sh;
   if(ir>tr){sh=img.height;sw=sh*tr;sx=(img.width-sw)/2;sy=0;}else{sw=img.width;sh=sw/tr;sx=0;sy=(img.height-sh)/2;}
   c.drawImage(img,sx,sy,sw,sh,x,y,w,h);}
-function osd(c,t,x,y,s,col,al,w,sc){c.font=`${w||'bold'} ${s}px Helvetica,Arial,sans-serif`;c.textAlign=al||'left';
+function osd(c,t,x,y,s,col,al,w,sc){c.font=`${w||'600'} ${s}px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif`;c.textAlign=al||'left';
   c.textBaseline='alphabetic';c.lineJoin='round';c.lineWidth=Math.max(2,s*0.16);c.strokeStyle=sc||'rgba(0,0,0,.82)';
   c.strokeText(t,x,y);c.fillStyle=col;c.fillText(t,x,y);}
 function dot(c,x,y,r,col,glow){if(glow){c.save();c.shadowColor=col;c.shadowBlur=r*2.4;}
