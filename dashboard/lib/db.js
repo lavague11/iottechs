@@ -996,6 +996,9 @@ function init() {
   // `public` = is this note visible to the customer. Staff notes default internal (0) and can be
   // toggled public; a customer's own note is always public (1). The Job Log reads this flag.
   if (!noteCols.includes("public")) db.exec("ALTER TABLE project_notes ADD COLUMN public INTEGER DEFAULT 0");
+  // A tech/sales rep can't publish directly — they REQUEST it (pending_public=1) and an admin or
+  // manager approves. Admin/manager set public straight away.
+  if (!noteCols.includes("pending_public")) db.exec("ALTER TABLE project_notes ADD COLUMN pending_public INTEGER DEFAULT 0");
 
   // ---- Job Log events ----  append-only activity beyond stage acceptances (calls placed, etc.).
   db.exec(`
@@ -4545,10 +4548,16 @@ export function addProjectNote(accessId, { role, name, body, scope, isPublic }) 
     .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20), pub);
   return scope ? getScopedNotes(accessId, scope) : getProjectNotes(accessId);
 }
-// Flip a staff note between internal and public (customer notes stay public — enforced upstream).
+// Set a note public/internal outright (admin/manager). Always clears any pending request.
 export function setNotePublic(accessId, id, isPublic) {
-  db.prepare("UPDATE project_notes SET public=? WHERE id=? AND project_access_id=?")
+  db.prepare("UPDATE project_notes SET public=?, pending_public=0 WHERE id=? AND project_access_id=?")
     .run(isPublic ? 1 : 0, Number(id), String(accessId));
+  return getProjectNotes(accessId);
+}
+// A tech/sales rep requests public — flags it pending for an admin/manager to approve.
+export function requestNotePublic(accessId, id) {
+  db.prepare("UPDATE project_notes SET pending_public=1 WHERE id=? AND project_access_id=? AND public=0")
+    .run(Number(id), String(accessId));
   return getProjectNotes(accessId);
 }
 // Job Log events — append-only activity (calls, etc.), newest first.

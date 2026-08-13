@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { getNotesAction, addNoteAction, setNotePublicAction, getEventsAction } from "./proposal-actions";
+import { getNotesAction, addNoteAction, setNoteVisibilityAction, resolveNotePublicAction, getEventsAction } from "./proposal-actions";
 
 // The Job Log — a per-project record with two halves:
 //   • Activity: a timestamped trail — the inquiry, the milestones that carry a signature/approval
@@ -50,6 +50,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const [busy, setBusy] = useState(false);
   const [mq, setMq] = useState(null);      // active @mention query { token, start } | null
   const [mode, setMode] = useState("basic"); // staff: basic milestones vs advanced forensics
+  const [confirmId, setConfirmId] = useState(null);   // note id awaiting an inline visibility confirm
   const taRef = useRef(null);
 
   useEffect(() => {
@@ -110,10 +111,43 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
     setBusy(false);
     if (r?.ok) { setNotes(r.notes); setDraft(""); setMq(null); }
   }
-  async function toggle(n) {
-    if (preview || isCust) return;
-    const r = await setNotePublicAction(accessId, n.id, !n.public);
+  const isAdminMgr = ["admin", "manager"].includes(role);
+  const isStaff = ["admin", "manager", "sales", "tech"].includes(role);
+  async function applyVisibility(n) {   // internal → public (admin/mgr) or → pending request (tech/sales)
+    const r = await setNoteVisibilityAction(accessId, n.id, !n.public);
     if (r?.ok) setNotes(r.notes);
+    setConfirmId(null);
+  }
+  async function resolvePending(n, approve) {   // admin/mgr decide a pending request
+    const r = await resolveNotePublicAction(accessId, n.id, approve);
+    if (r?.ok) setNotes(r.notes);
+    setConfirmId(null);
+  }
+  // The visibility control for one note — plain badge, clickable badge, pending chip, or an
+  // inline "are you sure?" confirm, depending on role and state.
+  function renderBadge(n) {
+    const plain = <span className={`jl-badge ${n.public ? "pub" : "int"}`}>{n.public ? "Public" : "Internal"}</span>;
+    if (isCust || n.author_role === "customer" || preview) return plain;   // no control
+    if (confirmId === n.id) {
+      const pending = !!n.pending_public;
+      const q = pending ? "Approve?" : n.public ? "Make internal?" : isAdminMgr ? "Make public?" : "Request public?";
+      return (
+        <span className="jl-confirm">
+          <span className="jl-cq">{q}</span>
+          <button className="jl-cy" title="Yes" onClick={pending ? () => resolvePending(n, true) : () => applyVisibility(n)}>✓</button>
+          <button className="jl-cn" title={pending ? "Reject" : "Cancel"} onClick={pending ? () => resolvePending(n, false) : () => setConfirmId(null)}>✕</button>
+        </span>
+      );
+    }
+    if (n.pending_public) {
+      return isAdminMgr
+        ? <button className="jl-badge pend" title="Approve or reject" onClick={() => setConfirmId(n.id)}>Pending</button>
+        : <span className="jl-badge pend">Pending</span>;
+    }
+    const clickable = isAdminMgr || (isStaff && !n.public);   // admin/mgr always; tech/sales only request public
+    return clickable
+      ? <button className={`jl-badge tog ${n.public ? "pub" : "int"}`} title="Change visibility" onClick={() => setConfirmId(n.id)}>{n.public ? "Public" : "Internal"}</button>
+      : plain;
   }
 
   return (
@@ -125,10 +159,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
         <div className="jl-head-row">
           <div className="jl-head mono">Activity</div>
           {!isCust && (
-            <div className="jl-seg" role="group" aria-label="Detail level">
-              <button className={mode === "basic" ? "on" : ""} onClick={() => setMode("basic")}>Basic</button>
-              <button className={mode === "advanced" ? "on" : ""} onClick={() => setMode("advanced")}>Advanced</button>
-            </div>
+            <button className={`jl-modetog ${advanced ? "adv" : ""}`} onClick={() => setMode((m) => (m === "basic" ? "advanced" : "basic"))}
+              title="Toggle basic ↔ advanced (forensic) activity">
+              <span className="jl-mdot" />{advanced ? "Advanced" : "Basic"}
+            </button>
           )}
         </div>
         {timeline.length === 0 ? (
@@ -192,12 +226,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
                 <div className="jl-note-top">
                   <span className={`jl-who ${n.author_role === "customer" ? "cust" : "staff"}`}>{n.author_name || n.author_role || "—"}</span>
                   <span className="jl-note-ts mono">{fmtTs(n.created_at)}</span>
-                  {n.author_role === "customer" || isCust ? (
-                    <span className={`jl-badge ${n.public ? "pub" : "int"}`}>{n.public ? "Public" : "Internal"}</span>
-                  ) : (
-                    <button className={`jl-badge tog ${n.public ? "pub" : "int"}`} onClick={() => toggle(n)}
-                      title="Toggle whether the customer can see this note">{n.public ? "Public" : "Internal"}</button>
-                  )}
+                  {renderBadge(n)}
                 </div>
                 <div className="jl-note-body">{renderBody(n.body)}</div>
               </li>
@@ -217,9 +246,10 @@ const CSS = `
 .jl-notes-col{border-left:1px solid var(--dv-line,#E4E4DF)}
 .jl-head{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .jl-head-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
-.jl-seg{display:inline-flex;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden}
-.jl-seg button{padding:5px 12px;font-size:12px;font-weight:500;color:var(--dv-meta,#787D84);background:transparent}
-.jl-seg button.on{background:var(--dv-ink,#101418);color:#fff}
+.jl-modetog{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:99px;font-size:12px;font-weight:600;color:var(--dv-meta,#787D84);background:var(--dv-raise,#FBFBFA)}
+.jl-modetog .jl-mdot{width:7px;height:7px;border-radius:99px;background:var(--dv-faint,#A1A6AC);transition:background .15s}
+.jl-modetog.adv{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.jl-modetog.adv .jl-mdot{background:var(--dv-gold-deep,#A8842F)}
 .jl-empty{font-size:13.5px;color:var(--dv-faint,#A1A6AC);line-height:1.5;max-width:34ch}
 /* timeline */
 .jl-time{list-style:none;display:flex;flex-direction:column;gap:2px;position:relative}
@@ -260,6 +290,12 @@ const CSS = `
 .jl-badge{font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:3px 9px;border-radius:100px;border:1px solid transparent}
 .jl-badge.int{background:#fbe9e6;color:#b23b28}
 .jl-badge.pub{background:#e9f0f8;color:#2f5c8f}
+.jl-badge.pend{background:#fbf0dc;color:#96631a;border-color:#e7cf9e;cursor:pointer}
+.jl-confirm{display:inline-flex;align-items:center;gap:6px}
+.jl-cq{font-size:11px;font-weight:600;color:var(--dv-ink,#101418)}
+.jl-cy,.jl-cn{width:22px;height:22px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF)}
+.jl-cy{background:#e9f0f8;color:#2f5c8f;border-color:#aec6e2}
+.jl-cn{background:#fbe9e6;color:#b23b28;border-color:#e3b4ab}
 .jl-badge.tog{cursor:pointer}
 .jl-note-body{font-size:14px;line-height:1.5;white-space:pre-wrap}
 .jl-mention{color:#2f5c8f;font-weight:600}

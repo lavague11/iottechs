@@ -9,7 +9,7 @@ import {
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
-  getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
+  getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, requestNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -570,12 +570,30 @@ export async function addNoteAction(accessId, body, isPublic = false) {
   await revalidate(accessId);
   return { ok: true, notes };
 }
-// Staff-only: flip a note between internal and public. Customers can't change visibility.
-export async function setNotePublicAction(accessId, id, isPublic) {
+// Change a note's visibility. Admin/manager set it outright; a tech/sales rep can only REQUEST
+// public (→ pending) and never un-publish. Customers can't touch visibility.
+export async function setNoteVisibilityAction(accessId, id, wantPublic) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired — unlock the project again." };
   if (tok.role === "customer") return { error: "Not allowed." };
-  const notes = setNotePublic(accessId, id, isPublic);
+  if (["admin", "manager"].includes(tok.role)) {
+    const notes = setNotePublic(accessId, id, wantPublic);
+    await revalidate(accessId);
+    return { ok: true, notes };
+  }
+  // tech / sales
+  if (wantPublic) {
+    const notes = requestNotePublic(accessId, id);
+    await revalidate(accessId);
+    return { ok: true, notes, pending: true };
+  }
+  return { error: "Only an admin or manager can change this." };
+}
+// Admin/manager resolve a pending public request: approve → public, reject → back to internal.
+export async function resolveNotePublicAction(accessId, id, approve) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can approve." };
+  const notes = setNotePublic(accessId, id, !!approve);
   await revalidate(accessId);
   return { ok: true, notes };
 }
