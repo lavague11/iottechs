@@ -1940,11 +1940,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
     };
     const canAdv = ["admin", "manager"].includes(cView);
+    const curPhaseIdx = Math.max(0, phaseList.findIndex((p) => p.key === vPhase));
     const deckStages = phaseList.map((p, i) => {
       const next = phaseList[i + 1];
+      // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion.
+      const pct = i < curPhaseIdx ? 100 : Math.round(((i + 1) / phaseList.length) * 100);
       return {
         name: p.label,
         pill: phaseStatusWord(p.key),
+        pct,
         tint: p.key === "ph_complete" ? "green" : p.key === "ph_survey" ? "blue" : "gold",
         tools: deckToolsFor(p.key),
         advance: next ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
@@ -3544,6 +3548,11 @@ export default function GatewayClient({ project, initialView = null, currentUser
   // In-place preview role (admin/manager viewing as customer/tech) — lifted here so BOTH the
   // masthead pill and the subheader eye drive the same state and the page snaps in one tab.
   const [previewRole, setPreviewRole]   = useState(null);
+  // ?deck=1 renders the redesigned full-bleed stage deck. Read after mount (avoids a hydration
+  // mismatch) — mirrored inside ResolvedView, which swaps its body for the deck. Here it also
+  // suppresses the legacy masthead + centred .wrap so the deck owns the whole viewport.
+  const [deckMode, setDeckMode] = useState(false);
+  useEffect(() => { setDeckMode(new URLSearchParams(window.location.search).get("deck") === "1"); }, []);
 
   async function attemptAccess({ loginRole, pinValue, emailOrPhone, password }) {
     return resolveAccess(project.access_id, { loginRole, pin: pinValue, emailOrPhone, password });
@@ -3551,6 +3560,37 @@ export default function GatewayClient({ project, initialView = null, currentUser
 
   if (!view) {
     return <GatewayScreen onAuthenticated={setView} attemptAccess={attemptAccess} />;
+  }
+
+  const body = (
+    <ResolvedView
+      project={project}
+      view={view}
+      currentUser={currentUser}
+      projectStage={projectStage}
+      onProjectStage={setProjectStage}
+      viewingStageRef={viewingStageRef}
+      previewRole={previewRole}
+      onPreviewRole={setPreviewRole}
+      assignments={assignments}
+      staffUsers={staffUsers}
+      workOrders={workOrders}
+      expenses={expenses}
+      requests={requests}
+      proposalViews={proposalViews}
+      proposal={proposal}
+      svcCall={svcCall}
+    />
+  );
+
+  // Deck mode: no legacy masthead / .wrap — the deck provides its own top bar and fills the page.
+  if (deckMode) {
+    return (
+      <div className="pvx pvx-deck">
+        <style>{PV_CSS}</style>
+        {body}
+      </div>
+    );
   }
 
   return (
@@ -3567,24 +3607,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
             Back to My Projects
           </Link>
         )}
-        <ResolvedView
-          project={project}
-          view={view}
-          currentUser={currentUser}
-          projectStage={projectStage}
-          onProjectStage={setProjectStage}
-          viewingStageRef={viewingStageRef}
-          previewRole={previewRole}
-          onPreviewRole={setPreviewRole}
-          assignments={assignments}
-          staffUsers={staffUsers}
-          workOrders={workOrders}
-          expenses={expenses}
-          requests={requests}
-          proposalViews={proposalViews}
-          proposal={proposal}
-          svcCall={svcCall}
-        />
+        {body}
       </div>
     </div>
   );
