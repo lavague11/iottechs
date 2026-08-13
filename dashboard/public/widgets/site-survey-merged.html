@@ -267,6 +267,7 @@
               <div class="dd">Sketch the layout by hand</div>
             </div>
           </div>
+          <button class="libBtn" id="doorLib"><svg viewBox="0 0 24 24"><path d="M4 5h6v14H4zM10 5h4v14h-4zM14 6l4-1 2 13-4 1z"/></svg>From library<span>· reuse a saved plan</span></button>
           <input id="upIn" type="file" accept="image/*" style="display:none">
           <!-- library picker: grid of saved plans -->
           <div id="libModal"><div class="libCard"><div class="libHead"><b>Floor-plan library</b><button id="libClose">&times;</button></div><div id="libGrid" class="libGrid"></div></div></div>
@@ -332,7 +333,6 @@
   <div id="confirmModal"><div class="cfCard"><div class="cfMsg" id="cfMsg"></div><div class="cfBtns"><button class="cfNo" id="cfNo">Cancel</button><button class="cfYes" id="cfYes">Delete</button></div></div></div>
 
   <!-- upload source picker -->
-  <div id="uploadPick"><div class="cfCard"><div class="cfMsg">Where's the picture?</div><div class="cfBtns"><button class="cfNo" id="upDevice">From device</button><button class="cfNo" id="upLibrary">Survey library</button></div></div></div>
 
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
@@ -445,6 +445,7 @@
     }
     function pickLib(id){ fetch("/api/floorplans?id="+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(d){
       if(d&&d.item&&d.item.image){ libModal.classList.remove("on"); applyBackground(d.item.image, true); } }).catch(function(){}); }
+    document.getElementById("doorLib").addEventListener("click", openLib);
     document.getElementById("libClose").addEventListener("click", function(){ libModal.classList.remove("on"); });
     libModal.addEventListener("click", function(e){ if(e.target===libModal) libModal.classList.remove("on"); });
 
@@ -737,11 +738,9 @@
     document.getElementById("confirmModal").addEventListener("click", function(e){ if(e.target===this) closeConfirm(); });
 
     // ---- Upload: ask device vs. survey library ----
-    var uploadPick=document.getElementById("uploadPick");
-    document.getElementById("doorUpload").addEventListener("click", function(){ uploadPick.classList.add("on"); });
-    document.getElementById("upDevice").addEventListener("click", function(){ uploadPick.classList.remove("on"); document.getElementById("upIn").click(); });
-    document.getElementById("upLibrary").addEventListener("click", function(){ uploadPick.classList.remove("on"); openLib(); });
-    uploadPick.addEventListener("click", function(e){ if(e.target===this) this.classList.remove("on"); });
+    // Upload goes straight to the device picker — no intermediate ask. Saved plans live under
+    // the slim "From library" link below the doors.
+    document.getElementById("doorUpload").addEventListener("click", function(){ document.getElementById("upIn").click(); });
     document.getElementById("upIn").addEventListener("change", function(e){
       var f=e.target.files[0]; if(!f) return;
       var r=new FileReader(); r.onload=function(ev){ applyBackground(ev.target.result); }; r.readAsDataURL(f); e.target.value="";
