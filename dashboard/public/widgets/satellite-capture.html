@@ -29,6 +29,27 @@
   #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
   #preview.show{display:block}
   #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  /* before/after compare — enhanced is the base (#prevImg); original overlays it, clipped to the left of the handle */
+  #cmpBefore{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:6;display:none;pointer-events:none}
+  #preview.cmp #cmpBefore{display:block}
+  #cmpHandle{position:absolute;top:0;bottom:0;left:50%;z-index:7;width:2px;background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(0,0,0,.18);display:none;cursor:ew-resize;touch-action:none}
+  #preview.cmp #cmpHandle{display:block}
+  #cmpHandle .grip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#0e1320}
+  #cmpHandle .grip svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .cmpTag{position:absolute;top:12px;z-index:7;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:rgba(12,14,16,.6);padding:3px 9px;border-radius:20px;display:none}
+  #preview.cmp .cmpTag{display:block}
+  .cmpTag.b{left:12px}
+  .cmpTag.a{right:12px;background:rgba(185,138,46,.9)}
+  /* in-progress enhance: a scanning beam + shimmering grid to keep you company */
+  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:rgba(12,14,16,.30)}
+  #scan.on{display:block}
+  #scan .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(185,138,46,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(185,138,46,.16) 1px,transparent 1px);background-size:28px 28px;-webkit-mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);animation:gridpulse 1.7s ease-in-out infinite}
+  @keyframes gridpulse{0%,100%{opacity:.28}50%{opacity:.6}}
+  #scan .beam{position:absolute;left:0;right:0;height:42%;top:-42%;background:linear-gradient(180deg,transparent,rgba(185,138,46,.20) 55%,rgba(255,240,205,.55) 92%,rgba(255,255,255,.9));box-shadow:0 0 30px 8px rgba(185,138,46,.35);animation:scanmove 1.5s cubic-bezier(.55,0,.45,1) infinite}
+  #scan .beam::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,244,214,.95),transparent)}
+  @keyframes scanmove{0%{top:-42%}100%{top:100%}}
+  #scan .cap{position:absolute;left:0;right:0;bottom:20px;text-align:center;color:#fff;font-size:13px;font-weight:700;letter-spacing:.03em;text-shadow:0 1px 8px rgba(0,0,0,.55)}
+  #scan .cap b{display:inline-block;min-width:16px;text-align:left}
   .pvbar{position:absolute;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:9}
   .pv{border:1px solid var(--line);background:#fff;border-radius:var(--r);height:38px;padding:0 13px;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);box-shadow:0 2px 12px rgba(16,17,18,.14)}
   .pv svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -70,6 +91,11 @@
     <div id="msg" class="on">Loading map…</div>
     <div id="preview">
       <img id="prevImg" alt="captured aerial">
+      <img id="cmpBefore" alt="original aerial">
+      <span class="cmpTag b">Before</span>
+      <span class="cmpTag a">After</span>
+      <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
+      <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Enhancing aerial<b id="scanDots">…</b></div></div>
       <div class="pvbar">
         <button class="pv" id="retake" title="Back to crop"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
         <button class="pv" id="dl" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
@@ -211,22 +237,61 @@
       cut.getContext("2d").drawImage(stageCv, Math.round(rect.x*scale), Math.round(rect.y*scale), Math.round(rect.w*scale), Math.round(rect.h*scale), 0,0, cut.width, cut.height);
       var longest=Math.max(cut.width,cut.height);
       if(longest>MAX_EDGE){ var s=MAX_EDGE/longest, ds=document.createElement("canvas"); ds.width=Math.round(cut.width*s); ds.height=Math.round(cut.height*s); var dg=ds.getContext("2d"); dg.imageSmoothingQuality="high"; dg.drawImage(cut,0,0,ds.width,ds.height); cut=ds; }
-      capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); msg("");
+      capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); resetCompare(); msg("");
     });
   }
 
   /* ---------- finalized actions ---------- */
+  var preview=$("preview");
   function usePreview(){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src}, "*"); }catch(e){} }
-  function enhance(){ if(!capCanvas) return; var w=$("wand"); w.classList.add("busy");
+
+  /* before/after compare: enhanced = #prevImg (base), original = #cmpBefore (clipped left of the handle) */
+  var cmpPos=50;   // % — left of the handle shows the original, right shows the enhanced
+  function setCut(pos){ cmpPos=Math.max(0,Math.min(100,pos));
+    $("cmpBefore").style.clipPath="inset(0 "+(100-cmpPos)+"% 0 0)";
+    $("cmpHandle").style.left=cmpPos+"%"; }
+  function cmpTransition(on){
+    $("cmpBefore").style.transition=on?"clip-path 1.05s cubic-bezier(.22,.7,.2,1)":"none";
+    $("cmpHandle").style.transition=on?"left 1.05s cubic-bezier(.22,.7,.2,1)":"none"; }
+  function resetCompare(){ preview.classList.remove("cmp"); cmpTransition(false); setCut(50); $("cmpBefore").src=""; }
+  function showCompare(beforeSrc, afterSrc){
+    $("cmpBefore").src=beforeSrc; $("prevImg").src=afterSrc;
+    preview.classList.add("cmp");
+    cmpTransition(false); setCut(100);   // start fully on the ORIGINAL
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      cmpTransition(true); setCut(0);                 // sweep → reveal the enhanced aerial
+      setTimeout(function(){ setCut(50); }, 1150);    // then settle to a 50/50 compare
+      setTimeout(function(){ cmpTransition(false); }, 2250);
+    }); });
+  }
+  // drag the divider to compare
+  (function(){ var h=$("cmpHandle"), dragging=false;
+    function toPos(clientX){ var r=$("preview").getBoundingClientRect(); return (clientX-r.left)/r.width*100; }
+    h.addEventListener("pointerdown", function(e){ e.preventDefault(); dragging=true; cmpTransition(false); h.setPointerCapture(e.pointerId); });
+    h.addEventListener("pointermove", function(e){ if(dragging) setCut(toPos(e.clientX)); });
+    h.addEventListener("pointerup", function(e){ dragging=false; try{h.releasePointerCapture(e.pointerId);}catch(_){} });
+  })();
+
+  var scanTimer=null;
+  function scanOn(on){ var s=$("scan"); s.classList.toggle("on",on);
+    if(on){ var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
+    else { clearInterval(scanTimer); scanTimer=null; } }
+
+  function enhance(){ if(!capCanvas) return; var w=$("wand");
+    var beforeSrc=$("prevImg").src;                 // remember the pre-enhance aerial for the compare
+    w.classList.add("busy"); resetCompare(); scanOn(true);
     capCanvas.toBlob(function(blob){ var fd=new FormData(); fd.append("image",blob,"c.png"); fd.append("mode","aerial");
       fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
-        var ai=new Image(); ai.onload=function(){ var cv=document.createElement("canvas"); cv.width=ai.naturalWidth; cv.height=ai.naturalHeight; cv.getContext("2d").drawImage(ai,0,0); capCanvas=cv; $("prevImg").src=cv.toDataURL("image/jpeg",0.92); w.classList.remove("busy"); };
+        var ai=new Image(); ai.onload=function(){ var cv=document.createElement("canvas"); cv.width=ai.naturalWidth; cv.height=ai.naturalHeight; cv.getContext("2d").drawImage(ai,0,0); capCanvas=cv;
+          scanOn(false); w.classList.remove("busy");
+          showCompare(beforeSrc, cv.toDataURL("image/jpeg",0.92));   // reveal + before/after
+        };
         ai.src="data:image/png;base64,"+d.b64;
-      }).catch(function(e){ w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
+      }).catch(function(e){ scanOn(false); w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
     },"image/png"); }
   $("wand").addEventListener("click", enhance);
   $("use").addEventListener("click", usePreview);
-  $("retake").addEventListener("click", function(){ goStep(1); });
+  $("retake").addEventListener("click", function(){ scanOn(false); resetCompare(); goStep(1); });
   $("dl").addEventListener("click", function(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); });
   goStep(0);
 </script>
