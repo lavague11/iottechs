@@ -59,11 +59,13 @@
   .ctxbtn svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .ctxnote{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font-size:12px;color:var(--muted);box-shadow:0 2px 10px rgba(16,17,18,.08)}
   .utils{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;z-index:4}
-  .ubtn{background:#fff;border:1px solid var(--line);border-radius:8px;height:34px;padding:0 12px;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
-  .ubtn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-  .zoombar{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  .zoombar button{border:0;background:#fff;color:var(--ink);width:34px;height:34px;font-size:17px;cursor:pointer}
-  .zoombar button:first-child{border-bottom:1px solid var(--line)}
+  .ubtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;height:34px;width:34px;padding:0;display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(4px)}
+  .ubtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  /* dim (moon) sits in the plan's top-right corner */
+  .plandim{position:absolute;right:14px;top:14px;z-index:4;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
+  .plandim svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .plandim.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  body.ro .plandim{display:none}
 
   /* right panel + collapse rail (same as survey tool) */
   .side{flex:none;width:300px;padding:14px 18px 0 14px;display:flex;flex-direction:column;min-height:0}
@@ -74,7 +76,9 @@
   .card{border:1px solid var(--line);border-radius:9px;padding:11px;margin:4px}
   .card .r1{display:flex;align-items:center;gap:9px}
   .card .chip{width:26px;height:26px;border-radius:7px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .card .nm{flex:1;font-size:14px;font-weight:500}
+  .card input.nm{flex:1;min-width:0;font-size:14px;font-weight:500;font-family:inherit;color:var(--ink);background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px}
+  .card input.nm:hover{border-color:var(--line)}
+  .card input.nm:focus{outline:none;border-color:var(--gold);background:#fff}
   .card .x{color:var(--muted);cursor:pointer}
   .card .fov{display:flex;align-items:center;gap:9px;margin-top:9px}
   .card .fov label{font-size:11px;color:var(--muted);width:28px}
@@ -121,12 +125,12 @@
 
   /* ===== device system: picker, armed placement, border-label aim (Angles step) ===== */
   #working.arming{cursor:crosshair}
-  .devNode{position:absolute;transform:translate(-50%,-50%);width:40px;height:40px;z-index:3}
-  .devNode .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center;cursor:grab}
+  .devNode{position:absolute;transform:translate(-50%,-50%);width:var(--isz,40px);height:var(--isz,40px);z-index:3}
+  .devNode .devDot{width:var(--isz,40px);height:var(--isz,40px);border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center;cursor:grab}
   .devNode .devDot:active{cursor:grabbing}
   .devNode.aim .devDot,.devNode.aim .devDot:active{cursor:pointer}   /* Angles: the icon doesn't move — only aim/length */
   .devNode .devDot{color:var(--ink)}
-  .devNode .devDot svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .devNode .devDot svg{width:calc(var(--isz,40px)*.47);height:calc(var(--isz,40px)*.47);stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
   .devNode .icLabel{position:absolute;left:20px;top:20px;transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none}
@@ -139,9 +143,13 @@
   .devNode .fovGrow.grow{animation:coneGrow .34s cubic-bezier(.2,.85,.25,1)}
   @keyframes coneGrow{from{transform:scale(.1);opacity:.25}to{transform:scale(1);opacity:1}}
   .devNode .coneSvg{position:absolute;overflow:visible;pointer-events:none}
+  body.no-fov .devNode .coneSvg{display:none}   /* Show FOV off → hide the shaded cone, keep the aim line + arrow */
   .devNode .coneLine{position:absolute;top:-1px;height:2px;background:currentColor}
   .devNode .coneLine::after{content:"";position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:9px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}   /* arrowhead */
-  #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center}
+  /* Add device: frosted + gold so it reads clearly over any aerial (not a heavy black block) */
+  #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
+  #addDeviceBtn:hover{background:#fff}
+  #addDeviceBtn svg{stroke:var(--gold);stroke-width:2.2}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
   .devmenu .mg + .mg{border-top:1px solid var(--line)}
@@ -156,6 +164,15 @@
   .devmenu .mi:hover{background:var(--soft)}
   .devmenu .mi .ic{width:26px;height:26px;flex:none;border-radius:7px;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
   .devmenu .mi .ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7}
+  /* settings rows */
+  .devmenu .setrow{display:flex;align-items:center;gap:10px;padding:7px 11px;font-size:13px;color:var(--ink)}
+  .devmenu .setrow label{flex:none;width:64px;color:var(--muted);font-weight:600}
+  .devmenu .setrow input[type=range]{flex:1;accent-color:var(--gold)}
+  .devmenu .setrow .setv{flex:none;width:26px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .settog{margin-left:auto;flex:none;width:38px;height:22px;border-radius:20px;border:1px solid var(--line);background:#e7e4dd;position:relative;cursor:pointer;transition:background .15s;padding:0}
+  .settog .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:left .15s}
+  .settog.on{background:var(--gold)}
+  .settog.on .knob{left:18px}
   .card.sel{border-color:var(--gold)}
 
   /* read-only (customer) view: hide editing, show the finished plan + cones */
@@ -175,7 +192,6 @@
     <div class="brand">Site Survey</div>
     <div><div class="job" id="jobName">Site Survey</div><div class="sub" id="jobSub"></div></div>
     <div class="grow"></div>
-    <button class="moon" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
     <button class="pill"><span class="g"></span>Draft</button>
   </div>
 
@@ -218,11 +234,11 @@
           <div class="dimOverlay"></div>
           <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
           <div class="devmenu" id="devMenu"></div>
+          <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
           <div class="utils">
-            <button class="ubtn"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg>Undo</button>
-            <button class="ubtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Center</button>
+            <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+            <button class="ubtn" id="centerBtn" title="Center"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></button>
           </div>
-          <div class="zoombar"><button>+</button><button>&minus;</button></div>
         </div>
 
       </div>
@@ -338,6 +354,7 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
+    var ISZ=40, showFovState=true;               // icon size (px) + whether the shaded FOV cone shows (settings)
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=1, dimmed=false;
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
@@ -369,18 +386,34 @@
     function cat(k){ return FLAT[k]; }
     function iconOf(it){ return ICONS[it.ic]||ICONS.dot; }
     function setHint(m){ var h=document.getElementById("wizHint"); if(h) h.textContent=m; }
+    function cap(s){ s=String(s||"").trim(); return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 
     // ---- picker: collapsible colour-coded groups; selecting a type ARMS it (menu stays open) ----
     var CHEV='<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>';
     devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mg" data-g="'+g.key+'">'+
       '<div class="mgrp">'+g.name+CHEV+'</div>'+
-      '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("");
+      '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("")+
+      '<div class="mg" data-g="settings"><div class="mgrp">Settings'+CHEV+'</div><div class="mitems">'+
+        '<div class="setrow"><label>Icon size</label><input type="range" id="setIconSize" min="26" max="64" step="2" value="40"><span class="setv" id="setIconV">40</span></div>'+
+        '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
+      '</div></div>';
     // remember which groups are expanded; default: just the first (Cameras)
     var MENUKEY="iottechs_survey2_menugroups"; var openG;
     try{ openG=JSON.parse(localStorage.getItem(MENUKEY)); }catch(e){}
     if(!openG||!openG.length) openG=[GROUPS[0].key];
     [].forEach.call(devMenu.querySelectorAll(".mg"), function(mg){ if(openG.indexOf(mg.dataset.g)>=0) mg.classList.add("open"); });
     function saveMenuGroups(){ var os=[]; [].forEach.call(devMenu.querySelectorAll(".mg.open"), function(x){ os.push(x.dataset.g); }); try{ localStorage.setItem(MENUKEY, JSON.stringify(os)); }catch(e){} }
+    // ---- settings: icon size + show-FOV (global, persisted with the survey) ----
+    function applySettings(){ document.body.style.setProperty("--isz", ISZ+"px");
+      document.body.classList.toggle("no-fov", !showFovState);
+      var iv=document.getElementById("setIconV"); if(iv) iv.textContent=ISZ;
+      var isl=document.getElementById("setIconSize"); if(isl) isl.value=ISZ;
+      var tg=document.getElementById("setShowFov"); if(tg) tg.classList.toggle("on", showFovState);
+      devices.forEach(renderDevice); }
+    document.getElementById("setIconSize").addEventListener("input", function(e){ ISZ=+e.target.value; applySettings(); queueSave(); });
+    document.getElementById("setShowFov").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
+    // Undo: remove the last-placed device
+    var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(RO||!devices.length) return; removeDevice(devices[devices.length-1].id); });
     addBtn.addEventListener("click", function(e){ e.stopPropagation(); devMenu.classList.toggle("show"); });
     // any click outside the picker (or its + button) hides it — placing already hides it too
     document.addEventListener("click", function(e){ if(!devMenu.classList.contains("show")) return;
@@ -431,12 +464,13 @@
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
       el.style.left=d.x+"%"; el.style.top=d.y+"%"; el.classList.toggle("sel",d.id===selId);
+      var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=d.tag;
-      lab.style.left=(20+BR*Math.cos(a))+"px"; lab.style.top=(20+BR*Math.sin(a))+"px";        // label rides the camera border
+      lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
-        wrap.style.transform="rotate("+d.aim+"deg)";
-        var R=(d.range||RANGE), ap=BR, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
+        wrap.style.left=cen+"px"; wrap.style.top=cen+"px"; wrap.style.transform="rotate("+d.aim+"deg)";
+        var R=(d.range||RANGE), ap=br, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
         svg.setAttribute("width",W); svg.setAttribute("height",H); svg.style.left="0px"; svg.style.top=(-R)+"px"; svg.setAttribute("viewBox","0 "+(-R)+" "+W+" "+H);
         if(d.fov>=359){ path.setAttribute("d","M "+(ap-R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap+R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap-R)+" 0 Z"); }   // 360° coverage → full circle
         else { var a1x=(ap+R*Math.cos(-half)).toFixed(1), a1y=(R*Math.sin(-half)).toFixed(1), a2x=(ap+R*Math.cos(half)).toFixed(1), a2y=(R*Math.sin(half)).toFixed(1), lg=d.fov>180?1:0;
@@ -459,10 +493,16 @@
       devices.forEach(function(d){
         var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
         var showFov=(curStep===2 && d.cone);   // angles live in the Angles step
-        card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><div class="nm">'+d.name+'</div><div class="x">&times;</div></div>'+
+        card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
           (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
-        card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")) select(d.id); });
+        card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
         card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
+        // editable name — stays in the panel; the on-plan label keeps its positional tag (IC1…)
+        var nmi=card.querySelector(".nm"); nmi.value=d.name;
+        nmi.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+        nmi.addEventListener("input", function(){ d.name=nmi.value; queueSave(); });
+        nmi.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); nmi.blur(); } });
+        nmi.addEventListener("blur", function(){ var v=cap(nmi.value.trim()); if(!v){ v=cap(cat(d.k).name); } d.name=v; nmi.value=v; queueSave(); });
         if(showFov){
           var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
           fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
@@ -477,20 +517,20 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov,range:d.range}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov,range:d.range,name:d.name}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
-    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted })); }catch(e){} reportHost(); }
+    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState })); }catch(e){} reportHost(); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
     document.getElementById("dimBtn").addEventListener("click", function(){ dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:it.name+" "+nT};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.backgroundImage="url("+bgData+")"; img.style.background=""; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
@@ -512,8 +552,9 @@
     function submit(){ snapFloor(); submitted=true; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
       setHint("Submitted for approval."); }
-    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ renderFloorTabs(); return; }
+    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
+      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=(st.showFov!==false); applySettings();   // settings before floors render
       if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,devices:f.devices||[],started:!!f.started}; }); }
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       curFloor=Math.min(st.curFloor||0, floors.length-1);
