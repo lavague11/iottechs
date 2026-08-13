@@ -573,7 +573,6 @@
         '<div class="icLabel"></div>';
       work.insertBefore(el, work.querySelector(".utils"));
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
-      el.querySelector(".devDot").addEventListener("pointerdown", function(){ select(d.id); });
       renderDevice(d);
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
@@ -697,7 +696,9 @@
 
     // move: drag the icon (Place step only — on Angles the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(RO) return; select(d.id); if(curStep===2) return;
+      dot.addEventListener("pointerdown", function(e){ if(RO) return;
+        if(curStep===2){ select(d.id===selId?null:d.id); return; }   // Angles: click a camera to select; click it again to unselect + hide its angle
+        select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("canvas").getBoundingClientRect();
         function mv(ev){ d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
