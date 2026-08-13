@@ -21,6 +21,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
+  const [embedOpen, setEmbedOpen] = useState({});    // { [`${stage}-${tool}`]: bool } — Open reveals the real tool
   const [custOpen, setCustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
@@ -185,10 +186,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                             <span className="dv-caret"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
                           </button>
                           <div className="dv-tdetail"><div><div className="dv-embed">
-                            {t.node ? t.node : (
-                              <div className="dv-embed-slot"><span className="dv-etitle mono">{t.label || t.name}</span>
-                                <button className="dv-embed-open" data-stop>Open<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div>
-                            )}
+                            <div className="dv-embed-slot"><span className="dv-etitle mono">{t.label || t.name}</span>
+                              <button className="dv-embed-open" data-stop onClick={() => t.node && setEmbedOpen((e) => ({ ...e, [`${i}-${ti}`]: !e[`${i}-${ti}`] }))}>
+                                {t.node && embedOpen[`${i}-${ti}`] ? "Close" : "Open"}
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div>
+                            {t.node && embedOpen[`${i}-${ti}`] && <div className="dv-embed-mount" data-stop>{t.node}</div>}
                           </div></div></div>
                         </div>
                       );
@@ -217,8 +219,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
 const CSS = `
 .dv-shell{--dv-ink:#101418;--dv-ink-soft:#3A4048;--dv-meta:#787D84;--dv-faint:#A1A6AC;--dv-paper:#F4F4F2;--dv-raise:#FBFBFA;--dv-line:#E4E4DF;--dv-line-soft:#EDEDE9;--dv-gold:#C9A96E;--dv-gold-deep:#A8842F;--dv-green:#2E7D5B;--dv-red:#C4553D;--dv-blue:#3E6C9E;--dv-e:cubic-bezier(.22,.9,.24,1);--dv-eo:cubic-bezier(.16,1,.3,1);
   height:100dvh;display:flex;flex-direction:column;background:var(--dv-paper);color:var(--dv-ink);
-  font-family:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
-.dv-shell .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  font-family:var(--font-sans),"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.dv-shell .mono{font-family:var(--font-mono),"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .dv-shell button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .dv-shell :focus-visible{outline:2px solid var(--dv-gold-deep);outline-offset:3px;border-radius:8px}
 
@@ -255,7 +257,7 @@ const CSS = `
 .dv-customer.open{max-height:360px}
 .dv-cust-in{margin:12px 24px 0;padding:20px 22px;border-radius:16px;background:var(--dv-raise);border:1px solid var(--dv-line);display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:22px 26px;opacity:0;transform:translateY(-8px);transition:.4s var(--dv-eo) .04s}
 .dv-customer.open .dv-cust-in{opacity:1;transform:none}
-.dv-field dt{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-bottom:6px}
+.dv-field dt{font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-bottom:6px}
 .dv-field dd{font-size:13.5px;color:var(--dv-ink);line-height:1.5}
 .dv-field dd small{display:block;color:var(--dv-meta);font-size:12px;margin-top:2px}
 .dv-cust-actions{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1;padding-top:4px;border-top:1px solid var(--dv-line-soft)}
@@ -267,7 +269,7 @@ const CSS = `
 .dv-seg{flex:1;text-align:left;min-width:0;padding-top:6px}
 .dv-bar{height:2px;border-radius:99px;background:var(--dv-line);overflow:hidden;position:relative}
 .dv-bar i{position:absolute;inset:0;width:0;border-radius:99px;transition:width .7s var(--dv-eo)}
-.dv-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .25s}
+.dv-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .25s}
 .dv-seg:hover .dv-lab,.dv-seg.done .dv-lab{color:var(--dv-ink-soft)}
 .dv-seg.current .dv-lab{color:var(--dv-ink)}
 .dv-beacon{width:6px;height:6px;border-radius:99px;flex:0 0 auto;background:transparent;position:relative;transform:scale(.4);transition:transform .35s var(--dv-eo)}
@@ -287,7 +289,7 @@ const CSS = `
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
 .dv-pane-head{padding:26px 30px 18px;display:flex;align-items:flex-start;gap:14px}
 .dv-stage-name{font-size:24px;font-weight:600;letter-spacing:-.03em}
-.dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:"JetBrains Mono",monospace}
+.dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:var(--font-mono),"JetBrains Mono",monospace}
 .f-pending{background:#EEF3F8;color:var(--dv-blue)}.f-reviewing,.f-finalizing{background:#FBF4E6;color:var(--dv-gold-deep)}.f-complete{background:#E9F3ED;color:var(--dv-green)}.f-locked{background:rgba(16,20,24,.04);color:var(--dv-faint)}
 .dv-scroll{flex:1;overflow-y:auto;padding:2px 20px 16px;-webkit-mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent)}
 
@@ -304,6 +306,7 @@ const CSS = `
 .dv-embed-slot{border:1px solid var(--dv-line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;background:var(--dv-raise)}
 .dv-etitle{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--dv-meta);letter-spacing:.01em}
 .dv-embed-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:9px;background:var(--dv-ink);color:#fff;font-size:12.5px;font-weight:500}
+.dv-embed-mount{margin-top:12px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
 
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft)}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
@@ -312,7 +315,7 @@ const CSS = `
 .dv-advance.ready .dv-adv-btn{background:var(--dv-ink);color:#fff}.dv-advance.ready .dv-adv-btn:hover{transform:translateY(-1px)}
 .dv-advance.gated .dv-adv-btn{background:transparent;border:1px solid var(--dv-line);color:var(--dv-faint);cursor:not-allowed}
 
-.dv-hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:35;font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dv-faint);transition:opacity .5s}
+.dv-hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:35;font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dv-faint);transition:opacity .5s}
 .dv-deck.moved .dv-hint{opacity:0}
 
 .dv-slide[aria-hidden="false"] .dv-pane-head>*,.dv-slide[aria-hidden="false"] .dv-tool{animation:dvrise .55s var(--dv-eo) both}

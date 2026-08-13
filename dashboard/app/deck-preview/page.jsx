@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import DeckView from "../project/[accessId]/deck-view";
+import SiteSurveyWidget from "../project/[accessId]/site-survey-widget";
 
 // Standalone preview of the redesigned project deck (Consulting wired with the real tool set).
 // Sample data only — no API. Lets us review the shell + one stage before porting into the gateway.
@@ -10,7 +11,8 @@ const STAGES = [
     advance: { to: "Proposal", ready: false, reason: "Waiting on customer to accept" },
     tools: [
       { name: "Survey Scheduling & Notes", state: "done", label: "Scheduler" },
-      { name: "Site Survey", state: "active", label: "Site Survey tool" },
+      { name: "Site Survey", state: "active", label: "Site Survey tool",
+        node: <div style={{ height: 560 }}><SiteSurveyWidget accessId="deckpreview" view="admin" noApproval /></div> },
       { name: "Mockups", label: "Mockup generator" },
     ] },
   { name: "Proposal", pill: "Reviewing", pct: 25, turn: "mine", tint: "gold",
