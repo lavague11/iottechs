@@ -344,7 +344,7 @@
     // Groups mirror the survey engine's catalog; the group colour drives on-plan + panel coding.
     var GROUPS=[
       {key:"cctv",name:"Cameras",letter:"C",color:"#b98a2e",items:[
-        {k:"cam",name:"Camera",ic:"cam",cone:true,fov:60},{k:"nvr",name:"NVR",ic:"nvr"},{k:"isp",name:"ISP",ic:"net"},{k:"poe",name:"PoE Switch",ic:"net"},{k:"disp",name:"Display",ic:"disp"}]},
+        {k:"cam",name:"Camera",ic:"cam",cone:true,fov:30},{k:"nvr",name:"NVR",ic:"nvr"},{k:"isp",name:"ISP",ic:"net"},{k:"poe",name:"PoE Switch",ic:"net"},{k:"disp",name:"Display",ic:"disp"}]},
       {key:"sound",name:"Sound",letter:"S",color:"#B084E0",items:[
         {k:"amp",name:"Amp",ic:"disp"},{k:"spk",name:"Speaker",ic:"spk"},{k:"aux",name:"Audio Input",ic:"net"}]},
       {key:"toast",name:"Toast POS",letter:"T",color:"#E8743B",items:[
@@ -379,7 +379,7 @@
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
       var nType=devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type
-      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,fov:it.fov||60,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
+      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(curStep===2&&d.cone?" aim":""); el.id="dev-"+d.id;
@@ -398,7 +398,7 @@
       lab.style.left=(20+BR*Math.cos(a))+"px"; lab.style.top=(20+BR*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.transform="rotate("+d.aim+"deg)";
-        var R=RANGE, ap=BR, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
+        var R=(d.range||RANGE), ap=BR, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
         svg.setAttribute("width",W); svg.setAttribute("height",H); svg.style.left="0px"; svg.style.top=(-R)+"px"; svg.setAttribute("viewBox","0 "+(-R)+" "+W+" "+H);
         if(d.fov>=359){ path.setAttribute("d","M "+(ap-R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap+R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap-R)+" 0 Z"); }   // 360° coverage → full circle
         else { var a1x=(ap+R*Math.cos(-half)).toFixed(1), a1y=(R*Math.sin(-half)).toFixed(1), a2x=(ap+R*Math.cos(half)).toFixed(1), a2y=(R*Math.sin(half)).toFixed(1), lg=d.fov>180?1:0;
@@ -419,12 +419,17 @@
         var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
         var showFov=(curStep===2 && d.cone);   // angles live in the Angles step
         card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><div class="nm">'+d.name+'</div><div class="x">&times;</div></div>'+
-          (showFov?'<div class="fov"><label>FOV</label><input type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
+          (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>'+
+                   '<div class="fov"><label>Length</label><input class="lenR" type="range" min="40" max="400" value="'+(d.range||RANGE)+'"><div class="v">'+Math.round(d.range||RANGE)+'</div></div>':'');
         card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")) select(d.id); });
         card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
-        if(showFov){ var rng=card.querySelector("input"),v=card.querySelector(".v");
-          rng.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
-          rng.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+rng.value; v.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
+        if(showFov){
+          var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
+          fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
+          fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); });
+          var lr=card.querySelector(".lenR"), lv=lr.nextElementSibling;
+          lr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
+          lr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.range=+lr.value; lv.textContent=Math.round(d.range); renderDevice(d); queueSave(); }); }
         panelBody.appendChild(card);
       });
     }
@@ -435,7 +440,7 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov,range:d.range}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -448,7 +453,7 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||60,tag:"I"+g.letter+nG,name:it.name+" "+nT};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:it.name+" "+nT};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.backgroundImage="url("+bgData+")"; img.style.background=""; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
