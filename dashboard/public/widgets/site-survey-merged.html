@@ -319,6 +319,7 @@
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
       exitBg(true);
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
+      snapFloor(); renderFloorTabs();   // this background is now this floor's plan
       goStep(1);   // → Place
     }
 
@@ -431,12 +432,17 @@
       devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); queueSave(); }
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
 
-    // ---- persistence: autosave the survey per project (localStorage; the host also backs it up server-side) ----
-    var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null;
+    // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
+    var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
+    var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov}; }); }
+    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
-    function save(){ try{ localStorage.setItem(PKEY, JSON.stringify({
-      bg:bgData, step:curStep, dim:dimmed,
-      devices:devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov}; }) })); }catch(e){} }
+    // Tell the host (project page) the live floor count + whether there's anything yet, so its
+    // header label and office Submit react the instant a floor/device lands — no server poll wait.
+    function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
+      parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
+    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted })); }catch(e){} reportHost(); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
     document.getElementById("dimBtn").addEventListener("click", function(){ dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
@@ -444,17 +450,34 @@
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||60,tag:"I"+g.letter+nG,name:it.name+" "+nT};
       devices.push(d); mountDevice(d); }
-    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s) return; var st=JSON.parse(s); if(!st) return;
-      dimmed=!!st.dim; applyDim();
-      if(!st.bg && !(st.devices&&st.devices.length)) return;
-      bgHasImage=true; bgData=st.bg||null;
-      var img=document.getElementById("stageImg");
-      if(bgData){ img.style.backgroundImage="url("+bgData+")"; } else { img.style.background="#fff"; }
-      document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block";
-      surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
-      (st.devices||[]).forEach(reAdd); renderPanel(); updateCount();
-      goStep(typeof st.step==="number"?st.step:1);
-    }catch(e){} }
+    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.backgroundImage="url("+bgData+")"; img.style.background=""; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
+    function loadFloor(i){ curFloor=i; var f=floors[i]||{};
+      [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
+      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null;
+      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
+      var s0=surveyWiz.querySelectorAll(".steps .s")[0];
+      if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); }
+      else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
+    }
+    function switchFloor(i){ if(i===curFloor) return; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
+    function addFloor(){ snapFloor(); floors.push({name:"Floor "+(floors.length+1),bg:null,devices:[],started:false}); loadFloor(floors.length-1); renderFloorTabs(); goStep(0); setHint("Choose a background for this floor."); queueSave(); }
+    function renderFloorTabs(){ var tabs=document.querySelector(".floorTabs"); if(!tabs) return; tabs.innerHTML="";
+      floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":""); b.textContent=f.name; b.addEventListener("click",function(){ switchFloor(i); }); tabs.appendChild(b); });
+      if(!RO){ var add=document.createElement("button"); add.className="ftab add"; add.textContent="+"; add.title="Add floor"; add.addEventListener("click",addFloor); tabs.appendChild(add); }
+    }
+    function setStatus(){ var pill=document.querySelector(".pill"); if(!pill) return;
+      pill.innerHTML='<span class="g" style="background:'+(submitted?"#3aa55d":"var(--gold)")+'"></span>'+(submitted?"Submitted":"Draft"); }
+    function submit(){ snapFloor(); submitted=true; setStatus(); save();
+      try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
+      setHint("Submitted for approval."); }
+    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ renderFloorTabs(); return; }
+      dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,devices:f.devices||[],started:!!f.started}; }); }
+      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      curFloor=Math.min(st.curFloor||0, floors.length-1);
+      loadFloor(curFloor); renderFloorTabs();
+      goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
+    }catch(e){ renderFloorTabs(); } }
 
     // move: drag the icon
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
@@ -500,22 +523,12 @@
       queueSave();
     }
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
-    nextBtn.addEventListener("click", function(){ if(curStep<3) goStep(curStep+1); });
+    // Next walks the wizard; on the Submit step it submits the whole survey for approval.
+    nextBtn.addEventListener("click", function(){ if(curStep<3) goStep(curStep+1); else submit(); });
+    // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
+    addFloorBtn.addEventListener("click", addFloor);
 
-    addFloorBtn.addEventListener("click",function(){
-      bgHasImage=false;
-      document.getElementById("working").style.display="none";
-      document.getElementById("bgstep").style.display="";
-      stepEls[0].classList.remove("done");
-      goStep(0);
-      document.getElementById("wizHint").textContent="Choose a background to begin.";
-      var tabs=document.querySelector(".floorTabs");
-      var n=tabs.querySelectorAll(".ftab").length+1;
-      tabs.querySelectorAll(".ftab").forEach(function(t){t.classList.remove("on");});
-      var nt=document.createElement("button"); nt.className="ftab on"; nt.textContent="Floor "+n; tabs.appendChild(nt);
-    });
-
-    restore();   // reopen the saved survey for this project (if any)
+    restore();   // reopen the saved survey (all floors) for this project (if any)
   </script>
 </body>
 </html>
