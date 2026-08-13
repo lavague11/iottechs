@@ -198,6 +198,21 @@
   .libItem img{display:block;width:100%;height:100px;object-fit:cover;background:#e9e6df}
   .libItem .lcap{font-size:11px;color:var(--muted);padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .libEmpty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:30px 10px}
+  /* confirm + upload-source dialogs */
+  #confirmModal,#uploadPick{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
+  #confirmModal.on,#uploadPick.on{display:flex}
+  .cfCard{width:min(340px,90%);background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px rgba(16,17,18,.3);padding:20px}
+  .cfMsg{font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:18px}
+  .cfBtns{display:flex;gap:10px;justify-content:flex-end}
+  .cfBtns button{border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--line)}
+  .cfNo{background:#fff;color:var(--ink)}
+  .cfNo:hover{background:var(--soft)}
+  .cfYes{background:#d9534f;color:#fff;border-color:#d9534f}
+  .cfYes:hover{background:#c9302c}
+  /* delete-floor x on the floor tabs */
+  .ftab .fdel{margin-left:7px;opacity:.5;font-size:14px;line-height:1;cursor:pointer}
+  .ftab .fdel:hover{opacity:1}
+  .ftab.on .fdel{color:#fff}
 
   /* read-only (customer) view: hide editing, show the finished plan + cones */
   body.ro #addDeviceBtn,body.ro .devmenu,body.ro .utils{display:none}
@@ -312,6 +327,12 @@
       <div class="bgstriplbl">Level, zoom &amp; crop the aerial in the wizard — tap Use to drop it onto your plan</div>
     </div>
   </div>
+
+  <!-- confirm dialog (destructive actions) -->
+  <div id="confirmModal"><div class="cfCard"><div class="cfMsg" id="cfMsg"></div><div class="cfBtns"><button class="cfNo" id="cfNo">Cancel</button><button class="cfYes" id="cfYes">Delete</button></div></div></div>
+
+  <!-- upload source picker -->
+  <div id="uploadPick"><div class="cfCard"><div class="cfMsg">Where's the picture?</div><div class="cfBtns"><button class="cfNo" id="upDevice">From device</button><button class="cfNo" id="upLibrary">Survey library</button></div></div></div>
 
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
@@ -626,8 +647,22 @@
     function switchFloor(i){ if(i===curFloor) return; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
     function addFloor(){ snapFloor(); floors.push({name:"Floor "+(floors.length+1),bg:null,devices:[],started:false}); loadFloor(floors.length-1); renderFloorTabs(); goStep(0); setHint("Choose a background for this floor."); queueSave(); }
     function renderFloorTabs(){ var tabs=document.querySelector(".floorTabs"); if(!tabs) return; tabs.innerHTML="";
-      floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":""); b.textContent=f.name; b.addEventListener("click",function(){ switchFloor(i); }); tabs.appendChild(b); });
+      floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":"");
+        var nm=document.createElement("span"); nm.textContent=f.name; b.appendChild(nm);
+        b.addEventListener("click",function(){ switchFloor(i); });
+        if(!RO){ var x=document.createElement("span"); x.className="fdel"; x.innerHTML="&times;"; x.title="Delete floor";
+          x.addEventListener("click",function(e){ e.stopPropagation(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
+          b.appendChild(x); }
+        tabs.appendChild(b); });
       if(!RO){ var add=document.createElement("button"); add.className="ftab add"; add.textContent="+"; add.title="Add floor"; add.addEventListener("click",addFloor); tabs.appendChild(add); }
+    }
+    function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
+      if(floors.length<=1){ floors=[{name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); setHint("Choose a background to begin."); queueSave(); return; }
+      var wasCur=(curFloor===i);
+      floors.splice(i,1);
+      floors.forEach(function(f,idx){ f.name="Floor "+(idx+1); });   // keep numbering sequential
+      if(curFloor>i) curFloor--; else if(wasCur) curFloor=Math.min(i, floors.length-1);
+      loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
     }
     function setStatus(){ var pill=document.querySelector(".pill"); if(!pill) return;
       pill.innerHTML='<span class="g" style="background:'+(submitted?"#3aa55d":"var(--gold)")+'"></span>'+(submitted?"Submitted":"Draft"); }
@@ -661,7 +696,20 @@
         lab.addEventListener("pointermove",mv); lab.addEventListener("pointerup",up); }); }
 
     // Upload a picture → file picker → drop the image onto the plan as the background
-    document.getElementById("doorUpload").addEventListener("click", function(){ document.getElementById("upIn").click(); });
+    // ---- confirm dialog (destructive) ----
+    var pendingYes=null;
+    function askConfirm(msg, onYes){ document.getElementById("cfMsg").textContent=msg; pendingYes=onYes; document.getElementById("confirmModal").classList.add("on"); }
+    function closeConfirm(){ document.getElementById("confirmModal").classList.remove("on"); pendingYes=null; }
+    document.getElementById("cfNo").addEventListener("click", closeConfirm);
+    document.getElementById("cfYes").addEventListener("click", function(){ var f=pendingYes; closeConfirm(); if(f) f(); });
+    document.getElementById("confirmModal").addEventListener("click", function(e){ if(e.target===this) closeConfirm(); });
+
+    // ---- Upload: ask device vs. survey library ----
+    var uploadPick=document.getElementById("uploadPick");
+    document.getElementById("doorUpload").addEventListener("click", function(){ uploadPick.classList.add("on"); });
+    document.getElementById("upDevice").addEventListener("click", function(){ uploadPick.classList.remove("on"); document.getElementById("upIn").click(); });
+    document.getElementById("upLibrary").addEventListener("click", function(){ uploadPick.classList.remove("on"); openLib(); });
+    uploadPick.addEventListener("click", function(e){ if(e.target===this) this.classList.remove("on"); });
     document.getElementById("upIn").addEventListener("change", function(e){
       var f=e.target.files[0]; if(!f) return;
       var r=new FileReader(); r.onload=function(ev){ applyBackground(ev.target.result); }; r.readAsDataURL(f); e.target.value="";
