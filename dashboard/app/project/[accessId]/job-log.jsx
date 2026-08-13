@@ -11,9 +11,9 @@ import { getNotesAction, addNoteAction, setNotePublicAction, getEventsAction } f
 //     (stripped server-side). Staff can @mention teammates.
 
 const LOG_MAP = {
-  submit_site_survey: { verb: "Site survey submitted to customer", kind: "submit" },
+  // submit_site_survey / submit_mockup are logged as project_events (with resubmit + camera
+  // count), so they're intentionally NOT mapped here — that would double them.
   site_survey:        { verb: "Site survey approved",              kind: "approve" },
-  submit_mockup:      { verb: "Mockups submitted to customer",     kind: "submit" },
   mockup:             { verb: "Mockups approved",                  kind: "approve" },
   proposal:           { verb: "Proposal signed",                   kind: "sign" },
   approval_deposit:   { verb: "Proposal approved & deposit paid",  kind: "sign" },

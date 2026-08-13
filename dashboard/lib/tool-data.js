@@ -63,6 +63,12 @@ function survey2Meaning(d) {
 export function survey2HasData(raw) {
   return !!survey2Meaning(parse(raw));
 }
+// Count placed cameras (device kind "cam") across all floors — used to annotate the Job Log.
+export function survey2CameraCount(raw) {
+  const m = survey2Meaning(parse(raw));
+  if (!m) return 0;
+  return m.floors.reduce((n, f) => n + (f.devices || []).filter(v => v.k === "cam").length, 0);
+}
 
 // ---- Camera mockup (localStorage key iot_cctv_<id>, tool "mockup") --------------------------
 function mockupMeaning(d) {

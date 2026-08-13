@@ -16,6 +16,7 @@ import {
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
+import { survey2CameraCount } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady } from "../../../lib/email";
 
@@ -650,9 +651,25 @@ export async function submitToolAction(accessId, tool, on = true) {
   if (on && !has) return { error: "Add something to the tool before submitting it." };
   const fp   = tool === "site_survey" ? meta.survey.fingerprint : meta.mockup.fingerprint;
   const key  = `submit_${tool}`;
+  // A prior submission on file → this is a re-submit (revision), not the first send.
+  const wasSubmitted = !!getStageAcceptances(accessId)[key];
   const acceptances = on
     ? acceptStage(accessId, key, actorName(tok), fp)
     : unacceptStage(accessId, key);
+  // Clock the submit/resubmit on the Job Log, annotated with the camera quantity for the survey.
+  if (on) {
+    const noun = tool === "site_survey" ? "Site survey" : "Mockups";
+    let extra = "";
+    if (tool === "site_survey") {
+      const cams = survey2CameraCount(getToolData(accessId, "survey2")?.data);
+      if (cams) extra = ` — ${cams} camera${cams !== 1 ? "s" : ""}`;
+    }
+    logProjectEvent(accessId, {
+      kind: wasSubmitted ? "resubmit" : "submit",
+      label: `${noun} ${wasSubmitted ? "resubmitted" : "submitted to customer"}${extra}`,
+      actor: actorName(tok),
+    });
+  }
   await revalidate(accessId);
   return { ok: true, acceptances };
 }

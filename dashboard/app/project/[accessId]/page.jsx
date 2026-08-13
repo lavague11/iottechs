@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -233,6 +233,13 @@ export default async function ProjectLinkPage({ params, searchParams }) {
       if (u?.id) viewerName = getUserById(u.id)?.name || u.email || null;
     }
     recordProposalView(p.access_id, { role: initialView, name: viewerName, ip });
+    // Clock a customer proposal view on the Job Log — but only once per ~30 min so repeat page
+    // loads don't spam the trail (the proposal_views table keeps the full per-view history).
+    if (initialView === "customer") {
+      const recent = getProjectEvents(p.access_id).find((e) => e.kind === "view" && String(e.label || "").includes("proposal"));
+      const ageMs = recent ? Date.now() - Date.parse(String(recent.created_at).replace(" ", "T")) : Infinity;
+      if (!(ageMs < 30 * 60 * 1000)) logProjectEvent(p.access_id, { kind: "view", label: "Customer viewed the proposal", actor: viewerName || "Customer" });
+    }
     // Role-scoped read: admin/manager see all views; sales sees only customer views; others see none.
     // Staff paths resolve approximate viewer location (IP-based); customers never wait on that.
     if (initialView === "admin" || initialView === "manager") {
