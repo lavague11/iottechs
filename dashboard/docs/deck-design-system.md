@@ -160,6 +160,15 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **Note visibility is governed, not free.** Making a note public asks first (inline confirm).
+  Only admin/manager set visibility outright; tech/sales can only *request* public → the note
+  goes `pending_public` and an admin/manager approves/rejects. Customer notes are always public.
+- **Job Log affordances:** Basic/Advanced is a single pill toggle; each column has a search icon
+  (activity filters verb+actor, notes filter body+author); note bodies are single-line, click to expand.
+- **Contact editing** is inline in the deck drawer (verified-address autocomplete) and every change
+  is logged at the mutation point (`updateProjectInfoAction`), covering the legacy header too.
+- **Site Survey chrome** keeps shrinking: device panel collapses until placement, satellite "Show"
+  became a search icon, one identity line (name · full address), Upload → device directly.
 - **Forensic events wired via `logProjectEvent`:** submits/resubmits (from `submitToolAction`,
   annotated with the survey camera count — `submit` kind is Basic-visible, `resubmit` is
   Advanced), customer proposal views (from `page.jsx`, deduped ~30 min, Advanced), customer PIN
