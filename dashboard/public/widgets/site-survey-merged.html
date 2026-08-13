@@ -347,7 +347,7 @@
     if(PID){
       fetch("/api/config?project="+encodeURIComponent(PID)).then(function(r){return r.json();}).then(function(c){
         if(c&&c.name) document.getElementById("jobName").textContent=c.name;
-        if(c&&c.address){ projectAddress=c.address; document.getElementById("jobSub").textContent=cityState(c.address); }
+        if(c&&c.address){ projectAddress=c.address; document.getElementById("jobSub").textContent=c.address; }
       }).catch(function(){});
     }
 
