@@ -52,8 +52,14 @@ export default function SurveyLibraryClient({ user, alerts, rows = [] }) {
           <div className="svl-grid">
             {visible.map((r) => (
               <Link className={`svl-card${r.has ? "" : " none"}`} key={r.access_id} href={`/project/${r.access_id}`}>
-                <span className={`svl-plan${r.has ? "" : " empty"}`}>
-                  <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                <span
+                  className={`svl-plan${r.has ? "" : " empty"}${r.thumb ? " photo" : ""}`}
+                  style={r.thumb ? { backgroundImage: `url(${r.thumb})` } : undefined}
+                >
+                  {r.submitted && <span className="svl-sub">Submitted</span>}
+                  {!r.thumb && (
+                    <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                  )}
                   {r.has ? (
                     <span className="svl-stats">
                       <span><b>{r.floors}</b> floor{r.floors === 1 ? "" : "s"}</span>
@@ -92,6 +98,10 @@ const CSS = `
 .apx .svl-card.none{border-style:dashed;background:var(--bg-soft,#fafaf8)}
 .apx .svl-plan{width:100%;min-height:96px;margin-bottom:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#f8f0e0;color:var(--gold-deep,#b08f4f)}
 .apx .svl-plan.empty{background:#fff;border:1px dashed var(--line);color:#a9a396}
+.apx .svl-plan.photo{background-size:cover;background-position:center;justify-content:flex-end;padding:0;overflow:hidden;position:relative;min-height:124px}
+.apx .svl-plan.photo .svl-stats{width:100%;justify-content:center;background:linear-gradient(transparent,rgba(12,14,16,.66));color:#fff;padding:18px 8px 8px}
+.apx .svl-plan.photo .svl-stats b{color:#fff}
+.apx .svl-sub{position:absolute;top:8px;right:8px;z-index:2;background:#3aa55d;color:#fff;font-size:.6rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:20px}
 .apx .svl-stats{display:flex;gap:12px;font-size:.76rem;color:var(--ink);font-weight:600}
 .apx .svl-stats b{font-size:.95rem;font-weight:800}
 .apx .svl-slot-t{font-size:.76rem;font-weight:700;color:var(--muted)}

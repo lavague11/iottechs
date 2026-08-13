@@ -1422,36 +1422,53 @@ export function getProjectsWithSystemQr(rows) {
 
 // Admin System-QR library: every project that has a QR, with the fields you'd search by
 // (customer, address, phone, ID). The QR image itself lives in system_qr (a data URL).
-// Site-survey library — every project with its survey meta (floors, devices, last edit) in one
-// searchable place. Survey blobs are small JSON; parse server-side and ship only the numbers.
+// Site-survey library — every project's survey in one searchable place, WITH the finished
+// background photo as a thumbnail. Reads the new tool (survey2: floors[].bg + devices[]) first,
+// falling back to the legacy engine (survey: floors[].markers + B.rooms) for historical projects.
 export function getSurveyLibrary() {
+  const THUMB_CAP = 700 * 1024;   // chars — larger first backgrounds ship as a count-only card
   return db.prepare(
     `SELECT p.access_id, p.customer, p.address, p.contact_name, p.created_at,
-            t.data AS survey_data, t.updated_by, t.updated_at
+            t2.data AS s2, t2.updated_by AS ub2, t2.updated_at AS ua2,
+            t1.data AS s1, t1.updated_by AS ub1, t1.updated_at AS ua1
        FROM projects p
-       LEFT JOIN project_tool_data t ON t.project_access_id = p.access_id AND t.tool = 'survey'
-      ORDER BY (t.data IS NOT NULL) DESC, COALESCE(t.updated_at,'') DESC, p.id DESC`
+       LEFT JOIN project_tool_data t2 ON t2.project_access_id = p.access_id AND t2.tool = 'survey2'
+       LEFT JOIN project_tool_data t1 ON t1.project_access_id = p.access_id AND t1.tool = 'survey'
+      ORDER BY (COALESCE(t2.data,t1.data) IS NOT NULL) DESC, COALESCE(t2.updated_at,t1.updated_at,'') DESC, p.id DESC`
   ).all().map((p) => {
-    let floors = 0, devices = 0, rooms = 0, title = "";
+    let floors = 0, devices = 0, rooms = 0, title = "", thumb = null, submitted = false, parsed = false;
+    // New tool (survey2): each floor carries a bg image + placed devices — show the first bg as a thumb.
     try {
-      const d = JSON.parse(p.survey_data || "null");
+      const d = JSON.parse(p.s2 || "null");
       if (d && Array.isArray(d.floors)) {
-        title = d.surveyTitle || "";
-        floors = d.floors.length;
-        for (const f of d.floors) {
-          devices += (f?.markers || []).length;
-          rooms += (f?.B?.rooms || []).length;
-        }
+        parsed = true;
+        submitted = !!d.submitted;
+        const real = d.floors.filter((f) => f && (f.started || f.bg || (f.devices || []).length));
+        floors = real.length;
+        for (const f of real) devices += (f.devices || []).length;
+        const bg = real.map((f) => f && f.bg).find((b) => typeof b === "string" && b.startsWith("data:image"));
+        if (bg && bg.length <= THUMB_CAP) thumb = bg;
       }
     } catch { /* bad blob */ }
+    // Legacy engine (survey): counts only.
+    if (!parsed) {
+      try {
+        const d = JSON.parse(p.s1 || "null");
+        if (d && Array.isArray(d.floors)) {
+          title = d.surveyTitle || "";
+          floors = d.floors.length;
+          for (const f of d.floors) { devices += (f?.markers || []).length; rooms += (f?.B?.rooms || []).length; }
+        }
+      } catch { /* bad blob */ }
+    }
     return {
       access_id: p.access_id,
       customer: p.customer || p.contact_name || p.access_id,
       address: p.address || "",
       has: floors > 0 || devices > 0,
-      title, floors, devices, rooms,
-      updated_by: p.updated_by || null,
-      updated_at: p.updated_at || null,
+      title, floors, devices, rooms, thumb, submitted,
+      updated_by: p.ub2 || p.ub1 || null,
+      updated_at: p.ua2 || p.ua1 || null,
     };
   });
 }
