@@ -82,14 +82,12 @@
   <div class="wiz">
     <div class="steps">
       <div class="s active" data-step="0">1 · Level</div>
-      <div class="s" data-step="1">2 · Zoom</div>
-      <div class="s" data-step="2">3 · Crop</div>
-      <div class="s" data-step="3">4 · Finalized</div>
+      <div class="s" data-step="1">2 · Zoom &amp; crop</div>
+      <div class="s" data-step="2">3 · Finalized</div>
     </div>
     <div class="panel on" data-panel="0"><label>Rotate</label><input id="rot" type="range" min="-45" max="45" value="0"><button class="rz" id="rotZero">0°</button><div class="val" id="rotVal">0°</div></div>
-    <div class="panel" data-panel="1"><label>Zoom</label><input id="zoom" type="range" min="17" max="21" step="0.1" value="20"><div class="val" id="zoomVal">20.0</div></div>
-    <div class="panel" data-panel="2"><span class="hint">Drag a box over the area — or just tap Next to capture the whole view.</span></div>
-    <div class="panel" data-panel="3"><span class="hint">Your leveled, cropped aerial — enhance with the wand, then Use it.</span></div>
+    <div class="panel" data-panel="1"><label>Zoom</label><input id="zoom" type="range" min="17" max="21" step="0.1" value="20"><div class="val" id="zoomVal">20.0</div><span class="hint" style="flex:1;text-align:right">Drag a box, or Next for the whole view</span></div>
+    <div class="panel" data-panel="2"><span class="hint">Your leveled, cropped aerial — enhance with the wand, then Use it.</span></div>
     <div class="nav">
       <button class="b lite" id="back">Back</button>
       <div class="grow" id="navHint"></div>
@@ -141,24 +139,24 @@
     step=n;
     [].forEach.call(document.querySelectorAll(".steps .s"), function(el,i){ el.classList.toggle("active",i===n); el.classList.toggle("done",i<n); });
     [].forEach.call(document.querySelectorAll("[data-panel]"), function(el){ el.classList.toggle("on", +el.dataset.panel===n); });
-    $("draw").classList.toggle("on", n===2);
+    $("draw").classList.toggle("on", n===1);
     $("back").style.visibility = n>0 ? "" : "hidden";
-    $("next").textContent = n===3 ? "" : "Next";
-    $("next").style.display = n===3 ? "none" : "";
-    $("preview").classList.toggle("show", n===3);
-    $("navHint").textContent = ["Rotate so the property sits square.","Zoom to frame the property.","Draw a box, or tap Next for the whole view.",""][n];
+    $("next").style.display = n===2 ? "none" : "";
+    $("preview").classList.toggle("show", n===2);
+    $("navHint").textContent = ["Rotate so the property sits square.","Zoom to frame, then drag a box — or Next for the whole view.",""][n];
   }
   $("rot").addEventListener("input", function(){ setRot(parseInt(this.value,10)); });
   $("rotZero").addEventListener("click", function(){ setRot(0); });
   $("zoom").addEventListener("input", function(){ map.setZoom(parseFloat(this.value)); $("zoomVal").textContent=parseFloat(this.value).toFixed(1); });
   function ensureRect(){ if(!rect){ var st=$("draw"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
-  [].forEach.call(document.querySelectorAll(".steps .s"), function(el){ el.addEventListener("click", function(){ var n=+el.dataset.step; if(n===3){ ensureRect(); capture(); } goStep(n); }); });
+  [].forEach.call(document.querySelectorAll(".steps .s"), function(el){ el.addEventListener("click", function(){ var n=+el.dataset.step; if(n===2){ ensureRect(); capture(); } goStep(n); }); });
   $("back").addEventListener("click", function(){ if(step>0) goStep(step-1); });
-  $("next").addEventListener("click", function(){ if(step===2){ ensureRect(); capture(); goStep(3); } else if(step<3) goStep(step+1); });
+  $("next").addEventListener("click", function(){ if(step===1){ ensureRect(); capture(); goStep(2); } else if(step<2) goStep(step+1); });
 
   /* ---------- crop box ---------- */
   function initDraw(){
     var layer=$("draw"), cornerA=null, dragging=false;
+    layer.addEventListener("wheel", function(e){ e.preventDefault(); if(!map) return; var z=map.getZoom()+(e.deltaY<0?0.3:-0.3); map.setZoom(Math.max(17,Math.min(21,z))); }, {passive:false});   // zoom still works over the crop layer
     layer.addEventListener("pointerdown", function(e){ e.preventDefault(); layer.setPointerCapture(e.pointerId);
       var r=layer.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
       if(!cornerA){ cornerA={x:x,y:y}; rect=null; dragging=true; } else { finishRect(x,y); cornerA=null; }
@@ -228,7 +226,7 @@
     },"image/png"); }
   $("wand").addEventListener("click", enhance);
   $("use").addEventListener("click", usePreview);
-  $("retake").addEventListener("click", function(){ goStep(2); });
+  $("retake").addEventListener("click", function(){ goStep(1); });
   $("dl").addEventListener("click", function(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); });
   goStep(0);
 </script>
