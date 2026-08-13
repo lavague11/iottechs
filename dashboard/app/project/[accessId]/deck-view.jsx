@@ -327,6 +327,15 @@ const CSS = `
 .dv-tdetail{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--dv-eo)}.dv-tool.open .dv-tdetail{grid-template-rows:1fr}
 .dv-tdetail>div{overflow:hidden}
 .dv-tinline{margin:0 6px 16px 28px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
+/* Legacy tool-card chrome (e.g. Details & Notes) mounted inside a light tool — flatten it to
+   the deck's minimal look: no card border / gold rail / icon chip, title in the deck font. */
+.pvx-deck .dv-tinline .pv-tool-panel{border:none;border-radius:0;background:transparent;overflow:visible}
+.pvx-deck .dv-tinline .pv-tool-head{padding:0 0 12px}
+.pvx-deck .dv-tinline .pv-tool-head:hover{background:none}
+.pvx-deck .dv-tinline .pv-tool-icon{display:none}
+.pvx-deck .dv-tinline .pv-tool-title{font-family:var(--font-sans),system-ui,sans-serif;font-weight:600;font-size:15px;letter-spacing:-.014em;color:var(--dv-ink)}
+.pvx-deck .dv-tinline .pv-tool-sub{font-family:var(--font-sans),system-ui,sans-serif;color:var(--dv-meta)}
+.pvx-deck .dv-tinline .pv-tool-body{border-top:1px solid var(--dv-line);padding:14px 0 0}
 .dv-overlay{position:fixed;inset:0;z-index:200;background:var(--dv-paper);display:flex;flex-direction:column;animation:dvfade .2s var(--dv-eo)}
 @keyframes dvfade{from{opacity:0}to{opacity:1}}
 .dv-overlay-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--dv-line);background:var(--dv-raise)}
