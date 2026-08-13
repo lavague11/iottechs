@@ -9,7 +9,7 @@ import {
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
-  getProjectNotes, getScopedNotes, addProjectNote, setProjectPoc, maybeAutoAdvance, advanceStageForward,
+  getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, setProjectPoc, maybeAutoAdvance, advanceStageForward,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -553,15 +553,28 @@ function mergeCustomerAddendumWrite(accessId, data) {
 
 // ---- Inquiry stage: notes thread + appointment point-of-contact ----
 export async function getNotesAction(accessId) {
-  if (!(await canReadProject(accessId))) return { ok: false, notes: [] };
-  return { ok: true, notes: getProjectNotes(accessId) };
+  const tok = await getSessionRole();
+  if (!tok || !(await canReadProject(accessId))) return { ok: false, notes: [] };
+  let notes = getProjectNotes(accessId);
+  // Server-side strip: a customer only ever sees notes flagged public.
+  if (tok.role === "customer") notes = notes.filter((n) => n.public);
+  return { ok: true, notes };
 }
-export async function addNoteAction(accessId, body) {
+export async function addNoteAction(accessId, body, isPublic = false) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired — unlock the project again." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (!String(body || "").trim()) return { error: "Write a note first." };
-  const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: body.trim() });
+  const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: body.trim(), isPublic });
+  await revalidate(accessId);
+  return { ok: true, notes };
+}
+// Staff-only: flip a note between internal and public. Customers can't change visibility.
+export async function setNotePublicAction(accessId, id, isPublic) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (tok.role === "customer") return { error: "Not allowed." };
+  const notes = setNotePublic(accessId, id, isPublic);
   await revalidate(accessId);
   return { ok: true, notes };
 }

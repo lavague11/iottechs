@@ -17,7 +17,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
     menu         [{ label, danger, onClick }]  — the "…" overflow items this role may see
     roleLabel    string for the top-right role pill (e.g. "Admin view")
 */
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view" }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
@@ -174,7 +174,6 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
               {s.completion ? (
                 <div className="dv-scroll">{s.completion}</div>
               ) : (
-                <>
                   <div className="dv-scroll">
                     {(s.tools || []).map((t, ti) => {
                       const open = openTool[i] === ti;
@@ -203,17 +202,25 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                       );
                     })}
                   </div>
-                  {s.advance && (
-                    <div className={`dv-advance${s.advance.ready && canAdvance ? " ready" : " gated"}`}>
-                      {s.advance.ready && canAdvance
-                        ? <span className="dv-reason ok">Ready to advance</span>
-                        : <span className="dv-reason"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>{s.advance.reason || "Not ready"}</span>}
-                      <button className="dv-adv-btn" data-stop disabled={!(s.advance.ready && canAdvance)} onClick={() => go(idx + 1)}>Continue to {s.advance.to}
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>
-                    </div>
-                  )}
-                </>
               )}
+              {/* Footer — present on every stage. Job Log on the left; advance controls on the right. */}
+              <div className={`dv-advance${s.advance ? (s.advance.ready && canAdvance ? " ready" : " gated") : ""}`}>
+                {log && (
+                  <button className="dv-log-btn" data-stop onClick={() => setOverlay({ name: "Job Log", node: log })}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
+                    Log
+                  </button>
+                )}
+                {s.advance && (
+                  <>
+                    {s.advance.ready && canAdvance
+                      ? <span className="dv-reason ok">Ready to advance</span>
+                      : <span className="dv-reason"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>{s.advance.reason || "Not ready"}</span>}
+                    <button className="dv-adv-btn" data-stop disabled={!(s.advance.ready && canAdvance)} onClick={() => go(idx + 1)}>Continue to {s.advance.to}
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -228,7 +235,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>Close
             </button>
           </div>
-          <div className="dv-overlay-body">{stages[overlay.i]?.tools?.[overlay.ti]?.node}</div>
+          <div className="dv-overlay-body">{overlay.node ?? stages[overlay.i]?.tools?.[overlay.ti]?.node}</div>
         </div>
       )}
       <style>{CSS}</style>
@@ -357,6 +364,8 @@ const CSS = `
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft);background:var(--dv-paper);flex:0 0 auto}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
 .dv-reason svg{color:var(--dv-gold-deep)}.dv-reason.ok{color:var(--dv-green)}
+.dv-log-btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--dv-line);color:var(--dv-meta);font-size:13px;font-weight:500;transition:border-color .14s,color .14s}
+.dv-log-btn:hover{border-color:var(--dv-gold);color:var(--dv-gold-deep)}
 .dv-adv-btn{margin-left:auto;display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-radius:12px;font-size:14px;font-weight:500;transition:transform .16s}
 .dv-advance.ready .dv-adv-btn{background:var(--dv-ink);color:#fff}.dv-advance.ready .dv-adv-btn:hover{transform:translateY(-1px)}
 .dv-advance.gated .dv-adv-btn{background:transparent;border:1px solid var(--dv-line);color:var(--dv-faint);cursor:not-allowed}

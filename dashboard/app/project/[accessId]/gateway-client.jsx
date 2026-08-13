@@ -10,6 +10,7 @@ import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import FaceScan from "../../components/face-scan";
 import DeckView         from "./deck-view";
+import JobLog           from "./job-log";
 import SiteSurveyWidget  from "./site-survey-widget";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
@@ -1926,13 +1927,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const deckToolsFor = (pk) => {
       if (pk === "ph_survey") {
         return [
-          { name: "Survey Scheduling & Notes", label: "Scheduler", state: lp.date ? "done" : "active",
+          { name: "Survey Scheduling", label: "Scheduler", state: lp.date ? "done" : "active",
             node: (
               <div style={{ padding: "16px 18px" }}>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
                   currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} />
-                <div style={{ height: 1, background: "var(--line,#e6e8ee)", margin: "16px 0 4px" }} />
-                <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
               </div>
             ) },
           { name: "Site Survey", label: "Site Survey tool", heavy: true, state: "active",
@@ -1975,6 +1974,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { label: "Directions", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
       ].filter(Boolean),
     };
+    const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} />;
     return (
       <DeckView
         stages={deckStages}
@@ -1984,6 +1984,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         customer={deckCustomer}
         menu={[]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
+        log={deckLog}
       />
     );
   }

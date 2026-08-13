@@ -993,6 +993,9 @@ function init() {
   // comment on the site survey shows under the survey, not mixed into general project notes.
   const noteCols = db.prepare("PRAGMA table_info(project_notes)").all().map((c) => c.name);
   if (!noteCols.includes("scope")) db.exec("ALTER TABLE project_notes ADD COLUMN scope TEXT DEFAULT 'general'");
+  // `public` = is this note visible to the customer. Staff notes default internal (0) and can be
+  // toggled public; a customer's own note is always public (1). The Job Log reads this flag.
+  if (!noteCols.includes("public")) db.exec("ALTER TABLE project_notes ADD COLUMN public INTEGER DEFAULT 0");
 
   // ---- Server copy of the browser tools' working data (survey / mockup / schedule) ----
   // These tools draft in localStorage for speed; this table is the authoritative backup so a
@@ -4522,10 +4525,18 @@ export function getScopedNotes(accessId, scope) {
   return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? AND COALESCE(scope,'general')=? ORDER BY id DESC LIMIT 100")
     .all(String(accessId), String(scope)).map((r) => ({ ...r }));
 }
-export function addProjectNote(accessId, { role, name, body, scope }) {
-  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body, scope) VALUES (?,?,?,?,?)")
-    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20));
+export function addProjectNote(accessId, { role, name, body, scope, isPublic }) {
+  // A customer's note is always public; staff choose (default internal).
+  const pub = role === "customer" ? 1 : (isPublic ? 1 : 0);
+  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body, scope, public) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20), pub);
   return scope ? getScopedNotes(accessId, scope) : getProjectNotes(accessId);
+}
+// Flip a staff note between internal and public (customer notes stay public — enforced upstream).
+export function setNotePublic(accessId, id, isPublic) {
+  db.prepare("UPDATE project_notes SET public=? WHERE id=? AND project_access_id=?")
+    .run(isPublic ? 1 : 0, Number(id), String(accessId));
+  return getProjectNotes(accessId);
 }
 export function setProjectPoc(accessId, { name, phone }) {
   db.prepare("UPDATE projects SET poc_name=?, poc_phone=? WHERE access_id=?")
