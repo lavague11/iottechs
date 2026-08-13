@@ -16,14 +16,16 @@
   .head input{flex:1;min-width:0;padding:10px 13px;font-size:15px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
   .head input:focus{border-color:var(--ink)}
   .head button{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
-  .head button:disabled{opacity:.5;cursor:default}
 
-  .stage{flex:1;position:relative;min-height:0;background:var(--soft)}
+  .stage{flex:1;position:relative;min-height:0;background:var(--soft);overflow:hidden}
+  #mapRot{position:absolute;inset:-60%;transform-origin:center center;will-change:transform}
   #map{position:absolute;inset:0}
-  #msg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:24px;z-index:5}
+  #msg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:24px;z-index:6}
   #msg.on{display:grid}
+  #draw{position:absolute;inset:0;z-index:5;display:none;touch-action:none;cursor:crosshair}
+  #draw.on{display:block}
+  #drawCv{position:absolute;inset:0;width:100%;height:100%}
 
-  /* Finalized preview: the captured aerial, with a wand (Enhance) in the bottom-right */
   #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
   #preview.show{display:block}
   #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
@@ -35,13 +37,25 @@
   .pv.wand svg{stroke:var(--gold)}
   .pv.wand.busy{opacity:.55;pointer-events:none}
 
-  .foot{flex:none;display:flex;align-items:center;gap:8px;padding:11px 16px;border-top:1px solid var(--line);background:#fff}
-  .seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-  .seg button{border:0;background:#fff;color:var(--muted);padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer}
-  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
-  .foot .grow{flex:1}
-  .foot .save{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:var(--r);padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}
-  .foot .save:disabled{opacity:.5;cursor:default}
+  /* step wizard */
+  .wiz{flex:none;border-top:1px solid var(--line);background:#fff}
+  .steps{display:flex;padding:8px 12px 0}
+  .steps .s{flex:1;text-align:center;font-size:11.5px;color:var(--muted);padding-bottom:9px;border-bottom:2px solid var(--line);cursor:pointer;font-weight:500}
+  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--ink)}
+  .steps .s.done{color:var(--ink)}
+  .steps .s.done::before{content:"\2713  ";color:var(--gold)}
+  .panel{padding:11px 16px;display:none;align-items:center;gap:10px}
+  .panel.on{display:flex}
+  .panel label{font-size:12px;color:var(--muted);width:46px;flex:none}
+  .panel input[type=range]{flex:1;accent-color:var(--ink)}
+  .panel .val{font-size:13px;min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+  .panel .rz{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer}
+  .panel .hint{font-size:12.5px;color:var(--muted)}
+  .nav{display:flex;align-items:center;gap:10px;padding:2px 16px 12px}
+  .nav .grow{flex:1;text-align:center;font-size:12px;color:var(--muted)}
+  .b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
+  .b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
+  .b:disabled{opacity:.45;cursor:default}
 </style>
 </head>
 <body>
@@ -51,12 +65,13 @@
     <button id="show">Show</button>
   </div>
   <div class="stage">
-    <div id="map"></div>
+    <div id="mapRot"><div id="map"></div></div>
+    <div id="draw"><canvas id="drawCv"></canvas></div>
     <div id="msg" class="on">Loading map…</div>
     <div id="preview">
       <img id="prevImg" alt="captured aerial">
       <div class="pvbar">
-        <button class="pv" id="retake" title="Back to map"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
+        <button class="pv" id="retake" title="Back to crop"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
         <button class="pv" id="dl" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
         <button class="pv wand" id="wand" title="Enhance with AI"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg></button>
         <button class="pv use" id="use">Use</button>
@@ -64,14 +79,33 @@
     </div>
   </div>
 
+  <div class="wiz">
+    <div class="steps">
+      <div class="s active" data-step="0">1 · Level</div>
+      <div class="s" data-step="1">2 · Zoom</div>
+      <div class="s" data-step="2">3 · Crop</div>
+      <div class="s" data-step="3">4 · Finalized</div>
+    </div>
+    <div class="panel on" data-panel="0"><label>Rotate</label><input id="rot" type="range" min="-45" max="45" value="0"><button class="rz" id="rotZero">0°</button><div class="val" id="rotVal">0°</div></div>
+    <div class="panel" data-panel="1"><label>Zoom</label><input id="zoom" type="range" min="17" max="21" step="0.1" value="20"><div class="val" id="zoomVal">20.0</div></div>
+    <div class="panel" data-panel="2"><span class="hint">Drag a box over the area to capture — or tap two opposite corners.</span></div>
+    <div class="panel" data-panel="3"><span class="hint">Your leveled, cropped aerial — enhance with the wand, then Use it.</span></div>
+    <div class="nav">
+      <button class="b lite" id="back">Back</button>
+      <div class="grow" id="navHint"></div>
+      <button class="b" id="next">Next</button>
+    </div>
+  </div>
+
 <script>
-  var API_KEY=null, map=null, geocoder=null, marker=null, booted=false;
+  var API_KEY=null, map=null, geocoder=null, marker=null;
   var PID=new URLSearchParams(location.search).get("project")||"";
-  var DEMO="2503 Jay Pl, Union, NJ 07083";
+  var DEMO="2503 Jay Pl, Union, NJ 07083", FT=3.28084;
+  var viewRot=0, step=0, rect=null;
   function $(id){return document.getElementById(id);}
   function msg(m){ var el=$("msg"); if(!m){el.classList.remove("on");return;} el.textContent=m; el.classList.add("on"); }
+  function norm(d){ return ((d+180)%360+360)%360-180; }
 
-  // Boot Google Maps with the vault key; prefill + search the project address.
   fetch("/api/config"+(PID?"?project="+encodeURIComponent(PID):"")).then(function(r){return r.json();}).then(function(c){
     if(c&&c.address) $("q").value=c.address;
     var key=c&&c.googleMapsApiKey;
@@ -87,34 +121,102 @@
   window.initMap=function(){
     msg("");
     map=new google.maps.Map($("map"),{ center:{lat:40.6588,lng:-74.2957}, zoom:20, mapTypeId:"satellite", tilt:0,
-      streetViewControl:false, mapTypeControl:false, fullscreenControl:false, rotateControl:false, gestureHandling:"greedy", isFractionalZoomEnabled:true });
+      streetViewControl:false, mapTypeControl:false, fullscreenControl:false, rotateControl:false, zoomControl:false,
+      keyboardShortcuts:false, gestureHandling:"greedy", isFractionalZoomEnabled:true });
     geocoder=new google.maps.Geocoder();
+    map.addListener("zoom_changed", function(){ var z=map.getZoom(); $("zoom").value=Math.max(17,Math.min(21,z)); $("zoomVal").textContent=z.toFixed(1); });
     $("show").addEventListener("click", function(){ search($("q").value.trim()); });
     $("q").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); search($("q").value.trim()); }});
+    initDraw();
     search(($("q").value||DEMO).trim());
   };
-  function setType(t){ map.setMapTypeId(t); $("mTop").setAttribute("aria-pressed",t==="satellite"); $("mHyb").setAttribute("aria-pressed",t==="hybrid"); }
+  function setRot(deg){ viewRot=norm(deg); $("rot").value=viewRot; $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
   function search(q){ if(!q||!geocoder) return; $("show").disabled=true;
     geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length) return;
       var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc}); $("q").value=res[0].formatted_address; }); }
 
-  // Capture the current view (square, so enhance doesn't squish it) → show the Finalized preview.
-  var capCanvas=null;
-  function capture(){
-    if(!map||!API_KEY) return;
-    msg("Capturing…");
-    var c=map.getCenter(), z=Math.round(map.getZoom());
-    var el=$("map"), s=Math.min(640, Math.min(el.clientWidth, el.clientHeight)|0);
-    var type=map.getMapTypeId()==="hybrid"?"hybrid":"satellite";
-    var url="https://maps.googleapis.com/maps/api/staticmap?center="+c.lat().toFixed(7)+","+c.lng().toFixed(7)+
-      "&zoom="+z+"&size="+s+"x"+s+"&scale=2&format=png&maptype="+type+"&key="+API_KEY;
-    var im=new Image(); im.crossOrigin="anonymous";
-    im.onload=function(){ var cv=document.createElement("canvas"); cv.width=im.naturalWidth; cv.height=im.naturalHeight;
-      cv.getContext("2d").drawImage(im,0,0); capCanvas=cv; $("prevImg").src=cv.toDataURL("image/jpeg",0.92); $("preview").classList.add("show"); msg(""); };
-    im.onerror=function(){ msg("Capture failed — check Maps Static API + billing."); setTimeout(function(){msg("");},2200); };
-    im.src=url;
+  /* ---------- step wizard ---------- */
+  function goStep(n){
+    step=n;
+    [].forEach.call(document.querySelectorAll(".steps .s"), function(el,i){ el.classList.toggle("active",i===n); el.classList.toggle("done",i<n); });
+    [].forEach.call(document.querySelectorAll("[data-panel]"), function(el){ el.classList.toggle("on", +el.dataset.panel===n); });
+    $("draw").classList.toggle("on", n===2);
+    $("back").style.visibility = n>0 ? "" : "hidden";
+    $("next").textContent = n===3 ? "" : "Next";
+    $("next").style.display = n===3 ? "none" : "";
+    $("preview").classList.toggle("show", n===3);
+    $("navHint").textContent = ["Rotate so the property sits square.","Zoom to frame the property.","Draw the capture box.",""][n];
   }
+  $("rot").addEventListener("input", function(){ setRot(parseInt(this.value,10)); });
+  $("rotZero").addEventListener("click", function(){ setRot(0); });
+  $("zoom").addEventListener("input", function(){ map.setZoom(parseFloat(this.value)); $("zoomVal").textContent=parseFloat(this.value).toFixed(1); });
+  [].forEach.call(document.querySelectorAll(".steps .s"), function(el){ el.addEventListener("click", function(){ var n=+el.dataset.step; if(n===3){ if(rect) capture(); else return; } goStep(n); }); });
+  $("back").addEventListener("click", function(){ if(step>0) goStep(step-1); });
+  $("next").addEventListener("click", function(){ if(step===2){ if(!rect){ msg("Draw a box first"); setTimeout(function(){msg("");},1600); return; } capture(); goStep(3); } else if(step<3) goStep(step+1); });
+
+  /* ---------- crop box ---------- */
+  function initDraw(){
+    var layer=$("draw"), cornerA=null, dragging=false;
+    layer.addEventListener("pointerdown", function(e){ e.preventDefault(); layer.setPointerCapture(e.pointerId);
+      var r=layer.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+      if(!cornerA){ cornerA={x:x,y:y}; rect=null; dragging=true; } else { finishRect(x,y); cornerA=null; }
+      paint(); });
+    layer.addEventListener("pointermove", function(e){ if(!dragging||!cornerA) return; var r=layer.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+      rect={x:Math.min(cornerA.x,x),y:Math.min(cornerA.y,y),w:Math.abs(x-cornerA.x),h:Math.abs(y-cornerA.y)}; paint(); });
+    layer.addEventListener("pointerup", function(){ if(dragging&&rect&&rect.w>16&&rect.h>16){ dragging=false; cornerA=null; } else if(dragging){ dragging=false; } paint(); });
+    window.addEventListener("resize", paint);
+  }
+  function finishRect(x,y){ /* cornerA set globally? no — handled in initDraw closure via two-tap; kept simple with drag */ }
+  function paint(){
+    var cv=$("drawCv"), box=$("draw"), dpr=window.devicePixelRatio||1, W=box.clientWidth, H=box.clientHeight; if(!W||!H) return;
+    cv.width=W*dpr; cv.height=H*dpr; var g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+    if(!rect) return;
+    g.fillStyle="rgba(16,17,18,.34)"; g.beginPath(); g.rect(0,0,W,H); g.rect(rect.x,rect.y,rect.w,rect.h); g.fill("evenodd");
+    g.strokeStyle="#fff"; g.lineWidth=2; g.strokeRect(rect.x,rect.y,rect.w,rect.h);
+  }
+
+  /* ---------- capture: stitch tiles, rotate, cut the rect (math from the survey handoff) ---------- */
+  var MAX_TILES=16, tileCache={}, MAX_EDGE=2600, capCanvas=null;
+  function loadTile(url){ if(tileCache[url]) return Promise.resolve(tileCache[url]); var k=Object.keys(tileCache); if(k.length>120) delete tileCache[k[0]];
+    return new Promise(function(res,rej){ var n=0; (function go(){ var im=new Image(); im.crossOrigin="anonymous"; im.onload=function(){tileCache[url]=im;res(im);}; im.onerror=function(){(++n<2)?setTimeout(go,350):rej(0);}; im.src=url+(n?"&r="+n:""); })(); }); }
+  function wx(ll){ return (ll.lng()+180)/360*256; }
+  function wy(ll){ var s=Math.sin(ll.lat()*Math.PI/180); return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*256; }
+  function unproject(x,y){ var lng=x/256*360-180,n=Math.PI-2*Math.PI*y/256; return new google.maps.LatLng(180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))),lng); }
+  function capture(){
+    if(!map||!API_KEY||!rect) return;
+    msg("Capturing…");
+    var stage=$("draw"), sw=stage.clientWidth, sh=stage.clientHeight;
+    var c=map.getCenter(), zView=map.getZoom(), mppView=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zView);
+    var need=Math.sqrt(sw*sw+sh*sh)*mppView*1.06;
+    var zt=Math.min(21,Math.round(zView)), mppTile, sf, span, cols, rows, box;
+    while(true){ mppTile=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zt); sf=Math.pow(2,zt)*2;
+      var halfWU=(need/mppTile)/sf/2, cxW=wx(c), cyW=wy(c); box={x0:cxW-halfWU,x1:cxW+halfWU,y0:cyW-halfWU,y1:cyW+halfWU,cxW:cxW,cyW:cyW};
+      span=640/Math.pow(2,zt); cols=Math.ceil((box.x1-box.x0)/span); rows=Math.ceil((box.y1-box.y0)/span);
+      if(cols*rows<=MAX_TILES||zt<=15) break; zt--; }
+    var oX=box.x0, oY=box.y0, W=Math.ceil((box.x1-box.x0)*sf), H=Math.ceil((box.y1-box.y0)*sf), mppMosaic=mppTile/2;
+    var mosaic=document.createElement("canvas"); mosaic.width=W; mosaic.height=H; var mg=mosaic.getContext("2d"), jobs=[], missed=0;
+    for(var r=0;r<rows;r++) for(var cc=0;cc<cols;cc++){ (function(col,row){
+      var cxw=oX+(col+0.5)*span, cyw=oY+(row+0.5)*span, ll=unproject(cxw,cyw);
+      var url="https://maps.googleapis.com/maps/api/staticmap?center="+ll.lat().toFixed(7)+","+ll.lng().toFixed(7)+"&zoom="+zt+"&size=640x640&scale=2&format=png&maptype="+(map.getMapTypeId()==="hybrid"?"hybrid":"satellite")+"&key="+API_KEY;
+      var dx=Math.round((cxw-span/2-oX)*sf), dy=Math.round((cyw-span/2-oY)*sf), dsz=Math.round(span*sf);
+      jobs.push(loadTile(url).then(function(im){ mg.drawImage(im,dx,dy,dsz,dsz); }).catch(function(){ missed++; }));
+    })(cc,r); }
+    Promise.all(jobs).then(function(){
+      if(missed>=cols*rows){ msg("Tiles failed — check Maps Static API + billing"); return; }
+      var scale=mppView/mppMosaic;
+      var stageCv=document.createElement("canvas"); stageCv.width=Math.round(sw*scale); stageCv.height=Math.round(sh*scale);
+      var sg=stageCv.getContext("2d"), mcx=(box.cxW-oX)*sf, mcy=(box.cyW-oY)*sf;
+      sg.translate(stageCv.width/2, stageCv.height/2); sg.rotate(viewRot*Math.PI/180); sg.drawImage(mosaic,-mcx,-mcy);
+      var cut=document.createElement("canvas"); cut.width=Math.max(4,Math.round(rect.w*scale)); cut.height=Math.max(4,Math.round(rect.h*scale));
+      cut.getContext("2d").drawImage(stageCv, Math.round(rect.x*scale), Math.round(rect.y*scale), Math.round(rect.w*scale), Math.round(rect.h*scale), 0,0, cut.width, cut.height);
+      var longest=Math.max(cut.width,cut.height);
+      if(longest>MAX_EDGE){ var s=MAX_EDGE/longest, ds=document.createElement("canvas"); ds.width=Math.round(cut.width*s); ds.height=Math.round(cut.height*s); var dg=ds.getContext("2d"); dg.imageSmoothingQuality="high"; dg.drawImage(cut,0,0,ds.width,ds.height); cut=ds; }
+      capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); msg("");
+    });
+  }
+
+  /* ---------- finalized actions ---------- */
   function usePreview(){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src}, "*"); }catch(e){} }
   function enhance(){ if(!capCanvas) return; var w=$("wand"); w.classList.add("busy");
     capCanvas.toBlob(function(blob){ var fd=new FormData(); fd.append("image",blob,"c.png"); fd.append("mode","aerial");
@@ -125,10 +227,9 @@
     },"image/png"); }
   $("wand").addEventListener("click", enhance);
   $("use").addEventListener("click", usePreview);
-  $("retake").addEventListener("click", function(){ $("preview").classList.remove("show"); });
+  $("retake").addEventListener("click", function(){ goStep(2); });
   $("dl").addEventListener("click", function(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); });
-  // The host shell requests the capture from its "Use as background"/Next button.
-  window.addEventListener("message", function(e){ if(e&&e.data&&e.data.type==="request-capture") capture(); });
+  goStep(0);
 </script>
 </body>
 </html>

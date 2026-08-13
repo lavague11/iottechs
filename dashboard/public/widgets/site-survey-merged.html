@@ -254,15 +254,7 @@
   <div class="wiz" id="bgWiz" style="display:none">
     <div class="bgstrip">
       <button class="back" id="satBack"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;pointer-events:none"><path d="M15 18l-6-6 6-6"/></svg>Background</button>
-      <div class="bgstriplbl">Building the base — finish, then it drops onto your plan</div>
-      <div class="grow"></div>
-      <button class="b" id="useBgBtn">Use as background</button>
-    </div>
-    <div class="steps" id="satSteps">
-      <div class="s active">Level</div>
-      <div class="s">Zoom</div>
-      <div class="s">Crop</div>
-      <div class="s">Enhance</div>
+      <div class="bgstriplbl">Level, zoom &amp; crop the aerial in the wizard — tap Use to drop it onto your plan</div>
     </div>
   </div>
 
@@ -314,12 +306,7 @@
       if(bgHasImage){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
       else { document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
     });
-    // Use as background: pull the current image from the tool (it also posts on Download)
-    document.getElementById("useBgBtn").addEventListener("click", function(){
-      try{ satFrame.contentWindow.postMessage({type:"request-capture"}, "*"); }catch(e){}
-    });
-
-    // the satellite tool posts its finished image here
+    // the satellite tool posts its finished image here (its own "Use" button)
     window.addEventListener("message", function(ev){
       if(!ev.data || ev.data.type!=="satellite-capture-result") return;
       applyBackground(ev.data.dataUrl);
