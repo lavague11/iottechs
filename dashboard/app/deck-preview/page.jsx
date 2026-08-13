@@ -12,7 +12,7 @@ const STAGES = [
     tools: [
       { name: "Survey Scheduling & Notes", state: "done", label: "Scheduler" },
       { name: "Site Survey", state: "active", label: "Site Survey tool",
-        node: <div style={{ height: 560 }}><SiteSurveyWidget accessId="deckpreview" view="admin" noApproval /></div> },
+        node: <SiteSurveyWidget accessId="deckpreview" view="admin" noApproval /> },
       { name: "Mockups", label: "Mockup generator" },
     ] },
   { name: "Proposal", pill: "Reviewing", pct: 25, turn: "mine", tint: "gold",

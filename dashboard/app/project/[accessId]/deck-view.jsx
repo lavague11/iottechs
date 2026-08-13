@@ -21,7 +21,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
-  const [embedOpen, setEmbedOpen] = useState({});    // { [`${stage}-${tool}`]: bool } — Open reveals the real tool
+  const [overlay, setOverlay] = useState(null);      // { i, ti, name } — Open launches the tool full-screen
   const [custOpen, setCustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
@@ -64,7 +64,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     function onKey(e) {
       if (e.key === "ArrowRight") { go(idx + 1); }
       if (e.key === "ArrowLeft") { go(idx - 1); }
-      if (e.key === "Escape") { setMenuOpen(false); setCustOpen(false); }
+      if (e.key === "Escape") { setMenuOpen(false); setCustOpen(false); setOverlay(null); }
     }
     const el = deckRef.current; el?.addEventListener("keydown", onKey);
     return () => el?.removeEventListener("keydown", onKey);
@@ -187,10 +187,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                           </button>
                           <div className="dv-tdetail"><div><div className="dv-embed">
                             <div className="dv-embed-slot"><span className="dv-etitle mono">{t.label || t.name}</span>
-                              <button className="dv-embed-open" data-stop onClick={() => t.node && setEmbedOpen((e) => ({ ...e, [`${i}-${ti}`]: !e[`${i}-${ti}`] }))}>
-                                {t.node && embedOpen[`${i}-${ti}`] ? "Close" : "Open"}
+                              <button className="dv-embed-open" data-stop onClick={() => t.node && setOverlay({ i, ti, name: t.name })}>Open
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div>
-                            {t.node && embedOpen[`${i}-${ti}`] && <div className="dv-embed-mount" data-stop>{t.node}</div>}
                           </div></div></div>
                         </div>
                       );
@@ -211,6 +209,19 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           </div>
         ))}
       </main>
+
+      {/* full-screen tool overlay — heavy tools (Site Survey, Proposal…) get the whole screen */}
+      {overlay && (
+        <div className="dv-overlay">
+          <div className="dv-overlay-bar">
+            <b>{overlay.name}</b>
+            <button className="dv-overlay-x" onClick={() => setOverlay(null)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>Close
+            </button>
+          </div>
+          <div className="dv-overlay-body">{stages[overlay.i]?.tools?.[overlay.ti]?.node}</div>
+        </div>
+      )}
       <style>{CSS}</style>
     </div>
   );
@@ -306,7 +317,19 @@ const CSS = `
 .dv-embed-slot{border:1px solid var(--dv-line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;background:var(--dv-raise)}
 .dv-etitle{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--dv-meta);letter-spacing:.01em}
 .dv-embed-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:9px;background:var(--dv-ink);color:#fff;font-size:12.5px;font-weight:500}
-.dv-embed-mount{margin-top:12px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
+.dv-overlay{position:fixed;inset:0;z-index:200;background:var(--dv-paper);display:flex;flex-direction:column;animation:dvfade .2s var(--dv-eo)}
+@keyframes dvfade{from{opacity:0}to{opacity:1}}
+.dv-overlay-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--dv-line);background:var(--dv-raise)}
+.dv-overlay-bar b{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.dv-overlay-x{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:9px;background:var(--dv-ink);color:#fff;font-size:12.5px;font-weight:500}
+.dv-overlay-x:hover{background:#000}
+.dv-overlay-body{flex:1;min-height:0;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.dv-overlay-body>*{flex:1;min-height:0}
+/* Embedded tools (Site Survey…) carry .pvx-scoped CSS that isn't present here — restyle the
+   embed shell so its iframe fills the overlay instead of collapsing to a default 150px box. */
+.dv-overlay-body .ss-embed{display:flex;flex-direction:column;height:100%;padding:0}
+.dv-overlay-body .ss-embed-bar{display:none}
+.dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto;min-height:0;border:none;background:var(--dv-raise);display:block}
 
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft)}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
