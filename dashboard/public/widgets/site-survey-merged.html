@@ -52,6 +52,7 @@
   .libBtn span{color:var(--muted);font-weight:400}
 
   /* device + FOV (used when a background is set) */
+  #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
   .stage-img{position:absolute;inset:0;background:#fff;background-size:cover;background-position:center}
   .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
   .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
@@ -275,8 +276,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div class="stage-img" id="stageImg"></div>
-          <div class="dimOverlay"></div>
+          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div>
           <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
           <div class="devmenu" id="devMenu"></div>
           <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
@@ -546,7 +546,7 @@
     // click empty plan → drop the armed device (hides the menu so it's out of the way; stays armed for the next one)
     work.addEventListener("pointerdown", function(e){ if(RO||!armedK) return;
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
-      var r=document.getElementById("canvas").getBoundingClientRect();
+      var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → % holds at any zoom
       addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100);
       devMenu.classList.remove("show"); });
 
@@ -558,8 +558,28 @@
       if(!d || !d.cone) return;
       var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
       d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI);
-      d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)));   // length = reach to the tapped point
+      d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale));   // reach to the tap, in scene px (÷ zoom)
       renderDevice(d); growCone(d.id); queueSave(); });
+
+    // ---- wheel / two-finger pinch zoom on the plan (Place + Angles); zooms toward the cursor ----
+    var scene=document.getElementById("scene"), zScale=1, zTx=0, zTy=0;
+    function applyZoom(){ scene.style.transform="translate("+zTx+"px,"+zTy+"px) scale("+zScale+")"; }
+    function zoomAt(mx,my,factor){ var z2=Math.max(1, Math.min(4, zScale*factor)); if(z2===zScale) return;
+      zTx=mx-(mx-zTx)/zScale*z2; zTy=my-(my-zTy)/zScale*z2; zScale=z2;
+      var W=work.clientWidth, H=work.clientHeight;                     // keep the scene covering the viewport
+      zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }
+    function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
+    work.addEventListener("wheel", function(e){ if(e.target.closest(".devmenu,.ctxbar,.utils,.plandim")) return;
+      e.preventDefault(); var r=work.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.12:1/1.12); }, {passive:false});
+    var pinchDist=0, pinchCx=0, pinchCy=0;
+    work.addEventListener("touchstart", function(e){ if(e.touches.length===2){ var r=work.getBoundingClientRect();
+      pinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pinchCx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left; pinchCy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top; } }, {passive:true});
+    work.addEventListener("touchmove", function(e){ if(e.touches.length===2){ e.preventDefault();
+      var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      if(pinchDist>0) zoomAt(pinchCx,pinchCy, d/pinchDist); pinchDist=d; } }, {passive:false});
+    work.addEventListener("touchend", function(e){ if(e.touches.length<2) pinchDist=0; });
+    var cbtn=document.getElementById("centerBtn"); if(cbtn) cbtn.addEventListener("click", resetZoom);   // Center resets the view
 
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
@@ -571,7 +591,7 @@
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         '<div class="icLabel"></div>';
-      work.insertBefore(el, work.querySelector(".utils"));
+      document.getElementById("scene").appendChild(el);
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
       renderDevice(d);
     }
@@ -700,7 +720,7 @@
         if(curStep===2){ select(d.id===selId?null:d.id); return; }   // Angles: click a camera to select; click it again to unselect + hide its angle
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
-        var r=document.getElementById("canvas").getBoundingClientRect();
+        var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → drag maps correctly at any zoom
         function mv(ev){ d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); queueSave(); }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
