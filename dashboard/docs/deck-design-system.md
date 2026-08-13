@@ -160,6 +160,13 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **Forensic events wired via `logProjectEvent`:** submits/resubmits (from `submitToolAction`,
+  annotated with the survey camera count — `submit` kind is Basic-visible, `resubmit` is
+  Advanced), customer proposal views (from `page.jsx`, deduped ~30 min, Advanced), customer PIN
+  logins, and calls. Submits are logged as events, so `submit_*` are **not** in the log's
+  acceptance map (would double). Camera count = device kind `"cam"` via `survey2CameraCount`.
+  Next: "customer viewed the survey" (needs a server hook — the survey is an iframe) and
+  surfacing `proposal_views` geo/metrics in Advanced.
 - Details & Notes panel **removed** from the scheduler; its function moved into the Job Log.
 - Legacy `.pv-tool-panel` chrome (card border, gold rail, icon chip, Bricolage title) is
   **flattened** to the deck look when mounted inside a light tool (`.pvx-deck .dv-tinline …`).
