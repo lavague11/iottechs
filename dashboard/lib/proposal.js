@@ -562,7 +562,10 @@ export function sanitizeProposal(row, role) {
       workOrder: true, payload: { ...wo, options },
     };
   }
-  const stripItem = ({ cost, ...it }) => (it.sub ? { ...it, sub: it.sub.map(({ cost: c, ...x }) => x) } : it);
+  // Strip internal money — wholesale cost AND tech payout — from every line + sub-line. Sales and
+  // customer must never receive techPrice/techPay on the wire (no UI shows it, but exports/breakdowns would).
+  const stripItem = ({ cost, techPrice, techPay, ...it }) =>
+    (it.sub ? { ...it, sub: it.sub.map(({ cost: c, techPrice: tp, techPay: tpay, ...x }) => x) } : it);
   const stripCost = (p) => ({
     ...p,
     options: (p.options || []).map((o) => ({
