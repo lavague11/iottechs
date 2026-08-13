@@ -10,10 +10,16 @@ const STAGES = [
     need: "Customer to accept the site survey",
     advance: { to: "Proposal", ready: false, reason: "Waiting on customer to accept" },
     tools: [
-      { name: "Survey Scheduling & Notes", state: "done", label: "Scheduler" },
-      { name: "Site Survey", state: "active", label: "Site Survey tool",
+      { name: "Survey Scheduling & Notes", state: "done", label: "Scheduler",
+        node: (
+          <div style={{ padding: 18, fontFamily: "var(--font-sans)", color: "#3B4048" }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Visit booked · Tue Aug 19, 10:00 AM</div>
+            <div style={{ fontSize: 13, color: "#787D84" }}>Point of contact: Abdul · (856) 555-0188 — a light tool expands inline, right here in the row.</div>
+          </div>
+        ) },
+      { name: "Site Survey", state: "active", label: "Site Survey tool", heavy: true,
         node: <SiteSurveyWidget accessId="deckpreview" view="admin" noApproval /> },
-      { name: "Mockups", label: "Mockup generator" },
+      { name: "Mockups", label: "Mockup generator", heavy: true },
     ] },
   { name: "Proposal", pill: "Reviewing", pct: 25, turn: "mine", tint: "gold",
     need: "Approval & deposit, then create the work order",

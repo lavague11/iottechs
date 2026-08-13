@@ -21,7 +21,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
-  const [overlay, setOverlay] = useState(null);      // { i, ti, name } — Open launches the tool full-screen
+  const [overlay, setOverlay] = useState(null);      // { i, ti, name } — heavy tools launch full-screen
+  const [embedOpen, setEmbedOpen] = useState({});    // { `${i}-${ti}`: bool } — light tools expand inline
   const [custOpen, setCustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
@@ -187,8 +188,14 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                           </button>
                           <div className="dv-tdetail"><div><div className="dv-embed">
                             <div className="dv-embed-slot"><span className="dv-etitle mono">{t.label || t.name}</span>
-                              <button className="dv-embed-open" data-stop onClick={() => t.node && setOverlay({ i, ti, name: t.name })}>Open
+                              <button className="dv-embed-open" data-stop onClick={() => {
+                                if (!t.node) return;
+                                if (t.heavy) setOverlay({ i, ti, name: t.name });
+                                else setEmbedOpen((e) => ({ ...e, [`${i}-${ti}`]: !e[`${i}-${ti}`] }));
+                              }}>
+                                {t.heavy || !embedOpen[`${i}-${ti}`] ? "Open" : "Close"}
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div>
+                            {!t.heavy && t.node && embedOpen[`${i}-${ti}`] && <div className="dv-embed-mount" data-stop>{t.node}</div>}
                           </div></div></div>
                         </div>
                       );
@@ -317,6 +324,7 @@ const CSS = `
 .dv-embed-slot{border:1px solid var(--dv-line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;background:var(--dv-raise)}
 .dv-etitle{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--dv-meta);letter-spacing:.01em}
 .dv-embed-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:9px;background:var(--dv-ink);color:#fff;font-size:12.5px;font-weight:500}
+.dv-embed-mount{margin-top:12px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
 .dv-overlay{position:fixed;inset:0;z-index:200;background:var(--dv-paper);display:flex;flex-direction:column;animation:dvfade .2s var(--dv-eo)}
 @keyframes dvfade{from{opacity:0}to{opacity:1}}
 .dv-overlay-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--dv-line);background:var(--dv-raise)}
