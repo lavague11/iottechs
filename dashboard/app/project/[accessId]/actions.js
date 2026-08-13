@@ -275,7 +275,12 @@ export async function updateProjectInfoAction(accessId, fields) {
   } else if (!["admin","manager","sales","tech"].includes(tok.role)) {
     return { error: "Unauthorized." };
   }
+  // Snapshot before the write so we can log exactly which contact fields changed.
+  const before = getJobByAccessId(accessId) || {};
   updateProjectContact(accessId, fields);
+  const FLABEL = { company_name: "company", contact_name: "name", contact_phone: "phone", contact_email: "email", address: "address" };
+  const changed = Object.keys(fields || {}).filter((k) => String(before[k] ?? "") !== String(fields[k] ?? "")).map((k) => FLABEL[k] || k);
+  if (changed.length) logProjectEvent(accessId, { kind: "change", label: `Contact info updated — ${changed.join(", ")}`, actor: tok.name || tok.email || tok.role });
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };

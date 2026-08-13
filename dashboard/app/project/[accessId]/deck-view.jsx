@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import AddressAutocomplete from "../../components/address-autocomplete";
 
 /*
   DeckView — the redesigned project page shell (horizontal stage deck).
@@ -23,6 +24,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
   const [overlay, setOverlay] = useState(null);      // { i, ti, name } — heavy tools launch full-screen
   const [custOpen, setCustOpen] = useState(false);
+  const [custEdit, setCustEdit] = useState(false);   // drawer contact-edit mode
+  const [cf, setCf] = useState(null);                 // edit form values
+  const [savingCust, setSavingCust] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
   const deckRef = useRef(null);
@@ -130,13 +134,35 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       {customer && (
         <section className={`dv-customer${custOpen ? " open" : ""}`}>
           <div className="dv-cust-in">
-            {(customer.fields || []).map((f, i) => (
-              <div className="dv-field" key={i}><dt>{f.k}</dt><dd>{f.v}{f.sub && <small>{f.sub}</small>}</dd></div>
-            ))}
-            {customer.actions?.length > 0 && (
-              <div className="dv-cust-actions">
-                {customer.actions.map((a, i) => <a className="dv-mini" key={i} href={a.href || undefined} onClick={a.onClick}>{a.label}</a>)}
+            {custEdit ? (
+              <div className="dv-cust-edit" data-stop>
+                <label className="dv-cl">Name</label>
+                <input className="dv-ci" value={cf.contact_name} onChange={(e) => setCf((v) => ({ ...v, contact_name: e.target.value }))} />
+                <div className="dv-crow">
+                  <div><label className="dv-cl">Phone</label><input className="dv-ci" value={cf.contact_phone} onChange={(e) => setCf((v) => ({ ...v, contact_phone: e.target.value }))} /></div>
+                  <div><label className="dv-cl">Email</label><input className="dv-ci" value={cf.contact_email} onChange={(e) => setCf((v) => ({ ...v, contact_email: e.target.value }))} /></div>
+                </div>
+                <label className="dv-cl">Job site</label>
+                <AddressAutocomplete className="dv-ci" value={cf.address} onChange={(v) => setCf((s) => ({ ...s, address: v }))} onPlace={(p) => setCf((s) => ({ ...s, address: p.address }))} placeholder="Start typing, then choose the address" />
+                <div className="dv-cust-actions">
+                  <button className="dv-mini primary" disabled={savingCust} onClick={async () => { setSavingCust(true); const r = await customer.onSave?.(cf); setSavingCust(false); if (!r || r.ok) setCustEdit(false); else alert(r.error || "Save failed."); }}>{savingCust ? "Saving…" : "Save"}</button>
+                  <button className="dv-mini" onClick={() => setCustEdit(false)}>Cancel</button>
+                </div>
               </div>
+            ) : (
+              <>
+                {(customer.fields || []).map((f, i) => (
+                  <div className="dv-field" key={i}><dt>{f.k}</dt><dd>{f.v}{f.sub && <small>{f.sub}</small>}</dd></div>
+                ))}
+                {(customer.actions?.length > 0 || customer.canEdit) && (
+                  <div className="dv-cust-actions">
+                    {(customer.actions || []).map((a, i) => <a className="dv-mini" key={i} href={a.href || undefined} onClick={a.onClick}>{a.label}</a>)}
+                    {customer.canEdit && (
+                      <button className="dv-mini" data-stop onClick={() => { setCf({ contact_name: customer.contact?.contact_name || "", contact_phone: customer.contact?.contact_phone || "", contact_email: customer.contact?.contact_email || "", address: customer.contact?.address || "" }); setCustEdit(true); }}>Edit</button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -290,6 +316,15 @@ const CSS = `
 .dv-cust-actions{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1;padding-top:4px;border-top:1px solid var(--dv-line-soft)}
 .dv-mini{display:inline-flex;align-items:center;gap:7px;height:31px;padding:0 12px;border-radius:9px;border:1px solid var(--dv-line);font-size:12.5px;font-weight:500;color:var(--dv-ink-soft);background:var(--dv-paper);text-decoration:none}
 .dv-mini:hover{border-color:var(--dv-ink);color:var(--dv-ink)}
+.dv-mini.primary{background:var(--dv-ink);color:#fff;border-color:var(--dv-ink)}
+.dv-mini.primary:hover{background:#000}
+.dv-mini.primary:disabled{opacity:.5}
+.dv-cust-edit{grid-column:1/-1;display:flex;flex-direction:column;gap:7px}
+.dv-cl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta);font-weight:600;margin-top:4px}
+.dv-ci{height:36px;border:1px solid var(--dv-line);border-radius:8px;background:var(--dv-raise);color:var(--dv-ink);padding:0 11px;font-size:13.5px;font-family:inherit;outline:none;width:100%}
+.dv-ci:focus{border-color:var(--dv-gold)}
+.dv-crow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dv-cust-edit .dv-cust-actions{border-top:none;padding-top:6px}
 
 .dv-rail{flex:0 0 auto;padding:18px 24px 14px;display:flex;align-items:center;gap:18px}
 .dv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}

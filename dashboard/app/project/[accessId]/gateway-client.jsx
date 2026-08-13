@@ -1974,6 +1974,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         lp.contact_email && { label: "Message", href: `mailto:${lp.contact_email}` },
         { label: "Directions", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
       ].filter(Boolean),
+      // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
+      contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },
+      canEdit: ["admin", "manager", "sales", "tech", "customer"].includes(cView) && !previewRole,
+      onSave: async (vals) => { const r = await updateProjectInfoAction(lp.access_id, vals); if (r?.ok) setLocalProj((p) => ({ ...p, ...vals })); return r; },
     };
     const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} />;
     return (
