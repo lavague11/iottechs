@@ -18,6 +18,11 @@
   .grow{flex:1}
   .pill{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
   .pill .g{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+  .moon{border:1px solid var(--line);background:#fff;border-radius:9px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink)}
+  .moon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .moon.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .dimOverlay{position:absolute;inset:0;background:rgba(10,12,16,.5);pointer-events:none;z-index:1;display:none}
+  body.dimmed .dimOverlay{display:block}
 
   .work{flex:1;display:flex;min-height:0}
   .canvasCol{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px 0 0 18px}
@@ -129,7 +134,7 @@
   /* FOV cone + line — only shown in the Angles step */
   .devNode .fovWrap{position:absolute;left:20px;top:20px;transform-origin:0 0;display:none;z-index:2}
   .devNode.aim.sel .fovWrap{display:block}   /* cone shows only for the selected camera (Angles) */
-  .devNode .cone{position:absolute;transform:none;clip-path:polygon(0 50%,100% 0,100% 100%);background:linear-gradient(90deg,rgba(185,138,46,.20),rgba(185,138,46,.03));border-top:1px solid rgba(185,138,46,.5);border-right:1px solid rgba(185,138,46,.5);border-bottom:1px solid rgba(185,138,46,.5)}
+  .devNode .coneSvg{position:absolute;overflow:visible;pointer-events:none}
   .devNode .coneLine{position:absolute;top:-1px;height:2px;background:var(--gold)}
   #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
@@ -159,6 +164,7 @@
     <div class="brand">Site Survey</div>
     <div><div class="job" id="jobName">Site Survey</div><div class="sub" id="jobSub"></div></div>
     <div class="grow"></div>
+    <button class="moon" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
     <button class="pill"><span class="g"></span>Draft</button>
   </div>
 
@@ -198,6 +204,7 @@
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
           <div class="stage-img" id="stageImg"></div>
+          <div class="dimOverlay"></div>
           <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
           <div class="devmenu" id="devMenu"></div>
           <div class="utils">
@@ -332,7 +339,7 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
-    var devices=[], devSeq=0, selId=null, armedK=null, curStep=1;
+    var devices=[], devSeq=0, selId=null, armedK=null, curStep=1, dimmed=false;
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
       nvr:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>',
@@ -389,7 +396,7 @@
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(curStep===2&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
-        (d.cone?'<div class="fovWrap"><div class="cone"></div><div class="coneLine"></div></div>':'')+
+        (d.cone?'<div class="fovWrap"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div>':'')+
         '<div class="icLabel"></div>';
       work.insertBefore(el, work.querySelector(".utils"));
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
@@ -401,12 +408,19 @@
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=d.tag;
       lab.style.left=(20+BR*Math.cos(a))+"px"; lab.style.top=(20+BR*Math.sin(a))+"px";        // label rides the camera border
-      if(d.cone){ var wrap=el.querySelector(".fovWrap"), cone=el.querySelector(".cone"), line=el.querySelector(".coneLine");
+      if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.transform="rotate("+d.aim+"deg)";
-        var h=2*RANGE*Math.tan(d.fov/2*Math.PI/180);
-        cone.style.left=BR+"px"; cone.style.top=(-h/2)+"px"; cone.style.width=RANGE+"px"; cone.style.height=h+"px";  // cone starts at the label/border
-        cone.style.background="linear-gradient(90deg,"+d.color+"33,"+d.color+"08)"; cone.style.borderColor=d.color+"88";
-        line.style.left=BR+"px"; line.style.width=RANGE+"px"; line.style.background=d.color; }
+        var R=RANGE, ap=BR, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
+        svg.setAttribute("width",W); svg.setAttribute("height",H); svg.style.left="0px"; svg.style.top=(-R)+"px"; svg.setAttribute("viewBox","0 "+(-R)+" "+W+" "+H);
+        if(d.fov>=359){ path.setAttribute("d","M "+(ap-R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap+R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap-R)+" 0 Z"); }   // 360° coverage → full circle
+        else { var a1x=(ap+R*Math.cos(-half)).toFixed(1), a1y=(R*Math.sin(-half)).toFixed(1), a2x=(ap+R*Math.cos(half)).toFixed(1), a2y=(R*Math.sin(half)).toFixed(1), lg=d.fov>180?1:0;
+          path.setAttribute("d","M "+ap+" 0 L "+a1x+" "+a1y+" A "+R+" "+R+" 0 "+lg+" 1 "+a2x+" "+a2y+" Z"); }   // apex + rounded arc (ice-cream cone)
+        path.setAttribute("stroke",d.color); path.setAttribute("stroke-opacity",".55"); path.setAttribute("stroke-width","1");
+        grad.setAttribute("cx",ap); grad.setAttribute("cy","0"); grad.setAttribute("r",R);
+        var s0=grad.querySelector(".s0"), s1=grad.querySelector(".s1");
+        s0.setAttribute("stop-color",d.color); s0.setAttribute("stop-opacity",".42");   // darker at the camera
+        s1.setAttribute("stop-color",d.color); s1.setAttribute("stop-opacity",".08");
+        line.style.left=ap+"px"; line.style.width=R+"px"; line.style.background=d.color; }
     }
     function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); }
     function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
@@ -434,15 +448,18 @@
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null;
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     function save(){ try{ localStorage.setItem(PKEY, JSON.stringify({
-      bg:bgData, step:curStep,
+      bg:bgData, step:curStep, dim:dimmed,
       devices:devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov}; }) })); }catch(e){} }
+    function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
+    document.getElementById("dimBtn").addEventListener("click", function(){ dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||60,tag:"I"+g.letter+nG,name:it.name+" "+nT};
       devices.push(d); mountDevice(d); }
-    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s) return; var st=JSON.parse(s);
-      if(!st || (!st.bg && !(st.devices&&st.devices.length))) return;
+    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s) return; var st=JSON.parse(s); if(!st) return;
+      dimmed=!!st.dim; applyDim();
+      if(!st.bg && !(st.devices&&st.devices.length)) return;
       bgHasImage=true; bgData=st.bg||null;
       var img=document.getElementById("stageImg");
       if(bgData){ img.style.backgroundImage="url("+bgData+")"; } else { img.style.background="#fff"; }
