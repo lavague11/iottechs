@@ -42,6 +42,28 @@ import { getAcceptancesAction, getLiveSnapshotAction, logCallAction } from "./pr
 
 const money = (n) => "$" + (n || 0).toLocaleString();
 
+// Deck drawer action icons (kept small + inline so the actions read as a clean icon row).
+const DVI = {
+  call: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+  mail: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
+  dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
+  card: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
+  edit: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+};
+// Build + download a .vcf with the customer's full contact card (name · phone · email · address).
+function downloadVCard(p) {
+  const esc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1");
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `FN:${esc(p.customer)}`, `N:${esc(p.customer)};;;;`, "ORG:IOT TECHS"];
+  if (p.contact_phone) lines.push(`TEL;TYPE=CELL:${esc(p.contact_phone)}`);
+  if (p.contact_email) lines.push(`EMAIL;TYPE=INTERNET:${esc(p.contact_email)}`);
+  if (p.address) lines.push(`ADR;TYPE=HOME:;;${esc(p.address)};;;;`);
+  lines.push(`NOTE:Project ${esc(p.access_id)}`, "END:VCARD");
+  const blob = new Blob([lines.join("\r\n")], { type: "text/vcard" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `${(p.customer || "contact").replace(/\s+/g, "_")}.vcf`; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Required actions per stage you're moving INTO. `check` (when present) verifies against
 // real project data; items without a check are reminders we can't auto-verify (e.g. signatures).
 // The requirements matrix lives in lib/stage-flow.js (shared with the server's auto-advance) —
@@ -1969,10 +1991,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         lp.contact_email && { k: "Email", v: lp.contact_email },
       ].filter(Boolean),
       actions: [
-        lp.contact_phone && { label: "Call", href: `tel:${lp.contact_phone}`,
+        lp.contact_phone && { label: "Call", icon: DVI.call, href: `tel:${lp.contact_phone}`,
           onClick: () => { if (!previewRole && cView !== "customer") logCallAction(lp.access_id, lp.customer); } },
-        lp.contact_email && { label: "Message", href: `mailto:${lp.contact_email}` },
-        { label: "Directions", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
+        lp.contact_email && { label: "Message", icon: DVI.mail, href: `mailto:${lp.contact_email}` },
+        { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
+        { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
       ].filter(Boolean),
       // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
       contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },

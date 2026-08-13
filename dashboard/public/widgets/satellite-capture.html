@@ -166,7 +166,11 @@
   function search(q){ if(!q||!geocoder) return; $("show").disabled=true;
     geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length) return;
       var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
-      if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc}); $("q").value=res[0].formatted_address; }); }
+      if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc});
+      // Expand a bare street into Google's full address, but never SHRINK an already-full one
+      // (the project's stored address wins if the geocode came back shorter/partial).
+      var cur=($("q").value||"").trim(), fa=res[0].formatted_address||"";
+      if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }
 
   /* ---------- step wizard ---------- */
   function goStep(n){

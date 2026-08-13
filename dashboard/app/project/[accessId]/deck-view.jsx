@@ -18,6 +18,13 @@ import AddressAutocomplete from "../../components/address-autocomplete";
     menu         [{ label, danger, onClick }]  — the "…" overflow items this role may see
     roleLabel    string for the top-right role pill (e.g. "Admin view")
 */
+// Per-stage tool completion — drives the footer "N of M complete" / "Ready to advance".
+const stageProgress = (s) => {
+  const total = (s.tools || []).length;
+  const done = (s.tools || []).filter((t) => t.state === "done").length;
+  return { done, total, allDone: total > 0 && done === total };
+};
+
 export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
@@ -156,9 +163,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                 ))}
                 {(customer.actions?.length > 0 || customer.canEdit) && (
                   <div className="dv-cust-actions">
-                    {(customer.actions || []).map((a, i) => <a className="dv-mini" key={i} href={a.href || undefined} onClick={a.onClick}>{a.label}</a>)}
+                    {(customer.actions || []).map((a, i) => <a className="dv-mini dv-ico" key={i} href={a.href || undefined} onClick={a.onClick} title={a.label} aria-label={a.label}>{a.icon || a.label}</a>)}
                     {customer.canEdit && (
-                      <button className="dv-mini" data-stop onClick={() => { setCf({ contact_name: customer.contact?.contact_name || "", contact_phone: customer.contact?.contact_phone || "", contact_email: customer.contact?.contact_email || "", address: customer.contact?.address || "" }); setCustEdit(true); }}>Edit</button>
+                      <button className="dv-mini dv-ico" data-stop title="Edit" aria-label="Edit" onClick={() => { setCf({ contact_name: customer.contact?.contact_name || "", contact_phone: customer.contact?.contact_phone || "", contact_email: customer.contact?.contact_email || "", address: customer.contact?.address || "" }); setCustEdit(true); }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
                     )}
                   </div>
                 )}
@@ -230,7 +239,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                   </div>
               )}
               {/* Footer — present on every stage. Job Log on the left; advance controls on the right. */}
-              <div className={`dv-advance${s.advance ? (s.advance.ready && canAdvance ? " ready" : " gated") : ""}`}>
+              {(() => { const pg = stageProgress(s); return (
+              <div className={`dv-advance${s.advance ? (pg.allDone ? " ready" : " gated") : ""}`}>
                 {log && (
                   <button className="dv-log-btn" data-stop onClick={() => setOverlay({ name: "Job Log", node: log })}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
@@ -239,14 +249,15 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                 )}
                 {s.advance && (
                   <>
-                    {s.advance.ready && canAdvance
+                    {pg.allDone
                       ? <span className="dv-reason ok">Ready to advance</span>
-                      : <span className="dv-reason"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>{s.advance.reason || "Not ready"}</span>}
+                      : <span className="dv-reason mono">{pg.done} of {pg.total} complete</span>}
                     <button className="dv-adv-btn" data-stop disabled={!(s.advance.ready && canAdvance)} onClick={() => go(idx + 1)}>Continue to {s.advance.to}
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>
                   </>
                 )}
               </div>
+              ); })()}
             </div>
           </div>
         ))}
@@ -316,6 +327,8 @@ const CSS = `
 .dv-cust-actions{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1;padding-top:4px;border-top:1px solid var(--dv-line-soft)}
 .dv-mini{display:inline-flex;align-items:center;gap:7px;height:31px;padding:0 12px;border-radius:9px;border:1px solid var(--dv-line);font-size:12.5px;font-weight:500;color:var(--dv-ink-soft);background:var(--dv-paper);text-decoration:none}
 .dv-mini:hover{border-color:var(--dv-ink);color:var(--dv-ink)}
+.dv-ico{width:36px;height:31px;padding:0;justify-content:center;color:var(--dv-meta)}
+.dv-ico svg{width:16px;height:16px}
 .dv-mini.primary{background:var(--dv-ink);color:#fff;border-color:var(--dv-ink)}
 .dv-mini.primary:hover{background:#000}
 .dv-mini.primary:disabled{opacity:.5}
