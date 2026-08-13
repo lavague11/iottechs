@@ -128,7 +128,7 @@
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* FOV cone + line — only shown in the Angles step */
   .devNode .fovWrap{position:absolute;left:20px;top:20px;transform-origin:0 0;display:none;z-index:2}
-  .devNode.aim .fovWrap{display:block}
+  .devNode.aim.sel .fovWrap{display:block}   /* cone shows only for the selected camera (Angles) */
   .devNode .cone{position:absolute;transform:none;clip-path:polygon(0 50%,100% 0,100% 100%);background:linear-gradient(90deg,rgba(185,138,46,.20),rgba(185,138,46,.03));border-top:1px solid rgba(185,138,46,.5);border-right:1px solid rgba(185,138,46,.5);border-bottom:1px solid rgba(185,138,46,.5)}
   .devNode .coneLine{position:absolute;top:-1px;height:2px;background:var(--gold)}
   #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center}
@@ -409,6 +409,7 @@
         line.style.left=BR+"px"; line.style.width=RANGE+"px"; line.style.background=d.color; }
     }
     function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); }
+    function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
     function renderPanel(){
       if(!devices.length){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
       panelBody.innerHTML="";
@@ -420,7 +421,8 @@
         card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")) select(d.id); });
         card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
         if(showFov){ var rng=card.querySelector("input"),v=card.querySelector(".v");
-          rng.addEventListener("input", function(){ d.fov=+rng.value; v.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
+          rng.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
+          rng.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+rng.value; v.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
         panelBody.appendChild(card);
       });
     }
@@ -481,8 +483,9 @@
       if(idx===0 && bgHasImage){ enterBg(); return; }   // reopen the background builder
       curStep=idx;
       stepEls.forEach(function(x,i){ x.classList.toggle("active", i===idx); });
-      // cones + aim + FOV controls live only in the Angles step
-      devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.toggle("aim", idx===2 && d.cone); });
+      if(idx===2) selId=null;   // enter Angles unselected → a camera's cone appears when you click it
+      // cones + aim live only in the Angles step (and only for the selected camera)
+      devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", idx===2 && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
       if(idx!==1) arm(null);
       var onSubmit=(idx===3);
