@@ -22,7 +22,6 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
   const [overlay, setOverlay] = useState(null);      // { i, ti, name } — heavy tools launch full-screen
-  const [embedOpen, setEmbedOpen] = useState({});    // { `${i}-${ti}`: bool } — light tools expand inline
   const [custOpen, setCustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
@@ -179,24 +178,27 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                   <div className="dv-scroll">
                     {(s.tools || []).map((t, ti) => {
                       const open = openTool[i] === ti;
+                      // The row IS the trigger — no intermediate "Open" step. Heavy tools launch
+                      // full-screen; light tools expand their content inline right here.
+                      const launch = () => {
+                        if (!t.node) return;
+                        if (t.heavy) setOverlay({ i, ti, name: t.name });
+                        else setOpenTool((o) => ({ ...o, [i]: open ? null : ti }));
+                      };
                       return (
-                        <div className={`dv-tool ${t.state || ""}${open ? " open" : ""}`} key={ti}>
-                          <button className="dv-tool-row" onClick={() => setOpenTool((o) => ({ ...o, [i]: open ? null : ti }))}>
+                        <div className={`dv-tool ${t.state || ""}${open ? " open" : ""}${t.node ? "" : " stub"}`} key={ti}>
+                          <button className="dv-tool-row" onClick={launch} disabled={!t.node}>
                             <span className="dv-tmark" />
                             <span className="dv-tname">{t.name}</span>
-                            <span className="dv-caret"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
+                            <span className="dv-caret">
+                              {t.heavy
+                                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                                : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg>}
+                            </span>
                           </button>
-                          <div className="dv-tdetail"><div><div className="dv-embed">
-                            <div className="dv-embed-slot"><span className="dv-etitle mono">{t.label || t.name}</span>
-                              <button className="dv-embed-open" data-stop onClick={() => {
-                                if (!t.node) return;
-                                if (t.heavy) setOverlay({ i, ti, name: t.name });
-                                else setEmbedOpen((e) => ({ ...e, [`${i}-${ti}`]: !e[`${i}-${ti}`] }));
-                              }}>
-                                {t.heavy || !embedOpen[`${i}-${ti}`] ? "Open" : "Close"}
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></div>
-                            {!t.heavy && t.node && embedOpen[`${i}-${ti}`] && <div className="dv-embed-mount" data-stop>{t.node}</div>}
-                          </div></div></div>
+                          {!t.heavy && t.node && (
+                            <div className="dv-tdetail"><div><div className="dv-tinline" data-stop>{t.node}</div></div></div>
+                          )}
                         </div>
                       );
                     })}
@@ -312,19 +314,18 @@ const CSS = `
 .dv-scroll{flex:1;overflow-y:auto;padding:2px 20px 16px;-webkit-mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent)}
 
 .dv-tool{border-top:1px solid var(--dv-line-soft)}.dv-tool:first-child{border-top:none}
-.dv-tool-row{width:100%;display:flex;align-items:center;gap:14px;padding:17px 6px;text-align:left;border-radius:10px;transition:background .16s}
+.dv-tool-row{width:100%;display:flex;align-items:center;gap:14px;padding:17px 6px;text-align:left;border-radius:10px;transition:background .16s;cursor:pointer}
 .dv-tool-row:hover{background:rgba(16,20,24,.028)}
+.dv-tool-row:hover .dv-tname{color:var(--dv-ink)}
+.dv-tool.stub .dv-tool-row{cursor:default}.dv-tool.stub .dv-tool-row:hover{background:transparent}.dv-tool.stub{opacity:.42}
 .dv-tmark{width:8px;height:8px;border-radius:99px;flex:0 0 auto;border:1.5px solid var(--dv-line);background:transparent}
 .dv-tool.done .dv-tmark{background:var(--dv-green);border-color:var(--dv-green)}.dv-tool.active .dv-tmark{background:var(--dv-gold-deep);border-color:var(--dv-gold-deep)}
-.dv-tname{font-size:15px;font-weight:500;letter-spacing:-.014em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dv-caret{flex:0 0 auto;color:var(--dv-faint);transition:transform .3s var(--dv-e)}.dv-tool.open .dv-caret{transform:rotate(180deg)}
+.dv-tname{font-size:15px;font-weight:500;letter-spacing:-.014em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .16s}
+.dv-caret{flex:0 0 auto;color:var(--dv-faint);transition:transform .3s var(--dv-e),color .16s}.dv-tool.open .dv-caret{transform:rotate(180deg)}
+.dv-tool-row:hover .dv-caret{color:var(--dv-meta)}
 .dv-tdetail{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--dv-eo)}.dv-tool.open .dv-tdetail{grid-template-rows:1fr}
 .dv-tdetail>div{overflow:hidden}
-.dv-embed{padding:0 6px 16px 28px}
-.dv-embed-slot{border:1px solid var(--dv-line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;background:var(--dv-raise)}
-.dv-etitle{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--dv-meta);letter-spacing:.01em}
-.dv-embed-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 16px;border-radius:9px;background:var(--dv-ink);color:#fff;font-size:12.5px;font-weight:500}
-.dv-embed-mount{margin-top:12px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
+.dv-tinline{margin:0 6px 16px 28px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
 .dv-overlay{position:fixed;inset:0;z-index:200;background:var(--dv-paper);display:flex;flex-direction:column;animation:dvfade .2s var(--dv-eo)}
 @keyframes dvfade{from{opacity:0}to{opacity:1}}
 .dv-overlay-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--dv-line);background:var(--dv-raise)}
