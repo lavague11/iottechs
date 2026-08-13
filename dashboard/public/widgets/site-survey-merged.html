@@ -364,6 +364,7 @@
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";
       bgWiz.style.display="";
+      sideCollapsed=true; applySideCollapsed();   // give the capture the full width until placement
     }
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
@@ -417,6 +418,7 @@
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor(); renderFloorTabs();   // this background is now this floor's plan
       if(dataUrl && !skipSave) saveToLibrary(dataUrl);   // reusable global floor-plan library (deduped server-side)
+      sideCollapsed=false; applySideCollapsed();   // placement is underway → reveal the device panel
       goStep(1);   // → Place
     }
     // save a finished plan to the global library (fire-and-forget; a small thumb rides along)
@@ -455,7 +457,7 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
-    var ISZ=28, showFovState=true, sideCollapsed=false, showAllAngles=false;   // icon size (default Small) + FOV toggle + panel collapse + all-angles
+    var ISZ=28, showFovState=true, sideCollapsed=true, showAllAngles=false;   // icon size (default Small) + FOV toggle + panel collapse (default: hidden until placement) + all-angles
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=1, dimmed=false;
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
@@ -702,7 +704,7 @@
     function submit(){ snapFloor(); submitted=true; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
       setHint("Submitted for approval."); }
-    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); renderFloorTabs(); return; }
+    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=(st.showFov!==false); showAllAngles=!!st.allAngles; applySettings();   // settings before floors render
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
@@ -711,6 +713,7 @@
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
       goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
+      if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
     }catch(e){ renderFloorTabs(); } }
 
     // move: drag the icon (Place step only — on Angles the icon is fixed, you set aim/length instead)
