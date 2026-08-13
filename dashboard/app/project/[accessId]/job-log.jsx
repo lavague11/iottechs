@@ -40,6 +40,7 @@ function fmtTs(s) {
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Forensic events show only in the staff "Advanced" view; milestones/inquiry are in Basic too.
 const ADVANCED_KINDS = new Set(["call", "login", "view", "change", "resubmit"]);
+const SearchIco = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>;
 
 export default function JobLog({ accessId, role, acceptances = {}, project, preview, staffUsers = [] }) {
   const isCust = role === "customer";
@@ -51,6 +52,9 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const [mq, setMq] = useState(null);      // active @mention query { token, start } | null
   const [mode, setMode] = useState("basic"); // staff: basic milestones vs advanced forensics
   const [confirmId, setConfirmId] = useState(null);   // note id awaiting an inline visibility confirm
+  const [actQ, setActQ] = useState(null);             // activity search string (null = closed)
+  const [noteQ, setNoteQ] = useState(null);           // notes search string (null = closed)
+  const [expanded, setExpanded] = useState(() => new Set());  // note ids shown full-height
   const taRef = useRef(null);
 
   useEffect(() => {
@@ -71,7 +75,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const full = [...merged, ...(inqAt ? [{ verb: "Inquiry received", kind: "open", at: inqAt, by: null }] : [])];
   // Basic = milestones + inquiry (customer-safe); Advanced (staff) adds forensic events.
   const advanced = !isCust && mode === "advanced";
-  const timeline = advanced ? full : full.filter((e) => !ADVANCED_KINDS.has(e.kind));
+  let timeline = advanced ? full : full.filter((e) => !ADVANCED_KINDS.has(e.kind));
+  if (actQ) timeline = timeline.filter((e) => `${e.verb} ${e.by || ""}`.toLowerCase().includes(actQ.toLowerCase()));
+  const shownNotes = noteQ ? notes.filter((n) => `${n.body} ${n.author_name || ""}`.toLowerCase().includes(noteQ.toLowerCase())) : notes;
+  const toggleExpand = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // ---- @mentions ----
   const mentionMatches = mq
@@ -158,13 +165,17 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
       <section className="jl-col">
         <div className="jl-head-row">
           <div className="jl-head mono">Activity</div>
-          {!isCust && (
-            <button className={`jl-modetog ${advanced ? "adv" : ""}`} onClick={() => setMode((m) => (m === "basic" ? "advanced" : "basic"))}
-              title="Toggle basic ↔ advanced (forensic) activity">
-              <span className="jl-mdot" />{advanced ? "Advanced" : "Basic"}
-            </button>
-          )}
+          <div className="jl-tools">
+            <button className={`jl-icbtn ${actQ != null ? "on" : ""}`} title="Search activity" onClick={() => setActQ((q) => (q == null ? "" : null))}><SearchIco /></button>
+            {!isCust && (
+              <button className={`jl-modetog ${advanced ? "adv" : ""}`} onClick={() => setMode((m) => (m === "basic" ? "advanced" : "basic"))}
+                title="Toggle basic ↔ advanced (forensic) activity">
+                <span className="jl-mdot" />{advanced ? "Advanced" : "Basic"}
+              </button>
+            )}
+          </div>
         </div>
+        {actQ != null && <input className="jl-search" autoFocus value={actQ} onChange={(e) => setActQ(e.target.value)} placeholder="Search activity…" />}
         {timeline.length === 0 ? (
           <div className="jl-empty">No activity yet. The inquiry, calls, and every signed or reviewed milestone appear here.</div>
         ) : (
@@ -185,7 +196,11 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
 
       {/* ---- Notes ---- */}
       <section className="jl-col jl-notes-col">
-        <div className="jl-head mono">Notes</div>
+        <div className="jl-head-row">
+          <div className="jl-head mono">Notes</div>
+          <button className={`jl-icbtn ${noteQ != null ? "on" : ""}`} title="Search notes" onClick={() => setNoteQ((q) => (q == null ? "" : null))}><SearchIco /></button>
+        </div>
+        {noteQ != null && <input className="jl-search" autoFocus value={noteQ} onChange={(e) => setNoteQ(e.target.value)} placeholder="Search notes…" />}
 
         {!preview && (
           <div className="jl-compose">
@@ -217,18 +232,18 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
           </div>
         )}
 
-        {notes.length === 0 ? (
-          <div className="jl-empty">No notes yet.</div>
+        {shownNotes.length === 0 ? (
+          <div className="jl-empty">{noteQ ? "No notes match." : "No notes yet."}</div>
         ) : (
           <ul className="jl-list">
-            {notes.map((n) => (
+            {shownNotes.map((n) => (
               <li className="jl-note" key={n.id}>
                 <div className="jl-note-top">
                   <span className={`jl-who ${n.author_role === "customer" ? "cust" : "staff"}`}>{n.author_name || n.author_role || "—"}</span>
                   <span className="jl-note-ts mono">{fmtTs(n.created_at)}</span>
                   {renderBadge(n)}
                 </div>
-                <div className="jl-note-body">{renderBody(n.body)}</div>
+                <div className={`jl-note-body ${expanded.has(n.id) ? "open" : ""}`} onClick={() => toggleExpand(n.id)} title="Click to expand / collapse">{renderBody(n.body)}</div>
               </li>
             ))}
           </ul>
@@ -297,7 +312,13 @@ const CSS = `
 .jl-cy{background:#e9f0f8;color:#2f5c8f;border-color:#aec6e2}
 .jl-cn{background:#fbe9e6;color:#b23b28;border-color:#e3b4ab}
 .jl-badge.tog{cursor:pointer}
-.jl-note-body{font-size:14px;line-height:1.5;white-space:pre-wrap}
+.jl-note-body{font-size:14px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.jl-note-body.open{white-space:pre-wrap;overflow:visible}
+.jl-tools{display:inline-flex;align-items:center;gap:8px}
+.jl-icbtn{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:99px;color:var(--dv-meta,#787D84);background:var(--dv-raise,#FBFBFA)}
+.jl-icbtn:hover,.jl-icbtn.on{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.jl-search{width:100%;height:34px;margin-bottom:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:0 12px;font-size:13px;font-family:inherit;outline:none}
+.jl-search:focus{border-color:var(--dv-gold,#C9A96E)}
 .jl-mention{color:#2f5c8f;font-weight:600}
 @media (max-width:720px){.jl{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.jl-notes-col{border-left:none;border-top:1px solid var(--dv-line,#E4E4DF)}}
 `;
