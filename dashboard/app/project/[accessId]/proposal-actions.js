@@ -9,7 +9,7 @@ import {
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
-  getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, setProjectPoc, maybeAutoAdvance, advanceStageForward,
+  getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -577,6 +577,21 @@ export async function setNotePublicAction(accessId, id, isPublic) {
   const notes = setNotePublic(accessId, id, isPublic);
   await revalidate(accessId);
   return { ok: true, notes };
+}
+// Job Log events (calls, etc.) — internal, so customers never read them.
+export async function getEventsAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role === "customer" || !(await canReadProject(accessId))) return { ok: false, events: [] };
+  return { ok: true, events: getProjectEvents(accessId) };
+}
+// Log a call the instant a staff member taps the Call button.
+export async function logCallAction(accessId, targetName) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role === "customer") return { ok: false };
+  const label = targetName ? `Called ${String(targetName).slice(0, 80)}` : "Call placed";
+  const events = logProjectEvent(accessId, { kind: "call", label, actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, events };
 }
 // Survey comments — a customer can't edit the read-only survey, but they can leave quick notes
 // ("move this", "remove that"). Scoped to 'survey' so they show under the survey for staff.

@@ -135,7 +135,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             ))}
             {customer.actions?.length > 0 && (
               <div className="dv-cust-actions">
-                {customer.actions.map((a, i) => <a className="dv-mini" key={i} href={a.href || undefined}>{a.label}</a>)}
+                {customer.actions.map((a, i) => <a className="dv-mini" key={i} href={a.href || undefined} onClick={a.onClick}>{a.label}</a>)}
               </div>
             )}
           </div>

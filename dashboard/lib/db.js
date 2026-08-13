@@ -997,6 +997,19 @@ function init() {
   // toggled public; a customer's own note is always public (1). The Job Log reads this flag.
   if (!noteCols.includes("public")) db.exec("ALTER TABLE project_notes ADD COLUMN public INTEGER DEFAULT 0");
 
+  // ---- Job Log events ----  append-only activity beyond stage acceptances (calls placed, etc.).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_events (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      kind              TEXT NOT NULL,
+      label             TEXT,
+      actor             TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_events_project ON project_events(project_access_id)`);
+
   // ---- Server copy of the browser tools' working data (survey / mockup / schedule) ----
   // These tools draft in localStorage for speed; this table is the authoritative backup so a
   // cleared cache or a different device never loses a site survey. One row per project+tool.
@@ -4537,6 +4550,15 @@ export function setNotePublic(accessId, id, isPublic) {
   db.prepare("UPDATE project_notes SET public=? WHERE id=? AND project_access_id=?")
     .run(isPublic ? 1 : 0, Number(id), String(accessId));
   return getProjectNotes(accessId);
+}
+// Job Log events — append-only activity (calls, etc.), newest first.
+export function getProjectEvents(accessId) {
+  return db.prepare("SELECT * FROM project_events WHERE project_access_id=? ORDER BY id DESC LIMIT 200").all(String(accessId)).map((r) => ({ ...r }));
+}
+export function logProjectEvent(accessId, { kind, label, actor }) {
+  db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor) VALUES (?,?,?,?)")
+    .run(String(accessId), String(kind || "note").slice(0, 30), String(label || "").slice(0, 300) || null, String(actor || "").slice(0, 120) || null);
+  return getProjectEvents(accessId);
 }
 export function setProjectPoc(accessId, { name, phone }) {
   db.prepare("UPDATE projects SET poc_name=?, poc_phone=? WHERE access_id=?")

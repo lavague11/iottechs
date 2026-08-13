@@ -36,7 +36,7 @@ import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
-import { getAcceptancesAction, getLiveSnapshotAction } from "./proposal-actions";
+import { getAcceptancesAction, getLiveSnapshotAction, logCallAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
 
@@ -1969,12 +1969,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         lp.contact_email && { k: "Email", v: lp.contact_email },
       ].filter(Boolean),
       actions: [
-        lp.contact_phone && { label: "Call", href: `tel:${lp.contact_phone}` },
+        lp.contact_phone && { label: "Call", href: `tel:${lp.contact_phone}`,
+          onClick: () => { if (!previewRole && cView !== "customer") logCallAction(lp.access_id, lp.customer); } },
         lp.contact_email && { label: "Message", href: `mailto:${lp.contact_email}` },
         { label: "Directions", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
       ].filter(Boolean),
     };
-    const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} />;
+    const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} />;
     return (
       <DeckView
         stages={deckStages}
