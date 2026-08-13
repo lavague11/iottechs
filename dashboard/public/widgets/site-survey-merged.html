@@ -24,7 +24,14 @@
   .dimOverlay{position:absolute;inset:0;background:rgba(10,12,16,.5);pointer-events:none;z-index:1;display:none}
   body.dimmed .dimOverlay{display:block}
 
-  .work{flex:1;display:flex;min-height:0}
+  .work{flex:1;display:flex;min-height:0;position:relative}
+  /* collapsible SURVEY panel */
+  .sideTgl{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:2px;display:flex;align-items:center;margin-left:8px}
+  .sideTgl svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .sideOpen{position:absolute;top:14px;right:0;z-index:5;display:none;align-items:center;justify-content:center;width:26px;height:42px;border:1px solid var(--line);border-right:0;border-radius:8px 0 0 8px;background:#fff;color:var(--muted);cursor:pointer;box-shadow:-2px 2px 12px rgba(16,17,18,.1)}
+  .sideOpen svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  body.side-collapsed .side{display:none}
+  body.side-collapsed .sideOpen{display:flex}
   .canvasCol{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px 0 0 18px}
   .canvasWrap{flex:1;margin-bottom:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r);position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center}
 
@@ -39,6 +46,10 @@
   .door svg{width:30px;height:30px;stroke:var(--ink);fill:none;stroke-width:1.4;margin-bottom:12px}
   .door .dt{font-size:14px;font-weight:600}
   .door .dd{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35}
+  .libBtn{width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
+  .libBtn:hover{border-color:var(--gold);background:var(--soft)}
+  .libBtn svg{width:16px;height:16px;stroke:var(--ink);fill:none;stroke-width:1.5}
+  .libBtn span{color:var(--muted);font-weight:400}
 
   /* device + FOV (used when a background is set) */
   .stage-img{position:absolute;inset:0;background:#fff;background-size:cover;background-position:center}
@@ -237,12 +248,8 @@
               <div class="dt">Draw one</div>
               <div class="dd">Sketch the layout by hand</div>
             </div>
-            <div class="door" id="doorLib">
-              <svg viewBox="0 0 24 24"><path d="M4 5h6v14H4zM10 5h4v14h-4zM14 6l4-1 2 13-4 1z"/></svg>
-              <div class="dt">From library</div>
-              <div class="dd">Reuse a saved floor plan</div>
-            </div>
           </div>
+          <button class="libBtn" id="doorLib"><svg viewBox="0 0 24 24"><path d="M4 5h6v14H4zM10 5h4v14h-4zM14 6l4-1 2 13-4 1z"/></svg>From library<span>· reuse a saved plan</span></button>
           <input id="upIn" type="file" accept="image/*" style="display:none">
           <!-- library picker: grid of saved plans -->
           <div id="libModal"><div class="libCard"><div class="libHead"><b>Floor-plan library</b><button id="libClose">&times;</button></div><div id="libGrid" class="libGrid"></div></div></div>
@@ -266,7 +273,7 @@
 
     <div class="side">
       <div class="panel">
-        <div class="panelHead"><div class="t">Survey</div><div class="n" style="font-size:12px;color:var(--muted)">0 devices</div></div>
+        <div class="panelHead"><div class="t">Survey</div><div class="n" style="font-size:12px;color:var(--muted)">0 devices</div><button class="sideTgl" id="sideTgl" title="Collapse panel"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>
         <div class="panelBody">
           <div class="empty">
             <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
@@ -275,6 +282,7 @@
         </div>
       </div>
     </div>
+    <button class="sideOpen" id="sideOpen" title="Show survey"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
   </div>
 
   <!-- survey wizard (default bottom bar) -->
@@ -424,7 +432,7 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
-    var ISZ=40, showFovState=true;               // icon size (px) + whether the shaded FOV cone shows (settings)
+    var ISZ=40, showFovState=true, sideCollapsed=false;   // icon size + shaded FOV toggle + survey-panel collapse
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=1, dimmed=false;
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
@@ -484,6 +492,10 @@
     document.getElementById("setShowFov").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
     // Undo: remove the last-placed device
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(RO||!devices.length) return; removeDevice(devices[devices.length-1].id); });
+    // collapse / expand the SURVEY panel
+    function applySideCollapsed(){ document.body.classList.toggle("side-collapsed", sideCollapsed); }
+    document.getElementById("sideTgl").addEventListener("click", function(){ sideCollapsed=true; applySideCollapsed(); queueSave(); });
+    document.getElementById("sideOpen").addEventListener("click", function(){ sideCollapsed=false; applySideCollapsed(); queueSave(); });
     addBtn.addEventListener("click", function(e){ e.stopPropagation(); devMenu.classList.toggle("show"); });
     // any click outside the picker (or its + button) hides it — placing already hides it too
     document.addEventListener("click", function(e){ if(!devMenu.classList.contains("show")) return;
@@ -594,7 +606,7 @@
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
-    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState })); }catch(e){} reportHost(); }
+    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, sideCollapsed:sideCollapsed })); }catch(e){} reportHost(); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
     document.getElementById("dimBtn").addEventListener("click", function(){ dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
@@ -625,6 +637,7 @@
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=(st.showFov!==false); applySettings();   // settings before floors render
+      sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,devices:f.devices||[],started:!!f.started}; }); }
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       curFloor=Math.min(st.curFloor||0, floors.length-1);
