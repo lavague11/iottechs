@@ -357,7 +357,9 @@ const CSS = `
 /* keep the tool's own control bar (mockup Upload/Layout/Cameras live here) but drop the
    redundant Full-screen button — the overlay is already full-screen. */
 .dv-overlay-body .ss-embed-bar{flex:0 0 auto;padding:11px 18px;border-bottom:1px solid var(--dv-line);margin:0}
-.dv-overlay-body .ss-embed-bar:empty{display:none}
+/* The survey's bar only holds a "Live survey editor" tag (redundant with the overlay title) —
+   hide it; keep the mockup's bar since it carries the Upload/Layout/Cameras controls. */
+.dv-overlay-body .ss-embed-bar:not(:has(.mk-controls)){display:none}
 .dv-overlay-body .ss-embed-open{display:none}
 .dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto!important;min-height:0;border:none;background:var(--dv-raise);display:block}
 
