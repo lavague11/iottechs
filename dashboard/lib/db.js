@@ -767,6 +767,18 @@ function init() {
     )
   `);
 
+  // One-time reset (2026-08-13): the aerial enhance prompt override was saved byte-identical to
+  // the old "light cleanup" default. The default is now the declutter version, so drop that stale
+  // override to fall through to it. Hash-guarded — a genuinely customized prompt is never touched.
+  // Safe to delete this block once production has restarted.
+  try {
+    const LEGACY_AERIAL_SHA = "6d0501a218bbab93753b9781fee63cb830d42cbd5406b1d2dcd9ed594ecb68f7";
+    const row = db.prepare("SELECT value FROM app_secrets WHERE key='SURVEY_PROMPT_AERIAL'").get();
+    if (row && createHash("sha256").update(String(row.value).trim()).digest("hex") === LEGACY_AERIAL_SHA) {
+      db.prepare("DELETE FROM app_secrets WHERE key='SURVEY_PROMPT_AERIAL'").run();
+    }
+  } catch { /* non-fatal */ }
+
   // ---- Document library (Tools ▸ readers) ----
   // One row per captured document (registration / insurance / business licence / …). `fields`
   // is the full JSON the reader produced; subject_name + doc_number are denormalized for search.
