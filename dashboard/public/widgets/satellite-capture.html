@@ -23,6 +23,18 @@
   #msg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:24px;z-index:5}
   #msg.on{display:grid}
 
+  /* Finalized preview: the captured aerial, with a wand (Enhance) in the bottom-right */
+  #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
+  #preview.show{display:block}
+  #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .pvbar{position:absolute;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:9}
+  .pv{border:1px solid var(--line);background:#fff;border-radius:var(--r);height:38px;padding:0 13px;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);box-shadow:0 2px 12px rgba(16,17,18,.14)}
+  .pv svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .pv.use{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pv.wand{width:38px;padding:0;justify-content:center}
+  .pv.wand svg{stroke:var(--gold)}
+  .pv.wand.busy{opacity:.55;pointer-events:none}
+
   .foot{flex:none;display:flex;align-items:center;gap:8px;padding:11px 16px;border-top:1px solid var(--line);background:#fff}
   .seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
   .seg button{border:0;background:#fff;color:var(--muted);padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer}
@@ -41,6 +53,15 @@
   <div class="stage">
     <div id="map"></div>
     <div id="msg" class="on">Loading map…</div>
+    <div id="preview">
+      <img id="prevImg" alt="captured aerial">
+      <div class="pvbar">
+        <button class="pv" id="retake" title="Back to map"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
+        <button class="pv" id="dl" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
+        <button class="pv wand" id="wand" title="Enhance with AI"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg></button>
+        <button class="pv use" id="use">Use</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -78,23 +99,34 @@
       var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc}); $("q").value=res[0].formatted_address; }); }
 
-  // Capture the current view as a Static Maps satellite image and hand it to the host.
+  // Capture the current view (square, so enhance doesn't squish it) → show the Finalized preview.
+  var capCanvas=null;
   function capture(){
-    if(!map||!API_KEY){ return; }
-    var btn=$("save"); btn.disabled=true; btn.textContent="Capturing…";
+    if(!map||!API_KEY) return;
+    msg("Capturing…");
     var c=map.getCenter(), z=Math.round(map.getZoom());
-    var el=$("map"), w=Math.min(640,Math.round(el.clientWidth)), h=Math.min(640,Math.round(el.clientHeight));
+    var el=$("map"), s=Math.min(640, Math.min(el.clientWidth, el.clientHeight)|0);
     var type=map.getMapTypeId()==="hybrid"?"hybrid":"satellite";
     var url="https://maps.googleapis.com/maps/api/staticmap?center="+c.lat().toFixed(7)+","+c.lng().toFixed(7)+
-      "&zoom="+z+"&size="+w+"x"+h+"&scale=2&format=png&maptype="+type+"&key="+API_KEY;
+      "&zoom="+z+"&size="+s+"x"+s+"&scale=2&format=png&maptype="+type+"&key="+API_KEY;
     var im=new Image(); im.crossOrigin="anonymous";
     im.onload=function(){ var cv=document.createElement("canvas"); cv.width=im.naturalWidth; cv.height=im.naturalHeight;
-      cv.getContext("2d").drawImage(im,0,0);
-      try{ parent.postMessage({type:"satellite-capture-result", dataUrl:cv.toDataURL("image/jpeg",0.92)}, "*"); }catch(e){}
-      btn.disabled=false; btn.textContent="Use this view"; };
-    im.onerror=function(){ btn.disabled=false; btn.textContent="Use this view"; msg("Capture failed — check Maps Static API + billing."); setTimeout(function(){msg("");},2200); };
+      cv.getContext("2d").drawImage(im,0,0); capCanvas=cv; $("prevImg").src=cv.toDataURL("image/jpeg",0.92); $("preview").classList.add("show"); msg(""); };
+    im.onerror=function(){ msg("Capture failed — check Maps Static API + billing."); setTimeout(function(){msg("");},2200); };
     im.src=url;
   }
+  function usePreview(){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src}, "*"); }catch(e){} }
+  function enhance(){ if(!capCanvas) return; var w=$("wand"); w.classList.add("busy");
+    capCanvas.toBlob(function(blob){ var fd=new FormData(); fd.append("image",blob,"c.png"); fd.append("mode","aerial");
+      fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
+        var ai=new Image(); ai.onload=function(){ var cv=document.createElement("canvas"); cv.width=ai.naturalWidth; cv.height=ai.naturalHeight; cv.getContext("2d").drawImage(ai,0,0); capCanvas=cv; $("prevImg").src=cv.toDataURL("image/jpeg",0.92); w.classList.remove("busy"); };
+        ai.src="data:image/png;base64,"+d.b64;
+      }).catch(function(e){ w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
+    },"image/png"); }
+  $("wand").addEventListener("click", enhance);
+  $("use").addEventListener("click", usePreview);
+  $("retake").addEventListener("click", function(){ $("preview").classList.remove("show"); });
+  $("dl").addEventListener("click", function(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); });
   // The host shell requests the capture from its "Use as background"/Next button.
   window.addEventListener("message", function(e){ if(e&&e.data&&e.data.type==="request-capture") capture(); });
 </script>
