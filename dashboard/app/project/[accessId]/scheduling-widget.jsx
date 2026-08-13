@@ -116,8 +116,11 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     return () => { live = false; if (stop) stop(); };
   }, [accessId]);
   const [showForm, setShowForm] = useState(false);
+  // Smart default title (DoD #1): the property's street address + the visit type, e.g.
+  // "2503 Jay Pl — Site Survey". Falls back to the caller's default when there's no address.
+  const streetTitle = project?.address ? `${String(project.address).split(",")[0].trim()} — Site Survey` : defaultTitle;
   const [form, setForm]         = useState({
-    title: defaultTitle, date:"", time:"10:00",
+    title: streetTitle, date:"", time:"10:00",
     duration:"60", location: project?.address||"", notes:"", invitees:[],
   });
   const [saving, setSaving]     = useState(false);
@@ -223,13 +226,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
 
   return (
     <div className="sched-tool">
-      {/* Add button */}
-      {!isReadOnly && (
-        <button className="sched-add-btn" onClick={() => setShowForm(v => !v)}>
-          {showForm
-            ? <><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel</>
-            : <><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Schedule Event</>
-          }
+      {/* Add button — Cancel lives at the bottom of the form now, not up here */}
+      {!isReadOnly && !showForm && (
+        <button className="sched-add-btn" onClick={() => setShowForm(true)}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Schedule Event
         </button>
       )}
 
@@ -257,30 +257,13 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
           </div>
           <div className="sched-row">
             <label className="sched-lbl">Location</label>
-            <AddressAutocomplete className="sched-input" value={form.location} onChange={v=>setForm(f=>({...f,location:v}))} placeholder="Job site address" />
+            <AddressAutocomplete className="sched-input" value={form.location} onChange={v=>setForm(f=>({...f,location:v}))} placeholder="" />
           </div>
           <div className="sched-row">
             <label className="sched-lbl">Invite Members</label>
-            {/* Chips — auto-invited (customer + assigned team + you) plus anyone added */}
-            {form.invitees.length > 0 && (
-              <div className="sched-chips">
-                {form.invitees.map(nm => {
-                  const r = roleFor(nm);
-                  const auto = autoNames.includes(nm);
-                  return (
-                    <span key={nm} className={`sched-chip${r === "customer" ? " cust" : ""}`}>
-                      {nm}
-                      {r && <span className="sched-chip-role">{r}</span>}
-                      {auto && <span className="sched-chip-auto">auto</span>}
-                      <button type="button" className="sched-chip-x" title="Remove" onClick={() => removeInvitee(nm)}>✕</button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-            {/* Search bar over internal members + customers */}
+            {/* Search first, then the invited chips sit right below it */}
             <div className="sched-invsearch">
-              <input className="sched-input" value={invSearch} placeholder="Search members or customers to invite…"
+              <input className="sched-input" value={invSearch} placeholder=""
                      autoComplete="off" onChange={e => setInvSearch(e.target.value)} />
               {invMatches.length > 0 && (
                 <div className="sched-invdd">
@@ -295,28 +278,41 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                 </div>
               )}
             </div>
+            {/* Chips — auto-invited (customer + assigned team + you) plus anyone added */}
+            {form.invitees.length > 0 && (
+              <div className="sched-chips" style={{ marginTop: 8, marginBottom: 0 }}>
+                {form.invitees.map(nm => {
+                  const r = roleFor(nm);
+                  const auto = autoNames.includes(nm);
+                  return (
+                    <span key={nm} className={`sched-chip${r === "customer" ? " cust" : ""}`}>
+                      {nm}
+                      {r && <span className="sched-chip-role">{r}</span>}
+                      {auto && <span className="sched-chip-auto">auto</span>}
+                      <button type="button" className="sched-chip-x" title="Remove" onClick={() => removeInvitee(nm)}>✕</button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="sched-row">
             <label className="sched-lbl">Notes</label>
             <textarea className="sched-input sched-ta" rows={2} value={form.notes}
-              onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Bring ladder, check camera angles, badge access needed…" />
+              onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="" />
           </div>
           <div className="sched-form-acts">
+            <button type="button" className="sched-cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
+            {form.date && (
+              <div className="sched-cal-group">
+                <span className="sched-cal-lbl">Add to calendar</span>
+                <a className="sched-cal-ico" title="Google Calendar" href={gcalUrl(form, form.invitees.map(n=>nameToEmail[n]).filter(Boolean))} target="_blank" rel="noopener noreferrer">{Ico.gcal}</a>
+                <button type="button" className="sched-cal-ico" title="Apple Calendar" onClick={() => downloadIcs(form)}>{Ico.apple}</button>
+              </div>
+            )}
             <button className="sched-save-btn" disabled={!form.date||saving} onClick={saveEvent}>
               {saving?"Saving…":"Save Event"}
             </button>
-            {form.date && (
-              <a className="sched-gcal-btn" href={gcalUrl(form, form.invitees.map(n=>nameToEmail[n]).filter(Boolean))} target="_blank" rel="noopener noreferrer">
-                {Ico.gcal}
-                Add to Google Calendar
-              </a>
-            )}
-            {form.date && (
-              <button type="button" className="sched-gcal-btn" onClick={() => downloadIcs(form)}>
-                {Ico.apple}
-                Add to Apple Calendar
-              </button>
-            )}
           </div>
         </div>
       )}

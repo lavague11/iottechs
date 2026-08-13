@@ -4386,7 +4386,14 @@ const PV_CSS = `
 .pvx .sched-invopt:hover{background:var(--bg-tint)}
 .pvx .sched-invopt-name{font-size:.84rem;font-weight:600;color:var(--ink);flex-shrink:0}
 .pvx .sched-invopt-email{font-size:.74rem;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pvx .sched-form-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pvx .sched-form-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pvx .sched-cancel-btn{background:none;border:none;color:var(--muted);font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer;padding:8px 4px}
+.pvx .sched-cancel-btn:hover{color:var(--ink)}
+.pvx .sched-cal-group{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+.pvx .sched-cal-lbl{font-size:.72rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
+.pvx .sched-cal-ico{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer;transition:.12s;text-decoration:none}
+.pvx .sched-cal-ico:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-cal-ico svg{width:16px;height:16px}
 .pvx .sched-save-btn{background:var(--ink);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer}
 .pvx .sched-save-btn:hover{background:var(--slate)}
 .pvx .sched-save-btn:disabled{opacity:.4;cursor:not-allowed}
