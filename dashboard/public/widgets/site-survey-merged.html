@@ -250,7 +250,7 @@
       </div>
       <div class="hint" id="wizHint">Choose a background to begin.</div>
       <button class="b lite" id="addFloorBtn" style="display:none">+ Add a new floor</button>
-      <button class="b lite">Back</button>
+      <button class="b lite" id="backBtn" style="display:none">Back</button>
       <button class="b" id="nextBtn">Next</button>
     </div>
   </div>
@@ -530,11 +530,16 @@
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
     var addFloorBtn=document.getElementById("addFloorBtn");
+    var backBtn=document.getElementById("backBtn");
     var nextBtn=document.getElementById("nextBtn");
     function goStep(idx){
-      if(idx===0 && bgHasImage){ enterBg(); return; }   // reopen the background builder
+      if(idx>0 && !bgHasImage) return;   // gate: can't Place/Angle/Submit until this floor has a background
       curStep=idx;
       stepEls.forEach(function(x,i){ x.classList.toggle("active", i===idx); });
+      // Background step shows the source chooser (redo from any source, devices stay); other steps show the plan
+      var chooser=(idx===0);
+      document.getElementById("bgstep").style.display=chooser?"":"none";
+      document.getElementById("working").style.display=chooser?"none":"block";
       if(idx===2) selId=null;   // enter Angles unselected → a camera's cone appears when you click it
       // cones + aim live only in the Angles step (and only for the selected camera)
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", idx===2 && d.cone); el.classList.toggle("sel", d.id===selId); } });
@@ -542,14 +547,17 @@
       if(idx!==1){ arm(null); devMenu.classList.remove("show"); }
       var onSubmit=(idx===3);
       addFloorBtn.style.display = onSubmit ? "" : "none";
+      backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
-      var hints={1:"Add cameras & devices, then place them on the plan.",2:"Aim each camera — drag its IC label around to set the angle.",3:"Review the plan, then submit — or add another floor."};
-      setHint(hints[idx]||"");
+      var hints={0:bgHasImage?"Pick a new background — your devices stay put.":"Choose a background to begin.",
+                 1:"Add cameras & devices, then place them on the plan.",2:"Aim each camera — drag its IC label around to set the angle.",3:"Review the plan, then submit — or add another floor."};
+      setHint(RO ? "" : (hints[idx]||""));   // customers don't get editing prompts
       queueSave();
     }
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
     // Next walks the wizard; on the Submit step it submits the whole survey for approval.
     nextBtn.addEventListener("click", function(){ if(curStep<3) goStep(curStep+1); else submit(); });
+    backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
     addFloorBtn.addEventListener("click", addFloor);
 

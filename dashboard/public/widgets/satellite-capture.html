@@ -279,12 +279,21 @@
 
   function enhance(){ if(!capCanvas) return; var w=$("wand");
     var beforeSrc=$("prevImg").src;                 // remember the pre-enhance aerial for the compare
+    // OpenAI images/edits returns a 1024² SQUARE — pad the crop to a centered square before
+    // sending, then crop the result back to the original proportions (so the aerial keeps its aspect).
+    var ow=capCanvas.width, oh=capCanvas.height, S=Math.max(ow,oh), offX=Math.floor((S-ow)/2), offY=Math.floor((S-oh)/2);
+    var sq=document.createElement("canvas"); sq.width=S; sq.height=S; var sg=sq.getContext("2d");
+    sg.fillStyle="#000"; sg.fillRect(0,0,S,S); sg.drawImage(capCanvas,offX,offY);
     w.classList.add("busy"); resetCompare(); scanOn(true);
-    capCanvas.toBlob(function(blob){ var fd=new FormData(); fd.append("image",blob,"c.png"); fd.append("mode","aerial");
+    sq.toBlob(function(blob){ var fd=new FormData(); fd.append("image",blob,"c.png"); fd.append("mode","aerial");
       fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
-        var ai=new Image(); ai.onload=function(){ var cv=document.createElement("canvas"); cv.width=ai.naturalWidth; cv.height=ai.naturalHeight; cv.getContext("2d").drawImage(ai,0,0); capCanvas=cv;
-          scanOn(false); w.classList.remove("busy");
-          showCompare(beforeSrc, cv.toDataURL("image/jpeg",0.92));   // reveal + before/after
+        var ai=new Image(); ai.onload=function(){
+          var k=ai.naturalWidth/S;                              // padded-square → square result scale
+          var cw=Math.max(1,Math.round(ow*k)), ch=Math.max(1,Math.round(oh*k)), cx=Math.round(offX*k), cy=Math.round(offY*k);
+          var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+          cv.getContext("2d").drawImage(ai, cx,cy,cw,ch, 0,0,cw,ch);   // crop back to the original aspect
+          capCanvas=cv; scanOn(false); w.classList.remove("busy");
+          showCompare(beforeSrc, cv.toDataURL("image/jpeg",0.92));      // reveal + before/after
         };
         ai.src="data:image/png;base64,"+d.b64;
       }).catch(function(e){ scanOn(false); w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
