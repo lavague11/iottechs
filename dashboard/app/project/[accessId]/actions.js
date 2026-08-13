@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
+import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
@@ -117,6 +117,9 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       // shortcut for logging in, not a lesser guest pass. Leads with no account yet keep the
       // project-scoped PIN grant (short-lived; see lib/auth ACCESS_TTL_MS).
       const owner = getCustomerUserForProject(p);
+      // Surface the sign-in on the project's Job Log (the recordEvent above is the security
+      // audit; this is the human-readable activity line).
+      logProjectEvent(p.access_id, { kind: "login", label: "Customer signed in by PIN", actor: owner?.name || p.contact_name || p.customer || "Customer" });
       if (owner && !owner.disabled) {
         recordEvent("pin_access", owner.id, ip, ua, p.id, `Customer PIN → ${owner.name} on ${p.access_id}`);
         const { makeToken } = await import("../../../lib/auth");

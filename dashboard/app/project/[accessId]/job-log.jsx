@@ -38,6 +38,8 @@ function fmtTs(s) {
   return `${day} · ${h}:${mm} ${ap}`;
 }
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Forensic events show only in the staff "Advanced" view; milestones/inquiry are in Basic too.
+const ADVANCED_KINDS = new Set(["call", "login", "view", "change", "resubmit"]);
 
 export default function JobLog({ accessId, role, acceptances = {}, project, preview, staffUsers = [] }) {
   const isCust = role === "customer";
@@ -47,6 +49,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const [pub, setPub] = useState(false);   // compose visibility (staff choose; customer forced public)
   const [busy, setBusy] = useState(false);
   const [mq, setMq] = useState(null);      // active @mention query { token, start } | null
+  const [mode, setMode] = useState("basic"); // staff: basic milestones vs advanced forensics
   const taRef = useRef(null);
 
   useEffect(() => {
@@ -64,7 +67,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const evts = events.map((e) => ({ verb: e.label, kind: e.kind, at: e.created_at, by: e.actor }));
   const merged = [...milestones, ...evts].sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const inqAt = project?.created_at || project?.date;
-  const timeline = [...merged, ...(inqAt ? [{ verb: "Inquiry received", kind: "open", at: inqAt, by: null }] : [])];
+  const full = [...merged, ...(inqAt ? [{ verb: "Inquiry received", kind: "open", at: inqAt, by: null }] : [])];
+  // Basic = milestones + inquiry (customer-safe); Advanced (staff) adds forensic events.
+  const advanced = !isCust && mode === "advanced";
+  const timeline = advanced ? full : full.filter((e) => !ADVANCED_KINDS.has(e.kind));
 
   // ---- @mentions ----
   const mentionMatches = mq
@@ -116,7 +122,15 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
 
       {/* ---- Activity ---- */}
       <section className="jl-col">
-        <div className="jl-head mono">Activity</div>
+        <div className="jl-head-row">
+          <div className="jl-head mono">Activity</div>
+          {!isCust && (
+            <div className="jl-seg" role="group" aria-label="Detail level">
+              <button className={mode === "basic" ? "on" : ""} onClick={() => setMode("basic")}>Basic</button>
+              <button className={mode === "advanced" ? "on" : ""} onClick={() => setMode("advanced")}>Advanced</button>
+            </div>
+          )}
+        </div>
         {timeline.length === 0 ? (
           <div className="jl-empty">No activity yet. The inquiry, calls, and every signed or reviewed milestone appear here.</div>
         ) : (
@@ -201,7 +215,11 @@ const CSS = `
 .jl-col{min-height:0;overflow-y:auto;padding:22px 26px;scrollbar-width:none}
 .jl-col::-webkit-scrollbar{width:0;display:none}
 .jl-notes-col{border-left:1px solid var(--dv-line,#E4E4DF)}
-.jl-head{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:16px}
+.jl-head{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.jl-head-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
+.jl-seg{display:inline-flex;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden}
+.jl-seg button{padding:5px 12px;font-size:12px;font-weight:500;color:var(--dv-meta,#787D84);background:transparent}
+.jl-seg button.on{background:var(--dv-ink,#101418);color:#fff}
 .jl-empty{font-size:13.5px;color:var(--dv-faint,#A1A6AC);line-height:1.5;max-width:34ch}
 /* timeline */
 .jl-time{list-style:none;display:flex;flex-direction:column;gap:2px;position:relative}
