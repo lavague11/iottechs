@@ -377,9 +377,9 @@
     [].forEach.call(devMenu.querySelectorAll(".mg"), function(mg){ if(openG.indexOf(mg.dataset.g)>=0) mg.classList.add("open"); });
     function saveMenuGroups(){ var os=[]; [].forEach.call(devMenu.querySelectorAll(".mg.open"), function(x){ os.push(x.dataset.g); }); try{ localStorage.setItem(MENUKEY, JSON.stringify(os)); }catch(e){} }
     addBtn.addEventListener("click", function(e){ e.stopPropagation(); devMenu.classList.toggle("show"); });
-    // close the menu when clicking clearly outside it — but NOT while dropping on the plan (stay armed & open)
+    // any click outside the picker (or its + button) hides it — placing already hides it too
     document.addEventListener("click", function(e){ if(!devMenu.classList.contains("show")) return;
-      if(e.target.closest(".devmenu,#addDeviceBtn,#working")) return; devMenu.classList.remove("show"); });
+      if(e.target.closest(".devmenu,#addDeviceBtn")) return; devMenu.classList.remove("show"); });
     devMenu.addEventListener("click", function(e){ e.stopPropagation();
       var hdr=e.target.closest(".mgrp");
       if(hdr){ hdr.parentNode.classList.toggle("open"); saveMenuGroups(); return; }   // expand/collapse a group
