@@ -8,7 +8,11 @@ import { getNotesAction, addNoteAction, setPocAction } from "./proposal-actions"
 export default function InquiryExtras({ accessId, project, role, preview }) {
   const [notes, setNotes] = useState([]);
   const [draft, setDraft] = useState("");
-  const [poc, setPoc] = useState({ name: project?.poc_name || "", phone: project?.poc_phone || "" });
+  // Smart default: the point of contact IS the customer unless someone else will be on site.
+  // Prefill their name + phone so the field is never empty (staff can override).
+  const custName = project?.contact_name || project?.customer || "";
+  const custPhone = project?.contact_phone || "";
+  const [poc, setPoc] = useState({ name: project?.poc_name || custName, phone: project?.poc_phone || custPhone });
   const [pocSaved, setPocSaved] = useState(!!project?.poc_name);
   const [pocEdit, setPocEdit] = useState(!project?.poc_name);
   const [busy, setBusy] = useState(false);
@@ -38,13 +42,12 @@ export default function InquiryExtras({ accessId, project, role, preview }) {
   }
 
   return (
-    <div className="pv-tool-panel" style={{ "--tool-c": "#6FBF73" }}>
+    <div className="pv-tool-panel" style={{ "--tool-c": "var(--gold,#C9A96E)" }}>
       <div className="pv-tool-head" style={{ cursor: "default" }}>
         <span className="pv-tool-icon">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </span>
         <span className="pv-tool-title">Details &amp; Notes</span>
-        <span className="pv-tool-sub">Point of contact · Extra info · Questions</span>
         {notes.length > 0 && <span className="pv-tool-chip">{notes.length} note{notes.length !== 1 ? "s" : ""}</span>}
       </div>
       <div className="pv-tool-body">
@@ -52,7 +55,7 @@ export default function InquiryExtras({ accessId, project, role, preview }) {
         {err && <div className="iex-err">{err}</div>}
 
         {/* Point of contact for the appointment */}
-        <div className="iex-lbl">Appointment Point of Contact</div>
+        <div className="iex-lbl">On site</div>
         {pocSaved && !pocEdit ? (
           <div className="iex-poc-saved">
             <span className="iex-poc-name">{poc.name}</span>
@@ -61,7 +64,7 @@ export default function InquiryExtras({ accessId, project, role, preview }) {
           </div>
         ) : (
           <div className="iex-poc-form">
-            <input className="iex-input" placeholder="Name (if someone else will be on site)" value={poc.name}
+            <input className="iex-input" placeholder="Name" value={poc.name}
                    onChange={(e) => setPoc((v) => ({ ...v, name: e.target.value }))} disabled={preview} />
             <input className="iex-input" placeholder="Phone" value={poc.phone}
                    onChange={(e) => setPoc((v) => ({ ...v, phone: e.target.value }))} disabled={preview} />
@@ -70,9 +73,9 @@ export default function InquiryExtras({ accessId, project, role, preview }) {
         )}
 
         {/* Notes thread */}
-        <div className="iex-lbl" style={{ marginTop: 14 }}>Notes &amp; Messages</div>
+        <div className="iex-lbl" style={{ marginTop: 14 }}>Notes</div>
         <div className="iex-compose">
-          <textarea className="iex-note-input" rows={2} placeholder="Add a note — access details, questions, anything we should know…"
+          <textarea className="iex-note-input" rows={2} placeholder="Add a note…"
                     value={draft} onChange={(e) => setDraft(e.target.value)} disabled={preview} />
           <button className="iex-btn" disabled={busy || preview || !draft.trim()} onClick={sendNote}>Send</button>
         </div>
@@ -100,15 +103,15 @@ const IEX_CSS = `
 .iex-poc-form .iex-input:first-child{flex:2;min-width:180px}
 .iex-poc-form .iex-input{flex:1;min-width:130px}
 .iex-input{height:38px;border:1px solid var(--line,#d9d4ca);border-radius:8px;background:#fff;color:var(--ink,#0B0F1A);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
-.iex-input:focus{border-color:#6FBF73}
-.iex-poc-saved{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#f2f9f3;border:1px solid #cde6d2;border-radius:9px;padding:9px 13px}
-.iex-poc-name{font-size:.84rem;font-weight:800;color:var(--ink,#0B0F1A)}
+.iex-input:focus{border-color:var(--gold,#C9A96E)}
+.iex-poc-saved{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg-soft,#f6f4ef);border:1px solid var(--line,#e6e2d9);border-radius:9px;padding:9px 13px}
+.iex-poc-name{font-size:.84rem;font-weight:700;color:var(--ink,#0B0F1A)}
 .iex-poc-phone{font-size:.8rem;color:var(--muted,#6f7686)}
-.iex-link{background:none;border:none;color:#2f7d5a;font-size:.74rem;font-weight:700;cursor:pointer;text-decoration:underline;font-family:inherit;margin-left:auto}
+.iex-link{background:none;border:none;color:var(--gold-deep,#A8842F);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto}
 .iex-compose{display:flex;gap:8px;align-items:flex-end}
 .iex-note-input{flex:1;border:1px solid var(--line,#d9d4ca);border-radius:9px;background:#fff;color:var(--ink,#0B0F1A);padding:9px 11px;font-size:.82rem;font-family:inherit;outline:none;resize:vertical}
-.iex-note-input:focus{border-color:#6FBF73}
-.iex-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:#2f7d5a;color:#fff;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit}
+.iex-note-input:focus{border-color:var(--gold,#C9A96E)}
+.iex-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--ink,#101418);color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
 .iex-btn:hover{filter:brightness(1.08)}
 .iex-btn:disabled{opacity:.5;cursor:default}
 .iex-notes{margin-top:10px;display:flex;flex-direction:column;gap:7px}
