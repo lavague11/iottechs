@@ -177,7 +177,7 @@
   function ensureRect(){ if(!rect){ var st=$("draw"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
   [].forEach.call(document.querySelectorAll(".steps .s"), function(el){ el.addEventListener("click", function(){ var n=+el.dataset.step; if(n===2){ ensureRect(); capture(); } goStep(n); }); });
   $("back").addEventListener("click", function(){ if(step>0) goStep(step-1); });
-  $("next").addEventListener("click", function(){ if(step===1){ ensureRect(); capture(); goStep(2); } else if(step<2) goStep(step+1); });
+  $("next").addEventListener("click", function(){ if(step>=2) return; var n=step+1; if(n===2){ ensureRect(); capture(); } goStep(n); });   // always advance one step; capture only when entering Finalized
 
   /* ---------- crop box ---------- */
   function initDraw(){
@@ -216,7 +216,7 @@
     var need=Math.sqrt(sw*sw+sh*sh)*mppView*1.06;
     var zt=Math.min(21,Math.round(zView)), mppTile, sf, span, cols, rows, box;
     while(true){ mppTile=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zt); sf=Math.pow(2,zt)*2;
-      var halfWU=(need/mppTile)/sf/2, cxW=wx(c), cyW=wy(c); box={x0:cxW-halfWU,x1:cxW+halfWU,y0:cyW-halfWU,y1:cyW+halfWU,cxW:cxW,cyW:cyW};
+      var halfWU=(need/mppTile)/Math.pow(2,zt)/2, cxW=wx(c), cyW=wy(c); box={x0:cxW-halfWU,x1:cxW+halfWU,y0:cyW-halfWU,y1:cyW+halfWU,cxW:cxW,cyW:cyW};   // span the FULL diagonal so the leveled (rotated) view has no bare corners
       span=640/Math.pow(2,zt); cols=Math.ceil((box.x1-box.x0)/span); rows=Math.ceil((box.y1-box.y0)/span);
       if(cols*rows<=MAX_TILES||zt<=15) break; zt--; }
     var oX=box.x0, oY=box.y0, W=Math.ceil((box.x1-box.x0)*sf), H=Math.ceil((box.y1-box.y0)*sf), mppMosaic=mppTile/2;
