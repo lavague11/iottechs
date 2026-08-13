@@ -339,7 +339,25 @@
       applyBackground(ev.data.dataUrl);
     });
 
+    // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
+    // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
+    // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
     function applyBackground(dataUrl){
+      if(!dataUrl){ finishBackground(null); return; }
+      var im=new Image();
+      im.onload=function(){
+        try{
+          var MAX=1600, w=im.naturalWidth, h=im.naturalHeight, s=Math.min(1, MAX/Math.max(w,h));
+          var cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(w*s)); cv.height=Math.max(1,Math.round(h*s));
+          cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+          var small=cv.toDataURL("image/jpeg",0.85);
+          finishBackground(small.length<dataUrl.length ? small : dataUrl);
+        }catch(e){ finishBackground(dataUrl); }
+      };
+      im.onerror=function(){ finishBackground(dataUrl); };
+      im.src=dataUrl;
+    }
+    function finishBackground(dataUrl){
       bgHasImage=true; bgData=dataUrl||null;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
@@ -532,7 +550,7 @@
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
-    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.backgroundImage="url("+bgData+")"; img.style.background=""; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
+    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }   // clear the shorthand FIRST, then set the image (else it wipes it)
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null;
