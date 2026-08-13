@@ -779,6 +779,23 @@ function init() {
     }
   } catch { /* non-fatal */ }
 
+  // ---- Global floor-plan library ----
+  // Finished survey backgrounds (aerial / uploaded plan / drawing) saved for reuse on any project's
+  // floor. `thumb` is a small preview for the picker grid; `image` is the full plan (fetched on pick).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS floorplan_library (
+      id             INTEGER PRIMARY KEY,
+      name           TEXT,
+      image          TEXT NOT NULL,
+      thumb          TEXT,
+      hash           TEXT UNIQUE,
+      source_project TEXT,
+      kind           TEXT DEFAULT 'aerial',
+      created_at     TEXT DEFAULT (datetime('now','localtime')),
+      created_by     TEXT
+    )
+  `);
+
   // ---- Document library (Tools ▸ readers) ----
   // One row per captured document (registration / insurance / business licence / …). `fields`
   // is the full JSON the reader produced; subject_name + doc_number are denormalized for search.
@@ -1483,6 +1500,29 @@ export function getSurveyLibrary() {
       updated_at: p.ua2 || p.ua1 || null,
     };
   });
+}
+
+// ---- Global floor-plan library (reusable finished plans) ----
+// Save a finished plan for reuse. Deduped by content hash so re-saving the same image is a no-op.
+export function addFloorplan({ image, thumb, name, project, kind, actor } = {}) {
+  if (typeof image !== "string" || !image.startsWith("data:image")) return { ok: false, error: "no image" };
+  const hash = createHash("sha256").update(image).digest("hex");
+  const hit = db.prepare("SELECT id FROM floorplan_library WHERE hash=?").get(hash);
+  if (hit) return { ok: true, id: hit.id, dup: true };
+  const r = db.prepare(
+    "INSERT INTO floorplan_library (name,image,thumb,hash,source_project,kind,created_by) VALUES (?,?,?,?,?,?,?)"
+  ).run(name || null, image, thumb || null, hash, project || null, kind || "aerial", actor || null);
+  return { ok: true, id: Number(r.lastInsertRowid) };
+}
+// List for the picker grid — thumbs only (full image fetched on pick), newest first.
+export function listFloorplans(limit = 60) {
+  return db.prepare(
+    "SELECT id,name,COALESCE(thumb,image) AS thumb,source_project,kind,created_at FROM floorplan_library ORDER BY id DESC LIMIT ?"
+  ).all(Math.max(1, Math.min(200, limit)));
+}
+// Full plan image by id (fetched when the user actually picks one).
+export function getFloorplan(id) {
+  return db.prepare("SELECT id,name,image,kind FROM floorplan_library WHERE id=?").get(Number(id) || 0) || null;
 }
 
 // Mockup library — every project's mockup with a first-photo thumbnail. Photos are inline data

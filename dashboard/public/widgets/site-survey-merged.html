@@ -174,6 +174,19 @@
   .settog.on{background:var(--gold)}
   .settog.on .knob{left:18px}
   .card.sel{border-color:var(--gold)}
+  /* floor-plan library picker */
+  #libModal{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
+  #libModal.on{display:flex}
+  .libCard{width:min(680px,92%);max-height:80%;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(16,17,18,.3);display:flex;flex-direction:column;overflow:hidden}
+  .libHead{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .libHead b{font-size:14px;color:var(--ink)}
+  .libHead button{border:0;background:transparent;font-size:22px;line-height:1;color:var(--muted);cursor:pointer}
+  .libGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:16px;overflow:auto}
+  .libItem{border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:#f6f4ef;transition:border-color .12s,transform .12s}
+  .libItem:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .libItem img{display:block;width:100%;height:100px;object-fit:cover;background:#e9e6df}
+  .libItem .lcap{font-size:11px;color:var(--muted);padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .libEmpty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:30px 10px}
 
   /* read-only (customer) view: hide editing, show the finished plan + cones */
   body.ro #addDeviceBtn,body.ro .devmenu,body.ro .utils{display:none}
@@ -224,8 +237,15 @@
               <div class="dt">Draw one</div>
               <div class="dd">Sketch the layout by hand</div>
             </div>
+            <div class="door" id="doorLib">
+              <svg viewBox="0 0 24 24"><path d="M4 5h6v14H4zM10 5h4v14h-4zM14 6l4-1 2 13-4 1z"/></svg>
+              <div class="dt">From library</div>
+              <div class="dd">Reuse a saved floor plan</div>
+            </div>
           </div>
           <input id="upIn" type="file" accept="image/*" style="display:none">
+          <!-- library picker: grid of saved plans -->
+          <div id="libModal"><div class="libCard"><div class="libHead"><b>Floor-plan library</b><button id="libClose">&times;</button></div><div id="libGrid" class="libGrid"></div></div></div>
         </div>
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
@@ -342,8 +362,8 @@
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
     // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
-    function applyBackground(dataUrl){
-      if(!dataUrl){ finishBackground(null); return; }
+    function applyBackground(dataUrl, skipSave){
+      if(!dataUrl){ finishBackground(null, skipSave); return; }
       var im=new Image();
       im.onload=function(){
         try{
@@ -351,13 +371,13 @@
           var cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(w*s)); cv.height=Math.max(1,Math.round(h*s));
           cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
           var small=cv.toDataURL("image/jpeg",0.85);
-          finishBackground(small.length<dataUrl.length ? small : dataUrl);
-        }catch(e){ finishBackground(dataUrl); }
+          finishBackground(small.length<dataUrl.length ? small : dataUrl, skipSave);
+        }catch(e){ finishBackground(dataUrl, skipSave); }
       };
-      im.onerror=function(){ finishBackground(dataUrl); };
+      im.onerror=function(){ finishBackground(dataUrl, skipSave); };
       im.src=dataUrl;
     }
-    function finishBackground(dataUrl){
+    function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
@@ -365,8 +385,40 @@
       exitBg(true);
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor(); renderFloorTabs();   // this background is now this floor's plan
+      if(dataUrl && !skipSave) saveToLibrary(dataUrl);   // reusable global floor-plan library (deduped server-side)
       goStep(1);   // → Place
     }
+    // save a finished plan to the global library (fire-and-forget; a small thumb rides along)
+    function saveToLibrary(dataUrl){
+      if(RO) return;
+      var im=new Image();
+      im.onload=function(){ var thumb=null;
+        try{ var TH=260, s=Math.min(1,TH/Math.max(im.naturalWidth,im.naturalHeight)),
+          cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(im.naturalWidth*s)); cv.height=Math.max(1,Math.round(im.naturalHeight*s));
+          cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); thumb=cv.toDataURL("image/jpeg",0.6);
+        }catch(e){}
+        fetch("/api/floorplans",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:dataUrl,thumb:thumb,project:PID,kind:"aerial"})}).catch(function(){});
+      };
+      im.onerror=function(){};
+      im.src=dataUrl;
+    }
+    // ---- library picker: reuse a saved plan ----
+    var libModal=document.getElementById("libModal");
+    function openLib(){ var grid=document.getElementById("libGrid"); grid.innerHTML='<div class="libEmpty">Loading…</div>'; libModal.classList.add("on");
+      fetch("/api/floorplans").then(function(r){return r.json();}).then(function(d){
+        var items=(d&&d.items)||[];
+        if(!items.length){ grid.innerHTML='<div class="libEmpty">No saved plans yet — finish a background and it lands here.</div>'; return; }
+        grid.innerHTML="";
+        items.forEach(function(it){ var el=document.createElement("div"); el.className="libItem";
+          el.innerHTML='<img src="'+(it.thumb||"")+'" alt=""><div class="lcap">'+(it.kind||"plan")+(it.created_at?" · "+String(it.created_at).slice(0,10):"")+'</div>';
+          el.addEventListener("click", function(){ pickLib(it.id); }); grid.appendChild(el); });
+      }).catch(function(){ grid.innerHTML='<div class="libEmpty">Couldn’t load the library.</div>'; });
+    }
+    function pickLib(id){ fetch("/api/floorplans?id="+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(d){
+      if(d&&d.item&&d.item.image){ libModal.classList.remove("on"); applyBackground(d.item.image, true); } }).catch(function(){}); }
+    document.getElementById("doorLib").addEventListener("click", openLib);
+    document.getElementById("libClose").addEventListener("click", function(){ libModal.classList.remove("on"); });
+    libModal.addEventListener("click", function(e){ if(e.target===libModal) libModal.classList.remove("on"); });
 
     // ===== Devices: catalog · armed placement · border-label aim (Angles step) =====
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
