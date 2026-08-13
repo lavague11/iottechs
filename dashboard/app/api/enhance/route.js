@@ -50,7 +50,7 @@ export async function POST(req) {
   const inputFidelity = mode === "aerial" ? "high" : "low";
 
   const buf = Buffer.from(await image.arrayBuffer());
-  const hash = createHash("sha256").update(mode).update("|").update(labels).update("|").update(revision).update("|").update(buf).digest("hex");
+  const hash = createHash("sha256").update(mode).update("|").update(prompt).update("|").update(revision).update("|").update(buf).digest("hex");
   const hit = cacheGet(hash);
   if (hit) return Response.json({ b64: hit, cached: true });
 
