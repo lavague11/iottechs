@@ -124,6 +124,7 @@
   .devNode{position:absolute;transform:translate(-50%,-50%);width:40px;height:40px;z-index:3}
   .devNode .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center;cursor:grab}
   .devNode .devDot:active{cursor:grabbing}
+  .devNode.aim .devDot,.devNode.aim .devDot:active{cursor:pointer}   /* Angles: the icon doesn't move — only aim/length */
   .devNode .devDot{color:var(--ink)}
   .devNode .devDot svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
@@ -134,8 +135,12 @@
   /* FOV cone + line — only shown in the Angles step */
   .devNode .fovWrap{position:absolute;left:20px;top:20px;transform-origin:0 0;display:none;z-index:2}
   .devNode.aim.sel .fovWrap{display:block}   /* cone shows only for the selected camera (Angles) */
+  .devNode .fovGrow{position:absolute;left:0;top:0;transform-origin:0 0}   /* wrapper the expand animation scales */
+  .devNode .fovGrow.grow{animation:coneGrow .34s cubic-bezier(.2,.85,.25,1)}
+  @keyframes coneGrow{from{transform:scale(.1);opacity:.25}to{transform:scale(1);opacity:1}}
   .devNode .coneSvg{position:absolute;overflow:visible;pointer-events:none}
-  .devNode .coneLine{position:absolute;top:-1px;height:2px;background:var(--gold)}
+  .devNode .coneLine{position:absolute;top:-1px;height:2px;background:currentColor}
+  .devNode .coneLine::after{content:"";position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:9px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}   /* arrowhead */
   #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
@@ -398,6 +403,17 @@
       addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100);
       devMenu.classList.remove("show"); });
 
+    // Angles step, second tap: with a camera selected, tap where the view should point — that sets
+    // both the aim (direction) and the length (distance to the tapped point). The line connects them.
+    work.addEventListener("pointerdown", function(e){ if(RO || curStep!==2 || selId==null) return;
+      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu")) return;
+      var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
+      if(!d || !d.cone) return;
+      var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
+      d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI);
+      d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)));   // length = reach to the tapped point
+      renderDevice(d); growCone(d.id); queueSave(); });
+
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
       var nType=devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type
@@ -406,7 +422,7 @@
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(curStep===2&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
-        (d.cone?'<div class="fovWrap"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div>':'')+
+        (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         '<div class="icLabel"></div>';
       work.insertBefore(el, work.querySelector(".utils"));
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
@@ -430,9 +446,12 @@
         var s0=grad.querySelector(".s0"), s1=grad.querySelector(".s1");
         s0.setAttribute("stop-color",d.color); s0.setAttribute("stop-opacity",".42");   // darker at the camera
         s1.setAttribute("stop-color",d.color); s1.setAttribute("stop-opacity",".08");
-        line.style.left=ap+"px"; line.style.width=R+"px"; line.style.background=d.color; }
+        line.style.left=ap+"px"; line.style.width=R+"px"; line.style.color=d.color; }
     }
-    function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); }
+    function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); if(id!=null) growCone(id); }
+    // replay the expand animation on the selected camera's cone
+    function growCone(id){ if(curStep!==2) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
+      if(g){ g.classList.remove("grow"); void g.offsetWidth; g.classList.add("grow"); } }
     function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
     function renderPanel(){
       if(!devices.length){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
@@ -441,17 +460,13 @@
         var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
         var showFov=(curStep===2 && d.cone);   // angles live in the Angles step
         card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><div class="nm">'+d.name+'</div><div class="x">&times;</div></div>'+
-          (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>'+
-                   '<div class="fov"><label>Length</label><input class="lenR" type="range" min="40" max="400" value="'+(d.range||RANGE)+'"><div class="v">'+Math.round(d.range||RANGE)+'</div></div>':'');
+          (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
         card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")) select(d.id); });
         card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
         if(showFov){
           var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
           fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
-          fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); });
-          var lr=card.querySelector(".lenR"), lv=lr.nextElementSibling;
-          lr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
-          lr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.range=+lr.value; lv.textContent=Math.round(d.range); renderDevice(d); queueSave(); }); }
+          fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
         panelBody.appendChild(card);
       });
     }
@@ -506,9 +521,10 @@
       goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
     }catch(e){ renderFloorTabs(); } }
 
-    // move: drag the icon
+    // move: drag the icon (Place step only — on Angles the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(RO) return; e.preventDefault(); e.stopPropagation(); select(d.id); dot.setPointerCapture(e.pointerId);
+      dot.addEventListener("pointerdown", function(e){ if(RO) return; select(d.id); if(curStep===2) return;
+        e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("canvas").getBoundingClientRect();
         function mv(ev){ d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); queueSave(); }
@@ -552,7 +568,7 @@
       backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
       var hints={0:bgHasImage?"Pick a new background — your devices stay put.":"Choose a background to begin.",
-                 1:"Add cameras & devices, then place them on the plan.",2:"Aim each camera — drag its IC label around to set the angle.",3:"Review the plan, then submit — or add another floor."};
+                 1:"Add cameras & devices, then place them on the plan.",2:"Tap a camera, then tap where it points — that sets the aim & reach.",3:"Review the plan, then submit — or add another floor."};
       setHint(RO ? "" : (hints[idx]||""));   // customers don't get editing prompts
       queueSave();
     }
