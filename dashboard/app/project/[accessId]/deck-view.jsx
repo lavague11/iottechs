@@ -311,7 +311,8 @@ const CSS = `
 .dv-stage-name{font-size:24px;font-weight:600;letter-spacing:-.03em}
 .dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:var(--font-mono),"JetBrains Mono",monospace}
 .f-pending{background:#EEF3F8;color:var(--dv-blue)}.f-reviewing,.f-finalizing{background:#FBF4E6;color:var(--dv-gold-deep)}.f-complete{background:#E9F3ED;color:var(--dv-green)}.f-locked{background:rgba(16,20,24,.04);color:var(--dv-faint)}
-.dv-scroll{flex:1;overflow-y:auto;padding:2px 20px 16px;-webkit-mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(180deg,transparent,#000 14px,#000 calc(100% - 20px),transparent)}
+.dv-scroll{flex:1;overflow-y:auto;padding:2px 20px 16px;scrollbar-width:none}
+.dv-scroll::-webkit-scrollbar{width:0;height:0;display:none}
 
 .dv-tool{border-top:1px solid var(--dv-line-soft)}.dv-tool:first-child{border-top:none}
 .dv-tool-row{width:100%;display:flex;align-items:center;gap:14px;padding:17px 6px;text-align:left;border-radius:10px;transition:background .16s;cursor:pointer}
@@ -344,7 +345,7 @@ const CSS = `
 .dv-overlay-body .ss-embed-open{display:none}
 .dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto!important;min-height:0;border:none;background:var(--dv-raise);display:block}
 
-.dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft)}
+.dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft);background:var(--dv-paper);flex:0 0 auto}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
 .dv-reason svg{color:var(--dv-gold-deep)}.dv-reason.ok{color:var(--dv-green)}
 .dv-adv-btn{margin-left:auto;display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-radius:12px;font-size:14px;font-weight:500;transition:transform .16s}
