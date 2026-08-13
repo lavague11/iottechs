@@ -139,7 +139,13 @@
   #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
-  .devmenu .mgrp{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 11px 4px}
+  .devmenu .mg + .mg{border-top:1px solid var(--line)}
+  .devmenu .mgrp{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 11px;cursor:pointer;user-select:none;border-radius:8px}
+  .devmenu .mgrp:hover{background:var(--soft)}
+  .devmenu .mgrp .chev{width:12px;height:12px;flex:none;opacity:.55;transition:transform .15s}
+  .devmenu .mg.open .mgrp .chev{transform:rotate(90deg)}
+  .devmenu .mitems{display:none;padding-bottom:4px}
+  .devmenu .mg.open .mitems{display:block}
   .devmenu .mi{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:8px;cursor:pointer;font-size:14px}
   .devmenu .mi.on{background:var(--soft);box-shadow:0 0 0 1px var(--gold) inset}
   .devmenu .mi:hover{background:var(--soft)}
@@ -359,13 +365,27 @@
     function iconOf(it){ return ICONS[it.ic]||ICONS.dot; }
     function setHint(m){ var h=document.getElementById("wizHint"); if(h) h.textContent=m; }
 
-    // ---- picker: grouped + colour-coded; selecting a type ARMS it ----
-    devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mgrp">'+g.name+'</div>'+
-      g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join(""); }).join("");
+    // ---- picker: collapsible colour-coded groups; selecting a type ARMS it (menu stays open) ----
+    var CHEV='<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>';
+    devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mg" data-g="'+g.key+'">'+
+      '<div class="mgrp">'+g.name+CHEV+'</div>'+
+      '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("");
+    // remember which groups are expanded; default: just the first (Cameras)
+    var MENUKEY="iottechs_survey2_menugroups"; var openG;
+    try{ openG=JSON.parse(localStorage.getItem(MENUKEY)); }catch(e){}
+    if(!openG||!openG.length) openG=[GROUPS[0].key];
+    [].forEach.call(devMenu.querySelectorAll(".mg"), function(mg){ if(openG.indexOf(mg.dataset.g)>=0) mg.classList.add("open"); });
+    function saveMenuGroups(){ var os=[]; [].forEach.call(devMenu.querySelectorAll(".mg.open"), function(x){ os.push(x.dataset.g); }); try{ localStorage.setItem(MENUKEY, JSON.stringify(os)); }catch(e){} }
     addBtn.addEventListener("click", function(e){ e.stopPropagation(); devMenu.classList.toggle("show"); });
-    document.addEventListener("click", function(){ devMenu.classList.remove("show"); });
-    devMenu.addEventListener("click", function(e){ e.stopPropagation(); var mi=e.target.closest(".mi"); if(!mi) return; arm(mi.dataset.k); devMenu.classList.remove("show"); });
-    document.addEventListener("keydown", function(e){ if(e.key==="Escape") arm(null); });
+    // close the menu when clicking clearly outside it — but NOT while dropping on the plan (stay armed & open)
+    document.addEventListener("click", function(e){ if(!devMenu.classList.contains("show")) return;
+      if(e.target.closest(".devmenu,#addDeviceBtn,#working")) return; devMenu.classList.remove("show"); });
+    devMenu.addEventListener("click", function(e){ e.stopPropagation();
+      var hdr=e.target.closest(".mgrp");
+      if(hdr){ hdr.parentNode.classList.toggle("open"); saveMenuGroups(); return; }   // expand/collapse a group
+      var mi=e.target.closest(".mi"); if(!mi) return; arm(mi.dataset.k);   // arm — keep menu open so you can keep dropping / switch types
+    });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
     function arm(k){ armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
@@ -519,7 +539,7 @@
       // cones + aim live only in the Angles step (and only for the selected camera)
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", idx===2 && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
-      if(idx!==1) arm(null);
+      if(idx!==1){ arm(null); devMenu.classList.remove("show"); }
       var onSubmit=(idx===3);
       addFloorBtn.style.display = onSubmit ? "" : "none";
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
