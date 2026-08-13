@@ -174,11 +174,22 @@ function NewProjectModal({ onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+  // A verified address is one PICKED from Google's suggestions (full formatted_address), not
+  // free-typed. Cleared the moment the field is edited by hand.
+  const [addrVerified, setAddrVerified] = useState(false);
+  const [addrWarned, setAddrWarned] = useState(false);   // guided once, so we never brick creation
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
 
   async function submit(e) {
     e.preventDefault();
+    // Strongly steer toward a picked, verified address — but if Places can't load, a second
+    // Create keeps what was typed rather than trapping the user.
+    if (f.address.trim() && !addrVerified && !addrWarned) {
+      setErr("Pick the address from the suggestions to store the full, verified location — or press Create again to keep what you typed.");
+      setAddrWarned(true);
+      return;
+    }
     setErr(""); setBusy(true);
     try {
       const res = await fetch("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
@@ -218,13 +229,13 @@ function NewProjectModal({ onClose }) {
             <form className="np-form" onSubmit={submit}>
               <div className="np-row2">
                 <div className="np-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address }))} placeholder="Start typing a business name…" /></div>
+                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })); if (p.address) setAddrVerified(true); }} placeholder="Start typing a business name…" /></div>
               </div>
               <div className="np-row2">
                 <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
                 <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
               </div>
-              <div className="np-f"><label>Service Address</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => set("address", v)} placeholder="123 Main St, City, NJ" /></div>
+              <div className="np-f"><label>Service Address {addrVerified ? <span className="np-verified">✓ Verified</span> : <span className="np-opt">pick from the list</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); setAddrVerified(false); setAddrWarned(false); }} onPlace={(p) => { set("address", p.address); setAddrVerified(true); }} placeholder="Start typing, then choose the address" /></div>
               <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
               <div className="np-f"><label>Notes <span className="np-opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}
@@ -697,6 +708,7 @@ const CSS = `
 .apx .np-f{display:flex;flex-direction:column;gap:5px}
 .apx .np-f label{font-size:.82rem;font-weight:600}
 .apx .np-opt{font-weight:400;color:var(--muted)}
+.apx .np-verified{font-weight:700;color:#2f7d5a;font-size:.72rem;letter-spacing:.02em}
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
 .apx .np-submit{flex:1;width:100%;padding:12px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
 .apx .np-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
