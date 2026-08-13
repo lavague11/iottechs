@@ -44,6 +44,26 @@ export function surveyHasData(raw) {
     m.floors.some(f => f.markers.length > 0 || f.img || f.sat || f.rooms > 0 || f.strokes > 0 || (f.notes && f.notes.length > 0));
 }
 
+// ---- Site survey v2 (localStorage key iottechs_survey2_<id>, tool "survey2") -----------------
+// New tool shape: floors[] each with a bg image + placed devices. A floor counts once it's been
+// started (bg chosen / device placed). The bg image is hashed so the fingerprint stays small.
+function survey2Meaning(d) {
+  if (!d || !Array.isArray(d.floors)) return null;
+  const real = d.floors.filter(f => f && (f.started || f.bg || (f.devices || []).length));
+  if (!real.length) return null;
+  return {
+    submitted: !!d.submitted,
+    floors: real.map(f => ({
+      name: f?.name || "",
+      bg: f?.bg ? hash(String(f.bg)) : null,
+      devices: (f?.devices || []).map(v => ({ k: v.k, x: Math.round(v.x || 0), y: Math.round(v.y || 0), aim: v.aim || 0, fov: v.fov || 0, range: v.range || 0, n: v.name || "" })),
+    })),
+  };
+}
+export function survey2HasData(raw) {
+  return !!survey2Meaning(parse(raw));
+}
+
 // ---- Camera mockup (localStorage key iot_cctv_<id>, tool "mockup") --------------------------
 function mockupMeaning(d) {
   if (!d) return null;
@@ -56,6 +76,7 @@ export function mockupHasData(raw) {
 }
 
 export function toolHasData(tool, raw) {
+  if (tool === "survey2") return survey2HasData(raw);
   if (tool === "survey" || tool === "site_survey") return surveyHasData(raw);
   if (tool === "mockup") return mockupHasData(raw);
   return !!parse(raw);
@@ -63,7 +84,9 @@ export function toolHasData(tool, raw) {
 export function toolFingerprint(tool, raw) {
   const d = parse(raw);
   if (d == null) return null;
-  const meaning = (tool === "survey" || tool === "site_survey") ? surveyMeaning(d) : tool === "mockup" ? mockupMeaning(d) : d;
+  const meaning = tool === "survey2" ? survey2Meaning(d)
+    : (tool === "survey" || tool === "site_survey") ? surveyMeaning(d)
+    : tool === "mockup" ? mockupMeaning(d) : d;
   if (!meaning) return null;
   return hash(stable(meaning));
 }

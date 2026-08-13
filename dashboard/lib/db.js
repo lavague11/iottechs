@@ -4553,7 +4553,11 @@ export function acceptStage(accessId, stage, byName, fingerprint) {
 // Server-authoritative per-tool meta: does the tool have data, and its current fingerprint.
 // Uses the project_tool_data backup + lib/tool-data.js so the gate agrees with what the customer sees.
 export function getToolMeta(accessId) {
-  const surveyRow = getToolData(accessId, "survey");
+  // The redesigned survey tool writes "survey2"; prefer it, fall back to the legacy "survey"
+  // store for older projects so their approvals keep working.
+  const s2Row = getToolData(accessId, "survey2");
+  const surveyTool = toolHasData("survey2", s2Row?.data) ? "survey2" : "survey";
+  const surveyRow = surveyTool === "survey2" ? s2Row : getToolData(accessId, "survey");
   const mockupRow = getToolData(accessId, "mockup");
   // Shipment tracking: count + all-delivered, so the office-only "shipping" step can stay hidden
   // until a tracking # exists and auto-complete once every package is delivered.
@@ -4571,7 +4575,7 @@ export function getToolMeta(accessId) {
   let addCount = 0;
   try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).length; } catch { /* bad blob */ }
   return {
-    survey: { has: toolHasData("survey", surveyRow?.data), fingerprint: toolFingerprint("survey", surveyRow?.data) },
+    survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data) },
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },

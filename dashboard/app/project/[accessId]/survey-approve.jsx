@@ -6,7 +6,7 @@ import { acceptStageAction, submitToolAction } from "./proposal-actions";
 // clicked inside that window would be rejected server-side ("no data yet") — so before submitting,
 // push the CURRENT local draft up. Makes Submit deterministic instead of racing the autosync.
 const DRAFT_STORE = {
-  site_survey: { tool: "survey", key: (id) => `iottechs_sitesurvey_v2_${id}` },
+  site_survey: { tool: "survey2", key: (id) => `iottechs_survey2_${id}` },   // redesigned survey tool
   mockup:      { tool: "mockup", key: (id) => `iot_cctv_${id}` },
 };
 async function flushDraft(accessId, stageKey) {
