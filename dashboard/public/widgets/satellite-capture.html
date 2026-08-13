@@ -42,11 +42,6 @@
     <div id="map"></div>
     <div id="msg" class="on">Loading map…</div>
   </div>
-  <div class="foot">
-    <div class="seg"><button id="mTop" aria-pressed="true">Top down</button><button id="mHyb" aria-pressed="false">Labels</button></div>
-    <div class="grow"></div>
-    <button class="save" id="save">Use this view</button>
-  </div>
 
 <script>
   var API_KEY=null, map=null, geocoder=null, marker=null, booted=false;
@@ -75,8 +70,6 @@
     geocoder=new google.maps.Geocoder();
     $("show").addEventListener("click", function(){ search($("q").value.trim()); });
     $("q").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); search($("q").value.trim()); }});
-    $("mTop").addEventListener("click", function(){ setType("satellite"); });
-    $("mHyb").addEventListener("click", function(){ setType("hybrid"); });
     search(($("q").value||DEMO).trim());
   };
   function setType(t){ map.setMapTypeId(t); $("mTop").setAttribute("aria-pressed",t==="satellite"); $("mHyb").setAttribute("aria-pressed",t==="hybrid"); }
@@ -102,8 +95,7 @@
     im.onerror=function(){ btn.disabled=false; btn.textContent="Use this view"; msg("Capture failed — check Maps Static API + billing."); setTimeout(function(){msg("");},2200); };
     im.src=url;
   }
-  $("save").addEventListener("click", capture);
-  // The host shell can also request the capture from its own "Use as background" button.
+  // The host shell requests the capture from its "Use as background"/Next button.
   window.addEventListener("message", function(e){ if(e&&e.data&&e.data.type==="request-capture") capture(); });
 </script>
 </body>
