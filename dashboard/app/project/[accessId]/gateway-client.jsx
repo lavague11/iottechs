@@ -1927,8 +1927,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       if (pk === "ph_survey") {
         return [
           { name: "Survey Scheduling & Notes", label: "Scheduler", state: lp.date ? "done" : "active",
-            node: <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
-                    currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} /> },
+            node: (
+              <div style={{ padding: "16px 18px" }}>
+                <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+                  currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} />
+                <div style={{ height: 1, background: "var(--line,#e6e8ee)", margin: "16px 0 4px" }} />
+                <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
+              </div>
+            ) },
           { name: "Site Survey", label: "Site Survey tool", heavy: true, state: "active",
             node: <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} /> },
