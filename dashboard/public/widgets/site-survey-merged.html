@@ -383,18 +383,20 @@
     devMenu.addEventListener("click", function(e){ e.stopPropagation();
       var hdr=e.target.closest(".mgrp");
       if(hdr){ hdr.parentNode.classList.toggle("open"); saveMenuGroups(); return; }   // expand/collapse a group
-      var mi=e.target.closest(".mi"); if(!mi) return; arm(mi.dataset.k);   // arm — keep menu open so you can keep dropping / switch types
+      var mi=e.target.closest(".mi"); if(!mi) return;
+      arm(mi.dataset.k===armedK ? null : mi.dataset.k);   // click a type to arm it; click it again to unselect
     });
     document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
     function arm(k){ armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
       else if(curStep===1) setHint("Add cameras & devices, then place them on the plan."); }
-    // click empty plan → drop the armed device; stays armed for the next one
+    // click empty plan → drop the armed device (hides the menu so it's out of the way; stays armed for the next one)
     work.addEventListener("pointerdown", function(e){ if(RO||!armedK) return;
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu")) return;
       var r=document.getElementById("canvas").getBoundingClientRect();
-      addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100); });
+      addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100);
+      devMenu.classList.remove("show"); });
 
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
