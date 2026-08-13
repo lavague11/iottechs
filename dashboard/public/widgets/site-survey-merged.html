@@ -73,7 +73,7 @@
   .ubtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;height:34px;width:34px;padding:0;display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(4px)}
   .ubtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   /* dim (moon) sits in the plan's top-right corner */
-  .plandim{position:absolute;right:14px;top:14px;z-index:4;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
+  .plandim{position:absolute;right:14px;top:14px;z-index:7;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
   .plandim svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   .plandim.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   body.ro .plandim{display:none}
@@ -161,6 +161,8 @@
   #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
   #addDeviceBtn:hover{background:#fff}
   #addDeviceBtn svg{stroke:var(--gold);stroke-width:2.2}
+  #iszBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px);font-size:15px;font-weight:800}
+  #iszBtn:hover{background:#fff}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
   .devmenu .mg + .mg{border-top:1px solid var(--line)}
@@ -274,7 +276,7 @@
         <div id="working" style="display:none;position:absolute;inset:0">
           <div class="stage-img" id="stageImg"></div>
           <div class="dimOverlay"></div>
-          <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+          <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button class="ctxbtn iszBtn" id="iszBtn" title="Icon size">M</button></div>
           <div class="devmenu" id="devMenu"></div>
           <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
           <div class="utils">
@@ -493,7 +495,6 @@
       '<div class="mgrp">'+g.name+CHEV+'</div>'+
       '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("")+
       '<div class="mg" data-g="settings"><div class="mgrp">Settings'+CHEV+'</div><div class="mitems">'+
-        '<div class="setrow"><label>Icon size</label><input type="range" id="setIconSize" min="26" max="64" step="2" value="40"><span class="setv" id="setIconV">40</span></div>'+
         '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
       '</div></div>';
     // remember which groups are expanded; default: just the first (Cameras)
@@ -503,13 +504,15 @@
     [].forEach.call(devMenu.querySelectorAll(".mg"), function(mg){ if(openG.indexOf(mg.dataset.g)>=0) mg.classList.add("open"); });
     function saveMenuGroups(){ var os=[]; [].forEach.call(devMenu.querySelectorAll(".mg.open"), function(x){ os.push(x.dataset.g); }); try{ localStorage.setItem(MENUKEY, JSON.stringify(os)); }catch(e){} }
     // ---- settings: icon size + show-FOV (global, persisted with the survey) ----
+    var ISZ_STEPS=[28,44,64], ISZ_LABELS=["S","M","L"];   // Small / Medium / Large
+    function iszIndex(){ var best=0,bd=1e9; for(var i=0;i<ISZ_STEPS.length;i++){ var d=Math.abs(ISZ-ISZ_STEPS[i]); if(d<bd){bd=d;best=i;} } return best; }
     function applySettings(){ document.body.style.setProperty("--isz", ISZ+"px");
       document.body.classList.toggle("no-fov", !showFovState);
-      var iv=document.getElementById("setIconV"); if(iv) iv.textContent=ISZ;
-      var isl=document.getElementById("setIconSize"); if(isl) isl.value=ISZ;
+      var ib=document.getElementById("iszBtn"); if(ib) ib.textContent=ISZ_LABELS[iszIndex()];
       var tg=document.getElementById("setShowFov"); if(tg) tg.classList.toggle("on", showFovState);
       devices.forEach(renderDevice); }
-    document.getElementById("setIconSize").addEventListener("input", function(e){ ISZ=+e.target.value; applySettings(); queueSave(); });
+    // icon-size toggle on the left bar: click cycles Small → Medium → Large
+    document.getElementById("iszBtn").addEventListener("click", function(e){ e.stopPropagation(); ISZ=ISZ_STEPS[(iszIndex()+1)%ISZ_STEPS.length]; applySettings(); queueSave(); });
     document.getElementById("setShowFov").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
     // Undo: remove the last-placed device
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(RO||!devices.length) return; removeDevice(devices[devices.length-1].id); });
@@ -528,13 +531,15 @@
       arm(mi.dataset.k===armedK ? null : mi.dataset.k);   // click a type to arm it; click it again to unselect
     });
     document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
+    var PLUS_SVG='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
     function arm(k){ armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
+      var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
       else if(curStep===1) setHint("Add cameras & devices, then place them on the plan."); }
     // click empty plan → drop the armed device (hides the menu so it's out of the way; stays armed for the next one)
     work.addEventListener("pointerdown", function(e){ if(RO||!armedK) return;
-      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu")) return;
+      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var r=document.getElementById("canvas").getBoundingClientRect();
       addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100);
       devMenu.classList.remove("show"); });
@@ -542,7 +547,7 @@
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
     work.addEventListener("pointerdown", function(e){ if(RO || curStep!==2 || selId==null) return;
-      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu")) return;
+      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
       if(!d || !d.cone) return;
       var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
@@ -629,7 +634,8 @@
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
     function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, sideCollapsed:sideCollapsed })); }catch(e){} reportHost(); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
-    document.getElementById("dimBtn").addEventListener("click", function(){ dimmed=!dimmed; applyDim(); queueSave(); });
+    document.getElementById("dimBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });   // never fall through to placement
+    document.getElementById("dimBtn").addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
