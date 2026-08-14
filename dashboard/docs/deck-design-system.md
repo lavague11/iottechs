@@ -160,6 +160,11 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **All 5 phases are wired** (admin): Consulting · Proposal · Install · Closeout · Completion each
+  mount their real tool components with the legacy role gates. Heavy tools (Proposal, Approval,
+  QC, Site Survey…) open full-screen; Completion renders inline via the slide `completion` slot.
+  Panels needing accordion context (`ApprovalPanel`) are wrapped per-node in `AccordionProvider`.
+  Next: validate the customer/tech/sales role variants and re-integrate the submit/approve bars.
 - **Note visibility is governed, not free.** Making a note public asks first (inline confirm).
   Only admin/manager set visibility outright; tech/sales can only *request* public → the note
   goes `pending_public` and an admin/manager approves/rejects. Customer notes are always public.
