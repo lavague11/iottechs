@@ -175,11 +175,14 @@ Newest first. Append when we make a call worth not re-litigating.
   permanently-disabled "Continue to X" button to non-admin roles — only admin/manager (who can move
   the stage) get the advance button; everyone else sees just the progress readout ("N of M complete"
   / "Stage complete"). DoD: render only when real, one clear next action. (2) The `embedded`
-  convention now also covers **InstallChecklist** and **SystemQrTool**, which were still self-titling
-  inside the deck overlay/row (double "Installation Work Order" / nested "System QR" collapse). Both
-  take `embedded` and drop their own name-header when the deck already titles them. Confirmed
-  `WorkOrderCard`, `QCChecklist`, `InstallAddendum`, `ApprovalPanel`, `ProposalBuilder` already
-  honor it. (3) No emoji-as-icon violations in persistent UI — the only emoji are export text
+  convention now also covers **InstallChecklist**, **SystemQrTool**, and **MockupWidget**, which were
+  still self-titling inside the deck overlay/row (double "Installation Work Order" / "Mockup builder",
+  nested "System QR" collapse). Each takes `embedded` and drops its own name-header (Mockups keeps
+  just its "N/M cameras" count) when the deck already titles it. Confirmed `WorkOrderCard`,
+  `QCChecklist`, `InstallAddendum`, `ApprovalPanel`, `ProposalBuilder` already honor it — so **every**
+  deck heavy/light tool is now free of double-titling. Approval "Record a Payment" and the Completion
+  certificate were spot-checked and already clean (good smart defaults: deposit amount + today's date
+  prefilled). (3) No emoji-as-icon violations in persistent UI — the only emoji are export text
   (calendar share), the cinematic-tracker art, and a completion toast; deck tools use inline SVG.
 - **Every stage tool is restyled to the deck theme.** All tool stylesheets (WorkOrder, QC,
   Completion, ShipmentTracking, Proposal, InstallAddendum, TechBoard, System QR, InstallChecklist,
