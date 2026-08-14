@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
 import { useAccordionItem } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -354,6 +355,20 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     showToast("Payment confirmed — balance updated");
     followStage(r.stage);
   }
+  // Download a brand invoice — accepted charges + add-ons, the confirmed payments, and the balance
+  // due. Same money picture shown on this card, so the paper always matches the screen.
+  function downloadInvoice() {
+    const lines = [
+      ...shown.map((o) => ({ label: `Security System — Option ${o.id}${o.name ? ` (${o.name})` : ""}`,
+        amount: optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand })),
+      ...(addons.list || []).map((a) => ({ label: `Add-on · ${a.title}`, amount: a.total })),
+    ];
+    downloadInvoicePdf(
+      { customerName, customerAddress, invoiceNo: "INV-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1), proposalNo: propNum },
+      { lines, grandWithAddons, paidTotal, balance },
+      confirmed,
+    );
+  }
   async function createWO() {
     setBusy(true); setErr(null);
     const r = await createWorkOrderAction(accessId);
@@ -466,6 +481,11 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
             </div>
           );
         })()}
+
+        {/* Download the invoice — charges, payments received, and balance due */}
+        <div className="apv-inv-row">
+          <button type="button" className="apv-inv-btn" onClick={downloadInvoice}>⭳ Download invoice</button>
+        </div>
 
         {/* History */}
         {payments.length > 0 ? (
@@ -721,6 +741,9 @@ select.apv-input{cursor:pointer}
 
 /* ---- Payments card ---- */
 .apv-pay-card{gap:16px}
+.apv-inv-row{display:flex;justify-content:flex-end;margin-top:-4px}
+.apv-inv-btn{height:34px;padding:0 15px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
+.apv-inv-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
 .apv-bal{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
   background:var(--dv-ink,#101418);border-radius:12px;padding:16px 18px;color:#fff}
 .apv-bal.paid{background:#12321f}

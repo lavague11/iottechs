@@ -7,7 +7,10 @@ import {
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, getPriceBookAction, resolveFlagAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction } from "./proposal-actions";
+import { downloadProposalPdf } from "../../../lib/proposal-pdf";
+import { exportMockupImages } from "../../../lib/mockup-export";
+import { exportSurvey2Images } from "../../../lib/survey2-export";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -33,8 +36,9 @@ function loadSurveyForImport(accessId) {
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
-export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, embedded = false }) {
+export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
+  const [dlBusy, setDlBusy] = useState(false);                // building the proposal PDF
   const [meta, setMeta] = useState(initial || null);          // server row (status, version, sent_at…)
   const [payload, setPayload] = useState(() => initial?.payload || blankPayload());
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
@@ -232,6 +236,28 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
+  }
+  // Download the same brand PDF the customer gets — built from the CURRENT edits (payload + tax +
+  // deposit merged onto the server row), with the mockup photos and survey floor plans appended.
+  async function handleDownload() {
+    if (dlBusy) return;
+    setDlBusy(true);
+    const p = { ...(meta || {}), payload, tax_rate: taxRate, deposit_pct: depositPct };
+    let mockupImages = [], surveyImages = [];
+    try {
+      const [mk, sv] = await Promise.all([
+        getToolDataAction(accessId, "mockup").catch(() => null),
+        getToolDataAction(accessId, "survey2").catch(() => null),
+      ]);
+      const jobs = [];
+      let hasMockupPhoto = false;
+      try { const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null; hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.startsWith("data:image")); } catch { /* bad blob */ }
+      if (hasMockupPhoto && mk?.saved?.data) jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
+      if (sv?.saved?.data) jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
+      await Promise.all(jobs);
+    } catch { /* download numbers-only on any fetch failure */ }
+    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupImages, surveyImages }); }
+    finally { setDlBusy(false); }
   }
 
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
@@ -461,6 +487,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
       {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save */}
       <div className="prop-actions">
+        <button type="button" className="prop-mini" disabled={dlBusy} onClick={handleDownload} title="Download the proposal PDF (with mockup & survey)">
+          {dlBusy ? "Preparing…" : "⭳ Download"}
+        </button>
         {!readOnly ? (
           <>
             <span className={`prop-savestat${busy || dirty ? " saving" : ""}`}>

@@ -14,7 +14,7 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
     <div className="prop-wrap">
       <style>{PROP_CSS}</style>
       {staffBuilder ? (
-        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} embedded={embedded} />
+        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} customerName={customerName} customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail} embedded={embedded} />
       ) : cView === "tech" ? (
         <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
