@@ -113,6 +113,7 @@
   .floorTabs{display:flex;gap:6px;align-items:center;overflow-x:auto}
   .ftab{flex:none;background:#fff;border:1px solid var(--line);border-radius:20px;padding:7px 13px;font-size:12px;color:var(--muted);cursor:pointer}
   .ftab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fnm-edit{width:88px;border:1px solid var(--gold);border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:12px;padding:2px 6px;outline:none}
   .ftab.add{color:var(--ink);font-weight:600}
   .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
   button.b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
@@ -125,6 +126,10 @@
   .bgstriplbl{font-size:12px;color:var(--muted)}
   #bgWiz .steps{padding:9px 16px 10px}
 
+  /* "Change background" pill — over the satellite editor when revising a built aerial */
+  #changeBgBtn{position:absolute;left:14px;bottom:14px;z-index:8;display:none;align-items:center;gap:7px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);font-family:inherit;backdrop-filter:blur(6px)}
+  #changeBgBtn:hover{border-color:var(--gold)}
+  #changeBgBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   /* ===== satellite overlay (the sub-tool, opened from the Satellite door) ===== */
   .satov{position:fixed;inset:0;background:#fff;z-index:50;display:none;flex-direction:column}
   .satov.show{display:flex}
@@ -153,7 +158,18 @@
   /* FOV cone + line — only shown in the Angles step */
   .devNode .fovWrap{position:absolute;left:20px;top:20px;transform-origin:0 0;display:none;z-index:2}
   /* cone shows for the selected/hovered/panel-highlighted camera, and for all when "show all angles" is on */
-  .devNode.sel .fovWrap,.devNode:hover .fovWrap,.devNode.hl .fovWrap,body.show-all-angles .devNode .fovWrap{display:block}
+  /* A placed camera is just its icon. Its cone/angle shows only when angle display is on
+     (angle mode or the show toggle → body.show-all-angles), or on a deliberate panel-card hover (.hl). */
+  .devNode.hl .fovWrap,body.show-all-angles .devNode .fovWrap,body.show-fov .devNode .fovWrap{display:block}
+  /* bottom-right "Show" control (Angles / FOV on-off) */
+  .showCtl{position:absolute;right:14px;bottom:14px;z-index:7;display:none;flex-direction:column;align-items:flex-end;gap:8px}
+  .showBtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:1px solid var(--line);border-radius:99px;background:rgba(255,255,255,.92);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
+  .showBtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7}
+  .showBtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .showPop{display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
+  .showPop.open{display:flex}
+  .showRow{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:6px 8px;min-width:150px}
+  .showRow label{font-size:13px;color:var(--ink);font-weight:500}
   .devNode .fovGrow{position:absolute;left:0;top:0;transform-origin:0 0}   /* wrapper the expand animation scales */
   .devNode .fovGrow.grow{animation:coneGrow .34s cubic-bezier(.2,.85,.25,1)}
   @keyframes coneGrow{from{transform:scale(.1);opacity:.25}to{transform:scale(1);opacity:1}}
@@ -162,9 +178,11 @@
   .devNode .coneLine{position:absolute;top:-1px;height:2px;background:currentColor}
   .devNode .coneLine::after{content:"";position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:9px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}   /* arrowhead */
   /* Add device: frosted + gold so it reads clearly over any aerial (not a heavy black block) */
-  #addDeviceBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
-  #addDeviceBtn:hover{background:#fff}
-  #addDeviceBtn svg{stroke:var(--gold);stroke-width:2.2}
+  #addDeviceBtn,#angleModeBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
+  #addDeviceBtn:hover,#angleModeBtn:hover{background:#fff}
+  #addDeviceBtn svg,#angleModeBtn svg{stroke:var(--gold);stroke-width:2.2}
+  #angleModeBtn.on{background:var(--ink);border-color:var(--ink)}
+  #angleModeBtn.on svg{stroke:#fff}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
   .devmenu .mg + .mg{border-top:1px solid var(--line)}
@@ -191,6 +209,17 @@
   .szTog{margin-left:auto;flex:none;min-width:30px;height:24px;padding:0 9px;border:1px solid var(--line);background:var(--soft);border-radius:7px;font-size:12px;font-weight:800;color:var(--gold);cursor:pointer;font-family:inherit}
   .szTog:hover{border-color:var(--gold)}
   .card.sel{border-color:var(--gold)}
+  /* floor divider in the SURVEY panel (multi-floor) */
+  .fdiv{display:flex;align-items:center;gap:8px;padding:9px 8px 7px;margin:8px 4px 2px;cursor:pointer;border-top:1px solid var(--line);user-select:none}
+  .fdiv:first-child{border-top:none;margin-top:2px}
+  .fdiv .fchev{width:13px;height:13px;fill:none;stroke:var(--muted);stroke-width:2.6;transform:rotate(90deg);transition:transform .12s;flex:none}
+  .fdiv.collapsed .fchev{transform:rotate(0deg)}
+  .fdiv-name{font-size:12px;font-weight:700;color:var(--ink)}
+  .fdiv.cur .fdiv-name{color:var(--gold)}
+  .fdiv-n{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);background:var(--soft);border-radius:99px;padding:1px 8px}
+  .card.other{cursor:pointer;opacity:.9}
+  .card.other:hover{border-color:var(--gold);opacity:1}
+  .card.other .onm{font-size:13px;font-weight:500;color:var(--ink);padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* floor-plan library picker */
   #libModal{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
   #libModal.on{display:flex}
@@ -247,6 +276,8 @@
         <iframe id="satFrame" title="Satellite Capture"
           style="display:none;position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--soft);z-index:6"
           allow="geolocation"></iframe>
+        <!-- shown only when re-editing a built satellite background — jumps back to the source chooser -->
+        <button id="changeBgBtn" title="Pick a different background"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>Change background</button>
 
         <!-- STATE A: Background step, nothing chosen yet — one question, three doors -->
         <div class="bgstep" id="bgstep">
@@ -278,11 +309,22 @@
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
           <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div>
-          <div class="ctxbar"><button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+          <div class="ctxbar">
+            <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
+          </div>
           <div class="devmenu" id="devMenu"></div>
           <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+          </div>
+          <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
+          <div class="showCtl" id="showCtl">
+            <div class="showPop" id="showPop">
+              <div class="showRow"><label>Angles</label><button class="settog" id="showAnglesTog" title="Show every camera's aim"><span class="knob"></span></button></div>
+              <div class="showRow"><label>FOV</label><button class="settog" id="showFovTog" title="Show the shaded coverage"><span class="knob"></span></button></div>
+            </div>
+            <button class="showBtn" id="showBtn" title="Show angles / FOV"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Show</button>
           </div>
         </div>
 
@@ -307,9 +349,8 @@
   <div class="wiz" id="surveyWiz">
     <div class="steps">
       <div class="s active" data-step="0">Background</div>
-      <div class="s" data-step="1">Place</div>
-      <div class="s" data-step="2">Angles</div>
-      <div class="s" data-step="3">Submit</div>
+      <div class="s" data-step="1">Setup</div>
+      <div class="s" data-step="2">Submit</div>
     </div>
     <div class="nav">
       <div class="floorTabs">
@@ -327,7 +368,7 @@
   <div class="wiz" id="bgWiz" style="display:none">
     <div class="bgstrip">
       <button class="back" id="satBack"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;pointer-events:none"><path d="M15 18l-6-6 6-6"/></svg>Background</button>
-      <div class="bgstriplbl">Level, zoom &amp; crop the aerial in the wizard — tap Use to drop it onto your plan</div>
+      <div class="bgstriplbl">Search, level &amp; crop the aerial with the toolbar — tap Done to drop it onto your plan</div>
     </div>
   </div>
 
@@ -353,30 +394,41 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"");
+    var DRAW_SRC="draw-floorplan.html"+(PID?"?project="+encodeURIComponent(PID):"");
+    var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
+    function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
     var surveyWiz=document.getElementById("surveyWiz");
     var bgWiz=document.getElementById("bgWiz");
     var bgHasImage=false;   // once a background exists, Back can return to editing it
+    var pendingBgSource=null, curBgSource=null;   // how this floor's background was built: 'satellite' | 'upload' | 'draw'
 
     // enter background-build mode: satellite tool fills the canvas, its bar takes the bottom
-    function enterBg(){
-      if(!satFrame.src) satFrame.src=SAT_SRC;
+    // Seamless: a background tool (satellite OR draw-floorplan) fills the canvas while the universal
+    // Background · Setup · Submit bar stays put. Both post `satellite-capture-result` back → applyBackground.
+    function openBgTool(src, source){
+      pendingBgSource=source; ensureBgToolSrc(src);
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
-      surveyWiz.style.display="none";
-      bgWiz.style.display="";
-      sideCollapsed=true; applySideCollapsed();   // give the capture the full width until placement
+      sideCollapsed=true; applySideCollapsed();
     }
+    function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
+    function enterDraw(){ openBgTool(DRAW_SRC, "draw"); }
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
-      bgWiz.style.display="none";
-      surveyWiz.style.display="";
       if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
       else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
       else { document.getElementById("working").style.display="block"; }
     }
 
     document.getElementById("doorSat").addEventListener("click", enterBg);
+    // "Change background" (only visible while revising a satellite bg) → back to the source chooser
+    document.getElementById("changeBgBtn").addEventListener("click", function(){
+      satFrame.style.display="none";
+      this.style.display="none";
+      document.getElementById("bgstep").style.display="";
+      document.getElementById("working").style.display="none";
+    });
     // Back on the strip returns to the three-source chooser (Satellite / Upload / Draw)
     document.getElementById("satBack").addEventListener("click", function(){
       satFrame.style.display="none";
@@ -410,27 +462,27 @@
       im.src=dataUrl;
     }
     function finishBackground(dataUrl, skipSave){
-      bgHasImage=true; bgData=dataUrl||null;
+      bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
       exitBg(true);
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor(); renderFloorTabs();   // this background is now this floor's plan
-      if(dataUrl && !skipSave) saveToLibrary(dataUrl);   // reusable global floor-plan library (deduped server-side)
+      if(dataUrl && !skipSave) saveToLibrary(dataUrl, curBgSource==="satellite"?"aerial":"floorplan");   // reusable global library (deduped server-side)
       sideCollapsed=false; applySideCollapsed();   // placement is underway → reveal the device panel
       goStep(1);   // → Place
     }
     // save a finished plan to the global library (fire-and-forget; a small thumb rides along)
-    function saveToLibrary(dataUrl){
-      if(RO) return;
+    function saveToLibrary(dataUrl, kind){
+      if(RO) return; kind=kind||"aerial";
       var im=new Image();
       im.onload=function(){ var thumb=null;
         try{ var TH=260, s=Math.min(1,TH/Math.max(im.naturalWidth,im.naturalHeight)),
           cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(im.naturalWidth*s)); cv.height=Math.max(1,Math.round(im.naturalHeight*s));
           cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); thumb=cv.toDataURL("image/jpeg",0.6);
         }catch(e){}
-        fetch("/api/floorplans",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:dataUrl,thumb:thumb,project:PID,kind:"aerial"})}).catch(function(){});
+        fetch("/api/floorplans",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:dataUrl,thumb:thumb,project:PID,kind:kind})}).catch(function(){});
       };
       im.onerror=function(){};
       im.src=dataUrl;
@@ -457,8 +509,10 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
-    var ISZ=28, showFovState=true, sideCollapsed=true, showAllAngles=false;   // icon size (default Small) + FOV toggle + panel collapse (default: hidden until placement) + all-angles
-    var devices=[], devSeq=0, selId=null, armedK=null, curStep=1, dimmed=false;
+    var ISZ=28, showFovState=false, sideCollapsed=true, showAllAngles=false;   // icon size (default Small) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
+    var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
+    var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
+    var collapsedFloors={};   // floor index → collapsed? (the SURVEY panel shows every floor under a divider)
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
       nvr:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>',
@@ -512,15 +566,40 @@
     function iszIndex(){ var best=0,bd=1e9; for(var i=0;i<ISZ_STEPS.length;i++){ var d=Math.abs(ISZ-ISZ_STEPS[i]); if(d<bd){bd=d;best=i;} } return best; }
     function applySettings(){ document.body.style.setProperty("--isz", ISZ+"px");
       document.body.classList.toggle("no-fov", !showFovState);
-      document.body.classList.toggle("show-all-angles", showAllAngles);
+      document.body.classList.toggle("show-fov", showFovState);
+      document.body.classList.toggle("show-all-angles", showAllAngles || angleMode);
       var ib=document.getElementById("setIsz"); if(ib) ib.textContent=ISZ_LABELS[iszIndex()];
       var tg=document.getElementById("setShowFov"); if(tg) tg.classList.toggle("on", showFovState);
       var aa=document.getElementById("setAllAngles"); if(aa) aa.classList.toggle("on", showAllAngles);
+      var sa=document.getElementById("showAnglesTog"); if(sa) sa.classList.toggle("on", showAllAngles);
+      var sf=document.getElementById("showFovTog"); if(sf) sf.classList.toggle("on", showFovState);
       devices.forEach(renderDevice); }
     // Settings toggles (in the picker): icon size cycles S→M→L; Show FOV; All angles
     document.getElementById("setIsz").addEventListener("click", function(e){ e.stopPropagation(); ISZ=ISZ_STEPS[(iszIndex()+1)%ISZ_STEPS.length]; applySettings(); queueSave(); });
     document.getElementById("setShowFov").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
     document.getElementById("setAllAngles").addEventListener("click", function(e){ e.stopPropagation(); showAllAngles=!showAllAngles; applySettings(); queueSave(); });
+    // ---- angle mode: the "↗" toggle inside the Setup step (merges the old Angles step) ----
+    // Off = place devices with "+"; on = tap a camera then tap where it points. Tapping the
+    // arrow again turns it off — same toggle feel as the add-device button.
+    function setAngleMode(on){
+      angleMode=on;
+      var b=document.getElementById("angleModeBtn"); if(b) b.classList.toggle("on",angleMode);
+      if(angleMode){ arm(null); devMenu.classList.remove("show"); } else { selId=null; }
+      document.body.classList.toggle("show-all-angles", angleMode || showAllAngles);
+      devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
+      renderPanel();
+      if(curStep===1) setHint(angleMode ? "Tap a camera, then tap where it points — that sets the aim & reach." : "Place devices with +, set camera angles with the arrow.");
+    }
+    document.getElementById("angleModeBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+    document.getElementById("angleModeBtn").addEventListener("click", function(e){ e.stopPropagation(); setAngleMode(!angleMode); queueSave(); });
+    // ---- bottom-right "Show" control: toggle the Angles / FOV display on the plan ----
+    (function(){
+      var sBtn=document.getElementById("showBtn"), sPop=document.getElementById("showPop");
+      sBtn.addEventListener("click", function(e){ e.stopPropagation(); var open=!sPop.classList.contains("open"); sPop.classList.toggle("open",open); sBtn.classList.toggle("on",open); });
+      document.addEventListener("click", function(e){ if(!document.getElementById("showCtl").contains(e.target)){ sPop.classList.remove("open"); sBtn.classList.remove("on"); } });
+      document.getElementById("showAnglesTog").addEventListener("click", function(e){ e.stopPropagation(); showAllAngles=!showAllAngles; applySettings(); queueSave(); });
+      document.getElementById("showFovTog").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
+    })();
     // Undo: remove the last-placed device
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(RO||!devices.length) return; removeDevice(devices[devices.length-1].id); });
     // collapse / expand the SURVEY panel
@@ -539,7 +618,7 @@
     });
     document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
     var PLUS_SVG='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
-    function arm(k){ armedK=k; work.classList.toggle("arming",!!k);
+    function arm(k){ if(k && angleMode) setAngleMode(false); armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
       var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
@@ -553,7 +632,7 @@
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
-    work.addEventListener("pointerdown", function(e){ if(RO || curStep!==2 || selId==null) return;
+    work.addEventListener("pointerdown", function(e){ if(RO || !angleMode || selId==null) return;
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
       if(!d || !d.cone) return;
@@ -582,13 +661,16 @@
     work.addEventListener("touchend", function(e){ if(e.touches.length<2) pinchDist=0; });
     var cbtn=document.getElementById("centerBtn"); if(cbtn) cbtn.addEventListener("click", resetZoom);   // Center resets the view
 
+    // Count matching devices on all EARLIER floors so numbering is continuous across floors
+    // (Floor 2's first camera continues after Floor 1's last — a "continuation", not a restart).
+    function floorsBefore(pred){ var n=0; for(var i=0;i<curFloor;i++){ ((floors[i]&&floors[i].devices)||[]).forEach(function(sd){ if(pred(sd)) n++; }); } return n; }
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
-      var nGroup=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group
-      var nType=devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type
+      var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group, across floors
+      var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
       var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     function mountDevice(d){
-      var el=document.createElement("div"); el.className="devNode"+(curStep===2&&d.cone?" aim":""); el.id="dev-"+d.id;
+      var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         '<div class="icLabel"></div>';
@@ -618,33 +700,64 @@
     }
     function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); if(id!=null) growCone(id); }
     // replay the expand animation on the selected camera's cone
-    function growCone(id){ if(curStep!==2) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
+    function growCone(id){ if(!angleMode) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
       if(g){ g.classList.remove("grow"); void g.offsetWidth; g.classList.add("grow"); } }
     function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
+    // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
+    function makeCard(d){
+      var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
+      card.addEventListener("mouseenter", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.add("hl"); });
+      card.addEventListener("mouseleave", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.remove("hl"); });
+      var showFov=(angleMode && d.cone);
+      card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
+        (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
+      card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
+      card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
+      var nmi=card.querySelector(".nm"); nmi.value=d.name;
+      nmi.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      nmi.addEventListener("input", function(){ d.name=nmi.value; queueSave(); });
+      // Enter → jump to the next device's name field (rapid-name the whole list); last one just commits.
+      nmi.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault();
+        var inputs=[].slice.call(panelBody.querySelectorAll("input.nm")), next=inputs[inputs.indexOf(nmi)+1];
+        if(next){ next.focus(); next.select(); } else { nmi.blur(); } } });
+      nmi.addEventListener("blur", function(){ var v=cap(nmi.value.trim()); if(!v){ v=cap(cat(d.k).name); } d.name=v; nmi.value=v; queueSave(); });
+      if(showFov){
+        var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
+        fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
+        fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
+      return card;
+    }
+    // A device on ANOTHER floor — compact; click to jump to that floor to edit it.
+    function makeOtherCard(sd, floorIdx){
+      var card=document.createElement("div"); card.className="card other"; var it=cat(sd.k)||{}, g=(it&&it.group)||{};
+      var r1=document.createElement("div"); r1.className="r1";
+      var chip=document.createElement("div"); chip.className="chip"; chip.style.background=g.color||"#8a8f98"; chip.textContent="•";
+      var nm=document.createElement("span"); nm.className="onm"; nm.textContent=sd.name||(it.name||"Device");
+      r1.appendChild(chip); r1.appendChild(nm); card.appendChild(r1);
+      card.title="On "+((floors[floorIdx]||{}).name||"another floor")+" — click to open";
+      card.addEventListener("click", function(){ switchFloor(floorIdx); });
+      return card;
+    }
+    // The SURVEY panel: every floor under a collapsible divider (floor 2 continues floor 1). The
+    // current floor's devices are fully editable; other floors list their devices (click to open).
     function renderPanel(){
-      if(!devices.length){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
+      var others=floors.reduce(function(n,f,i){ return i===curFloor?n:n+((f.devices&&f.devices.length)||0); },0);
+      if(!devices.length && !others){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
       panelBody.innerHTML="";
-      devices.forEach(function(d){
-        var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
-        // hover a card → highlight that device + show its angle on the plan
-        card.addEventListener("mouseenter", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.add("hl"); });
-        card.addEventListener("mouseleave", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.remove("hl"); });
-        var showFov=(curStep===2 && d.cone);   // angles live in the Angles step
-        card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
-          (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
-        card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
-        card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
-        // editable name — stays in the panel; the on-plan label keeps its positional tag (IC1…)
-        var nmi=card.querySelector(".nm"); nmi.value=d.name;
-        nmi.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
-        nmi.addEventListener("input", function(){ d.name=nmi.value; queueSave(); });
-        nmi.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); nmi.blur(); } });
-        nmi.addEventListener("blur", function(){ var v=cap(nmi.value.trim()); if(!v){ v=cap(cat(d.k).name); } d.name=v; nmi.value=v; queueSave(); });
-        if(showFov){
-          var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
-          fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
-          fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
-        panelBody.appendChild(card);
+      var multi=floors.length>1;
+      floors.forEach(function(f,fi){
+        var isCur=fi===curFloor, devs=isCur?devices:(f.devices||[]);
+        var collapsed = multi && (collapsedFloors[fi]!==undefined ? collapsedFloors[fi] : (fi!==curFloor));
+        if(multi){
+          var head=document.createElement("div"); head.className="fdiv"+(isCur?" cur":"")+(collapsed?" collapsed":"");
+          head.innerHTML='<svg class="fchev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg><span class="fdiv-name"></span><span class="fdiv-n"></span>';
+          head.querySelector(".fdiv-name").textContent=f.name;
+          head.querySelector(".fdiv-n").textContent=devs.length;
+          head.addEventListener("click", function(){ collapsedFloors[fi]=!collapsed; renderPanel(); });
+          panelBody.appendChild(head);
+          if(collapsed) return;
+        }
+        devs.forEach(function(d){ panelBody.appendChild(isCur?makeCard(d):makeOtherCard(d,fi)); });
       });
     }
     function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
@@ -655,7 +768,7 @@
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov,range:d.range,name:d.name}; }); }
-    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.devices=stripDevs(); }
+    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
@@ -666,36 +779,51 @@
     document.getElementById("dimBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });   // never fall through to placement
     document.getElementById("dimBtn").addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); });
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
-      var nG=devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
-      var nT=devices.filter(function(d){return d.k===sd.k;}).length+1;
+      var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
+      var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }   // clear the shorthand FIRST, then set the image (else it wipes it)
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null;
+      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null;
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
     }
-    function switchFloor(i){ if(i===curFloor) return; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
+    function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
     function addFloor(){ snapFloor(); floors.push({name:"Floor "+(floors.length+1),bg:null,devices:[],started:false}); loadFloor(floors.length-1); renderFloorTabs(); goStep(0); setHint("Choose a background for this floor."); queueSave(); }
     function renderFloorTabs(){ var tabs=document.querySelector(".floorTabs"); if(!tabs) return; tabs.innerHTML="";
       floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":"");
-        var nm=document.createElement("span"); nm.textContent=f.name; b.appendChild(nm);
+        var nm=document.createElement("span"); nm.className="fnm"; nm.textContent=f.name; b.appendChild(nm);
         b.addEventListener("click",function(){ switchFloor(i); });
-        if(!RO){ var x=document.createElement("span"); x.className="fdel"; x.innerHTML="&times;"; x.title="Delete floor";
+        if(!RO){
+          b.title="Double-click to rename";
+          b.addEventListener("dblclick",function(e){ e.stopPropagation(); e.preventDefault(); startFloorRename(nm,f); });
+          var x=document.createElement("span"); x.className="fdel"; x.innerHTML="&times;"; x.title="Delete floor";
           x.addEventListener("click",function(e){ e.stopPropagation(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
           b.appendChild(x); }
         tabs.appendChild(b); });
       if(!RO){ var add=document.createElement("button"); add.className="ftab add"; add.textContent="+"; add.title="Add floor"; add.addEventListener("click",addFloor); tabs.appendChild(add); }
     }
+    // Inline-rename a floor: double-click swaps the label for an input; Enter/blur commits, Esc cancels.
+    function startFloorRename(nm,f){
+      var inp=document.createElement("input"); inp.className="fnm-edit"; inp.value=f.name;
+      nm.replaceWith(inp); inp.focus(); inp.select();
+      inp.addEventListener("click",function(e){ e.stopPropagation(); });
+      inp.addEventListener("dblclick",function(e){ e.stopPropagation(); });
+      var done=false;
+      function commit(){ if(done) return; done=true; var v=inp.value.trim(); if(v) f.name=v; renderFloorTabs(); renderPanel(); queueSave(); }
+      inp.addEventListener("keydown",function(e){ e.stopPropagation();
+        if(e.key==="Enter"){ e.preventDefault(); commit(); } else if(e.key==="Escape"){ done=true; renderFloorTabs(); } });
+      inp.addEventListener("blur",commit);
+    }
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
       if(floors.length<=1){ floors=[{name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); setHint("Choose a background to begin."); queueSave(); return; }
       var wasCur=(curFloor===i);
       floors.splice(i,1);
-      floors.forEach(function(f,idx){ f.name="Floor "+(idx+1); });   // keep numbering sequential
+      floors.forEach(function(f,idx){ if(/^Floor \d+$/.test(f.name)) f.name="Floor "+(idx+1); });   // renumber only default-named floors; keep custom names
       if(curFloor>i) curFloor--; else if(wasCur) curFloor=Math.min(i, floors.length-1);
       loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
     }
@@ -706,7 +834,7 @@
       setHint("Submitted for approval."); }
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
-      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=(st.showFov!==false); showAllAngles=!!st.allAngles; applySettings();   // settings before floors render
+      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,devices:f.devices||[],started:!!f.started}; }); }
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
@@ -716,10 +844,10 @@
       if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
     }catch(e){ renderFloorTabs(); } }
 
-    // move: drag the icon (Place step only — on Angles the icon is fixed, you set aim/length instead)
+    // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
       dot.addEventListener("pointerdown", function(e){ if(RO) return;
-        if(curStep===2){ select(d.id===selId?null:d.id); return; }   // Angles: click a camera to select; click it again to unselect + hide its angle
+        if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → drag maps correctly at any zoom
@@ -727,7 +855,7 @@
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); queueSave(); }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
-    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||curStep!==2||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
+    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
         function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); renderDevice(d); }
         function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); queueSave(); }
@@ -748,10 +876,11 @@
     document.getElementById("doorUpload").addEventListener("click", function(){ document.getElementById("upIn").click(); });
     document.getElementById("upIn").addEventListener("change", function(e){
       var f=e.target.files[0]; if(!f) return;
+      pendingBgSource="upload";
       var r=new FileReader(); r.onload=function(ev){ applyBackground(ev.target.result); }; r.readAsDataURL(f); e.target.value="";
     });
-    // Draw one → start on a blank canvas (sketch/place directly on the plan)
-    document.getElementById("doorDraw").addEventListener("click", function(){ applyBackground(null); });
+    // Draw one → inline floor-plan tool: sketch labeled rooms → wand enhances into a real plan → Done.
+    document.getElementById("doorDraw").addEventListener("click", enterDraw);
 
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
@@ -759,30 +888,52 @@
     var backBtn=document.getElementById("backBtn");
     var nextBtn=document.getElementById("nextBtn");
     function goStep(idx){
-      if(idx>0 && !bgHasImage) return;   // gate: can't Place/Angle/Submit until this floor has a background
+      idx=Math.max(0,Math.min(2,idx));   // 0 Background · 1 Setup · 2 Submit (clamps any stale 4-step save)
+      if(idx>0 && !bgHasImage) return;   // gate: can't Setup/Submit until this floor has a background
       curStep=idx;
       stepEls.forEach(function(x,i){ x.classList.toggle("active", i===idx); });
       // Background step shows the source chooser (redo from any source, devices stay); other steps show the plan
-      var chooser=(idx===0);
-      document.getElementById("bgstep").style.display=chooser?"":"none";
-      document.getElementById("working").style.display=chooser?"none":"block";
-      if(idx===2) selId=null;   // enter Angles unselected → a camera's cone appears when you click it
-      // cones + aim live only in the Angles step (and only for the selected camera)
-      devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", idx===2 && d.cone); el.classList.toggle("sel", d.id===selId); } });
+      var chooser=(idx===0), cbg=document.getElementById("changeBgBtn");
+      if(chooser){
+        if(bgHasImage && (curBgSource==="satellite" || curBgSource==="draw")){
+          // Reopen the background tool you used (satellite or draw) — state preserved in-session — to
+          // revise / re-enhance, instead of forcing a re-pick. "Change background" reopens the chooser.
+          ensureBgToolSrc(curBgSource==="draw" ? DRAW_SRC : SAT_SRC);
+          satFrame.style.display="block";
+          document.getElementById("bgstep").style.display="none";
+          document.getElementById("working").style.display="none";
+          if(cbg) cbg.style.display="inline-flex";
+        } else {
+          satFrame.style.display="none";
+          document.getElementById("bgstep").style.display="";
+          document.getElementById("working").style.display="none";
+          if(cbg) cbg.style.display="none";
+        }
+      } else {
+        satFrame.style.display="none";
+        document.getElementById("bgstep").style.display="none";
+        document.getElementById("working").style.display="block";
+        if(cbg) cbg.style.display="none";
+      }
+      if(idx!==1) setAngleMode(false);   // angle editing lives inside Setup only
+      devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
       if(idx!==1){ arm(null); devMenu.classList.remove("show"); }
-      var onSubmit=(idx===3);
+      // The Setup toolbar ("+" place · "↗" angles) shows only on the Setup step (1), not Submit (2).
+      document.querySelector(".ctxbar").style.display = (idx===1) ? "" : "none";
+      var sc=document.getElementById("showCtl"); if(sc) sc.style.display = (!chooser && !RO) ? "flex" : "none";
+      var onSubmit=(idx===2);
       addFloorBtn.style.display = onSubmit ? "" : "none";
       backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
       var hints={0:bgHasImage?"Pick a new background — your devices stay put.":"Choose a background to begin.",
-                 1:"Add cameras & devices, then place them on the plan.",2:"Tap a camera, then tap where it points — that sets the aim & reach.",3:"Review the plan, then submit — or add another floor."};
+                 1:"Place devices with +, set camera angles with the arrow.",2:"Review the plan, then submit — or add another floor."};
       setHint(RO ? "" : (hints[idx]||""));   // customers don't get editing prompts
       queueSave();
     }
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
     // Next walks the wizard; on the Submit step it submits the whole survey for approval.
-    nextBtn.addEventListener("click", function(){ if(curStep<3) goStep(curStep+1); else submit(); });
+    nextBtn.addEventListener("click", function(){ if(curStep<2) goStep(curStep+1); else submit(); });
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
     addFloorBtn.addEventListener("click", addFloor);

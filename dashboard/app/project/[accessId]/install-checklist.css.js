@@ -128,6 +128,19 @@ export const ICL_CSS = `
 .icl-ring:disabled{cursor:default}
 .icl-ring:not(:disabled):hover .icl-ring-svg{transform:scale(1.06)}
 .icl-ring-svg{transition:transform .12s}
+/* "how far did you get?" step picker — a centered popup (not a clipped dropdown) */
+.icl-stepmodal-bg{position:fixed;inset:0;z-index:200;background:rgba(11,15,26,.5);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+.icl-stepmodal{position:relative;width:min(360px,94vw);max-height:80vh;overflow-y:auto;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 24px 60px rgba(16,20,24,.34);padding:16px}
+.icl-stepmodal-x{position:absolute;top:12px;right:12px;border:none;background:none;font-size:1rem;color:var(--dv-meta,#787D84);cursor:pointer}
+.icl-stepmodal-name{font-size:1rem;font-weight:800;color:var(--dv-ink,#101418);padding-right:24px}
+.icl-stepmodal-h{font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:4px 0 8px}
+.icl-steppop-opt{width:100%;display:flex;align-items:center;gap:9px;padding:8px 9px;border:none;background:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.82rem;color:var(--dv-ink,#101418);text-align:left}
+.icl-steppop-opt:hover{background:var(--dv-paper,#F4F4F2)}
+.icl-steppop-opt.reached{color:var(--dv-ink,#101418)}
+.icl-steppop-opt.on{background:color-mix(in srgb,var(--icl-c,#C9A96E) 14%,#fff);font-weight:700}
+.icl-steppop-n{width:20px;height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:800}
+.icl-steppop-opt.reached .icl-steppop-n{background:var(--icl-c,#C9A96E);color:#fff}
+.icl-steppop-chk{margin-left:auto;color:var(--dv-green,#2E7D5B);font-weight:800}
 .icl-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .icl-name{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icl-step{font-size:.78rem;color:var(--dv-meta,#787D84)}

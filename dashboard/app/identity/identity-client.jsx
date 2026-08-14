@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition } from "react";
 import AdminShell from "../components/admin-shell";
-import { setIdentityStatusAction, deleteIdentityAction, createEnrollInviteAction } from "./actions";
+import { setIdentityStatusAction, deleteIdentityAction, createEnrollInviteAction, claimUnauthorizedAction, dismissUnauthorizedAction } from "./actions";
 
 // The Face ID / Driver's Licence library. One card per enrolled account with its
 // two photos (face + ID), status, and admin controls. Photos load on demand from
@@ -16,8 +16,9 @@ const STATUS = {
 function initials(n) { return (n || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 10) : "—"; }
 
-export default function IdentityClient({ user, alerts, rows = [], stats, staff = [] }) {
+export default function IdentityClient({ user, alerts, rows = [], stats, staff = [], unauthorized = [] }) {
   const isAdmin = user.role === "admin";
+  const [assign, setAssign] = useState({});   // captureId → chosen user id (defaults to the closest-match guess)
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [pending, startTx] = useTransition();
@@ -96,6 +97,38 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
             </div>
           )}
         </div>
+
+        {unauthorized.length > 0 && (
+          <div className="panel idl-unauth">
+            <div className="idl-unauth-h">
+              <b>Unauthorized captures <span className="idl-unauth-n">{unauthorized.length}</span></b>
+              <span>Faces that failed to match. Identify the person and attach the face to their account — it&rsquo;ll recognize them next time (glasses, hat, mask). Auto-deleted after 30 days.</span>
+            </div>
+            <div className="idl-unauth-grid">
+              {unauthorized.map((c) => (
+                <div key={c.id} className="idl-unauth-card">
+                  <img className="idl-unauth-img" src={`/api/unauthorized-image?id=${c.id}`} alt="" loading="lazy" />
+                  <div className="idl-unauth-meta">
+                    <span className="mono">{fmt(c.captured_at)}</span>
+                    {c.best_name && <span className="idl-unauth-guess">Nearest: {c.best_name}{c.best_score != null ? ` · ${Math.round(c.best_score * 100)}%` : ""}</span>}
+                  </div>
+                  <div className="idl-unauth-actions">
+                    <select className="apx-input" value={assign[c.id] ?? (c.best_user_id || "")} onChange={(e) => setAssign((a) => ({ ...a, [c.id]: e.target.value }))}>
+                      <option value="">Assign to…</option>
+                      {staff.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.role}</option>)}
+                    </select>
+                    <button className="idl-btn ok" disabled={pending} onClick={() => run(async () => {
+                      const uid = assign[c.id] ?? c.best_user_id;
+                      if (!uid) return { error: "Pick a person to attach this face to." };
+                      return claimUnauthorizedAction(c.id, Number(uid));
+                    })}>Attach</button>
+                    <button className="idl-btn" disabled={pending} onClick={() => run(() => dismissUnauthorizedAction(c.id))}>Dismiss</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {visible.length === 0 ? (
           <div className="panel"><div className="empty">{q ? "No matches." : "No one has enrolled yet — invite someone above, or share the Face Enroll link."}</div></div>
@@ -204,6 +237,19 @@ const CSS = `
 .apx .idl-mhd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:.9rem}
 .apx .idl-mhd button{border:none;background:none;font-size:1rem;cursor:pointer;color:var(--muted)}
 .apx .idl-modal img{width:100%;display:block;max-height:70vh;object-fit:contain;background:#0B0F1A}
+.apx .idl-unauth{padding:14px 16px;margin-bottom:14px;border-color:#e6cf9a;background:linear-gradient(0deg,rgba(230,207,154,.06),rgba(230,207,154,.06)),#fff}
+.apx .idl-unauth-h{display:flex;flex-direction:column;gap:2px;margin-bottom:12px}
+.apx .idl-unauth-h b{font-weight:800;font-size:.92rem;display:flex;align-items:center;gap:8px}
+.apx .idl-unauth-h span{font-size:.78rem;color:var(--muted);max-width:70ch}
+.apx .idl-unauth-n{font-size:.7rem;font-weight:800;color:#8a5f00;background:#f5e6c3;border-radius:100px;padding:1px 8px}
+.apx .idl-unauth-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.apx .idl-unauth-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.apx .idl-unauth-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#0B0F1A}
+.apx .idl-unauth-meta{display:flex;flex-direction:column;gap:1px;padding:8px 10px 4px}
+.apx .idl-unauth-meta .mono{font-size:.72rem;color:var(--muted)}
+.apx .idl-unauth-guess{font-size:.74rem;font-weight:700;color:var(--ink)}
+.apx .idl-unauth-actions{display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px 10px}
+.apx .idl-unauth-actions select{flex:1 1 100%;height:32px;font-size:.76rem}
 .apx .idl-invite{padding:14px 16px;margin-bottom:14px}
 .apx .idl-invite-h{display:flex;flex-direction:column;gap:1px;margin-bottom:10px}
 .apx .idl-invite-h b{font-weight:800;font-size:.92rem}

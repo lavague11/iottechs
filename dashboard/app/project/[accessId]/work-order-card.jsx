@@ -63,7 +63,7 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
   }
 
   // Internal / legacy jobs (no customer sale) skip the customer sign + deposit requirement.
-  const gateOk = intern || (signed && depositOk);
+  const gateOk = intern || depositOk;   // the work order is INTERNAL — no customer signature required, just a deposit
   async function toggleInternal(on) {
     setIntern(on);   // optimistic
     const r = await setInternalJobAction(accessId, on);
@@ -75,9 +75,9 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
     ? (techSigned ? `Work order accepted by ${p.tech_signed_name}.` : "Work order created — project is in scheduling.")
     : intern
       ? "Internal job — no customer sign-off needed. Assign a technician, set their payout, then create the work order."
-      : signed && depositOk
-        ? "Signed and deposit on file — assign a technician, set their payout, then create the work order."
-        : [!signed && "customer signature", !depositOk && "a deposit"].filter(Boolean).join(" and ").replace(/^./, (c) => "Needs " + c) + " before the work order can go out — or mark it an internal job below.";
+      : depositOk
+        ? "Deposit on file — assign a technician, set their payout, then create the work order."
+        : "Needs a deposit before the work order can go out — or mark it an internal job below.";
 
   return (
     <div className="woc-card">

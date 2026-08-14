@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
-import { listIdentities, identityStats, getStaffUsers } from "../../lib/db";
+import { listIdentities, identityStats, getStaffUsers, listUnauthorizedFaces } from "../../lib/db";
 import IdentityClient from "./identity-client";
 
 // Identity library — every enrolled account, its two photos (face + ID), verify
@@ -15,6 +15,7 @@ export default async function IdentityPage() {
   const staff = getStaffUsers()
     .filter((u) => ["admin", "manager", "sales", "tech"].includes(u.role) && !u.disabled)
     .map((u) => ({ id: u.id, name: u.name, role: u.role }));
+  const unauthorized = listUnauthorizedFaces();
 
-  return <IdentityClient user={user} alerts={alerts} rows={rows} stats={stats} staff={staff} />;
+  return <IdentityClient user={user} alerts={alerts} rows={rows} stats={stats} staff={staff} unauthorized={unauthorized} />;
 }

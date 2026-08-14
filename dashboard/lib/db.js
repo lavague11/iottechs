@@ -857,6 +857,42 @@ function init() {
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_identity_events_user ON identity_events(user_id)");
 
+  // Unauthorized captures — a face-login MISS parks the live frame here (AES-encrypted),
+  // with the closest-match guess, so an admin can identify the person and attach the face
+  // to their account (multi-face). Auto-purged after 30 days unless claimed.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS unauthorized_faces (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      image           TEXT,
+      embedding       TEXT,
+      ip              TEXT,
+      best_user_id    INTEGER,
+      best_name       TEXT,
+      best_score      REAL,
+      status          TEXT DEFAULT 'pending',
+      claimed_user_id INTEGER,
+      claimed_at      TEXT,
+      captured_at     TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_unauth_status ON unauthorized_faces(status)");
+
+  // Additional enrolled faces per user (glasses / hat / mask / a claimed capture). The 1:N
+  // login matcher unions these with user_identity.face_embedding so ANY of a user's faces can
+  // match. Images encrypted like the primary; a vector alone isn't reversible into a face.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_faces (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL,
+      embedding   TEXT,
+      image       TEXT,
+      source      TEXT,
+      added_by    TEXT,
+      added_at    TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_user_faces_user ON user_faces(user_id)");
+
   // One-time enrolment invites — an admin mints a tokenized link a user opens to
   // enrol WITHOUT logging in first (new hires, controlled onboarding).
   db.exec(`
@@ -3938,15 +3974,75 @@ export function listIdentities() {
 // For the 1:N face login matcher: every enrolled user's face + ID embeddings.
 // Vectors only — the raw photos never leave the DB for this.
 export function listEnrolledFaces() {
-  return db.prepare(`
-    SELECT ui.user_id, ui.status, ui.face_embedding, ui.id_embedding, u.name, u.role, u.email
-    FROM user_identity ui JOIN users u ON u.id = ui.user_id
-    WHERE ui.face_embedding IS NOT NULL AND (u.disabled IS NULL OR u.disabled = 0)
-  `).all().map((r) => ({
+  const map = (r) => ({
     user_id: r.user_id, status: r.status, name: r.name, role: r.role, email: r.email,
     face_embedding: _jparse(r.face_embedding, null),
     id_embedding: _jparse(r.id_embedding, null),
-  }));
+  });
+  // Primary enrolled face (one per user)…
+  const primary = db.prepare(`
+    SELECT ui.user_id, ui.status, ui.face_embedding, ui.id_embedding, u.name, u.role, u.email
+    FROM user_identity ui JOIN users u ON u.id = ui.user_id
+    WHERE ui.face_embedding IS NOT NULL AND (u.disabled IS NULL OR u.disabled = 0)
+  `).all().map(map);
+  // …plus any additional faces (glasses/hat/claimed captures). Same user identity, different vector.
+  const extra = db.prepare(`
+    SELECT uf.user_id, ui.status, uf.embedding AS face_embedding, ui.id_embedding, u.name, u.role, u.email
+    FROM user_faces uf JOIN users u ON u.id = uf.user_id JOIN user_identity ui ON ui.user_id = uf.user_id
+    WHERE uf.embedding IS NOT NULL AND (u.disabled IS NULL OR u.disabled = 0)
+  `).all().map(map);
+  return primary.concat(extra);
+}
+
+// ---- multi-face + unauthorized captures ----
+function _cosine(a, b) { if (!a || !b || a.length !== b.length) return -1;
+  let s = 0, na = 0, nb = 0; for (let i = 0; i < a.length; i++) { s += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  const d = Math.sqrt(na) * Math.sqrt(nb); return d ? s / d : -1; }
+
+// A user's additional faces (beyond the primary enrolment).
+export function addUserFace(userId, embedding, image, source, actor) {
+  db.prepare("INSERT INTO user_faces (user_id, embedding, image, source, added_by) VALUES (?,?,?,?,?)")
+    .run(Number(userId), JSON.stringify(embedding), encBlob(image || ""), String(source || "manual"), String(actor || ""));
+}
+export function listUserFaces(userId) {
+  return db.prepare("SELECT id, source, added_by, added_at, (image IS NOT NULL AND image != '') AS has_image FROM user_faces WHERE user_id=? ORDER BY id DESC")
+    .all(Number(userId))
+    .map((r) => ({ id: r.id, source: r.source, added_by: r.added_by, added_at: r.added_at, has_image: !!r.has_image }));
+}
+export function deleteUserFace(id) { db.prepare("DELETE FROM user_faces WHERE id=?").run(Number(id)); }
+export function getUserFaceImage(id) { const r = db.prepare("SELECT image FROM user_faces WHERE id=?").get(Number(id)); return r ? decBlob(r.image) : ""; }
+
+// Unauthorized capture parking lot (30-day retention).
+function purgeUnauthorizedFaces() {
+  db.prepare("DELETE FROM unauthorized_faces WHERE status!='claimed' AND captured_at < datetime('now','localtime','-30 days')").run();
+}
+export function recordUnauthorizedFace({ image, embedding, ip, bestUserId, bestName, bestScore }) {
+  if (!image || !embedding) return;
+  purgeUnauthorizedFaces();
+  // Dedup a retry burst: skip if a near-identical face was parked in the last 10 minutes.
+  const recent = db.prepare("SELECT embedding FROM unauthorized_faces WHERE status='pending' AND captured_at > datetime('now','localtime','-10 minutes')").all();
+  for (const r of recent) { const v = _jparse(r.embedding, null); if (v && _cosine(v, embedding) > 0.9) return; }
+  db.prepare("INSERT INTO unauthorized_faces (image, embedding, ip, best_user_id, best_name, best_score) VALUES (?,?,?,?,?,?)")
+    .run(encBlob(image), JSON.stringify(embedding), String(ip || ""), bestUserId || null, bestName || null, bestScore == null ? null : Number(bestScore));
+}
+export function listUnauthorizedFaces(limit = 120) {
+  purgeUnauthorizedFaces();
+  return db.prepare("SELECT id, ip, best_user_id, best_name, best_score, status, captured_at FROM unauthorized_faces WHERE status='pending' ORDER BY id DESC LIMIT ?")
+    .all(Number(limit))
+    .map((r) => ({ id: r.id, ip: r.ip, best_user_id: r.best_user_id, best_name: r.best_name, best_score: r.best_score, status: r.status, captured_at: r.captured_at }));
+}
+export function unauthorizedCount() { purgeUnauthorizedFaces(); const r = db.prepare("SELECT COUNT(*) c FROM unauthorized_faces WHERE status='pending'").get(); return r?.c || 0; }
+export function getUnauthorizedImage(id) { const r = db.prepare("SELECT image FROM unauthorized_faces WHERE id=?").get(Number(id)); return r ? decBlob(r.image) : ""; }
+export function dismissUnauthorizedFace(id) { db.prepare("UPDATE unauthorized_faces SET status='dismissed' WHERE id=?").run(Number(id)); }
+export function claimUnauthorizedFace(id, userId, actor) {
+  const row = db.prepare("SELECT * FROM unauthorized_faces WHERE id=?").get(Number(id));
+  if (!row) return { ok: false, error: "Not found" };
+  const emb = _jparse(row.embedding, null); if (!emb) return { ok: false, error: "No embedding on this capture" };
+  addUserFace(userId, emb, decBlob(row.image), "claimed", actor);
+  db.prepare("UPDATE unauthorized_faces SET status='claimed', claimed_user_id=?, claimed_at=datetime('now','localtime') WHERE id=?").run(Number(userId), Number(id));
+  const u = db.prepare("SELECT name FROM users WHERE id=?").get(Number(userId));
+  logIdentityEvent(Number(userId), { kind: "face_added", detail: `Face added from an unauthorized capture${row.best_name ? ` (was nearest ${row.best_name})` : ""}`, score: row.best_score || null, actor_name: actor });
+  return { ok: true, name: u?.name || null };
 }
 
 // ---- One-time enrolment invites ----

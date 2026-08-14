@@ -104,6 +104,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
   const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays lead row -> breakdown expanded
+  const [dispShown, setDispShown] = useState(1);  // display slots revealed (start at 1, "+ Add display" reveals more)
+  const [askCam, setAskCam] = useState(null);     // preset awaiting a "how many cameras?" count (first camera only)
+  const [camN, setCamN] = useState(4);
   const [presetOpen, setPresetOpen] = useState(false); // preset-bundle manager modal
   const [presetVer, setPresetVer] = useState(0);       // bumps after a preset save to refresh chips
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
@@ -228,8 +231,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = presetsForService(svc.key, loadPriceBook());
   void presetVer; // referenced so the chip row recomputes after a preset save
-  function addPresetBlock(preset) {
-    patchItems([...svc.items, makePresetBlock(preset, loadPriceBook())]);
+  function addPresetBlock(preset, count = 1) {
+    const book = loadPriceBook();
+    const blocks = Array.from({ length: Math.max(1, +count || 1) }, () => makePresetBlock(preset, book));
+    patchItems([...svc.items, ...blocks]);
+  }
+  // First camera on a project → ask "how many?" so the office adds them all at once; after that, +1.
+  function clickPreset(p) {
+    if (svc.key === "camera" && camCount === 0) { setCamN(4); setAskCam(p); }
+    else addPresetBlock(p);
   }
   function quickAdd(e) {
     const v = e.target.value;
@@ -250,6 +260,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const camMode = svc.key === "camera";
   const driveItems = camMode ? svc.items.filter((it) => it.slot != null) : [];
   const displayItems = camMode ? svc.items.filter((it) => it.displaySlot != null) : [];
+  // Displays are add-on-demand: show 1 by default, reveal more with "+ Add display" (or as many as are filled).
+  const dispVisible = Math.max(1, displayItems.reduce((m, it) => Math.max(m, it.displaySlot || 0), 0), dispShown);
   const nvrGroupTotal = nvrItem ? itemTotal(nvrItem) + driveItems.reduce((s, it) => s + itemTotal(it), 0) : 0;
   const displaysTotal = displayItems.reduce((s, it) => s + itemTotal(it), 0);
   const nvrCollapsed = camMode && nvrDone && !!nvrItem;
@@ -382,11 +394,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         {!readOnly && <button className="prop-svc-x" title="Remove service" onClick={onRemove}>✕</button>}
       </div>
 
-      {/* First things first — the recording system: NVR model + a drive picker per HDD bay.
-          NVR and each drive show their editable price (and cost, for admin/manager) below the picker. */}
+      {/* First things first — the recording system: NVR model + a drive picker per HDD bay. NVR and
+          Displays each sit on their own row (mobile-friendly). Prices/cost render below each picker. */}
       {showSysbar && (
         <div className="prop-sysbar">
-          {showNvrPickers && <>
+          {showNvrPickers && <div className="prop-sysrow">
           <div className="prop-slot">
             <span className="prop-slot-lbl">NVR</span>
             <select value={nvrItem?.name || ""} onChange={pickNvr} disabled={readOnly}>
@@ -406,19 +418,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               </>
             ) : <span className="prop-slot-cost">—</span>}
           </div>
-          {nvrItem && (
+          {nvrItem && hddSlots > 0 && (
             <div className="prop-slots">
-              {Array.from({ length: 4 }, (_, i) => {
+              {/* Only the bays this NVR actually has — 8-Ch → 1, 16-Ch → 2, 32-Ch → 4. No greyed N/A slots. */}
+              {Array.from({ length: hddSlots }, (_, i) => {
                 const n = i + 1;
-                const locked = n > hddSlots;
-                const d = !locked && driveAt(n);
+                const d = driveAt(n);
                 return (
-                  <div className={`prop-slot${locked ? " prop-slot-locked" : ""}`} key={n}>
+                  <div className="prop-slot" key={n}>
                     <span className="prop-slot-lbl">HDD Slot {n}</span>
-                    <select value={d?.name || ""} onChange={(e) => setSlotDrive(n, e.target.value)} disabled={readOnly || locked}
-                            title={locked ? `Not available on ${nvrShort(nvrItem.name)}` : undefined}>
-                      <option value="">{locked ? "N/A" : "Empty"}</option>
-                      {!locked && STORAGE_DRIVES.map((x) => (
+                    <select value={d?.name || ""} onChange={(e) => setSlotDrive(n, e.target.value)} disabled={readOnly}>
+                      <option value="">Empty</option>
+                      {STORAGE_DRIVES.map((x) => (
                         <option key={x.name} value={x.name}>{x.name.replace(/ Storage Drive$/, "")}</option>
                       ))}
                     </select>
@@ -440,15 +451,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           {nvrItem && !readOnly && (
             <button type="button" className="prop-sys-done" onClick={() => setNvrDone(true)}>Done</button>
           )}
-          </>}
-          {showDispPickers && <>
+          </div>}
+          {showDispPickers && <div className="prop-sysrow">
             <div className="prop-slots">
-              {Array.from({ length: 4 }, (_, i) => {
+              {Array.from({ length: dispVisible }, (_, i) => {
                 const n = i + 1;
                 const d = displayAt(n);
                 return (
                   <div className="prop-slot" key={n}>
-                    <span className="prop-slot-lbl">Display {n}</span>
+                    <span className="prop-slot-lbl">Display {n}
+                      {!readOnly && n === dispVisible && dispVisible > 1 && (
+                        <button type="button" className="prop-slot-x" title="Remove this display" onClick={() => { setSlotDisplay(n, ""); setDispShown(dispVisible - 1); }}>✕</button>
+                      )}
+                    </span>
                     <select value={d?.baseName || ""} onChange={(e) => setSlotDisplay(n, e.target.value)} disabled={readOnly}>
                       <option value="">Empty</option>
                       {displayOptions.map((x) => (
@@ -473,11 +488,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                   </div>
                 );
               })}
+              {!readOnly && dispVisible < 4 && (
+                <button type="button" className="prop-add-slot" onClick={() => setDispShown(dispVisible + 1)} title="Add another display">+ Add display</button>
+              )}
             </div>
           {displayItems.length > 0 && !readOnly && (
             <button type="button" className="prop-sys-done" onClick={() => setDispDone(true)}>Done</button>
           )}
-          </>}
+          </div>}
           {!nvrItem && camCount > 0 && (
             <span className="prop-sys-hint">Recommended: {camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel</span>
           )}
@@ -563,8 +581,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           {/* Preset bundles — one-click line groups, kept at the top of the add area */}
           <div className="prop-preset-row">
             {presets.map((p) => (
-              <button key={p.id} className="prop-preset-chip" title={`Add bundle: ${p.name}`} onClick={() => addPresetBlock(p)}>+ {p.name}</button>
+              <button key={p.id} className="prop-preset-chip" title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
             ))}
+            {askCam && (
+              <span className="prop-camask">
+                How many cameras?
+                <input type="number" min="1" max="64" value={camN} autoFocus
+                       onChange={(e) => setCamN(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === "Enter") { addPresetBlock(askCam, camN); setAskCam(null); } else if (e.key === "Escape") setAskCam(null); }} />
+                <button type="button" className="prop-camask-go" onClick={() => { addPresetBlock(askCam, camN); setAskCam(null); }}>Add</button>
+                <button type="button" className="prop-camask-x" onClick={() => setAskCam(null)}>Cancel</button>
+              </span>
+            )}
             <button className="prop-preset-edit" title="Create or edit preset bundles" onClick={() => setPresetOpen(true)}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               {presets.length ? "Edit presets" : "+ Preset"}

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, loadPriceBook, PAYMENT_PLANS,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -33,7 +33,7 @@ function loadSurveyForImport(accessId) {
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
-export default function ProposalBuilder({ accessId, role, initial, onProposalChange, embedded = false }) {
+export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, embedded = false }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
   const [meta, setMeta] = useState(initial || null);          // server row (status, version, sent_at…)
   const [payload, setPayload] = useState(() => initial?.payload || blankPayload());
@@ -137,7 +137,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     if (!key || opt.services.some((s) => s.key === key && key !== "custom")) return;
     // Toast POS always brings ISP / Pronto-Meraki / Network Switch along, even added
     // manually with no survey markers — same baseline surveyToImport seeds on import.
-    const items = key === "toast" ? toastBaselineItems(loadPriceBook()) : [];
+    const items = key === "toast" ? toastBaselineItems(loadPriceBook())
+      : key === "camera" ? cameraBaselineItems(loadPriceBook()) : [];
     patchOption({ services: [...opt.services, { key, label: serviceLabel(key), items, note: "" }] });
   }
 
@@ -279,10 +280,18 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         );
+        // Eye icon (staff only, once sent) → how many times the customer opened the proposal and when.
+        const isStaff = ["admin", "manager", "sales"].includes(role);
+        const eye = isStaff && onShowViews && ["sent", "accepted", "changes_requested"].includes(status) && (
+          <button className="prop-eye" title={viewCount ? `Customer opened this ${viewCount} time${viewCount === 1 ? "" : "s"} — see when` : "Customer hasn't opened it yet"} onClick={onShowViews}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span className="prop-eye-n">{viewCount}</span>
+          </button>
+        );
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
-        // title + self-collapse; keep just the status chip and the pricing gear on a slim row.
+        // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{gear}</div>;
+          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{eye}{gear}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -293,6 +302,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
               <span className="pv-tool-title">Proposal builder{meta?.version ? ` · v${meta.version}` : ""}</span>
               {statusChip}
             </button>
+            {eye}
             {gear}
             <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
           </div>
@@ -306,32 +316,35 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       {err && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
 
-      {/* Option tabs */}
+      {/* Option tabs — the active tab is inline-editable (the option name is merged in, no separate field). */}
       <div className="prop-tabs">
-        {payload.options.map((o) => (
-          <button key={o.id} className={`prop-tab${o.id === activeOpt ? " on" : ""}`} onClick={() => setActiveOpt(o.id)}>
-            {o.id} · {o.name}
-            {!readOnly && payload.options.length > 1 && o.id === activeOpt && (
-              <span onClick={(e) => { e.stopPropagation(); removeOption(o.id); }} title="Remove option" style={{ opacity: .75 }}>✕</span>
-            )}
-          </button>
-        ))}
+        {payload.options.map((o) => {
+          const active = o.id === activeOpt;
+          if (active && !readOnly) return (
+            <div key={o.id} className="prop-tab on prop-tab-edit">
+              <span className="prop-tab-letter">{o.id}</span>
+              <input className="prop-tab-name" value={o.name} maxLength={60}
+                size={Math.max(6, (o.name || "").length)}
+                onChange={(e) => patchOption({ name: e.target.value })} placeholder="Option name" />
+              {payload.options.length > 1 && (
+                <span className="prop-tab-x" onClick={() => removeOption(o.id)} title="Remove option">✕</span>
+              )}
+            </div>
+          );
+          return (
+            <button key={o.id} className={`prop-tab${active ? " on" : ""}`} onClick={() => setActiveOpt(o.id)}>
+              {o.id} · {o.name}
+            </button>
+          );
+        })}
         {!readOnly && payload.options.length < 3 && (
           <button className="prop-tab prop-tab-add" onClick={addOption}>+ Option</button>
         )}
       </div>
 
-      {!readOnly && (
+      {!readOnly && surveyFloors.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <input
-            value={opt.name}
-            maxLength={60}
-            onChange={(e) => patchOption({ name: e.target.value })}
-            style={{ height: 32, border: "1px solid var(--line)", borderRadius: 8, padding: "0 10px", fontSize: ".82rem", fontWeight: 700, fontFamily: "inherit", outline: "none", maxWidth: 260 }}
-          />
-          {surveyFloors.length > 0 && (
-            <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} />
-          )}
+          <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} />
         </div>
       )}
 
@@ -422,8 +435,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
           <span>Tax</span>
           {readOnly ? <b>{taxRate}%</b> : (
             <span className="prop-adj">
-              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => { setTaxRate(6.625); setDirty(true); }}>NJ</button>
-              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => { setTaxRate(8.875); setDirty(true); }}>NY</button>
+              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 6.625 ? 0 : 6.625); setDirty(true); }}>NJ</button>
+              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 8.875 ? 0 : 8.875); setDirty(true); }}>NY</button>
               <input className="tin" type="number" min="0" max="30" step="0.01" value={taxRate} onChange={(e) => { setTaxRate(e.target.value); setDirty(true); }} />
             </span>
           )}

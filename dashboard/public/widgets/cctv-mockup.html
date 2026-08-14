@@ -246,7 +246,7 @@ function drawCell(c,x,y,w,h,i,o){o=o||{};
   }else{c.fillStyle='#CDD2DA';c.fillRect(x,y,w,h);
     camIcon(c,x+w/2,y+h/2-h*0.07,Math.min(w,h)*0.34,'#1a1a1a');
     osd(c,'No Photos Available',x+w/2,y+h/2+h*0.2,Math.max(11,h*0.068),'#1a1a1a','center','bold','rgba(255,255,255,.55)');
-    if(o.interactive)osd(c,'+  tap or drop a photo',x+w/2,y+h-h*0.10,Math.max(9,h*0.05),'rgba(150,124,62,.9)','center','normal','rgba(255,255,255,.45)');}
+    if(o.interactive)osd(c,'+  tap · drop · paste',x+w/2,y+h-h*0.10,Math.max(9,h*0.05),'rgba(150,124,62,.9)','center','normal','rgba(255,255,255,.45)');}
   const cf=Math.max(11,Math.min(h*0.08,32)),pad=Math.max(7,h*0.05);
   dot(c,x+pad+cf*0.32,y+pad+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
   osd(c,nameOf(i),x+pad+cf*0.95,y+pad+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
@@ -327,6 +327,7 @@ function doSingleClick(h){
   }else{pendingSlot=h.i;slotFile.value='';slotFile.click();}
 }
 let clickTimer=null;
+let lastTile={p:null,i:null};   // tile currently under the cursor — the target for a Ctrl+V paste
 function bindCanvas(canvas,page){
   canvas.addEventListener('click',e=>{if(nameEdit.style.display==='block')return;
     const h=tileAt(e,canvas,page);if(!h)return;
@@ -334,15 +335,57 @@ function bindCanvas(canvas,page){
   canvas.addEventListener('dblclick',e=>{clearTimeout(clickTimer);const h=tileAt(e,canvas,page);
     if(h&&S.slots[h.i])openLightbox(h.i);});
   if(IOT_RO)return;                                             // no drag/drop uploads in read-only mode
+  // Track the tile under the pointer so a paste (which carries no drag position) knows where to land.
+  canvas.addEventListener('mousemove',e=>{const h=tileAt(e,canvas,page);lastTile=h?{p:page,i:h.i}:{p:null,i:null};});
+  canvas.addEventListener('mouseleave',()=>{if(lastTile.p===page)lastTile={p:null,i:null};});
   canvas.addEventListener('dragover',e=>{e.preventDefault();const h=tileAt(e,canvas,page);const i=h?h.i:null;
     if(S.hover.p!==page||S.hover.i!==i){const prev=S.hover.p;S.hover={p:page,i};
       if(prev!=null&&prev!==page)renderPage(prev);renderPage(page);}});
   canvas.addEventListener('dragleave',()=>{if(S.hover.p===page){S.hover={p:null,i:null};renderPage(page);}});
   canvas.addEventListener('drop',e=>{e.preventDefault();const h=tileAt(e,canvas,page);S.hover={p:null,i:null};
-    const f=[...(e.dataTransfer.files||[])].find(okImg);
-    if(h&&f)loadInto(h.i,f);else renderPage(page);});
+    const files=[...(e.dataTransfer.files||[])].filter(okImg);
+    if(h&&files.length)placeFiles(h.i,files);else renderPage(page);});
 }
 slotFile.onchange=e=>{const f=e.target.files[0];if(f&&pendingSlot!=null)loadInto(pendingSlot,f);};
+
+/* ===== shared placement (drop · paste): drop N photos starting at a tile, filling empties ===== */
+// One predictable path for drop and paste. Places files[0] at `start` (replacing) and each further
+// file into the next empty slot after it, growing the grid + hopping to the right page as needed.
+function targetsFrom(start,k){const out=[start];let i=start+1;
+  while(out.length<k){while(i<S.count&&S.slots[i])i++;out.push(i);i++;}return out;}
+function placeFiles(start,files){
+  if(!files||!files.length)return;
+  const t=targetsFrom(start,files.length),maxT=Math.max.apply(null,t);
+  if(maxT>=S.count){S.count=maxT+1;syncCount();}            // pre-size so no photo lands off the last page
+  const fp=Math.floor(start/per());S.page=fp;S.hover={p:fp,i:start};   // show + highlight the landing tile
+  rebuildCards();
+  files.forEach((f,k)=>loadInto(t[k],f));
+  setTimeout(()=>{if(S.hover.i===start){S.hover={p:null,i:null};if(S._cv[S.page])renderPage(S.page);}},800);
+}
+// Where a paste should land: the tile under the cursor, else the next empty slot (this page first,
+// then anywhere), else a brand-new camera at the end.
+function pasteTargetIndex(){
+  if(lastTile.i!=null&&lastTile.i<S.count){if(lastTile.p!=null)S.page=lastTile.p;return lastTile.i;}
+  const start=S.page*per(),end=Math.min(S.count,start+per());
+  for(let i=start;i<end;i++)if(!S.slots[i])return i;
+  for(let i=0;i<S.count;i++)if(!S.slots[i]){S.page=Math.floor(i/per());return i;}
+  S.page=Math.floor(S.count/per());return S.count;
+}
+// Ctrl+V / ⌘V an image anywhere in the tool → drop it into a camera tile. Ignored in read-only mode
+// and while typing a camera name (so normal text paste still works).
+document.addEventListener('paste',e=>{
+  if(IOT_RO)return;
+  if(nameEdit.style.display==='block')return;
+  const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName))return;
+  const dt=e.clipboardData;if(!dt)return;
+  let file=null;
+  for(const it of dt.items||[]){if(it.kind==='file'){const f=it.getAsFile();if(f&&okImg(f)){file=f;break;}}}
+  if(!file&&dt.files&&dt.files.length)file=[...dt.files].find(okImg)||null;
+  if(!file)return;                                           // nothing pastable — leave default paste alone
+  e.preventDefault();
+  placeFiles(pasteTargetIndex(),[file]);
+  setStatus('Pasted photo');
+});
 function commitName(){if(nameEdit.style.display!=='block')return;
   S.names[+nameEdit.dataset.i]=nameEdit.value.trim();nameEdit.style.display='none';renderAll();touch();}
 nameEdit.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitName();}
@@ -520,6 +563,12 @@ rebuildCards();
       iotNotify();
     }catch(e){setStatus('Storage full');}
   };
+
+  // Abrupt close / tab hide (the app shutting down mid-edit): flush the debounced save immediately
+  // so the last photo placement is never lost before it reaches localStorage.
+  function iotFlush(){try{clearTimeout(autoT);autoSave();}catch(_e){}}
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')iotFlush();});
+  window.addEventListener('pagehide',iotFlush);
 
   // Re-notify on every rebuild (covers page nav + count/layout changes) so the host stays in sync.
   var _rebuild=rebuildCards;

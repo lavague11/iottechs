@@ -2006,6 +2006,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
+                  viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
                   signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
               </div></AccordionProvider>
             ) });

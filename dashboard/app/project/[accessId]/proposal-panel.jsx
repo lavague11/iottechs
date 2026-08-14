@@ -8,13 +8,13 @@ import ProposalWorkOrderView from "./proposal-workorder-view";
 // (tech prices only); customer (and staff previewing as customer) get the review surface.
 // Data arrives server-sanitized per role from page.jsx (lib/proposal.js sanitizeProposal) —
 // cost/margin never reach non-staff, and the customer price never reaches a tech.
-export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, embedded = false }) {
+export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, viewCount = 0, onShowViews, embedded = false }) {
   const staffBuilder = ["admin", "manager", "sales"].includes(cView);
   return (
     <div className="prop-wrap">
       <style>{PROP_CSS}</style>
       {staffBuilder ? (
-        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} embedded={embedded} />
+        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} embedded={embedded} />
       ) : cView === "tech" ? (
         <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
@@ -38,6 +38,9 @@ const PROP_CSS = `
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
+.pvx .prop-eye{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer;font-family:inherit}
+.pvx .prop-eye:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-eye-n{font-size:.78rem;font-weight:800;color:var(--dv-ink,#101418)}
 .pvx .prop-gear:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
 .pvx .prop-fp{position:relative}
 .pvx .prop-fp-btn{height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;font-family:inherit;padding:0 12px;outline:none;cursor:pointer}
@@ -74,12 +77,20 @@ const PROP_CSS = `
 .pvx .prop-tab{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-tab.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-tab-add{color:var(--dv-meta,#787D84)}
+.pvx .prop-tab-edit{padding-left:11px;padding-right:9px;gap:6px}
+.pvx .prop-tab-letter{font-weight:800;opacity:.9}
+.pvx .prop-tab-name{border:none;outline:none;background:transparent;color:#fff;font-size:.78rem;font-weight:700;font-family:inherit;padding:0;min-width:70px}
+.pvx .prop-tab-name::placeholder{color:rgba(255,255,255,.5)}
+.pvx .prop-tab-x{opacity:.7;cursor:pointer;font-size:.72rem;margin-left:1px}
+.pvx .prop-tab-x:hover{opacity:1}
 .pvx .prop-svc{border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;overflow:hidden}
 .pvx .prop-svc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-svc-name{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
-.pvx .prop-sysbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-sysrow{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pvx .prop-sysrow + .prop-sysrow{padding-top:12px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-sys-field{display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-sys-field select,.pvx .prop-sys-field input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none}
 .pvx .prop-sys-field input{width:58px;text-align:center}
@@ -154,6 +165,14 @@ const PROP_CSS = `
 .pvx .prop-block.prop-dragging{opacity:.45}
 .pvx .prop-block.prop-dragover{border-top:2px solid var(--dv-gold,#C9A96E);background:var(--dv-line-soft,#EDEDE9)}
 /* Recording-system "Done" button + collapsed NVR/Displays summary lines */
+.pvx .prop-slot-x{margin-left:6px;border:none;background:transparent;color:var(--dv-red,#C4553D);font-size:.68rem;cursor:pointer;padding:0;opacity:.65}
+.pvx .prop-slot-x:hover{opacity:1}
+.pvx .prop-add-slot{align-self:flex-end;height:32px;padding:0 12px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:1px}
+.pvx .prop-add-slot:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-camask{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-gold,#C9A96E);border-radius:9px;padding:4px 8px 4px 12px}
+.pvx .prop-camask input{width:56px;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;padding:0 8px;font-size:.82rem;font-family:inherit;text-align:center}
+.pvx .prop-camask-go{height:28px;padding:0 12px;border:none;border-radius:6px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .prop-camask-x{height:28px;padding:0 8px;border:none;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;cursor:pointer;font-family:inherit}
 .pvx .prop-sys-done{align-self:center;height:30px;padding:0 16px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-sys-done:hover{filter:brightness(1.12)}
 .pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}

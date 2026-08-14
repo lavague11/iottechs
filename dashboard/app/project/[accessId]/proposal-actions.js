@@ -696,10 +696,10 @@ export async function submitToolAction(accessId, tool, on = true) {
 export async function createWorkOrderAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can create the work order." };
-  // Pipeline order is accepted → signed → deposit → work order; enforce it server-side too.
+  // Pipeline order is accepted → deposit → work order. The work order is an INTERNAL tool, so the
+  // customer signature is NOT required to create it (only acceptance + a confirmed deposit).
   const cur = getActiveProposal(accessId);
   if (!cur || cur.status !== "accepted") return { error: "The customer hasn't accepted a proposal option yet." };
-  if (!cur.signed_name) return { error: "The customer hasn't signed the agreement yet." };
   const paid = getProjectPayments(accessId).some((p) => p.kind === "deposit" && +p.amount > 0 && p.status === "confirmed");
   if (!paid) return { error: "A confirmed deposit is required before creating the work order." };
   const updated = updateStage(accessId, "schedule");

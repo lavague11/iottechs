@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { makeToken } from "../../../lib/auth";
-import { listEnrolledFaces, recordLogin, logIdentityEvent } from "../../../lib/db";
+import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace } from "../../../lib/db";
 
 // Face-first login (1:N). The client sends a live face embedding; we cosine-match
 // it against every verified enrolled face, and — the two-step the owner asked for
@@ -54,14 +54,21 @@ export async function POST(request) {
   const pool = listEnrolledFaces().filter((r) => r.status === "verified");
   if (!pool.length) return Response.json({ ok: false, error: "No enrolled faces yet. Use your PIN, or enroll first." }, { status: 404 });
 
-  // Rank every enrolled face by cosine to the live capture.
-  let best = null, second = -1;
+  // Rank each USER by their best-matching face (multi-face: a user can have several enrolled
+  // faces — glasses, hat, a claimed capture). The margin below is between distinct users, so two
+  // faces of the same person don't cancel each other out.
+  const perUser = new Map();
   for (const r of pool) {
     const fv = vecOf(r.face_embedding);
     if (!fv || fv.length !== live.length) continue;             // different embedding space — skip
     const score = cosine(fv, live);
-    if (!best || score > best.score) { second = best ? best.score : second; best = { r, score }; }
-    else if (score > second) { second = score; }
+    const cur = perUser.get(r.user_id);
+    if (!cur || score > cur.score) perUser.set(r.user_id, { r, score });
+  }
+  let best = null, second = -1;
+  for (const u of perUser.values()) {
+    if (!best || u.score > best.score) { second = best ? best.score : second; best = u; }
+    else if (u.score > second) { second = u.score; }
   }
 
   const clean = best && best.score >= FACE_THRESHOLD && (best.score - second) >= MARGIN;
@@ -79,6 +86,12 @@ export async function POST(request) {
       detail: `Face login miss (best ${best ? best.score.toFixed(3) : "—"}${idScore != null ? `, id ${idScore.toFixed(3)}` : ""})`,
       score: best?.score ?? null,
     });
+    // Park the live frame (encrypted) so an admin can identify the person and attach this face
+    // to their account — the glasses/hat/mask case that couldn't match. Deduped + 30-day purge.
+    try {
+      if (body.image && typeof body.image === "string" && body.image.startsWith("data:image"))
+        recordUnauthorizedFace({ image: body.image, embedding: live, ip, bestUserId: best?.r.user_id || null, bestName: best?.r.name || null, bestScore: best?.score ?? null });
+    } catch (e) {}
     return Response.json({ ok: false, error: "Not recognized. Use your PIN, or re-enroll." }, { status: 401 });
   }
 

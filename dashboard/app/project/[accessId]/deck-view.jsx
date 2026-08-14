@@ -106,7 +106,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     <div className="dv-shell" data-tint={cur.tint || "ink"}>
       {/* top bar */}
       <header className="dv-top">
-        <div className="dv-logo">IOT <em>TECHS</em></div>
+        <a className="dv-logo" href="/dashboard" title="Go to dashboard">IOT <em>TECHS</em></a>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => previewRoles.length && setRoleOpen((o) => !o)}>
@@ -306,7 +306,8 @@ const CSS = `
 .dv-shell :focus-visible{outline:2px solid var(--dv-gold-deep);outline-offset:3px;border-radius:8px}
 
 .dv-top{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;flex:0 0 auto}
-.dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px}.dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
+.dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px;color:var(--dv-ink);text-decoration:none;cursor:pointer}
+.dv-logo:hover{opacity:.7}.dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
 .dv-sp{flex:1}
 .dv-ghost{display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font-size:12.5px;font-weight:500;color:var(--dv-ink-soft)}
 .dv-solid{background:var(--dv-ink);color:#fff}

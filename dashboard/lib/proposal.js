@@ -165,6 +165,20 @@ export function makeCameraBundle(book, label = "Camera") {
   };
 }
 
+// Baseline recording system seeded the moment Security Cameras is added: an 8-Channel NVR,
+// a 4 TB drive in HDD Slot 1, and Display 1 pre-set to "Customer Provided" — the office's
+// most common starting point, editable/removable in the sysbar.
+export function cameraBaselineItems(book) {
+  const b = book || loadPriceBook();
+  const px = (name) => priceOf(name, b);
+  const dn = (name) => displayNameOf(name, b);
+  return [
+    { id: newItemId(), name: "NVR (8-Channel)", qty: 1, price: px("NVR (8-Channel)"), cost: 0 },
+    { id: newItemId(), name: "4TB Storage Drive", qty: 1, price: px("4TB Storage Drive"), cost: 0, slot: 1 },
+    { id: newItemId(), name: dn("Customer Provided"), baseName: "Customer Provided", qty: 1, price: px("Customer Provided"), cost: 0, displaySlot: 1 },
+  ];
+}
+
 // NVR models and storage drives are structurally load-bearing — their exact names are
 // pattern-matched elsewhere (channel/bay counts, quick-pick lists in proposal-items-editor.jsx).
 // They stay LOCKED in the catalog editor: price is editable, name and removal are not.

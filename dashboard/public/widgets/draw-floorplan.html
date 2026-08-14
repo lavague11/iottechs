@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Draw floor plan</title>
+<style>
+  :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--r:10px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{font:15px/1.45 var(--sans);color:var(--ink);background:#fff;display:flex;flex-direction:column;overflow:hidden}
+
+  .stage{flex:1;position:relative;min-height:0;background:#fbfbfa;overflow:hidden}
+  #grid{position:absolute;inset:0;background-image:linear-gradient(#eceae4 1px,transparent 1px),linear-gradient(90deg,#eceae4 1px,transparent 1px);background-size:26px 26px;pointer-events:none}
+  #cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  #hint{position:absolute;left:0;right:0;top:14px;text-align:center;color:var(--muted);font-size:12.5px;pointer-events:none;z-index:2}
+  #hint b{color:var(--ink)}
+
+  /* label popover for the selected shape */
+  #labelPop{position:absolute;z-index:8;display:none;flex-direction:column;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.22);padding:12px;width:262px}
+  #labelPop.on{display:flex}
+  #labelPop .chips{display:flex;flex-wrap:wrap;gap:6px}
+  #labelPop .chip{border:1px solid var(--line);background:var(--soft);border-radius:99px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink)}
+  #labelPop .chip:hover{border-color:var(--gold);color:var(--gold)}
+  #labelPop input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:14px;outline:none;color:var(--ink)}
+  #labelPop input:focus{border-color:var(--ink)}
+  #labelPop .lpRow{display:flex;gap:8px;justify-content:space-between}
+  #labelPop .lpRow button{border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--line)}
+  #labelPop .lpDel{background:#fff;color:#c4553d;border-color:#e3b4ab}
+  #labelPop .lpDone{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  #preview{position:absolute;inset:0;background:#fff;display:none;z-index:9}
+  #preview.show{display:block}
+  #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:rgba(12,14,16,.28)}
+  #scan.on{display:block}
+  #scan .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(185,138,46,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(185,138,46,.16) 1px,transparent 1px);background-size:28px 28px;-webkit-mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);animation:gp 1.7s ease-in-out infinite}
+  @keyframes gp{0%,100%{opacity:.28}50%{opacity:.6}}
+  #scan .beam{position:absolute;left:0;right:0;height:42%;top:-42%;background:linear-gradient(180deg,transparent,rgba(185,138,46,.2) 55%,rgba(255,240,205,.55) 92%,rgba(255,255,255,.9));box-shadow:0 0 30px 8px rgba(185,138,46,.35);animation:sm 1.5s cubic-bezier(.55,0,.45,1) infinite}
+  @keyframes sm{0%{top:-42%}100%{top:100%}}
+  #scan .cap{position:absolute;left:0;right:0;bottom:22px;text-align:center;color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 8px rgba(0,0,0,.55)}
+  #msg{position:absolute;left:0;right:0;bottom:70px;text-align:center;color:var(--muted);font-size:12.5px;z-index:11;display:none}
+  #msg.on{display:block}
+  #revBox{position:absolute;left:50%;transform:translateX(-50%);bottom:70px;z-index:12;display:none;gap:8px;align-items:center;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:10px;padding:7px 8px 7px 12px;box-shadow:0 6px 22px rgba(16,17,18,.2)}
+  #revBox.on{display:flex}
+  #revBox input{border:0;outline:none;font:inherit;font-size:13px;color:var(--ink);width:min(52vw,320px)}
+  #revBox button{border:0;background:var(--gold);color:#fff;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer}
+
+  .tbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:14;display:flex;align-items:center;gap:6px;
+    background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 8px 30px rgba(16,17,18,.2);backdrop-filter:blur(8px)}
+  .tb{display:flex;align-items:center;gap:7px;height:40px;padding:0 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);font:600 13px var(--sans);cursor:pointer}
+  .tb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tb:hover{background:var(--soft)}
+  .tb.on{background:var(--ink);color:#fff}
+  .tb.wand svg{stroke:var(--gold)}
+  .tb.wand.busy{opacity:.5;pointer-events:none}
+  .tb.use{background:var(--ink);color:#fff;border-color:var(--ink);padding:0 18px}
+  .tb.use:hover{background:#000}
+  .tb:disabled{opacity:.4;cursor:default}
+  .tb.locked{opacity:.4;pointer-events:none}
+  .tsep{width:1px;height:24px;background:var(--line);margin:0 2px}
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div id="grid"></div>
+    <canvas id="cv"></canvas>
+    <div id="hint"></div>
+    <div id="labelPop">
+      <div class="chips" id="lpChips"></div>
+      <input id="lpInput" type="text" autocomplete="off">
+      <div class="lpRow"><button class="lpDel" id="lpDel">Delete</button><button class="lpDone" id="lpDone">Done</button></div>
+    </div>
+
+    <div id="preview"><img id="prevImg" alt="floor plan">
+      <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Drawing your floor plan…</div></div>
+    </div>
+    <div id="msg"></div>
+    <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. add a hallway between the rooms"><button id="revGo">Revise</button></div>
+
+    <div class="tbar" id="tbar">
+      <button class="tb on" id="tBorder" title="Draw the property border first"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/></svg><span>Border</span></button>
+      <button class="tb" id="tRoom" title="Draw rooms inside"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 14h6V4"/></svg><span>Room</span></button>
+      <button class="tb" id="tClear" title="Clear everything"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+      <span class="tsep"></span>
+      <button class="tb wand" id="tEnhance" title="Turn the sketch into a real floor plan"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg></button>
+      <button class="tb" id="tDl" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
+      <button class="tb use" id="tDone">Done</button>
+    </div>
+  </div>
+
+<script>
+  var PID=new URLSearchParams(location.search).get("project")||"";
+  function $(id){return document.getElementById(id);}
+  var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage");
+  // NORMALIZED coords (0..1) so shapes survive resize. border = the property outline (drawn first);
+  // rooms = interior spaces drawn inside it.
+  var border=null, rooms=[], sel=null, draft=null, dragging=false, startPt=null, mode="border";
+  var enhancedURL=null, enhancedOnce=false, busy=false;
+  var ROOM_CHIPS=["Living Room","Kitchen","Bathroom","Bedroom","Master Bedroom","Dining","Garage","Office","Hallway","Closet","Laundry","Basement"];
+  var BORDER_CHIPS=["Home","House","Building","Store","Garage","Warehouse"];
+
+  function fitCanvas(){ var r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+    cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
+    ctx.setTransform(dpr,0,0,dpr,0,0); redraw(); }
+  function W(){ return cv.width/(window.devicePixelRatio||1); }
+  function H(){ return cv.height/(window.devicePixelRatio||1); }
+  window.addEventListener("resize", fitCanvas);
+  function fontFam(){ return getComputedStyle(document.body).fontFamily; }
+
+  function px(r){ return {x:r.x*W(), y:r.y*H(), w:r.w*W(), h:r.h*H()}; }
+  function inRect(x,y,r){ var p=px(r); return x>=p.x&&x<=p.x+p.w&&y>=p.y&&y<=p.y+p.h; }
+  function drawBorder(on){ var p=px(border);
+    ctx.strokeStyle= on ? "#b98a2e" : "#111"; ctx.lineWidth= on ? 4.5 : 3.5;
+    ctx.strokeRect(p.x,p.y,p.w,p.h);
+    var name=(border.label||"").trim(); if(name){ ctx.font="700 13px "+fontFam(); ctx.textAlign="left"; ctx.textBaseline="middle";
+      var tw=ctx.measureText(name).width; ctx.fillStyle="#fbfbfa"; ctx.fillRect(p.x+10,p.y-9,tw+12,18);
+      ctx.fillStyle="#111"; ctx.fillText(name,p.x+16,p.y); } }
+  function drawRoom(r,on){ var p=px(r);
+    ctx.fillStyle= on ? "rgba(185,138,46,.10)" : "rgba(16,17,18,.035)";
+    ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2;
+    ctx.fillRect(p.x,p.y,p.w,p.h); ctx.strokeRect(p.x,p.y,p.w,p.h);
+    var name=(r.label||"").trim();
+    ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(name||"Tap to name", p.x+p.w/2, p.y+p.h/2, Math.max(20,p.w-12)); }
+  function redraw(){ ctx.clearRect(0,0,W(),H());
+    if(border) drawBorder(border===sel);
+    rooms.forEach(function(r){ drawRoom(r, r===sel); });
+    if(draft){ var p=px(draft); ctx.setLineDash([6,5]); ctx.strokeStyle="#b98a2e"; ctx.lineWidth=2;
+      ctx.strokeRect(p.x,p.y,p.w,p.h); ctx.setLineDash([]); } }
+
+  function roomHit(x,y){ for(var i=rooms.length-1;i>=0;i--){ if(inRect(x,y,rooms[i])) return rooms[i]; } return null; }
+  function rel(e){ var r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+  function setMode(m){ mode=m; $("tBorder").classList.toggle("on",m==="border"); $("tRoom").classList.toggle("on",m==="room");
+    // can't draw rooms before a border exists
+    $("tRoom").classList.toggle("locked", !border);
+    $("hint").innerHTML = m==="border"
+      ? "First, drag to draw the <b>property border</b> — the outline of the home."
+      : "Now draw the <b>rooms</b> inside, and name each one. The wand turns it into a real floor plan.";
+    $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; }
+
+  cv.addEventListener("pointerdown", function(e){ if(busy||$("preview").classList.contains("show")) return;
+    cv.setPointerCapture(e.pointerId); var pt=rel(e);
+    var h = mode==="border" ? (border && inRect(pt.x,pt.y,border) ? border : null) : roomHit(pt.x,pt.y);
+    if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap an existing shape → name it
+    closeLabel(); sel=null; startPt=pt; dragging=true; draft={x:pt.x/W(),y:pt.y/H(),w:0,h:0}; });
+  cv.addEventListener("pointermove", function(e){ if(!dragging) return; var pt=rel(e);
+    var x0=Math.min(startPt.x,pt.x), y0=Math.min(startPt.y,pt.y), w=Math.abs(pt.x-startPt.x), h=Math.abs(pt.y-startPt.y);
+    draft={x:x0/W(),y:y0/H(),w:w/W(),h:h/H()}; redraw(); });
+  cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
+    var p=px(draft||{x:0,y:0,w:0,h:0});
+    if(draft && p.w>18 && p.h>18){
+      var shape={x:draft.x,y:draft.y,w:draft.w,h:draft.h,label:""};
+      if(mode==="border"){ if(border) shape.label=border.label; border=shape; sel=border; draft=null; redraw(); openLabel(border); setMode("room"); }
+      else { rooms.push(shape); sel=shape; draft=null; redraw(); openLabel(shape); }
+    } else { draft=null; redraw(); } });
+
+  // ---- label popover ----
+  function openLabel(r){ var pop=$("labelPop"), p=px(r), sr=stage.getBoundingClientRect(), isBorder=(r===border);
+    var left=Math.max(8, Math.min(sr.width-270, p.x+p.w/2-131)), top=Math.max(8, Math.min(sr.height-170, p.y+p.h/2-20));
+    pop.style.left=left+"px"; pop.style.top=top+"px"; pop.classList.add("on");
+    var chips=$("lpChips"); chips.innerHTML=""; (isBorder?BORDER_CHIPS:ROOM_CHIPS).forEach(function(c){ var b=document.createElement("button"); b.className="chip"; b.textContent=c;
+      b.addEventListener("click",function(){ r.label=c; $("lpInput").value=c; redraw(); }); chips.appendChild(b); });
+    var inp=$("lpInput"); inp.value=r.label||""; inp.placeholder=isBorder?"Structure — e.g. Home":"Room name — e.g. Kitchen"; setTimeout(function(){ inp.focus(); },30);
+    inp.oninput=function(){ r.label=inp.value; redraw(); };
+    inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); closeLabel(); } };
+    $("lpDel").onclick=function(){ if(isBorder){ border=null; setMode("border"); } else { rooms=rooms.filter(function(x){return x!==r;}); } sel=null; closeLabel(); redraw(); };
+    $("lpDone").onclick=closeLabel; }
+  function closeLabel(){ $("labelPop").classList.remove("on"); }
+
+  // ---- render the current sketch to a padded SQUARE png (sent to AI + used if not enhanced) ----
+  function sketchPNG(){ var S=1024, c=document.createElement("canvas"); c.width=S; c.height=S; var g=c.getContext("2d");
+    g.fillStyle="#ffffff"; g.fillRect(0,0,S,S);
+    var aw=W(), ah=H(), scale=Math.min((S-40)/aw,(S-40)/ah), dw=aw*scale, dh=ah*scale, ox=(S-dw)/2, oy=(S-dh)/2;
+    function box(r,lw){ return {x:ox+r.x*aw*scale, y:oy+r.y*ah*scale, w:r.w*aw*scale, h:r.h*ah*scale, lw:lw}; }
+    if(border){ var b=box(border); g.strokeStyle="#111"; g.lineWidth=7; g.strokeRect(b.x,b.y,b.w,b.h); }   // bold outer property wall
+    rooms.forEach(function(r){ var q=box(r); g.fillStyle="rgba(0,0,0,.04)"; g.fillRect(q.x,q.y,q.w,q.h);
+      g.strokeStyle="#111"; g.lineWidth=3; g.strokeRect(q.x,q.y,q.w,q.h);
+      var name=(r.label||"").trim(); if(name){ g.fillStyle="#111"; g.font="600 22px sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(name, q.x+q.w/2, q.y+q.h/2, Math.max(30,q.w-16)); } });
+    return c; }
+  function hasSketch(){ return !!border || rooms.length>0; }
+
+  // ---- enhance: sketch → real floor plan via /api/enhance (mode=floorplan) ----
+  function scanOn(on){ $("scan").classList.toggle("on",on); }
+  function msg(m){ var el=$("msg"); if(!m){ el.classList.remove("on"); return; } el.textContent=m; el.classList.add("on"); }
+  function enhance(revision){
+    if(!hasSketch()){ msg("Draw the property border first, then rooms."); setTimeout(function(){msg("");},2400); return; }
+    var w=$("tEnhance"); busy=true; w.classList.add("busy"); scanOn(true); $("preview").classList.add("show"); $("hint").style.display="none"; closeLabel();
+    var labels=[]; if(border && (border.label||"").trim()) labels.push(border.label.trim());
+    rooms.forEach(function(r){ var n=(r.label||"").trim(); if(n) labels.push(n); });
+    sketchPNG().toBlob(function(blob){
+      var fd=new FormData(); fd.append("image",blob,"sketch.png"); fd.append("mode","floorplan");
+      if(labels.length) fd.append("labels",labels.join(", ")); if(revision) fd.append("revision",revision);
+      fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
+        var img=new Image(); img.onload=function(){ enhancedURL="data:image/png;base64,"+d.b64; $("prevImg").src=enhancedURL;
+          scanOn(false); w.classList.remove("busy"); busy=false; enhancedOnce=true; w.title="Revise the floor plan"; };
+        img.onerror=function(){ scanOn(false); w.classList.remove("busy"); busy=false; msg("Couldn't load the result."); };
+        img.src="data:image/png;base64,"+d.b64;
+      }).catch(function(e){ scanOn(false); w.classList.remove("busy"); busy=false; if(!enhancedURL){ $("preview").classList.remove("show"); $("hint").style.display="block"; }
+        msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2600); });
+    },"image/png"); }
+  function openRev(){ $("revBox").classList.add("on"); var i=$("revIn"); i.value=""; i.focus(); }
+  function closeRev(){ $("revBox").classList.remove("on"); }
+  function runRev(){ var v=$("revIn").value.trim(); closeRev(); enhance(v); }
+  $("revGo").addEventListener("click", runRev);
+  $("revIn").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runRev(); } else if(e.key==="Escape") closeRev(); });
+
+  // ---- toolbar ----
+  function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); enhancedURL=null; enhancedOnce=false; $("tEnhance").title="Turn the sketch into a real floor plan"; } }
+  $("tBorder").addEventListener("click", function(){ backToDraw(); setMode("border"); });
+  $("tRoom").addEventListener("click", function(){ if(!border){ setMode("border"); return; } backToDraw(); setMode("room"); });
+  $("tClear").addEventListener("click", function(){ if(busy) return; border=null; rooms=[]; sel=null; draft=null; enhancedURL=null; enhancedOnce=false;
+    $("preview").classList.remove("show"); closeLabel(); setMode("border"); redraw(); });
+  $("tEnhance").addEventListener("click", function(){ if(busy) return;
+    if(enhancedOnce){ $("revBox").classList.contains("on")?closeRev():openRev(); return; } enhance(""); });
+  $("tDl").addEventListener("click", function(){ var url=enhancedURL || sketchPNG().toDataURL("image/png");
+    var a=document.createElement("a"); a.href=url; a.download="floor-plan.png"; a.click(); });
+  // Done → hand the final plan (enhanced if made, else the sketch) to the survey; it drops it as the
+  // floor background AND saves it to the shared library (same contract the satellite tool uses).
+  $("tDone").addEventListener("click", function(){ if(busy) return;
+    if(!hasSketch()){ msg("Draw the property border, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
+    var url=enhancedURL || sketchPNG().toDataURL("image/png");
+    try{ parent.postMessage({type:"satellite-capture-result", dataUrl:url}, "*"); }catch(e){} });
+
+  setMode("border");
+  fitCanvas();
+</script>
+</body>
+</html>

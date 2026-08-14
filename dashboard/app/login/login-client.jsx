@@ -143,7 +143,7 @@ export default function LoginClient({ next }) {
         return;
       }
       const emb = live.embedding;
-      const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb }) });
+      const res = await fetch("/api/face-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embedding: emb, image: live.image }) });
       const j = await res.json();
       if (j.ok) {
         setFaceState("ok"); setFaceMsg("Welcome, " + j.name);

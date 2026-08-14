@@ -101,6 +101,17 @@
   const median = (a) => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // A small JPEG of the current video frame — sent with a login so a MISS can be parked
+  // (encrypted, server-side) for an admin to identify later. Downscaled; never stored client-side.
+  function snapFrame(video, max = 480) {
+    const w = video.videoWidth || video.width || 0, h = video.videoHeight || video.height || 0;
+    if (!w || !h) return null;
+    const k = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    try { c.getContext("2d").drawImage(video, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.82); }
+    catch (e) { return null; }
+  }
+
   function upscale(img, minW = 1100) {
     const w = img.naturalWidth || img.width || img.videoWidth || 0;
     if (!w) return img;
@@ -224,7 +235,7 @@
       else if (!frontal) cue("Face forward");
       else if (alive || sawFace >= 6) {   // live signal, or give up waiting → capture (~<0.8s)
         const emb = await embed(video);
-        if (emb) return { ok: true, embedding: emb };
+        if (emb) return { ok: true, embedding: emb, image: snapFrame(video) };
       } else cue("Look at the camera");
       await sleep(35);
     }

@@ -87,6 +87,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   })();
 
   const [steps, setSteps]   = useState({});
+  const [stepPick, setStepPick] = useState(null);   // item id whose "how far did you get?" step picker is open
   const [notes, setNotes]   = useState({});
   const [custom, setCustom] = useState([]);   // added line items
   const [removed, setRemoved] = useState([]); // derived ids the office deleted
@@ -246,7 +247,22 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     setSteps(s => ({ ...s, [item.id]: next }));
     if (next > cur) logAdvance(item, cur, next); else logRevert(item.id, next);
   };
+  // Jump straight to a chosen step (the picker: "how far did you get?") instead of tapping one at a time.
+  const setStepTo = (item, n) => {
+    if (!canEdit) { setStepPick(null); return; }
+    const max = stepsFor(item.type).length;
+    const cur = Math.min(steps[item.id] || 0, max);
+    const next = Math.max(0, Math.min(max, n));
+    if (next !== cur) { pushHist(); setSteps(s => ({ ...s, [item.id]: next })); if (next > cur) logAdvance(item, cur, next); else logRevert(item.id, next); }
+    setStepPick(null);
+  };
   const setNote = (id, text) => setNotes(n => ({ ...n, [id]: text }));
+  useEffect(() => {   // Esc closes the step picker popup
+    if (!stepPick) return;
+    const onKey = (e) => { if (e.key === "Escape") setStepPick(null); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [stepPick]);
   const removeItem = (item) => {
     if (!canEdit) return;
     pushHist();
@@ -359,7 +375,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     return (
       <div key={item.id} className={`icl-row${complete ? " done" : ""}`} style={{ "--icl-c": color }}>
         <div className="icl-main">
-          <button type="button" className="icl-ring" disabled={!canEdit} onClick={() => bump(item, +1)} title={complete ? "Complete" : `Tap: ${stepList[done]}`}>
+          <button type="button" className="icl-ring" disabled={!canEdit} onClick={() => setStepPick(item)} title="Set how far you've gotten">
             <ProgressRing done={done} total={stepList.length} color={color} complete={complete} />
           </button>
           <div className="icl-info">
@@ -677,6 +693,28 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
       {canEditPay && (
         <RateLibrary open={ratesOpen} accessId={accessId} onClose={() => setRatesOpen(false)} onSaved={() => loadRates()} />
       )}
+
+      {/* Step picker — a centered popup (not a clipped dropdown): pick how far this item got. */}
+      {stepPick && canEdit && (() => {
+        const it = stepPick, list = stepsFor(it.type), done = Math.min(steps[it.id] || 0, list.length);
+        return (
+          <div className="icl-stepmodal-bg" onClick={(e) => { if (e.target.classList.contains("icl-stepmodal-bg")) setStepPick(null); }}>
+            <div className="icl-stepmodal" style={{ "--icl-c": colorFor(it.type) }}>
+              <button type="button" className="icl-stepmodal-x" onClick={() => setStepPick(null)}>✕</button>
+              <div className="icl-stepmodal-name">{titleCase(it.name)}</div>
+              <div className="icl-stepmodal-h">How far did you get?</div>
+              <button type="button" className={`icl-steppop-opt${done === 0 ? " on" : ""}`} onClick={() => setStepTo(it, 0)}>
+                <span className="icl-steppop-n">—</span>Not started
+              </button>
+              {list.map((s, i) => (
+                <button type="button" key={i} className={`icl-steppop-opt${done >= i + 1 ? " reached" : ""}${done === i + 1 ? " on" : ""}`} onClick={() => setStepTo(it, i + 1)}>
+                  <span className="icl-steppop-n">{i + 1}</span>{s}{done >= i + 1 && <span className="icl-steppop-chk">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
