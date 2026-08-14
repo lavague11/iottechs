@@ -1948,6 +1948,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   if (deckMode) {
     const deckToolsFor = (pk) => {
       if (pk === "ph_survey") {
+        // Server tool-meta + the widget's live "has data" signal → drives the Submit/Approve bar.
+        const svMeta = toolMeta?.survey || { has: false };
+        const mkMeta = toolMeta?.mockup || { has: false };
+        const svMetaEff = { ...svMeta, has: svMeta.has || surveyHasLocal };
+        const mkMetaEff = { ...mkMeta, has: mkMeta.has || mockupHasLocal };
+        const onApprove = (a) => setAcceptances(a);
+        const barWrap = { padding: "10px 14px", borderTop: "1px solid var(--dv-line,#E4E4DF)", flex: "0 0 auto", background: "var(--dv-raise,#FBFBFA)" };
+        const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
         return [
           { name: "Survey Scheduling", label: "Scheduler", state: lp.date ? "done" : "active",
             node: (
@@ -1956,12 +1964,30 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} />
               </div>
             ) },
-          { name: "Site Survey", label: "Site Survey tool", heavy: true, state: "active",
-            node: <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} /> },
+          { name: "Site Survey", label: "Site Survey tool", heavy: true,
+            state: toolAccepted(svMetaEff, acceptances.site_survey) ? "done" : "active",
+            node: (
+              <div style={heavyCol}>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} />
+                </div>
+                <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
+                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
+              </div>
+            ) },
           { name: "Mockups", label: "Mockup generator", heavy: true,
-            node: <MockupWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                    customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} /> },
+            state: toolAccepted(mkMetaEff, acceptances.mockup) ? "done" : (mkMetaEff.has ? "active" : undefined),
+            node: (
+              <div style={heavyCol}>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <MockupWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                    customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} />
+                </div>
+                <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
+                  acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
+              </div>
+            ) },
         ];
       }
       if (pk === "ph_proposal") {
