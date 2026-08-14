@@ -248,29 +248,19 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                   <div className="apv-baltile"><span>Remaining</span><b className={gRemaining > 0 ? "apv-due" : "apv-ok"}>{money(gRemaining)}</b></div>
                 </div>
               )}
-              <div className="apv-payform">
-                <button type="button" className="apv-payform-hd apv-payform-toggle" onClick={() => setPayFormOpen((o) => !o)}>
-                  <span>Record a payment</span>
-                  <svg className={`apv-payform-chev${payFormOpen ? " open" : ""}`} viewBox="0 0 10 6" width="11" height="7" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
-                </button>
-                {payFormOpen && (
-                  <div style={{ display: "contents" }}>
-                    <div className="apv-payform-grid">
-                      <label className="apv-fld"><span>Amount</span>
-                        <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
-                      <label className="apv-fld"><span>Method</span>
-                        <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-                          <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
-                        </select></label>
-                      <label className="apv-fld"><span>Date paid</span>
-                        <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
-                      <label className="apv-fld"><span>Note / reference <em>(optional)</em></span>
-                        <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
-                    </div>
-                    <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
-                  </div>
-                )}
+              <div className="apv-payform-grid">
+                <label className="apv-fld"><span>Amount</span>
+                  <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
+                <label className="apv-fld"><span>Method</span>
+                  <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
+                    <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
+                  </select></label>
+                <label className="apv-fld"><span>Date paid</span>
+                  <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
+                <label className="apv-fld"><span>Note / reference <em>(optional)</em></span>
+                  <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
               </div>
+              <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
               <div className="apv-fine">Billing stays open — record a deposit or payment even before the customer accepts or signs.</div>
             </div>
             )}
