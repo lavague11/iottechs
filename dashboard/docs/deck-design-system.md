@@ -187,8 +187,17 @@ Newest first. Append when we make a call worth not re-litigating.
   `techPay` for sales + customer, gives tech a tech-priced work order only after the proposal is
   *sent* (drafts hidden from customer/tech); `getNotesAction` filters to `public` for customers;
   `getEventsAction` refuses customers outright; tool-data reads delete `techPay` and blank
-  signature data for customer/tech. Matrix holds at both layers. Still open: re-integrate the
-  submit/approve action bars into the deck footer for the non-admin flows.
+  signature data for customer/tech. Matrix holds at both layers.
+- **Submit/Approve bar is deck-themed.** The `ToolApproveBar` (`survey-approve.jsx`) is the shared
+  submit→review→approve control that sits under a data-bearing tool (Site Survey, Mockups) in the
+  deck — office submits/unsubmits/re-submits, the customer approves, and it flips to "changed —
+  re-approve" when the tool edits after approval. It was already wired into the deck; its stylesheet
+  (`TAB_CSS`) was the last cartoonish holdout, so it's now on deck tokens: neutral `--dv-raise`
+  surface, hairline border, one dark-ink `.tab-btn` (customer "Approve"), a `.ghost` for Unsubmit,
+  a `--dv-green` check and `--dv-gold` dot — no gold gradient, no 800 weights. Verified both the
+  office ("Submitted — Unsubmit") and customer ("Approve site survey") variants render in the deck.
+  (`SmoothSailing`/`SSL_CSS` — the survey empty-state boat — is still cartoonish but is legacy-only,
+  not mounted in the deck; restyle it if it ever surfaces there.)
 - **Note visibility is governed, not free.** Making a note public asks first (inline confirm).
   Only admin/manager set visibility outright; tech/sales can only *request* public → the note
   goes `pending_public` and an admin/manager approves/rejects. Customer notes are always public.
