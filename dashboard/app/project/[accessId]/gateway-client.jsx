@@ -1494,17 +1494,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
-  // Additive deck shell: renders the redesigned horizontal stage deck instead of the legacy
-  // stacked page. Set after mount (not during SSR) to avoid a hydration mismatch. The legacy page
-  // stays the default; staff opt into the deck via an in-app toggle (persisted in localStorage) or
-  // ?deck=1 / ?deck=0 in the URL (URL wins for that load). Customers are never shown the toggle.
+  // Deck shell: the redesigned horizontal stage deck. Staff now get it BY DEFAULT (every project,
+  // new or old); customers stay on the legacy stacked page until their deck view is fully validated.
+  // Resolution order (set after mount to avoid a hydration mismatch): ?deck=1/0 in the URL wins for
+  // that load → a persisted in-app choice (localStorage) → otherwise the role default (staff = deck,
+  // customer = legacy). The "Classic view" / "Deck" toggle lets staff switch and remembers it.
   const [deckMode, setDeckMode] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("deck");
     if (q === "1") { setDeckMode(true); return; }
     if (q === "0") { setDeckMode(false); return; }
-    try { setDeckMode(localStorage.getItem("iot_deck") === "1"); } catch { /* no storage */ }
-  }, []);
+    try {
+      const saved = localStorage.getItem("iot_deck");
+      if (saved === "1") { setDeckMode(true); return; }
+      if (saved === "0") { setDeckMode(false); return; }
+    } catch { /* no storage */ }
+    setDeckMode(["admin", "manager", "sales", "tech"].includes(view));   // role default
+  }, [view]);
   const toggleDeck = () => setDeckMode((m) => { const n = !m; try { localStorage.setItem("iot_deck", n ? "1" : "0"); } catch { /* no storage */ } return n; });
   const canToggleDeck = ["admin", "manager", "sales", "tech"].includes(view);
   const [busy, setBusy]                 = useState(false);
