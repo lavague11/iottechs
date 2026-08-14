@@ -2059,7 +2059,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 role={cView} readOnly={cView === "customer" || !!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
         if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} /></div> });
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         return tools;
       }
@@ -2076,7 +2076,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: <div style={pad}><SystemQrTool accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
         tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
-          node: <div style={fill}><QCChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
+          node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
             readOnly={!!previewRole || cView === "customer" || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,

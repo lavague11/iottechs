@@ -59,16 +59,16 @@ export default function TechProjectBoard({ project }) {
 }
 
 const TPB_CSS = `
-.tpb-root{background:var(--ink);border-radius:14px;padding:16px 18px;margin-bottom:14px;color:#fff;
-  font-family:var(--font);border-top:4px solid var(--green)}
+.tpb-root{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;padding:16px 18px;margin-bottom:14px;color:var(--dv-ink,#101418);
+  font-family:inherit}
 .tpb-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.tpb-title{font-size:.95rem;font-weight:800;letter-spacing:.02em}
-.tpb-tag{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#5FB88A;border:1px solid rgba(95,184,138,.45);border-radius:100px;padding:4px 11px}
+.tpb-title{font-size:.95rem;font-weight:600;letter-spacing:-.01em;color:var(--dv-ink,#101418)}
+.tpb-tag{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-green,#2E7D5B);background:#e9f3ed;border:1px solid #cfe6d8;border-radius:100px;padding:4px 11px}
 .tpb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
 .tpb-cell{display:flex;flex-direction:column;gap:3px;min-width:0}
-.tpb-lbl{font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a93a8}
-.tpb-cell b{font-size:.9rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tpb-dir{font-size:.72rem;color:#9fc0e8;text-decoration:none;margin-top:1px}
-.tpb-dir:hover{color:var(--gold)}
-.tpb-foot{margin-top:12px;font-size:.72rem;color:#9aa1af;border-top:1px solid rgba(255,255,255,.08);padding-top:10px}
+.tpb-lbl{font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.tpb-cell b{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpb-dir{font-size:.72rem;color:var(--dv-blue,#3E6C9E);text-decoration:none;margin-top:1px}
+.tpb-dir:hover{color:var(--dv-gold-deep,#A8842F)}
+.tpb-foot{margin-top:12px;font-size:.72rem;color:var(--dv-faint,#A1A6AC);border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-top:10px}
 `;

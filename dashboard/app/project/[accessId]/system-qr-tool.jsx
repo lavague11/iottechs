@@ -48,7 +48,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
   return (
     <div className="sqp" style={{ "--sq": accent }}>
       <div className="sqp-head">
-        <span className="sqp-ic" style={{ background: saved ? "#e7f6ec" : "#f8f0e0", color: saved ? accent : "#8a6d2f" }}>
+        <span className="sqp-ic" style={{ background: saved ? "#e9f3ed" : "var(--dv-paper,#F4F4F2)", color: saved ? "var(--dv-green,#2E7D5B)" : "var(--dv-meta,#787D84)" }}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h1"/></svg>
         </span>
         <button type="button" className="sqp-tt" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -56,7 +56,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
           <span className="sqp-sub">
             {readOnly
               ? (saved ? "Scan to set up your cameras in the app" : "Your activation card will appear here")
-              : (saved ? "Activation card ready" : "Upload the device QR to generate the card")}
+              : (saved ? "Card ready" : "Upload the device QR")}
           </span>
         </button>
         {flash && <span className="sqp-flash">Saved ✓</span>}
@@ -104,28 +104,27 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
       />
 
       <style>{`
-        /* Match the FlowStep bare cards exactly (.flow-bare-head): same padding, icon, border, radius
-           — so the whole install flow reads as one uniform stack of rows. */
-        .sqp{border:1px solid #d9d4ca;border-left:3px solid var(--sq);border-radius:12px;background:#fff;margin:0;overflow:hidden;font-family:inherit}
-        .sqp-head{display:flex;align-items:center;gap:10px;padding:11px 16px}
-        .sqp-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+        /* Deck theme — flat, neutral, thin lines, ink/green actions. */
+        .sqp{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-raise,#FBFBFA);margin:0;overflow:hidden;font-family:inherit}
+        .sqp-head{display:flex;align-items:center;gap:11px;padding:12px 14px}
+        .sqp-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;border:1px solid var(--dv-line,#E4E4DF)}
         .sqp-tt{display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;text-align:left}
-        .sqp-title{font-weight:800;font-size:.9rem;color:#0B0F1A}
-        .sqp-chev{color:#8a8378;font-size:.7rem;font-weight:700}
-        .sqp-sub{font-size:.76rem;color:#6f7686}
-        .sqp-flash{font-size:.76rem;font-weight:800;color:#1c8a45;white-space:nowrap}
-        .sqp-btn{height:30px;padding:0 16px;border:none;border-radius:8px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
-        .sqp-btn.upload{background:#C9A96E;color:#0B0F1A}
-        .sqp-btn.view{background:#2f7d5a}
-        .sqp-btn.ghost{background:#fff;border:1px solid #d9d4ca;color:#41485a}
-        .sqp-btn:hover{filter:brightness(1.06)}
-        .sqp-remove{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border:1px solid #f2c4c4;border-radius:8px;background:#fff;color:#e74c3c;cursor:pointer;line-height:1}
-        .sqp-remove:hover{background:#fdecec;border-color:#e74c3c}
-        .sqp-body{border-top:1px solid #eee}
+        .sqp-title{font-weight:600;font-size:14.5px;color:var(--dv-ink,#101418)}
+        .sqp-chev{color:var(--dv-faint,#A1A6AC);font-size:.7rem;font-weight:700}
+        .sqp-sub{font-size:12.5px;color:var(--dv-meta,#787D84)}
+        .sqp-flash{font-size:.76rem;font-weight:600;color:var(--dv-green,#2E7D5B);white-space:nowrap}
+        .sqp-btn{height:30px;padding:0 15px;border:none;border-radius:8px;font-size:.8rem;font-weight:500;cursor:pointer;font-family:inherit;color:#fff;white-space:nowrap}
+        .sqp-btn.upload{background:var(--dv-ink,#101418);color:#fff}
+        .sqp-btn.view{background:var(--dv-green,#2E7D5B)}
+        .sqp-btn.ghost{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink,#101418)}
+        .sqp-btn:hover{filter:brightness(1.12)}
+        .sqp-remove{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border:1px solid #e3b4ab;border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-red,#C4553D);cursor:pointer;line-height:1}
+        .sqp-remove:hover{background:#fbe9e6}
+        .sqp-body{border-top:1px solid var(--dv-line,#E4E4DF)}
         .sqp-frame{width:100%;height:640px;border:none;background:#0B0F1A;display:block}
-        .sqp-cust{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px 20px;background:#fbfaf8}
-        .sqp-cust-img{width:min(240px,70%);max-width:240px;height:auto;border-radius:10px;border:1px solid #e2ddd2;background:#fff;cursor:zoom-in;display:block}
-        .sqp-cust-cap{font-size:.8rem;color:#41485a;text-align:center;max-width:320px}
+        .sqp-cust{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px 20px;background:var(--dv-paper,#F4F4F2)}
+        .sqp-cust-img{width:min(240px,70%);max-width:240px;height:auto;border-radius:10px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;cursor:zoom-in;display:block}
+        .sqp-cust-cap{font-size:.8rem;color:var(--dv-ink-soft,#3A4048);text-align:center;max-width:320px}
       `}</style>
     </div>
   );

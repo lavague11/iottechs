@@ -20,7 +20,7 @@ const checksFor = (type) => CHECKS[type] || CHECKS.equip;
 
 const LABOR_RX = /drop|cable|run|termination|mount|management|program|setup|labor|install|per diem|test|tone|waterproof/i;
 
-export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange }) {
+export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange, embedded = false }) {
   const isCustomer = role === "customer";
   const canEdit = !readOnly && ["admin", "manager", "tech"].includes(role);
   const canAdvance = !readOnly && ["admin", "manager"].includes(role);
@@ -100,6 +100,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   return (
     <div className="qc-root" style={{ "--qc": allPass ? "#2f7d5a" : "#D64545" }}>
       <style>{QC_CSS}</style>
+      {!embedded && (
       <button type="button" className="qc-head qc-head-btn" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
         {/* QC is a REQUIRED step (Manager QC approval gates completion) → red until every device passes, then green. */}
         <span className="qc-ic" style={{ background: allPass ? "#e7f6ec" : "#fdecec", color: allPass ? "#2f7d5a" : "#c0392b" }}>
@@ -111,8 +112,9 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
         </span>
         <span className={`qc-badge${allPass ? " done" : ""}`}>{allPass ? "All passed" : `${passedCount} / ${items.length} passed`}</span>
       </button>
+      )}
 
-      {!collapsed && (<div className="qc-body">
+      {(embedded || !collapsed) && (<div className="qc-body">
       <div className="qc-bar"><span className="qc-bar-fill" style={{ width: `${pct}%` }} /></div>
 
       {canEdit && !allPass && (
@@ -176,44 +178,48 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
 }
 
 const QC_CSS = `
-.qc-root{margin:16px 0 4px;background:#fff;border:1px solid #d9d4ca;border-left:3px solid var(--qc,#C9A96E);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
-.qc-empty{color:#6f7686;font-size:.9rem;padding:14px 16px}
+/* Deck-themed — neutral surfaces, thin lines, ink primary button, semantic green for passes.
+   No gold rail / gradients / Bricolage. Tokens fall back to hex for the legacy page. */
+.qc-root{margin:16px 0 4px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.qc-empty{color:var(--dv-meta,#787D84);font-size:.9rem;padding:14px 16px}
 .qc-head-btn{display:flex;align-items:center;gap:10px;padding:11px 16px;width:100%;background:none;border:none;margin:0;cursor:pointer;font-family:inherit;text-align:left}
 .qc-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
 .qc-tt{display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1}
-.qc-chev{color:#8a8378;font-size:.7rem;font-weight:700}
-.qc-title{font-size:.9rem;font-weight:800;color:#0B0F1A}
-.qc-sub{font-size:.76rem;color:#6f7686}
-.qc-body{border-top:1px solid #eee;padding:12px 16px 14px;display:flex;flex-direction:column;gap:12px}
-.qc-badge{background:#eef3fa;border:1px solid #ccd6e6;color:#3a4a72;font-weight:800;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap;flex-shrink:0}
-.qc-badge.done{background:#f2f9f4;border-color:#bfe0c9;color:#1d7a3a}
-.qc-bar{height:7px;background:#eee9df;border-radius:100px;overflow:hidden}
-.qc-bar-fill{display:block;height:100%;background:linear-gradient(90deg,#2f7d5a,#4bbd86);border-radius:100px;transition:width .3s}
+.qc-chev{color:var(--dv-faint,#A1A6AC);font-size:.7rem;font-weight:700}
+.qc-title{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418)}
+.qc-sub{font-size:.76rem;color:var(--dv-meta,#787D84)}
+.qc-body{border-top:1px solid var(--dv-line-soft,#EDEDE9);padding:12px 16px 14px;display:flex;flex-direction:column;gap:12px}
+.qc-badge{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-weight:600;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap;flex-shrink:0}
+.qc-badge.done{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
+.qc-bar{height:7px;background:var(--dv-line-soft,#EDEDE9);border-radius:100px;overflow:hidden}
+.qc-bar-fill{display:block;height:100%;background:var(--dv-green,#2E7D5B);border-radius:100px;transition:width .3s}
 .qc-tools{display:flex;justify-content:flex-end}
-.qc-passall{height:28px;padding:0 12px;border:1px solid #bfe0c9;background:#f2f9f4;color:#1d7a3a;border-radius:8px;font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit}
+.qc-passall{height:28px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);border-radius:8px;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.qc-passall:hover{filter:brightness(1.12)}
 .qc-list{display:flex;flex-direction:column;gap:8px}
-.qc-item{background:#fbfaf8;border:1px solid #e2ddd2;border-left:3px solid #c9c2b4;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
-.qc-item.pass{background:#f2f9f4;border-color:#bfe0c9;border-left-color:#2f7d5a}
+.qc-item{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.qc-item.pass{background:#f2f9f4;border-color:#cfe6d8}
 .qc-item-top{display:flex;align-items:center;gap:10px}
-.qc-check-dot{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:1.5px solid #c9d2e0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;color:#2f7d5a}
-.qc-check-dot.on{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.qc-item-name{flex:1;min-width:0;font-size:.88rem;font-weight:700;color:#0B0F1A}
-.qc-item-pass{height:26px;padding:0 11px;border:1px solid #bfe0c9;background:#fff;color:#1d7a3a;border-radius:7px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:inherit}
-.qc-flag{background:#fdeceb;border:1px solid #e0b0a8;color:#a8442f;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;border-radius:100px;padding:2px 8px}
+.qc-check-dot{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:1.5px solid var(--dv-line,#E4E4DF);background:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:var(--dv-green,#2E7D5B)}
+.qc-check-dot.on{background:var(--dv-green,#2E7D5B);border-color:var(--dv-green,#2E7D5B);color:#fff}
+.qc-item-name{flex:1;min-width:0;font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418)}
+.qc-item-pass{height:26px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-green,#2E7D5B);border-radius:7px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
+.qc-flag{background:#fbe9e6;color:var(--dv-red,#C4553D);font-size:.66rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;border-radius:100px;padding:2px 8px}
 .qc-checks{display:flex;flex-wrap:wrap;gap:6px}
-.qc-chk{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid #d9d4ca;background:#fff;border-radius:8px;font-size:.76rem;font-weight:600;color:#41485a;cursor:pointer;font-family:inherit}
+.qc-chk{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;border-radius:8px;font-size:.76rem;font-weight:500;color:var(--dv-ink-soft,#3A4048);cursor:pointer;font-family:inherit}
 .qc-chk:disabled{cursor:default;opacity:.85}
-.qc-chk.on{background:#eaf6ef;border-color:#2f7d5a;color:#1d7a3a}
-.qc-chk-box{width:16px;height:16px;border-radius:4px;border:1.5px solid #c9d2e0;display:inline-flex;align-items:center;justify-content:center;font-size:.66rem;font-weight:800;background:#fff;color:#2f7d5a}
-.qc-chk.on .qc-chk-box{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.qc-add-issue{align-self:flex-start;background:none;border:none;color:#8a8378;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;padding:0}
-.qc-add-issue:hover{color:#a8442f}
-.qc-issue-in{width:100%;height:34px;border:1px solid #e0b0a8;border-radius:8px;padding:0 10px;font-size:.82rem;font-family:inherit;background:#fffdfc}
-.qc-issue-ro{font-size:.82rem;color:#a8442f;font-style:italic}
-.qc-err{font-size:.82rem;color:#a8442f;background:#fdeceb;border:1px solid #e0b0a8;border-radius:8px;padding:8px 10px}
-.qc-advance{height:44px;border:none;border-radius:10px;background:#2f7d5a;color:#fff;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
-.qc-advance:hover:not(:disabled){filter:brightness(1.08)}
+.qc-chk.on{background:#e9f3ed;border-color:#cfe6d8;color:var(--dv-green,#2E7D5B)}
+.qc-chk-box{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--dv-line,#E4E4DF);display:inline-flex;align-items:center;justify-content:center;font-size:.66rem;font-weight:700;background:#fff;color:var(--dv-green,#2E7D5B)}
+.qc-chk.on .qc-chk-box{background:var(--dv-green,#2E7D5B);border-color:var(--dv-green,#2E7D5B);color:#fff}
+.qc-add-issue{align-self:flex-start;background:none;border:none;color:var(--dv-faint,#A1A6AC);font-size:.74rem;font-weight:500;cursor:pointer;font-family:inherit;padding:0}
+.qc-add-issue:hover{color:var(--dv-red,#C4553D)}
+.qc-issue-in{width:100%;height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.82rem;font-family:inherit;background:#fff;color:var(--dv-ink,#101418);outline:none}
+.qc-issue-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.qc-issue-ro{font-size:.82rem;color:var(--dv-red,#C4553D);font-style:italic}
+.qc-err{font-size:.82rem;color:var(--dv-red,#C4553D);background:#fbe9e6;border:1px solid #e3b4ab;border-radius:8px;padding:8px 10px}
+.qc-advance{height:44px;border:none;border-radius:10px;background:var(--dv-ink,#101418);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit}
+.qc-advance:hover:not(:disabled){filter:brightness(1.12)}
 .qc-advance:disabled{opacity:.6;cursor:default}
-.qc-done-note{text-align:center;font-size:.84rem;font-weight:700;color:#1d7a3a;padding:6px}
-.qc-pending-note{text-align:center;font-size:.8rem;color:#8a8378;padding:2px}
+.qc-done-note{text-align:center;font-size:.84rem;font-weight:600;color:var(--dv-green,#2E7D5B);padding:6px}
+.qc-pending-note{text-align:center;font-size:.8rem;color:var(--dv-faint,#A1A6AC);padding:2px}
 `;
