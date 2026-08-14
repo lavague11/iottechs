@@ -160,6 +160,27 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **Restyle sweep completed for every role-facing tool + an audit pass.** The last cartoonish
+  holdouts are now deck-themed: the **customer proposal view** (dark document banner → flat neutral
+  header, one sanctioned dark grand-total band, gold gradients/800-weights/heavy shadows gone; the
+  per-service band is now a neutral chip with a thin service-color left accent instead of a dark
+  bar), the **tech work-order view**, **shipment tracking**, the proposal **sub-editors**
+  (preset/pricing/rate-library), the **customer accept bar**, **receiving checklist** (dropped its
+  gold top-rail + blue left-rail + gradient bar), the **proposal sign modal** (bright-yellow ribbon
+  → neutral header), **survey comments**, and the **Approval "Record a Payment"** rows. Verified
+  live: customer proposal document + Job Log render clean and flat. The **cinematic shipment
+  tracker** (`cin-*` night-drive art) is deliberately kept as-is — it's an intentional dark art
+  component, not chrome to flatten.
+- **Audit — deck footer + the embedded convention, extended.** (1) The footer no longer shows a
+  permanently-disabled "Continue to X" button to non-admin roles — only admin/manager (who can move
+  the stage) get the advance button; everyone else sees just the progress readout ("N of M complete"
+  / "Stage complete"). DoD: render only when real, one clear next action. (2) The `embedded`
+  convention now also covers **InstallChecklist** and **SystemQrTool**, which were still self-titling
+  inside the deck overlay/row (double "Installation Work Order" / nested "System QR" collapse). Both
+  take `embedded` and drop their own name-header when the deck already titles them. Confirmed
+  `WorkOrderCard`, `QCChecklist`, `InstallAddendum`, `ApprovalPanel`, `ProposalBuilder` already
+  honor it. (3) No emoji-as-icon violations in persistent UI — the only emoji are export text
+  (calendar share), the cinematic-tracker art, and a completion toast; deck tools use inline SVG.
 - **Every stage tool is restyled to the deck theme.** All tool stylesheets (WorkOrder, QC,
   Completion, ShipmentTracking, Proposal, InstallAddendum, TechBoard, System QR, InstallChecklist,
   TechPricingEditor — plus the earlier Approval & Details/Notes) now use the deck palette: neutral
