@@ -2002,7 +2002,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {cView === "tech" && <TechProjectBoard project={lp} />}
-                <ProposalPanel accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                <ProposalPanel embedded accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}

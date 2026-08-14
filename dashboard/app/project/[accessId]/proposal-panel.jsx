@@ -8,13 +8,13 @@ import ProposalWorkOrderView from "./proposal-workorder-view";
 // (tech prices only); customer (and staff previewing as customer) get the review surface.
 // Data arrives server-sanitized per role from page.jsx (lib/proposal.js sanitizeProposal) —
 // cost/margin never reach non-staff, and the customer price never reaches a tech.
-export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech }) {
+export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, embedded = false }) {
   const staffBuilder = ["admin", "manager", "sales"].includes(cView);
   return (
     <div className="prop-wrap">
       <style>{PROP_CSS}</style>
       {staffBuilder ? (
-        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} />
+        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} embedded={embedded} />
       ) : cView === "tech" ? (
         <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
@@ -34,6 +34,7 @@ const PROP_CSS = `
    edge-to-edge and the body is a divided, padded section below. Flat deck surface, no accent rail. */
 .pvx .prop-card{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;overflow:hidden}
 .pvx .prop-body{border-top:1px solid var(--dv-line,#E4E4DF);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.pvx .prop-head-slim{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
