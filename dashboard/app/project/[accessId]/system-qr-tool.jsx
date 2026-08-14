@@ -8,7 +8,7 @@ import ConfirmDialog from "../../components/confirm-dialog";
 // Minimal System QR step. One row: red "Upload" until a card exists, green "View" after.
 // Upload opens the compact QR Cleaner; once it produces a verified card we save it and flip to
 // green. View pops the card full-screen. Customer name is prefilled from the project.
-export default function SystemQrTool({ accessId, customerName, systemQr, readOnly = false }) {
+export default function SystemQrTool({ accessId, customerName, systemQr, readOnly = false, embedded = false }) {
   const [saved, setSaved] = useState(systemQr || null);
   const [mode, setMode] = useState("idle");   // idle | upload
   const [viewing, setViewing] = useState(false);
@@ -51,8 +51,8 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         <span className="sqp-ic" style={{ background: saved ? "#e9f3ed" : "var(--dv-paper,#F4F4F2)", color: saved ? "var(--dv-green,#2E7D5B)" : "var(--dv-meta,#787D84)" }}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h1"/></svg>
         </span>
-        <button type="button" className="sqp-tt" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          <span className="sqp-title">System QR <span className="sqp-chev">{open ? "▾" : "▸"}</span></span>
+        <button type="button" className="sqp-tt" onClick={embedded ? undefined : () => setOpen((o) => !o)} aria-expanded={embedded ? undefined : open} style={embedded ? { cursor: "default" } : undefined}>
+          {!embedded && <span className="sqp-title">System QR <span className="sqp-chev">{open ? "▾" : "▸"}</span></span>}
           <span className="sqp-sub">
             {readOnly
               ? (saved ? "Scan to set up your cameras in the app" : "Your activation card will appear here")

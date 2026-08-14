@@ -33,7 +33,7 @@ const CAMERA_BULK = [
 let _cid = 0;
 const newId = () => `c${Date.now().toString(36)}${_cid++}`;
 
-export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, staffUsers = [] }) {
+export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, staffUsers = [], embedded = false }) {
   const isCustomer = role === "customer";
   const canEdit  = !readOnly && !isCustomer;   // tech / admin / manager may mark + add + delete
   const canPrice = !isCustomer;                // can SEE pricing (tech + office)
@@ -427,7 +427,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
       <style>{ICL_CSS}</style>
       <div className="icl-head">
         <div className="icl-head-l">
-          <span className="icl-title">Installation Work Order</span>
+          {!embedded && <span className="icl-title">Installation Work Order</span>}
           <span className="icl-sub">{customerName || "Customer"}{customerAddress ? ` · ${customerAddress}` : ""}</span>
         </div>
         <div className="icl-head-r">

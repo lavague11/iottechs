@@ -2055,7 +2055,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
           node: techLocked
             ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
-            : <div style={fill}><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+            : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                 role={cView} readOnly={cView === "customer" || !!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
         if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
@@ -2070,10 +2070,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
         if (["admin", "manager", "tech"].includes(cView)) {
           tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
-            node: <div style={pad}><SystemQrTool accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
         } else if (cView === "customer" && lp.system_qr) {
           tools.push({ name: "System QR", label: "Activation QR",
-            node: <div style={pad}><SystemQrTool accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
         tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
           node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
