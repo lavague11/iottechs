@@ -4595,7 +4595,7 @@ export function confirmedPaymentTotal(accessId, kind) {
 // ---- Browser-tool data backup (survey / mockup / schedule JSON blobs) ----
 // "tracking" = equipment shipment info for the Schedule stage ({number, carrier, note}) —
 // staff set it, the customer's scheduling page displays it.
-export const TOOL_KEYS = new Set(["survey", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
+export const TOOL_KEYS = new Set(["survey", "survey2", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
 export function getToolData(accessId, tool) {
   const r = db.prepare("SELECT data, updated_by, updated_at FROM project_tool_data WHERE project_access_id=? AND tool=?")
     .get(String(accessId), String(tool));

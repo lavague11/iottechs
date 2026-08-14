@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurveyImages } from "../../../lib/survey-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction } from "./proposal-actions";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -48,6 +48,42 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [menuNote, setMenuNote] = useState("");
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+
+  // ---- "Your System Layout": the customer's floor plan(s) with cameras placed + the mockup photos,
+  // rendered straight from the saved survey2 / mockup data (no off-screen render). Collapsible.
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const [hasLayout, setHasLayout]   = useState(false);   // light mount check — is there anything to show?
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [layoutBusy, setLayoutBusy] = useState(false);
+  const [survey2Raw, setSurvey2Raw] = useState(null);
+  const [mockupRaw, setMockupRaw]   = useState(null);
+  useEffect(() => {   // booleans only — the heavy survey/mockup blobs are NOT fetched here
+    let live = true;
+    proposalLayoutMetaAction(accessId).then((r) => { if (live && r?.ok) setHasLayout(!!(r.hasSurvey || r.hasMockup)); });
+    return () => { live = false; };
+  }, [accessId]);
+  async function toggleLayout() {
+    const next = !layoutOpen; setLayoutOpen(next);
+    if (next && !layoutLoaded) {   // fetch the full data only the first time it's opened
+      setLayoutLoaded(true); setLayoutBusy(true);
+      const [sv, mk] = await Promise.all([
+        getToolDataAction(accessId, "survey2").catch(() => null),
+        getToolDataAction(accessId, "mockup").catch(() => null),
+      ]);
+      setSurvey2Raw(sv?.saved?.data || null); setMockupRaw(mk?.saved?.data || null); setLayoutBusy(false);
+    }
+  }
+  const layoutFloors = useMemo(() => {
+    try { const d = JSON.parse(survey2Raw); return (d.floors || []).filter((f) => f.bg)
+      .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
+    catch { return []; }
+  }, [survey2Raw]);
+  const layoutPhotos = useMemo(() => {
+    try { const d = JSON.parse(mockupRaw); return (d.photos || [])
+      .map((url, i) => ({ url, name: (d.names && d.names[i]) || `Camera ${i + 1}` }))
+      .filter((x) => typeof x.url === "string" && x.url.startsWith("data:image")); }
+    catch { return []; }
+  }, [mockupRaw]);
   const showToast = (msg) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -312,14 +348,65 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         <div className="pcv-info-row">
           <div><span className="pcv-info-lbl">Prepared For</span><b>{customerName || "Client TBD"}</b></div>
           <div><span className="pcv-info-lbl">Project Address</span><b>{customerAddress || "Address TBD"}</b></div>
-          <div><span className="pcv-info-lbl">Proposal #</span><b>{propNum}</b></div>
         </div>
         <div className="pcv-info-row">
-          <div><span className="pcv-info-lbl">Client Name</span><b>{customerName || "Client TBD"}</b></div>
           <div><span className="pcv-info-lbl">Phone</span><b>{customerPhone || "—"}</b></div>
           <div><span className="pcv-info-lbl">Email</span><b>{customerEmail || "—"}</b></div>
         </div>
       </div>
+
+      {/* Your System Layout — floor plan(s) with cameras placed + the mockup photos, so the
+          customer can SEE what they're buying (not just line items). Collapsible, render-only-when-real. */}
+      {hasLayout && (
+        <div className="pcv-layout">
+          <button type="button" className="pcv-layout-hd" onClick={toggleLayout} aria-expanded={layoutOpen}>
+            <span className="pcv-layout-ic">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </span>
+            <span className="pcv-layout-title">Your System Layout</span>
+            <span className="pcv-layout-sub">
+              {layoutLoaded
+                ? [layoutFloors.length && `${layoutFloors.length} floor plan${layoutFloors.length !== 1 ? "s" : ""}`,
+                   layoutPhotos.length && `${layoutPhotos.length} camera photo${layoutPhotos.length !== 1 ? "s" : ""}`].filter(Boolean).join(" · ")
+                : "Floor plan & camera preview"}
+            </span>
+            <span className="pcv-fold-chev">{layoutOpen ? "▲" : "▼"}</span>
+          </button>
+          {layoutOpen && (
+            <div className="pcv-layout-body">
+              {layoutBusy && <div className="pcv-layout-caption" style={{ textAlign: "center", padding: "12px 0" }}>Loading your layout…</div>}
+              {!layoutBusy && layoutLoaded && layoutFloors.length === 0 && layoutPhotos.length === 0 && (
+                <div className="pcv-layout-caption" style={{ textAlign: "center", padding: "12px 0" }}>Your system layout will appear here.</div>
+              )}
+              {layoutFloors.map((f, i) => (
+                <div className="pcv-layout-floor" key={"f" + i}>
+                  {layoutFloors.length > 1 && <div className="pcv-layout-floor-nm">{f.name}</div>}
+                  <div className="pcv-layout-plan">
+                    <img src={f.bg} alt={f.name} loading="lazy" />
+                    {f.cams.map((c, j) => (
+                      <span className="pcv-layout-cam" key={j} style={{ left: `${c.x}%`, top: `${c.y}%` }} title={c.name || `Camera ${j + 1}`}>{j + 1}</span>
+                    ))}
+                  </div>
+                  {f.cams.length > 0 && <div className="pcv-layout-caption">{f.cams.length} camera{f.cams.length !== 1 ? "s" : ""} placed</div>}
+                </div>
+              ))}
+              {layoutPhotos.length > 0 && (
+                <>
+                  <div className="pcv-layout-sec">Camera Preview</div>
+                  <div className="pcv-layout-mocks">
+                    {layoutPhotos.map((m, i) => (
+                      <div className="pcv-layout-mock" key={"m" + i}>
+                        <img src={m.url} alt={m.name} loading="lazy" />
+                        <span className="pcv-layout-mock-nm">{m.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Actions (Accept / Decline / Request / Download) live at the BOTTOM of the proposal now —
           read first, act at the end. See the acceptance box below the totals. */}
@@ -651,11 +738,29 @@ const PCV_CSS = `
 .pcv-empty{color:var(--dv-meta,#787D84);font-size:.86rem;padding:30px 22px;text-align:center}
 
 .pcv-info-box{margin:20px 22px;border:1px solid var(--dv-line,#E4E4DF);border-radius:2px;background:var(--dv-raise,#FBFBFA)}
-.pcv-info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:10px 14px}
+.pcv-info-row{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:10px 14px}
 .pcv-info-row+.pcv-info-row{border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pcv-info-row div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .pcv-info-row b{font-size:.82rem;color:var(--dv-ink,#101418);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-info-lbl{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+/* Your System Layout — floor plan(s) with cameras + mockup photos */
+.pcv-layout{margin:16px 22px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden;background:#fff}
+.pcv-layout-hd{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--dv-raise,#FBFBFA);border:none;cursor:pointer;font-family:inherit;text-align:left}
+.pcv-layout-hd:hover{background:var(--dv-paper,#F4F4F2)}
+.pcv-layout-ic{width:28px;height:28px;flex-shrink:0;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--gold,#b08f4f);background:#f6efdf;border:1px solid #e7d6ad}
+.pcv-layout-title{font-weight:700;font-size:.9rem;color:var(--dv-ink,#101418)}
+.pcv-layout-sub{font-size:.72rem;color:var(--dv-meta,#787D84);margin-left:auto;text-align:right}
+.pcv-layout-body{padding:14px 16px;display:flex;flex-direction:column;gap:16px}
+.pcv-layout-floor-nm{font-size:.78rem;font-weight:700;color:var(--dv-ink,#101418);margin-bottom:6px}
+.pcv-layout-plan{position:relative;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden;line-height:0;background:#f4f4f2}
+.pcv-layout-plan img{width:100%;display:block}
+.pcv-layout-cam{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:var(--gold,#b08f4f);color:#fff;font-size:.66rem;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35);border:1.5px solid #fff}
+.pcv-layout-caption{font-size:.72rem;color:var(--dv-meta,#787D84);margin-top:6px}
+.pcv-layout-sec{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.pcv-layout-mocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.pcv-layout-mock{border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden;background:#0B0F1A}
+.pcv-layout-mock img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.pcv-layout-mock-nm{display:block;padding:5px 8px;font-size:.72rem;font-weight:600;color:#fff;background:rgba(11,15,26,.9)}
 
 .pcv-toolbar{margin:0 22px 6px;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .pcv-dl{height:30px;padding:0 14px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;

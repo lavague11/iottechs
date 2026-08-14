@@ -501,6 +501,17 @@ export async function getToolDataAction(accessId, tool) {
   if (tool === "techs" && tok.role === "customer") return { ok: false };
   return { ok: true, saved: sanitizeToolRead(tool, tok.role, getToolData(accessId, tool)) };
 }
+// Cheap "is there a system layout to show?" check for the customer proposal's collapsible section —
+// a substring scan server-side (no JSON parse, and no shipping a multi-MB mockup blob to the client
+// just to decide whether to render the fold). The full data loads only when the customer expands it.
+export async function proposalLayoutMetaAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !(await canReadProject(accessId))) return { ok: false };
+  const sv = getToolData(accessId, "survey2"), mk = getToolData(accessId, "mockup");
+  return { ok: true,
+    hasSurvey: !!(sv?.data && sv.data.includes("data:image")),
+    hasMockup: !!(mk?.data && mk.data.includes("data:image")) };
+}
 export async function saveToolDataAction(accessId, tool, data) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
