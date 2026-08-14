@@ -366,7 +366,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     downloadInvoicePdf(
       { customerName, customerAddress, invoiceNo: "INV-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1), proposalNo: propNum },
       { lines, grandWithAddons, paidTotal, balance },
-      confirmed,
+      payments,   // full ledger — page 1 lists confirmed receipts, page 2 the complete records
     );
   }
   async function createWO() {

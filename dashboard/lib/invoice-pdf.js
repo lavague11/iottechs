@@ -70,15 +70,16 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   doc.text("PAYMENTS RECEIVED", lm, y); y += 8;
   doc.setDrawColor(...LINE); doc.line(lm, y, rm, y); y += 15;
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
-  if (payments.length) {
-    payments.forEach((pmt) => {
+  const received = payments.filter((pmt) => String(pmt.status || "confirmed") !== "pending");
+  if (received.length) {
+    received.forEach((pmt) => {
       const bits = [fmtDay(pmt.paid_at || pmt.created_at), titleCaseX(pmt.kind), pmt.method].filter(Boolean).join("  ·  ");
       doc.setTextColor(70, 76, 84); doc.text(bits, lm + 2, y);
       doc.setTextColor(...GREEN); rt("+ " + money(pmt.amount), rm - 2, y);
       y += 15;
     });
   } else {
-    doc.setTextColor(...META); doc.text("No payments recorded yet.", lm + 2, y); y += 15;
+    doc.setTextColor(...META); doc.text("No payments received yet.", lm + 2, y); y += 15;
   }
   doc.setDrawColor(...LINE); doc.line(lm, y - 3, rm, y - 3); y += 6;
   doc.setTextColor(...INK); doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
@@ -97,6 +98,54 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   // ── Footer ─────────────────────────────────────────────────────────────────
   doc.setTextColor(...META); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
   doc.text("Zelle preferred. Thank you for your business.  ·  IOT TECHS  ·  support@iot-techs.com", lm, 762);
+
+  // ── Page 2+: full payment records (the complete ledger from the payment tool) ─
+  if (payments.length) {
+    doc.addPage();
+    doc.setFillColor(...INK); doc.rect(0, 0, W, 70, "F");
+    doc.setFillColor(...GOLD); doc.rect(0, 70, W, 3, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+    doc.text("PAYMENT RECORDS", lm, 40);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 184, 190);
+    doc.text([invoiceNo, titleCaseX(customerName)].filter(Boolean).join("  ·  "), lm, 56);
+
+    let yy = 100;
+    const head = () => {
+      doc.setFillColor(...INK); doc.rect(lm, yy, rm - lm, 20, "F");
+      doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+      doc.text("DATE", lm + 6, yy + 13); doc.text("TYPE", lm + 96, yy + 13); doc.text("METHOD", lm + 162, yy + 13);
+      doc.text("REFERENCE", lm + 250, yy + 13); doc.text("STATUS", lm + 384, yy + 13); rt("AMOUNT", rm - 6, yy + 13);
+      yy += 20;
+    };
+    head();
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    payments.forEach((pmt, i) => {
+      if (yy > 742) { doc.addPage(); yy = 48; head(); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); }
+      if (i % 2) { doc.setFillColor(...PAPER); doc.rect(lm, yy, rm - lm, 18, "F"); }
+      const pending = String(pmt.status || "confirmed") === "pending";
+      doc.setTextColor(...INK);
+      doc.text(fmtDay(pmt.paid_at || pmt.created_at) || "—", lm + 6, yy + 12);
+      doc.text(titleCaseX(pmt.kind) || "—", lm + 96, yy + 12);
+      doc.text(String(pmt.method || "—"), lm + 162, yy + 12);
+      doc.text((String(pmt.note || "").slice(0, 22)) || "—", lm + 250, yy + 12);
+      doc.setTextColor(...(pending ? GOLD_D : GREEN)); doc.setFont("helvetica", "bold");
+      doc.text(pending ? "Pending" : "Received", lm + 384, yy + 12);
+      doc.setTextColor(...INK); rt(money(pmt.amount), rm - 6, yy + 12);
+      doc.setFont("helvetica", "normal");
+      doc.setDrawColor(...LINE); doc.line(lm, yy + 18, rm, yy + 18);
+      yy += 18;
+    });
+    // Totals: received vs still-pending
+    const recd = payments.filter((p) => String(p.status || "confirmed") !== "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+    const pend = payments.filter((p) => String(p.status || "confirmed") === "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+    yy += 14;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...INK);
+    doc.text("Total received", lm + 6, yy); doc.setTextColor(...GREEN); rt(money(recd), rm - 6, yy);
+    if (pend > 0.005) { yy += 16; doc.setTextColor(...INK); doc.text("Pending confirmation", lm + 6, yy); doc.setTextColor(...GOLD_D); rt(money(pend), rm - 6, yy); }
+
+    doc.setTextColor(...META); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("Complete payment ledger from the IOT TECHS payment tool.  ·  support@iot-techs.com", lm, 762);
+  }
 
   doc.save(`${invoiceNo || "Invoice"}.pdf`);
 }
