@@ -261,15 +261,18 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                     Log
                   </button>
                 )}
-                {s.advance && (
+                {s.advance && (canAdvance ? (
                   <>
                     {pg.allDone
                       ? <span className="dv-reason ok">Ready to advance</span>
                       : <span className="dv-reason mono">{pg.done} of {pg.total} complete</span>}
-                    <button className="dv-adv-btn" data-stop disabled={!(s.advance.ready && canAdvance)} onClick={() => go(idx + 1)}>Continue to {s.advance.to}
+                    <button className="dv-adv-btn" data-stop disabled={!s.advance.ready} onClick={() => go(idx + 1)}>Continue to {s.advance.to}
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>
                   </>
-                )}
+                ) : (
+                  // Non-admin can't move the stage — show progress, not a dead "Continue" button.
+                  pg.total > 0 && <span className="dv-reason mono">{pg.allDone ? "Stage complete" : `${pg.done} of ${pg.total} complete`}</span>
+                ))}
               </div>
               ); })()}
             </div>

@@ -492,18 +492,18 @@ const STP_CSS = `
 .stp-track-ph{font-family:ui-monospace,Consolas,monospace;font-size:.9rem;color:var(--dv-faint,#A1A6AC);letter-spacing:.08em;animation:stpShimmer 2.2s ease-in-out infinite}
 @keyframes stpShimmer{0%,100%{opacity:.45}50%{opacity:1}}
 .stp-track-wait span{font-size:.8rem;color:var(--dv-ink-soft,#3A4048)}
-.stp-input{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
+.stp-input{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
 .stp-input:focus{border-color:var(--dv-gold,#C9A96E)}
 .stp-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .stp-btn:hover{filter:brightness(1.12)}
 .stp-btn:disabled{opacity:.45;cursor:default}
 .stp-btn.ghost{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink,#101418)}
 .stp-btn.outline{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink,#101418);align-self:flex-start}
-.stp-btn.danger{color:var(--dv-red,#C4553D);border-color:#e3b4ab}
-.stp-btn.danger:hover{background:#fbe9e6}
+.stp-btn.danger{color:var(--dv-red,#C4553D);border-color:rgba(196,85,61,.35)}
+.stp-btn.danger:hover{background:rgba(196,85,61,.08)}
 
 .stp-quickadd{display:flex;gap:6px;align-items:center}
-.stp-quickadd-in{height:30px;width:180px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 10px;font-size:.78rem;font-family:ui-monospace,Consolas,monospace;outline:none}
+.stp-quickadd-in{height:30px;width:180px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:0 10px;font-size:.78rem;font-family:ui-monospace,Consolas,monospace;outline:none}
 .stp-quickadd-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .stp-quickadd-btn{height:30px;padding:0 13px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .stp-quickadd-btn:hover{filter:brightness(1.12)}
