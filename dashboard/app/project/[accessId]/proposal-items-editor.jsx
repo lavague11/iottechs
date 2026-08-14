@@ -102,6 +102,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     return DISPLAY_OPTION_NAMES.map((n) => ({ baseName: n, name: displayNameOf(n, book), price: priceOf(n, book) }));
   }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
+  const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
   const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays lead row -> breakdown expanded
   const [presetOpen, setPresetOpen] = useState(false); // preset-bundle manager modal
   const [presetVer, setPresetVer] = useState(0);       // bumps after a preset save to refresh chips
@@ -305,9 +306,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
         {!parent && blockNumOf[it.id] && <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span>}
         {hasSub ? (
-          <input value={it.name} disabled={readOnly} placeholder="Item"
-                 style={!parent && it.outdoor ? { color: "var(--red)", fontWeight: 700 } : undefined}
-                 onChange={(e) => patchItem(it.id, { name: e.target.value })} />
+          editingId === it.id ? (
+            <input value={it.name} disabled={readOnly} placeholder="Item" autoFocus
+                   style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
+                   onChange={(e) => patchItem(it.id, { name: e.target.value })}
+                   onBlur={() => setEditingId(null)}
+                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingId(null); } }} />
+          ) : (
+            <span className="prop-item-nametext" title={readOnly ? undefined : "Double-click to rename"}
+                  style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
+                  onDoubleClick={() => { if (!readOnly) setEditingId(it.id); }}>{it.name || "Item"}</span>
+          )
         ) : (
           <ItemNameField
             value={it.name} disabled={readOnly} placeholder={parent ? "Sub-item" : "Item"}

@@ -11,6 +11,26 @@ import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseP
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// The deck's Site Survey tool saves to `survey2` (floors[].devices[] with {k, name}); the older
+// tool used `sitesurvey_v2` (floors[].markers[] with {kind, name, mode}). Read survey2 first and
+// adapt it to the marker shape surveyToImport expects — so every camera's NAME (IC1, IC2, …) and
+// the full camera COUNT flow into the proposal. Falls back to the legacy store.
+function loadSurveyForImport(accessId) {
+  const read = (key) => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } };
+  const s2 = read(`iottechs_survey2_${accessId}`);
+  if (s2 && Array.isArray(s2.floors) && s2.floors.some((f) => (f.devices || []).length)) {
+    // Name = the on-plan tag the user sees (IC1, IC2…) unless they gave a real custom name.
+    // The survey's default name is "<Type> <n>" (e.g. "Camera 1"), so treat that as "no custom".
+    const nameFor = (d) => {
+      const nm = String(d.name || "").trim();
+      const isDefault = /^[A-Za-z].* \d+$/.test(nm);
+      return (nm && !isDefault) ? nm : (d.tag || nm);
+    };
+    return { floors: s2.floors.map((f) => ({ ...f, markers: (f.devices || []).map((d) => ({ kind: d.k, name: nameFor(d), mode: d.mode || d.io || "in" })) })) };
+  }
+  return read(`iottechs_sitesurvey_v2_${accessId}`);
+}
+
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
 export default function ProposalBuilder({ accessId, role, initial, onProposalChange, embedded = false }) {
@@ -48,7 +68,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // this device has survey data, auto-import the devices once (idempotent — see importSurvey).
   const autoImportedRef = useRef(false);
   useEffect(() => {
-    try { setSurveyFloors(surveyFloorSummary(JSON.parse(localStorage.getItem(`iottechs_sitesurvey_v2_${accessId}`) || "null"))); } catch {}
+    try { setSurveyFloors(surveyFloorSummary(loadSurveyForImport(accessId))); } catch {}
     let live = true;
     // Sync the company-wide price book to the local cache FIRST, so auto-import prices correctly.
     getPriceBookAction()
@@ -125,8 +145,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // `auto` = fired on first open of an empty draft. `floorIndex` = a single floor index, an
   // array of indices (the floor-plan checkbox picker), or null for every floor.
   function importSurvey(auto = false, floorIndex = null) {
-    let survey = null;
-    try { survey = JSON.parse(localStorage.getItem(`iottechs_sitesurvey_v2_${accessId}`) || "null"); } catch {}
+    const survey = loadSurveyForImport(accessId);
     const groups = survey ? surveyToImport(survey, floorIndex) : [];
     const picked = floorIndex == null ? null : (Array.isArray(floorIndex) ? floorIndex : [floorIndex]);
     const floorName = picked ? picked.map((i) => surveyFloors.find((f) => f.index === i)?.name).filter(Boolean).join(", ") || null : null;

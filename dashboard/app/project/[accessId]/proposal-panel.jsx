@@ -119,6 +119,8 @@ const PROP_CSS = `
 .pvx .prop-item input:focus{border-color:var(--dv-gold,#C9A96E)}
 .pvx .prop-item input.num{text-align:right}
 .pvx .prop-item input:not(.num){text-transform:capitalize}
+.pvx .prop-item-nametext{flex:1;min-width:0;height:30px;display:flex;align-items:center;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;padding:0 8px;border:1px solid transparent;border-radius:7px}
+.pvx .prop-item-nametext:hover{background:var(--dv-paper,#F4F4F2)}
 /* Item-name field with catalog type-ahead */
 .pvx .prop-name-ac{position:relative;flex:1;min-width:0}
 .pvx .prop-name-ac input{width:100%}
