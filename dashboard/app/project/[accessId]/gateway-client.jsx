@@ -1905,32 +1905,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     else doMove(stageKey);
   }
 
-  // Customer gate: they must accept the site survey before viewing the proposal, and accept a
-  // proposal option before the approval page. Staff/preview aren't gated. Never blocks the
-  // default landing (only explicit forward clicks) so a customer can't get stranded.
+  // Open navigation: EVERY role (customer included) can click into ANY stage — we never redirect or
+  // block the click. Stages/tools that aren't ready yet just render in their not-ready state. Where a
+  // customer's own action would unblock the next step, we surface a soft, non-blocking hint (gateMsg)
+  // but still open the stage they asked for, so a submitted proposal is always viewable, etc.
   function browse(stageKey) {
     if (!typeKeys.includes(stageKey)) return;
-    if (cView === "customer" && !previewRole) {
-      if (stageKey === "proposal" && !surveyOk) {
-        setGateMsg("Please review and approve your site survey first.");
-        setViewingStage("site_survey");
-        return;
-      }
-      if (stageKey === "approval_deposit" && !(proposalData?.accepted_options?.length)) {
-        setGateMsg("Please accept a proposal option before the approval step.");
-        setViewingStage("proposal");
-        return;
-      }
-    }
-    // Technicians can browse ahead, but a stage that isn't active yet shows what's still needed
-    // (soft gate — the page still opens so they can look).
+    let msg = null;
     if (cView === "tech") {
-      const msg = techStepBlockMessage(stageKey);
-      setGateMsg(msg);
-      setViewingStage(stageKey);
-      return;
+      msg = techStepBlockMessage(stageKey);
+    } else if (cView === "customer" && !previewRole) {
+      if (stageKey === "proposal" && !surveyOk) msg = "Tip: approve your site survey to keep things moving.";
+      else if (stageKey === "approval_deposit" && !(proposalData?.accepted_options?.length)) msg = "Accept a proposal option to unlock the deposit step.";
     }
-    setGateMsg(null);
+    setGateMsg(msg);
     setViewingStage(stageKey);
   }
   // What (if anything) blocks a technician from ACTING in a stage yet. Null = clear to work.
@@ -2002,9 +1990,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) },
         ];
-        // Customer only sees a survey/mockup once it actually has something to review.
+        // Customers see every consulting tool — nothing is hidden. A survey/mockup with nothing to
+        // review yet renders as a grayed, non-clickable stub (node dropped) instead of disappearing,
+        // per the deck's "gray it, don't hide it" model.
         if (cView === "customer") {
-          return all.filter((t) => t.name === "Survey Scheduling" || (t.name === "Site Survey" && svMetaEff.has) || (t.name === "Mockups" && mkMetaEff.has));
+          return all.map((t) =>
+            ((t.name === "Site Survey" && !svMetaEff.has) || (t.name === "Mockups" && !mkMetaEff.has))
+              ? { ...t, node: null }
+              : t);
         }
         return all;
       }
@@ -2057,9 +2050,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: <div style={pad}><SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
               currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} defaultTitle="IOT TECHS — Installation" onCount={setInstallEvents} /></div> });
         }
-        if (staff || (cView === "customer" && toolMeta?.tracking?.count > 0)) {
+        if (staff || cView === "customer") {
+          // Customers see Tracking always; it's a grayed stub until there's a shipment to track.
+          const hasTracking = staff || toolMeta?.tracking?.count > 0;
           tools.push({ name: "Shipment Tracking", label: "Tracking",
-            node: <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> });
+            node: hasTracking ? <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> : null });
         }
         // Installation checklist — tech's is locked until the work order is accepted AND install day.
         const woAccepted = !!proposalData?.tech_signed_name;
@@ -2071,9 +2066,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
             : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                 role={cView} readOnly={cView === "customer" || !!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
-        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
+        if (staff || cView === "tech" || cView === "customer") {
+          // Customers see Add-ons always; grayed stub until there's an approved change order to review.
+          const hasAddon = staff || cView === "tech" || toolMeta?.addendum?.count > 0;
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
+            node: hasAddon ? <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> : null });
         }
         return tools;
       }
@@ -2085,9 +2082,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (["admin", "manager", "tech"].includes(cView)) {
           tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
             node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
-        } else if (cView === "customer" && lp.system_qr) {
+        } else if (cView === "customer") {
+          // Customer sees the Activation QR tool always; grayed stub until the system QR is uploaded.
           tools.push({ name: "System QR", label: "Activation QR",
-            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
+            node: lp.system_qr ? <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> : null });
         }
         tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
           node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
