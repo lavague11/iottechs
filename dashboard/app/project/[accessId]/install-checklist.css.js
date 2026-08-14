@@ -60,7 +60,7 @@ export const ICL_CSS = `
 .icl-eod-confirm{display:inline-flex;gap:5px;align-items:center;flex-shrink:0}
 .icl-eod-yes{height:24px;padding:0 9px;border:none;border-radius:6px;background:var(--dv-red,#C4553D);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
 .icl-eod-no{height:24px;padding:0 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:#fff;color:var(--dv-ink-soft,#3A4048);font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
-.icl-eod-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.icl-eod-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
 .icl-eod-for{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--dv-meta,#787D84);font-weight:500}
 .icl-eod-date-in{height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 9px;font-size:.8rem;font-family:inherit;color:var(--dv-ink,#101418);background:#fff;outline:none}
 .icl-eod-date-in:focus{border-color:var(--dv-gold,#C9A96E)}

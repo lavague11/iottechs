@@ -97,7 +97,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const [dayLogs, setDayLogs] = useState([]);  // end-of-day snapshots {date, closed, pay, pct, ...}
   const [requests, setRequests] = useState([]); // tech-submitted line-item requests awaiting pricing
   const [reqAdding, setReqAdding] = useState(false);
-  const [reqDraft, setReqDraft] = useState({ name: "", type: "equip", note: "" });
+  const [reqDraft, setReqDraft] = useState({ name: "", type: "equip", note: "", tech: "" });
   const [reqPrice, setReqPrice] = useState({}); // admin's price entry per pending request {id: $}
   const [stepLog, setStepLog] = useState([]); // audit log: who completed which step + when
   const [eodDate, setEodDate] = useState(""); // chosen End-of-Day date (preset to today on mount)
@@ -282,12 +282,15 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const submitRequest = () => {
     const name = reqDraft.name.trim(); if (!name || !canEdit) return;
     pushHist();
-    setRequests(r => [...r, { id: newId(), name, type: reqDraft.type, note: reqDraft.note.trim(), by: userName || (role === "tech" ? "Technician" : "Staff"), at: new Date().toISOString(), status: "pending" }]);
-    setReqDraft({ name: "", type: "equip", note: "" }); setReqAdding(false);
+    // The tech may suggest their expected payout — it rides along as `tech` but is only PENDING:
+    // nothing is earned until the office reviews and approves it below (pre-filled with this figure).
+    setRequests(r => [...r, { id: newId(), name, type: reqDraft.type, note: reqDraft.note.trim(), tech: +reqDraft.tech || 0, by: userName || (role === "tech" ? "Technician" : "Staff"), at: new Date().toISOString(), status: "pending" }]);
+    setReqDraft({ name: "", type: "equip", note: "", tech: "" }); setReqAdding(false);
   };
   const approveRequest = (req) => {
     if (!canEditPay) return;
-    const pay = +reqPrice[req.id] || 0;
+    // Office keeps its own entry if it typed one, otherwise honors the tech's suggested payout.
+    const pay = (reqPrice[req.id] != null && reqPrice[req.id] !== "") ? +reqPrice[req.id] || 0 : (+req.tech || 0);
     pushHist();
     setCustom(c => [...c, { id: newId(), name: req.name, type: req.type, tech: pay, requestedBy: req.by }]);
     setRequests(r => r.filter(x => x.id !== req.id));
@@ -566,11 +569,11 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
             <div key={req.id} className="icl-req">
               <div className="icl-req-info">
                 <span className="icl-req-name">{titleCase(req.name)} <span className="icl-req-type">{req.type}</span></span>
-                <span className="icl-req-meta">Requested by {req.by}{req.note ? ` — ${req.note}` : ""}</span>
+                <span className="icl-req-meta">Requested by {req.by}{req.note ? ` — ${req.note}` : ""}{+req.tech > 0 ? ` · asks ${money(req.tech)}` : ""}</span>
               </div>
               {canEditPay ? (
                 <div className="icl-req-act">
-                  <span className="icl-pay-edit">$<input className="icl-pay-in" type="number" min="0" step="1" placeholder="0" value={reqPrice[req.id] ?? ""} onChange={(e) => setReqPrice(p => ({ ...p, [req.id]: e.target.value }))} title="Set the payout" /></span>
+                  <span className="icl-pay-edit">$<input className="icl-pay-in" type="number" min="0" step="1" placeholder="0" value={reqPrice[req.id] ?? (req.tech ? String(req.tech) : "")} onChange={(e) => setReqPrice(p => ({ ...p, [req.id]: e.target.value }))} title="Set the payout" /></span>
                   <button type="button" className="icl-req-yes" onClick={() => approveRequest(req)}>Approve</button>
                   <button type="button" className="icl-req-no" onClick={() => declineRequest(req)}>Decline</button>
                 </div>
@@ -605,8 +608,9 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
             <option value="camera">Camera</option><option value="nvr">NVR / Recorder</option><option value="pos">POS / Network</option><option value="equip">Equipment / Other</option>
           </select>
           <input className="icl-add-in" style={{ flex: "1 1 160px" }} placeholder="Note (why / where)" value={reqDraft.note} onChange={(e) => setReqDraft(d => ({ ...d, note: e.target.value }))} />
-          <button type="button" className="icl-add-save" disabled={!reqDraft.name.trim()} onClick={submitRequest}>Request</button>
-          <button type="button" className="icl-add-cancel" onClick={() => { setReqAdding(false); setReqDraft({ name: "", type: "equip", note: "" }); }}>Cancel</button>
+          <input className="icl-add-pay" type="number" min="0" step="1" placeholder="Payout $" title="Your expected payout — pending office approval" value={reqDraft.tech} onChange={(e) => setReqDraft(d => ({ ...d, tech: e.target.value }))} />
+          <button type="button" className="icl-add-save" disabled={!reqDraft.name.trim()} onClick={submitRequest}>Submit</button>
+          <button type="button" className="icl-add-cancel" onClick={() => { setReqAdding(false); setReqDraft({ name: "", type: "equip", note: "", tech: "" }); }}>Cancel</button>
         </div>
       ) : (
         <button type="button" className="icl-addbtn req" onClick={() => setReqAdding(true)}>+ Request line item</button>
@@ -617,8 +621,8 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
         <div className="icl-eod-log" style={{ marginTop: 10 }}>
           {pendingReqs.map((req) => (
             <div key={req.id} className="icl-eod-row">
-              <span className="icl-eod-date">{titleCase(req.name)}</span>
-              <span className="icl-req-wait">Requested — awaiting pricing</span>
+              <span className="icl-eod-date">{titleCase(req.name)}{+req.tech > 0 ? ` · ${money(req.tech)}` : ""}</span>
+              <span className="icl-req-wait">Pending — awaiting office approval</span>
             </div>
           ))}
         </div>
