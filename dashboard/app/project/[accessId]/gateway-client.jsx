@@ -2138,6 +2138,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         menu={[]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}
+        previewRole={previewRole}
+        onPreviewRole={onPreviewRole}
+        previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales"] : []}
       />
     );
   }

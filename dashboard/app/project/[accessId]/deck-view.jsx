@@ -25,12 +25,13 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [] }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
   const [overlay, setOverlay] = useState(null);      // { i, ti, name } — heavy tools launch full-screen
   const [custOpen, setCustOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);    // role/preview dropdown
   const [custEdit, setCustEdit] = useState(false);   // drawer contact-edit mode
   const [cf, setCf] = useState(null);                 // edit form values
   const [savingCust, setSavingCust] = useState(false);
@@ -107,8 +108,21 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       <header className="dv-top">
         <div className="dv-logo">IOT <em>TECHS</em></div>
         <div className="dv-sp" />
-        <button className="dv-ghost dv-solid">{roleLabel}
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg></button>
+        <div className="dv-rolewrap" data-stop>
+          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => previewRoles.length && setRoleOpen((o) => !o)}>
+            {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
+            {roleLabel}
+            {previewRoles.length > 0 && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+          </button>
+          {roleOpen && previewRoles.length > 0 && (
+            <div className="dv-rolemenu">
+              <button className={!previewRole ? "on" : ""} onClick={() => { onPreviewRole?.(null); setRoleOpen(false); }}>Your view</button>
+              {previewRoles.map((r) => (
+                <button key={r} className={previewRole === r ? "on" : ""} onClick={() => { onPreviewRole?.(r); setRoleOpen(false); }}>Preview as {r}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
 
       {/* job bar */}
@@ -293,6 +307,13 @@ const CSS = `
 .dv-sp{flex:1}
 .dv-ghost{display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font-size:12.5px;font-weight:500;color:var(--dv-ink-soft)}
 .dv-solid{background:var(--dv-ink);color:#fff}
+.dv-solid.previewing{background:var(--dv-gold-deep)}
+.dv-eye{display:inline-flex}
+.dv-rolewrap{position:relative}
+.dv-rolemenu{position:absolute;top:calc(100% + 6px);right:0;z-index:60;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:11px;box-shadow:0 14px 34px rgba(16,20,24,.14);padding:5px;min-width:170px;display:flex;flex-direction:column;gap:2px}
+.dv-rolemenu button{text-align:left;padding:8px 11px;border-radius:7px;font-size:13px;font-weight:500;color:var(--dv-ink-soft);text-transform:capitalize}
+.dv-rolemenu button:hover{background:var(--dv-paper)}
+.dv-rolemenu button.on{color:var(--dv-gold-deep);font-weight:600}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s}
