@@ -1956,7 +1956,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const onApprove = (a) => setAcceptances(a);
         const barWrap = { padding: "10px 14px", borderTop: "1px solid var(--dv-line,#E4E4DF)", flex: "0 0 auto", background: "var(--dv-raise,#FBFBFA)" };
         const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
-        return [
+        const all = [
           { name: "Survey Scheduling", label: "Scheduler", state: lp.date ? "done" : "active",
             node: (
               <div style={{ padding: "16px 18px" }}>
@@ -1989,6 +1989,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) },
         ];
+        // Customer only sees a survey/mockup once it actually has something to review.
+        if (cView === "customer") {
+          return all.filter((t) => t.name === "Survey Scheduling" || (t.name === "Site Survey" && svMetaEff.has) || (t.name === "Mockups" && mkMetaEff.has));
+        }
+        return all;
       }
       if (pk === "ph_proposal") {
         const tools = [];
