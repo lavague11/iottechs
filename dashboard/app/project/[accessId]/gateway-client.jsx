@@ -2002,6 +2002,58 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         return tools.length ? tools : [{ name: "Proposal", label: "—" }];
       }
+      if (pk === "ph_install") {
+        const tools = [];
+        const staff = ["admin", "manager"].includes(cView);
+        const pad = { padding: "16px 18px" };
+        const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
+        if (staff || cView === "customer") {
+          tools.push({ name: "Install Scheduling", label: "Scheduler", state: installEvents > 0 ? "done" : "active",
+            node: <div style={pad}><SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+              currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} defaultTitle="IOT TECHS — Installation" onCount={setInstallEvents} /></div> });
+        }
+        if (staff || (cView === "customer" && toolMeta?.tracking?.count > 0)) {
+          tools.push({ name: "Shipment Tracking", label: "Tracking",
+            node: <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> });
+        }
+        // Installation checklist — tech's is locked until the work order is accepted AND install day.
+        const woAccepted = !!proposalData?.tech_signed_name;
+        const iDate = lp.install_date || lp.date || null;
+        const dOpen = iDate ? (new Date(iDate + "T00:00:00") <= new Date(new Date().setHours(0, 0, 0, 0))) : false;
+        const techLocked = cView === "tech" && !(woAccepted && dOpen);
+        tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
+          node: techLocked
+            ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
+            : <div style={fill}><InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                role={cView} readOnly={cView === "customer" || !!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
+        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
+          tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} /></div> });
+        }
+        return tools;
+      }
+      if (pk === "ph_wrap") {
+        const tools = [];
+        const cust = lp.company_name || lp.contact_name || lp.customer;
+        const pad = { padding: "16px 18px" };
+        const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
+        if (["admin", "manager", "tech"].includes(cView)) {
+          tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
+            node: <div style={pad}><SystemQrTool accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
+        } else if (cView === "customer" && lp.system_qr) {
+          tools.push({ name: "System QR", label: "Activation QR",
+            node: <div style={pad}><SystemQrTool accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
+        }
+        tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
+          node: <div style={fill}><QCChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
+            readOnly={!!previewRole || cView === "customer" || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
+        if (["admin", "manager", "customer"].includes(cView)) {
+          tools.push({ name: "Final Payment", label: "Payment", heavy: true,
+            node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" customerName={lp.contact_name || lp.customer}
+              customerAddress={lp.address} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
+        }
+        return tools;
+      }
       return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
     };
     const canAdv = ["admin", "manager"].includes(cView);
@@ -2010,13 +2062,22 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const next = phaseList[i + 1];
       // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion.
       const pct = i < curPhaseIdx ? 100 : Math.round(((i + 1) / phaseList.length) * 100);
+      const isComplete = p.key === "ph_complete";
       return {
         name: p.label,
         pill: phaseStatusWord(p.key),
         pct,
-        tint: p.key === "ph_complete" ? "green" : p.key === "ph_survey" ? "blue" : "gold",
-        tools: deckToolsFor(p.key),
-        advance: next ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
+        tint: isComplete ? "green" : p.key === "ph_survey" ? "blue" : "gold",
+        // Completion is a read-only wrap-up — render the panel inline, no tool rows / advance.
+        completion: isComplete ? (
+          <div style={{ padding: "4px 2px 20px" }}>
+            <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={!!previewRole || cView === "tech"}
+              onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
+              onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
+          </div>
+        ) : undefined,
+        tools: isComplete ? undefined : deckToolsFor(p.key),
+        advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
       };
     });
     const deckCustomer = {
