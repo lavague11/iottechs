@@ -2015,7 +2015,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             state: acceptances?.approval_deposit ? "done" : "active",
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
-                <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit"
+                <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
                   customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} />
               </div></AccordionProvider>
@@ -2025,7 +2025,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "Create Work Order", label: "Work order", state: workOrders?.length ? "done" : undefined,
             node: (
               <div style={{ padding: "16px 18px" }}>
-                <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData}
+                <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
                   assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
                   onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
               </div>
@@ -2080,7 +2080,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             readOnly={!!previewRole || cView === "customer" || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
-            node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" customerName={lp.contact_name || lp.customer}
+            node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
               customerAddress={lp.address} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
         }
         return tools;

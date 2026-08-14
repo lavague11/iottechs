@@ -45,7 +45,10 @@ function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
 // The step trail up top shows exactly where things stand; each section below completes one step.
 // Customer signs (same signature tool as accepting) and acknowledges payments; staff record
 // actual received payments and create the work order once it's signed AND a deposit is on file.
-export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage, stage = "approval_deposit" }) {
+// `embedded` = mounted inside the deck's full-screen overlay, which already shows the tool's
+// name in its bar. When embedded we drop our own collapse/title header (no second, redundant
+// title bar) and stay always-open. This is the standing convention for deck-embedded tools.
+export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage, stage = "approval_deposit", embedded = false }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
   // The person who paid, by NAME. New entries stamp a real name; older/generic ones ("customer",
@@ -81,7 +84,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   // Accordion: inside the proposal phase this panel shares one-open-at-a-time with the proposal
   // document — accepting+signing the proposal hands the open slot to this deposit panel.
   const acc = useAccordionItem(isFinal ? "final-payment" : "deposit", false);
-  const open = acc ? acc.open : localOpen;
+  const open = embedded ? true : (acc ? acc.open : localOpen);
   const toggleOpen = () => { if (acc) acc.toggle(); else setLocalOpen((v) => !v); };
 
   // The deposit summary is the live source of truth: it re-pulls the proposal totals, approved
@@ -365,13 +368,15 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     <div className="apv-root">
       <style>{APV_CSS}</style>
 
-      <button type="button" className="apv-titlebar apv-foldbtn" onClick={toggleOpen} aria-expanded={open}>
-        <span className="apv-fold-ic">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-        </span>
-        <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
-        <span className="apv-fold-chev">{open ? "▲" : "▼"}</span>
-      </button>
+      {!embedded && (
+        <button type="button" className="apv-titlebar apv-foldbtn" onClick={toggleOpen} aria-expanded={open}>
+          <span className="apv-fold-ic">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          </span>
+          <span className="apv-titlebar-h">{isFinal ? "Final Payment" : (isCustomer ? "Make Your Deposit" : "Approval & Deposit")}</span>
+          <span className="apv-fold-chev">{open ? "▲" : "▼"}</span>
+        </button>
+      )}
 
       {err && <div className="apv-note err">{err}</div>}
 

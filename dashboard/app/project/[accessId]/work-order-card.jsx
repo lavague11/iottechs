@@ -8,8 +8,11 @@ import TechPricingEditor from "./proposal-tech-pricing";
 // the proposal is signed + the deposit is in. Groups, in order: assign the technician(s) → set their
 // per-line payout (the pricing editor, moved here from Install) → create the work order. Self-contained
 // (fetches its own approval data for the signed/deposit gate) so it drops in as its own collapsible.
-export default function WorkOrderCard({ accessId, proposal, onProposalChange, assignments = [], staffUsers = [], onAssignmentsChange, onStageChange, internalJob = false }) {
-  const [open, setOpen] = useState(false);   // collapsed by default — part of the compact flow
+export default function WorkOrderCard({ accessId, proposal, onProposalChange, assignments = [], staffUsers = [], onAssignmentsChange, onStageChange, internalJob = false, embedded = false }) {
+  // `embedded` = mounted in the deck (the row already names it) → drop our own title/collapse
+  // header and stay open. Standing convention for deck-embedded tools.
+  const [openState, setOpen] = useState(false);   // collapsed by default — part of the compact flow
+  const open = embedded ? true : openState;
   const [data, setData] = useState(null);
   const [intern, setIntern] = useState(!!internalJob);   // internal / legacy job — skips the sign+deposit gate
   const [busy, setBusy] = useState(false);
@@ -79,16 +82,18 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
   return (
     <div className="woc-card">
       <style>{WOC_CSS}</style>
-      <button type="button" className="woc-head" onClick={() => setOpen((o) => !o)}>
-        <span className={`woc-ic${created ? " done" : ""}`}>
-          {created
-            ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>}
-        </span>
-        <span className="woc-title">Create Work Order</span>
-        <span className={`woc-status ${created ? "done" : "pending"}`}>{statusTxt}</span>
-        <span className="woc-chev">{open ? "▲" : "▼"}</span>
-      </button>
+      {!embedded && (
+        <button type="button" className="woc-head" onClick={() => setOpen((o) => !o)}>
+          <span className={`woc-ic${created ? " done" : ""}`}>
+            {created
+              ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>}
+          </span>
+          <span className="woc-title">Create Work Order</span>
+          <span className={`woc-status ${created ? "done" : "pending"}`}>{statusTxt}</span>
+          <span className="woc-chev">{open ? "▲" : "▼"}</span>
+        </button>
+      )}
 
       {open && (
         <div className="woc-body">

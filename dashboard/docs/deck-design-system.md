@@ -160,6 +160,14 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **No double title bars — the `embedded` convention.** The deck already names every tool (the
+  full-screen overlay bar for heavy tools; the row label for light tools). A tool must NOT render
+  its own name/collapse header on top of that. The standing pattern: give the tool an `embedded`
+  prop — when true it drops its top fold/title header and stays open (never CSS-hide a collapse
+  header; that can trap the body closed). Done for `ApprovalPanel` + `WorkOrderCard`; the gateway
+  passes `embedded` when mounting them in the deck. **Any new deck-embedded tool with a top
+  name-header must take `embedded` and honor it.** (Section headers that differ from the tool name
+  and carry status — e.g. the billing "Record a Payment · deposit due" head — are fine to keep.)
 - **All 5 phases are wired** (admin): Consulting · Proposal · Install · Closeout · Completion each
   mount their real tool components with the legacy role gates. Heavy tools (Proposal, Approval,
   QC, Site Survey…) open full-screen; Completion renders inline via the slide `completion` slot.
