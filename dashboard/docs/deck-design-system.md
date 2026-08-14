@@ -160,6 +160,14 @@ sales sees only their own commission. Walk the matrix before shipping a stage.
 
 Newest first. Append when we make a call worth not re-litigating.
 
+- **Every stage tool is restyled to the deck theme.** All tool stylesheets (WorkOrder, QC,
+  Completion, ShipmentTracking, Proposal, InstallAddendum, TechBoard, System QR, InstallChecklist,
+  TechPricingEditor — plus the earlier Approval & Details/Notes) now use the deck palette: neutral
+  off-white surfaces, thin `--dv-line` borders, one dark ink primary button, restrained gold
+  (focus/small accents only), semantic green/red, the deck font, few words. Gone: gold left-rails,
+  gold gradients, pastel icon squares, dashed borders, Bricolage display face, 800 weights, heavy
+  shadows. Deck `--dv-*` tokens carry hex fallbacks so the legacy page holds the same look. QC +
+  InstallAddendum also took `embedded`. **New tools inherit this — no cartoonish chrome.**
 - **No double title bars — the `embedded` convention.** The deck already names every tool (the
   full-screen overlay bar for heavy tools; the row label for light tools). A tool must NOT render
   its own name/collapse header on top of that. The standing pattern: give the tool an `embedded`
