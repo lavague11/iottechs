@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
-import { exportSurveyImages } from "../../../lib/survey-export";
+import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction } from "./proposal-actions";
 import { TaglinePill } from "../../components/brand";
@@ -179,7 +179,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     try {
       const [mk, sv] = await Promise.all([
         getToolDataAction(accessId, "mockup").catch(() => null),
-        getToolDataAction(accessId, "survey").catch(() => null),
+        getToolDataAction(accessId, "survey2").catch(() => null),
       ]);
       const jobs = [];
       // Only render the mockup when it actually has at least one photo.
@@ -192,7 +192,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
       }
       if (sv?.saved?.data) {
-        jobs.push(exportSurveyImages(accessId, sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
+        jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       }
       await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
