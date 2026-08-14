@@ -8,7 +8,7 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // themed controls (Upload · Layout · Cameras · paging) in the host bar and drives the
 // iframe over postMessage. It auto-saves to localStorage per-project; ?ro=1 renders the
 // read-only customer grid.
-export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData }) {
+export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData, embedded = false }) {
   // Edit lock: only Admin / Manager / Sales rep build the mockup. Every other role
   // (Customer, Technician, Vendor, …) — and the admin "customer view" preview — is read-only.
   const readOnly = !["admin", "manager", "sales"].includes(view) || customerView;
@@ -88,8 +88,8 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       <div className="ss-embed-bar">
         <span className="ss-embed-tag">
-          {readOnly ? "Customer view — camera mockups" : "Mockup builder"}
-          {stat && <> · {stat.filled}/{stat.count} cameras</>}
+          {!embedded && (readOnly ? "Customer view — camera mockups" : "Mockup builder")}
+          {stat && <>{!embedded && " · "}{stat.filled}/{stat.count} cameras</>}
         </span>
 
         <div className="mk-controls">

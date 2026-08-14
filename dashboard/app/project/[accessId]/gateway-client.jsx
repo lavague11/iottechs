@@ -1981,7 +1981,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <div style={heavyCol}>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <MockupWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                  <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                     customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} />
                 </div>
                 <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
