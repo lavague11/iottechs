@@ -1494,11 +1494,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
-  // Additive deck shell: ?deck=1 renders the redesigned horizontal stage deck instead of the
-  // legacy stacked page. Set after mount (not during SSR) to avoid a hydration mismatch. The
-  // live page is the default until every stage × role is validated in deck form.
+  // Additive deck shell: renders the redesigned horizontal stage deck instead of the legacy
+  // stacked page. Set after mount (not during SSR) to avoid a hydration mismatch. The legacy page
+  // stays the default; staff opt into the deck via an in-app toggle (persisted in localStorage) or
+  // ?deck=1 / ?deck=0 in the URL (URL wins for that load). Customers are never shown the toggle.
   const [deckMode, setDeckMode] = useState(false);
-  useEffect(() => { setDeckMode(new URLSearchParams(window.location.search).get("deck") === "1"); }, []);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("deck");
+    if (q === "1") { setDeckMode(true); return; }
+    if (q === "0") { setDeckMode(false); return; }
+    try { setDeckMode(localStorage.getItem("iot_deck") === "1"); } catch { /* no storage */ }
+  }, []);
+  const toggleDeck = () => setDeckMode((m) => { const n = !m; try { localStorage.setItem("iot_deck", n ? "1" : "0"); } catch { /* no storage */ } return n; });
+  const canToggleDeck = ["admin", "manager", "sales", "tech"].includes(view);
   const [busy, setBusy]                 = useState(false);
   const [err,  setErr]                  = useState("");
   const [jumpToast, setJumpToast]       = useState(null);
@@ -2141,7 +2149,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
-        menu={[]}
+        menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}
         previewRole={previewRole}
@@ -2174,6 +2182,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
             {mapHidden ? "Map" : "Map"}
           </button>
+          {canToggleDeck && (
+            <button className="pct-map-btn" title="Switch to the new deck layout" onClick={toggleDeck}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/></svg>
+              Deck
+            </button>
+          )}
         </div>
         {(!hCollapsed || !mapHidden) && (
           <div className="pv-hcard" style={{gridTemplateColumns: hCollapsed?"1fr": (!mapHidden?"1fr 1fr":"1fr")}}>
