@@ -1494,11 +1494,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
-  // Deck shell: the redesigned horizontal stage deck. Staff now get it BY DEFAULT (every project,
-  // new or old); customers stay on the legacy stacked page until their deck view is fully validated.
-  // Resolution order (set after mount to avoid a hydration mismatch): ?deck=1/0 in the URL wins for
-  // that load → a persisted in-app choice (localStorage) → otherwise the role default (staff = deck,
-  // customer = legacy). The "Classic view" / "Deck" toggle lets staff switch and remembers it.
+  // Deck shell: the redesigned horizontal stage deck — now the default for EVERY role (staff and
+  // customers), on every project new or old. Resolution order (set after mount to avoid a hydration
+  // mismatch): ?deck=1/0 in the URL wins for that load → a persisted in-app choice (localStorage) →
+  // otherwise the deck. Staff get a "Classic view" / "Deck" toggle (persisted) to switch back.
   const [deckMode, setDeckMode] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("deck");
@@ -1509,7 +1508,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       if (saved === "1") { setDeckMode(true); return; }
       if (saved === "0") { setDeckMode(false); return; }
     } catch { /* no storage */ }
-    setDeckMode(["admin", "manager", "sales", "tech"].includes(view));   // role default
+    setDeckMode(true);   // default: everyone gets the deck
   }, [view]);
   const toggleDeck = () => setDeckMode((m) => { const n = !m; try { localStorage.setItem("iot_deck", n ? "1" : "0"); } catch { /* no storage */ } return n; });
   const canToggleDeck = ["admin", "manager", "sales", "tech"].includes(view);
