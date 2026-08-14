@@ -513,6 +513,44 @@ export const techItemTotal = (it) => techLine(it) + (it.sub || []).reduce((s, x)
 export const techSvcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + techItemTotal(it), 0);
 export const techOptionTotal = (opt) => r2((opt.services || []).reduce((s, svc) => s + techSvcSubtotal(svc), 0));
 
+// ---- Standard payout: map a catalog line to its default technician pay-per-unit --------------
+// Uses the company rate book (getEffectiveRates → { cam_drop, cam_mgmt, ... }). The per-camera
+// bundle maps step→key; a single "Cat6 Drop" line covers BOTH the drop and its cable management.
+// Anything without a standard rate returns 0, so the office prices it by hand. This is what seeds
+// the work order the moment a proposal is sent (admin can still override any line afterward).
+export function defaultTechPayout(name, serviceKey, rates) {
+  const R = rates || {};
+  const n = String(name || "").toLowerCase().replace(/\s*·\s*slot\s*\d+$/i, "").replace(/\s*\(o\)\s*$/i, "").trim();
+  const pos = serviceKey === "toast";
+  const num = (v) => (+v || 0);
+  if (/(cat6 drop|cable drop)/.test(n)) return num(pos ? R.pos_drop : R.cam_drop) + num(pos ? R.pos_mgmt : R.cam_mgmt);
+  if (/termination/.test(n)) return num(pos ? R.pos_term : R.cam_term);
+  if (/mounting/.test(n)) return num(R.cam_mount);
+  if (/programming/.test(n)) return num(R.cam_program);
+  if (/waterproof/.test(n)) return num(R.cam_waterproof);
+  if (/\bnvr\b/.test(n)) return num(R.nvr_setup);
+  if (/(storage drive|\bhdd\b)/.test(n)) return num(R.hdd_install);
+  if (/monitor/.test(n)) return num(R.monitor_mount);
+  if (pos && /install/.test(n)) return num(R.pos_install);
+  return 0;
+}
+// Build a { itemId: techPrice } seed map for a whole proposal payload from the standard rates,
+// only for lines that don't already carry a positive techPrice (never clobbers an admin override).
+export function seedTechPricingMap(payload, rates) {
+  const map = {};
+  const apply = (svcKey, x) => {
+    if (!x || !x.id) return;
+    if (+x.techPrice > 0) return;                      // already priced — leave it
+    const d = defaultTechPayout(x.name, svcKey, rates);
+    if (d > 0) map[x.id] = d;
+  };
+  (payload?.options || []).forEach((o) => (o.services || []).forEach((s) => (s.items || []).forEach((it) => {
+    apply(s.key, it);
+    (it.sub || []).forEach((x) => apply(s.key, x));
+  })));
+  return map;
+}
+
 // ---- Sanitize (server-side choke point — cost/margin never leave for non-staff) ----
 const COST_ROLES = new Set(["admin", "manager"]);
 const CUSTOMER_VISIBLE_STATUS = new Set(["sent", "changes_requested", "accepted", "declined"]);
@@ -550,6 +588,7 @@ export function sanitizeProposal(row, role) {
     pcp_status: row.pcp_status, pcp_agreed_at: row.pcp_agreed_at, pcp_agreement_no: row.pcp_agreement_no,
     pcp_grant_source: row.pcp_grant_source, pcp_approved_at: row.pcp_approved_at,
     tech_signed_name: row.tech_signed_name, tech_signed_at: row.tech_signed_at,
+    wo_finalized_at: row.wo_finalized_at, wo_finalized_by: row.wo_finalized_by,
     accepted_options: (() => { try { return JSON.parse(row.accepted_options || "[]"); } catch { return []; } })(),
     declined_options: (() => { try { return JSON.parse(row.declined_options || "{}"); } catch { return {}; } })(),
     declined_reason: row.declined_reason,
@@ -573,6 +612,7 @@ export function sanitizeProposal(row, role) {
       selected_option: row.selected_option, accepted_options: accepted,
       sent_at: row.sent_at, updated_at: row.updated_at,
       tech_signed_name: row.tech_signed_name, tech_signed_at: row.tech_signed_at, tech_signature_data: row.tech_signature_data,
+      wo_finalized_at: row.wo_finalized_at, wo_finalized_by: row.wo_finalized_by,
       workOrder: true, payload: { ...wo, options },
     };
   }

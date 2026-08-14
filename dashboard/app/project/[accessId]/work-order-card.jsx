@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getApprovalDataAction, createWorkOrderAction } from "./proposal-actions";
+import { getApprovalDataAction, createWorkOrderAction, finalizeWorkOrderAction } from "./proposal-actions";
 import { addAssignmentAction, removeAssignmentAction, setInternalJobAction } from "./actions";
 import TechPricingEditor from "./proposal-tech-pricing";
 
@@ -32,6 +32,21 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
   const techSigned = !!p?.tech_signed_name;
   const [woCreated, setWoCreated] = useState(false);
   const created = woCreated || techSigned;
+
+  // Finalize: the office reviews the auto-seeded payout, then finalizes so a tech can accept it.
+  const [finBusy, setFinBusy] = useState(false);
+  const [finalizedAt, setFinalizedAt] = useState(proposal?.wo_finalized_at || null);
+  const [finalizedBy, setFinalizedBy] = useState(proposal?.wo_finalized_by || null);
+  useEffect(() => { setFinalizedAt(proposal?.wo_finalized_at || null); setFinalizedBy(proposal?.wo_finalized_by || null); }, [proposal?.wo_finalized_at, proposal?.wo_finalized_by]);
+  async function toggleFinalize(on) {
+    setFinBusy(true); setErr(null);
+    const r = await finalizeWorkOrderAction(accessId, on);
+    setFinBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    setFinalizedAt(r.proposal?.wo_finalized_at || null);
+    setFinalizedBy(r.proposal?.wo_finalized_by || null);
+    onProposalChange?.(r.proposal);
+  }
 
   const techs = assignments.filter((a) => a.role === "tech");
   const availableTechs = staffUsers.filter((u) => u.role === "tech" && !techs.some((t) => String(t.user_id) === String(u.id)));
@@ -131,7 +146,26 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
             </div>
           )}
 
-          {/* ③ Create it */}
+          {/* ③ Finalize the payout so a technician can accept the work order */}
+          {proposal?.payload?.options?.length > 0 && (
+            <div className="woc-sec">
+              {finalizedAt ? (
+                <div className="woc-final done">
+                  <span className="woc-final-msg">
+                    <b>✓ Finalized{finalizedBy ? ` by ${finalizedBy}` : ""}</b> — technicians can now accept this work order.
+                  </span>
+                  {!created && <button type="button" className="woc-reopen" disabled={finBusy} onClick={() => toggleFinalize(false)}>Re-open</button>}
+                </div>
+              ) : (
+                <div className="woc-final">
+                  <p className="woc-final-msg">Payout auto-filled from your standard rates. Review it above, then finalize so a technician can accept.</p>
+                  <button type="button" className="woc-final-btn" disabled={finBusy} onClick={() => toggleFinalize(true)}>{finBusy ? "Finalizing…" : "Finalize Work Order"}</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ④ Create it */}
           <div className="woc-sec">
             {!created && (
               <label className="woc-intern">
@@ -190,4 +224,15 @@ const WOC_CSS = `
 .woc-intern{display:flex;align-items:flex-start;gap:9px;margin-bottom:10px;padding:10px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;cursor:pointer;font-size:.8rem;color:var(--dv-meta,#787D84)}
 .woc-intern input{margin-top:2px;width:15px;height:15px;accent-color:var(--dv-ink,#101418);cursor:pointer;flex-shrink:0}
 .woc-intern b{color:var(--dv-ink,#101418);font-weight:600}
+.woc-final{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:13px 15px;background:var(--dv-paper,#F4F4F2)}
+.woc-final.done{border-color:#cfe6d8;background:#eef7f1}
+.woc-final-msg{margin:0;font-size:.8rem;color:var(--dv-meta,#787D84);flex:1;min-width:200px}
+.woc-final.done .woc-final-msg{color:var(--dv-ink-soft,#3A4048)}
+.woc-final-msg b{color:var(--dv-green,#2E7D5B);font-weight:700}
+.woc-final-btn{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-green,#2E7D5B);color:#fff;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.woc-final-btn:hover{filter:brightness(1.08)}
+.woc-final-btn:disabled{opacity:.5;cursor:default}
+.woc-reopen{height:34px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.woc-reopen:hover{border-color:var(--dv-red,#C4553D);color:var(--dv-red,#C4553D)}
+.woc-reopen:disabled{opacity:.5;cursor:default}
 `;

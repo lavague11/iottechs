@@ -5,9 +5,9 @@ import { getRatesAction, saveRatesAction } from "./proposal-actions";
 // Work-order rate library. Company DEFAULT rates plus optional per-technician overrides. A blank
 // field on a technician scope inherits the default. Rates are the per-step install labor payouts.
 const GROUPS = [
-  { title: "Camera (per step)", color: "var(--gold)", keys: [["cam_drop", "Cable Drop"], ["cam_mgmt", "Cable Mgmt"], ["cam_term", "Termination"], ["cam_mount", "Mounting"]] },
-  { title: "Toast POS / Network (per step)", color: "#7c3aed", keys: [["pos_drop", "Cable Drop"], ["pos_mgmt", "Cable Mgmt"], ["pos_term", "Termination"], ["pos_install", "Install"]] },
-  { title: "NVR", color: "#4b6a9b", keys: [["nvr_setup", "Setup"]] },
+  { title: "Camera (per step)", color: "var(--gold)", bundle: "camera", keys: [["cam_drop", "Cable Drop"], ["cam_mgmt", "Cable Mgmt"], ["cam_term", "Termination"], ["cam_mount", "Mounting"], ["cam_program", "Programming"], ["cam_waterproof", "Waterproofing"]] },
+  { title: "Toast POS / Network (per step)", color: "#7c3aed", bundle: "device", keys: [["pos_drop", "Cable Drop"], ["pos_mgmt", "Cable Mgmt"], ["pos_term", "Termination"], ["pos_install", "Install"]] },
+  { title: "Equipment (per unit)", color: "#4b6a9b", keys: [["nvr_setup", "NVR Setup"], ["hdd_install", "HDD / Storage Drive"], ["monitor_mount", "Monitor + Mount"]] },
 ];
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -38,8 +38,7 @@ export default function RateLibrary({ open, onClose, accessId, onSaved }) {
   const inherit = (k) => (book.default[k] ?? defaults[k]);
   const val = (k) => (draft[k] ?? "");
   const effective = (k) => (draft[k] != null && draft[k] !== "" ? +draft[k] : +inherit(k) || 0);
-  const camTotal = GROUPS[0].keys.reduce((a, [k]) => a + effective(k), 0);
-  const posTotal = GROUPS[1].keys.reduce((a, [k]) => a + effective(k), 0);
+  const groupTotal = (g) => g.keys.reduce((a, [k]) => a + effective(k), 0);
 
   async function save() {
     setBusy(true);
@@ -80,7 +79,7 @@ export default function RateLibrary({ open, onClose, accessId, onSaved }) {
           {GROUPS.map((g) => (
             <div key={g.title} className="rl-group" style={{ "--rl-c": g.color }}>
               <div className="rl-group-hd">{g.title}
-                {g.keys.length > 1 && <span className="rl-group-tot">= {money(g === GROUPS[0] ? camTotal : posTotal)}</span>}
+                {g.bundle && <span className="rl-group-tot">= {money(groupTotal(g))} / {g.bundle}</span>}
               </div>
               {g.keys.map(([k, label]) => (
                 <label key={k} className="rl-field">

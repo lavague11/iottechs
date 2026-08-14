@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import {
   getJobByAccessId, getActiveProposal, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
-  getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags,
+  getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, acceptStage, unacceptStage, updateStage,
@@ -15,7 +15,7 @@ import {
   getApprovedAddons, submitRequest,
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload } from "../../../lib/proposal";
+import { sanitizeProposal, validatePayload, seedTechPricingMap } from "../../../lib/proposal";
 import { survey2CameraCount } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady } from "../../../lib/email";
@@ -120,7 +120,15 @@ export async function sendProposalAction(accessId) {
   try { payload = JSON.parse(cur.payload); } catch { return { error: "Malformed proposal." }; }
   const hasItems = payload.options?.some((o) => o.services?.some((s) => s.items?.length));
   if (!hasItems) return { error: "Add at least one line item first." };
-  const row = markProposalSent(accessId, actorName(tok));
+  let row = markProposalSent(accessId, actorName(tok));
+  // Auto-create the work order the moment the proposal is sent: seed every line's technician
+  // payout from the company standard rates (getEffectiveRates) so the tech's work order shows
+  // real numbers — not "TBD" — from the start. Only fills lines without a payout already set;
+  // admin can still override any line in the Work Order pricing editor.
+  try {
+    const seed = seedTechPricingMap(JSON.parse(row.payload), getEffectiveRates(null));
+    if (Object.keys(seed).length) { const seeded = setProposalTechPricing(accessId, seed); if (seeded) row = seeded; }
+  } catch { /* seeding is best-effort — never block the send */ }
   // Sending the proposal is proof we're past inquiry/site_survey — jump the project to the
   // proposal stage (forward-only; never rewinds a job already further along). It parks there
   // until the customer accepts an option, which is what advances it onward.
@@ -701,6 +709,19 @@ export async function submitToolAction(accessId, tool, on = true) {
   }
   await revalidate(accessId);
   return { ok: true, acceptances };
+}
+
+// Office finalizes (or re-opens) the auto-created work order after reviewing the technician payout.
+// Finalizing is what lets a technician accept it; re-opening clears the stamp for another edit pass.
+export async function finalizeWorkOrderAction(accessId, on = true) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can finalize the work order." };
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status === "draft") return { error: "Send the proposal first — the work order builds out on send." };
+  const row = setWorkOrderFinalized(accessId, !!on, actorName(tok));
+  if (!row) return { error: "No work order to finalize." };
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
 // Staff create the work order (advance approval → schedule) once a deposit is on file.

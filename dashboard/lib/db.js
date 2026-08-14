@@ -980,6 +980,10 @@ function init() {
   if (!propCols.includes("tech_signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_name TEXT");    // technician who accepted the work order
   if (!propCols.includes("tech_signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_at TEXT");
   if (!propCols.includes("tech_signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN tech_signature_data TEXT");
+  // Work order: the office finalizes the auto-created work order (payout reviewed) before a tech
+  // can accept it. Null until finalized; stamped with the finalizer's name + timestamp.
+  if (!propCols.includes("wo_finalized_at"))     db.exec("ALTER TABLE proposals ADD COLUMN wo_finalized_at TEXT");
+  if (!propCols.includes("wo_finalized_by"))     db.exec("ALTER TABLE proposals ADD COLUMN wo_finalized_by TEXT");
   // Performance Credit Program (PCP): a pending, discretionary labor-subtotal credit that the
   // customer acknowledges (agreement) and admin finalizes at payment. See lib/proposal PCP.
   if (!propCols.includes("pcp_status"))       db.exec("ALTER TABLE proposals ADD COLUMN pcp_status TEXT");        // null | pending | approved
@@ -4430,6 +4434,15 @@ export function markProposalSent(accessId, byName) {
     .run(byName || null, cur.id);
   return getActiveProposal(accessId);
 }
+// Office finalizes the auto-created work order (payout reviewed) — this is what lets a tech accept
+// it. `on=false` re-opens it for edits (clears the stamp). No-op if there's no proposal.
+export function setWorkOrderFinalized(accessId, on, byName) {
+  const cur = getActiveProposal(accessId);
+  if (!cur) return null;
+  if (on) db.prepare("UPDATE proposals SET wo_finalized_at=datetime('now','localtime'), wo_finalized_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName || null, cur.id);
+  else    db.prepare("UPDATE proposals SET wo_finalized_at=NULL, wo_finalized_by=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  return getActiveProposal(accessId);
+}
 // Clone the sent/changes_requested version into a new editable draft; supersede the old row.
 export function reviseProposal(accessId, byName) {
   const cur = getActiveProposal(accessId);
@@ -4781,9 +4794,11 @@ export function setPriceBook(book, byName) {
 
 // ---- Technician work-order rate library ----
 // Valid rate keys — per-step labor payouts for the install work order.
-export const RATE_KEYS = ["cam_drop", "cam_mgmt", "cam_term", "cam_mount", "pos_drop", "pos_mgmt", "pos_term", "pos_install", "nvr_setup"];
-// Company defaults (used when a scope hasn't set a key). $52/camera & /POS device, $10 NVR.
-export const DEFAULT_RATES = { cam_drop: 10, cam_mgmt: 18, cam_term: 12, cam_mount: 12, pos_drop: 10, pos_mgmt: 18, pos_term: 12, pos_install: 12, nvr_setup: 10 };
+export const RATE_KEYS = ["cam_drop", "cam_mgmt", "cam_term", "cam_mount", "cam_program", "cam_waterproof", "pos_drop", "pos_mgmt", "pos_term", "pos_install", "nvr_setup", "hdd_install", "monitor_mount"];
+// Company defaults (used when a scope hasn't set a key). Owner-set 2026-08: camera bundle = drop
+// $10 + cable mgmt $18 + termination $12 + mounting $10 + programming $8 + waterproofing $0 =
+// $58/camera; NVR setup $15; HDD/storage drive install $10; monitor + mount $10.
+export const DEFAULT_RATES = { cam_drop: 10, cam_mgmt: 18, cam_term: 12, cam_mount: 10, cam_program: 8, cam_waterproof: 0, pos_drop: 10, pos_mgmt: 18, pos_term: 12, pos_install: 12, nvr_setup: 15, hdd_install: 10, monitor_mount: 10 };
 function cleanRates(data) {
   const out = {};
   RATE_KEYS.forEach((k) => { const v = data?.[k]; if (v != null && v !== "" && +v >= 0) out[k] = Math.round(+v * 100) / 100; });

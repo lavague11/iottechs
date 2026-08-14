@@ -253,6 +253,10 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
             )}
           </div>
         </div>
+      ) : !p.wo_finalized_at ? (
+        <div className="pwo-accept-box">
+          <p>This work order is being finalized by the office. You&apos;ll be able to accept it here once the payout is confirmed.</p>
+        </div>
       ) : (
         <div className="pwo-accept-box">
           <p>Review the scope above, then accept this work order to be assigned the job.</p>
