@@ -1964,6 +1964,44 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} /> },
         ];
       }
+      if (pk === "ph_proposal") {
+        const tools = [];
+        if (["admin", "manager", "sales", "customer", "tech"].includes(cView)) {
+          tools.push({ name: "Proposal", label: "Proposal builder", heavy: true, state: "active",
+            node: (
+              <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
+                {cView === "tech" && <TechProjectBoard project={lp} />}
+                <ProposalPanel accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                  proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
+                  onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                  customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
+                  signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
+              </div></AccordionProvider>
+            ) });
+        }
+        if (["admin", "manager", "customer"].includes(cView)) {
+          tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
+            state: acceptances?.approval_deposit ? "done" : "active",
+            node: (
+              <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
+                <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit"
+                  customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                  onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} />
+              </div></AccordionProvider>
+            ) });
+        }
+        if (["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0) {
+          tools.push({ name: "Create Work Order", label: "Work order", state: workOrders?.length ? "done" : undefined,
+            node: (
+              <div style={{ padding: "16px 18px" }}>
+                <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData}
+                  assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
+                  onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
+              </div>
+            ) });
+        }
+        return tools.length ? tools : [{ name: "Proposal", label: "—" }];
+      }
       return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
     };
     const canAdv = ["admin", "manager"].includes(cView);
