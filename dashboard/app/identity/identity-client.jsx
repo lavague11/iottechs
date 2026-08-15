@@ -98,12 +98,15 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
           )}
         </div>
 
-        {unauthorized.length > 0 && (
-          <div className="panel idl-unauth">
+        {/* Always visible so it's findable — shows an empty state until a capture lands. */}
+        <div className="panel idl-unauth">
             <div className="idl-unauth-h">
               <b>Unauthorized captures <span className="idl-unauth-n">{unauthorized.length}</span></b>
               <span>Faces that failed to match. Identify the person and attach the face to their account — it&rsquo;ll recognize them next time (glasses, hat, mask). Auto-deleted after 30 days.</span>
             </div>
+            {unauthorized.length === 0 ? (
+              <div className="idl-unauth-empty">No unrecognized faces yet. When someone tries <b>Face&nbsp;ID login</b> and isn&rsquo;t matched, their photo is parked here (encrypted) for you to identify and attach to an account. Needs at least one enrolled face first.</div>
+            ) : (
             <div className="idl-unauth-grid">
               {unauthorized.map((c) => (
                 <div key={c.id} className="idl-unauth-card">
@@ -127,8 +130,8 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
                 </div>
               ))}
             </div>
-          </div>
-        )}
+            )}
+        </div>
 
         {visible.length === 0 ? (
           <div className="panel"><div className="empty">{q ? "No matches." : "No one has enrolled yet — invite someone above, or share the Face Enroll link."}</div></div>
@@ -242,6 +245,8 @@ const CSS = `
 .apx .idl-unauth-h b{font-weight:800;font-size:.92rem;display:flex;align-items:center;gap:8px}
 .apx .idl-unauth-h span{font-size:.78rem;color:var(--muted);max-width:70ch}
 .apx .idl-unauth-n{font-size:.7rem;font-weight:800;color:#8a5f00;background:#f5e6c3;border-radius:100px;padding:1px 8px}
+.apx .idl-unauth-empty{font-size:.82rem;color:var(--muted);line-height:1.5;padding:4px 2px 2px}
+.apx .idl-unauth-empty b{color:var(--ink);font-weight:700}
 .apx .idl-unauth-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
 .apx .idl-unauth-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
 .apx .idl-unauth-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#0B0F1A}
