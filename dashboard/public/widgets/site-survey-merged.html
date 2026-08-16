@@ -55,7 +55,7 @@
 
   /* device + FOV (used when a background is set) */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
-  .stage-img{position:absolute;inset:0;background:#fff;background-size:cover;background-position:center}
+  .stage-img{position:absolute;inset:0;background:#fff;background-repeat:no-repeat;background-size:contain;background-position:center}
   .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
   .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
   .devDot svg{width:19px;height:19px;stroke:var(--ink);fill:none;stroke-width:1.6}
@@ -464,7 +464,7 @@
     function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
       var img=document.getElementById("stageImg");
-      if(dataUrl){ img.style.backgroundImage="url("+dataUrl+")"; }
+      if(dataUrl){ img.style.background=""; img.style.backgroundImage="url("+dataUrl+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="contain"; img.style.backgroundPosition="center"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
       exitBg(true);
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
@@ -783,7 +783,7 @@
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
-    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }   // clear the shorthand FIRST, then set the image (else it wipes it)
+    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="contain"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }   // clear the shorthand FIRST, then set image + force no-repeat/contain (else leftover inline size:auto/repeat tiles it)
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null;
