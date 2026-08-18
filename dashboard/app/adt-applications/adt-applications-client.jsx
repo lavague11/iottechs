@@ -71,7 +71,7 @@ export default function AdtApplicationsClient({ user, alerts, apps }) {
                     <Fragment key={a.adt_id}>
                       <tr className={isOpen ? "adta-row open" : "adta-row"} onClick={() => setOpen(isOpen ? null : a.adt_id)}>
                         <td><div className="adta-id mono">{a.adt_id}</div><div className="adta-when">{fmtDay(a.created_at)}</div></td>
-                        <td><div className="adta-cust">{a.name || "—"}</div><div className="adta-addr">{a.address || a.phone || "—"}</div></td>
+                        <td><div className="adta-cust">{a.name || "—"} <span className={`adta-ptype ${a.property_type === "commercial" ? "comm" : "res"}`}>{a.property_type === "commercial" ? "Commercial" : "Residential"}</span></div><div className="adta-addr">{a.address || a.phone || "—"}</div></td>
                         <td className="r"><b>{a.points || 0}</b> <span className="adta-u">pts</span></td>
                         <td className="r">{sum.count}</td>
                         <td><span className={`spill ${st.pill}`}>{st.label}</span></td>
@@ -113,8 +113,23 @@ function DetailPanel({ app, summary }) {
   const doSchedule = () => { setErr(""); startTx(async () => { const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); }); };
   const doComplete = () => { setErr(""); startTx(async () => { const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); }); };
 
+  const ORDER = ["applied", "scheduled", "completed"];
+  const LBL = { applied: "Applied", scheduled: "Scheduled", completed: "Completed" };
+  const cur = ORDER.indexOf(app.stage);
   return (
     <div className="adta-detail">
+      <div className="adta-track">
+        {ORDER.map((s, i) => {
+          const done = app.stage === "completed" || i < cur;
+          const on = i === cur && app.stage !== "completed";
+          return (
+            <div key={s} className={`adta-track-step${done ? " done" : ""}${on ? " on" : ""}`}>
+              <span className="adta-track-dot">{done ? "✓" : i + 1}</span>
+              <span className="adta-track-lbl">{LBL[s]}</span>
+            </div>
+          );
+        })}
+      </div>
       <div className="adta-detail-cols">
         <div className="adta-equip">
           <div className="adta-sub">Equipment · <b>{summary.points} pts</b></div>
@@ -131,7 +146,7 @@ function DetailPanel({ app, summary }) {
         <div className="adta-side">
           <div className="adta-contact">
             <div className="adta-sub">Contact</div>
-            <div className="adta-crow">{app.name || "—"}</div>
+            <div className="adta-crow">{app.name || "—"} <span className={`adta-ptype ${app.property_type === "commercial" ? "comm" : "res"}`}>{app.property_type === "commercial" ? "Commercial" : "Residential"}</span></div>
             {app.phone && <a className="adta-crow lnk" href={`tel:${app.phone}`}>{app.phone}</a>}
             {app.email && <a className="adta-crow lnk" href={`mailto:${app.email}`}>{app.email}</a>}
             {app.address && <a className="adta-crow lnk" href={`https://maps.google.com/?q=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a>}
@@ -177,6 +192,9 @@ const CSS = `
 .apx .adta-id{font-weight:800;color:var(--ink)}
 .apx .adta-when{font-size:.72rem;color:var(--muted)}
 .apx .adta-cust{font-weight:700;color:var(--ink)}
+.apx .adta-ptype{font-size:.6rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:1px 7px;border-radius:100px;vertical-align:middle;margin-left:5px}
+.apx .adta-ptype.res{background:#eef4ee;color:#2f7d5a}
+.apx .adta-ptype.comm{background:#eef1f8;color:#3a4a72}
 .apx .adta-addr{font-size:.74rem;color:var(--muted)}
 .apx .adta-u{font-size:.7rem;color:var(--muted);font-weight:600}
 .apx .adta-muted{color:var(--muted)}
@@ -188,6 +206,15 @@ const CSS = `
 .apx .spill.st-done{background:var(--green-soft);color:var(--green)}
 .apx .adta-detail-row td{background:var(--bg-tint);padding:0}
 .apx .adta-detail{padding:16px 18px}
+.apx .adta-track{display:flex;align-items:center;gap:0;margin-bottom:16px;max-width:520px}
+.apx .adta-track-step{display:flex;align-items:center;gap:8px;flex:1;position:relative;color:var(--muted)}
+.apx .adta-track-step:not(:last-child)::after{content:"";flex:1;height:2px;background:var(--line);margin:0 8px}
+.apx .adta-track-step.done,.apx .adta-track-step.on{color:var(--ink)}
+.apx .adta-track-step.done:not(:last-child)::after{background:#2f7d5a}
+.apx .adta-track-dot{width:24px;height:24px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.74rem;font-weight:800;background:var(--line-soft,#eee);color:var(--muted);border:1px solid var(--line)}
+.apx .adta-track-step.done .adta-track-dot{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
+.apx .adta-track-step.on .adta-track-dot{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
+.apx .adta-track-lbl{font-size:.78rem;font-weight:700;white-space:nowrap}
 .apx .adta-detail-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:22px}
 .apx .adta-sub{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .apx .adta-equip-list{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
