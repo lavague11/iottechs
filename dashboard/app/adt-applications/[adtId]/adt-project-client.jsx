@@ -1,10 +1,39 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary } from "../../../lib/adt";
-import { adminScheduleAdtAction, adminCompleteAdtAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction } from "../actions";
+
+// The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
+// vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
+// reload — or another role — opens the same numbers. Sales gets Rep view (locked); office gets Admin.
+function DealFrame({ adtId, view, locked, rep, cust, deal }) {
+  const ref = useRef(null);
+  const saveTimer = useRef(null);
+  useEffect(() => {
+    function onMsg(e) {
+      const m = e.data || {};
+      if (!m || m.adt !== adtId) return;
+      if (m.type === "adt-ready") {
+        try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: deal || null }, "*"); } catch {}
+      } else if (m.type === "adt-deal-save") {
+        clearTimeout(saveTimer.current);
+        const payload = m.deal;
+        saveTimer.current = setTimeout(() => { saveAdtDealAction(adtId, payload); }, 700);
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => { window.removeEventListener("message", onMsg); clearTimeout(saveTimer.current); };
+  }, [adtId, deal]);
+  const qs = new URLSearchParams({ embed: "1", view, adt: adtId });
+  if (locked) qs.set("lock", "1");
+  if (rep) qs.set("rep", rep);
+  if (cust) qs.set("cust", cust);
+  return <iframe ref={ref} title="ADT Tool" src={`/widgets/adt-calculator.html?${qs.toString()}`}
+    style={{ width: "100%", border: "none", display: "block", background: "#FAF8F4" }} />;
+}
 
 const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
 const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (d.length !== 9) return t; return comm ? `${d.slice(0, 2)}-${d.slice(2)}` : `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
@@ -18,7 +47,15 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const isComm = app.property_type === "commercial";
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
-  const [idx, setIdx] = useState(done ? 2 : scheduled ? 2 : 1);   // land on the next action
+
+  // The deal (ADT Tool): sales prices in Rep view (locked); office prices in Admin view.
+  const dealView = user?.role === "sales" ? "rep" : "admin";
+  const dealLocked = user?.role === "sales";
+  const dealObj = useMemo(() => { try { return app.deal_json ? JSON.parse(app.deal_json) : null; } catch { return null; } }, [app.deal_json]);
+  const hasDeal = !!app.deal_json;
+
+  // Stages: Apply(0) → Deal(1) → Schedule(2) → Complete(3). Land on the earliest open staff action.
+  const [idx, setIdx] = useState(done ? 3 : scheduled ? 3 : hasDeal ? 2 : 1);
 
   const [date, setDate] = useState(app.schedule_date || "");
   const [win, setWin]   = useState(app.schedule_window || WINDOWS[0]);
@@ -78,9 +115,14 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   );
 
+  const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} />;
+
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle", need: "",
       tools: [{ name: "Application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: applyNode }] },
+    { name: "Deal", pill: hasDeal ? "Priced" : "Open", pct: hasDeal ? 100 : 0, tint: "purple",
+      turn: done ? "idle" : "mine", need: "Price the deal",
+      tools: [{ name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode }] },
     { name: "Schedule", pill: scheduled ? "Scheduled" : "Awaiting", pct: scheduled ? 100 : 0, tint: "blue",
       turn: done ? "idle" : "mine", need: "Schedule the install",
       tools: [{ name: "Schedule install", label: scheduled ? fmtDay(app.schedule_date) : "Pick a date", state: scheduled ? "done" : "active", node: scheduleNode }] },
