@@ -198,7 +198,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               {gateOpen && (<>
                 <div className="apv-gate-sub">{sub}</div>
                 {onBrowseStage && showBtn && (
-                  <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>Go to Proposal</button>
+                  <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>✍ Review &amp; Approve</button>
                 )}
               </>)}
             </div>
