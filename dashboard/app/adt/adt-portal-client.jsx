@@ -4,7 +4,7 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "../components/brand";
-import { ADT_GROUPS, ADT_ITEMS, adtSummary } from "../../lib/adt";
+import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
 import { submitAdtApplicationAction, scheduleAdtAction, completeAdtAction } from "./actions";
 
 const STEPS = [
@@ -122,7 +122,7 @@ function ApplyStep() {
 
       <div className="adt-sec">
         <div className="adt-sec-t">Choose your equipment</div>
-        {ADT_GROUPS.map((g) => (
+        {adtGroupsFor(propertyType).map((g) => (
           <div key={g.key} className="adt-group">
             <div className="adt-group-t">{g.label}</div>
             <div className="adt-items">

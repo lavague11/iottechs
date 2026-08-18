@@ -41,12 +41,13 @@ export const ADT_GROUPS = [
       { id: "doorbell",  name: "Google Doorbell Camera",             points: 6 },
       { id: "camIn",     name: "ADT Google — Nest Indoor Camera",    points: 6 },
       { id: "camOut",    name: "ADT Google — Nest Outdoor Camera (Wired)", points: 6 },
-      { id: "hubMax",    name: "ADT Google — Nest Hub Max Display",  points: 6 },
+      { id: "hubMax",    name: "ADT Google — Nest Hub Max Display",  points: 6, scope: "residential" },
     ],
   },
   {
     key: "automation",
     label: "Smart Home & Automation",
+    scope: "residential",   // home automation — hidden for commercial accounts
     items: [
       { id: "lock",    name: "Smart Door Lock",                    points: 5 },
       { id: "thermo",  name: "Nest Thermostat",                    points: 5 },
@@ -86,6 +87,19 @@ export const ADT_GROUPS = [
 export const ADT_ITEMS = Object.fromEntries(
   ADT_GROUPS.flatMap((g) => g.items.map((it) => [it.id, { ...it, group: g.key }]))
 );
+
+// Equipment groups tailored to the property type. Items/groups carry an optional `scope`
+// ("residential" | "commercial"); anything without one shows for both. Commercial accounts drop the
+// home-automation gear (smart lock, thermostat, garage, lamp modules, hub display); residential keeps
+// the full list. Empty groups are removed. Defaults to residential.
+export function adtGroupsFor(propertyType) {
+  const t = propertyType === "commercial" ? "commercial" : "residential";
+  const ok = (s) => !s || s === "both" || s === t;
+  return ADT_GROUPS
+    .filter((g) => ok(g.scope))
+    .map((g) => ({ ...g, items: g.items.filter((it) => ok(it.scope)) }))
+    .filter((g) => g.items.length);
+}
 
 // selection = { [itemId]: qty }. Returns total points (rounded to 1 decimal) + the picked lines.
 export function adtSummary(selection = {}) {
