@@ -96,6 +96,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const pad = { padding: "16px 18px" };
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
+  const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
 
   const applyNode = (
     <div style={pad} className="adtp">
@@ -110,8 +111,21 @@ export default function AdtProjectClient({ user, alerts, app }) {
           </div>
         )}
       </div>
-      <div className="adtp-badge">{isComm ? "Commercial" : "Residential"} · ${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
-      {summary.lines.length === 0 ? <div className="adtp-muted">No equipment on file.</div> : (
+      <div className="adtp-cd-sec">Customer details</div>
+      <div className="adtp-cd">
+        <div className="adtp-cd-f"><span>Name</span><b>{app.name || "—"}</b></div>
+        <div className="adtp-cd-f"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div>
+        {app.phone && <div className="adtp-cd-f"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div>}
+        {app.email && <div className="adtp-cd-f"><span>Email</span><b>{app.email}</b></div>}
+        {app.address && <div className="adtp-cd-f full"><span>Install address</span><b>{app.address}</b></div>}
+        {app.tax_id && <div className="adtp-cd-f"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div>}
+        {app.access_pin && <div className="adtp-cd-f"><span>Access PIN</span><b>{app.access_pin}</b></div>}
+        {app.verbal_password && <div className="adtp-cd-f"><span>Verbal password</span><b><RevealField value={app.verbal_password} /></b></div>}
+        {emerg.map((c, i) => <div key={i} className="adtp-cd-f"><span>Emergency {i + 1}</span><b>{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</b></div>)}
+      </div>
+
+      <div className="adtp-cd-sec">Equipment <em>${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</em></div>
+      {summary.lines.length === 0 ? <div className="adtp-muted" style={{ padding: "0 2px" }}>No equipment on file.</div> : (
         <div className="adtp-list">
           {summary.lines.map((l) => (
             <div key={l.id} className="adtp-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : ""}{l.linePrice && l.linePoints ? " · " : ""}{l.linePoints ? `${l.linePoints} pts` : (l.linePrice ? "" : "0 pts")}</span></div>
@@ -227,9 +241,16 @@ const CSS = `
 .adtp-list{border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden}
 .adtp-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.88rem;color:var(--dv-ink,#101418)}
 .adtp-row:first-child{border-top:none}
-.adtp-q{font-weight:800;color:var(--dv-gold-deep,#A8842F);min-width:32px}
+.adtp-q{font-weight:800;color:var(--dv-ink,#101418);min-width:32px}
 .adtp-n{flex:1}
-.adtp-p{color:var(--dv-meta,#787D84);font-weight:600}
+.adtp-p{color:var(--dv-ink,#101418);font-weight:700}
+.adtp-cd-sec{font-size:.64rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:16px 0 9px}
+.adtp-cd-sec em{font-style:normal;font-weight:700;color:var(--dv-ink,#101418);letter-spacing:0;margin-left:6px}
+.adtp-cd{display:grid;grid-template-columns:1fr 1fr;gap:11px 20px;margin-bottom:4px}
+.adtp-cd-f{min-width:0}
+.adtp-cd-f.full{grid-column:1/-1}
+.adtp-cd-f span{display:block;font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
+.adtp-cd-f b{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}

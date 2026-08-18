@@ -183,13 +183,13 @@ const CSS = `
 .ai-secret input{border:none;flex:1}
 .ai-eye{border:none;background:none;color:var(--meta);padding:0 12px;cursor:pointer;display:grid;place-items:center}
 .ai-group{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
-.ai-group-t{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--gd);background:var(--paper);padding:9px 14px;border-bottom:1px solid var(--line)}
+.ai-group-t{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--paper);padding:9px 14px;border-bottom:1px solid var(--line)}
 .ai-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid var(--soft)}
 .ai-item:first-of-type{border-top:none}
 .ai-item.on{background:#fbf7ee}
 .ai-item-main{min-width:0}
 .ai-item-name{display:block;font-size:.9rem;color:var(--ink)}
-.ai-item-sub{display:block;font-size:.74rem;font-weight:700;color:var(--gd);margin-top:1px}
+.ai-item-sub{display:block;font-size:.74rem;font-weight:700;color:var(--ink);margin-top:1px}
 .ai-step{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none;background:#fff}
 .ai-step button{width:36px;height:36px;border:none;background:#fff;font-size:1.1rem;color:#5b6270;cursor:pointer}
 .ai-step button:disabled{opacity:.4;cursor:default}

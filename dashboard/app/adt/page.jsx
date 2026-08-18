@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../lib/auth";
-import { getAdtApplication, getUserById, getProjectsByContactEmail } from "../../lib/db";
+import { getAdtApplication, getUserById, getProjectsByContactEmail, decBlob } from "../../lib/db";
 import { custDealFromDeal } from "../../lib/adt";
+
+// Mask a tax id to its last 4 for the customer-facing view (full value never leaves the server here).
+const maskTax = (digits, comm) => { const d = String(digits || "").replace(/\D/g, ""); if (d.length !== 9) return ""; return comm ? `••-•••${d.slice(5)}` : `•••-••-${d.slice(5)}`; };
 import AdtPortalClient from "./adt-portal-client";
 import AdtGate from "./adt-gate";
 
@@ -42,9 +45,15 @@ export default async function AdtPage({ searchParams }) {
   const app = rec ? {
     adt_id: rec.adt_id, name: rec.name, address: rec.address, points: rec.points,
     phone: rec.phone || "", email: rec.email || "",
+    property_type: rec.property_type || "residential", notes: rec.notes || "",
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
     pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],
+    // The applicant's own record, on their own account — SSN/EIN shown masked to last-4; verbal
+    // password is only flagged as on file. Full values live on the staff Deck.
+    tax_masked: rec.tax_id ? maskTax(decBlob(rec.tax_id), rec.property_type === "commercial") : "",
+    has_verbal: !!rec.verbal_password,
+    emergency: (() => { try { return JSON.parse(rec.emergency_contacts || "[]"); } catch { return []; } })(),
     deal_accepted: !!rec.deal_accepted_at, status: rec.status || "submitted",
   } : null;
 

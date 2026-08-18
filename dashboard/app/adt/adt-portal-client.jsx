@@ -73,25 +73,54 @@ function AcceptQuote({ app, accepted }) {
 function CustomerDeck({ app, quote, dashboardHref = null }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
+  const isComm = app.property_type === "commercial";
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
   const accepted = !!app.deal_accepted;
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
   const hasPrefs = prefDays.length > 0 || prefWins.length > 0;
+  const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
   const [idx, setIdx] = useState(done ? 2 : quote ? 1 : 0);
   const telHref = `tel:${SUPPORT_PHONE.replace(/\D/g, "")}`;
 
+  // The full application — customer details + equipment + everything they submitted.
   const equipmentNode = (
     <div className="adtc-pad">
-      {summary.lines.length
-        ? <PointsRecap app={app} />
-        : <div className="adtc-muted">No equipment on file yet.</div>}
-      {hasPrefs && (
-        <div className="adtc-pref">
-          <span>Preferred install times</span>
-          <b>{prefDays.join(", ") || "Any day"}</b>{prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
+      <div className="adtc-app">
+        <div className="adtc-app-hero">
+          <div className="adtc-app-hg"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div>
+          <div className="adtc-app-hg r"><span>Equipment estimate</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
         </div>
-      )}
+
+        <div className="adtc-app-sec">Customer details</div>
+        <div className="adtc-app-grid">
+          <div className="adtc-app-f"><span>Name</span><b>{app.name || "—"}</b></div>
+          {app.phone && <div className="adtc-app-f"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div>}
+          {app.email && <div className="adtc-app-f"><span>Email</span><b>{app.email}</b></div>}
+          {app.address && <div className="adtc-app-f full"><span>Install address</span><b>{app.address}</b></div>}
+          {app.tax_masked && <div className="adtc-app-f"><span>{isComm ? "EIN" : "SSN"}</span><b>{app.tax_masked}</b></div>}
+          {app.access_pin && <div className="adtc-app-f"><span>Access PIN</span><b>{app.access_pin}</b></div>}
+          {app.has_verbal && <div className="adtc-app-f"><span>Verbal password</span><b>•••••• <em>on file</em></b></div>}
+        </div>
+
+        <div className="adtc-app-sec">Equipment</div>
+        {summary.lines.length ? (
+          <div className="adtc-app-eqp">
+            {summary.lines.map((l) => (
+              <div key={l.id} className="adtc-app-eqrow"><span className="q">{l.qty}×</span><span className="n">{l.name}</span>
+                <span className="p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : ""}{l.linePrice && l.linePoints ? " · " : ""}{l.linePoints ? `${l.linePoints} pts` : (l.linePrice ? "" : "0 pts")}</span></div>
+            ))}
+          </div>
+        ) : <div className="adtc-muted">No equipment on file.</div>}
+
+        {hasPrefs && (<><div className="adtc-app-sec">Preferred install times</div>
+          <div className="adtc-app-line">{prefDays.join(", ") || "Any day"}{prefWins.length ? ` · ${prefWins.join(", ")}` : ""}</div></>)}
+
+        {emerg.length > 0 && (<><div className="adtc-app-sec">Emergency contacts</div>
+          {emerg.map((c, i) => <div key={i} className="adtc-app-line">{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</div>)}</>)}
+
+        {app.notes && (<><div className="adtc-app-sec">Notes</div><div className="adtc-app-line">{app.notes}</div></>)}
+      </div>
     </div>
   );
   const quoteNode = quote
@@ -188,6 +217,27 @@ const CUSTCSS = `
 .adtc-steps{margin-top:14px}
 .adtc-ul{margin:6px 0 0;padding-left:18px;color:var(--dv-ink,#101418);font-size:.88rem;line-height:1.7}
 .adtc-ul b{color:var(--dv-gold-deep,#A8842F)}
+.adtc-app{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;overflow:hidden;background:#fff}
+.adtc-app-hero{display:flex;align-items:stretch;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.adtc-app-hg{flex:1;padding:14px 18px}
+.adtc-app-hg.r{text-align:right;border-left:1px solid var(--dv-line-soft,#EDEDE9)}
+.adtc-app-hg span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
+.adtc-app-hg b{font-size:1.15rem;font-weight:800;color:var(--dv-ink,#101418)}
+.adtc-app-hg i{display:block;font-style:normal;font-size:.72rem;color:var(--dv-meta,#787D84);margin-top:2px}
+.adtc-app-sec{font-size:.64rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:14px 18px 0}
+.adtc-app-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 22px;padding:10px 18px 4px}
+.adtc-app-f{min-width:0}
+.adtc-app-f.full{grid-column:1/-1}
+.adtc-app-f span{display:block;font-size:.64rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
+.adtc-app-f b{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
+.adtc-app-f b em{font-style:normal;font-weight:600;color:var(--dv-meta,#787D84);font-size:.78rem}
+.adtc-app-eqp{padding:8px 18px 4px}
+.adtc-app-eqrow{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.88rem}
+.adtc-app-eqrow:first-child{border-top:none}
+.adtc-app-eqrow .q{font-weight:800;color:var(--dv-ink,#101418);min-width:28px}
+.adtc-app-eqrow .n{flex:1;color:var(--dv-ink,#101418)}
+.adtc-app-eqrow .p{font-weight:700;color:var(--dv-ink,#101418)}
+.adtc-app-line{padding:4px 18px 8px;font-size:.88rem;color:var(--dv-ink,#101418);line-height:1.5}
 .adtc-support{margin-top:16px;font-size:.88rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:11px 13px}
 .adtc-support a{color:var(--dv-gold-deep,#A8842F);font-weight:800;text-decoration:none}
 .adtc-muted a{color:var(--dv-gold-deep,#A8842F);font-weight:700;text-decoration:none}

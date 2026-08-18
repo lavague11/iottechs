@@ -8,8 +8,8 @@ export const ADT_GROUPS = [
     key: "panels",
     label: "Panels & Connectivity",
     items: [
-      { id: "panel5",     name: "5in Control Panel",                              points: 0,   price: 450 },
-      { id: "panel7",     name: "7in Control Panel",                              points: 0,   price: 550 },
+      { id: "panel5",     name: "5in Control Panel",                              points: 5,   price: 450 },
+      { id: "panel7",     name: "7in Control Panel",                              points: 7,   price: 550 },
       { id: "touch7",     name: "Secondary Touchscreen — Command 7in",            points: 4,   price: 349 },
       { id: "touchpad",   name: "ADT Command — Wireless Touchpad (WLTP100)",      points: 2.5, price: 249 },
       { id: "lte",        name: "LTE Cell Radio — Verizon",                       points: 0,   price: 0 },
