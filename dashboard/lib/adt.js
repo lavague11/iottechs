@@ -120,6 +120,28 @@ export function adtSummary(selection = {}) {
   return { points: Math.round(points * 10) / 10, price, count: lines.reduce((s, l) => s + l.qty, 0), lines };
 }
 
+// ADT catalog id → ADT Tool (calculator) item NAME, so an application's equipment can seed the Quote
+// tool. Names must match the calculator's CATS exactly. Items with no calculator equivalent are omitted
+// (LTE radio is folded into the panel; yard sign / google fee / takeover items carry no retail line).
+export const ADT_TO_CALC = {
+  panel5: "5in Screen", panel7: "7in Screen", touch7: "Touchscreen", touchpad: "Wireless Keypad",
+  eero: "Wi-Fi Extender", gc2: "Hybrid Panel", translator: "Wireless Converter",
+  contact: "Door Sensor", motion: "Motion", glass: "Glassbreak", shock: "Shock Sensor",
+  smoke: "Smoke", doorbell: "Nest Doorbell", camIn: "Nest Indoor Cam", camOut: "Nest Outdoor Cam",
+  hubMax: "Nest Hub", lock: "Door Lock", thermo: "Nest Thermostat", garage: "Garage Opener",
+  lamp: "Lamp Module", keyfob: "Key Fob",
+};
+// Turn an application's equipment { itemId: qty } into { calcItemName: qty } for the Quote tool.
+export function adtQuoteSeed(equipment = {}) {
+  const seed = {};
+  for (const [id, qty] of Object.entries(equipment)) {
+    const n = Math.max(0, Math.floor(+qty || 0));
+    const name = ADT_TO_CALC[id];
+    if (n && name) seed[name] = (seed[name] || 0) + n;
+  }
+  return seed;
+}
+
 // Credit/approval status → label + color. One source of truth for the badge everywhere it shows.
 export const ADT_STATUS_META = {
   submitted: { label: "Submitted", color: "#5b6470" },

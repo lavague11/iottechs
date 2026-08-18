@@ -3,21 +3,23 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
-import { adtSummary, adtStatusMeta } from "../../../lib/adt";
+import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction } from "../actions";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
 // reload — or another role — opens the same numbers. Sales gets Rep view (locked); office gets Admin.
-function DealFrame({ adtId, view, locked, rep, cust, deal }) {
+function DealFrame({ adtId, view, locked, rep, cust, deal, seed }) {
   const ref = useRef(null);
   const saveTimer = useRef(null);
+  // No saved deal yet → seed the calculator from the application's equipment (application → quote).
+  const initial = deal || (seed && Object.keys(seed).length ? { seedByName: seed, cust } : null);
   useEffect(() => {
     function onMsg(e) {
       const m = e.data || {};
       if (!m || m.adt !== adtId) return;
       if (m.type === "adt-ready") {
-        try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: deal || null }, "*"); } catch {}
+        try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: initial }, "*"); } catch {}
       } else if (m.type === "adt-deal-save") {
         clearTimeout(saveTimer.current);
         const payload = m.deal;
@@ -31,7 +33,7 @@ function DealFrame({ adtId, view, locked, rep, cust, deal }) {
   if (locked) qs.set("lock", "1");
   if (rep) qs.set("rep", rep);
   if (cust) qs.set("cust", cust);
-  const push = () => { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: deal || null }, "*"); } catch {} };
+  const push = () => { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: initial }, "*"); } catch {} };
   return <iframe ref={ref} title="ADT Tool" src={`/widgets/adt-calculator.html?${qs.toString()}`} onLoad={push}
     style={{ width: "100%", border: "none", display: "block", background: "#FAF8F4" }} />;
 }
@@ -146,7 +148,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   );
 
-  const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} />;
+  const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} />;
 
   const [shared, setShared] = useState(!!app.deal_shared);
   const [shareErr, setShareErr] = useState("");

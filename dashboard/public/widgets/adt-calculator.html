@@ -1152,6 +1152,7 @@ calc();
       if(d.retails) Object.entries(d.retails).forEach(([i,p])=>{ set('p'+i,p); });   // customer payload: retail only
       EQUIP.forEach(x=>{ $('qn'+x.i).value = 0; $('qe'+x.i).value = 0; });
       if(d.qtys) Object.entries(d.qtys).forEach(([i,v])=>{ set('qn'+i,v[0]); set('qe'+i,v[1]); });
+      if(d.seedByName) Object.entries(d.seedByName).forEach(([name,qty])=>{ const it = EQUIP.find(e=>e.n===name); if(it) $('qn'+it.i).value = Math.max(0, +qty||0); });   // application → quote
       if(d.exAll){ $('exAll').checked = true; document.body.classList.add('takeover'); }
       if(d.cGiven!=null){ $('cGiven').value = d.cGiven; $('cGivenRep').value = d.cGiven; }
       if(d.given!=null){ custLockedCredit = Math.max(0, +d.given||0); }               // rep's credit → cust view
