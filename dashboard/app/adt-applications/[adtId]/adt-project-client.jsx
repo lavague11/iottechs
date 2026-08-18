@@ -128,12 +128,9 @@ export default function AdtProjectClient({ user, alerts, app }) {
         <div className="adtp-statusrow-l"><span className="adtp-sub" style={{ margin: 0 }}>Credit status</span>
           <span className="adtp-status-badge" style={{ color: sm.color, background: sm.color + "1a", border: `1px solid ${sm.color}33` }}>{sm.label}</span></div>
         {status !== "installed" && (
-          <div className="adtp-status-btns">
-            {status !== "in_review" && <button className="adtp-chip" disabled={pending} onClick={() => setStatus("in_review")}>In review</button>}
-            {status !== "needs_docs" && <button className="adtp-chip amber" disabled={pending} onClick={() => setStatus("needs_docs")}>Needs docs</button>}
-            {status !== "approved" && <button className="adtp-chip green" disabled={pending} onClick={() => setStatus("approved")}>Approve</button>}
-            {status !== "declined" && <button className="adtp-chip red" disabled={pending} onClick={() => setStatus("declined")}>Decline</button>}
-          </div>
+          <select className="adtp-status-sel" value={status} disabled={pending} onChange={(e) => setStatus(e.target.value)} style={{ color: sm.color }}>
+            {["submitted", "in_review", "needs_docs", "approved", "declined"].map((s) => <option key={s} value={s} style={{ color: "#101418" }}>{adtStatusMeta(s).label}</option>)}
+          </select>
         )}
       </div>
       <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
@@ -146,8 +143,19 @@ export default function AdtProjectClient({ user, alerts, app }) {
         {app.tax_id && <div className="adtp-cd-f"><CopyBtn text={fmtTax(app.tax_id, isComm)} /><div className="adtp-cd-v"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div></div>}
         {app.access_pin && <div className="adtp-cd-f"><CopyBtn text={app.access_pin} /><div className="adtp-cd-v"><span>Access PIN</span><b>{app.access_pin}</b></div></div>}
         {app.verbal_password && <div className="adtp-cd-f"><CopyBtn text={app.verbal_password} /><div className="adtp-cd-v"><span>Verbal password</span><b><RevealField value={app.verbal_password} /></b></div></div>}
-        {emerg.map((c, i) => <div key={i} className="adtp-cd-f"><CopyBtn text={[c.name, c.phone ? fmtPhone(c.phone) : ""].filter(Boolean).join(" · ")} /><div className="adtp-cd-v"><span>Emergency {i + 1}</span><b>{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</b></div></div>)}
+        {emerg.flatMap((c, i) => [
+          c.name && <div key={`en${i}`} className="adtp-cd-f"><CopyBtn text={c.name} /><div className="adtp-cd-v"><span>Emergency {i + 1} name</span><b>{c.name}</b></div></div>,
+          c.phone && <div key={`ep${i}`} className="adtp-cd-f"><CopyBtn text={fmtPhone(c.phone)} /><div className="adtp-cd-v"><span>Emergency {i + 1} phone</span><b>{fmtPhone(c.phone)}</b></div></div>,
+        ]).filter(Boolean)}
       </div>
+
+      {app.verification_doc?.data && (<>
+        <div className="adtp-cd-sec">Business verification</div>
+        <a className="adtp-doc" href={app.verification_doc.data} download={app.verification_doc.name || "verification"} target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span className="adtp-doc-n">{app.verification_doc.name || "Document"}</span><em>Open</em>
+        </a>
+      </>)}
 
       <div className="adtp-cd-sec">Equipment <em>${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</em></div>
       {summary.lines.length === 0 ? <div className="adtp-muted" style={{ padding: "0 2px" }}>No equipment on file.</div> : (
@@ -282,6 +290,12 @@ const CSS = `
 .adtp-copy.ok{border-color:var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
 .adtp-copy-sp{flex:none;width:24px}
 .adtp-chip.amber{border-color:#f0d9bf;color:#c46a1a}
+.adtp-status-sel{height:33px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;font-size:.8rem;font-weight:700;padding:0 12px;cursor:pointer;font-family:inherit;outline:none}
+.adtp-status-sel:hover{border-color:var(--dv-gold,#C9A96E)}
+.adtp-doc{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-gold-deep,#A8842F);text-decoration:none;transition:.12s}
+.adtp-doc:hover{border-color:var(--dv-gold,#C9A96E);background:#fff}
+.adtp-doc-n{flex:1;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-all}
+.adtp-doc em{font-style:normal;font-size:.74rem;font-weight:700;color:var(--dv-gold-deep,#A8842F)}
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}

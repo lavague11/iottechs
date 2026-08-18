@@ -583,6 +583,7 @@ function init() {
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
   if (!adtCols.includes("archived")) db.exec("ALTER TABLE adt_applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: hidden from lists, kept for audit
+  if (!adtCols.includes("verification_doc")) db.exec("ALTER TABLE adt_applications ADD COLUMN verification_doc TEXT"); // commercial business-verification file: JSON {name,type,data(dataURL)}
   if (!adtCols.includes("status")) {   // credit/approval lifecycle: submitted → in_review → approved | declined → installed
     db.exec("ALTER TABLE adt_applications ADD COLUMN status TEXT DEFAULT 'submitted'");
     db.exec("UPDATE adt_applications SET status = CASE WHEN stage = 'completed' THEN 'installed' ELSE 'submitted' END WHERE status IS NULL");
@@ -3438,7 +3439,7 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, verificationDoc }) {
   const adtId = nextAdtId();
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
@@ -3452,14 +3453,15 @@ export function createAdtApplication({ name, email, phone, address, equipment, p
   const vpEnc = String(verbalPassword || "").trim() ? encBlob(String(verbalPassword).trim().slice(0, 60)) : null;  // encrypted at rest
   const pDays = JSON.stringify(Array.isArray(prefDays) ? prefDays.slice(0, 7) : []);      // preferred install days
   const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []); // preferred windows
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins);
+  const vdoc = verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null;
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows, verification_doc)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, vdoc);
   return getAdtApplication(adtId);
 }
 // Admin edit of a submitted application — same field handling as create (re-encrypt SSN/verbal,
 // recompute the access PIN from the phone). Stage/status/deal are untouched.
-export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows }) {
+export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, verificationDoc }) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
@@ -3474,10 +3476,13 @@ export function updateAdtApplication(adtId, { name, email, phone, address, equip
   const vpEnc = String(verbalPassword || "").trim() ? encBlob(String(verbalPassword).trim().slice(0, 60)) : null;
   const pDays = JSON.stringify(Array.isArray(prefDays) ? prefDays.slice(0, 7) : []);
   const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []);
+  // undefined = leave the doc as-is; an object with data = replace; null = remove.
+  const vdoc = verificationDoc === undefined ? cur.verification_doc && JSON.stringify(cur.verification_doc)
+             : (verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null);
   db.prepare(`UPDATE adt_applications SET name=?, email=?, phone=?, address=?, equipment=?, points=?, notes=?,
-              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?,
+              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?, verification_doc=?,
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
-    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, String(adtId));
+    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, vdoc || null, String(adtId));
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {
@@ -3486,6 +3491,7 @@ export function getAdtApplication(adtId) {
   try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
   try { r.pref_days = JSON.parse(r.pref_days || "[]"); } catch { r.pref_days = []; }
   try { r.pref_windows = JSON.parse(r.pref_windows || "[]"); } catch { r.pref_windows = []; }
+  try { r.verification_doc = r.verification_doc ? JSON.parse(r.verification_doc) : null; } catch { r.verification_doc = null; }
   return r;
 }
 export function listAdtApplications({ includeArchived = false } = {}) {

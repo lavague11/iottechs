@@ -47,8 +47,19 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
   const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
   const [wins, setWins] = useState(ex ? [...(ex.pref_windows || [])] : []);
+  const [doc, setDoc] = useState(ex?.verification_doc || null);   // commercial business-verification file
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
+
+  const onDoc = (e) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { setErr("Document is too large (max 8MB)."); return; }
+    setErr("");
+    const rd = new FileReader();
+    rd.onload = () => setDoc({ name: file.name, type: file.type, data: String(rd.result) });
+    rd.readAsDataURL(file);
+  };
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const ec = (i, field) => (e) => { const v = field === "name" ? titleCase(e.target.value) : fmtPhone(e.target.value); setEmg((prev) => prev.map((c, x) => (x === i ? { ...c, [field]: v } : c))); };
@@ -66,13 +77,21 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const dtoggle = (v) => setDays((d) => d.includes(v) ? d.filter((x) => x !== v) : [...d, v]);
   const wtoggle = (v) => setWins((w) => w.includes(v) ? w.filter((x) => x !== v) : [...w, v]);
   const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-  const dquick = (s) => setDays(sameSet(days, s) ? [] : s);
+  const WINKEYS = WINS.map((w) => w.key);
+  const allIn = (set) => set.length > 0 && set.every((x) => days.includes(x));   // weekday/weekend chips add/remove a range (both can be on)
+  const rangeToggle = (set) => setDays((d) => set.every((x) => d.includes(x)) ? d.filter((x) => !set.includes(x)) : [...new Set([...d, ...set])]);
+  const anyDay = days.length === DAYS.length;
+  const toggleAny = () => setDays(anyDay ? [] : [...DAYS]);
+  const asap = anyDay && sameSet(wins, WINKEYS);                                 // ASAP = any day + any time
+  const toggleAsap = () => { if (asap) { setDays([]); setWins([]); } else { setDays([...DAYS]); setWins([...WINKEYS]); } };
   const summary = useMemo(() => adtSummary(qty), [qty]);
 
   function submit(e) {
     e?.preventDefault(); setErr("");
+    if (!emg.some((c) => c.name.trim() && c.phone.replace(/\D/g, "").length >= 10)) { setErr("Add at least one emergency contact — a name and phone number."); return; }
+    if (!f.verbalPassword.trim()) { setErr("Please set a verbal password."); return; }
     startTx(async () => {
-      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins };
+      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, verificationDoc: propertyType === "commercial" ? doc : null };
       const r = onSubmit ? await onSubmit(payload) : await submitAdtApplicationAction(payload);
       if (r?.error) { setErr(r.error); return; }
       if (r?.adtId) router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);   // fresh create → account Deck
@@ -129,6 +148,23 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         <label className="ai-fld full"><span>Install address</span><AddressAutocomplete value={f.address} onChange={(addr) => setF((p) => ({ ...p, address: addr }))} placeholder="Start typing an address…" autoComplete="off" /></label>
       </div>
 
+      {isComm && (<>
+        <div className="ai-sec-t">Business verification <em>· proof of business</em></div>
+        {doc ? (
+          <div className="ai-doc on">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg>
+            <span className="ai-doc-n">{doc.name}</span>
+            <button type="button" className="ai-doc-x" onClick={() => setDoc(null)}>Remove</button>
+          </div>
+        ) : (
+          <label className="ai-doc">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <span className="ai-doc-t"><b>Upload document</b><em>Articles of formation, EIN letter, or proof of business — PDF or image</em></span>
+            <input type="file" accept=".pdf,image/*" onChange={onDoc} hidden />
+          </label>
+        )}
+      </>)}
+
       <div className="ai-sec-t">Choose your equipment</div>
       {adtGroupsFor(propertyType).map((g) => (
         <div key={g.key} className="ai-group">
@@ -162,7 +198,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai-sec-t">Anything else? <em>optional</em></div>
       <textarea className="ai-area" rows={2} value={f.notes} onChange={set("notes")} placeholder="Gate code, pets, best time to reach you…" />
 
-      <div className="ai-sec-t">Emergency contacts</div>
+      <div className="ai-sec-t">Emergency contacts <em>· at least one required</em></div>
       <div className="ai-note">If we can't reach you by phone, we'll contact these people in an emergency.</div>
       {[0, 1].map((i) => (
         <div className="ai-grid" key={i} style={{ marginBottom: i === 0 ? 8 : 0 }}>
@@ -171,15 +207,16 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         </div>
       ))}
 
-      <div className="ai-sec-t">Verbal password</div>
+      <div className="ai-sec-t">Verbal password <em>· required</em></div>
       <input className="ai-inp" value={f.verbalPassword} onChange={set("verbalPassword")} placeholder="A word or phrase only you know" autoComplete="off" />
       <div className="ai-note">This verifies your identity and is used in case of emergencies.</div>
 
-      <div className="ai-sec-t">Preferred install times <em>optional</em></div>
+      <div className="ai-sec-t">Preferred install times</div>
       <div className="ai-quick">
-        <button type="button" className={"ai-c" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => dquick(DAYS)}>Any day</button>
-        <button type="button" className={"ai-c" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => dquick(WEEKDAYS)}>Weekdays</button>
-        <button type="button" className={"ai-c" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => dquick(WEEKENDS)}>Weekends</button>
+        <button type="button" className={"ai-c asap" + (asap ? " on" : "")} onClick={toggleAsap}>⚡ ASAP</button>
+        <button type="button" className={"ai-c" + (anyDay ? " on" : "")} onClick={toggleAny}>Any day</button>
+        <button type="button" className={"ai-c" + (allIn(WEEKDAYS) ? " on" : "")} onClick={() => rangeToggle(WEEKDAYS)}>Weekdays</button>
+        <button type="button" className={"ai-c" + (allIn(WEEKENDS) ? " on" : "")} onClick={() => rangeToggle(WEEKENDS)}>Weekends</button>
       </div>
       <div className="ai-days">{DAYS.map((d) => <button type="button" key={d} className={"ai-day" + (days.includes(d) ? " on" : "")} onClick={() => dtoggle(d)}>{d}</button>)}</div>
       <div className="ai-winlbl">Time window</div>
@@ -221,6 +258,14 @@ const CSS = `
 .ai-fld input:focus,.ai-inp:focus,.ai-area:focus,.ai-secret:focus-within{border-color:var(--g)}
 .ai-inp{margin-bottom:0}
 .ai-area{margin-bottom:0;resize:vertical}
+.ai-doc{display:flex;align-items:center;gap:12px;padding:16px;border:1.5px dashed var(--line);border-radius:12px;background:var(--raise);color:var(--gd);cursor:pointer;transition:.12s}
+.ai-doc:hover{border-color:var(--g);background:#fff}
+.ai-doc-t{display:flex;flex-direction:column;gap:2px}
+.ai-doc-t b{font-size:.9rem;color:var(--ink)}
+.ai-doc-t em{font-style:normal;font-size:.76rem;color:var(--meta)}
+.ai-doc.on{border-style:solid;border-color:#c9e4d1;background:#eef7f0;color:#1c6b45;cursor:default}
+.ai-doc-n{flex:1;font-size:.88rem;font-weight:600;color:var(--ink);word-break:break-all}
+.ai-doc-x{border:1px solid var(--line);background:#fff;color:#c0392b;border-radius:8px;padding:6px 12px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
 .ai-secret{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
 .ai-secret input{border:none;flex:1}
 .ai-eye{border:none;background:none;color:var(--meta);padding:0 12px;cursor:pointer;display:grid;place-items:center}
@@ -248,6 +293,8 @@ const CSS = `
 .ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
 .ai-c:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
 .ai-c.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ai-c.asap{border-color:var(--g);color:var(--gd)}
+.ai-c.asap.on{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;border-color:#C9A96E}
 .ai-days{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin-bottom:14px}
 .ai-day{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:10px;padding:11px 0;font-size:.82rem;font-weight:700;cursor:pointer;text-align:center;transition:.12s}
 .ai-day:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18);transform:translateY(-1px)}

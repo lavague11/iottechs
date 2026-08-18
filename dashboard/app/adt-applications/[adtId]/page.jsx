@@ -27,6 +27,7 @@ export default async function AdtProjectPage({ params }) {
     verbal_password: office && app.verbal_password ? decBlob(app.verbal_password) : "",
     schedule_date: app.schedule_date, schedule_window: app.schedule_window, access_pin: app.access_pin,
     pref_days: app.pref_days || [], pref_windows: app.pref_windows || [], deal_json: app.deal_json || "",
+    verification_doc: office ? (app.verification_doc || null) : null,
     deal_shared: !!app.deal_shared_at, deal_accepted: !!app.deal_accepted_at,
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };

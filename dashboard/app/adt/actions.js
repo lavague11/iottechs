@@ -40,6 +40,7 @@ export async function submitAdtApplicationAction(form) {
     verbalPassword: String(form?.verbalPassword || "").trim(),
     prefDays:    Array.isArray(form?.prefDays) ? form.prefDays : [],
     prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
+    verificationDoc: form?.verificationDoc && form.verificationDoc.data ? form.verificationDoc : null,
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }
