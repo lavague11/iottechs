@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
-import { submitAdtApplicationAction, submitAdtPreferencesAction, completeAdtAction } from "./actions";
+import { submitAdtApplicationAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
 
 const STEPS = [
@@ -14,8 +14,6 @@ const STEPS = [
   { key: "quote",    label: "Quote" },
   { key: "complete", label: "Complete" },
 ];
-// Map a saved application stage → which step is active (applied = schedule is next up).
-const STAGE_TO_STEP = { applied: 1, scheduled: 2, completed: 2 };
 
 // Capitalize each word (names); format a phone as (xxx) xxx-xxxx as it's typed.
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -126,48 +124,6 @@ function CustomerDeck({ app, quote }) {
       <style>{CSS}</style>
       <style>{CUSTCSS}</style>
     </>
-  );
-}
-
-// Preferred-times picker as an inline Deck tool. Applied → the picker; after → a read-only status.
-function CustSchedule({ app }) {
-  const router = useRouter();
-  const [days, setDays] = useState(app.pref_days || []);
-  const [wins, setWins] = useState(app.pref_windows || []);
-  const [err, setErr] = useState("");
-  const [pending, startTx] = useTransition();
-  const scheduled = !!app.schedule_date;
-  const applied = app.stage === "applied";
-  const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-  const quick = (set) => setDays(sameSet(days, set) ? [] : set);
-  const submit = () => startTx(async () => { setErr(""); const r = await submitAdtPreferencesAction(app.adt_id, { days, windows: wins }); if (r?.error) setErr(r.error); else router.refresh(); });
-
-  if (scheduled) return <div className="adtc-pad"><div className="adtc-ok">Install set for <b>{DAY_FMT(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div></div>;
-  if (!applied) return (
-    <div className="adtc-pad">
-      <div className="adtc-ok">Preferences received</div>
-      <div className="adtc-muted" style={{ marginTop: 6 }}>We'll confirm a time that fits: <b>{(app.pref_days || []).join(", ") || "any day"}</b>{app.pref_windows?.length ? <> · <b>{app.pref_windows.join(", ")}</b></> : null}.</div>
-    </div>
-  );
-  return (
-    <div className="adtc-pad">
-      <div className="adtc-sec-t">Preferred days</div>
-      <div className="adt-quick">
-        <button type="button" className={"adt-chip" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => quick(WEEKDAYS)}>Weekdays</button>
-        <button type="button" className={"adt-chip" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => quick(WEEKENDS)}>Weekends</button>
-        <button type="button" className={"adt-chip" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => quick(DAYS)}>Any day</button>
-      </div>
-      <div className="adt-days">
-        {DAYS.map((d) => <button type="button" key={d} className={"adt-day" + (days.includes(d) ? " on" : "")} onClick={() => toggle(days, setDays, d)}>{d}</button>)}
-      </div>
-      <div className="adtc-sec-t" style={{ marginTop: 16 }}>Time window</div>
-      <div className="adt-wins">
-        {WINDOWS.map((w) => <button type="button" key={w.key} className={"adt-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => toggle(wins, setWins, w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}
-      </div>
-      {err && <div className="adt-err" style={{ marginTop: 10 }}>{err}</div>}
-      <button className="adtc-btn" style={{ marginTop: 14 }} disabled={pending || !days.length || !wins.length} onClick={submit}>{pending ? "Sending…" : "Send preferences"}</button>
-    </div>
   );
 }
 
@@ -391,7 +347,7 @@ function ApplyStep({ prefill = null }) {
   );
 }
 
-/* ---------------- Step 2 · Preferred times ---------------- */
+/* ---------------- preferred-times constants (used in the Apply intake) ---------------- */
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const WEEKENDS = ["Sat", "Sun"];
@@ -400,107 +356,6 @@ const WINDOWS = [
   { key: "Afternoon", sub: "12pm–4pm" },
   { key: "Evening",   sub: "4pm–7pm" },
 ];
-function ScheduleStep({ app }) {
-  const router = useRouter();
-  const [days, setDays] = useState([]);
-  const [wins, setWins] = useState([]);
-  const [err, setErr]   = useState("");
-  const [pending, startTx] = useTransition();
-
-  const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-  const quick = (set) => setDays(sameSet(days, set) ? [] : set);
-
-  function confirm() {
-    setErr("");
-    startTx(async () => {
-      const r = await submitAdtPreferencesAction(app.adt_id, { days, windows: wins });
-      if (r?.error) { setErr(r.error); return; }
-      router.refresh();
-    });
-  }
-
-  return (
-    <div className="adt-card">
-      <div className="adt-h">
-        <h1>When works for you?</h1>
-        <p>Application <b>{app.adt_id}</b> received. Tell us your preferred days and times — we'll confirm the exact appointment.</p>
-      </div>
-      <PointsRecap app={app} />
-
-      <div className="adt-sec">
-        <div className="adt-sec-t">Preferred days</div>
-        <div className="adt-quick">
-          <button type="button" className={"adt-chip" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => quick(WEEKDAYS)}>Weekdays</button>
-          <button type="button" className={"adt-chip" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => quick(WEEKENDS)}>Weekends</button>
-          <button type="button" className={"adt-chip" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => quick(DAYS)}>Any day</button>
-        </div>
-        <div className="adt-days">
-          {DAYS.map((d) => (
-            <button type="button" key={d} className={"adt-day" + (days.includes(d) ? " on" : "")} onClick={() => toggle(days, setDays, d)}>{d}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="adt-sec">
-        <div className="adt-sec-t">Time window</div>
-        <div className="adt-wins">
-          {WINDOWS.map((w) => (
-            <button type="button" key={w.key} className={"adt-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => toggle(wins, setWins, w.key)}>
-              <b>{w.key}</b><span>{w.sub}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {err && <div className="adt-err">{err}</div>}
-      <div className="adt-bar end">
-        <button className="adt-go" onClick={confirm} disabled={pending || !days.length || !wins.length}>{pending ? "Sending…" : "Send preferences →"}</button>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Scheduled (awaiting install) ---------------- */
-function ScheduledView({ app }) {
-  const router = useRouter();
-  const [pending, startTx] = useTransition();
-  const fmt = (d) => { try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
-  return (
-    <div className="adt-card">
-      <div className="adt-hero">
-        <div className="adt-hero-ic sched"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-        <h1>{app.schedule_date ? "You're on the schedule" : "Preferences received"}</h1>
-        <p>{app.schedule_date
-          ? <>Install set for <b>{fmt(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}.</>
-          : (app.pref_days?.length || app.pref_windows?.length)
-            ? <>We'll confirm a time that fits your preference: <b>{(app.pref_days || []).join(", ") || "any day"}</b>{app.pref_windows?.length ? <> · <b>{app.pref_windows.join(", ")}</b></> : ""}.</>
-            : "We'll be in touch to confirm the details."}</p>
-      </div>
-      <PointsRecap app={app} />
-      <div className="adt-bar end">
-        <button className="adt-go ghost" disabled={pending} onClick={() => startTx(async () => { await completeAdtAction(app.adt_id); router.refresh(); })}>
-          {pending ? "…" : "Mark install complete"}
-        </button>
-      </div>
-      <div className="adt-note-line">Access PIN <b>{app.access_pin || "—"}</b> · keep your application ID <b>{app.adt_id}</b> to check back anytime.</div>
-    </div>
-  );
-}
-
-/* ---------------- Step 3 · Complete ---------------- */
-function CompleteView({ app }) {
-  return (
-    <div className="adt-card">
-      <div className="adt-hero">
-        <div className="adt-hero-ic done"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-        <h1>Your ADT system is live</h1>
-        <p>Installation complete for <b>{app.adt_id}</b>. Welcome to safer days ahead.</p>
-      </div>
-      <PointsRecap app={app} />
-    </div>
-  );
-}
 
 /* ---------------- shared: equipment recap ---------------- */
 function PointsRecap({ app }) {

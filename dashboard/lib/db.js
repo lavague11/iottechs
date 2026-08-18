@@ -3480,18 +3480,6 @@ export function completeAdtApplication(adtId) {
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`).run(String(adtId));
   return getAdtApplication(adtId);
 }
-// Customer states preferred install days + time windows (not a firm date). Advances to 'scheduled'
-// so the office can lock in the real date afterward from the staff Deck.
-export function setAdtPreferences(adtId, { days, windows } = {}) {
-  const cur = getAdtApplication(adtId);
-  if (!cur) return null;
-  const d = Array.isArray(days) ? days.slice(0, 7) : [];
-  const w = Array.isArray(windows) ? windows.slice(0, 3) : [];
-  db.prepare(`UPDATE adt_applications SET pref_days = ?, pref_windows = ?, stage = 'scheduled',
-              scheduled_at = COALESCE(scheduled_at, datetime('now','localtime')), updated_at = datetime('now','localtime')
-              WHERE adt_id = ? COLLATE NOCASE`).run(JSON.stringify(d), JSON.stringify(w), String(adtId));
-  return getAdtApplication(adtId);
-}
 // Persist the internal ADT Tool deal state (equipment cart, tier, credit, rep). Autosaved from the widget.
 export function saveAdtDeal(adtId, dealJson) {
   const cur = getAdtApplication(adtId);
