@@ -152,11 +152,11 @@
   .devNode .devDot svg{width:calc(var(--isz,40px)*.47);height:calc(var(--isz,40px)*.47);stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot,.devNode:hover .devDot,.devNode.hl .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
-  .devNode .icLabel{position:absolute;left:20px;top:20px;transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none}
+  .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none}
   .devNode.aim .icLabel{pointer-events:auto;cursor:grab}
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* FOV cone + line — only shown in the Angles step */
-  .devNode .fovWrap{position:absolute;left:20px;top:20px;transform-origin:0 0;display:none;z-index:2}
+  .devNode .fovWrap{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform-origin:0 0;display:none;z-index:2}
   /* cone shows for the selected/hovered/panel-highlighted camera, and for all when "show all angles" is on */
   /* A placed camera is just its icon. Its cone/angle shows only when angle display is on
      (angle mode or the show toggle → body.show-all-angles), or on a deliberate panel-card hover (.hl). */
@@ -257,7 +257,24 @@
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}
   body.ro .devNode .devDot{cursor:default}
 
-  @media (max-width:900px){ .side{display:none} .canvasCol{padding-right:18px} .doors{grid-template-columns:1fr} }
+  @media (max-width:900px){
+    .doors{grid-template-columns:1fr}
+    .canvasCol{padding:14px 12px 0}
+    .bgstep{padding:18px;max-height:100%;overflow-y:auto}   /* the From-library button is reachable now */
+    /* Survey panel → slide-over drawer instead of display:none (which stranded it with no way to
+       reopen). The existing collapse rail (▸) + panel chevron open/close it over the canvas. */
+    .side{position:absolute;top:8px;right:8px;bottom:8px;width:min(300px,86%);z-index:20;padding:12px 12px 0;background:var(--soft);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 44px rgba(16,17,18,.3)}
+  }
+  @media (max-width:640px){
+    /* Phones: ~half-size device icons + tighter controls. Label/cone offsets track --isz (calc), so
+       everything stays put. */
+    #scene{--isz:22px}
+    .devNode .icLabel{font-size:8px;padding:2px 5px}
+    .moon,.plandim,.ubtn{width:30px;height:30px}
+    .ctxbtn{padding:8px 11px;font-size:12px}
+    .door svg{width:24px;height:24px;margin-bottom:8px}
+    .door{padding:16px 12px}
+  }
 </style>
 </head>
 <body>
@@ -472,7 +489,7 @@
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor(); renderFloorTabs();   // this background is now this floor's plan
       if(dataUrl && !skipSave) saveToLibrary(dataUrl, curBgSource==="satellite"?"aerial":"floorplan");   // reusable global library (deduped server-side)
-      sideCollapsed=false; applySideCollapsed();   // placement is underway → reveal the device panel
+      sideCollapsed=(window.innerWidth<=900); applySideCollapsed();   // reveal the device panel on desktop; on mobile keep the drawer closed (rail ▸ opens it) so the canvas stays usable
       goStep(1);   // → Place
     }
     // save a finished plan to the global library (fire-and-forget; a small thumb rides along)
