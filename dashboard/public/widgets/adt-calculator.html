@@ -511,6 +511,7 @@ const money0 = v => (v<0?'-$':'$') + Math.abs(Math.round(v)).toLocaleString('en-
 let tier = 'Com';
 const PROMOS = { IOT500: 500, IOT1000: 1000, IOT1500: 1500 };   // uppercase only
 let promoCode = '', promoAmt = 0;
+let custLockedCredit = null;   // a shared quote passes the rep's credit; cust view applies it as the credit
 let mode = 'deal';                                     // 'free' | 'deal' | 'retail'
 
 /* ---------------- build ---------------- */
@@ -721,7 +722,7 @@ function calc(){
     userCredit = Math.max(0, +$('cGivenRep').value||0);
     mode = 'deal';
   }
-  if(view === 'cust'){ mode = 'deal'; userCredit = promoAmt; $('cGiven').value = promoAmt.toFixed(2); }
+  if(view === 'cust'){ mode = 'deal'; userCredit = promoAmt || (custLockedCredit || 0); $('cGiven').value = userCredit.toFixed(2); }
   if(mode === 'free')   $('cGiven').value = retail.toFixed(2);
   if(mode === 'retail') $('cGiven').value = '0.00';
   if(mode === 'deal')   $('cGiven').value = userCredit.toFixed(2);
@@ -1148,10 +1149,12 @@ calc();
       set('repPct',d.repPct); set('repFloor',d.repFloor);
       if(d.rates)  Object.entries(d.rates ).forEach(([i,v])=>{ set('m'+i,v[0]); set('a'+i,v[1]); });
       if(d.prices) Object.entries(d.prices).forEach(([i,v])=>{ set('l'+i,v[0]); set('e'+i,v[1]); set('p'+i,v[2]); });
+      if(d.retails) Object.entries(d.retails).forEach(([i,p])=>{ set('p'+i,p); });   // customer payload: retail only
       EQUIP.forEach(x=>{ $('qn'+x.i).value = 0; $('qe'+x.i).value = 0; });
       if(d.qtys) Object.entries(d.qtys).forEach(([i,v])=>{ set('qn'+i,v[0]); set('qe'+i,v[1]); });
       if(d.exAll){ $('exAll').checked = true; document.body.classList.add('takeover'); }
       if(d.cGiven!=null){ $('cGiven').value = d.cGiven; $('cGivenRep').value = d.cGiven; }
+      if(d.given!=null){ custLockedCredit = Math.max(0, +d.given||0); }               // rep's credit → cust view
       if(d.promo) $('promo').value = d.promo;
     } finally { hydrating = false; }
     if($('promo').value && typeof applyPromo === 'function') applyPromo(); else calc();
@@ -1164,10 +1167,13 @@ calc();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(()=>{ try{ parent.postMessage({type:'adt-deal-save', adt, deal:serialize()}, '*'); }catch(e){} }, 500);
   }
-  window.addEventListener('message', e=>{ const m = e.data||{}; if(m.type === 'adt-deal-load') hydrate(m.deal); });
+  let gotDeal = false;
+  window.addEventListener('message', e=>{ const m = e.data||{}; if(m.type === 'adt-deal-load'){ gotDeal = true; if(m.deal) hydrate(m.deal); } });
   ['input','change','click'].forEach(ev=> document.addEventListener(ev, pushSave, true));
 
-  try{ parent.postMessage({type:'adt-ready', adt}, '*'); }catch(e){}   // ask the parent for the saved deal
+  // Re-announce until the parent answers with the saved deal — robust against effect-attach races.
+  let tries = 0;
+  (function announce(){ if(gotDeal || tries++ > 25) return; try{ parent.postMessage({type:'adt-ready', adt}, '*'); }catch(e){} setTimeout(announce, 150); })();
 })();
 </script>
 </body>

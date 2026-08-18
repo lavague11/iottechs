@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary } from "../../../lib/adt";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction } from "../actions";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
@@ -31,7 +31,8 @@ function DealFrame({ adtId, view, locked, rep, cust, deal }) {
   if (locked) qs.set("lock", "1");
   if (rep) qs.set("rep", rep);
   if (cust) qs.set("cust", cust);
-  return <iframe ref={ref} title="ADT Tool" src={`/widgets/adt-calculator.html?${qs.toString()}`}
+  const push = () => { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: deal || null }, "*"); } catch {} };
+  return <iframe ref={ref} title="ADT Tool" src={`/widgets/adt-calculator.html?${qs.toString()}`} onLoad={push}
     style={{ width: "100%", border: "none", display: "block", background: "#FAF8F4" }} />;
 }
 
@@ -117,12 +118,31 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} />;
 
+  const [shared, setShared] = useState(!!app.deal_shared);
+  const [shareErr, setShareErr] = useState("");
+  const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
+  const shareNode = (
+    <div style={pad} className="adtp">
+      {shared
+        ? <div className="adtp-ok">✓ Shared — the customer sees their quote on the ADT portal</div>
+        : <div className="adtp-muted" style={{ marginBottom: 10 }}>The customer sees no pricing until you share it. They'll get retail, activation, your applied credit, and due-at-install — never cost or commission.</div>}
+      {shareErr && <div className="adtp-err">{shareErr}</div>}
+      {shared
+        ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
+        : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
+      {!hasDeal && !shared && <div className="adtp-muted" style={{ marginTop: 8 }}>Price the deal first.</div>}
+    </div>
+  );
+
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle", need: "",
       tools: [{ name: "Application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: applyNode }] },
-    { name: "Deal", pill: hasDeal ? "Priced" : "Open", pct: hasDeal ? 100 : 0, tint: "purple",
+    { name: "Deal", pill: hasDeal ? (shared ? "Shared" : "Priced") : "Open", pct: hasDeal ? 100 : 0, tint: "purple",
       turn: done ? "idle" : "mine", need: "Price the deal",
-      tools: [{ name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode }] },
+      tools: [
+        { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
+        { name: "Customer quote", label: shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
+      ] },
     { name: "Schedule", pill: scheduled ? "Scheduled" : "Awaiting", pct: scheduled ? 100 : 0, tint: "blue",
       turn: done ? "idle" : "mine", need: "Schedule the install",
       tools: [{ name: "Schedule install", label: scheduled ? fmtDay(app.schedule_date) : "Pick a date", state: scheduled ? "done" : "active", node: scheduleNode }] },
@@ -191,6 +211,7 @@ const CSS = `
 .adtp-btn{height:40px;padding:0 20px;border:none;border-radius:9px;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit}
 .adtp-btn.gold{background:var(--dv-ink,#101418);color:#fff}
 .adtp-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
+.adtp-btn.ghost{background:#fff;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink,#101418)}
 .adtp-btn:hover{filter:brightness(1.1)}
 .adtp-btn:disabled{opacity:.5;cursor:default}
 .adtp-err{font-size:.82rem;color:var(--dv-red,#C4553D);margin-bottom:8px}

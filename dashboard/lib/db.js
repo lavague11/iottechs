@@ -580,6 +580,7 @@ function init() {
   if (!adtCols.includes("pref_days"))    db.exec("ALTER TABLE adt_applications ADD COLUMN pref_days TEXT");    // JSON ["Mon",…] — customer's preferred install days
   if (!adtCols.includes("pref_windows")) db.exec("ALTER TABLE adt_applications ADD COLUMN pref_windows TEXT"); // JSON ["Morning",…] — preferred time windows
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
+  if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3496,6 +3497,15 @@ export function saveAdtDeal(adtId, dealJson) {
   const blob = typeof dealJson === "string" ? dealJson : JSON.stringify(dealJson || {});
   db.prepare(`UPDATE adt_applications SET deal_json = ?, updated_at = datetime('now','localtime')
               WHERE adt_id = ? COLLATE NOCASE`).run(blob, String(adtId));
+  return getAdtApplication(adtId);
+}
+// Share / unshare the quote with the customer. Sharing stamps a time; the customer /adt page only
+// renders the (sanitized) Cust-view pricing once this is set.
+export function shareAdtDeal(adtId, on) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare(`UPDATE adt_applications SET deal_shared_at = ?, updated_at = datetime('now','localtime')
+              WHERE adt_id = ? COLLATE NOCASE`).run(on ? new Date().toISOString() : null, String(adtId));
   return getAdtApplication(adtId);
 }
 

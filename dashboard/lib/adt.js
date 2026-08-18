@@ -116,3 +116,31 @@ export function adtSummary(selection = {}) {
   }
   return { points: Math.round(points * 10) / 10, count: lines.reduce((s, l) => s + l.qty, 0), lines };
 }
+
+// Reduce a full ADT Tool deal (deal_json) to the ONLY fields safe to send a customer's browser.
+// The raw deal holds cost, fees, commission split, and rate multiples — none of that leaves the
+// server. The customer gets: their equipment quantities, monthly rate, package, activation, the
+// rep's applied credit, any promo, and retail-price overrides (retail only, never cost).
+export function custDealFromDeal(deal) {
+  if (!deal || typeof deal !== "object") return null;
+  const retails = {};
+  if (deal.prices && typeof deal.prices === "object") {
+    for (const [i, v] of Object.entries(deal.prices)) {
+      // stored as [labor, cost, retail]; keep retail only
+      const p = Array.isArray(v) ? v[2] : null;
+      if (p != null) retails[i] = p;
+    }
+  }
+  return {
+    cust:   deal.cust || "",
+    mmr:    deal.mmr,
+    pkg:    deal.pkg,
+    nest:   deal.nest,
+    fAct:   deal.fAct,
+    promo:  deal.promo || "",
+    exAll:  !!deal.exAll,
+    qtys:   deal.qtys && typeof deal.qtys === "object" ? deal.qtys : {},
+    given:  deal.cGiven,          // the rep's negotiated credit → customer's real due-at-install
+    retails,
+  };
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "../components/brand";
@@ -20,7 +20,7 @@ const STAGE_TO_STEP = { applied: 1, scheduled: 2, completed: 2 };
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 
-export default function AdtPortalClient({ app, prefill = null }) {
+export default function AdtPortalClient({ app, prefill = null, quote = null }) {
   const stepIdx = app ? STAGE_TO_STEP[app.stage] ?? 0 : 0;
   return (
     <div className="adt">
@@ -36,7 +36,31 @@ export default function AdtPortalClient({ app, prefill = null }) {
         {app && app.stage === "applied"   && <ScheduleStep app={app} />}
         {app && app.stage === "scheduled" && <ScheduledView app={app} />}
         {app && app.stage === "completed" && <CompleteView app={app} />}
+        {app && quote && <QuotePanel adtId={app.adt_id} quote={quote} />}
       </div>
+    </div>
+  );
+}
+
+// The customer's shared quote — the ADT Tool in locked, read-only Cust view. Sanitized upstream so
+// no cost/commission is ever in this payload; it only ever shows retail, credit, and due-at-install.
+function QuotePanel({ adtId, quote }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    function onMsg(e) {
+      const m = e.data || {};
+      if (!m || m.adt !== adtId) return;
+      if (m.type === "adt-ready") { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: quote }, "*"); } catch {} }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [adtId, quote]);
+  const push = () => { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: quote }, "*"); } catch {} };
+  const qs = new URLSearchParams({ embed: "1", view: "cust", lock: "1", ro: "1", adt: adtId });
+  return (
+    <div className="adt-quote">
+      <div className="adt-quote-h"><span>Your quote</span></div>
+      <iframe ref={ref} title="Your quote" src={`/widgets/adt-calculator.html?${qs.toString()}`} className="adt-quote-frame" onLoad={push} />
     </div>
   );
 }
@@ -416,6 +440,11 @@ const CSS = `
 .adt-recap-n{flex:1;color:#0B0F1A}
 .adt-recap-p{color:#8a8578;font-weight:600}
 .adt-note-line{margin-top:16px;text-align:center;font-size:.82rem;color:#6f7686}
+/* shared quote (read-only ADT Tool, cust view) */
+.adt-quote{margin-top:18px;border:1px solid #e4e0d8;border-radius:16px;overflow:hidden;background:#fff}
+.adt-quote-h{padding:13px 16px;background:#0B0F1A;color:#fff;font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-bottom:3px solid #C9A96E}
+.adt-quote-h span{color:#C9A96E}
+.adt-quote-frame{width:100%;height:640px;border:none;display:block;background:#FAF8F4}
 /* preferred days + windows */
 .adt-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .adt-chip{border:1px solid #d9d4ca;background:#fff;color:#5b6275;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}

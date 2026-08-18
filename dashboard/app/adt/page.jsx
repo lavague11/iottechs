@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { parseToken } from "../../lib/auth";
 import { getAdtApplication, getUserById, getProjectsByContactEmail } from "../../lib/db";
+import { custDealFromDeal } from "../../lib/adt";
 import AdtPortalClient from "./adt-portal-client";
 
 export const metadata = { title: "ADT Project Portal · IOT TECHS" };
@@ -17,6 +18,12 @@ export default async function AdtPage({ searchParams }) {
     pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],
   } : null;
 
+  // The customer's quote — ONLY once staff shared it, and ALWAYS sanitized (no cost/commission).
+  let quote = null;
+  if (rec && rec.deal_shared_at && rec.deal_json) {
+    try { quote = custDealFromDeal(JSON.parse(rec.deal_json)); } catch { quote = null; }
+  }
+
   // Smart-defaults: a logged-in customer arriving from their portal gets the intake prefilled with
   // what we already know (name · email · phone · their project address). Anonymous visitors → blank.
   let prefill = null;
@@ -32,5 +39,5 @@ export default async function AdtPage({ searchParams }) {
     } catch { /* not signed in → blank form */ }
   }
 
-  return <AdtPortalClient app={app} prefill={prefill} />;
+  return <AdtPortalClient app={app} prefill={prefill} quote={quote} />;
 }
