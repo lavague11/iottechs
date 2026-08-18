@@ -8,7 +8,7 @@ import { unlockAdtAction } from "./actions";
 
 // PIN gate for an existing ADT account — matches how a customer unlocks a regular project.
 // Nothing sensitive is on this screen: just the account code, the customer's first name, and a PIN box.
-export default function AdtGate({ adtId, firstName = "" }) {
+export default function AdtGate({ adtId, firstName = "", onUnlocked = null }) {
   const router = useRouter();
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
@@ -20,7 +20,7 @@ export default function AdtGate({ adtId, firstName = "" }) {
       setErr("");
       const r = await unlockAdtAction(adtId, pin);
       if (r?.error) { setErr(r.error); setPin(""); return; }
-      router.refresh();
+      if (onUnlocked) onUnlocked(); else router.refresh();
     });
   };
 

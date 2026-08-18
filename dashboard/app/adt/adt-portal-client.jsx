@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adtSummary, adtStatusMeta } from "../../lib/adt";
-import { acceptAdtQuoteAction } from "./actions";
+import { acceptAdtQuoteAction, lockAdtAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
 import AdtIntake from "./adt-intake";
+import AdtGate from "./adt-gate";
 
 // Customer support line shown on the Complete stage. TODO: replace with the real ADT/IOT TECHS number.
 const SUPPORT_PHONE = "(800) 555-0100";
@@ -81,7 +82,11 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const hasPrefs = prefDays.length > 0 || prefWins.length > 0;
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
   const [idx, setIdx] = useState(done ? 2 : quote ? 1 : 0);
+  const [locked, setLocked] = useState(false);
   const telHref = `tel:${SUPPORT_PHONE.replace(/\D/g, "")}`;
+
+  // Locked (project parity): show the PIN gate; back in with the admin PIN or the account's last-4.
+  if (locked) return <AdtGate adtId={app.adt_id} firstName={String(app.name || "").trim().split(/\s+/)[0] || ""} onUnlocked={() => setLocked(false)} />;
 
   // The full application — customer details + equipment + everything they submitted.
   const equipmentNode = (
@@ -200,6 +205,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         roleLabel="Customer view"
         logoHref={dashboardHref || "/"}
         menu={[
+          { label: "🔒 Lock", onClick: () => { lockAdtAction(app.adt_id).catch(() => {}); setLocked(true); } },
           ...(dashboardHref ? [{ label: "My dashboard", onClick: () => router.push(dashboardHref) }] : []),
           { label: "Start another application", onClick: () => router.push("/adt") },
         ]}
