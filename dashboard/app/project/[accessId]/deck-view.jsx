@@ -25,7 +25,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [] }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard" }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
@@ -106,7 +106,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     <div className="dv-shell" data-tint={cur.tint || "ink"}>
       {/* top bar */}
       <header className="dv-top">
-        <a className="dv-logo" href="/dashboard" title="Go to dashboard">IOT <em>TECHS</em></a>
+        <a className="dv-logo" href={logoHref} title="IOT TECHS">IOT <em>TECHS</em></a>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => previewRoles.length && setRoleOpen((o) => !o)}>

@@ -7,6 +7,7 @@ import { Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
 import { submitAdtApplicationAction, submitAdtPreferencesAction, completeAdtAction } from "./actions";
+import DeckView from "../project/[accessId]/deck-view";
 
 const STEPS = [
   { key: "apply",    label: "Apply" },
@@ -21,7 +22,9 @@ const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase()
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 
 export default function AdtPortalClient({ app, prefill = null, quote = null }) {
-  const stepIdx = app ? STAGE_TO_STEP[app.stage] ?? 0 : 0;
+  // An existing application renders in the project-builder Deck style (stage rail + tool rows),
+  // matching every other project. A brand-new visitor still gets the light intake form.
+  if (app) return <CustomerDeck app={app} quote={quote} />;
   return (
     <div className="adt">
       <style>{CSS}</style>
@@ -29,22 +32,146 @@ export default function AdtPortalClient({ app, prefill = null, quote = null }) {
         <Link href="/" className="adt-brand"><Wordmark height={22} /></Link>
         <span className="adt-tag">ADT Project Portal</span>
       </header>
-
       <div className="adt-wrap">
-        <Stepper current={stepIdx} appDone={app?.stage === "completed"} />
-        {!app          && <ApplyStep prefill={prefill} />}
-        {app && app.stage === "applied"   && <ScheduleStep app={app} />}
-        {app && app.stage === "scheduled" && <ScheduledView app={app} />}
-        {app && app.stage === "completed" && <CompleteView app={app} />}
-        {app && quote && <QuotePanel adtId={app.adt_id} quote={quote} />}
+        <Stepper current={0} appDone={false} />
+        <ApplyStep prefill={prefill} />
       </div>
     </div>
   );
 }
 
+const DAY_FMT = (d) => { try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
+
+// The customer's ADT account on the SAME Deck as a project: Apply → Quote → Schedule → Complete.
+function CustomerDeck({ app, quote }) {
+  const router = useRouter();
+  const summary = adtSummary(app.equipment || {});
+  const scheduled = !!app.schedule_date;
+  const done = app.stage === "completed";
+  const applied = app.stage === "applied";
+  const hasPrefs = (app.pref_days || []).length > 0;
+  const [idx, setIdx] = useState(done ? 3 : applied ? 2 : quote ? 1 : 2);
+
+  const equipmentNode = (
+    <div className="adtc-pad">
+      {summary.lines.length
+        ? <PointsRecap app={app} />
+        : <div className="adtc-muted">No equipment on file yet.</div>}
+    </div>
+  );
+  const quoteNode = quote
+    ? <QuotePanel adtId={app.adt_id} quote={quote} bare />
+    : <div className="adtc-pad"><div className="adtc-muted">Your installer will share your quote here once it's ready. We'll email you when it lands.</div></div>;
+  const completeNode = (
+    <div className="adtc-pad">
+      {done
+        ? <div className="adtc-ok">✓ Your ADT system is live — welcome to safer days ahead.</div>
+        : <div className="adtc-muted">Your technician completes the install on the scheduled day. You'll get a confirmation when it's done.</div>}
+      <div className="adtc-note">Access PIN <b>{app.access_pin || "—"}</b> · keep your ID <b>{app.adt_id}</b> to check back anytime.</div>
+    </div>
+  );
+
+  const stages = [
+    { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle",
+      tools: [{ name: "Your equipment", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: equipmentNode }] },
+    { name: "Quote", pill: quote ? "Ready" : "Pending", pct: quote ? 100 : 0, tint: "purple", turn: quote ? "mine" : "idle", need: "Review your quote",
+      tools: [{ name: "Your quote", label: quote ? "View pricing" : "Awaiting quote", state: quote ? "done" : "active", heavy: !!quote, node: quoteNode }] },
+    { name: "Schedule", pill: scheduled ? "Scheduled" : hasPrefs ? "Requested" : "Awaiting", pct: scheduled ? 100 : hasPrefs ? 60 : 0, tint: "blue",
+      turn: applied ? "mine" : "idle", need: "Tell us your preferred times",
+      tools: [{ name: "Preferred times", label: scheduled ? DAY_FMT(app.schedule_date) : hasPrefs ? "Requested" : "Pick your times", state: (scheduled || hasPrefs) ? "done" : "active", node: <CustSchedule app={app} /> }] },
+    { name: "Complete", pill: done ? "Complete" : "Pending", pct: done ? 100 : 0, tint: "green", turn: "idle",
+      tools: [{ name: "Installation", label: done ? "Live" : "Awaiting install", state: done ? "done" : "active", node: completeNode }] },
+  ];
+
+  const customer = {
+    code: app.adt_id,
+    name: app.name || "Your ADT project",
+    statusText: done ? "Live" : scheduled ? "Scheduled" : "In progress",
+    fields: [
+      app.address && { k: "Address", v: app.address },
+      app.access_pin && { k: "Access PIN", v: app.access_pin },
+      { k: "Application", v: app.adt_id },
+    ].filter(Boolean),
+    actions: [
+      app.address && { label: "Directions", href: `https://maps.google.com/?q=${encodeURIComponent(app.address)}` },
+    ].filter(Boolean),
+  };
+
+  return (
+    <>
+      <DeckView
+        stages={stages}
+        idx={idx}
+        onIdx={setIdx}
+        canAdvance={false}
+        customer={customer}
+        roleLabel="ADT Monitoring"
+        logoHref="/"
+        menu={[{ label: "Start another application", onClick: () => router.push("/adt") }]}
+      />
+      <style>{CSS}</style>
+      <style>{CUSTCSS}</style>
+    </>
+  );
+}
+
+// Preferred-times picker as an inline Deck tool. Applied → the picker; after → a read-only status.
+function CustSchedule({ app }) {
+  const router = useRouter();
+  const [days, setDays] = useState(app.pref_days || []);
+  const [wins, setWins] = useState(app.pref_windows || []);
+  const [err, setErr] = useState("");
+  const [pending, startTx] = useTransition();
+  const scheduled = !!app.schedule_date;
+  const applied = app.stage === "applied";
+  const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  const quick = (set) => setDays(sameSet(days, set) ? [] : set);
+  const submit = () => startTx(async () => { setErr(""); const r = await submitAdtPreferencesAction(app.adt_id, { days, windows: wins }); if (r?.error) setErr(r.error); else router.refresh(); });
+
+  if (scheduled) return <div className="adtc-pad"><div className="adtc-ok">Install set for <b>{DAY_FMT(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div></div>;
+  if (!applied) return (
+    <div className="adtc-pad">
+      <div className="adtc-ok">Preferences received</div>
+      <div className="adtc-muted" style={{ marginTop: 6 }}>We'll confirm a time that fits: <b>{(app.pref_days || []).join(", ") || "any day"}</b>{app.pref_windows?.length ? <> · <b>{app.pref_windows.join(", ")}</b></> : null}.</div>
+    </div>
+  );
+  return (
+    <div className="adtc-pad">
+      <div className="adtc-sec-t">Preferred days</div>
+      <div className="adt-quick">
+        <button type="button" className={"adt-chip" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => quick(WEEKDAYS)}>Weekdays</button>
+        <button type="button" className={"adt-chip" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => quick(WEEKENDS)}>Weekends</button>
+        <button type="button" className={"adt-chip" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => quick(DAYS)}>Any day</button>
+      </div>
+      <div className="adt-days">
+        {DAYS.map((d) => <button type="button" key={d} className={"adt-day" + (days.includes(d) ? " on" : "")} onClick={() => toggle(days, setDays, d)}>{d}</button>)}
+      </div>
+      <div className="adtc-sec-t" style={{ marginTop: 16 }}>Time window</div>
+      <div className="adt-wins">
+        {WINDOWS.map((w) => <button type="button" key={w.key} className={"adt-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => toggle(wins, setWins, w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}
+      </div>
+      {err && <div className="adt-err" style={{ marginTop: 10 }}>{err}</div>}
+      <button className="adtc-btn" style={{ marginTop: 14 }} disabled={pending || !days.length || !wins.length} onClick={submit}>{pending ? "Sending…" : "Send preferences"}</button>
+    </div>
+  );
+}
+
+const CUSTCSS = `
+.adtc-pad{padding:16px 20px;font-family:var(--font-sans),inherit}
+.adtc-muted{color:var(--dv-meta,#787D84);font-size:.9rem;line-height:1.5}
+.adtc-ok{font-size:.95rem;font-weight:700;color:var(--dv-green,#2E7D5B)}
+.adtc-ok b{color:var(--dv-ink,#101418)}
+.adtc-note{margin-top:14px;font-size:.8rem;color:var(--dv-meta,#787D84)}
+.adtc-note b{color:var(--dv-ink,#101418)}
+.adtc-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:11px}
+.adtc-btn{height:44px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
+.adtc-btn:disabled{opacity:.55;cursor:default}
+`;
+
 // The customer's shared quote — the ADT Tool in locked, read-only Cust view. Sanitized upstream so
 // no cost/commission is ever in this payload; it only ever shows retail, credit, and due-at-install.
-function QuotePanel({ adtId, quote }) {
+function QuotePanel({ adtId, quote, bare }) {
   const ref = useRef(null);
   useEffect(() => {
     function onMsg(e) {
@@ -57,10 +184,12 @@ function QuotePanel({ adtId, quote }) {
   }, [adtId, quote]);
   const push = () => { try { ref.current?.contentWindow?.postMessage({ type: "adt-deal-load", deal: quote }, "*"); } catch {} };
   const qs = new URLSearchParams({ embed: "1", view: "cust", lock: "1", ro: "1", adt: adtId });
+  const src = `/widgets/adt-calculator.html?${qs.toString()}`;
+  if (bare) return <iframe ref={ref} title="Your quote" src={src} onLoad={push} style={{ width: "100%", height: "100%", border: "none", display: "block", background: "#FAF8F4" }} />;
   return (
     <div className="adt-quote">
       <div className="adt-quote-h"><span>Your quote</span></div>
-      <iframe ref={ref} title="Your quote" src={`/widgets/adt-calculator.html?${qs.toString()}`} className="adt-quote-frame" onLoad={push} />
+      <iframe ref={ref} title="Your quote" src={src} className="adt-quote-frame" onLoad={push} />
     </div>
   );
 }
