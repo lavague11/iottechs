@@ -144,11 +144,12 @@ export function adtQuoteSeed(equipment = {}) {
 
 // Credit/approval status → label + color. One source of truth for the badge everywhere it shows.
 export const ADT_STATUS_META = {
-  submitted: { label: "Submitted", color: "#5b6470" },
-  in_review: { label: "In review", color: "#b87300" },
-  approved:  { label: "Approved",  color: "#1c8a45" },
-  declined:  { label: "Declined",  color: "#c0392b" },
-  installed: { label: "Installed", color: "#2f7d5a" },
+  submitted:  { label: "Submitted", color: "#5b6470" },
+  in_review:  { label: "In review", color: "#b87300" },
+  needs_docs: { label: "Needs docs", color: "#e67e22" },
+  approved:   { label: "Approved",  color: "#1c8a45" },
+  declined:   { label: "Declined",  color: "#c0392b" },
+  installed:  { label: "Installed", color: "#2f7d5a" },
 };
 export const adtStatusMeta = (s) => ADT_STATUS_META[s] || ADT_STATUS_META.submitted;
 

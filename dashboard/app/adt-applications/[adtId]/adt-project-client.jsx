@@ -53,6 +53,20 @@ const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 
 const maskTax = (formatted) => { const total = (String(formatted).match(/\d/g) || []).length; let seen = 0; return String(formatted).replace(/\d/g, (d) => (++seen <= total - 4 ? "•" : d)); };
 const WINDOWS = ["Morning (8am–12pm)", "Afternoon (12pm–4pm)", "Evening (4pm–7pm)"];
 
+// Copy a value to the clipboard — the office fills ADT's own credit app from these fields.
+function CopyBtn({ text }) {
+  const [done, setDone] = useState(false);
+  if (!text) return <span className="adtp-copy-sp" />;
+  const copy = () => { try { navigator.clipboard.writeText(String(text)); setDone(true); setTimeout(() => setDone(false), 1200); } catch {} };
+  return (
+    <button type="button" className={"adtp-copy" + (done ? " ok" : "")} onClick={copy} title="Copy" aria-label="Copy">
+      {done
+        ? <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+        : <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}
+    </button>
+  );
+}
+
 // Sensitive value hidden until the operator taps View — SSN/EIN and the verbal password.
 function RevealField({ value, mask }) {
   const [show, setShow] = useState(false);
@@ -109,29 +123,30 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   ) : (
     <div style={pad} className="adtp">
-      {office && <div className="adtp-editrow"><button type="button" className="adtp-chip" onClick={() => setEditing(true)}>Edit application</button></div>}
+      {office && <div className="adtp-editrow"><button type="button" className="adtp-chip" onClick={() => setEditing(true)}>Revise application</button></div>}
       <div className="adtp-statusrow">
         <div className="adtp-statusrow-l"><span className="adtp-sub" style={{ margin: 0 }}>Credit status</span>
           <span className="adtp-status-badge" style={{ color: sm.color, background: sm.color + "1a", border: `1px solid ${sm.color}33` }}>{sm.label}</span></div>
         {status !== "installed" && (
           <div className="adtp-status-btns">
             {status !== "in_review" && <button className="adtp-chip" disabled={pending} onClick={() => setStatus("in_review")}>In review</button>}
+            {status !== "needs_docs" && <button className="adtp-chip amber" disabled={pending} onClick={() => setStatus("needs_docs")}>Needs docs</button>}
             {status !== "approved" && <button className="adtp-chip green" disabled={pending} onClick={() => setStatus("approved")}>Approve</button>}
             {status !== "declined" && <button className="adtp-chip red" disabled={pending} onClick={() => setStatus("declined")}>Decline</button>}
           </div>
         )}
       </div>
-      <div className="adtp-cd-sec">Customer details</div>
+      <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
       <div className="adtp-cd">
-        <div className="adtp-cd-f"><span>Name</span><b>{app.name || "—"}</b></div>
-        <div className="adtp-cd-f"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div>
-        {app.phone && <div className="adtp-cd-f"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div>}
-        {app.email && <div className="adtp-cd-f"><span>Email</span><b>{app.email}</b></div>}
-        {app.address && <div className="adtp-cd-f full"><span>Install address</span><b>{app.address}</b></div>}
-        {app.tax_id && <div className="adtp-cd-f"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div>}
-        {app.access_pin && <div className="adtp-cd-f"><span>Access PIN</span><b>{app.access_pin}</b></div>}
-        {app.verbal_password && <div className="adtp-cd-f"><span>Verbal password</span><b><RevealField value={app.verbal_password} /></b></div>}
-        {emerg.map((c, i) => <div key={i} className="adtp-cd-f"><span>Emergency {i + 1}</span><b>{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</b></div>)}
+        <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>Name</span><b>{app.name || "—"}</b></div></div>
+        <div className="adtp-cd-f"><span className="adtp-copy-sp" /><div className="adtp-cd-v"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div></div>
+        {app.phone && <div className="adtp-cd-f"><CopyBtn text={fmtPhone(app.phone)} /><div className="adtp-cd-v"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div></div>}
+        {app.email && <div className="adtp-cd-f"><CopyBtn text={app.email} /><div className="adtp-cd-v"><span>Email</span><b>{app.email}</b></div></div>}
+        {app.address && <div className="adtp-cd-f full"><CopyBtn text={app.address} /><div className="adtp-cd-v"><span>Install address</span><b>{app.address}</b></div></div>}
+        {app.tax_id && <div className="adtp-cd-f"><CopyBtn text={fmtTax(app.tax_id, isComm)} /><div className="adtp-cd-v"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div></div>}
+        {app.access_pin && <div className="adtp-cd-f"><CopyBtn text={app.access_pin} /><div className="adtp-cd-v"><span>Access PIN</span><b>{app.access_pin}</b></div></div>}
+        {app.verbal_password && <div className="adtp-cd-f"><CopyBtn text={app.verbal_password} /><div className="adtp-cd-v"><span>Verbal password</span><b><RevealField value={app.verbal_password} /></b></div></div>}
+        {emerg.map((c, i) => <div key={i} className="adtp-cd-f"><CopyBtn text={[c.name, c.phone ? fmtPhone(c.phone) : ""].filter(Boolean).join(" · ")} /><div className="adtp-cd-v"><span>Emergency {i + 1}</span><b>{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</b></div></div>)}
       </div>
 
       <div className="adtp-cd-sec">Equipment <em>${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</em></div>
@@ -257,10 +272,16 @@ const CSS = `
 .adtp-cd-sec{font-size:.64rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:16px 0 9px}
 .adtp-cd-sec em{font-style:normal;font-weight:700;color:var(--dv-ink,#101418);letter-spacing:0;margin-left:6px}
 .adtp-cd{display:grid;grid-template-columns:1fr 1fr;gap:11px 20px;margin-bottom:4px}
-.adtp-cd-f{min-width:0}
+.adtp-cd-f{min-width:0;display:flex;align-items:flex-start;gap:8px}
 .adtp-cd-f.full{grid-column:1/-1}
-.adtp-cd-f span{display:block;font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
-.adtp-cd-f b{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
+.adtp-cd-v{min-width:0;flex:1}
+.adtp-cd-v span{display:block;font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
+.adtp-cd-v b{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
+.adtp-copy{flex:none;width:24px;height:24px;margin-top:1px;display:grid;place-items:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer;transition:.12s}
+.adtp-copy:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.adtp-copy.ok{border-color:var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
+.adtp-copy-sp{flex:none;width:24px}
+.adtp-chip.amber{border-color:#f0d9bf;color:#c46a1a}
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}

@@ -3519,7 +3519,7 @@ export function completeAdtApplication(adtId) {
   return getAdtApplication(adtId);
 }
 // Set the credit/approval status. installed is set automatically on completion (above).
-export const ADT_STATUSES = ["submitted", "in_review", "approved", "declined", "installed"];
+export const ADT_STATUSES = ["submitted", "in_review", "needs_docs", "approved", "declined", "installed"];
 export function setAdtStatus(adtId, status) {
   const cur = getAdtApplication(adtId);
   if (!cur || !ADT_STATUSES.includes(status)) return null;
