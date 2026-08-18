@@ -53,8 +53,9 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const [emg, setEmg] = useState(ex ? padEmg(ex.emergency) : [{ name: "", phone: "" }, { name: "", phone: "" }]);
   const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
   const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
-  const [wins, setWins] = useState(ex ? [...(ex.pref_windows || [])] : []);
+  const [wins, setWins] = useState(ex ? [...(ex.pref_windows || [])] : ["Afternoon"]);   // fresh: Afternoon preselected
   const [asap, setAsap] = useState(ex ? !!ex.asap : false);                          // standalone "install ASAP" flag
+  const [noteOpen, setNoteOpen] = useState(!!ex?.notes);                             // optional note stays collapsed behind a + until asked for
   const [doc, setDoc] = useState(ex?.verification_doc || null);   // commercial business-verification file
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
@@ -258,7 +259,14 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       )}
 
       <div className="ai-sec-t">Anything else? <em>optional</em></div>
-      <textarea className="ai-area" rows={2} value={f.notes} onChange={set("notes")} placeholder="Gate code, pets, best time to reach you…" />
+      {noteOpen || f.notes ? (
+        <textarea className="ai-area" rows={2} value={f.notes} onChange={set("notes")} placeholder="Gate code, pets, best time to reach you…" autoFocus={noteOpen && !f.notes} />
+      ) : (
+        <button type="button" className="ai-addbtn" onClick={() => setNoteOpen(true)}>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add a note
+        </button>
+      )}
 
       <div className="ai-sec-t">Emergency contacts <em>· at least one required</em></div>
       <div className="ai-note">If we can't reach you by phone, we'll contact these people in an emergency.</div>
@@ -379,6 +387,9 @@ const CSS = `
 .ai-bchip-add{border:1px solid var(--line);color:var(--gd);background:#fff;font-size:1.05rem}
 .ai-bchip-q{min-width:26px;padding:0 6px;background:var(--ink);color:#fff;font-size:.8rem}
 .ai-note{font-size:.78rem;color:var(--meta);margin:8px 0 0;line-height:1.45}
+.ai-addbtn{display:inline-flex;align-items:center;gap:7px;border:1.5px dashed var(--line);background:#fff;color:var(--gd);border-radius:10px;padding:10px 15px;font-size:.84rem;font-weight:700;cursor:pointer;transition:.12s;font-family:inherit}
+.ai-addbtn:hover{border-color:var(--g);background:#faf6ec}
+.ai-addbtn svg{display:block}
 .ai-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
 .ai-c:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
