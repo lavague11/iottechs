@@ -13,6 +13,7 @@ export default async function AdtPage({ searchParams }) {
   const rec = sp?.id ? getAdtApplication(sp.id) : null;
   const app = rec ? {
     adt_id: rec.adt_id, name: rec.name, address: rec.address, points: rec.points,
+    phone: rec.phone || "", email: rec.email || "",
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
     pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],

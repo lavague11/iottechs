@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
+import { ProjectTypeIcon } from "../components/project-type";
 import { archiveProjectAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
@@ -94,6 +95,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
             const dc   = days !== null ? daysColor(days, p.stage) : null;
             return (
               <div key={p.access_id} className="crow" onClick={() => router.push(p.kind === "adt" ? `/adt-applications/${p.access_id}` : `/project/${p.access_id}`)}>
+                <ProjectTypeIcon project={p} size={38} />
                 <span className="cav">{initials(p.customer)}</span>
                 <div className="c-main">
                   <div className="c-name">{p.customer}</div>

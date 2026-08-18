@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets, listServiceCalls } from "../../lib/db";
+import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets, listServiceCalls, listAdtApplications } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import AdminClient from "./admin-client";
 
@@ -55,8 +55,8 @@ export default async function DashboardPage() {
     urgentCalls,
   };
 
-  // ---- Projects (client filters by tab) ----
-  const projects = jobs.map((j) => ({
+  // ---- Projects (client filters by tab) — jobs + ADT applications on one board ----
+  const jobRows = jobs.map((j) => ({
     access_id:    j.access_id,
     customer:     j.customer,
     service:      j.service || j.service_code,
@@ -66,7 +66,22 @@ export default async function DashboardPage() {
     project_type: j.project_type,
     needsAction:  ["proposal", "approval_deposit", "qc"].includes(j.stage),
     closed:       CLOSED.has(j.stage),
+    created_at:   j.created_at || "",
   }));
+  const ADT_STAGE = { applied: "adt_applied", scheduled: "adt_scheduled", completed: "adt_completed" };
+  const adtRows = listAdtApplications().map((a) => ({
+    kind:         "adt",
+    access_id:    a.adt_id,
+    customer:     a.name || "ADT account",
+    service:      (a.property_type === "commercial" ? "Commercial" : "Residential") + " · ADT Monitoring",
+    address:      a.address || "",
+    stage:        ADT_STAGE[a.stage] || "adt_applied",
+    tech:         null,
+    needsAction:  a.stage === "applied",
+    closed:       a.stage === "completed",
+    created_at:   a.created_at || "",
+  }));
+  const projects = [...jobRows, ...adtRows].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
   // ---- Tickets (from the real tickets table) ----
   const tickets = openReal.slice(0, 8).map((t) => ({

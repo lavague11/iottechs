@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
+import { ProjectTypeIcon } from "../components/project-type";
 
 const STAGE_PILL = {
   inquiry:          { cls: "s-survey",   label: "Inquiry" },
@@ -14,6 +15,9 @@ const STAGE_PILL = {
   qc:               { cls: "s-qc",       label: "QC" },
   payment:          { cls: "s-qc",       label: "Payment" },
   completion:       { cls: "s-done",     label: "Completed" },
+  adt_applied:      { cls: "s-proposal", label: "Applied" },
+  adt_scheduled:    { cls: "s-install",  label: "Scheduled" },
+  adt_completed:    { cls: "s-done",     label: "Completed" },
 };
 
 const money = (n) => "$" + (n || 0).toLocaleString();
@@ -126,12 +130,16 @@ export default function AdminClient({ user, alerts, kpis, projects, tickets, tec
               <div className="empty">No projects in this view.</div>
             ) : visibleProjects.map((p) => {
               const pill = STAGE_PILL[p.stage] || { cls: "s-survey", label: p.stage };
+              const href = p.kind === "adt" ? `/adt-applications/${p.access_id}` : `/project/${p.access_id}`;
               return (
                 <div className="pt-row" key={p.access_id}>
-                  <div><div className="r-name">{p.customer}</div><div className="r-loc">{p.service}{p.address ? ` · ${p.address}` : ""}</div></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                    <ProjectTypeIcon project={p} />
+                    <div style={{ minWidth: 0 }}><div className="r-name">{p.customer}</div><div className="r-loc">{p.service}{p.address ? ` · ${p.address}` : ""}</div></div>
+                  </div>
                   <div><span className={`stage-pill ${pill.cls}`}>{pill.label}</span></div>
                   <div className="r-tech">{p.tech || "—"}</div>
-                  <div className="r-open"><Link href={`/project/${p.access_id}`}>Open</Link></div>
+                  <div className="r-open"><Link href={href}>Open</Link></div>
                 </div>
               );
             })}
