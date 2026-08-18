@@ -170,6 +170,7 @@ const NP_SERVICES = [
 
 function NewProjectModal({ onClose }) {
   const r = useRouter();
+  const [kind, setKind] = useState("cctv");   // cctv (standard install) | adt (monitoring)
   const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", service: "Security Cameras / CCTV", message: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -224,8 +225,25 @@ function NewProjectModal({ onClose }) {
             <div className="np-head">
               <div className="np-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
               <h2 className="np-h">New Project</h2>
-              <p className="np-p">Capture the customer and the service they need. This opens a new inquiry.</p>
+              <p className="np-p">What kind of project is this?</p>
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+              {[["cctv", "Security System", "Cameras, access, cabling — the standard install pipeline"],
+                ["adt", "ADT Monitoring", "Points-based ADT / SafeStreets monitoring account"]].map(([k, t, d]) => (
+                <button type="button" key={k} onClick={() => setKind(k)}
+                  style={{ textAlign: "left", padding: "13px 14px", borderRadius: 12, cursor: "pointer",
+                    border: `1.5px solid ${kind === k ? "#C9A96E" : "#e4e0d8"}`, background: kind === k ? "#fbf7ee" : "#fff" }}>
+                  <div style={{ fontSize: ".92rem", fontWeight: 800, color: "#0B0F1A" }}>{t}</div>
+                  <div style={{ fontSize: ".76rem", color: "#6f7686", marginTop: 3, lineHeight: 1.4 }}>{d}</div>
+                </button>
+              ))}
+            </div>
+            {kind === "adt" ? (
+              <div style={{ textAlign: "center", padding: "6px 0 4px" }}>
+                <p className="np-p" style={{ margin: "0 0 16px" }}>ADT accounts run their own intake — property type, equipment, emergency contacts, and preferred install times.</p>
+                <button type="button" className="np-submit" onClick={() => { onClose(); r.push("/adt"); }}>Open ADT intake →</button>
+              </div>
+            ) : (
             <form className="np-form" onSubmit={submit}>
               <div className="np-row2">
                 <div className="np-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
@@ -241,6 +259,7 @@ function NewProjectModal({ onClose }) {
               {err && <div className="np-err">{err}</div>}
               <button className="np-submit" type="submit" disabled={busy}>{busy ? "Creating…" : "Create Project"}</button>
             </form>
+            )}
           </>
         )}
       </div>

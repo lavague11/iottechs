@@ -7,12 +7,13 @@ import ConfirmDialog from "../components/confirm-dialog";
 import { archiveProjectAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
-const CLOSED = new Set(["payment", "completion"]);
+const CLOSED = new Set(["payment", "completion", "adt_completed"]);
 const STAGE_PILL = {
   inquiry: ["s-survey", "Inquiry"], site_survey: ["s-survey", "Survey"],
   proposal: ["s-proposal", "Proposal"], approval_deposit: ["s-proposal", "Approval"],
   schedule: ["s-install", "Schedule"], install: ["s-install", "Install"],
   qc: ["s-qc", "QC"], payment: ["s-qc", "Payment"], completion: ["s-done", "Completed"],
+  adt_applied: ["s-proposal", "Applied"], adt_scheduled: ["s-install", "Scheduled"], adt_completed: ["s-done", "Completed"],
 };
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 function daysSince(iso) {
@@ -26,7 +27,7 @@ function daysLabel(d) {
   return `${d}d`;
 }
 function daysColor(d, stage) {
-  if (["payment","completion"].includes(stage)) return { bg: "rgba(91,184,122,.12)", color: "#1c8a45" };
+  if (["payment","completion","adt_completed"].includes(stage)) return { bg: "rgba(91,184,122,.12)", color: "#1c8a45" };
   if (d <= 3)  return { bg: "rgba(91,184,122,.12)",  color: "#1c8a45" };
   if (d <= 7)  return { bg: "rgba(224,154,58,.12)",  color: "#b87300" };
   if (d <= 14) return { bg: "rgba(231,76,60,.1)",    color: "#c0392b" };
@@ -46,7 +47,7 @@ function matches(p, filter) {
   if (filter === "inquiry") return p.stage === "inquiry";
   if (filter === "active") return !CLOSED.has(p.stage);
   if (filter === "needs") return ["proposal", "approval_deposit", "qc"].includes(p.stage);
-  if (filter === "completed") return p.stage === "completion";
+  if (filter === "completed") return p.stage === "completion" || p.stage === "adt_completed";
   return true;
 }
 
@@ -92,7 +93,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
             const days = daysSince(p.created_at);
             const dc   = days !== null ? daysColor(days, p.stage) : null;
             return (
-              <div key={p.access_id} className="crow" onClick={() => router.push(`/project/${p.access_id}`)}>
+              <div key={p.access_id} className="crow" onClick={() => router.push(p.kind === "adt" ? `/adt-applications/${p.access_id}` : `/project/${p.access_id}`)}>
                 <span className="cav">{initials(p.customer)}</span>
                 <div className="c-main">
                   <div className="c-name">{p.customer}</div>
@@ -100,6 +101,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                   <div className="c-addr mono" style={{ fontSize: ".72rem" }}>{p.access_id}{p.tech ? ` · ${p.tech}` : ""}{p.date ? ` · ${p.date}` : ""}</div>
                 </div>
                 <div className="c-chips">
+                  {p.kind === "adt" && <span className="stage-pill" style={{ background: "rgba(201,169,110,.16)", color: "#a8842f" }}>ADT</span>}
                   <span className={`stage-pill ${cls}`}>{lbl}</span>
                   {p.value ? <span className="chip value">{money(p.value)}</span> : null}
                   {dc && (
@@ -114,7 +116,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                     </span>
                   )}
                 </div>
-                {canArchive && (
+                {canArchive && p.kind !== "adt" && (
                   <button
                     className="prj-arch"
                     title="Archive project"
