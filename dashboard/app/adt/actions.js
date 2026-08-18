@@ -24,6 +24,8 @@ export async function submitAdtApplicationAction(form) {
     taxId:     String(form?.taxId || "").trim(),
     emergency: Array.isArray(form?.emergency) ? form.emergency : [],
     verbalPassword: String(form?.verbalPassword || "").trim(),
+    prefDays:    Array.isArray(form?.prefDays) ? form.prefDays : [],
+    prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }

@@ -3432,7 +3432,7 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows }) {
   const adtId = nextAdtId();
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
@@ -3444,9 +3444,11 @@ export function createAdtApplication({ name, email, phone, address, equipment, p
     .filter((c) => c.name || c.phone).slice(0, 2);
   const emergJson = emerg.length ? JSON.stringify(emerg) : null;
   const vpEnc = String(verbalPassword || "").trim() ? encBlob(String(verbalPassword).trim().slice(0, 60)) : null;  // encrypted at rest
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc);
+  const pDays = JSON.stringify(Array.isArray(prefDays) ? prefDays.slice(0, 7) : []);      // preferred install days
+  const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []); // preferred windows
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins);
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {

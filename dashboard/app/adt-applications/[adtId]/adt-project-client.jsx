@@ -45,10 +45,25 @@ const DVI = {
 };
 const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
 const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (d.length !== 9) return t; return comm ? `${d.slice(0, 2)}-${d.slice(2)}` : `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
+const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length < 10) return s || ""; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
+// Mask everything but the last 4 digits of a formatted tax id ("123-45-6789" → "•••-••-6789").
+const maskTax = (formatted) => { const total = (String(formatted).match(/\d/g) || []).length; let seen = 0; return String(formatted).replace(/\d/g, (d) => (++seen <= total - 4 ? "•" : d)); };
 const WINDOWS = ["Morning (8am–12pm)", "Afternoon (12pm–4pm)", "Evening (4pm–7pm)"];
 
-// The ADT account rendered on the SAME Deck as a project — Apply → Schedule → Complete as
-// swipeable stages, each opening its tool inline. Reuses DeckView so the chrome matches 1:1.
+// Sensitive value hidden until the operator taps View — SSN/EIN and the verbal password.
+function RevealField({ value, mask }) {
+  const [show, setShow] = useState(false);
+  if (!value) return null;
+  return (
+    <span className="adtp-reveal">
+      <span className="adtp-reveal-v">{show ? value : (mask || "••••••")}</span>
+      <button type="button" className="adtp-reveal-btn" onClick={() => setShow((s) => !s)}>{show ? "Hide" : "View"}</button>
+    </span>
+  );
+}
+
+// The ADT account rendered on the SAME Deck as a project — Apply → Deal → Complete as swipeable
+// stages (scheduling folded into Complete). Reuses DeckView so the chrome matches 1:1.
 export default function AdtProjectClient({ user, alerts, app }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
@@ -62,8 +77,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const dealObj = useMemo(() => { try { return app.deal_json ? JSON.parse(app.deal_json) : null; } catch { return null; } }, [app.deal_json]);
   const hasDeal = !!app.deal_json;
 
-  // Stages: Apply(0) → Deal(1) → Schedule(2) → Complete(3). Land on the earliest open staff action.
-  const [idx, setIdx] = useState(done ? 3 : scheduled ? 3 : hasDeal ? 2 : 1);
+  // Stages: Apply(0) → Deal(1) → Complete(2). Land on the earliest open staff action.
+  const [idx, setIdx] = useState(done ? 2 : hasDeal ? 2 : 1);
 
   const [date, setDate] = useState(app.schedule_date || "");
   const [win, setWin]   = useState(app.schedule_window || WINDOWS[0]);
@@ -75,6 +90,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
 
   const pad = { padding: "16px 18px" };
+  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
 
   const applyNode = (
     <div style={pad} className="adtp">
@@ -86,39 +102,32 @@ export default function AdtProjectClient({ user, alerts, app }) {
           ))}
         </div>
       )}
+      {(prefDays.length || prefWins.length) ? (
+        <div className="adtp-pref">
+          <span>Preferred install times</span>
+          {prefDays.length ? <b>{prefDays.join(", ")}</b> : <b>Any day</b>}
+          {prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
+        </div>
+      ) : null}
       {app.notes && <div className="adtp-notes"><span>Notes</span>{app.notes}</div>}
     </div>
   );
 
-  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
-  const scheduleNode = (
+  // Complete = schedule the firm install date + mark it done (the old Schedule stage folded in here).
+  const completeNode = (
     <div style={pad} className="adtp">
-      {(prefDays.length || prefWins.length) ? (
-        <div className="adtp-pref">
-          <span>Customer prefers</span>
-          {prefDays.length ? <b>{prefDays.join(", ")}</b> : <b>any day</b>}
-          {prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
-        </div>
-      ) : null}
-      {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
-      {!done && (<>
+      {done ? <div className="adtp-ok">✓ Completed {fmtDay(app.completed_at)}</div> : (<>
+        {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
+        <div className="adtp-sub">{scheduled ? "Update the date" : "Set the install date"}</div>
         <div className="adtp-form">
           <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
           <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
         </div>
-        {err && <div className="adtp-err">{err}</div>}
         <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{scheduled ? "Update date" : "Schedule install"}</button>
-      </>)}
-    </div>
-  );
-
-  const completeNode = (
-    <div style={pad} className="adtp">
-      {done ? <div className="adtp-ok">✓ Completed {fmtDay(app.completed_at)}</div> : (<>
-        <div className="adtp-muted" style={{ marginBottom: 10 }}>Mark the install complete once the technician has finished on site.</div>
-        {err && <div className="adtp-err">{err}</div>}
+        {err && <div className="adtp-err" style={{ marginTop: 10 }}>{err}</div>}
+        <div className="adtp-sub" style={{ marginTop: 16 }}>Once the technician finishes on site</div>
         <button className="adtp-btn green" disabled={pending || !scheduled} onClick={doComplete}>Mark complete</button>
-        {!scheduled && <div className="adtp-muted" style={{ marginTop: 8 }}>Schedule the install first.</div>}
+        {!scheduled && <div className="adtp-muted" style={{ marginTop: 8 }}>Set the install date first.</div>}
       </>)}
     </div>
   );
@@ -150,12 +159,9 @@ export default function AdtProjectClient({ user, alerts, app }) {
         { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
         { name: "Customer quote", label: shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
       ] },
-    { name: "Schedule", pill: scheduled ? "Scheduled" : "Awaiting", pct: scheduled ? 100 : 0, tint: "blue",
-      turn: done ? "idle" : "mine", need: "Schedule the install",
-      tools: [{ name: "Schedule install", label: scheduled ? fmtDay(app.schedule_date) : "Pick a date", state: scheduled ? "done" : "active", node: scheduleNode }] },
-    { name: "Complete", pill: done ? "Complete" : "Pending", pct: done ? 100 : 0, tint: "green",
-      turn: done ? "idle" : "mine", need: "Mark the install complete",
-      tools: [{ name: "Completion", label: done ? `Done ${fmtDay(app.completed_at)}` : "Finish up", state: done ? "done" : "active", node: completeNode }] },
+    { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green",
+      turn: done ? "idle" : "mine", need: "Schedule + complete the install",
+      tools: [{ name: "Schedule & finish", label: done ? `Done ${fmtDay(app.completed_at)}` : scheduled ? fmtDay(app.schedule_date) : "Set install date", state: done ? "done" : "active", node: completeNode }] },
   ];
 
   const customer = {
@@ -165,12 +171,12 @@ export default function AdtProjectClient({ user, alerts, app }) {
     fields: [
       { k: "Property", v: isComm ? "Commercial" : "Residential" },
       app.address && { k: "Address", v: app.address },
-      app.phone && { k: "Phone", v: app.phone },
+      app.phone && { k: "Phone", v: fmtPhone(app.phone) },
       app.email && { k: "Email", v: app.email },
-      app.tax_id && { k: isComm ? "EIN" : "SSN", v: fmtTax(app.tax_id, isComm) },
+      app.tax_id && { k: isComm ? "EIN" : "SSN", v: <RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /> },
       app.access_pin && { k: "Access PIN", v: app.access_pin },
-      ...(app.emergency || []).filter((c) => c && (c.name || c.phone)).map((c, i) => ({ k: `Emergency ${i + 1}`, v: [c.name, c.phone].filter(Boolean).join(" · ") })),
-      app.verbal_password && { k: "Verbal password", v: app.verbal_password },
+      app.verbal_password && { k: "Verbal password", v: <RevealField value={app.verbal_password} /> },
+      ...(app.emergency || []).filter((c) => c && (c.name || c.phone)).map((c, i) => ({ k: `Emergency ${i + 1}`, v: c.name || "—", sub: c.phone ? fmtPhone(c.phone) : "" })),
     ].filter(Boolean),
     actions: [
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
@@ -210,6 +216,7 @@ const CSS = `
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}
 .adtp-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref b{color:var(--dv-gold-deep,#A8842F)}
+.adtp-sub{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 0 8px}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
 .adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
@@ -222,4 +229,8 @@ const CSS = `
 .adtp-btn:hover{filter:brightness(1.1)}
 .adtp-btn:disabled{opacity:.5;cursor:default}
 .adtp-err{font-size:.82rem;color:var(--dv-red,#C4553D);margin-bottom:8px}
+.adtp-reveal{display:inline-flex;align-items:center;gap:8px}
+.adtp-reveal-v{font-variant-numeric:tabular-nums}
+.adtp-reveal-btn{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-gold-deep,#A8842F);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px 9px;cursor:pointer}
+.adtp-reveal-btn:hover{border-color:var(--dv-gold,#C9A96E)}
 `;

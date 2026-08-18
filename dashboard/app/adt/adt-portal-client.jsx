@@ -11,7 +11,7 @@ import DeckView from "../project/[accessId]/deck-view";
 
 const STEPS = [
   { key: "apply",    label: "Apply" },
-  { key: "schedule", label: "Schedule" },
+  { key: "quote",    label: "Quote" },
   { key: "complete", label: "Complete" },
 ];
 // Map a saved application stage → which step is active (applied = schedule is next up).
@@ -48,21 +48,27 @@ const DVI = {
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
 };
 
-// The customer's ADT account on the SAME Deck as a project: Apply → Quote → Schedule → Complete.
+// The customer's ADT account on the SAME Deck as a project: Apply → Quote → Complete.
 function CustomerDeck({ app, quote }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
-  const applied = app.stage === "applied";
-  const hasPrefs = (app.pref_days || []).length > 0;
-  const [idx, setIdx] = useState(done ? 3 : applied ? 2 : quote ? 1 : 2);
+  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
+  const hasPrefs = prefDays.length > 0 || prefWins.length > 0;
+  const [idx, setIdx] = useState(done ? 2 : quote ? 1 : 0);
 
   const equipmentNode = (
     <div className="adtc-pad">
       {summary.lines.length
         ? <PointsRecap app={app} />
         : <div className="adtc-muted">No equipment on file yet.</div>}
+      {hasPrefs && (
+        <div className="adtc-pref">
+          <span>Preferred install times</span>
+          <b>{prefDays.join(", ") || "Any day"}</b>{prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
+        </div>
+      )}
     </div>
   );
   const quoteNode = quote
@@ -72,21 +78,20 @@ function CustomerDeck({ app, quote }) {
     <div className="adtc-pad">
       {done
         ? <div className="adtc-ok">✓ Your ADT system is live — welcome to safer days ahead.</div>
-        : <div className="adtc-muted">Your technician completes the install on the scheduled day. You'll get a confirmation when it's done.</div>}
+        : scheduled
+          ? <div className="adtc-ok">Install set for <b>{DAY_FMT(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>
+          : <div className="adtc-muted">We'll confirm your install date{hasPrefs ? <> around your preference (<b>{prefDays.join(", ") || "any day"}</b>{prefWins.length ? ` · ${prefWins.join(", ")}` : ""})</> : ""} and complete it on the day. You'll get a confirmation when it's done.</div>}
       <div className="adtc-note">Access PIN <b>{app.access_pin || "—"}</b> · keep your ID <b>{app.adt_id}</b> to check back anytime.</div>
     </div>
   );
 
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle",
-      tools: [{ name: "Your equipment", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: equipmentNode }] },
+      tools: [{ name: "Your application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: equipmentNode }] },
     { name: "Quote", pill: quote ? "Ready" : "Pending", pct: quote ? 100 : 0, tint: "purple", turn: quote ? "mine" : "idle", need: "Review your quote",
       tools: [{ name: "Your quote", label: quote ? "View pricing" : "Awaiting quote", state: quote ? "done" : "active", heavy: !!quote, node: quoteNode }] },
-    { name: "Schedule", pill: scheduled ? "Scheduled" : hasPrefs ? "Requested" : "Awaiting", pct: scheduled ? 100 : hasPrefs ? 60 : 0, tint: "blue",
-      turn: applied ? "mine" : "idle", need: "Tell us your preferred times",
-      tools: [{ name: "Preferred times", label: scheduled ? DAY_FMT(app.schedule_date) : hasPrefs ? "Requested" : "Pick your times", state: (scheduled || hasPrefs) ? "done" : "active", node: <CustSchedule app={app} /> }] },
-    { name: "Complete", pill: done ? "Complete" : "Pending", pct: done ? 100 : 0, tint: "green", turn: "idle",
-      tools: [{ name: "Installation", label: done ? "Live" : "Awaiting install", state: done ? "done" : "active", node: completeNode }] },
+    { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green", turn: "idle",
+      tools: [{ name: "Installation", label: done ? "Live" : scheduled ? DAY_FMT(app.schedule_date) : "Awaiting install", state: done ? "done" : "active", node: completeNode }] },
   ];
 
   const customer = {
@@ -173,6 +178,9 @@ const CUSTCSS = `
 .adtc-ok b{color:var(--dv-ink,#101418)}
 .adtc-note{margin-top:14px;font-size:.8rem;color:var(--dv-meta,#787D84)}
 .adtc-note b{color:var(--dv-ink,#101418)}
+.adtc-pref{margin-top:14px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px}
+.adtc-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
+.adtc-pref b{color:var(--dv-gold-deep,#A8842F)}
 .adtc-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:11px}
 .adtc-btn{height:44px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
 .adtc-btn:disabled{opacity:.55;cursor:default}
@@ -230,6 +238,12 @@ function ApplyStep({ prefill = null }) {
   const [emg, setEmg] = useState([{ name: "", phone: "" }, { name: "", phone: "" }]);   // two emergency contacts
   const ec = (i, field) => (e) => { const v = field === "name" ? titleCase(e.target.value) : fmtPhone(e.target.value); setEmg((prev) => prev.map((c, x) => (x === i ? { ...c, [field]: v } : c))); };
   const [qty, setQty] = useState({});          // { itemId: n }
+  const [days, setDays] = useState([]);        // preferred install days
+  const [wins, setWins] = useState([]);        // preferred windows
+  const dtoggle = (v) => setDays((d) => d.includes(v) ? d.filter((x) => x !== v) : [...d, v]);
+  const wtoggle = (v) => setWins((w) => w.includes(v) ? w.filter((x) => x !== v) : [...w, v]);
+  const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  const dquick = (set) => setDays(sameSet(days, set) ? [] : set);
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -241,7 +255,7 @@ function ApplyStep({ prefill = null }) {
   function submit(e) {
     e.preventDefault(); setErr("");
     startTx(async () => {
-      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType, emergency: emg });
+      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins });
       if (r?.error) { setErr(r.error); return; }
       router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);
     });
@@ -349,6 +363,21 @@ function ApplyStep({ prefill = null }) {
         <p className="adt-secnote">This verifies your identity and is used in case of emergencies.</p>
       </div>
 
+      <div className="adt-sec">
+        <div className="adt-sec-t">Preferred install times <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "#9aa1af" }}>· optional</em></div>
+        <div className="adt-quick">
+          <button type="button" className={"adt-chip" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => dquick(WEEKDAYS)}>Weekdays</button>
+          <button type="button" className={"adt-chip" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => dquick(WEEKENDS)}>Weekends</button>
+          <button type="button" className={"adt-chip" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => dquick(DAYS)}>Any day</button>
+        </div>
+        <div className="adt-days">
+          {DAYS.map((d) => <button type="button" key={d} className={"adt-day" + (days.includes(d) ? " on" : "")} onClick={() => dtoggle(d)}>{d}</button>)}
+        </div>
+        <div className="adt-wins" style={{ marginTop: 12 }}>
+          {WINDOWS.map((w) => <button type="button" key={w.key} className={"adt-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => wtoggle(w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}
+        </div>
+      </div>
+
       {err && <div className="adt-err">{err}</div>}
 
       <div className="adt-bar">
@@ -356,7 +385,7 @@ function ApplyStep({ prefill = null }) {
           <div className="adt-bar-pts">{summary.points} <span>pts</span></div>
           <div className="adt-bar-sub">{summary.count} item{summary.count === 1 ? "" : "s"} selected</div>
         </div>
-        <button type="submit" className="adt-go" disabled={pending}>{pending ? "Submitting…" : "Continue to Schedule →"}</button>
+        <button type="submit" className="adt-go" disabled={pending}>{pending ? "Submitting…" : "Submit application →"}</button>
       </div>
     </form>
   );
