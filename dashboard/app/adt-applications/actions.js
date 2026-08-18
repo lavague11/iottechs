@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus } from "../../lib/db";
+import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus, updateAdtApplication } from "../../lib/db";
+import { adtSummary } from "../../lib/adt";
 
 // The ADT project Deck is open to every internal role that has a view — admin/manager (Admin view)
 // and sales (Rep view). Technicians are excluded: they do their own thing, no view here.
@@ -14,6 +15,32 @@ async function requireStaff() {
 async function requireOffice() {
   const u = await getSessionUser();
   return u && ["admin", "manager"].includes(u.role) ? u : null;
+}
+
+// Admin edits a submitted application (contact, equipment, SSN/EIN, emergency, verbal pw, prefs).
+export async function updateAdtApplicationAction(adtId, form) {
+  if (!(await requireOffice())) return { error: "Not authorized." };
+  if (!getAdtApplication(adtId)) return { error: "Application not found." };
+  const name = String(form?.name || "").trim();
+  const phone = String(form?.phone || "").trim();
+  if (!name) return { error: "Please enter a name." };
+  if (!phone) return { error: "Please enter a phone number." };
+  const { points } = adtSummary(form?.equipment || {});
+  updateAdtApplication(adtId, {
+    name, phone,
+    email: String(form?.email || "").trim(),
+    address: String(form?.address || "").trim(),
+    equipment: form?.equipment || {}, points,
+    notes: String(form?.notes || "").trim(),
+    propertyType: form?.propertyType === "commercial" ? "commercial" : "residential",
+    taxId: String(form?.taxId || "").trim(),
+    emergency: Array.isArray(form?.emergency) ? form.emergency : [],
+    verbalPassword: String(form?.verbalPassword || "").trim(),
+    prefDays: Array.isArray(form?.prefDays) ? form.prefDays : [],
+    prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
+  });
+  revalidatePath("/adt-applications");
+  return { ok: true };
 }
 
 // Office schedules an install date on behalf of the customer.

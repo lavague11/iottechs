@@ -31,15 +31,22 @@ const GIC = {
 
 // The ADT intake — rebuilt in the Deck (vault) theme so it lives natively on the project page as the
 // Apply stage. Residential/Commercial gate → full application → submit creates the record.
-export default function AdtIntake({ prefill = null }) {
+const padEmg = (arr) => { const a = (Array.isArray(arr) ? arr : []).slice(0, 2).map((c) => ({ name: c?.name || "", phone: c?.phone || "" })); while (a.length < 2) a.push({ name: "", phone: "" }); return a; };
+
+// prefill = smart-defaults for a fresh apply; existing = an application being edited (admin); onSubmit =
+// custom handler (edit). Default create flow: submit → create → redirect to the account Deck.
+export default function AdtIntake({ prefill = null, existing = null, onSubmit = null, submitLabel = null }) {
   const router = useRouter();
-  const [propertyType, setPropertyType] = useState(null);
+  const ex = existing;
+  const [propertyType, setPropertyType] = useState(ex?.property_type || null);
   const [showTax, setShowTax] = useState(false);
-  const [f, setF] = useState({ name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
-  const [emg, setEmg] = useState([{ name: "", phone: "" }, { name: "", phone: "" }]);
-  const [qty, setQty] = useState({ ...AUTO });   // 5in panel + LTE radio preselected
-  const [days, setDays] = useState([...DAYS]);   // "Any day" preselected
-  const [wins, setWins] = useState([]);
+  const [f, setF] = useState(ex
+    ? { name: ex.name || "", email: ex.email || "", phone: ex.phone || "", address: ex.address || "", notes: ex.notes || "", taxId: ex.tax_id || "", verbalPassword: ex.verbal_password || "" }
+    : { name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
+  const [emg, setEmg] = useState(ex ? padEmg(ex.emergency) : [{ name: "", phone: "" }, { name: "", phone: "" }]);
+  const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
+  const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
+  const [wins, setWins] = useState(ex ? [...(ex.pref_windows || [])] : []);
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
 
@@ -65,9 +72,11 @@ export default function AdtIntake({ prefill = null }) {
   function submit(e) {
     e?.preventDefault(); setErr("");
     startTx(async () => {
-      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins });
+      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins };
+      const r = onSubmit ? await onSubmit(payload) : await submitAdtApplicationAction(payload);
       if (r?.error) { setErr(r.error); return; }
-      router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);
+      if (r?.adtId) router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);   // fresh create → account Deck
+      else router.refresh();                                                  // edit → back to the record
     });
   }
 
@@ -179,7 +188,7 @@ export default function AdtIntake({ prefill = null }) {
       {err && <div className="ai-err">{err}</div>}
       <div className="ai-bar">
         <div className="ai-bar-sum"><div className="ai-bar-big">${summary.price.toLocaleString()} <span>est.</span></div><div className="ai-bar-sub">{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</div></div>
-        <button type="submit" className="ai-go" disabled={pending}>{pending ? "Submitting…" : "Submit application →"}</button>
+        <button type="submit" className="ai-go" disabled={pending}>{pending ? "Saving…" : (submitLabel || "Submit application →")}</button>
       </div>
     </form>
   );

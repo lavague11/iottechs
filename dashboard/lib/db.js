@@ -3457,6 +3457,29 @@ export function createAdtApplication({ name, email, phone, address, equipment, p
     .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins);
   return getAdtApplication(adtId);
 }
+// Admin edit of a submitted application — same field handling as create (re-encrypt SSN/verbal,
+// recompute the access PIN from the phone). Stage/status/deal are untouched.
+export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows }) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
+  const equip = JSON.stringify(equipment || {});
+  const ptype = propertyType === "commercial" ? "commercial" : "residential";
+  const taxDigits = String(taxId || "").replace(/\D/g, "").slice(0, 9);
+  const taxEnc = taxDigits ? encBlob(taxDigits) : null;
+  const emerg = (Array.isArray(emergency) ? emergency : [])
+    .map((c) => ({ name: String(c?.name || "").slice(0, 80).trim(), phone: String(c?.phone || "").slice(0, 24).trim() }))
+    .filter((c) => c.name || c.phone).slice(0, 2);
+  const emergJson = emerg.length ? JSON.stringify(emerg) : null;
+  const vpEnc = String(verbalPassword || "").trim() ? encBlob(String(verbalPassword).trim().slice(0, 60)) : null;
+  const pDays = JSON.stringify(Array.isArray(prefDays) ? prefDays.slice(0, 7) : []);
+  const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []);
+  db.prepare(`UPDATE adt_applications SET name=?, email=?, phone=?, address=?, equipment=?, points=?, notes=?,
+              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?,
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
+    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, String(adtId));
+  return getAdtApplication(adtId);
+}
 export function getAdtApplication(adtId) {
   const r = db.prepare("SELECT * FROM adt_applications WHERE adt_id = ? COLLATE NOCASE").get(String(adtId || "").trim());
   if (!r) return null;

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction } from "../actions";
+import AdtIntake from "../../adt/adt-intake";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
@@ -97,9 +98,18 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const pad = { padding: "16px 18px" };
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
+  const office = ["admin", "manager"].includes(user?.role);   // edit is office-only
+  const [editing, setEditing] = useState(false);
+  const saveEdit = async (payload) => { const r = await updateAdtApplicationAction(app.adt_id, payload); if (r?.ok) setEditing(false); return r; };
 
-  const applyNode = (
+  const applyNode = editing ? (
+    <div className="adtp">
+      <div className="adtp-editbar"><b>Edit application</b><button type="button" className="adtp-chip" onClick={() => setEditing(false)}>Cancel</button></div>
+      <AdtIntake existing={app} submitLabel="Save changes →" onSubmit={saveEdit} />
+    </div>
+  ) : (
     <div style={pad} className="adtp">
+      {office && <div className="adtp-editrow"><button type="button" className="adtp-chip" onClick={() => setEditing(true)}>Edit application</button></div>}
       <div className="adtp-statusrow">
         <div className="adtp-statusrow-l"><span className="adtp-sub" style={{ margin: 0 }}>Credit status</span>
           <span className="adtp-status-badge" style={{ color: sm.color, background: sm.color + "1a", border: `1px solid ${sm.color}33` }}>{sm.label}</span></div>
@@ -266,6 +276,8 @@ const CSS = `
 .adtp-chip.green{border-color:#bfe3cb;color:#1c8a45}
 .adtp-chip.red{border-color:#f0cfca;color:#c0392b}
 .adtp-chip:disabled{opacity:.5;cursor:default}
+.adtp-editrow{display:flex;justify-content:flex-end;margin-bottom:12px}
+.adtp-editbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 4px;font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
 .adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
