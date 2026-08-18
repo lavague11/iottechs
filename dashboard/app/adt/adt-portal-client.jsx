@@ -86,6 +86,13 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   // The full application — customer details + equipment + everything they submitted.
   const equipmentNode = (
     <div className="adtc-pad">
+      {app.status === "needs_docs" && (
+        <div className="adtc-docsbanner">
+          <b>Action needed — we need a few documents to continue.</b>
+          {app.docs_note && <span>{app.docs_note}</span>}
+          <em>Call <a href={telHref}>{SUPPORT_PHONE}</a> or reply to your installer to send them over.</em>
+        </div>
+      )}
       <div className="adtc-app">
         <div className="adtc-app-hero">
           <div className="adtc-app-hg"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div>
@@ -120,6 +127,8 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
           {emerg.map((c, i) => <div key={i} className="adtc-app-line">{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</div>)}</>)}
 
         {app.notes && (<><div className="adtc-app-sec">Notes</div><div className="adtc-app-line">{app.notes}</div></>)}
+
+        <div className="adtc-app-foot"><span>Estimated total</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
       </div>
     </div>
   );
@@ -188,7 +197,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         canAdvance={false}
         customer={customer}
         statusChip={adtStatusMeta(app.status)}
-        roleLabel="ADT Monitoring"
+        roleLabel="Customer view"
         logoHref={dashboardHref || "/"}
         menu={[
           ...(dashboardHref ? [{ label: "My dashboard", onClick: () => router.push(dashboardHref) }] : []),
@@ -238,6 +247,19 @@ const CUSTCSS = `
 .adtc-app-eqrow .n{flex:1;color:var(--dv-ink,#101418)}
 .adtc-app-eqrow .p{font-weight:700;color:var(--dv-ink,#101418)}
 .adtc-app-line{padding:4px 18px 8px;font-size:.88rem;color:var(--dv-ink,#101418);line-height:1.5}
+.adtc-app-eqrow{transition:background .12s;border-radius:7px}
+.adtc-app-eqrow:hover{background:rgba(201,169,110,.08)}
+.adtc-app-f{border-radius:8px;transition:background .12s}
+.adtc-app-f:hover{background:rgba(201,169,110,.07)}
+.adtc-app-foot{display:flex;align-items:center;gap:10px;margin:8px 18px 0;padding:14px 0 16px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.adtc-app-foot span{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.adtc-app-foot b{font-size:1.2rem;font-weight:800;color:var(--dv-ink,#101418)}
+.adtc-app-foot i{font-style:normal;font-size:.8rem;color:var(--dv-meta,#787D84);margin-left:auto}
+.adtc-docsbanner{margin-bottom:16px;padding:14px 16px;border-radius:12px;background:#fdf1e3;border:1px solid #f0d0a8;color:#8a4b12}
+.adtc-docsbanner b{display:block;font-size:.95rem;color:#8a4b12}
+.adtc-docsbanner span{display:block;font-size:.9rem;color:#0B0F1A;margin-top:5px}
+.adtc-docsbanner em{display:block;font-style:normal;font-size:.82rem;margin-top:7px;color:#8a4b12}
+.adtc-docsbanner a{color:#8a4b12;font-weight:800;text-decoration:none}
 .adtc-support{margin-top:16px;font-size:.88rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:11px 13px}
 .adtc-support a{color:var(--dv-gold-deep,#A8842F);font-weight:800;text-decoration:none}
 .adtc-muted a{color:var(--dv-gold-deep,#A8842F);font-weight:700;text-decoration:none}

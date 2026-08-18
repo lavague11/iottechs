@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
@@ -114,7 +114,9 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
   const office = ["admin", "manager"].includes(user?.role);   // edit is office-only
   const [editing, setEditing] = useState(false);
+  const [docsNote, setDocsNote] = useState(app.docs_note || "");
   const saveEdit = async (payload) => { const r = await updateAdtApplicationAction(app.adt_id, payload); if (r?.ok) setEditing(false); return r; };
+  const saveDocsNote = () => startTx(async () => { await setAdtDocsNoteAction(app.adt_id, docsNote); router.refresh(); });
 
   const applyNode = editing ? (
     <div className="adtp">
@@ -133,6 +135,13 @@ export default function AdtProjectClient({ user, alerts, app }) {
           </select>
         )}
       </div>
+      {status === "needs_docs" && (
+        <div className="adtp-docs">
+          <span className="adtp-sub" style={{ margin: 0 }}>Which documents does the customer need to provide?</span>
+          <textarea className="adtp-docs-in" rows={2} value={docsNote} onChange={(e) => setDocsNote(e.target.value)} placeholder="e.g. Articles of formation, EIN letter, proof of business address…" />
+          <button type="button" className="adtp-chip" disabled={pending} onClick={saveDocsNote}>Save request</button>
+        </div>
+      )}
       <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
       <div className="adtp-cd">
         <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>Name</span><b>{app.name || "—"}</b></div></div>
@@ -173,6 +182,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
         </div>
       ) : null}
       {app.notes && <div className="adtp-notes"><span>Notes</span>{app.notes}</div>}
+      <div className="adtp-foot"><span>Estimated total</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
     </div>
   );
 
@@ -259,7 +269,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
         canAdvance={false}
         customer={customer}
         statusChip={sm}
-        roleLabel="24/7 Monitoring"
+        roleLabel={{ admin: "Admin view", manager: "Manager view", sales: "Sales view" }[user?.role] || "Staff view"}
         menu={[{ label: "All ADT applications", onClick: () => router.push("/adt-applications") }]}
       />
       <style>{CSS}</style>
@@ -296,6 +306,17 @@ const CSS = `
 .adtp-doc:hover{border-color:var(--dv-gold,#C9A96E);background:#fff}
 .adtp-doc-n{flex:1;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-all}
 .adtp-doc em{font-style:normal;font-size:.74rem;font-weight:700;color:var(--dv-gold-deep,#A8842F)}
+.adtp-docs{margin-bottom:14px;padding:12px 13px;border:1px solid #f0d9bf;background:#fdf6ec;border-radius:11px;display:flex;flex-direction:column;gap:9px;align-items:flex-start}
+.adtp-docs-in{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 11px;font-size:.86rem;font-family:inherit;resize:vertical;outline:none;background:#fff;color:var(--dv-ink,#101418)}
+.adtp-docs-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.adtp-foot{display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.adtp-foot span{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.adtp-foot b{font-size:1.15rem;font-weight:800;color:var(--dv-ink,#101418)}
+.adtp-foot i{font-style:normal;font-size:.8rem;color:var(--dv-meta,#787D84);margin-left:auto}
+.adtp-row{transition:background .12s}
+.adtp-row:hover{background:rgba(201,169,110,.08)}
+.adtp-cd-f{border-radius:8px;transition:background .12s}
+.adtp-cd-f:hover{background:rgba(201,169,110,.07)}
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}

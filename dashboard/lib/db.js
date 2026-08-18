@@ -584,6 +584,7 @@ function init() {
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
   if (!adtCols.includes("archived")) db.exec("ALTER TABLE adt_applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: hidden from lists, kept for audit
   if (!adtCols.includes("verification_doc")) db.exec("ALTER TABLE adt_applications ADD COLUMN verification_doc TEXT"); // commercial business-verification file: JSON {name,type,data(dataURL)}
+  if (!adtCols.includes("docs_note")) db.exec("ALTER TABLE adt_applications ADD COLUMN docs_note TEXT"); // when status=needs_docs, which documents the office needs
   if (!adtCols.includes("status")) {   // credit/approval lifecycle: submitted → in_review → approved | declined → installed
     db.exec("ALTER TABLE adt_applications ADD COLUMN status TEXT DEFAULT 'submitted'");
     db.exec("UPDATE adt_applications SET status = CASE WHEN stage = 'completed' THEN 'installed' ELSE 'submitted' END WHERE status IS NULL");
@@ -3531,6 +3532,14 @@ export function setAdtStatus(adtId, status) {
   if (!cur || !ADT_STATUSES.includes(status)) return null;
   db.prepare("UPDATE adt_applications SET status = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
     .run(status, String(adtId));
+  return getAdtApplication(adtId);
+}
+// Which documents the office still needs (shown to the customer when status = needs_docs).
+export function setAdtDocsNote(adtId, note) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare("UPDATE adt_applications SET docs_note = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
+    .run(String(note || "").slice(0, 400).trim() || null, String(adtId));
   return getAdtApplication(adtId);
 }
 // Persist the internal ADT Tool deal state (equipment cart, tier, credit, rep). Autosaved from the widget.

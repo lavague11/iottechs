@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus, updateAdtApplication } from "../../lib/db";
+import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus, updateAdtApplication, setAdtDocsNote } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 
 // The ADT project Deck is open to every internal role that has a view — admin/manager (Admin view)
@@ -15,6 +15,15 @@ async function requireStaff() {
 async function requireOffice() {
   const u = await getSessionUser();
   return u && ["admin", "manager"].includes(u.role) ? u : null;
+}
+
+// Which documents the office needs (paired with the needs_docs status).
+export async function setAdtDocsNoteAction(adtId, note) {
+  if (!(await requireStaff())) return { error: "Not authorized." };
+  if (!getAdtApplication(adtId)) return { error: "Application not found." };
+  setAdtDocsNote(adtId, note);
+  revalidatePath("/adt-applications");
+  return { ok: true };
 }
 
 // Admin edits a submitted application (contact, equipment, SSN/EIN, emergency, verbal pw, prefs).
