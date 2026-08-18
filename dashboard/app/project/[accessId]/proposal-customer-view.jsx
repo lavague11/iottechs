@@ -501,7 +501,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
                     {menuFor === it.id && (
                       <div className="pcv-linemenu" onClick={(e) => e.stopPropagation()}>
-                        <div className="pcv-linemenu-title">{titleCase(it.name)}</div>
+                        <div className="pcv-linemenu-head">
+                          <span className="pcv-linemenu-title">{titleCase(it.name)}</span>
+                          <button type="button" className="pcv-linemenu-x" aria-label="Close" title="Close" onClick={() => setMenuFor(null)}>✕</button>
+                        </div>
                         <textarea className="pcv-linemenu-note" rows={2} placeholder="Add a note for our team (optional)…"
                                   value={menuNote} onChange={(e) => setMenuNote(e.target.value)} />
                         <div className="pcv-linemenu-actions">
@@ -641,7 +644,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 <p>Accept the option{p.payload.options.length > 1 ? "(s)" : ""} you want{p.payload.options.length > 1 ? " — you can pick more than one" : ""}, request a change, or decline.</p>
                 <div className="pcv-accept-actions">
                   <button className={`pcv-select${optAccepted ? " outline" : ""}`} disabled={busy} onClick={() => choose(opt.id)}>
-                    {optAccepted ? `Remove Option ${opt.id}` : `Accept Option ${opt.id} — ${money(t.grand)}`}
+                    {optAccepted ? `Remove Option ${opt.id}` : `✍ Approve & Sign — ${money(t.grand)}`}
                   </button>
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>✎ Request Change</button>
                   <button className="pcv-btn" onClick={() => { setDeclineOpen(true); setReviseMode(false); }}>✕ Decline</button>
@@ -698,7 +701,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
       <ProposalSignModal
         open={!!signFor}
-        heading={signFor ? `Accept & Sign — Option ${signFor}` : "Accept & Sign"}
+        heading={signFor ? `Approve & Sign — Option ${signFor}` : "Approve & Sign"}
         subheading={signFor ? `${optName(signFor)} · ${money(optionTotals(p.payload.options.find((o) => o.id === signFor), p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand)}` : ""}
         reference={propNum}
         defaultName={p.signed_name || customerName || ""}
@@ -931,7 +934,10 @@ const PCV_CSS = `
 .pcv-flag-chip.change{background:rgba(201,169,110,.14);color:var(--dv-gold-deep,#A8842F)}
 
 .pcv-linemenu{position:absolute;z-index:40;left:34px;top:calc(100% - 2px);width:min(300px,80vw);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 1px 2px rgba(16,20,24,.04);padding:12px;display:flex;flex-direction:column;gap:9px}
+.pcv-linemenu-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .pcv-linemenu-title{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418)}
+.pcv-linemenu-x{border:none;background:none;color:var(--dv-meta,#787D84);font-size:.9rem;line-height:1;cursor:pointer;padding:2px 4px;border-radius:6px}
+.pcv-linemenu-x:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418)}
 .pcv-linemenu-note{border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);padding:8px 10px;font-size:.78rem;font-family:inherit;outline:none;resize:vertical}
 .pcv-linemenu-note:focus{border-color:var(--dv-gold,#C9A96E)}
 .pcv-linemenu-actions{display:flex;gap:7px;flex-wrap:wrap}
