@@ -66,10 +66,11 @@ export default async function AdtPage({ searchParams }) {
 
   // Session-aware: prefill a fresh intake for a signed-in customer, and route the "My dashboard"
   // button to the right home (customer → /my-projects, staff → /dashboard, PIN-only → none).
-  let prefill = null, dashboardHref = null;
+  let prefill = null, dashboardHref = null, isStaff = false;
   try {
     const tok = (await cookies()).get("iot_session")?.value;
     const session = tok ? await parseToken(tok) : null;
+    isStaff = ["admin", "manager", "sales"].includes(session?.role);   // reps/office get the full equipment picker; customers get the simple questions
     if (session?.role && ["admin", "manager", "sales", "tech"].includes(session.role)) dashboardHref = "/dashboard";
     else if (session?.id) dashboardHref = "/my-projects";
     if (!app && session?.id) {
@@ -79,5 +80,5 @@ export default async function AdtPage({ searchParams }) {
     }
   } catch { /* not signed in → blank + no dashboard button */ }
 
-  return <AdtPortalClient app={app} prefill={prefill} quote={quote} dashboardHref={dashboardHref} />;
+  return <AdtPortalClient app={app} prefill={prefill} quote={quote} dashboardHref={dashboardHref} isStaff={isStaff} />;
 }

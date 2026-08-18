@@ -15,21 +15,21 @@ const SUPPORT_PHONE = "(800) 555-0100";
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 
-export default function AdtPortalClient({ app, prefill = null, quote = null, dashboardHref = null }) {
+export default function AdtPortalClient({ app, prefill = null, quote = null, dashboardHref = null, isStaff = false }) {
   // Everything runs on the Deck now — a fresh visitor gets the Apply stage with the intake open;
   // an existing application advances through Apply → Quote → Complete.
   if (app) return <CustomerDeck app={app} quote={quote} dashboardHref={dashboardHref} />;
-  return <FreshDeck prefill={prefill} dashboardHref={dashboardHref} />;
+  return <FreshDeck prefill={prefill} dashboardHref={dashboardHref} isStaff={isStaff} />;
 }
 
 // A brand-new visitor: the Deck itself, with the intake living inside the Apply stage (auto-open).
-function FreshDeck({ prefill, dashboardHref }) {
+function FreshDeck({ prefill, dashboardHref, isStaff = false }) {
   const router = useRouter();
   const [idx, setIdx] = useState(0);
   const soon = (msg) => <div className="adtc-pad"><div className="adtc-muted">{msg}</div></div>;
   const stages = [
     { name: "Apply", pill: "In progress", pct: 0, tint: "gold", turn: "mine", need: "Complete your application",
-      tools: [{ name: "Your application", label: "Fill it out", state: "active", node: <AdtIntake prefill={prefill} /> }] },
+      tools: [{ name: "Your application", label: "Fill it out", state: "active", node: <AdtIntake prefill={prefill} simple={!isStaff} /> }] },
     { name: "Quote", pill: "Pending", pct: 0, tint: "purple",
       tools: [{ name: "Your quote", label: "After you apply", state: "active", node: soon("Submit your application and your installer will build your quote here.") }] },
     { name: "Complete", pill: "Pending", pct: 0, tint: "green",

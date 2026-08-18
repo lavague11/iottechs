@@ -16,6 +16,13 @@ const WINS = [{ key: "Morning", sub: "8am–12pm" }, { key: "Afternoon", sub: "1
 const PANELS = ["panel5", "panel7"];   // one control panel only — mutually exclusive, max 1 each
 const LOCKED = { lte: 1 };             // always present at a fixed qty, can't be changed
 const AUTO = { panel5: 1, lte: 1, contact: 1, glass: 1, motion: 1 };    // preselected starter lineup on a fresh application
+// Customer (simple) view: three plain-language coverage questions instead of the full picker. The
+// control panel + cell backup are always included (part of AUTO) — the rep refines the rest later.
+const SIMPLE_Q = [
+  { id: "contact", label: "Doors & windows to protect", sub: "One sensor per entry point" },
+  { id: "glass",   label: "Glass break sensors",        sub: "For rooms with large windows" },
+  { id: "motion",  label: "Motion sensors",             sub: "Detects movement inside a room" },
+];
 
 // A small placeholder glyph per equipment group — swap for real product photos later.
 const GIC = {
@@ -35,7 +42,7 @@ const padEmg = (arr) => { const a = (Array.isArray(arr) ? arr : []).slice(0, 2).
 
 // prefill = smart-defaults for a fresh apply; existing = an application being edited (admin); onSubmit =
 // custom handler (edit). Default create flow: submit → create → redirect to the account Deck.
-export default function AdtIntake({ prefill = null, existing = null, onSubmit = null, submitLabel = null }) {
+export default function AdtIntake({ prefill = null, existing = null, onSubmit = null, submitLabel = null, simple = false }) {
   const router = useRouter();
   const ex = existing;
   const [propertyType, setPropertyType] = useState(ex?.property_type || null);
@@ -165,6 +172,30 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         )}
       </>)}
 
+      {simple ? (
+        <>
+          <div className="ai-sec-t">Your protection <em>· how much coverage?</em></div>
+          <div className="ai-note" style={{ marginBottom: 12 }}>Every ADT system includes a smart control panel and 24/7 cellular backup. Just tell us how much coverage you need — we'll tailor the rest.</div>
+          {SIMPLE_Q.map((q) => {
+            const n = qty[q.id] || 0;
+            return (
+              <div key={q.id} className={`ai-item${n ? " on" : ""}`}>
+                <span className="ai-ic">{GIC.sensors}</span>
+                <div className="ai-item-main">
+                  <span className="ai-item-name">{q.label}</span>
+                  <span className="ai-item-sub" style={{ fontWeight: 500, color: "var(--meta)" }}>{q.sub}</span>
+                </div>
+                <div className="ai-step">
+                  <button type="button" onClick={() => bump(q.id, -1)} disabled={!n} aria-label={`Fewer ${q.label}`}>−</button>
+                  <input value={n} onChange={(e) => setN(q.id, e.target.value)} inputMode="numeric" />
+                  <button type="button" onClick={() => bump(q.id, 1)} aria-label={`More ${q.label}`}>+</button>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      ) : (
+        <>
       <div className="ai-sec-t">Choose your equipment</div>
       {(() => {
         // Best-sellers from the ADT tool — one-tap quick-add. Only show ids valid for this property type.
@@ -223,6 +254,8 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
           })}
         </div>
       ))}
+        </>
+      )}
 
       <div className="ai-sec-t">Anything else? <em>optional</em></div>
       <textarea className="ai-area" rows={2} value={f.notes} onChange={set("notes")} placeholder="Gate code, pets, best time to reach you…" />
