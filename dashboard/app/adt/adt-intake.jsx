@@ -140,9 +140,15 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
 
       <div className="ai-sec-t">Your details</div>
       <div className="ai-grid">
-        <label className="ai-fld"><span>{isComm ? "Business name" : "Full name"}</span><input value={f.name} onChange={set("name")} placeholder={isComm ? "Acme Holdings LLC" : "Jane Doe"} autoComplete={isComm ? "organization" : "name"} /></label>
-        {isComm && <label className="ai-fld"><span>Contact first name</span><input value={f.contactFirst} onChange={set("contactFirst")} placeholder="First" autoComplete="given-name" /></label>}
-        {isComm && <label className="ai-fld"><span>Contact last name</span><input value={f.contactLast} onChange={set("contactLast")} placeholder="Last" autoComplete="family-name" /></label>}
+        {isComm ? (
+          <>
+            <label className="ai-fld"><span>First name</span><input value={f.contactFirst} onChange={set("contactFirst")} placeholder="First" autoComplete="given-name" /></label>
+            <label className="ai-fld"><span>Last name</span><input value={f.contactLast} onChange={set("contactLast")} placeholder="Last" autoComplete="family-name" /></label>
+            <label className="ai-fld"><span>Business name</span><input value={f.name} onChange={set("name")} placeholder="Acme Holdings LLC" autoComplete="organization" /></label>
+          </>
+        ) : (
+          <label className="ai-fld"><span>Full name</span><input value={f.name} onChange={set("name")} placeholder="Jane Doe" autoComplete="name" /></label>
+        )}
         <label className="ai-fld"><span>Phone</span><input value={f.phone} onChange={set("phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="tel" /></label>
         <label className="ai-fld"><span>Email</span><input value={f.email} onChange={set("email")} placeholder="you@email.com" type="email" autoComplete="email" /></label>
         <label className="ai-fld"><span>{isComm ? "EIN" : "SSN"} <em>· for the ADT account</em></span>
