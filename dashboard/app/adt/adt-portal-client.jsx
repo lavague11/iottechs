@@ -16,6 +16,10 @@ const STEPS = [
 // Map a saved application stage → which step is active (applied = schedule is next up).
 const STAGE_TO_STEP = { applied: 1, scheduled: 2, completed: 2 };
 
+// Capitalize each word (names); format a phone as (xxx) xxx-xxxx as it's typed.
+const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
+const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
+
 export default function AdtPortalClient({ app, prefill = null }) {
   const stepIdx = app ? STAGE_TO_STEP[app.stage] ?? 0 : 0;
   return (
@@ -60,7 +64,9 @@ function ApplyStep({ prefill = null }) {
   const [propertyType, setPropertyType] = useState(null);   // "residential" | "commercial" — the FIRST choice
   const [showTax, setShowTax] = useState(false);            // reveal/hide the SSN/EIN
   // Prefilled from the signed-in customer's record when they arrive from their portal (smart defaults).
-  const [f, setF] = useState({ name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "" });
+  const [f, setF] = useState({ name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
+  const [emg, setEmg] = useState([{ name: "", phone: "" }, { name: "", phone: "" }]);   // two emergency contacts
+  const ec = (i, field) => (e) => { const v = field === "name" ? titleCase(e.target.value) : fmtPhone(e.target.value); setEmg((prev) => prev.map((c, x) => (x === i ? { ...c, [field]: v } : c))); };
   const [qty, setQty] = useState({});          // { itemId: n }
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
@@ -73,7 +79,7 @@ function ApplyStep({ prefill = null }) {
   function submit(e) {
     e.preventDefault(); setErr("");
     startTx(async () => {
-      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType });
+      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType, emergency: emg });
       if (r?.error) { setErr(r.error); return; }
       router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);
     });
@@ -163,6 +169,22 @@ function ApplyStep({ prefill = null }) {
 
       <div className="adt-sec">
         <label className="adt-fld full"><span>Anything else? <em>(optional)</em></span><textarea rows={3} value={f.notes} onChange={set("notes")} placeholder="Gate code, pets, best time to reach you…" /></label>
+      </div>
+
+      <div className="adt-sec">
+        <div className="adt-sec-t">Emergency contacts</div>
+        <p className="adt-secnote">If we can&rsquo;t reach you by phone, we&rsquo;ll contact these people in an emergency.</p>
+        {[0, 1].map((i) => (
+          <div className="adt-grid" key={i} style={{ marginBottom: i === 0 ? 10 : 0 }}>
+            <label className="adt-fld"><span>Contact {i + 1} · full name</span><input value={emg[i].name} onChange={ec(i, "name")} placeholder="Full name" autoComplete="off" /></label>
+            <label className="adt-fld"><span>Phone</span><input value={emg[i].phone} onChange={ec(i, "phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="off" /></label>
+          </div>
+        ))}
+      </div>
+
+      <div className="adt-sec">
+        <label className="adt-fld full"><span>Verbal password</span><input value={f.verbalPassword} onChange={set("verbalPassword")} placeholder="A word or phrase only you know" autoComplete="off" /></label>
+        <p className="adt-secnote">This verifies your identity and is used in case of emergencies.</p>
       </div>
 
       {err && <div className="adt-err">{err}</div>}
@@ -310,6 +332,7 @@ const CSS = `
 @media(max-width:560px){.adt-ptype{grid-template-columns:1fr}}
 .adt-sec{margin-top:22px}
 .adt-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8578;margin-bottom:12px}
+.adt-secnote{font-size:.76rem;color:#9aa1af;margin:-6px 0 12px;line-height:1.45}
 .adt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
 .adt-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .adt-fld.full{grid-column:1/-1}

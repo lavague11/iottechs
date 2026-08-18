@@ -92,6 +92,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.email && { k: "Email", v: app.email },
       app.tax_id && { k: isComm ? "EIN" : "SSN", v: fmtTax(app.tax_id, isComm) },
       app.access_pin && { k: "Access PIN", v: app.access_pin },
+      ...(app.emergency || []).filter((c) => c && (c.name || c.phone)).map((c, i) => ({ k: `Emergency ${i + 1}`, v: [c.name, c.phone].filter(Boolean).join(" · ") })),
+      app.verbal_password && { k: "Verbal password", v: app.verbal_password },
     ].filter(Boolean),
     actions: [
       app.phone && { label: "Call", href: `tel:${app.phone}` },

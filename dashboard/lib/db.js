@@ -575,6 +575,8 @@ function init() {
   const adtCols = db.prepare("PRAGMA table_info(adt_applications)").all().map((c) => c.name);
   if (!adtCols.includes("property_type")) db.exec("ALTER TABLE adt_applications ADD COLUMN property_type TEXT");   // residential | commercial
   if (!adtCols.includes("tax_id"))        db.exec("ALTER TABLE adt_applications ADD COLUMN tax_id TEXT");          // SSN (residential) / EIN (commercial) — stored AES-256-GCM encrypted (encBlob)
+  if (!adtCols.includes("emergency_contacts")) db.exec("ALTER TABLE adt_applications ADD COLUMN emergency_contacts TEXT"); // JSON [{name,phone},…] — who we call if the customer can't be reached
+  if (!adtCols.includes("verbal_password"))    db.exec("ALTER TABLE adt_applications ADD COLUMN verbal_password TEXT");    // identity-verify passphrase — encrypted (encBlob)
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3426,16 +3428,21 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword }) {
   const adtId = nextAdtId();
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
   const ptype = propertyType === "commercial" ? "commercial" : "residential";
   const taxDigits = String(taxId || "").replace(/\D/g, "").slice(0, 9);   // SSN/EIN are 9 digits
   const taxEnc = taxDigits ? encBlob(taxDigits) : null;                   // encrypted at rest
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc);
+  const emerg = (Array.isArray(emergency) ? emergency : [])
+    .map((c) => ({ name: String(c?.name || "").slice(0, 80).trim(), phone: String(c?.phone || "").slice(0, 24).trim() }))
+    .filter((c) => c.name || c.phone).slice(0, 2);
+  const emergJson = emerg.length ? JSON.stringify(emerg) : null;
+  const vpEnc = String(verbalPassword || "").trim() ? encBlob(String(verbalPassword).trim().slice(0, 60)) : null;  // encrypted at rest
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc);
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {

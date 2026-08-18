@@ -19,6 +19,8 @@ export default async function AdtProjectPage({ params }) {
     equipment: app.equipment || {}, points: app.points, notes: app.notes, stage: app.stage,
     property_type: app.property_type || "residential",
     tax_id: app.tax_id ? decBlob(app.tax_id) : "",
+    emergency: (() => { try { return JSON.parse(app.emergency_contacts || "[]"); } catch { return []; } })(),
+    verbal_password: app.verbal_password ? decBlob(app.verbal_password) : "",
     schedule_date: app.schedule_date, schedule_window: app.schedule_window, access_pin: app.access_pin,
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };
