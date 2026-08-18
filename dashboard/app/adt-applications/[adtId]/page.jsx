@@ -20,6 +20,7 @@ export default async function AdtProjectPage({ params }) {
     adt_id: app.adt_id, name: app.name, email: app.email, phone: app.phone, address: app.address,
     equipment: app.equipment || {}, points: app.points, notes: app.notes, stage: app.stage,
     property_type: app.property_type || "residential",
+    status: app.status || "submitted",
     // Sensitive PII stays with the office — sales never receives SSN/EIN or the verbal password.
     tax_id: office && app.tax_id ? decBlob(app.tax_id) : "",
     emergency: (() => { try { return JSON.parse(app.emergency_contacts || "[]"); } catch { return []; } })(),

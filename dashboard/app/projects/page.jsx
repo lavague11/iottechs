@@ -25,6 +25,7 @@ const slimAdt = (a) => ({
   service:    (a.property_type === "commercial" ? "Commercial" : "Residential") + " · ADT Monitoring",
   address:    a.address || "",
   stage:      ADT_STAGE[a.stage] || "adt_applied",
+  status:     a.status || "submitted",
   tech:       null,
   value:      0,
   date:       "",

@@ -76,6 +76,7 @@ export default async function DashboardPage() {
     service:      (a.property_type === "commercial" ? "Commercial" : "Residential") + " · ADT Monitoring",
     address:      a.address || "",
     stage:        ADT_STAGE[a.stage] || "adt_applied",
+    status:       a.status || "submitted",
     tech:         null,
     needsAction:  a.stage === "applied",
     closed:       a.stage === "completed",

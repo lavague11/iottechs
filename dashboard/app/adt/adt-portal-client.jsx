@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
-import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
+import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor, adtStatusMeta } from "../../lib/adt";
 import { submitAdtApplicationAction, acceptAdtQuoteAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
 
@@ -154,6 +154,7 @@ function CustomerDeck({ app, quote }) {
         onIdx={setIdx}
         canAdvance={false}
         customer={customer}
+        statusChip={adtStatusMeta(app.status)}
         roleLabel="ADT Monitoring"
         logoHref="/"
         menu={[{ label: "Start another application", onClick: () => router.push("/adt") }]}

@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
-import { adtSummary } from "../../../lib/adt";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction } from "../actions";
+import { adtSummary, adtStatusMeta } from "../../../lib/adt";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction } from "../actions";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
@@ -70,6 +70,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const isComm = app.property_type === "commercial";
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
+  const status = app.status || "submitted";
+  const sm = adtStatusMeta(status);
 
   // The deal (ADT Tool): sales prices in Rep view (locked); office prices in Admin view.
   const dealView = user?.role === "sales" ? "rep" : "admin";
@@ -88,12 +90,24 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const doSchedule = () => startTx(async () => { setErr(""); const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); else router.refresh(); });
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
+  const setStatus = (s) => startTx(async () => { setErr(""); const r = await setAdtStatusAction(app.adt_id, s); if (r?.error) setErr(r.error); else router.refresh(); });
 
   const pad = { padding: "16px 18px" };
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
 
   const applyNode = (
     <div style={pad} className="adtp">
+      <div className="adtp-statusrow">
+        <div className="adtp-statusrow-l"><span className="adtp-sub" style={{ margin: 0 }}>Credit status</span>
+          <span className="adtp-status-badge" style={{ color: sm.color, background: sm.color + "1a", border: `1px solid ${sm.color}33` }}>{sm.label}</span></div>
+        {status !== "installed" && (
+          <div className="adtp-status-btns">
+            {status !== "in_review" && <button className="adtp-chip" disabled={pending} onClick={() => setStatus("in_review")}>In review</button>}
+            {status !== "approved" && <button className="adtp-chip green" disabled={pending} onClick={() => setStatus("approved")}>Approve</button>}
+            {status !== "declined" && <button className="adtp-chip red" disabled={pending} onClick={() => setStatus("declined")}>Decline</button>}
+          </div>
+        )}
+      </div>
       <div className="adtp-badge">{isComm ? "Commercial" : "Residential"} · ${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
       {summary.lines.length === 0 ? <div className="adtp-muted">No equipment on file.</div> : (
         <div className="adtp-list">
@@ -195,6 +209,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
         onIdx={setIdx}
         canAdvance={false}
         customer={customer}
+        statusChip={sm}
         roleLabel="24/7 Monitoring"
         menu={[{ label: "All ADT applications", onClick: () => router.push("/adt-applications") }]}
       />
@@ -219,6 +234,15 @@ const CSS = `
 .adtp-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref b{color:var(--dv-gold-deep,#A8842F)}
 .adtp-sub{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 0 8px}
+.adtp-statusrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
+.adtp-statusrow-l{display:flex;align-items:center;gap:10px}
+.adtp-status-badge{font-size:.74rem;font-weight:800;padding:3px 11px;border-radius:100px}
+.adtp-status-btns{display:flex;gap:6px}
+.adtp-chip{font-size:.74rem;font-weight:700;padding:5px 12px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);cursor:pointer}
+.adtp-chip:hover:not(:disabled){border-color:var(--dv-gold,#C9A96E)}
+.adtp-chip.green{border-color:#bfe3cb;color:#1c8a45}
+.adtp-chip.red{border-color:#f0cfca;color:#c0392b}
+.adtp-chip:disabled{opacity:.5;cursor:default}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
 .adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}

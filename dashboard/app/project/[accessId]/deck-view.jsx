@@ -25,7 +25,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard" }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard", statusChip = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
@@ -134,7 +134,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
         )}
-        <span className="dv-chip live"><i className="dv-dot" />Active</span>
+        {statusChip
+          ? <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>
+          : <span className="dv-chip live"><i className="dv-dot" />Active</span>}
         <span className={`dv-status ${cur.turn}`}><i />{turnText}</span>
 
         <div className="dv-cluster">

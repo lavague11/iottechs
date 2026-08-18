@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal } from "../../lib/db";
+import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus } from "../../lib/db";
 
 // The ADT project Deck is open to every internal role that has a view — admin/manager (Admin view)
 // and sales (Rep view). Technicians are excluded: they do their own thing, no view here.
@@ -31,6 +31,15 @@ export async function adminCompleteAdtAction(adtId) {
   if (!(await requireOffice())) return { error: "Not authorized." };
   if (!getAdtApplication(adtId)) return { error: "Application not found." };
   completeAdtApplication(adtId);
+  revalidatePath("/adt-applications");
+  return { ok: true };
+}
+
+// Set the application's credit/approval status (Submitted → In review → Approved | Declined).
+export async function setAdtStatusAction(adtId, status) {
+  if (!(await requireStaff())) return { error: "Not authorized." };
+  if (!getAdtApplication(adtId)) return { error: "Application not found." };
+  if (!setAdtStatus(adtId, status)) return { error: "Invalid status." };
   revalidatePath("/adt-applications");
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import { ProjectTypeIcon } from "../components/project-type";
+import { adtStatusMeta } from "../../lib/adt";
 
 const STAGE_PILL = {
   inquiry:          { cls: "s-survey",   label: "Inquiry" },
@@ -137,7 +138,9 @@ export default function AdminClient({ user, alerts, kpis, projects, tickets, tec
                     <ProjectTypeIcon project={p} />
                     <div style={{ minWidth: 0 }}><div className="r-name">{p.customer}</div><div className="r-loc">{p.service}{p.address ? ` · ${p.address}` : ""}</div></div>
                   </div>
-                  <div><span className={`stage-pill ${pill.cls}`}>{pill.label}</span></div>
+                  <div>{p.kind === "adt"
+                    ? (() => { const m = adtStatusMeta(p.status); return <span className="stage-pill" style={{ background: m.color + "1a", color: m.color }}>{m.label}</span>; })()
+                    : <span className={`stage-pill ${pill.cls}`}>{pill.label}</span>}</div>
                   <div className="r-tech">{p.tech || "—"}</div>
                   <div className="r-open"><Link href={href}>Open</Link></div>
                 </div>

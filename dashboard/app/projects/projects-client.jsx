@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { ProjectTypeIcon } from "../components/project-type";
+import { adtStatusMeta } from "../../lib/adt";
 import { archiveProjectAction } from "./actions";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
@@ -104,7 +105,9 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                 </div>
                 <div className="c-chips">
                   {p.kind === "adt" && <span className="stage-pill" style={{ background: "rgba(201,169,110,.16)", color: "#a8842f" }}>ADT</span>}
-                  <span className={`stage-pill ${cls}`}>{lbl}</span>
+                  {p.kind === "adt"
+                    ? (() => { const m = adtStatusMeta(p.status); return <span className="stage-pill" style={{ background: m.color + "1a", color: m.color }}>{m.label}</span>; })()
+                    : <span className={`stage-pill ${cls}`}>{lbl}</span>}
                   {p.value ? <span className="chip value">{money(p.value)}</span> : null}
                   {dc && (
                     <span title={`Opened ${days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}`}

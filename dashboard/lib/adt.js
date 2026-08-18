@@ -120,6 +120,16 @@ export function adtSummary(selection = {}) {
   return { points: Math.round(points * 10) / 10, price, count: lines.reduce((s, l) => s + l.qty, 0), lines };
 }
 
+// Credit/approval status → label + color. One source of truth for the badge everywhere it shows.
+export const ADT_STATUS_META = {
+  submitted: { label: "Submitted", color: "#5b6470" },
+  in_review: { label: "In review", color: "#b87300" },
+  approved:  { label: "Approved",  color: "#1c8a45" },
+  declined:  { label: "Declined",  color: "#c0392b" },
+  installed: { label: "Installed", color: "#2f7d5a" },
+};
+export const adtStatusMeta = (s) => ADT_STATUS_META[s] || ADT_STATUS_META.submitted;
+
 // Reduce a full ADT Tool deal (deal_json) to the ONLY fields safe to send a customer's browser.
 // The raw deal holds cost, fees, commission split, and rate multiples — none of that leaves the
 // server. The customer gets: their equipment quantities, monthly rate, package, activation, the

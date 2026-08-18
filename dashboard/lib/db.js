@@ -582,6 +582,10 @@ function init() {
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
+  if (!adtCols.includes("status")) {   // credit/approval lifecycle: submitted → in_review → approved | declined → installed
+    db.exec("ALTER TABLE adt_applications ADD COLUMN status TEXT DEFAULT 'submitted'");
+    db.exec("UPDATE adt_applications SET status = CASE WHEN stage = 'completed' THEN 'installed' ELSE 'submitted' END WHERE status IS NULL");
+  }
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3477,8 +3481,17 @@ export function scheduleAdtApplication(adtId, { date, window } = {}) {
 export function completeAdtApplication(adtId) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;
-  db.prepare(`UPDATE adt_applications SET stage = 'completed', completed_at = datetime('now','localtime'),
+  db.prepare(`UPDATE adt_applications SET stage = 'completed', status = 'installed', completed_at = datetime('now','localtime'),
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`).run(String(adtId));
+  return getAdtApplication(adtId);
+}
+// Set the credit/approval status. installed is set automatically on completion (above).
+export const ADT_STATUSES = ["submitted", "in_review", "approved", "declined", "installed"];
+export function setAdtStatus(adtId, status) {
+  const cur = getAdtApplication(adtId);
+  if (!cur || !ADT_STATUSES.includes(status)) return null;
+  db.prepare("UPDATE adt_applications SET status = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
+    .run(status, String(adtId));
   return getAdtApplication(adtId);
 }
 // Persist the internal ADT Tool deal state (equipment cart, tier, credit, rep). Autosaved from the widget.
