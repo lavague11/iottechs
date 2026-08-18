@@ -46,7 +46,7 @@ function firstName(name) { return (name||"").trim().split(/\s+/)[0]||""; }
 const SERVICES = [
   "Security Cameras / CCTV","Commercial Audio","Networking & Cat6",
   "Toast / POS Cabling","Access Control / Door Entry","NVR & Storage",
-  "Emergency Monitoring","AI Camera Development","LPR & Automation","Other",
+  "ADT Monitoring","AI Camera Development","LPR & Automation","Other",
 ];
 
 function toTitleCase(v) {
@@ -768,7 +768,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
               </button>
               <Link href="/adt" className="cp-action cp-a-slate">
                 <span className="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
-                <h3>24/7 Monitoring</h3>
+                <h3>ADT Monitoring</h3>
               </Link>
             </div>
           </div>

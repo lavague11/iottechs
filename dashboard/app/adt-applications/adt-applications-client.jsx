@@ -36,7 +36,7 @@ export default function AdtApplicationsClient({ user, alerts, apps }) {
     <AdminShell user={user} alerts={alerts} active="adt">
       <div className="apx-wrap">
         <div className="page-head">
-          <h1>24/7 Monitoring</h1>
+          <h1>ADT Monitoring</h1>
           <div className="ph-sub">ADT applications · {counts.applied} new · {counts.scheduled} scheduled</div>
         </div>
 
