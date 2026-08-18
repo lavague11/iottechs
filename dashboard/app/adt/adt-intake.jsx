@@ -48,8 +48,8 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const [propertyType, setPropertyType] = useState(ex?.property_type || null);
   const [showTax, setShowTax] = useState(false);
   const [f, setF] = useState(ex
-    ? { name: ex.name || "", contactName: ex.contact_name || "", email: ex.email || "", phone: ex.phone || "", address: ex.address || "", notes: ex.notes || "", taxId: ex.tax_id || "", verbalPassword: ex.verbal_password || "" }
-    : { name: prefill?.name || "", contactName: "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
+    ? { name: ex.name || "", contactFirst: (ex.contact_name || "").trim().split(/\s+/)[0] || "", contactLast: (ex.contact_name || "").trim().split(/\s+/).slice(1).join(" "), email: ex.email || "", phone: ex.phone || "", address: ex.address || "", notes: ex.notes || "", taxId: ex.tax_id || "", verbalPassword: ex.verbal_password || "" }
+    : { name: prefill?.name || "", contactFirst: "", contactLast: "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
   const [emg, setEmg] = useState(ex ? padEmg(ex.emergency) : [{ name: "", phone: "" }, { name: "", phone: "" }]);
   const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
   const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
@@ -99,7 +99,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
     if (!emg.some((c) => c.name.trim() && c.phone.replace(/\D/g, "").length >= 10)) { setErr("Add at least one emergency contact — a name and phone number."); return; }
     if (!f.verbalPassword.trim()) { setErr("Please set a verbal password."); return; }
     startTx(async () => {
-      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, asap, contactName: propertyType === "commercial" ? f.contactName : "", verificationDoc: propertyType === "commercial" ? doc : null };
+      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, asap, contactName: propertyType === "commercial" ? `${f.contactFirst || ""} ${f.contactLast || ""}`.trim() : "", verificationDoc: propertyType === "commercial" ? doc : null };
       const r = onSubmit ? await onSubmit(payload) : await submitAdtApplicationAction(payload);
       if (r?.error) { setErr(r.error); return; }
       if (r?.adtId) router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);   // fresh create → account Deck
@@ -141,7 +141,8 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai-sec-t">Your details</div>
       <div className="ai-grid">
         <label className="ai-fld"><span>{isComm ? "Business name" : "Full name"}</span><input value={f.name} onChange={set("name")} placeholder={isComm ? "Acme Holdings LLC" : "Jane Doe"} autoComplete={isComm ? "organization" : "name"} /></label>
-        {isComm && <label className="ai-fld"><span>Contact name</span><input value={f.contactName} onChange={set("contactName")} placeholder="Who we ask for" autoComplete="name" /></label>}
+        {isComm && <label className="ai-fld"><span>Contact first name</span><input value={f.contactFirst} onChange={set("contactFirst")} placeholder="First" autoComplete="given-name" /></label>}
+        {isComm && <label className="ai-fld"><span>Contact last name</span><input value={f.contactLast} onChange={set("contactLast")} placeholder="Last" autoComplete="family-name" /></label>}
         <label className="ai-fld"><span>Phone</span><input value={f.phone} onChange={set("phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="tel" /></label>
         <label className="ai-fld"><span>Email</span><input value={f.email} onChange={set("email")} placeholder="you@email.com" type="email" autoComplete="email" /></label>
         <label className="ai-fld"><span>{isComm ? "EIN" : "SSN"} <em>· for the ADT account</em></span>
