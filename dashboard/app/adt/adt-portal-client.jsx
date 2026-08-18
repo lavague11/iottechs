@@ -16,7 +16,7 @@ const STEPS = [
 // Map a saved application stage → which step is active (applied = schedule is next up).
 const STAGE_TO_STEP = { applied: 1, scheduled: 2, completed: 2 };
 
-export default function AdtPortalClient({ app }) {
+export default function AdtPortalClient({ app, prefill = null }) {
   const stepIdx = app ? STAGE_TO_STEP[app.stage] ?? 0 : 0;
   return (
     <div className="adt">
@@ -28,7 +28,7 @@ export default function AdtPortalClient({ app }) {
 
       <div className="adt-wrap">
         <Stepper current={stepIdx} appDone={app?.stage === "completed"} />
-        {!app          && <ApplyStep />}
+        {!app          && <ApplyStep prefill={prefill} />}
         {app && app.stage === "applied"   && <ScheduleStep app={app} />}
         {app && app.stage === "scheduled" && <ScheduledView app={app} />}
         {app && app.stage === "completed" && <CompleteView app={app} />}
@@ -55,11 +55,12 @@ function Stepper({ current, appDone }) {
 }
 
 /* ---------------- Step 1 · Apply (intake) ---------------- */
-function ApplyStep() {
+function ApplyStep({ prefill = null }) {
   const router = useRouter();
   const [propertyType, setPropertyType] = useState(null);   // "residential" | "commercial" — the FIRST choice
   const [showTax, setShowTax] = useState(false);            // reveal/hide the SSN/EIN
-  const [f, setF] = useState({ name: "", email: "", phone: "", address: "", notes: "", taxId: "" });
+  // Prefilled from the signed-in customer's record when they arrive from their portal (smart defaults).
+  const [f, setF] = useState({ name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "" });
   const [qty, setQty] = useState({});          // { itemId: n }
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();

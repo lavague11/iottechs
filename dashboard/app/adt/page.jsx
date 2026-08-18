@@ -1,4 +1,6 @@
-import { getAdtApplication } from "../../lib/db";
+import { cookies } from "next/headers";
+import { parseToken } from "../../lib/auth";
+import { getAdtApplication, getUserById, getProjectsByContactEmail } from "../../lib/db";
 import AdtPortalClient from "./adt-portal-client";
 
 export const metadata = { title: "ADT Project Portal · IOT TECHS" };
@@ -13,5 +15,21 @@ export default async function AdtPage({ searchParams }) {
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
   } : null;
-  return <AdtPortalClient app={app} />;
+
+  // Smart-defaults: a logged-in customer arriving from their portal gets the intake prefilled with
+  // what we already know (name · email · phone · their project address). Anonymous visitors → blank.
+  let prefill = null;
+  if (!app) {
+    try {
+      const tok = (await cookies()).get("iot_session")?.value;
+      const session = tok ? await parseToken(tok) : null;
+      if (session?.id) {
+        const u = getUserById(session.id);
+        const projs = session.email ? getProjectsByContactEmail(session.email) : [];
+        prefill = { name: u?.name || "", email: session.email || u?.email || "", phone: u?.phone || "", address: projs[0]?.address || "" };
+      }
+    } catch { /* not signed in → blank form */ }
+  }
+
+  return <AdtPortalClient app={app} prefill={prefill} />;
 }
