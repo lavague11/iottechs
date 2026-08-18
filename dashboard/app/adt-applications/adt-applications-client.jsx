@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useTransition, Fragment } from "react";
+import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import { adtSummary } from "../../lib/adt";
 import { adminScheduleAdtAction, adminCompleteAdtAction } from "./actions";
@@ -76,7 +77,7 @@ export default function AdtApplicationsClient({ user, alerts, apps }) {
                         <td className="r">{sum.count}</td>
                         <td><span className={`spill ${st.pill}`}>{st.label}</span></td>
                         <td>{a.schedule_date ? <span className="adta-sched">{fmtDay(a.schedule_date)}{a.schedule_window ? <em>{a.schedule_window}</em> : null}</span> : <span className="adta-muted">—</span>}</td>
-                        <td className="r"><span className="adta-chev">{isOpen ? "▲" : "▼"}</span></td>
+                        <td className="r"><Link href={`/adt-applications/${a.adt_id}`} className="adta-open" onClick={(e) => e.stopPropagation()}>Open →</Link><span className="adta-chev">{isOpen ? "▲" : "▼"}</span></td>
                       </tr>
                       {isOpen && (
                         <tr className="adta-detail-row">
@@ -200,7 +201,9 @@ const CSS = `
 .apx .adta-muted{color:var(--muted)}
 .apx .adta-sched{font-weight:700;color:var(--ink);font-size:.84rem;display:flex;flex-direction:column}
 .apx .adta-sched em{font-style:normal;font-size:.7rem;color:var(--muted);font-weight:500}
-.apx .adta-chev{color:var(--muted);font-size:.7rem}
+.apx .adta-chev{color:var(--muted);font-size:.7rem;margin-left:8px}
+.apx .adta-open{font-size:.76rem;font-weight:800;color:#8a6d2f;text-decoration:none;white-space:nowrap}
+.apx .adta-open:hover{text-decoration:underline}
 .apx .spill.st-new{background:#f8f0e0;color:#a8894e}
 .apx .spill.st-sched{background:#eef1f8;color:#3a4a72}
 .apx .spill.st-done{background:var(--green-soft);color:var(--green)}
