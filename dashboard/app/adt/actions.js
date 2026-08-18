@@ -1,7 +1,21 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { createAdtApplication, acceptAdtDeal, getAdtApplication } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
+import { makeAccessToken, accessTtlFor } from "../../lib/auth";
+
+// Unlock an ADT account with its access PIN (last 4 of the phone) — mirrors the project PIN gate.
+// Mints the same iot_access grant so the customer survives reloads/navigation.
+export async function unlockAdtAction(adtId, pin) {
+  const app = getAdtApplication(adtId);
+  if (!app) return { error: "Application not found." };
+  const clean = String(pin || "").replace(/\D/g, "");
+  if (!app.access_pin || clean !== String(app.access_pin)) return { error: "That PIN doesn't match." };
+  const jar = await cookies();
+  jar.set("iot_access", await makeAccessToken(app.adt_id, "customer"), { httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.ceil(accessTtlFor("customer") / 1000) });
+  return { ok: true };
+}
 
 // Apply — create the ADT application from the intake form (all info gathered here).
 export async function submitAdtApplicationAction(form) {
