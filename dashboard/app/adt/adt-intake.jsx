@@ -15,7 +15,7 @@ const WINS = [{ key: "Morning", sub: "8am–12pm" }, { key: "Afternoon", sub: "1
 
 const PANELS = ["panel5", "panel7"];   // one control panel only — mutually exclusive, max 1 each
 const LOCKED = { lte: 1 };             // always present at a fixed qty, can't be changed
-const AUTO = { panel5: 1, lte: 1 };    // preselected on a fresh application
+const AUTO = { panel5: 1, lte: 1, contact: 1, glass: 1, motion: 1 };    // preselected starter lineup on a fresh application
 
 // A small placeholder glyph per equipment group — swap for real product photos later.
 const GIC = {

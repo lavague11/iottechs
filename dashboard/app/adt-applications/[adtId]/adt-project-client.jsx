@@ -115,8 +115,15 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const office = ["admin", "manager"].includes(user?.role);   // edit is office-only
   const [editing, setEditing] = useState(false);
   const [docsNote, setDocsNote] = useState(app.docs_note || "");
+  const [docsSaved, setDocsSaved] = useState(false);
   const saveEdit = async (payload) => { const r = await updateAdtApplicationAction(app.adt_id, payload); if (r?.ok) setEditing(false); return r; };
-  const saveDocsNote = () => startTx(async () => { await setAdtDocsNoteAction(app.adt_id, docsNote); router.refresh(); });
+  const saveDocsNote = () => startTx(async () => {
+    setErr("");
+    const r = await setAdtDocsNoteAction(app.adt_id, docsNote);
+    if (r?.error) { setErr(r.error); return; }
+    setDocsSaved(true); setTimeout(() => setDocsSaved(false), 1800);
+    router.refresh();
+  });
 
   const applyNode = editing ? (
     <div className="adtp">
@@ -139,7 +146,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
         <div className="adtp-docs">
           <span className="adtp-sub" style={{ margin: 0 }}>Which documents does the customer need to provide?</span>
           <textarea className="adtp-docs-in" rows={2} value={docsNote} onChange={(e) => setDocsNote(e.target.value)} placeholder="e.g. Articles of formation, EIN letter, proof of business address…" />
-          <button type="button" className="adtp-chip" disabled={pending} onClick={saveDocsNote}>Save request</button>
+          <button type="button" className="adtp-chip" disabled={pending} onClick={saveDocsNote}>{docsSaved ? "Saved" : "Save request"}</button>
+          {err && <span className="adtp-docs-err">{err}</span>}
         </div>
       )}
       <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
@@ -309,6 +317,7 @@ const CSS = `
 .adtp-docs{margin-bottom:14px;padding:12px 13px;border:1px solid #f0d9bf;background:#fdf6ec;border-radius:11px;display:flex;flex-direction:column;gap:9px;align-items:flex-start}
 .adtp-docs-in{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 11px;font-size:.86rem;font-family:inherit;resize:vertical;outline:none;background:#fff;color:var(--dv-ink,#101418)}
 .adtp-docs-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.adtp-docs-err{font-size:.78rem;color:#c0392b;font-weight:600}
 .adtp-foot{display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adtp-foot span{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .adtp-foot b{font-size:1.15rem;font-weight:800;color:var(--dv-ink,#101418)}
