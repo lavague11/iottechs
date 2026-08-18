@@ -328,7 +328,7 @@ function ApplyStep({ prefill = null }) {
                   <div key={it.id} className={`adt-item${n ? " picked" : ""}`}>
                     <div className="adt-item-main">
                       <span className="adt-item-name">{it.name}</span>
-                      <span className="adt-item-pts">{it.points === 0 ? "0 pts" : `${it.points} pt${it.points === 1 ? "" : "s"}`}</span>
+                      <span className="adt-item-pts">{[it.price ? `$${it.price.toLocaleString()}` : null, it.points ? `${it.points} pt${it.points === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || "Included"}</span>
                     </div>
                     <div className="adt-step-ctrl">
                       <button type="button" className="adt-qbtn" onClick={() => bump(it.id, -1)} disabled={!n} aria-label={`Remove ${it.name}`}>−</button>
@@ -382,8 +382,8 @@ function ApplyStep({ prefill = null }) {
 
       <div className="adt-bar">
         <div className="adt-bar-sum">
-          <div className="adt-bar-pts">{summary.points} <span>pts</span></div>
-          <div className="adt-bar-sub">{summary.count} item{summary.count === 1 ? "" : "s"} selected</div>
+          <div className="adt-bar-pts">${summary.price.toLocaleString()} <span>est.</span></div>
+          <div className="adt-bar-sub">{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
         </div>
         <button type="submit" className="adt-go" disabled={pending}>{pending ? "Submitting…" : "Submit application →"}</button>
       </div>
@@ -407,13 +407,13 @@ function PointsRecap({ app }) {
   if (!summary.lines.length) return null;
   return (
     <div className="adt-recap">
-      <div className="adt-recap-hd"><span>Your equipment</span><span className="adt-recap-pts">{summary.points} pts</span></div>
+      <div className="adt-recap-hd"><span>Your equipment</span><span className="adt-recap-pts">${summary.price.toLocaleString()} · {summary.points} pts</span></div>
       <div className="adt-recap-list">
         {summary.lines.map((l) => (
           <div key={l.id} className="adt-recap-row">
             <span className="adt-recap-q">{l.qty}×</span>
             <span className="adt-recap-n">{l.name}</span>
-            <span className="adt-recap-p">{l.linePoints || 0} pts</span>
+            <span className="adt-recap-p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : ""}{l.linePrice && l.linePoints ? " · " : ""}{l.linePoints ? `${l.linePoints} pts` : (l.linePrice ? "" : "0 pts")}</span>
           </div>
         ))}
       </div>
@@ -453,7 +453,7 @@ const CSS = `
 @media(max-width:560px){.adt-ptype{grid-template-columns:1fr}}
 .adt-sec{margin-top:22px}
 .adt-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8578;margin-bottom:12px}
-.adt-secnote{font-size:.76rem;color:#9aa1af;margin:-6px 0 12px;line-height:1.45}
+.adt-secnote{font-size:.76rem;color:#9aa1af;margin:7px 0 12px;line-height:1.45}
 .adt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
 .adt-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .adt-fld.full{grid-column:1/-1}

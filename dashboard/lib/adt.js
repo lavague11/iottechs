@@ -1,47 +1,48 @@
-// ADT project catalog — the equipment a customer can request, each carrying an ADT "point" value
-// (ADT's equipment-allowance model). The intake form (Apply step of the ADT portal) totals points
-// as the customer picks quantities. Points are the only value shown to the customer; pricing/plan
-// allowances can be layered on later. Grouped for a clean picker. Source: owner-provided list.
+// ADT project catalog — the equipment a customer can request. Each item carries an ADT "point"
+// value (ADT's equipment-allowance model) AND a retail `price` shown on the intake. Prices are
+// pulled from the ADT Tool commission catalog where the item matches; a few (marked ~) are best-fit
+// estimates — verify: 2GIG GC2 panel, Eero mesh, Nest Hub Max, Emergency Pendant, Google fee, LTE radio.
+// The intake totals both points and price; the internal margin/credit math lives in the Quote stage.
 export const ADT_GROUPS = [
   {
     key: "panels",
     label: "Panels & Connectivity",
     items: [
-      { id: "panel5",     name: "5in Control Panel",                              points: 0 },
-      { id: "panel7",     name: "7in Control Panel",                              points: 0 },
-      { id: "touch7",     name: "Secondary Touchscreen — Command 7in",            points: 4 },
-      { id: "touchpad",   name: "ADT Command — Wireless Touchpad (WLTP100)",      points: 2.5 },
-      { id: "lte",        name: "LTE Cell Radio — Verizon",                       points: 0 },
-      { id: "eero",       name: "ADT Control — Eero 6+ Dual-Band Wi-Fi Mesh",     points: 0 },
-      { id: "gc2",        name: "2GIG Control Panel GC2",                         points: 0 },
-      { id: "translator", name: "Wireless Translator",                           points: 2.5 },
+      { id: "panel5",     name: "5in Control Panel",                              points: 0,   price: 450 },
+      { id: "panel7",     name: "7in Control Panel",                              points: 0,   price: 550 },
+      { id: "touch7",     name: "Secondary Touchscreen — Command 7in",            points: 4,   price: 349 },
+      { id: "touchpad",   name: "ADT Command — Wireless Touchpad (WLTP100)",      points: 2.5, price: 249 },
+      { id: "lte",        name: "LTE Cell Radio — Verizon",                       points: 0,   price: 0 },
+      { id: "eero",       name: "ADT Control — Eero 6+ Dual-Band Wi-Fi Mesh",     points: 0,   price: 199 },
+      { id: "gc2",        name: "2GIG Control Panel GC2",                         points: 0,   price: 240 },
+      { id: "translator", name: "Wireless Translator",                           points: 2.5, price: 99 },
     ],
   },
   {
     key: "sensors",
     label: "Intrusion Sensors",
     items: [
-      { id: "contact", name: "Door / Window Contact",              points: 1 },
-      { id: "motion",  name: "ADT Command — Wireless Motion Detector", points: 2 },
-      { id: "glass",   name: "Glass Break Detector",               points: 2 },
-      { id: "shock",   name: "Shock Sensor",                       points: 2 },
+      { id: "contact", name: "Door / Window Contact",              points: 1, price: 159 },
+      { id: "motion",  name: "ADT Command — Wireless Motion Detector", points: 2, price: 299 },
+      { id: "glass",   name: "Glass Break Detector",               points: 2, price: 299 },
+      { id: "shock",   name: "Shock Sensor",                       points: 2, price: 199 },
     ],
   },
   {
     key: "safety",
     label: "Life Safety",
     items: [
-      { id: "smoke", name: "Smoke Detector", points: 2 },
+      { id: "smoke", name: "Smoke Detector", points: 2, price: 299 },
     ],
   },
   {
     key: "video",
     label: "Cameras & Video",
     items: [
-      { id: "doorbell",  name: "Google Doorbell Camera",             points: 6 },
-      { id: "camIn",     name: "ADT Google — Nest Indoor Camera",    points: 6 },
-      { id: "camOut",    name: "ADT Google — Nest Outdoor Camera (Wired)", points: 6 },
-      { id: "hubMax",    name: "ADT Google — Nest Hub Max Display",  points: 6, scope: "residential" },
+      { id: "doorbell",  name: "Google Doorbell Camera",             points: 6, price: 349 },
+      { id: "camIn",     name: "ADT Google — Nest Indoor Camera",    points: 6, price: 299 },
+      { id: "camOut",    name: "ADT Google — Nest Outdoor Camera (Wired)", points: 6, price: 399 },
+      { id: "hubMax",    name: "ADT Google — Nest Hub Max Display",  points: 6, price: 299, scope: "residential" },
     ],
   },
   {
@@ -49,36 +50,36 @@ export const ADT_GROUPS = [
     label: "Smart Home & Automation",
     scope: "residential",   // home automation — hidden for commercial accounts
     items: [
-      { id: "lock",    name: "Smart Door Lock",                    points: 5 },
-      { id: "thermo",  name: "Nest Thermostat",                    points: 5 },
-      { id: "garage",  name: "Garage Door Controller",             points: 5 },
-      { id: "lamp",    name: "ADT Control — Versa Lamp Module (Z-Wave)", points: 2 },
-      { id: "googleFee", name: "Google Integration Fee",           points: 0 },
+      { id: "lock",    name: "Smart Door Lock",                    points: 5, price: 349 },
+      { id: "thermo",  name: "Nest Thermostat",                    points: 5, price: 349 },
+      { id: "garage",  name: "Garage Door Controller",             points: 5, price: 349 },
+      { id: "lamp",    name: "ADT Control — Versa Lamp Module (Z-Wave)", points: 2, price: 129 },
+      { id: "googleFee", name: "Google Integration Fee",           points: 0, price: 0 },
     ],
   },
   {
     key: "access",
     label: "Access & Panic",
     items: [
-      { id: "keyfob",  name: "Keyfob",            points: 1 },
-      { id: "pendant", name: "Emergency Pendant", points: 1 },
+      { id: "keyfob",  name: "Keyfob",            points: 1, price: 159 },
+      { id: "pendant", name: "Emergency Pendant", points: 1, price: 159 },
     ],
   },
   {
     key: "misc",
     label: "Misc",
     items: [
-      { id: "yardSign", name: "ADT Yard Sign", points: 0 },
+      { id: "yardSign", name: "ADT Yard Sign", points: 0, price: 0 },
     ],
   },
   {
     key: "existing",
     label: "Existing Equipment (takeover — 0 pts)",
     items: [
-      { id: "exAuto",    name: "Existing Automation",           points: 0 },
-      { id: "exContact", name: "Existing Door / Window Contact", points: 0 },
-      { id: "exGlass",   name: "Existing Glassbreak Detector",  points: 0 },
-      { id: "exMotion",  name: "Existing Motion",               points: 0 },
+      { id: "exAuto",    name: "Existing Automation",           points: 0, price: 0 },
+      { id: "exContact", name: "Existing Door / Window Contact", points: 0, price: 0 },
+      { id: "exGlass",   name: "Existing Glassbreak Detector",  points: 0, price: 0 },
+      { id: "exMotion",  name: "Existing Motion",               points: 0, price: 0 },
     ],
   },
 ];
@@ -101,20 +102,22 @@ export function adtGroupsFor(propertyType) {
     .filter((g) => g.items.length);
 }
 
-// selection = { [itemId]: qty }. Returns total points (rounded to 1 decimal) + the picked lines.
+// selection = { [itemId]: qty }. Returns total points + total price (retail) + the picked lines.
 export function adtSummary(selection = {}) {
   const lines = [];
-  let points = 0;
+  let points = 0, price = 0;
   for (const [id, qty] of Object.entries(selection)) {
     const n = Math.max(0, Math.floor(+qty || 0));
     if (!n) continue;
     const it = ADT_ITEMS[id];
     if (!it) continue;
     const linePts = it.points * n;
+    const linePrice = (it.price || 0) * n;
     points += linePts;
-    lines.push({ id, name: it.name, qty: n, points: it.points, linePoints: Math.round(linePts * 10) / 10 });
+    price += linePrice;
+    lines.push({ id, name: it.name, qty: n, points: it.points, price: it.price || 0, linePoints: Math.round(linePts * 10) / 10, linePrice });
   }
-  return { points: Math.round(points * 10) / 10, count: lines.reduce((s, l) => s + l.qty, 0), lines };
+  return { points: Math.round(points * 10) / 10, price, count: lines.reduce((s, l) => s + l.qty, 0), lines };
 }
 
 // Reduce a full ADT Tool deal (deal_json) to the ONLY fields safe to send a customer's browser.

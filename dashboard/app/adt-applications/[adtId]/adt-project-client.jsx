@@ -94,11 +94,11 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const applyNode = (
     <div style={pad} className="adtp">
-      <div className="adtp-badge">{isComm ? "Commercial" : "Residential"} · {app.points || 0} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
+      <div className="adtp-badge">{isComm ? "Commercial" : "Residential"} · ${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
       {summary.lines.length === 0 ? <div className="adtp-muted">No equipment on file.</div> : (
         <div className="adtp-list">
           {summary.lines.map((l) => (
-            <div key={l.id} className="adtp-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePoints || 0} pts</span></div>
+            <div key={l.id} className="adtp-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : ""}{l.linePrice && l.linePoints ? " · " : ""}{l.linePoints ? `${l.linePoints} pts` : (l.linePrice ? "" : "0 pts")}</span></div>
           ))}
         </div>
       )}
