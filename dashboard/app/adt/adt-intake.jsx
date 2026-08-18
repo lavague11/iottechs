@@ -8,10 +8,26 @@ import { submitAdtApplicationAction } from "./actions";
 
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const WEEKENDS = ["Sat", "Sun"];
 const WINS = [{ key: "Morning", sub: "8am–12pm" }, { key: "Afternoon", sub: "12pm–4pm" }, { key: "Evening", sub: "4pm–7pm" }];
+
+const PANELS = ["panel5", "panel7"];   // one control panel only — mutually exclusive, max 1 each
+const LOCKED = { lte: 1 };             // always present at a fixed qty, can't be changed
+const AUTO = { panel5: 1, lte: 1 };    // preselected on a fresh application
+
+// A small placeholder glyph per equipment group — swap for real product photos later.
+const GIC = {
+  panels:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>,
+  sensors:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2"/><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4"/></svg>,
+  safety:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c1 4 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 .5 2 2 2 3 3z"/></svg>,
+  video:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>,
+  automation: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>,
+  access:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15M18 5l2 2M15 8l2 2"/></svg>,
+  misc:       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="m3.3 7 8.7 5 8.7-5"/></svg>,
+  existing:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>,
+};
 
 // The ADT intake — rebuilt in the Deck (vault) theme so it lives natively on the project page as the
 // Apply stage. Residential/Commercial gate → full application → submit creates the record.
@@ -21,16 +37,25 @@ export default function AdtIntake({ prefill = null }) {
   const [showTax, setShowTax] = useState(false);
   const [f, setF] = useState({ name: prefill?.name || "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
   const [emg, setEmg] = useState([{ name: "", phone: "" }, { name: "", phone: "" }]);
-  const [qty, setQty] = useState({});
-  const [days, setDays] = useState([]);
+  const [qty, setQty] = useState({ ...AUTO });   // 5in panel + LTE radio preselected
+  const [days, setDays] = useState([...DAYS]);   // "Any day" preselected
   const [wins, setWins] = useState([]);
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const ec = (i, field) => (e) => { const v = field === "name" ? titleCase(e.target.value) : fmtPhone(e.target.value); setEmg((prev) => prev.map((c, x) => (x === i ? { ...c, [field]: v } : c))); };
-  const bump = (id, d) => setQty((q) => { const n = Math.max(0, (q[id] || 0) + d); const nx = { ...q }; if (n) nx[id] = n; else delete nx[id]; return nx; });
-  const setN = (id, v) => setQty((q) => { const n = Math.max(0, Math.floor(+v || 0)); const nx = { ...q }; if (n) nx[id] = n; else delete nx[id]; return nx; });
+  // One panel only (5in ↔ 7in exclusive, max 1); LTE is locked at its fixed qty.
+  const applyQty = (id, next) => setQty((q) => {
+    if (id in LOCKED) return q;
+    const nx = { ...q };
+    let n = Math.max(0, Math.floor(next(q[id] || 0)));
+    if (PANELS.includes(id)) { n = Math.min(1, n); if (n > 0) PANELS.forEach((pid) => { if (pid !== id) delete nx[pid]; }); }
+    if (n) nx[id] = n; else delete nx[id];
+    return nx;
+  });
+  const bump = (id, d) => applyQty(id, (cur) => cur + d);
+  const setN = (id, v) => applyQty(id, () => +v || 0);
   const dtoggle = (v) => setDays((d) => d.includes(v) ? d.filter((x) => x !== v) : [...d, v]);
   const wtoggle = (v) => setWins((w) => w.includes(v) ? w.filter((x) => x !== v) : [...w, v]);
   const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
@@ -101,17 +126,24 @@ export default function AdtIntake({ prefill = null }) {
           <div className="ai-group-t">{g.label}</div>
           {g.items.map((it) => {
             const n = qty[it.id] || 0;
+            const locked = it.id in LOCKED;
+            const capped = PANELS.includes(it.id) && n >= 1;   // panels max 1
             return (
-              <div key={it.id} className={`ai-item${n ? " on" : ""}`}>
+              <div key={it.id} className={`ai-item${n ? " on" : ""}${locked ? " locked" : ""}`}>
+                <span className="ai-ic">{GIC[g.key] || GIC.misc}</span>
                 <div className="ai-item-main">
                   <span className="ai-item-name">{it.name}</span>
                   <span className="ai-item-sub">{[it.price ? `$${it.price.toLocaleString()}` : null, it.points ? `${it.points} pt${it.points === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || "Included"}</span>
                 </div>
-                <div className="ai-step">
-                  <button type="button" onClick={() => bump(it.id, -1)} disabled={!n} aria-label={`Remove ${it.name}`}>−</button>
-                  <input value={n} onChange={(e) => setN(it.id, e.target.value)} inputMode="numeric" />
-                  <button type="button" onClick={() => bump(it.id, 1)} aria-label={`Add ${it.name}`}>+</button>
-                </div>
+                {locked
+                  ? <span className="ai-req">Required · {LOCKED[it.id]}</span>
+                  : (
+                    <div className="ai-step">
+                      <button type="button" onClick={() => bump(it.id, -1)} disabled={!n} aria-label={`Remove ${it.name}`}>−</button>
+                      <input value={n} onChange={(e) => setN(it.id, e.target.value)} inputMode="numeric" />
+                      <button type="button" onClick={() => bump(it.id, 1)} disabled={capped} aria-label={`Add ${it.name}`}>+</button>
+                    </div>
+                  )}
               </div>
             );
           })}
@@ -136,11 +168,12 @@ export default function AdtIntake({ prefill = null }) {
 
       <div className="ai-sec-t">Preferred install times <em>optional</em></div>
       <div className="ai-quick">
+        <button type="button" className={"ai-c" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => dquick(DAYS)}>Any day</button>
         <button type="button" className={"ai-c" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => dquick(WEEKDAYS)}>Weekdays</button>
         <button type="button" className={"ai-c" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => dquick(WEEKENDS)}>Weekends</button>
-        <button type="button" className={"ai-c" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => dquick(DAYS)}>Any day</button>
       </div>
       <div className="ai-days">{DAYS.map((d) => <button type="button" key={d} className={"ai-day" + (days.includes(d) ? " on" : "")} onClick={() => dtoggle(d)}>{d}</button>)}</div>
+      <div className="ai-winlbl">Time window</div>
       <div className="ai-wins">{WINS.map((w) => <button type="button" key={w.key} className={"ai-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => wtoggle(w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}</div>
 
       {err && <div className="ai-err">{err}</div>}
@@ -184,27 +217,38 @@ const CSS = `
 .ai-eye{border:none;background:none;color:var(--meta);padding:0 12px;cursor:pointer;display:grid;place-items:center}
 .ai-group{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
 .ai-group-t{font-size:.72rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--paper);padding:9px 14px;border-bottom:1px solid var(--line)}
-.ai-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid var(--soft)}
+.ai-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--soft);transition:background .12s}
 .ai-item:first-of-type{border-top:none}
+.ai-item:hover{background:#faf8f3}
 .ai-item.on{background:#fbf7ee}
-.ai-item-main{min-width:0}
+.ai-ic{width:34px;height:34px;flex:none;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--gd)}
+.ai-ic svg{width:18px;height:18px}
+.ai-item.on .ai-ic{border-color:var(--g);background:#fff}
+.ai-item-main{flex:1;min-width:0}
 .ai-item-name{display:block;font-size:.9rem;color:var(--ink)}
 .ai-item-sub{display:block;font-size:.74rem;font-weight:700;color:var(--ink);margin-top:1px}
-.ai-step{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none;background:#fff}
-.ai-step button{width:36px;height:36px;border:none;background:#fff;font-size:1.1rem;color:#5b6270;cursor:pointer}
+.ai-req{font-size:.72rem;font-weight:700;color:var(--gd);background:var(--paper);border:1px solid var(--line);border-radius:100px;padding:5px 12px;flex:none;white-space:nowrap}
+.ai-step{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none;background:#fff;transition:border-color .12s,box-shadow .12s}
+.ai-step:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.16)}
+.ai-step button{width:36px;height:36px;border:none;background:#fff;font-size:1.1rem;color:#5b6270;cursor:pointer;transition:background .12s}
+.ai-step button:hover:not(:disabled){background:#faf6ec;color:var(--gd)}
 .ai-step button:disabled{opacity:.4;cursor:default}
 .ai-step input{width:38px;height:36px;border:none;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-family:var(--font-mono),ui-monospace,monospace;font-size:.9rem;background:#fff;outline:none}
 .ai-note{font-size:.78rem;color:var(--meta);margin:8px 0 0;line-height:1.45}
 .ai-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.ai-c{border:1px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer}
-.ai-c:hover{border-color:var(--g)}.ai-c.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-.ai-days{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin-bottom:12px}
-.ai-day{border:1px solid var(--line);background:#fff;color:#5b6270;border-radius:10px;padding:11px 0;font-size:.82rem;font-weight:700;cursor:pointer;text-align:center}
-.ai-day:hover{border-color:var(--g)}.ai-day.on{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;border-color:#C9A96E}
-.ai-wins{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.ai-win{display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid var(--line);background:#fff;color:#5b6270;border-radius:11px;padding:12px 8px;cursor:pointer}
-.ai-win:hover{border-color:var(--g)}.ai-win b{font-size:.88rem;color:var(--ink)}.ai-win span{font-size:.72rem;color:var(--meta)}
-.ai-win.on{background:#fbf7ee;border-color:var(--g)}.ai-win.on b{color:var(--gd)}
+.ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
+.ai-c:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
+.ai-c.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ai-days{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin-bottom:14px}
+.ai-day{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:10px;padding:11px 0;font-size:.82rem;font-weight:700;cursor:pointer;text-align:center;transition:.12s}
+.ai-day:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18);transform:translateY(-1px)}
+.ai-day.on{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;border-color:#C9A96E}
+.ai-winlbl{font-size:.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--meta);margin:0 0 9px}
+.ai-wins{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.ai-win{display:flex;flex-direction:column;gap:2px;align-items:center;border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:12px;padding:13px 8px;cursor:pointer;transition:.12s}
+.ai-win:hover{border-color:var(--g);box-shadow:0 3px 12px rgba(201,169,110,.2);transform:translateY(-1px)}
+.ai-win b{font-size:.9rem;color:var(--ink)}.ai-win span{font-size:.72rem;color:var(--meta)}
+.ai-win.on{background:#fbf7ee;border-color:var(--g);box-shadow:0 0 0 1px var(--g) inset}.ai-win.on b{color:var(--gd)}
 .ai-err{margin-top:14px;font-size:.85rem;color:var(--dv-red,#C4553D);font-weight:600}
 .ai-bar{position:sticky;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:20px;padding:14px 0 4px;background:linear-gradient(180deg,transparent,var(--raise) 30%)}
 .ai-bar-big{font-size:1.4rem;font-weight:800;color:var(--ink);line-height:1}
