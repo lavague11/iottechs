@@ -450,6 +450,7 @@
       if(!dataUrl){ finishBackground(null, skipSave); return; }
       var im=new Image();
       im.onload=function(){
+        sceneAspect=(im.naturalWidth/im.naturalHeight)||1;   // anchor the plate to this photo's shape
         try{
           var MAX=1600, w=im.naturalWidth, h=im.naturalHeight, s=Math.min(1, MAX/Math.max(w,h));
           var cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(w*s)); cv.height=Math.max(1,Math.round(h*s));
@@ -464,9 +465,10 @@
     function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
       var img=document.getElementById("stageImg");
-      if(dataUrl){ img.style.background=""; img.style.backgroundImage="url("+dataUrl+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="contain"; img.style.backgroundPosition="center"; }
+      if(dataUrl){ img.style.background=""; img.style.backgroundImage="url("+dataUrl+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
-      exitBg(true);
+      exitBg(true);           // show the working canvas FIRST…
+      fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor(); renderFloorTabs();   // this background is now this floor's plan
       if(dataUrl && !skipSave) saveToLibrary(dataUrl, curBgSource==="satellite"?"aerial":"floorplan");   // reusable global library (deduped server-side)
@@ -783,13 +785,30 @@
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
-    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="contain"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }   // clear the shorthand FIRST, then set image + force no-repeat/contain (else leftover inline size:auto/repeat tiles it)
+    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
+    // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned
+    // at % of #scene) always anchor to the same spot on the image on every screen (iPhone/iPad/desktop),
+    // and the whole photo shows with blank space AROUND the plate (never inside it → no floating icons,
+    // no tiling, no crop). Recomputed on every bg change, floor switch, and resize.
+    var sceneAspect=null;   // width/height of the current floor's background image
+    function fitScene(){
+      var scene=document.getElementById("scene"), host=document.getElementById("working");
+      if(!scene||!host) return;
+      if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; return; }  // no image → CSS inset:0 (full)
+      if(!sceneAspect){ var im=new Image(); im.onload=function(){ sceneAspect=(im.naturalWidth/im.naturalHeight)||1; fitScene(); }; im.onerror=function(){ sceneAspect=1; fitScene(); }; im.src=bgData; return; }
+      var cw=host.clientWidth, ch=host.clientHeight; if(!cw||!ch) return;
+      var w,h; if(cw/ch>sceneAspect){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
+      scene.style.right="auto"; scene.style.bottom="auto";
+      scene.style.left=Math.round((cw-w)/2)+"px"; scene.style.top=Math.round((ch-h)/2)+"px";
+      scene.style.width=w+"px"; scene.style.height=h+"px";
+    }
+    window.addEventListener("resize", fitScene);
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null;
+      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
-      if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); }
+      if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
     }
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
