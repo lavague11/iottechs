@@ -145,7 +145,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
             </button>
           </div>
         </label>
-        <label className="ai-fld full"><span>Install address</span><AddressAutocomplete value={f.address} onChange={(addr) => setF((p) => ({ ...p, address: addr }))} placeholder="Start typing an address…" autoComplete="off" /></label>
+        <label className="ai-fld full"><span>Install address</span><AddressAutocomplete types={[]} value={f.address} onChange={(addr) => setF((p) => ({ ...p, address: addr }))} placeholder="Start typing an address or business…" autoComplete="off" /></label>
       </div>
 
       {isComm && (<>
@@ -179,12 +179,15 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
             <div className="ai-best-row">
               {picks.map((it) => {
                 const n = qty[it.id] || 0;
+                const sub = [it.price ? `$${it.price.toLocaleString()}` : null, it.points ? `${it.points} pt${it.points === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || "Included";
                 return (
                   <button type="button" key={it.id} className={`ai-bchip${n ? " on" : ""}`} onClick={() => bump(it.id, 1)}>
-                    <span className="ai-bchip-ic">{GIC[it.gkey] || GIC.misc}</span>
-                    <span className="ai-bchip-n">{it.name}</span>
-                    {it.price ? <span className="ai-bchip-p">${it.price.toLocaleString()}</span> : null}
-                    {n > 0 && <span className="ai-bchip-q">{n}</span>}
+                    <span className="ai-ic">{GIC[it.gkey] || GIC.misc}</span>
+                    <span className="ai-bchip-main">
+                      <span className="ai-item-name">{it.name}</span>
+                      <span className="ai-item-sub">{sub}</span>
+                    </span>
+                    {n > 0 ? <span className="ai-bchip-q">{n}</span> : <span className="ai-bchip-add">+</span>}
                   </button>
                 );
               })}
@@ -247,6 +250,19 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai-days">{DAYS.map((d) => <button type="button" key={d} className={"ai-day" + (days.includes(d) ? " on" : "")} onClick={() => dtoggle(d)}>{d}</button>)}</div>
       <div className="ai-winlbl">Time window</div>
       <div className="ai-wins">{WINS.map((w) => <button type="button" key={w.key} className={"ai-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => wtoggle(w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}</div>
+
+      {summary.lines.length > 0 && (
+        <div className="ai-cart">
+          <div className="ai-cart-t">Your order <em>· {summary.count} item{summary.count === 1 ? "" : "s"} · {summary.points} pt{summary.points === 1 ? "" : "s"}</em></div>
+          {summary.lines.map((l) => (
+            <div className="ai-cart-row" key={l.id}>
+              <span className="ai-cart-q">{l.qty}×</span>
+              <span className="ai-cart-n">{l.name}</span>
+              <span className="ai-cart-p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : "Included"}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {err && <div className="ai-err">{err}</div>}
       <div className="ai-bar">
@@ -314,18 +330,18 @@ const CSS = `
 .ai-step button:hover:not(:disabled){background:#faf6ec;color:var(--gd)}
 .ai-step button:disabled{opacity:.4;cursor:default}
 .ai-step input{width:38px;height:36px;border:none;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-family:var(--font-mono),ui-monospace,monospace;font-size:.9rem;background:#fff;outline:none}
-.ai-best{margin:2px 0 4px}
+.ai-best{margin:2px 0 6px}
 .ai-best-t{font-size:.74rem;font-weight:800;color:var(--ink);margin:0 0 9px}
 .ai-best-t em{font-style:normal;font-weight:600;color:var(--meta)}
-.ai-best-row{display:flex;gap:8px;flex-wrap:wrap}
-.ai-bchip{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--line);background:#fff;border-radius:100px;padding:7px 13px 7px 9px;cursor:pointer;transition:.12s}
-.ai-bchip:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
+.ai-best-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.ai-bchip{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;text-align:left;transition:border-color .12s,box-shadow .12s,background .12s}
+.ai-bchip:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.16)}
 .ai-bchip.on{border-color:var(--g);background:#fbf7ee}
-.ai-bchip-ic{width:22px;height:22px;flex:none;display:grid;place-items:center;color:var(--gd)}
-.ai-bchip-ic svg{width:16px;height:16px}
-.ai-bchip-n{font-size:.82rem;font-weight:700;color:var(--ink)}
-.ai-bchip-p{font-size:.76rem;font-weight:700;color:var(--gd)}
-.ai-bchip-q{min-width:18px;height:18px;padding:0 5px;display:grid;place-items:center;background:var(--ink);color:#fff;border-radius:100px;font-size:.7rem;font-weight:800}
+.ai-bchip.on .ai-ic{border-color:var(--g);background:#fff}
+.ai-bchip-main{flex:1;min-width:0}
+.ai-bchip-add,.ai-bchip-q{flex:none;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;font-weight:800;line-height:1}
+.ai-bchip-add{border:1px solid var(--line);color:var(--gd);background:#fff;font-size:1.05rem}
+.ai-bchip-q{min-width:26px;padding:0 6px;background:var(--ink);color:#fff;font-size:.8rem}
 .ai-note{font-size:.78rem;color:var(--meta);margin:8px 0 0;line-height:1.45}
 .ai-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
@@ -343,6 +359,13 @@ const CSS = `
 .ai-win:hover{border-color:var(--g);box-shadow:0 3px 12px rgba(201,169,110,.2);transform:translateY(-1px)}
 .ai-win b{font-size:.9rem;color:var(--ink)}.ai-win span{font-size:.72rem;color:var(--meta)}
 .ai-win.on{background:#fbf7ee;border-color:var(--g);box-shadow:0 0 0 1px var(--g) inset}.ai-win.on b{color:var(--gd)}
+.ai-cart{margin-top:20px;border:1px solid var(--soft);border-radius:12px;padding:11px 14px;background:#fbfaf7}
+.ai-cart-t{font-size:.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--meta);margin-bottom:6px}
+.ai-cart-t em{font-style:normal;font-weight:700;color:var(--gd);text-transform:none;letter-spacing:0}
+.ai-cart-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--soft)}
+.ai-cart-q{flex:none;font-family:var(--font-mono),ui-monospace,monospace;font-size:.8rem;font-weight:700;color:var(--gd);min-width:24px}
+.ai-cart-n{flex:1;min-width:0;font-size:.86rem;color:var(--ink)}
+.ai-cart-p{flex:none;font-size:.84rem;font-weight:700;color:var(--ink)}
 .ai-err{margin-top:14px;font-size:.85rem;color:var(--dv-red,#C4553D);font-weight:600}
 .ai-bar{position:sticky;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:20px;padding:14px 0 4px;background:linear-gradient(180deg,transparent,var(--raise) 30%)}
 .ai-bar-big{font-size:1.4rem;font-weight:800;color:var(--ink);line-height:1}

@@ -46,13 +46,17 @@ export function loadPlaces() {
 }
 
 // Attach autocomplete to an input. onPlace receives { name, address } for the selected place.
-// types: ["address"] for address fields, ["establishment"] for a business-name field.
-// Returns a cleanup function.
+// types: ["address"] for address fields, ["establishment"] for a business-name field, or an empty
+// array [] for no restriction — Google then returns BOTH street addresses and businesses (use this
+// for an install-address field that may sit at a business). Returns a cleanup function.
 export function attachAutocomplete(input, { types = ["address"], onPlace } = {}) {
   let ac = null, cancelled = false;
   loadPlaces().then((places) => {
     if (cancelled || !input || !places?.Autocomplete) return;
-    ac = new places.Autocomplete(input, { types, fields: ["formatted_address", "name"] });
+    // Google rejects mixing "address" + "establishment"; passing no `types` key returns both.
+    const opts = { fields: ["formatted_address", "name"] };
+    if (Array.isArray(types) && types.length) opts.types = types;
+    ac = new places.Autocomplete(input, opts);
     ac.addListener("place_changed", () => {
       const p = ac.getPlace();
       if (p) onPlace?.({ name: p.name || "", address: p.formatted_address || "" });
