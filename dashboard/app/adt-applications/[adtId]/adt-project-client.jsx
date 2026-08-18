@@ -182,10 +182,12 @@ export default function AdtProjectClient({ user, alerts, app }) {
           ))}
         </div>
       )}
-      {(prefDays.length || prefWins.length) ? (
+      {(prefDays.length || prefWins.length || app.asap) ? (
         <div className="adtp-pref">
           <span>Preferred install times</span>
-          {prefDays.length ? <b>{prefDays.join(", ")}</b> : <b>Any day</b>}
+          {app.asap ? <b className="adtp-asap">ASAP</b> : null}
+          {app.asap && (prefDays.length || prefWins.length) ? " · " : null}
+          {prefDays.length ? <b>{prefDays.join(", ")}</b> : (app.asap ? null : <b>Any day</b>)}
           {prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
         </div>
       ) : null}
@@ -329,6 +331,7 @@ const CSS = `
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}
+.adtp-pref .adtp-asap{color:var(--dv-gold-deep,#9A7B43)}
 .adtp-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtp-pref b{color:var(--dv-gold-deep,#A8842F)}
 .adtp-sub{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 0 8px}

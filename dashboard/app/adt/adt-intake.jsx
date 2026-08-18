@@ -47,6 +47,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
   const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
   const [wins, setWins] = useState(ex ? [...(ex.pref_windows || [])] : []);
+  const [asap, setAsap] = useState(ex ? !!ex.asap : false);                          // standalone "install ASAP" flag
   const [doc, setDoc] = useState(ex?.verification_doc || null);   // commercial business-verification file
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
@@ -82,8 +83,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const rangeToggle = (set) => setDays((d) => set.every((x) => d.includes(x)) ? d.filter((x) => !set.includes(x)) : [...new Set([...d, ...set])]);
   const anyDay = days.length === DAYS.length;
   const toggleAny = () => setDays(anyDay ? [] : [...DAYS]);
-  const asap = anyDay && sameSet(wins, WINKEYS);                                 // ASAP = any day + any time
-  const toggleAsap = () => { if (asap) { setDays([]); setWins([]); } else { setDays([...DAYS]); setWins([...WINKEYS]); } };
+  const toggleAsap = () => setAsap((v) => !v);                                   // standalone flag — never touches the day/window picks
   const summary = useMemo(() => adtSummary(qty), [qty]);
 
   function submit(e) {
@@ -91,7 +91,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
     if (!emg.some((c) => c.name.trim() && c.phone.replace(/\D/g, "").length >= 10)) { setErr("Add at least one emergency contact — a name and phone number."); return; }
     if (!f.verbalPassword.trim()) { setErr("Please set a verbal password."); return; }
     startTx(async () => {
-      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, verificationDoc: propertyType === "commercial" ? doc : null };
+      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, asap, verificationDoc: propertyType === "commercial" ? doc : null };
       const r = onSubmit ? await onSubmit(payload) : await submitAdtApplicationAction(payload);
       if (r?.error) { setErr(r.error); return; }
       if (r?.adtId) router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);   // fresh create → account Deck
@@ -242,10 +242,13 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
 
       <div className="ai-sec-t">Preferred install times</div>
       <div className="ai-quick">
-        <button type="button" className={"ai-c asap" + (asap ? " on" : "")} onClick={toggleAsap}>⚡ ASAP</button>
         <button type="button" className={"ai-c" + (anyDay ? " on" : "")} onClick={toggleAny}>Any day</button>
         <button type="button" className={"ai-c" + (allIn(WEEKDAYS) ? " on" : "")} onClick={() => rangeToggle(WEEKDAYS)}>Weekdays</button>
         <button type="button" className={"ai-c" + (allIn(WEEKENDS) ? " on" : "")} onClick={() => rangeToggle(WEEKENDS)}>Weekends</button>
+        <button type="button" className={"ai-c asap" + (asap ? " on" : "")} onClick={toggleAsap} aria-pressed={asap}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+          ASAP
+        </button>
       </div>
       <div className="ai-days">{DAYS.map((d) => <button type="button" key={d} className={"ai-day" + (days.includes(d) ? " on" : "")} onClick={() => dtoggle(d)}>{d}</button>)}</div>
       <div className="ai-winlbl">Time window</div>
@@ -347,7 +350,8 @@ const CSS = `
 .ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
 .ai-c:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
 .ai-c.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-.ai-c.asap{border-color:var(--g);color:var(--gd)}
+.ai-c.asap{margin-left:auto;display:inline-flex;align-items:center;gap:6px;border-color:var(--g);color:var(--gd)}
+.ai-c.asap svg{display:block}
 .ai-c.asap.on{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;border-color:#C9A96E}
 .ai-days{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin-bottom:14px}
 .ai-day{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:10px;padding:11px 0;font-size:.82rem;font-weight:700;cursor:pointer;text-align:center;transition:.12s}

@@ -48,7 +48,7 @@ export default async function AdtPage({ searchParams }) {
     property_type: rec.property_type || "residential", notes: rec.notes || "",
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
-    pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],
+    pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [], asap: !!rec.asap,
     // The applicant's own record, on their own account — SSN/EIN shown masked to last-4; verbal
     // password is only flagged as on file. Full values live on the staff Deck.
     tax_masked: rec.tax_id ? maskTax(decBlob(rec.tax_id), rec.property_type === "commercial") : "",

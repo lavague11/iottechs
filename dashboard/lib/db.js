@@ -579,6 +579,7 @@ function init() {
   if (!adtCols.includes("verbal_password"))    db.exec("ALTER TABLE adt_applications ADD COLUMN verbal_password TEXT");    // identity-verify passphrase — encrypted (encBlob)
   if (!adtCols.includes("pref_days"))    db.exec("ALTER TABLE adt_applications ADD COLUMN pref_days TEXT");    // JSON ["Mon",…] — customer's preferred install days
   if (!adtCols.includes("pref_windows")) db.exec("ALTER TABLE adt_applications ADD COLUMN pref_windows TEXT"); // JSON ["Morning",…] — preferred time windows
+  if (!adtCols.includes("asap")) db.exec("ALTER TABLE adt_applications ADD COLUMN asap INTEGER DEFAULT 0"); // standalone flag: customer wants the install as soon as possible
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
@@ -3440,7 +3441,7 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, verificationDoc }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, verificationDoc }) {
   const adtId = nextAdtId();
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
@@ -3455,14 +3456,14 @@ export function createAdtApplication({ name, email, phone, address, equipment, p
   const pDays = JSON.stringify(Array.isArray(prefDays) ? prefDays.slice(0, 7) : []);      // preferred install days
   const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []); // preferred windows
   const vdoc = verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null;
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows, verification_doc)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, vdoc);
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows, asap, verification_doc)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, vdoc);
   return getAdtApplication(adtId);
 }
 // Admin edit of a submitted application — same field handling as create (re-encrypt SSN/verbal,
 // recompute the access PIN from the phone). Stage/status/deal are untouched.
-export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, verificationDoc }) {
+export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, verificationDoc }) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
@@ -3481,9 +3482,9 @@ export function updateAdtApplication(adtId, { name, email, phone, address, equip
   const vdoc = verificationDoc === undefined ? cur.verification_doc && JSON.stringify(cur.verification_doc)
              : (verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null);
   db.prepare(`UPDATE adt_applications SET name=?, email=?, phone=?, address=?, equipment=?, points=?, notes=?,
-              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?, verification_doc=?,
+              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?, asap=?, verification_doc=?,
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
-    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, vdoc || null, String(adtId));
+    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, vdoc || null, String(adtId));
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {
@@ -3492,6 +3493,7 @@ export function getAdtApplication(adtId) {
   try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
   try { r.pref_days = JSON.parse(r.pref_days || "[]"); } catch { r.pref_days = []; }
   try { r.pref_windows = JSON.parse(r.pref_windows || "[]"); } catch { r.pref_windows = []; }
+  r.asap = !!r.asap;
   try { r.verification_doc = r.verification_doc ? JSON.parse(r.verification_doc) : null; } catch { r.verification_doc = null; }
   return r;
 }

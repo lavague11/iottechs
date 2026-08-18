@@ -78,8 +78,8 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
   const accepted = !!app.deal_accepted;
-  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
-  const hasPrefs = prefDays.length > 0 || prefWins.length > 0;
+  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [], asap = !!app.asap;
+  const hasPrefs = prefDays.length > 0 || prefWins.length > 0 || asap;
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
   const [idx, setIdx] = useState(done ? 2 : quote ? 1 : 0);
   const [locked, setLocked] = useState(false);
@@ -126,7 +126,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         ) : <div className="adtc-muted">No equipment on file.</div>}
 
         {hasPrefs && (<><div className="adtc-app-sec">Preferred install times</div>
-          <div className="adtc-app-line">{prefDays.join(", ") || "Any day"}{prefWins.length ? ` · ${prefWins.join(", ")}` : ""}</div></>)}
+          <div className="adtc-app-line">{[asap ? "ASAP" : null, prefDays.join(", ") || (asap ? null : "Any day"), prefWins.join(", ") || null].filter(Boolean).join(" · ")}</div></>)}
 
         {emerg.length > 0 && (<><div className="adtc-app-sec">Emergency contacts</div>
           {emerg.map((c, i) => <div key={i} className="adtc-app-line">{c.name}{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}</div>)}</>)}

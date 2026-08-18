@@ -47,6 +47,7 @@ export async function updateAdtApplicationAction(adtId, form) {
     verbalPassword: String(form?.verbalPassword || "").trim(),
     prefDays: Array.isArray(form?.prefDays) ? form.prefDays : [],
     prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
+    asap: !!form?.asap,
     verificationDoc: form?.verificationDoc,   // object=replace · null=remove · undefined=leave as-is
   });
   revalidatePath("/adt-applications");
