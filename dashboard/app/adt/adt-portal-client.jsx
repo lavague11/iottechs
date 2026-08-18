@@ -8,6 +8,7 @@ import AddressAutocomplete from "../components/address-autocomplete";
 import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor, adtStatusMeta } from "../../lib/adt";
 import { submitAdtApplicationAction, acceptAdtQuoteAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
+import AdtIntake from "./adt-intake";
 
 // Customer support line shown on the Complete stage. TODO: replace with the real ADT/IOT TECHS number.
 const SUPPORT_PHONE = "(800) 555-0100";
@@ -22,22 +23,34 @@ const STEPS = [
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 
-export default function AdtPortalClient({ app, prefill = null, quote = null }) {
-  // An existing application renders in the project-builder Deck style (stage rail + tool rows),
-  // matching every other project. A brand-new visitor still gets the light intake form.
-  if (app) return <CustomerDeck app={app} quote={quote} />;
+export default function AdtPortalClient({ app, prefill = null, quote = null, dashboardHref = null }) {
+  // Everything runs on the Deck now — a fresh visitor gets the Apply stage with the intake open;
+  // an existing application advances through Apply → Quote → Complete.
+  if (app) return <CustomerDeck app={app} quote={quote} dashboardHref={dashboardHref} />;
+  return <FreshDeck prefill={prefill} dashboardHref={dashboardHref} />;
+}
+
+// A brand-new visitor: the Deck itself, with the intake living inside the Apply stage (auto-open).
+function FreshDeck({ prefill, dashboardHref }) {
+  const router = useRouter();
+  const [idx, setIdx] = useState(0);
+  const soon = (msg) => <div className="adtc-pad"><div className="adtc-muted">{msg}</div></div>;
+  const stages = [
+    { name: "Apply", pill: "In progress", pct: 0, tint: "gold", turn: "mine", need: "Complete your application",
+      tools: [{ name: "Your application", label: "Fill it out", state: "active", node: <AdtIntake prefill={prefill} /> }] },
+    { name: "Quote", pill: "Pending", pct: 0, tint: "purple",
+      tools: [{ name: "Your quote", label: "After you apply", state: "active", node: soon("Submit your application and your installer will build your quote here.") }] },
+    { name: "Complete", pill: "Pending", pct: 0, tint: "green",
+      tools: [{ name: "Installation", label: "After install", state: "active", node: soon("Your records and next steps appear here once you're set up.") }] },
+  ];
+  const menu = dashboardHref ? [{ label: "My dashboard", onClick: () => router.push(dashboardHref) }] : [];
   return (
-    <div className="adt">
-      <style>{CSS}</style>
-      <header className="adt-top">
-        <Link href="/" className="adt-brand"><Wordmark height={22} /></Link>
-        <span className="adt-tag">ADT Project Portal</span>
-      </header>
-      <div className="adt-wrap">
-        <Stepper current={0} appDone={false} />
-        <ApplyStep prefill={prefill} />
-      </div>
-    </div>
+    <>
+      <DeckView stages={stages} idx={idx} onIdx={setIdx} canAdvance={false} customer={null}
+        statusChip={{ label: "New application", color: "#8a8578" }} roleLabel="ADT Monitoring"
+        logoHref={dashboardHref || "/"} initialOpenTool={{ 0: 0 }} menu={menu} />
+      <style>{CUSTCSS}</style>
+    </>
   );
 }
 
@@ -66,7 +79,7 @@ function AcceptQuote({ app, accepted }) {
 }
 
 // The customer's ADT account on the SAME Deck as a project: Apply → Quote → Complete.
-function CustomerDeck({ app, quote }) {
+function CustomerDeck({ app, quote, dashboardHref = null }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
   const scheduled = !!app.schedule_date;
@@ -156,8 +169,11 @@ function CustomerDeck({ app, quote }) {
         customer={customer}
         statusChip={adtStatusMeta(app.status)}
         roleLabel="ADT Monitoring"
-        logoHref="/"
-        menu={[{ label: "Start another application", onClick: () => router.push("/adt") }]}
+        logoHref={dashboardHref || "/"}
+        menu={[
+          ...(dashboardHref ? [{ label: "My dashboard", onClick: () => router.push(dashboardHref) }] : []),
+          { label: "Start another application", onClick: () => router.push("/adt") },
+        ]}
       />
       <style>{CSS}</style>
       <style>{CUSTCSS}</style>

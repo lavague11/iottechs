@@ -25,10 +25,10 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard", statusChip = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard", statusChip = null, initialOpenTool = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
-  const [openTool, setOpenTool] = useState({});      // { [stageIdx]: toolIdx | null }
+  const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
   const [overlay, setOverlay] = useState(null);      // { i, ti, name } — heavy tools launch full-screen
   const [custOpen, setCustOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);    // role/preview dropdown

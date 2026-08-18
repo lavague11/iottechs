@@ -54,20 +54,20 @@ export default async function AdtPage({ searchParams }) {
     try { quote = custDealFromDeal(JSON.parse(rec.deal_json)); } catch { quote = null; }
   }
 
-  // Smart-defaults: a logged-in customer arriving from their portal gets the intake prefilled with
-  // what we already know (name · email · phone · their project address). Anonymous visitors → blank.
-  let prefill = null;
-  if (!app) {
-    try {
-      const tok = (await cookies()).get("iot_session")?.value;
-      const session = tok ? await parseToken(tok) : null;
-      if (session?.id) {
-        const u = getUserById(session.id);
-        const projs = session.email ? getProjectsByContactEmail(session.email) : [];
-        prefill = { name: u?.name || "", email: session.email || u?.email || "", phone: u?.phone || "", address: projs[0]?.address || "" };
-      }
-    } catch { /* not signed in → blank form */ }
-  }
+  // Session-aware: prefill a fresh intake for a signed-in customer, and route the "My dashboard"
+  // button to the right home (customer → /my-projects, staff → /dashboard, PIN-only → none).
+  let prefill = null, dashboardHref = null;
+  try {
+    const tok = (await cookies()).get("iot_session")?.value;
+    const session = tok ? await parseToken(tok) : null;
+    if (session?.role && ["admin", "manager", "sales", "tech"].includes(session.role)) dashboardHref = "/dashboard";
+    else if (session?.id) dashboardHref = "/my-projects";
+    if (!app && session?.id) {
+      const u = getUserById(session.id);
+      const projs = session.email ? getProjectsByContactEmail(session.email) : [];
+      prefill = { name: u?.name || "", email: session.email || u?.email || "", phone: u?.phone || "", address: projs[0]?.address || "" };
+    }
+  } catch { /* not signed in → blank + no dashboard button */ }
 
-  return <AdtPortalClient app={app} prefill={prefill} quote={quote} />;
+  return <AdtPortalClient app={app} prefill={prefill} quote={quote} dashboardHref={dashboardHref} />;
 }
