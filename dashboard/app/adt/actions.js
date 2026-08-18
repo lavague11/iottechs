@@ -93,6 +93,7 @@ export async function submitAdtApplicationAction(form) {
     prefDays:    Array.isArray(form?.prefDays) ? form.prefDays : [],
     prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
     asap:        !!form?.asap,
+    contactName: String(form?.contactName || "").trim(),
     verificationDoc: form?.verificationDoc && form.verificationDoc.data ? form.verificationDoc : null,
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };

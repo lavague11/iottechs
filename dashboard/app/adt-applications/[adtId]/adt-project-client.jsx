@@ -152,7 +152,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
       )}
       <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
       <div className="adtp-cd">
-        <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>Name</span><b>{app.name || "—"}</b></div></div>
+        <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div></div>
+        {isComm && app.contact_name && <div className="adtp-cd-f"><CopyBtn text={app.contact_name} /><div className="adtp-cd-v"><span>Contact</span><b>{app.contact_name}</b></div></div>}
         <div className="adtp-cd-f"><span className="adtp-copy-sp" /><div className="adtp-cd-v"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div></div>
         {app.phone && <div className="adtp-cd-f"><CopyBtn text={fmtPhone(app.phone)} /><div className="adtp-cd-v"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div></div>}
         {app.email && <div className="adtp-cd-f"><CopyBtn text={app.email} /><div className="adtp-cd-v"><span>Email</span><b>{app.email}</b></div></div>}
@@ -255,6 +256,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
     statusText: isComm ? "Commercial" : "Residential",
     fields: [
       { k: "Property", v: isComm ? "Commercial" : "Residential" },
+      isComm && app.contact_name && { k: "Contact", v: app.contact_name },
       app.address && { k: "Address", v: app.address },
       app.phone && { k: "Phone", v: fmtPhone(app.phone) },
       app.email && { k: "Email", v: app.email },

@@ -106,7 +106,8 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
 
         <div className="adtc-app-sec">Customer details</div>
         <div className="adtc-app-grid">
-          <div className="adtc-app-f"><span>Name</span><b>{app.name || "—"}</b></div>
+          <div className="adtc-app-f"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div>
+          {isComm && app.contact_name && <div className="adtc-app-f"><span>Contact</span><b>{app.contact_name}</b></div>}
           {app.phone && <div className="adtc-app-f"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div>}
           {app.email && <div className="adtc-app-f"><span>Email</span><b>{app.email}</b></div>}
           {app.address && <div className="adtc-app-f full"><span>Install address</span><b>{app.address}</b></div>}

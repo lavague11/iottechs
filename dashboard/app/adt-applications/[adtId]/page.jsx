@@ -19,7 +19,7 @@ export default async function AdtProjectPage({ params }) {
   const a = {
     adt_id: app.adt_id, name: app.name, email: app.email, phone: app.phone, address: app.address,
     equipment: app.equipment || {}, points: app.points, notes: app.notes, stage: app.stage,
-    property_type: app.property_type || "residential",
+    property_type: app.property_type || "residential", contact_name: app.contact_name || "", asap: !!app.asap,
     status: app.status || "submitted", docs_note: app.docs_note || "",
     // Sensitive PII stays with the office — sales never receives SSN/EIN or the verbal password.
     tax_id: office && app.tax_id ? decBlob(app.tax_id) : "",

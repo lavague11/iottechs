@@ -45,7 +45,7 @@ export default async function AdtPage({ searchParams }) {
   const app = rec ? {
     adt_id: rec.adt_id, name: rec.name, address: rec.address, points: rec.points,
     phone: rec.phone || "", email: rec.email || "",
-    property_type: rec.property_type || "residential", notes: rec.notes || "",
+    property_type: rec.property_type || "residential", contact_name: rec.contact_name || "", notes: rec.notes || "",
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
     pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [], asap: !!rec.asap,
