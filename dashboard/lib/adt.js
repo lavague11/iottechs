@@ -89,6 +89,11 @@ export const ADT_ITEMS = Object.fromEntries(
   ADT_GROUPS.flatMap((g) => g.items.map((it) => [it.id, { ...it, group: g.key }]))
 );
 
+// Best-selling add-ons (from the ADT tool) — surfaced as one-tap quick-add chips on the intake so a
+// rep can build the lineup fast. Ordered by how often they're sold; ids not valid for the chosen
+// property type are filtered out at render.
+export const ADT_BEST_SELLERS = ["doorbell", "camOut", "camIn", "lock", "contact", "smoke", "thermo"];
+
 // Equipment groups tailored to the property type. Items/groups carry an optional `scope`
 // ("residential" | "commercial"); anything without one shows for both. Commercial accounts drop the
 // home-automation gear (smart lock, thermostat, garage, lamp modules, hub display); residential keeps

@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AddressAutocomplete from "../components/address-autocomplete";
-import { adtGroupsFor, adtSummary } from "../../lib/adt";
+import { adtGroupsFor, adtSummary, ADT_BEST_SELLERS } from "../../lib/adt";
 import { submitAdtApplicationAction } from "./actions";
 
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -166,6 +166,32 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       </>)}
 
       <div className="ai-sec-t">Choose your equipment</div>
+      {(() => {
+        // Best-sellers from the ADT tool — one-tap quick-add. Only show ids valid for this property type.
+        const groups = adtGroupsFor(propertyType);
+        const lookup = {};
+        groups.forEach((g) => g.items.forEach((it) => { lookup[it.id] = { ...it, gkey: g.key }; }));
+        const picks = ADT_BEST_SELLERS.map((id) => lookup[id]).filter(Boolean);
+        if (!picks.length) return null;
+        return (
+          <div className="ai-best">
+            <div className="ai-best-t">Popular add-ons <em>· tap to add</em></div>
+            <div className="ai-best-row">
+              {picks.map((it) => {
+                const n = qty[it.id] || 0;
+                return (
+                  <button type="button" key={it.id} className={`ai-bchip${n ? " on" : ""}`} onClick={() => bump(it.id, 1)}>
+                    <span className="ai-bchip-ic">{GIC[it.gkey] || GIC.misc}</span>
+                    <span className="ai-bchip-n">{it.name}</span>
+                    {it.price ? <span className="ai-bchip-p">${it.price.toLocaleString()}</span> : null}
+                    {n > 0 && <span className="ai-bchip-q">{n}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
       {adtGroupsFor(propertyType).map((g) => (
         <div key={g.key} className="ai-group">
           <div className="ai-group-t">{g.label}</div>
@@ -288,6 +314,18 @@ const CSS = `
 .ai-step button:hover:not(:disabled){background:#faf6ec;color:var(--gd)}
 .ai-step button:disabled{opacity:.4;cursor:default}
 .ai-step input{width:38px;height:36px;border:none;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-family:var(--font-mono),ui-monospace,monospace;font-size:.9rem;background:#fff;outline:none}
+.ai-best{margin:2px 0 4px}
+.ai-best-t{font-size:.74rem;font-weight:800;color:var(--ink);margin:0 0 9px}
+.ai-best-t em{font-style:normal;font-weight:600;color:var(--meta)}
+.ai-best-row{display:flex;gap:8px;flex-wrap:wrap}
+.ai-bchip{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--line);background:#fff;border-radius:100px;padding:7px 13px 7px 9px;cursor:pointer;transition:.12s}
+.ai-bchip:hover{border-color:var(--g);box-shadow:0 2px 8px rgba(201,169,110,.18)}
+.ai-bchip.on{border-color:var(--g);background:#fbf7ee}
+.ai-bchip-ic{width:22px;height:22px;flex:none;display:grid;place-items:center;color:var(--gd)}
+.ai-bchip-ic svg{width:16px;height:16px}
+.ai-bchip-n{font-size:.82rem;font-weight:700;color:var(--ink)}
+.ai-bchip-p{font-size:.76rem;font-weight:700;color:var(--gd)}
+.ai-bchip-q{min-width:18px;height:18px;padding:0 5px;display:grid;place-items:center;background:var(--ink);color:#fff;border-radius:100px;font-size:.7rem;font-weight:800}
 .ai-note{font-size:.78rem;color:var(--meta);margin:8px 0 0;line-height:1.45}
 .ai-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .ai-c{border:1.5px solid var(--line);background:#fff;color:#5b6270;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;transition:.12s}
