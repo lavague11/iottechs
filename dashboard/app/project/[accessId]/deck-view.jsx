@@ -91,7 +91,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     const w = deckRef.current?.offsetWidth || 1;
     const p = d + drag / w, a = Math.abs(p), hidden = a >= 0.999 && drag === 0;
     return {
-      transform: `translate(-50%,0) translateX(${p * 100}%)`,
+      // NB: left:0 (not left:50% + translate(-50%)) — a full-width slide centered via -50% lands on a
+      // half-pixel (e.g. -704.5px) which, with will-change compositing, renders the text blurry.
+      transform: `translateX(${p * 100}%)`,
       opacity: drag ? 1 : a < 1 ? 1 : 0,
       visibility: hidden ? "hidden" : "visible",
       zIndex: a < 1 ? 10 : 1,
@@ -398,7 +400,7 @@ const CSS = `
 
 .dv-deck{flex:1 1 auto;position:relative;overflow:hidden;touch-action:pan-y;cursor:grab}
 .dv-deck:active{cursor:grabbing}
-.dv-slide{position:absolute;top:0;left:50%;height:100%;width:100%;will-change:transform,opacity}
+.dv-slide{position:absolute;top:0;left:0;height:100%;width:100%;will-change:transform,opacity}
 .dv-pane{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
 .dv-pane-head{padding:26px 30px 18px;display:flex;align-items:flex-start;gap:14px}
