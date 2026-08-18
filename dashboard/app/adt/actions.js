@@ -20,6 +20,7 @@ export async function submitAdtApplicationAction(form) {
     equipment: form?.equipment || {},
     points,
     notes:     String(form?.notes || "").trim(),
+    propertyType: form?.propertyType === "commercial" ? "commercial" : "residential",
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }

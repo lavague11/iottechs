@@ -571,6 +571,9 @@ function init() {
       completed_at  TEXT
     )
   `);
+  // Residential vs commercial — the first choice on the ADT intake (added after launch).
+  const adtCols = db.prepare("PRAGMA table_info(adt_applications)").all().map((c) => c.name);
+  if (!adtCols.includes("property_type")) db.exec("ALTER TABLE adt_applications ADD COLUMN property_type TEXT");   // residential | commercial
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3422,13 +3425,14 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType }) {
   const adtId = nextAdtId();
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin)
-              VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin);
+  const ptype = propertyType === "commercial" ? "commercial" : "residential";
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type)
+              VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype);
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {

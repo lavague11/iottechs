@@ -56,6 +56,7 @@ function Stepper({ current, appDone }) {
 /* ---------------- Step 1 · Apply (intake) ---------------- */
 function ApplyStep() {
   const router = useRouter();
+  const [propertyType, setPropertyType] = useState(null);   // "residential" | "commercial" — the FIRST choice
   const [f, setF] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
   const [qty, setQty] = useState({});          // { itemId: n }
   const [err, setErr] = useState("");
@@ -69,10 +70,34 @@ function ApplyStep() {
   function submit(e) {
     e.preventDefault(); setErr("");
     startTx(async () => {
-      const r = await submitAdtApplicationAction({ ...f, equipment: qty });
+      const r = await submitAdtApplicationAction({ ...f, equipment: qty, propertyType });
       if (r?.error) { setErr(r.error); return; }
       router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);
     });
+  }
+
+  // ── FIRST STEP: residential or commercial. Nothing else shows until they pick. ──
+  if (!propertyType) {
+    return (
+      <div className="adt-card">
+        <div className="adt-h">
+          <h1>What are we protecting?</h1>
+          <p>Pick the kind of property — it tailors the rest of your ADT setup.</p>
+        </div>
+        <div className="adt-ptype">
+          <button type="button" className="adt-ptype-box" onClick={() => setPropertyType("residential")}>
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+            <span className="adt-ptype-t">Residential</span>
+            <span className="adt-ptype-d">Home, apartment, or condo</span>
+          </button>
+          <button type="button" className="adt-ptype-box" onClick={() => setPropertyType("commercial")}>
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M5 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/><path d="M15 21V9h3a1 1 0 0 1 1 1v11"/><path d="M8 8h1M8 12h1M8 16h1M12 8h0M12 12h0M12 16h0"/></svg>
+            <span className="adt-ptype-t">Commercial</span>
+            <span className="adt-ptype-d">Store, office, or warehouse</span>
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -80,6 +105,9 @@ function ApplyStep() {
       <div className="adt-h">
         <h1>Design your ADT system</h1>
         <p>Tell us where you are and pick your equipment — we'll total the points and reach out to schedule your install.</p>
+        <button type="button" className="adt-ptype-chip" onClick={() => setPropertyType(null)}>
+          {propertyType === "commercial" ? "Commercial" : "Residential"} · Change
+        </button>
       </div>
 
       <div className="adt-sec">
@@ -255,6 +283,17 @@ const CSS = `
 .adt-card{background:#fff;border:1px solid #e4e0d8;border-radius:18px;padding:26px 26px 20px;box-shadow:0 20px 50px -30px rgba(14,19,32,.4)}
 .adt-h h1{font-family:'Bricolage Grotesque',sans-serif;font-size:1.55rem;font-weight:800;letter-spacing:-.01em;margin:0 0 6px}
 .adt-h p{font-size:.92rem;color:#6f7686;line-height:1.5;margin:0 0 6px;max-width:56ch}
+/* First step — residential / commercial */
+.adt-ptype{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+.adt-ptype-box{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:30px 18px;border:1px solid #e4e0d8;border-radius:16px;background:#fff;color:#1a2233;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s,transform .1s}
+.adt-ptype-box:hover{border-color:#1a2233;background:#faf8f4}
+.adt-ptype-box:active{transform:translateY(1px)}
+.adt-ptype-box svg{color:#b8923a;margin-bottom:8px}
+.adt-ptype-t{font-size:1.05rem;font-weight:800}
+.adt-ptype-d{font-size:.82rem;color:#6f7686}
+.adt-ptype-chip{margin-top:8px;height:28px;padding:0 12px;border:1px solid #e4e0d8;border-radius:100px;background:#faf8f4;color:#6f7686;font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit}
+.adt-ptype-chip:hover{border-color:#b8923a;color:#8a6d1f}
+@media(max-width:560px){.adt-ptype{grid-template-columns:1fr}}
 .adt-sec{margin-top:22px}
 .adt-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8578;margin-bottom:12px}
 .adt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
