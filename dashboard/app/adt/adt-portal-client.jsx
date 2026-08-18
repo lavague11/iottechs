@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "../components/brand";
+import AddressAutocomplete from "../components/address-autocomplete";
 import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
 import { submitAdtApplicationAction, scheduleAdtAction, completeAdtAction } from "./actions";
 
@@ -57,7 +58,8 @@ function Stepper({ current, appDone }) {
 function ApplyStep() {
   const router = useRouter();
   const [propertyType, setPropertyType] = useState(null);   // "residential" | "commercial" — the FIRST choice
-  const [f, setF] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
+  const [showTax, setShowTax] = useState(false);            // reveal/hide the SSN/EIN
+  const [f, setF] = useState({ name: "", email: "", phone: "", address: "", notes: "", taxId: "" });
   const [qty, setQty] = useState({});          // { itemId: n }
   const [err, setErr] = useState("");
   const [pending, startTx] = useTransition();
@@ -116,7 +118,18 @@ function ApplyStep() {
           <label className="adt-fld"><span>Full name</span><input value={f.name} onChange={set("name")} placeholder="Jane Doe" autoComplete="name" /></label>
           <label className="adt-fld"><span>Phone</span><input value={f.phone} onChange={set("phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="tel" /></label>
           <label className="adt-fld"><span>Email</span><input value={f.email} onChange={set("email")} placeholder="you@email.com" type="email" autoComplete="email" /></label>
-          <label className="adt-fld full"><span>Install address</span><input value={f.address} onChange={set("address")} placeholder="Street, City, State ZIP" autoComplete="street-address" /></label>
+          <label className="adt-fld">
+            <span>{propertyType === "commercial" ? "EIN" : "SSN"} <em>· for the ADT account</em></span>
+            <div className="adt-secret">
+              <input type={showTax ? "text" : "password"} value={f.taxId} onChange={set("taxId")} placeholder={propertyType === "commercial" ? "12-3456789" : "•••-••-••••"} inputMode="numeric" autoComplete="off" />
+              <button type="button" className="adt-secret-eye" onClick={() => setShowTax((s) => !s)} tabIndex={-1} aria-label={showTax ? "Hide" : "Show"}>
+                {showTax
+                  ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>
+                  : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+              </button>
+            </div>
+          </label>
+          <label className="adt-fld full"><span>Install address</span><AddressAutocomplete value={f.address} onChange={(addr) => setF((p) => ({ ...p, address: addr }))} placeholder="Start typing an address…" autoComplete="off" /></label>
         </div>
       </div>
 
@@ -303,6 +316,10 @@ const CSS = `
 .adt-fld em{font-style:normal;color:#9aa1af;font-weight:500}
 .adt-fld input,.adt-fld select,.adt-fld textarea{border:1px solid #d9d4ca;border-radius:9px;background:#faf8f4;color:#0B0F1A;padding:10px 12px;font-size:.92rem;font-family:inherit;outline:none}
 .adt-fld input:focus,.adt-fld select:focus,.adt-fld textarea:focus{border-color:var(--gold,#C9A96E);background:#fff}
+.adt-secret{position:relative;display:flex}
+.adt-secret input{flex:1;width:100%;padding-right:42px}
+.adt-secret-eye{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:none;background:none;color:#9aa1af;cursor:pointer;padding:5px;display:flex;align-items:center;border-radius:6px}
+.adt-secret-eye:hover{color:#5b6275}
 .adt-group{border:1px solid #eee7db;border-radius:12px;overflow:hidden;margin-bottom:10px}
 .adt-group-t{font-size:.78rem;font-weight:800;color:#0B0F1A;background:#faf6ee;padding:9px 14px;border-bottom:1px solid #eee7db}
 .adt-items{display:flex;flex-direction:column}

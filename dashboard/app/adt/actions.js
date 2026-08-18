@@ -21,6 +21,7 @@ export async function submitAdtApplicationAction(form) {
     points,
     notes:     String(form?.notes || "").trim(),
     propertyType: form?.propertyType === "commercial" ? "commercial" : "residential",
+    taxId:     String(form?.taxId || "").trim(),
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }

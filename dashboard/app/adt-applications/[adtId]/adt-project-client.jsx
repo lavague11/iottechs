@@ -8,6 +8,7 @@ import { adtSummary } from "../../../lib/adt";
 import { adminScheduleAdtAction, adminCompleteAdtAction } from "../actions";
 
 const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
+const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (d.length !== 9) return t; return comm ? `${d.slice(0, 2)}-${d.slice(2)}` : `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
 const ORDER = ["applied", "scheduled", "completed"];
 const LBL = { applied: "Applied", scheduled: "Scheduled", completed: "Completed" };
 const PILL = { applied: "st-new", scheduled: "st-sched", completed: "st-done" };
@@ -87,6 +88,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
               {app.email && <a className="adtp-crow lnk" href={`mailto:${app.email}`}>{app.email}</a>}
               {app.address && <a className="adtp-crow lnk" href={`https://maps.google.com/?q=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a>}
               {app.access_pin && <div className="adtp-crow"><span className="adtp-muted">Access PIN</span> <b>{app.access_pin}</b></div>}
+              {app.tax_id && <div className="adtp-crow"><span className="adtp-muted">{isComm ? "EIN" : "SSN"}</span> <b>{fmtTax(app.tax_id, isComm)}</b></div>}
             </div>
 
             {app.stage !== "completed" ? (

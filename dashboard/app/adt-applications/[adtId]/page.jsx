@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAdtApplication } from "../../../lib/db";
+import { getAdtApplication, decBlob } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import AdtProjectClient from "./adt-project-client";
 
@@ -18,6 +18,7 @@ export default async function AdtProjectPage({ params }) {
     adt_id: app.adt_id, name: app.name, email: app.email, phone: app.phone, address: app.address,
     equipment: app.equipment || {}, points: app.points, notes: app.notes, stage: app.stage,
     property_type: app.property_type || "residential",
+    tax_id: app.tax_id ? decBlob(app.tax_id) : "",
     schedule_date: app.schedule_date, schedule_window: app.schedule_window, access_pin: app.access_pin,
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };
