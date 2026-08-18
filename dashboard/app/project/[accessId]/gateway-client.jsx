@@ -1958,7 +1958,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const barWrap = { padding: "10px 14px", borderTop: "1px solid var(--dv-line,#E4E4DF)", flex: "0 0 auto", background: "var(--dv-raise,#FBFBFA)" };
         const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
         const all = [
-          { name: "Survey Scheduling", label: "Scheduler", state: lp.date ? "done" : "active",
+          { name: "Survey Scheduling", label: "Scheduler", state: toolMeta?.schedule?.count > 0 ? "done" : "active",
             node: (
               <div style={{ padding: "16px 18px" }}>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
@@ -1990,21 +1990,24 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) },
         ];
-        // Customers see every consulting tool — nothing is hidden. A survey/mockup with nothing to
-        // review yet renders as a grayed, non-clickable stub (node dropped) instead of disappearing,
-        // per the deck's "gray it, don't hide it" model.
+        // Customers see the consulting tools — a survey/mockup with nothing to review yet renders as
+        // a grayed, non-clickable stub (node dropped) instead of disappearing. The Scheduler is the
+        // one exception the owner asked to fully hide until there's an actual booking to show.
         if (cView === "customer") {
-          return all.map((t) =>
-            ((t.name === "Site Survey" && !svMetaEff.has) || (t.name === "Mockups" && !mkMetaEff.has))
-              ? { ...t, node: null }
-              : t);
+          return all
+            .filter((t) => t.name !== "Survey Scheduling" || toolMeta?.schedule?.count > 0)
+            .map((t) =>
+              ((t.name === "Site Survey" && !svMetaEff.has) || (t.name === "Mockups" && !mkMetaEff.has))
+                ? { ...t, node: null }
+                : t);
         }
         return all;
       }
       if (pk === "ph_proposal") {
         const tools = [];
         if (["admin", "manager", "sales", "customer", "tech"].includes(cView)) {
-          tools.push({ name: "Proposal", label: "Proposal builder", heavy: true, state: "active",
+          tools.push({ name: "Proposal", label: "Proposal builder", heavy: true,
+            state: (proposalAccepted || proposalData?.status === "sent") ? "done" : "active",   // green once submitted or accepted
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {cView === "tech" && <TechProjectBoard project={lp} />}

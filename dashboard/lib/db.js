@@ -4725,11 +4725,17 @@ export function getToolMeta(accessId) {
   const addRow = getToolData(accessId, "addendum");
   let addCount = 0;
   try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).length; } catch { /* bad blob */ }
+  // Scheduled visits (survey + install share this store): drives "Scheduling" step green/open state
+  // and keeps the scheduler hidden from the customer until a real booking exists.
+  const schedRow = getToolData(accessId, "schedule");
+  let schedCount = 0;
+  try { const s = JSON.parse(schedRow?.data || "{}"); schedCount = (Array.isArray(s.events) ? s.events : []).length; } catch { /* bad blob */ }
   return {
     survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data) },
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },
+    schedule: { count: schedCount },
   };
 }
 // The survey stage is satisfied when every tool that HAS data has a current (fingerprint-matching)
