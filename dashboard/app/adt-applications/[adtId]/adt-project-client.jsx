@@ -137,10 +137,12 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const [shared, setShared] = useState(!!app.deal_shared);
   const [shareErr, setShareErr] = useState("");
   const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
+  const accepted = !!app.deal_accepted;
   const shareNode = (
     <div style={pad} className="adtp">
+      {accepted && <div className="adtp-ok">✓ Customer accepted the quote</div>}
       {shared
-        ? <div className="adtp-ok">✓ Shared — the customer sees their quote on the ADT portal</div>
+        ? !accepted && <div className="adtp-ok">✓ Shared — the customer sees their quote on the ADT portal</div>
         : <div className="adtp-muted" style={{ marginBottom: 10 }}>The customer sees no pricing until you share it. They'll get retail, activation, your applied credit, and due-at-install — never cost or commission.</div>}
       {shareErr && <div className="adtp-err">{shareErr}</div>}
       {shared
@@ -157,7 +159,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       turn: done ? "idle" : "mine", need: "Price the deal",
       tools: [
         { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
-        { name: "Customer quote", label: shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
+        { name: "Customer quote", label: accepted ? "Accepted by customer" : shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green",
       turn: done ? "idle" : "mine", need: "Schedule + complete the install",

@@ -581,6 +581,7 @@ function init() {
   if (!adtCols.includes("pref_windows")) db.exec("ALTER TABLE adt_applications ADD COLUMN pref_windows TEXT"); // JSON ["Morning",…] — preferred time windows
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
+  if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3490,12 +3491,23 @@ export function saveAdtDeal(adtId, dealJson) {
   return getAdtApplication(adtId);
 }
 // Share / unshare the quote with the customer. Sharing stamps a time; the customer /adt page only
-// renders the (sanitized) Cust-view pricing once this is set.
+// renders the (sanitized) Cust-view pricing once this is set. Unsharing also clears acceptance.
 export function shareAdtDeal(adtId, on) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;
-  db.prepare(`UPDATE adt_applications SET deal_shared_at = ?, updated_at = datetime('now','localtime')
-              WHERE adt_id = ? COLLATE NOCASE`).run(on ? new Date().toISOString() : null, String(adtId));
+  db.prepare(`UPDATE adt_applications SET deal_shared_at = ?, deal_accepted_at = CASE WHEN ? THEN deal_accepted_at ELSE NULL END,
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
+    .run(on ? new Date().toISOString() : null, on ? 1 : 0, String(adtId));
+  return getAdtApplication(adtId);
+}
+// Customer accepts ("picks up") their shared quote — stamps the acceptance time (idempotent).
+export function acceptAdtDeal(adtId) {
+  const cur = getAdtApplication(adtId);
+  if (!cur || !cur.deal_shared_at) return null;   // can only accept a shared quote
+  if (!cur.deal_accepted_at) {
+    db.prepare(`UPDATE adt_applications SET deal_accepted_at = ?, updated_at = datetime('now','localtime')
+                WHERE adt_id = ? COLLATE NOCASE`).run(new Date().toISOString(), String(adtId));
+  }
   return getAdtApplication(adtId);
 }
 

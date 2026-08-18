@@ -17,6 +17,7 @@ export default async function AdtPage({ searchParams }) {
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
     pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],
+    deal_accepted: !!rec.deal_accepted_at,
   } : null;
 
   // The customer's quote — ONLY once staff shared it, and ALWAYS sanitized (no cost/commission).

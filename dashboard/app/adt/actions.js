@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdtApplication } from "../../lib/db";
+import { createAdtApplication, acceptAdtDeal, getAdtApplication } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 
 // Apply — create the ADT application from the intake form (all info gathered here).
@@ -28,4 +28,13 @@ export async function submitAdtApplicationAction(form) {
     prefWindows: Array.isArray(form?.prefWindows) ? form.prefWindows : [],
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
+}
+
+// Quote — the customer accepts ("picks up") the quote staff shared with them.
+export async function acceptAdtQuoteAction(adtId) {
+  const app = getAdtApplication(adtId);
+  if (!app) return { error: "Application not found." };
+  if (!app.deal_shared_at) return { error: "No quote to accept yet." };
+  acceptAdtDeal(adtId);
+  return { ok: true };
 }
