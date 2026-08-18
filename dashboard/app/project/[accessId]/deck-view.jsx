@@ -25,7 +25,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], logoHref = "/dashboard", statusChip = null, initialOpenTool = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
@@ -109,19 +109,30 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         <a className="dv-logo" href={logoHref} title="IOT TECHS">IOT <em>TECHS</em></a>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
-          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => previewRoles.length && setRoleOpen((o) => !o)}>
+          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>
             {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
             {roleLabel}
-            {previewRoles.length > 0 && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+            {(roleMenu?.length || previewRoles.length > 0 || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
           </button>
-          {roleOpen && previewRoles.length > 0 && (
+          {roleOpen && (roleMenu?.length ? (
             <div className="dv-rolemenu">
-              <button className={!previewRole ? "on" : ""} onClick={() => { onPreviewRole?.(null); setRoleOpen(false); }}>Your view</button>
-              {previewRoles.map((r) => (
-                <button key={r} className={previewRole === r ? "on" : ""} onClick={() => { onPreviewRole?.(r); setRoleOpen(false); }}>Preview as {r}</button>
+              {roleMenu.map((it, i) => (
+                <button key={i} className={it.on ? "on" : ""} onClick={() => { setRoleOpen(false); it.onClick?.(); }}>{it.label}</button>
               ))}
             </div>
-          )}
+          ) : (previewRoles.length > 0 || onLock) && (
+            <div className="dv-rolemenu">
+              {previewRoles.length > 0 && (
+                <>
+                  <button className={!previewRole ? "on" : ""} onClick={() => { onPreviewRole?.(null); setRoleOpen(false); }}>Your view</button>
+                  {previewRoles.map((r) => (
+                    <button key={r} className={previewRole === r ? "on" : ""} onClick={() => { onPreviewRole?.(r); setRoleOpen(false); }}>Preview as {r}</button>
+                  ))}
+                </>
+              )}
+              {onLock && <button className="dv-rolelock" onClick={() => { setRoleOpen(false); onLock(); }}>Lock</button>}
+            </div>
+          ))}
         </div>
       </header>
 
@@ -320,6 +331,7 @@ const CSS = `
 .dv-rolemenu button{text-align:left;padding:8px 11px;border-radius:7px;font-size:13px;font-weight:500;color:var(--dv-ink-soft);text-transform:capitalize}
 .dv-rolemenu button:hover{background:var(--dv-paper)}
 .dv-rolemenu button.on{color:var(--dv-gold-deep);font-weight:600}
+.dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft);font-weight:600}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s}

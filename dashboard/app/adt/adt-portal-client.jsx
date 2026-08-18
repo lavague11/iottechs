@@ -203,9 +203,13 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         customer={customer}
         statusChip={adtStatusMeta(app.status)}
         roleLabel="Customer view"
+        roleMenu={[
+          { label: "Customer view", on: true },
+          { label: "Admin view", onClick: () => setLocked(true) },
+          { label: "Lock", onClick: () => { lockAdtAction(app.adt_id).catch(() => {}); setLocked(true); } },
+        ]}
         logoHref={dashboardHref || "/"}
         menu={[
-          { label: "🔒 Lock", onClick: () => { lockAdtAction(app.adt_id).catch(() => {}); setLocked(true); } },
           ...(dashboardHref ? [{ label: "My dashboard", onClick: () => router.push(dashboardHref) }] : []),
           { label: "Start another application", onClick: () => router.push("/adt") },
         ]}
