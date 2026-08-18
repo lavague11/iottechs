@@ -582,6 +582,7 @@ function init() {
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
+  if (!adtCols.includes("archived")) db.exec("ALTER TABLE adt_applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: hidden from lists, kept for audit
   if (!adtCols.includes("status")) {   // credit/approval lifecycle: submitted → in_review → approved | declined → installed
     db.exec("ALTER TABLE adt_applications ADD COLUMN status TEXT DEFAULT 'submitted'");
     db.exec("UPDATE adt_applications SET status = CASE WHEN stage = 'completed' THEN 'installed' ELSE 'submitted' END WHERE status IS NULL");
@@ -3464,11 +3465,20 @@ export function getAdtApplication(adtId) {
   try { r.pref_windows = JSON.parse(r.pref_windows || "[]"); } catch { r.pref_windows = []; }
   return r;
 }
-export function listAdtApplications() {
-  return db.prepare("SELECT * FROM adt_applications ORDER BY id DESC").all().map((r) => {
+export function listAdtApplications({ includeArchived = false } = {}) {
+  const where = includeArchived ? "" : "WHERE COALESCE(archived, 0) = 0";
+  return db.prepare(`SELECT * FROM adt_applications ${where} ORDER BY id DESC`).all().map((r) => {
     try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
     return r;
   });
+}
+// Soft-delete / restore an ADT application — archived rows drop out of every list but are kept for audit.
+export function archiveAdtApplication(adtId, on = true) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare("UPDATE adt_applications SET archived = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
+    .run(on ? 1 : 0, String(adtId));
+  return getAdtApplication(adtId);
 }
 export function scheduleAdtApplication(adtId, { date, window } = {}) {
   const cur = getAdtApplication(adtId);
