@@ -22,6 +22,7 @@ export default async function AdtProjectPage({ params }) {
     emergency: (() => { try { return JSON.parse(app.emergency_contacts || "[]"); } catch { return []; } })(),
     verbal_password: app.verbal_password ? decBlob(app.verbal_password) : "",
     schedule_date: app.schedule_date, schedule_window: app.schedule_window, access_pin: app.access_pin,
+    pref_days: app.pref_days || [], pref_windows: app.pref_windows || [], deal_json: app.deal_json || "",
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };
   return <AdtProjectClient user={user} alerts={alerts} app={a} />;

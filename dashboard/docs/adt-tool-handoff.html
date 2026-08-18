@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADT Tool — Handoff</title>
+<style>
+:root{--cream:#FAF8F4;--paper:#fff;--band:#F0EDE8;--ink:#0B0F1A;--slate:#2C3347;
+  --gold:#C9A96E;--gold-deep:#A8842F;--line:#DED8CC;--muted:#5F5A50;--green:#1F5138;--red:#8E3B32;
+  --f:"Helvetica Neue",Helvetica,Arial,sans-serif;--m:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.6}
+.h{background:var(--ink);color:var(--cream);padding:26px 22px;border-bottom:3px solid var(--gold)}
+.h .b{color:var(--gold);font-size:10px;letter-spacing:.3em;text-transform:uppercase}
+.h h1{margin:8px 0 4px;font-size:24px;text-transform:uppercase;letter-spacing:.02em}
+.h .s{color:#B7B0A0;font-size:13px}
+.wrap{max-width:960px;margin:0 auto;padding:0 18px 60px}
+h2{font-size:11px;letter-spacing:.2em;text-transform:uppercase;background:var(--slate);color:#fff;
+  padding:10px 14px;border-left:4px solid var(--gold);margin:32px 0 0}
+h3{font-size:15px;margin:22px 0 6px}
+h4{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-deep);
+  margin:22px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px}
+p{margin:10px 0}
+.card{background:var(--paper);border:1px solid var(--line);border-top:0;padding:16px 18px}
+table{width:100%;border-collapse:collapse;background:var(--paper);margin:8px 0 4px;font-size:13.5px}
+th{background:var(--band);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:7px 8px;text-align:left;color:var(--muted);font-weight:400}
+td{padding:7px 8px;border-top:1px solid #EDE8DE;vertical-align:top}
+.n{text-align:right;font-family:var(--m);white-space:nowrap}
+th.n{text-align:right}
+.pn{font-family:var(--m);font-size:11px;color:var(--muted)}
+.pos{color:var(--green)}
+.dflt{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-deep);font-weight:400}
+code{font-family:var(--m);font-size:12.5px;background:var(--band);padding:1px 5px;border-radius:2px}
+pre{font-family:var(--m);font-size:12.5px;background:var(--ink);color:#E4DFD3;padding:14px 16px;
+  overflow-x:auto;line-height:1.65;border-left:3px solid var(--gold)}
+pre b{color:var(--gold);font-weight:400}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+.note{background:#FCF8EE;border-left:3px solid var(--gold);padding:11px 14px;font-size:13.5px;margin:14px 0}
+.warn{background:#F6E9E7;border-left:3px solid var(--red);padding:11px 14px;font-size:13.5px;margin:14px 0}
+.kv{display:grid;grid-template-columns:190px 1fr;gap:2px 14px;font-size:14px;margin:10px 0}
+.kv dt{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding-top:3px}
+.kv dd{margin:0}
+sup{color:var(--gold-deep)}
+.toc a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+@media print{body{background:#fff}h2{break-after:avoid}table{break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<div class="h">
+  <div class="b">IOT TECHS &middot; La Vague Inc.</div>
+  <h1>ADT Tool &mdash; Handoff</h1>
+  <div class="s">Single-file field commission calculator &mdash; architecture, formulas, catalog, and pricing</div>
+</div>
+
+<div class="wrap">
+
+<h2>1 · What it is</h2>
+<div class="card">
+<p>One HTML file, <code>commission-calculator.html</code>. No build step, no dependencies, no network calls, no storage. Open it from a phone home screen, a laptop, or a folder on a USB stick and it works offline.</p>
+<dl class="kv">
+  <dt>Purpose</dt><dd>Price an ADT/SafeStreets deal at the door and see the commission before leaving</dd>
+  <dt>Stack</dt><dd>Vanilla HTML, CSS, JS. No libraries.</dd>
+  <dt>Size</dt><dd>~55 KB, single file</dd>
+  <dt>Design</dt><dd>VAULT DARK — cream #FAF8F4, slate #2C3347, gold #C9A96E, ink #0B0F1A</dd>
+  <dt>State</dt><dd>Entirely in the DOM. Reload clears everything. Nothing is persisted anywhere.</dd>
+  <dt>Deploy</dt><dd>Drop the file on any static host, or mount it inside the FSM platform as a route</dd>
+</dl>
+</div>
+
+<h2>2 · The money model</h2>
+<div class="card">
+<p>Every number the tool shows comes out of this chain. This is the part to get right if it's ever rebuilt.</p>
+<pre><b>Net funded MMR</b>   = MMR + cost of service        (cost of service is negative)
+<b>Gross funding</b>    = net funded MMR × tier multiple
+<b>Budget</b>           = gross funding + activation
+
+<b>Cost of goods</b>    = Σ (new qty × part cost) + Σ (total qty × labor)
+                     existing units charge labor but no part cost
+
+<b>Overhead</b>         = admin + attrition + merchant + ADC
+<b>Attrition</b>        = gross funding × tier attrition %
+
+<b>Base</b>             = budget − cost of goods − overhead + custom labor/parts margin
+
+<b>Commission at cost</b>       = base                          (free system — you credit all retail)
+<b>Commission (this deal)</b>   = base + (retail − credit given)
+<b>Commission at full retail</b>= base + retail                 (no credit)
+
+<b>Customer pays</b>    = activation + retail − credit given    (activation is due in every scenario)
+<b>Equipment margin</b> = retail − cost of goods</pre>
+
+<div class="note"><b>The credit is the only lever between the two ends.</b> Every dollar credited to the customer comes out of the payout dollar for dollar. The three scenario buttons are just three points on that line.</div>
+
+<h3>Fundable bands</h3>
+<p>The MMR must land inside a band or the deal won't fund. The band is whichever is higher — the package sold, or the devices actually on the job.</p>
+<table>
+<tr><th>Condition</th><th class="n">Band</th></tr>
+<tr><td>No smart/video devices, basic package</td><td class="n">$42.99 – $53.99</td></tr>
+<tr><td>Any smart/video device, or smart/video package</td><td class="n">$51.99 – $74.99</td></tr>
+<tr><td>Nest Aware Plus toggle or package</td><td class="n">$58.99 – $81.99</td></tr>
+</table>
+<div class="warn"><b>Known gotcha.</b> Earlier versions checked the band against the cart only, so selecting the smart/video package with no camera in the cart flagged $61.99 as unfundable. Fixed — but if the band logic is ever touched, both inputs must be considered.</div>
+</div>
+
+<h2>3 · Rates and fees</h2>
+<div class="card">
+<table>
+<tr><th>Tier</th><th>Credit score</th><th class="n">Multiple</th><th class="n">Attrition</th></tr>
+<tr><td>A+</td><td>795+</td><td class="n">34x</td><td class="n">15.0%</td></tr>
+<tr><td>A</td><td>760–794</td><td class="n">33x</td><td class="n">15.0%</td></tr>
+<tr><td>B</td><td>705–759</td><td class="n">32x</td><td class="n">15.0%</td></tr>
+<tr><td>B−</td><td>665–704</td><td class="n">29x</td><td class="n">15.0%</td></tr>
+<tr><td>D</td><td>640–664</td><td class="n">27x</td><td class="n">15.0%</td></tr>
+<tr><td>E</td><td>600–639</td><td class="n">26x</td><td class="n">15.0%</td></tr>
+<tr><td><b>Commercial</b> — the default</td><td>—</td><td class="n">26x</td><td class="n">15.0%</td></tr>
+</table>
+
+<h3>Packages</h3>
+<table>
+<tr><th>Package</th><th class="n">Cost of service</th><th class="n">Standard rate</th></tr>
+<tr><td>Basic w/o app control</td><td class="n">−$3.50</td><td class="n">$51.99</td></tr>
+<tr><td>Basic w/ app control <b class="dflt">default</b></td><td class="n">−$3.50</td><td class="n">$53.99</td></tr>
+<tr><td>Basic + smart/video</td><td class="n">−$6.50</td><td class="n">$61.99</td></tr>
+<tr><td>Basic + smart/video + Nest Aware Plus</td><td class="n">−$8.00</td><td class="n">$81.99</td></tr>
+</table>
+<p>Selecting a package writes its standard rate into the MMR field and sets the Nest Aware toggle to match. Adding any smart or video device auto-upgrades a basic package to smart/video — it only ever upgrades, never downgrades.</p>
+
+<h3>Fees</h3>
+<table>
+<tr><th>Fee</th><th class="n">Default</th><th>Direction</th></tr>
+<tr><td>Activation</td><td class="n">$99.00</td><td>Into the budget, and onto the customer's bill</td></tr>
+<tr><td>Admin</td><td class="n">$199.00</td><td>Deducted</td></tr>
+<tr><td>Merchant</td><td class="n">$0.00</td><td>Deducted</td></tr>
+<tr><td>ADC</td><td class="n">$0.00</td><td>Deducted</td></tr>
+</table>
+</div>
+
+<h2>4 · Screen layout</h2>
+<div class="card">
+<p>Main page is four cards. Everything set once and forgotten lives behind <b>Settings</b> in the header.</p>
+<ol>
+  <li><b>Deal</b> — rep, customer, credit tier, monthly rate (typeable, with −/+), activation, package, Nest Aware</li>
+  <li><b>The numbers</b> — budget / cost / retail / margin tiles, the three scenario buttons, credit field, and a collapsed full breakdown</li>
+  <li><b>Equipment</b> — search, Existing toggle, Best Sellers, then seven categories. One open at a time.</li>
+  <li><b>Cart</b> — editable quantity per line</li>
+</ol>
+<p><b>Settings</b> holds fees, tier rates and attrition, custom labor &amp; parts, and the full equipment pricing grid (labor / cost / retail for all 41 items).</p>
+
+<h3>Sticky bar — three views</h3>
+<p>Cust / Rep / Admin toggle, Clear, and Save. Save downloads whichever document matches the view.</p>
+<table>
+<tr><th>View</th><th>Big number</th><th>Sees</th><th>Never sees</th></tr>
+<tr><td><b>Cust</b></td><td>What the customer pays</td><td>Retail per line, equipment total, monthly rate, savings</td><td>Cost, margin, commission, Settings</td></tr>
+<tr><td><b>Rep</b></td><td>Rep's own commission</td><td>Their commission across the three credit scenarios, credit field, customer's total, retail</td><td>Cost of goods, company margin, full net commission, Settings</td></tr>
+<tr><td><b>Admin</b></td><td>Net commission</td><td>Everything, plus the rep's cut in the subline</td><td>—</td></tr>
+</table>
+<p><b>Rep commission</b> is a share of the deal's net commission — the split lives in Settings, default <b>50%</b>, with an optional per-deal minimum. Rep-view color thresholds are scaled to the split (red under $150, orange to $200, yellow to $250, green above), so the signal reads the same as Admin's $300/$400/$500 bands at a 50% cut.</p>
+<ul>
+  <li><b>Internal</b> — big number is the net commission, color-coded: red under $300, orange to $400, yellow to $500, green above. Cart shows cost, retail, and margin. Save downloads the internal deal summary.</li>
+  <li><b>Customer</b> — big number becomes what the customer pays. Save downloads the customer proposal.</li>
+</ul>
+<div class="warn"><b>Hard rule: the customer never sees cost.</b> In Customer view every one of these must be hidden or swapped to retail — the numbers card (budget, cost, margin, scenarios, credit), the Settings button and sheet, the per-row cost subline in the picker and Best Sellers, the equipment card footer, and the cart's margin lines. Anything added later that displays cost, margin, or commission needs the <code>internal-only</code> class or a <code>custView</code> branch. Audit both when touching the equipment renderer.</div>
+<ul style="display:none">
+</ul>
+
+<h3>Promo codes (Customer view)</h3>
+<p>In Customer view the credit is no longer a free-text field — the customer owes full retail unless a valid code is entered. Codes are <b>case sensitive and always uppercase</b>; a lowercase entry is rejected with a message rather than silently matched.</p>
+<table>
+<tr><th>Code</th><th class="n">Discount</th></tr>
+<tr><td><code>IOT500</code></td><td class="n">$500.00</td></tr>
+<tr><td><code>IOT1000</code></td><td class="n">$1,000.00</td></tr>
+<tr><td><code>IOT1500</code></td><td class="n">$1,500.00</td></tr>
+</table>
+<p>The table is the <code>PROMOS</code> object at the top of the script — add a key to add a code. The discount is capped at the equipment retail, so a code larger than the job zeroes the equipment but never produces a negative balance or credits the activation. Editing the code field after applying clears the discount, so a half-typed code can't leave a stale credit on screen. In Rep and Admin views the credit stays a free-text field, since those users set credit directly.</p>
+
+<h3>Existing equipment</h3>
+<p>The Existing checkbox in the equipment header reveals a second counter per row. Existing units charge labor (the tech still converts them) but no part cost and no retail. Unchecking clears the counts so nothing hides.</p>
+</div>
+
+<h2>5 · Code map</h2>
+<div class="card">
+<p>Everything is in one <code>&lt;script&gt;</code> block at the bottom of the file, in this order:</p>
+<table>
+<tr><th>Block</th><th>What it does</th></tr>
+<tr><td><code>TIERS</code>, <code>PKGS</code></td><td>Rate tables. Edit here to change multiples or package pricing.</td></tr>
+<tr><td><code>CATS</code></td><td>The catalog. Each item: <code>n</code> name, <code>pn</code> part #, <code>e</code> part cost, <code>l</code> labor, <code>r</code> retail (0 = derive), <code>s</code> smart flag, <code>qn</code> default qty.</td></tr>
+<tr><td><code>EQUIP</code></td><td>Flattened catalog with a stable global index <code>i</code>. Every DOM id ends in that index.</td></tr>
+<tr><td><code>BEST</code></td><td>Best Sellers — references to the same objects, not copies. Quick-add mirrors.</td></tr>
+<tr><td><code>EL</code></td><td>Cached DOM nodes, built once. calc() reads from here, never getElementById.</td></tr>
+<tr><td><code>calc()</code></td><td>The whole model. One pass over EQUIP, then funding, scenarios, cart, breakdown. Returns an object the document generators consume.</td></tr>
+<tr><td><code>schedule()</code></td><td>requestAnimationFrame debounce — one repaint per burst of typing.</td></tr>
+<tr><td><code>saveCustomer()</code> / <code>saveInternal()</code></td><td>Build a standalone branded HTML document and trigger a download.</td></tr>
+</table>
+
+<h3>ID conventions</h3>
+<table>
+<tr><th>Pattern</th><th>Element</th></tr>
+<tr><td><code>qn{i}</code> / <code>qe{i}</code></td><td>New / existing quantity for item <code>i</code> — the source of truth</td></tr>
+<tr><td><code>l{i}</code> / <code>e{i}</code> / <code>p{i}</code></td><td>Labor, part cost, retail price (in Settings)</td></tr>
+<tr><td><code>t{i}</code> / <code>s{i}</code> / <code>row{i}</code></td><td>Price display, cost subline, row container</td></tr>
+<tr><td><code>bp{i}</code> / <code>bsub{i}</code> / <code>brow{i}</code></td><td>Best Sellers mirrors of the above</td></tr>
+<tr><td><code>[data-cq]</code> / <code>[data-bs]</code></td><td>Cart and Best Sellers quantity inputs — write through to <code>qn{i}</code></td></tr>
+</table>
+<div class="note">Best Sellers and the Cart are <b>views</b>, not separate state. They write into <code>qn{i}</code> and read back on the next calc. Never store quantity in two places.</div>
+</div>
+
+<h2>6 · Common edits</h2>
+<div class="card">
+<h3>Change a price permanently</h3>
+<p>Edit the item's <code>e</code>, <code>l</code>, or <code>r</code> in <code>CATS</code>. Editing in the Settings screen changes the current session only — a reload restores the file's values.</p>
+
+<h3>Add a device</h3>
+<p>Add an object to the right category in <code>CATS</code>. Set <code>s:1</code> if it's a smart/video device, which affects the fundable band and triggers the package auto-upgrade. Everything else — DOM, cart, search, documents — builds from the catalog automatically.</p>
+
+<h3>Add it to Best Sellers</h3>
+<p>Append the exact item name to <code>BEST_NAMES</code>. It renders in catalog order, not list order.</p>
+
+<h3>Change what a rep can see</h3>
+<p>Add the class <code>internal-only</code> to any element to hide it in Customer view.</p>
+
+<h3>Rate or fee change</h3>
+<p><code>TIERS</code> for multiples and attrition, <code>PKGS</code> for cost of service and standard rate, and the default <code>value</code> attributes on <code>fAct</code>, <code>fAdm</code>, <code>fMer</code>, <code>fAdc</code> for fees.</p>
+</div>
+
+<h2>7 · Pricing — all 41 items</h2>
+<div class="card">
+<p>Part cost and labor come from the ADT Primary Command Equipment List (2026). Retail marked <sup>*</sup> has no price on that sheet; the tool derives it as cost + 30%, rounded to the dollar. Margin % is margin over retail.</p>
+<div class="note"><b>5in and 7in panels both include the Verizon LTE radio</b> (ADTLTE-V3, $61.53) folded into the part cost. The standalone Verizon radio line was removed to prevent double-counting; the AT&amp;T module remains separate.</div>
+<h4>Panels</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>5in Screen <b class=dflt>default 1</b></td><td class=pn>ADT5AIO-4 + ADTLTE-V3</td><td class=n>$227.65</td><td class=n>$149.00</td><td class=n>$376.65</td><td class=n>$450.00</td><td class="n pos">$73.35</td><td class=n>16%</td></tr><tr><td>7in Screen</td><td class=pn>ADT7AIO-4 + ADTLTE-V3</td><td class=n>$267.98</td><td class=n>$149.00</td><td class=n>$416.98</td><td class=n>$550.00</td><td class="n pos">$133.02</td><td class=n>24%</td></tr><tr><td>Hybrid Panel</td><td class=pn>ADTHYBWL-2</td><td class=n>$109.25</td><td class=n>$75.00</td><td class=n>$184.25</td><td class=n>$240.00<sup>*</sup></td><td class="n pos">$55.75</td><td class=n>23%</td></tr><tr><td>AT&T Radio</td><td class=pn>ADTLTE-A3</td><td class=n>$61.53</td><td class=n>$0.00</td><td class=n>$61.53</td><td class=n>$80.00<sup>*</sup></td><td class="n pos">$18.47</td><td class=n>23%</td></tr><tr><td>8-Zone Converter</td><td class=pn>SIXC2WA</td><td class=n>$51.68</td><td class=n>$0.00</td><td class=n>$51.68</td><td class=n>$99.00</td><td class="n pos">$47.32</td><td class=n>48%</td></tr><tr><td>Wireless Converter</td><td class=pn>ADTCONVERT</td><td class=n>$49.22</td><td class=n>$0.00</td><td class=n>$49.22</td><td class=n>$99.00</td><td class="n pos">$49.78</td><td class=n>50%</td></tr><tr><td>Wi-Fi Extender</td><td class=pn>RE305</td><td class=n>$53.00</td><td class=n>$0.00</td><td class=n>$53.00</td><td class=n>$199.00</td><td class="n pos">$146.00</td><td class=n>73%</td></tr></table><h4>Sensors</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Door Sensor <b class=dflt>default 2</b></td><td class=pn>SIXCTA</td><td class=n>$12.64</td><td class=n>$15.00</td><td class=n>$27.64</td><td class=n>$159.00</td><td class="n pos">$131.36</td><td class=n>83%</td></tr><tr><td>Motion <b class=dflt>default 1</b></td><td class=pn>SIXPIRA</td><td class=n>$31.60</td><td class=n>$15.00</td><td class=n>$46.60</td><td class=n>$299.00</td><td class="n pos">$252.40</td><td class=n>84%</td></tr><tr><td>Glassbreak</td><td class=pn>SIXGBA</td><td class=n>$45.50</td><td class=n>$15.00</td><td class=n>$60.50</td><td class=n>$299.00</td><td class="n pos">$238.50</td><td class=n>80%</td></tr><tr><td>Shock Sensor</td><td class=pn>SIXSHOCK2A</td><td class=n>$22.74</td><td class=n>$15.00</td><td class=n>$37.74</td><td class=n>$199.00</td><td class="n pos">$161.26</td><td class=n>81%</td></tr></table><h4>Life Safety</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Smoke</td><td class=pn>SIXSMOKEA</td><td class=n>$45.50</td><td class=n>$15.00</td><td class=n>$60.50</td><td class=n>$299.00</td><td class="n pos">$238.50</td><td class=n>80%</td></tr><tr><td>Carbon Monoxide</td><td class=pn>SIXCOA</td><td class=n>$44.31</td><td class=n>$15.00</td><td class=n>$59.31</td><td class=n>$299.00</td><td class="n pos">$239.69</td><td class=n>80%</td></tr><tr><td>Smoke + CO</td><td class=pn>SIXCOMBOVA</td><td class=n>$107.43</td><td class=n>$15.00</td><td class=n>$122.43</td><td class=n>$299.00</td><td class="n pos">$176.57</td><td class=n>59%</td></tr><tr><td>Flood</td><td class=pn>SIXFLOODA</td><td class=n>$44.30</td><td class=n>$15.00</td><td class=n>$59.30</td><td class=n>$299.00</td><td class="n pos">$239.70</td><td class=n>80%</td></tr></table><h4>Keypads</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Touchscreen</td><td class=pn>WTS700</td><td class=n>$116.90</td><td class=n>$25.00</td><td class=n>$141.90</td><td class=n>$349.00</td><td class="n pos">$207.10</td><td class=n>59%</td></tr><tr><td>Wireless Keypad</td><td class=pn>WLTP100</td><td class=n>$61.53</td><td class=n>$15.00</td><td class=n>$76.53</td><td class=n>$249.00</td><td class="n pos">$172.47</td><td class=n>69%</td></tr><tr><td>Wired Keypad</td><td class=pn>WTP100</td><td class=n>$36.80</td><td class=n>$25.00</td><td class=n>$61.80</td><td class=n>$199.00</td><td class="n pos">$137.20</td><td class=n>69%</td></tr><tr><td>Desk Mount, panel</td><td class=pn>DESKMT-AIO</td><td class=n>$18.46</td><td class=n>$0.00</td><td class=n>$18.46</td><td class=n>$24.00<sup>*</sup></td><td class="n pos">$5.54</td><td class=n>23%</td></tr><tr><td>Desk Mount, screen</td><td class=pn>DESKMT-WTS</td><td class=n>$24.61</td><td class=n>$0.00</td><td class=n>$24.61</td><td class=n>$32.00<sup>*</sup></td><td class="n pos">$7.39</td><td class=n>23%</td></tr><tr><td>Desk Mount, keypad</td><td class=pn>DESKMT-WLTP</td><td class=n>$18.45</td><td class=n>$0.00</td><td class=n>$18.45</td><td class=n>$24.00<sup>*</sup></td><td class="n pos">$5.55</td><td class=n>23%</td></tr><tr><td>Wall Mount</td><td class=pn>WALLMT-WTS2</td><td class=n>$32.98</td><td class=n>$0.00</td><td class=n>$32.98</td><td class=n>$43.00<sup>*</sup></td><td class="n pos">$10.02</td><td class=n>23%</td></tr></table><h4>Cameras</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Nest Doorbell</td><td class=pn>GA02268-US</td><td class=n>$122.41</td><td class=n>$15.00</td><td class=n>$137.41</td><td class=n>$349.00</td><td class="n pos">$211.59</td><td class=n>61%</td></tr><tr><td>Nest Doorbell, battery</td><td class=pn>GA02076-US</td><td class=n>$122.41</td><td class=n>$40.00</td><td class=n>$162.41</td><td class=n>$349.00</td><td class="n pos">$186.59</td><td class=n>53%</td></tr><tr><td>Nest Outdoor Cam</td><td class=pn>GA01317-US</td><td class=n>$153.53</td><td class=n>$40.00</td><td class=n>$193.53</td><td class=n>$399.00</td><td class="n pos">$205.47</td><td class=n>51%</td></tr><tr><td>Nest Indoor Cam</td><td class=pn>GA01998-US</td><td class=n>$91.43</td><td class=n>$15.00</td><td class=n>$106.43</td><td class=n>$299.00</td><td class="n pos">$192.57</td><td class=n>64%</td></tr><tr><td>ADT Outdoor Cam</td><td class=pn>N8-OC845</td><td class=n>$148.00</td><td class=n>$40.00</td><td class=n>$188.00</td><td class=n>$399.00</td><td class="n pos">$211.00</td><td class=n>53%</td></tr><tr><td>ADT Indoor Cam</td><td class=pn>N8-RC845</td><td class=n>$89.00</td><td class=n>$15.00</td><td class=n>$104.00</td><td class=n>$299.00</td><td class="n pos">$195.00</td><td class=n>65%</td></tr></table><h4>Smart Home</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Nest Thermostat</td><td class=pn>GA01334-US</td><td class=n>$88.61</td><td class=n>$20.00</td><td class=n>$108.61</td><td class=n>$349.00</td><td class="n pos">$240.39</td><td class=n>69%</td></tr><tr><td>ADT Thermostat</td><td class=pn>LA-T2RCADT</td><td class=n>$86.25</td><td class=n>$20.00</td><td class=n>$106.25</td><td class=n>$349.00</td><td class="n pos">$242.75</td><td class=n>70%</td></tr><tr><td>Door Lock</td><td class=pn>KT-98930001</td><td class=n>$129.44</td><td class=n>$25.00</td><td class=n>$154.44</td><td class=n>$349.00</td><td class="n pos">$194.56</td><td class=n>56%</td></tr><tr><td>Garage Opener</td><td class=pn>LN-GD00Z8ADT</td><td class=n>$95.60</td><td class=n>$20.00</td><td class=n>$115.60</td><td class=n>$349.00</td><td class="n pos">$233.40</td><td class=n>67%</td></tr><tr><td>Nest Hub</td><td class=pn>GA01331-US</td><td class=n>$83.45</td><td class=n>$0.00</td><td class=n>$83.45</td><td class=n>$249.00</td><td class="n pos">$165.55</td><td class=n>66%</td></tr><tr><td>Nest Mini</td><td class=pn>GA00638-US</td><td class=n>$15.20</td><td class=n>$5.00</td><td class=n>$20.20</td><td class=n>$99.00</td><td class="n pos">$78.80</td><td class=n>80%</td></tr><tr><td>Smart Plug</td><td class=pn>Z5SWPID</td><td class=n>$29.00</td><td class=n>$0.00</td><td class=n>$29.00</td><td class=n>$129.00</td><td class="n pos">$100.00</td><td class=n>78%</td></tr><tr><td>Smart Bulb</td><td class=pn>76609</td><td class=n>$33.81</td><td class=n>$15.00</td><td class=n>$48.81</td><td class=n>$129.00</td><td class="n pos">$80.19</td><td class=n>62%</td></tr><tr><td>Lamp Module</td><td class=pn>JS-28170</td><td class=n>$44.57</td><td class=n>$0.00</td><td class=n>$44.57</td><td class=n>$129.00</td><td class="n pos">$84.43</td><td class=n>65%</td></tr></table><h4>Misc</h4><table><tr><th>Item</th><th>Part #</th><th class=n>Part</th><th class=n>Labor</th><th class=n>Cost</th><th class=n>Retail</th><th class=n>Margin</th><th class=n>%</th></tr><tr><td>Key Fob</td><td class=pn>SIXFOB2A</td><td class=n>$13.54</td><td class=n>$15.00</td><td class=n>$28.54</td><td class=n>$159.00</td><td class="n pos">$130.46</td><td class=n>82%</td></tr><tr><td>Indoor Siren</td><td class=pn>SIXSIRENA</td><td class=n>$49.22</td><td class=n>$15.00</td><td class=n>$64.22</td><td class=n>$229.00</td><td class="n pos">$164.78</td><td class=n>72%</td></tr><tr><td>Outdoor Siren</td><td class=pn>SIXSIREN-ODA</td><td class=n>$73.83</td><td class=n>$15.00</td><td class=n>$88.83</td><td class=n>$279.00</td><td class="n pos">$190.17</td><td class=n>68%</td></tr><tr><td>Command Labor</td><td class=pn>—</td><td class=n>$0.00</td><td class=n>$25.00</td><td class=n>$25.00</td><td class=n>$33.00<sup>*</sup></td><td class="n pos">$8.00</td><td class=n>24%</td></tr></table>
+<p style="font-size:12.5px;color:var(--muted);margin-top:18px"><sup>*</sup> Derived at cost + 30%. Replace with real retail when available — these are placeholders, not quoted prices.</p>
+</div>
+
+<h2>8 · Known issues and history</h2>
+<div class="card">
+<ul>
+  <li><b>Door/window sensor was a 3-pack price.</b> The original Payscale sheet listed $34.50 in a per-unit column. The ADT sheet has it at $12.64 each. Any older calculation using $34.50 per unit is wrong.</li>
+  <li><b>Nine items have no published retail.</b> Hybrid panel, AT&amp;T radio, three desk mounts, wall mount, and Command Labor are all derived at cost + 30%. These need real numbers.</li>
+  <li><b>Margin % is margin over retail, not markup over cost.</b> A cost + 30% item shows 23% margin. That's correct, just easy to misread.</li>
+  <li><b>Nothing persists.</b> A reload loses the deal. If this becomes a problem, the fix is to serialize the <code>qn</code>/<code>qe</code> values plus the deal inputs into localStorage or the FSM platform's job record.</li>
+  <li><b>Attrition is held, not lost.</b> It's withheld at the tier rate and released under the funding agreement. The tool deducts it in full, so the commission shown is conservative.</li>
+</ul>
+</div>
+
+<h2>9 · If it moves into the FSM platform</h2>
+<div class="card">
+<ol>
+  <li><b>Catalog to the database.</b> <code>CATS</code> becomes an equipment table with cost, labor, retail, and the smart flag. The tool fetches it instead of hardcoding.</li>
+  <li><b>Rates to a settings record</b> so a change propagates without editing a file.</li>
+  <li><b>Save writes a job record</b> rather than downloading an HTML file — deal inputs, line items, credit, and the computed commission.</li>
+  <li><b>Customer proposal feeds the proposal builder</b> instead of being its own document.</li>
+  <li><b>Keep calc() intact.</b> It's pure — inputs in, numbers out. Port it verbatim and the math stays trustworthy.</li>
+</ol>
+</div>
+
+</div>
+</body>
+</html>

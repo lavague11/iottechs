@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdtApplication, scheduleAdtApplication, completeAdtApplication, getAdtApplication } from "../../lib/db";
+import { createAdtApplication, scheduleAdtApplication, completeAdtApplication, getAdtApplication, setAdtPreferences } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 
 // Step 1 — Apply: create the ADT application from the intake form.
@@ -28,11 +28,22 @@ export async function submitAdtApplicationAction(form) {
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }
 
-// Step 2 — Schedule.
+// Step 2 — Schedule (staff, firm date).
 export async function scheduleAdtAction(adtId, { date, window } = {}) {
   if (!getAdtApplication(adtId)) return { error: "Application not found." };
   if (!date) return { error: "Please choose an install date." };
   scheduleAdtApplication(adtId, { date, window });
+  return { ok: true };
+}
+
+// Step 2 — Customer preferred times (days + windows, not a firm date).
+export async function submitAdtPreferencesAction(adtId, { days, windows } = {}) {
+  if (!getAdtApplication(adtId)) return { error: "Application not found." };
+  const d = Array.isArray(days) ? days : [];
+  const w = Array.isArray(windows) ? windows : [];
+  if (!d.length) return { error: "Pick at least one preferred day." };
+  if (!w.length) return { error: "Pick at least one time window." };
+  setAdtPreferences(adtId, { days: d, windows: w });
   return { ok: true };
 }
 

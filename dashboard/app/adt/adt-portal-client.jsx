@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 import { ADT_GROUPS, ADT_ITEMS, adtSummary, adtGroupsFor } from "../../lib/adt";
-import { submitAdtApplicationAction, scheduleAdtAction, completeAdtAction } from "./actions";
+import { submitAdtApplicationAction, submitAdtPreferencesAction, completeAdtAction } from "./actions";
 
 const STEPS = [
   { key: "apply",    label: "Apply" },
@@ -200,20 +200,30 @@ function ApplyStep({ prefill = null }) {
   );
 }
 
-/* ---------------- Step 2 · Schedule ---------------- */
-const WINDOWS = ["Morning (8am–12pm)", "Afternoon (12pm–4pm)", "Evening (4pm–7pm)"];
+/* ---------------- Step 2 · Preferred times ---------------- */
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const WEEKENDS = ["Sat", "Sun"];
+const WINDOWS = [
+  { key: "Morning",   sub: "8am–12pm" },
+  { key: "Afternoon", sub: "12pm–4pm" },
+  { key: "Evening",   sub: "4pm–7pm" },
+];
 function ScheduleStep({ app }) {
   const router = useRouter();
-  const [date, setDate] = useState("");
-  const [win, setWin]   = useState(WINDOWS[0]);
+  const [days, setDays] = useState([]);
+  const [wins, setWins] = useState([]);
   const [err, setErr]   = useState("");
   const [pending, startTx] = useTransition();
-  const today = new Date().toISOString().slice(0, 10);
+
+  const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  const quick = (set) => setDays(sameSet(days, set) ? [] : set);
 
   function confirm() {
     setErr("");
     startTx(async () => {
-      const r = await scheduleAdtAction(app.adt_id, { date, window: win });
+      const r = await submitAdtPreferencesAction(app.adt_id, { days, windows: wins });
       if (r?.error) { setErr(r.error); return; }
       router.refresh();
     });
@@ -222,22 +232,39 @@ function ScheduleStep({ app }) {
   return (
     <div className="adt-card">
       <div className="adt-h">
-        <h1>Schedule your install</h1>
-        <p>Application <b>{app.adt_id}</b> received. Pick a day that works — we'll confirm the exact arrival window.</p>
+        <h1>When works for you?</h1>
+        <p>Application <b>{app.adt_id}</b> received. Tell us your preferred days and times — we'll confirm the exact appointment.</p>
       </div>
       <PointsRecap app={app} />
+
       <div className="adt-sec">
-        <div className="adt-sec-t">Preferred install date</div>
-        <div className="adt-grid">
-          <label className="adt-fld"><span>Date</span><input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label className="adt-fld"><span>Time window</span>
-            <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
-          </label>
+        <div className="adt-sec-t">Preferred days</div>
+        <div className="adt-quick">
+          <button type="button" className={"adt-chip" + (sameSet(days, WEEKDAYS) ? " on" : "")} onClick={() => quick(WEEKDAYS)}>Weekdays</button>
+          <button type="button" className={"adt-chip" + (sameSet(days, WEEKENDS) ? " on" : "")} onClick={() => quick(WEEKENDS)}>Weekends</button>
+          <button type="button" className={"adt-chip" + (sameSet(days, DAYS) ? " on" : "")} onClick={() => quick(DAYS)}>Any day</button>
+        </div>
+        <div className="adt-days">
+          {DAYS.map((d) => (
+            <button type="button" key={d} className={"adt-day" + (days.includes(d) ? " on" : "")} onClick={() => toggle(days, setDays, d)}>{d}</button>
+          ))}
         </div>
       </div>
+
+      <div className="adt-sec">
+        <div className="adt-sec-t">Time window</div>
+        <div className="adt-wins">
+          {WINDOWS.map((w) => (
+            <button type="button" key={w.key} className={"adt-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => toggle(wins, setWins, w.key)}>
+              <b>{w.key}</b><span>{w.sub}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {err && <div className="adt-err">{err}</div>}
       <div className="adt-bar end">
-        <button className="adt-go" onClick={confirm} disabled={pending || !date}>{pending ? "Confirming…" : "Confirm schedule →"}</button>
+        <button className="adt-go" onClick={confirm} disabled={pending || !days.length || !wins.length}>{pending ? "Sending…" : "Send preferences →"}</button>
       </div>
     </div>
   );
@@ -252,8 +279,12 @@ function ScheduledView({ app }) {
     <div className="adt-card">
       <div className="adt-hero">
         <div className="adt-hero-ic sched"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-        <h1>You're on the schedule</h1>
-        <p>{app.schedule_date ? <>Install set for <b>{fmt(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}.</> : "We'll be in touch to confirm the details."}</p>
+        <h1>{app.schedule_date ? "You're on the schedule" : "Preferences received"}</h1>
+        <p>{app.schedule_date
+          ? <>Install set for <b>{fmt(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}.</>
+          : (app.pref_days?.length || app.pref_windows?.length)
+            ? <>We'll confirm a time that fits your preference: <b>{(app.pref_days || []).join(", ") || "any day"}</b>{app.pref_windows?.length ? <> · <b>{app.pref_windows.join(", ")}</b></> : ""}.</>
+            : "We'll be in touch to confirm the details."}</p>
       </div>
       <PointsRecap app={app} />
       <div className="adt-bar end">
@@ -385,5 +416,21 @@ const CSS = `
 .adt-recap-n{flex:1;color:#0B0F1A}
 .adt-recap-p{color:#8a8578;font-weight:600}
 .adt-note-line{margin-top:16px;text-align:center;font-size:.82rem;color:#6f7686}
-@media(max-width:560px){.adt-grid{grid-template-columns:1fr}.adt-bar{flex-direction:column;align-items:stretch}.adt-bar .adt-go{width:100%}}
+/* preferred days + windows */
+.adt-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.adt-chip{border:1px solid #d9d4ca;background:#fff;color:#5b6275;border-radius:100px;padding:7px 15px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
+.adt-chip:hover{border-color:var(--gold,#C9A96E)}
+.adt-chip.on{background:#0B0F1A;color:#fff;border-color:#0B0F1A}
+.adt-days{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.adt-day{border:1px solid #d9d4ca;background:#faf8f4;color:#5b6275;border-radius:10px;padding:12px 0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center}
+.adt-day:hover{border-color:var(--gold,#C9A96E)}
+.adt-day.on{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;border-color:#C9A96E}
+.adt-wins{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.adt-win{display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid #d9d4ca;background:#faf8f4;color:#5b6275;border-radius:11px;padding:13px 8px;cursor:pointer;font-family:inherit}
+.adt-win:hover{border-color:var(--gold,#C9A96E)}
+.adt-win b{font-size:.9rem;color:#0B0F1A;font-weight:800}
+.adt-win span{font-size:.72rem;color:#8a8578}
+.adt-win.on{background:#fff8ee;border-color:#C9A96E}
+.adt-win.on b{color:#a3812f}
+@media(max-width:560px){.adt-grid{grid-template-columns:1fr}.adt-bar{flex-direction:column;align-items:stretch}.adt-bar .adt-go{width:100%}.adt-day{padding:11px 0;font-size:.78rem;border-radius:8px}.adt-days{gap:5px}}
 `;

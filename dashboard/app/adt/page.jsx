@@ -14,6 +14,7 @@ export default async function AdtPage({ searchParams }) {
     adt_id: rec.adt_id, name: rec.name, address: rec.address, points: rec.points,
     equipment: rec.equipment || {}, stage: rec.stage,
     schedule_date: rec.schedule_date, schedule_window: rec.schedule_window, access_pin: rec.access_pin,
+    pref_days: rec.pref_days || [], pref_windows: rec.pref_windows || [],
   } : null;
 
   // Smart-defaults: a logged-in customer arriving from their portal gets the intake prefilled with

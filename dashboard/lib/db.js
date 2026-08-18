@@ -577,6 +577,9 @@ function init() {
   if (!adtCols.includes("tax_id"))        db.exec("ALTER TABLE adt_applications ADD COLUMN tax_id TEXT");          // SSN (residential) / EIN (commercial) — stored AES-256-GCM encrypted (encBlob)
   if (!adtCols.includes("emergency_contacts")) db.exec("ALTER TABLE adt_applications ADD COLUMN emergency_contacts TEXT"); // JSON [{name,phone},…] — who we call if the customer can't be reached
   if (!adtCols.includes("verbal_password"))    db.exec("ALTER TABLE adt_applications ADD COLUMN verbal_password TEXT");    // identity-verify passphrase — encrypted (encBlob)
+  if (!adtCols.includes("pref_days"))    db.exec("ALTER TABLE adt_applications ADD COLUMN pref_days TEXT");    // JSON ["Mon",…] — customer's preferred install days
+  if (!adtCols.includes("pref_windows")) db.exec("ALTER TABLE adt_applications ADD COLUMN pref_windows TEXT"); // JSON ["Morning",…] — preferred time windows
+  if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
 
   // Résumé upload on job applications (base64 data URL + original filename), added after launch.
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
@@ -3449,6 +3452,8 @@ export function getAdtApplication(adtId) {
   const r = db.prepare("SELECT * FROM adt_applications WHERE adt_id = ? COLLATE NOCASE").get(String(adtId || "").trim());
   if (!r) return null;
   try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
+  try { r.pref_days = JSON.parse(r.pref_days || "[]"); } catch { r.pref_days = []; }
+  try { r.pref_windows = JSON.parse(r.pref_windows || "[]"); } catch { r.pref_windows = []; }
   return r;
 }
 export function listAdtApplications() {
@@ -3470,6 +3475,27 @@ export function completeAdtApplication(adtId) {
   if (!cur) return null;
   db.prepare(`UPDATE adt_applications SET stage = 'completed', completed_at = datetime('now','localtime'),
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`).run(String(adtId));
+  return getAdtApplication(adtId);
+}
+// Customer states preferred install days + time windows (not a firm date). Advances to 'scheduled'
+// so the office can lock in the real date afterward from the staff Deck.
+export function setAdtPreferences(adtId, { days, windows } = {}) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  const d = Array.isArray(days) ? days.slice(0, 7) : [];
+  const w = Array.isArray(windows) ? windows.slice(0, 3) : [];
+  db.prepare(`UPDATE adt_applications SET pref_days = ?, pref_windows = ?, stage = 'scheduled',
+              scheduled_at = COALESCE(scheduled_at, datetime('now','localtime')), updated_at = datetime('now','localtime')
+              WHERE adt_id = ? COLLATE NOCASE`).run(JSON.stringify(d), JSON.stringify(w), String(adtId));
+  return getAdtApplication(adtId);
+}
+// Persist the internal ADT Tool deal state (equipment cart, tier, credit, rep). Autosaved from the widget.
+export function saveAdtDeal(adtId, dealJson) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  const blob = typeof dealJson === "string" ? dealJson : JSON.stringify(dealJson || {});
+  db.prepare(`UPDATE adt_applications SET deal_json = ?, updated_at = datetime('now','localtime')
+              WHERE adt_id = ? COLLATE NOCASE`).run(blob, String(adtId));
   return getAdtApplication(adtId);
 }
 

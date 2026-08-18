@@ -45,8 +45,16 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   );
 
+  const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
   const scheduleNode = (
     <div style={pad} className="adtp">
+      {(prefDays.length || prefWins.length) ? (
+        <div className="adtp-pref">
+          <span>Customer prefers</span>
+          {prefDays.length ? <b>{prefDays.join(", ")}</b> : <b>any day</b>}
+          {prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
+        </div>
+      ) : null}
       {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
       {!done && (<>
         <div className="adtp-form">
@@ -130,6 +138,9 @@ const CSS = `
 .adtp-p{color:var(--dv-meta,#787D84);font-weight:600}
 .adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
 .adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
+.adtp-pref{font-size:.84rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 12px;margin-bottom:12px}
+.adtp-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
+.adtp-pref b{color:var(--dv-gold-deep,#A8842F)}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
 .adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
