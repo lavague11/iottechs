@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import AdminShell from "../../components/admin-shell";
+import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary } from "../../../lib/adt";
 import { adminScheduleAdtAction, adminCompleteAdtAction } from "../actions";
 
 const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
 const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (d.length !== 9) return t; return comm ? `${d.slice(0, 2)}-${d.slice(2)}` : `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
-const ORDER = ["applied", "scheduled", "completed"];
-const LBL = { applied: "Applied", scheduled: "Scheduled", completed: "Completed" };
-const PILL = { applied: "st-new", scheduled: "st-sched", completed: "st-done" };
 const WINDOWS = ["Morning (8am–12pm)", "Afternoon (12pm–4pm)", "Evening (4pm–7pm)"];
 
+// The ADT account rendered on the SAME Deck as a project — Apply → Schedule → Complete as
+// swipeable stages, each opening its tool inline. Reuses DeckView so the chrome matches 1:1.
 export default function AdtProjectClient({ user, alerts, app }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
   const isComm = app.property_type === "commercial";
-  const cur = ORDER.indexOf(app.stage);
+  const scheduled = !!app.schedule_date;
+  const done = app.stage === "completed";
+  const [idx, setIdx] = useState(done ? 2 : scheduled ? 2 : 1);   // land on the next action
 
   const [date, setDate] = useState(app.schedule_date || "");
   const [win, setWin]   = useState(app.schedule_window || WINDOWS[0]);
@@ -29,137 +29,114 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const doSchedule = () => startTx(async () => { setErr(""); const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); else router.refresh(); });
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
 
+  const pad = { padding: "16px 18px" };
+
+  const applyNode = (
+    <div style={pad} className="adtp">
+      <div className="adtp-badge">{isComm ? "Commercial" : "Residential"} · {app.points || 0} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</div>
+      {summary.lines.length === 0 ? <div className="adtp-muted">No equipment on file.</div> : (
+        <div className="adtp-list">
+          {summary.lines.map((l) => (
+            <div key={l.id} className="adtp-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePoints || 0} pts</span></div>
+          ))}
+        </div>
+      )}
+      {app.notes && <div className="adtp-notes"><span>Notes</span>{app.notes}</div>}
+    </div>
+  );
+
+  const scheduleNode = (
+    <div style={pad} className="adtp">
+      {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
+      {!done && (<>
+        <div className="adtp-form">
+          <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
+          <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
+        </div>
+        {err && <div className="adtp-err">{err}</div>}
+        <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{scheduled ? "Update date" : "Schedule install"}</button>
+      </>)}
+    </div>
+  );
+
+  const completeNode = (
+    <div style={pad} className="adtp">
+      {done ? <div className="adtp-ok">✓ Completed {fmtDay(app.completed_at)}</div> : (<>
+        <div className="adtp-muted" style={{ marginBottom: 10 }}>Mark the install complete once the technician has finished on site.</div>
+        {err && <div className="adtp-err">{err}</div>}
+        <button className="adtp-btn green" disabled={pending || !scheduled} onClick={doComplete}>Mark complete</button>
+        {!scheduled && <div className="adtp-muted" style={{ marginTop: 8 }}>Schedule the install first.</div>}
+      </>)}
+    </div>
+  );
+
+  const stages = [
+    { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle", need: "",
+      tools: [{ name: "Application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: applyNode }] },
+    { name: "Schedule", pill: scheduled ? "Scheduled" : "Awaiting", pct: scheduled ? 100 : 0, tint: "blue",
+      turn: done ? "idle" : "mine", need: "Schedule the install",
+      tools: [{ name: "Schedule install", label: scheduled ? fmtDay(app.schedule_date) : "Pick a date", state: scheduled ? "done" : "active", node: scheduleNode }] },
+    { name: "Complete", pill: done ? "Complete" : "Pending", pct: done ? 100 : 0, tint: "green",
+      turn: done ? "idle" : "mine", need: "Mark the install complete",
+      tools: [{ name: "Completion", label: done ? `Done ${fmtDay(app.completed_at)}` : "Finish up", state: done ? "done" : "active", node: completeNode }] },
+  ];
+
+  const customer = {
+    code: app.adt_id,
+    name: app.name || "ADT account",
+    statusText: isComm ? "Commercial" : "Residential",
+    fields: [
+      { k: "Property", v: isComm ? "Commercial" : "Residential" },
+      app.address && { k: "Address", v: app.address },
+      app.phone && { k: "Phone", v: app.phone },
+      app.email && { k: "Email", v: app.email },
+      app.tax_id && { k: isComm ? "EIN" : "SSN", v: fmtTax(app.tax_id, isComm) },
+      app.access_pin && { k: "Access PIN", v: app.access_pin },
+    ].filter(Boolean),
+    actions: [
+      app.phone && { label: "Call", href: `tel:${app.phone}` },
+      app.email && { label: "Email", href: `mailto:${app.email}` },
+      app.address && { label: "Directions", href: `https://maps.google.com/?q=${encodeURIComponent(app.address)}` },
+    ].filter(Boolean),
+  };
+
   return (
-    <AdminShell user={user} alerts={alerts} active="adt">
-      <div className="apx-wrap adtp">
-        <Link href="/adt-applications" className="adtp-back">← All ADT applications</Link>
-
-        <div className="adtp-head">
-          <div className="adtp-id-row">
-            <span className="adtp-id mono">{app.adt_id}</span>
-            <span className={`adtp-ptype ${isComm ? "comm" : "res"}`}>{isComm ? "Commercial" : "Residential"}</span>
-            <span className={`spill ${PILL[app.stage] || "st-new"}`}>{LBL[app.stage] || app.stage}</span>
-          </div>
-          <h1>{app.name || "ADT account"}</h1>
-          <div className="adtp-sub">24/7 Monitoring · <b>{app.points || 0} pts</b> · {summary.count} item{summary.count === 1 ? "" : "s"} · opened {fmtDay(app.created_at)}</div>
-        </div>
-
-        {/* Stage rail — Applied → Scheduled → Completed */}
-        <div className="adtp-track">
-          {ORDER.map((s, i) => {
-            const done = app.stage === "completed" || i < cur;
-            const on = i === cur && app.stage !== "completed";
-            return (
-              <div key={s} className={`adtp-track-step${done ? " done" : ""}${on ? " on" : ""}`}>
-                <span className="adtp-track-dot">{done ? "✓" : i + 1}</span>
-                <span className="adtp-track-lbl">{LBL[s]}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="adtp-cols">
-          <div className="adtp-main">
-            <div className="adtp-card">
-              <div className="adtp-card-h">Equipment <span className="adtp-card-x">{summary.points} pts</span></div>
-              {summary.lines.length === 0 ? (
-                <div className="adtp-empty">No equipment on file.</div>
-              ) : (
-                <div className="adtp-equip">
-                  {summary.lines.map((l) => (
-                    <div key={l.id} className="adtp-equip-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePoints || 0} pts</span></div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {app.notes && (
-              <div className="adtp-card">
-                <div className="adtp-card-h">Notes</div>
-                <div className="adtp-notes">{app.notes}</div>
-              </div>
-            )}
-          </div>
-
-          <div className="adtp-side">
-            <div className="adtp-card">
-              <div className="adtp-card-h">Contact</div>
-              <div className="adtp-crow">{app.name || "—"}</div>
-              {app.phone && <a className="adtp-crow lnk" href={`tel:${app.phone}`}>{app.phone}</a>}
-              {app.email && <a className="adtp-crow lnk" href={`mailto:${app.email}`}>{app.email}</a>}
-              {app.address && <a className="adtp-crow lnk" href={`https://maps.google.com/?q=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a>}
-              {app.access_pin && <div className="adtp-crow"><span className="adtp-muted">Access PIN</span> <b>{app.access_pin}</b></div>}
-              {app.tax_id && <div className="adtp-crow"><span className="adtp-muted">{isComm ? "EIN" : "SSN"}</span> <b>{fmtTax(app.tax_id, isComm)}</b></div>}
-            </div>
-
-            {app.stage !== "completed" ? (
-              <div className="adtp-card">
-                <div className="adtp-card-h">{app.stage === "scheduled" ? "Reschedule / complete" : "Schedule install"}</div>
-                <div className="adtp-sched">
-                  <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className="apx-input" />
-                  <select value={win} onChange={(e) => setWin(e.target.value)} className="apx-input">{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
-                </div>
-                {err && <div className="adtp-err">{err}</div>}
-                <div className="adtp-btns">
-                  <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{app.stage === "scheduled" ? "Update date" : "Schedule"}</button>
-                  {app.stage === "scheduled" && <button className="adtp-btn green" disabled={pending} onClick={doComplete}>Mark complete</button>}
-                </div>
-              </div>
-            ) : (
-              <div className="adtp-card adtp-done">✓ Completed {fmtDay(app.completed_at)}</div>
-            )}
-          </div>
-        </div>
-      </div>
+    <>
+      <DeckView
+        stages={stages}
+        idx={idx}
+        onIdx={setIdx}
+        canAdvance={false}
+        customer={customer}
+        roleLabel="24/7 Monitoring"
+        menu={[{ label: "All ADT applications", onClick: () => router.push("/adt-applications") }]}
+      />
       <style>{CSS}</style>
-    </AdminShell>
+    </>
   );
 }
 
 const CSS = `
-.apx .adtp-back{display:inline-block;font-size:.82rem;font-weight:700;color:var(--muted);text-decoration:none;margin:14px 0 10px}
-.apx .adtp-back:hover{color:var(--ink)}
-.apx .adtp-head{margin-bottom:18px}
-.apx .adtp-id-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:6px}
-.apx .adtp-id{font-weight:800;color:var(--ink);font-size:.9rem}
-.apx .adtp-ptype{font-size:.62rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:2px 9px;border-radius:100px}
-.apx .adtp-ptype.res{background:#eef4ee;color:#2f7d5a}
-.apx .adtp-ptype.comm{background:#eef1f8;color:#3a4a72}
-.apx .adtp-head h1{font-family:'Bricolage Grotesque',sans-serif;font-size:1.7rem;font-weight:800;letter-spacing:-.01em;margin:0 0 5px}
-.apx .adtp-sub{font-size:.86rem;color:var(--muted)}
-.apx .adtp-sub b{color:var(--ink)}
-.apx .adtp-track{display:flex;align-items:center;gap:0;max-width:560px;margin-bottom:20px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 18px}
-.apx .adtp-track-step{display:flex;align-items:center;gap:9px;flex:1;color:var(--muted)}
-.apx .adtp-track-step:not(:last-child)::after{content:"";flex:1;height:2px;background:var(--line);margin:0 10px}
-.apx .adtp-track-step.done,.apx .adtp-track-step.on{color:var(--ink)}
-.apx .adtp-track-step.done:not(:last-child)::after{background:#2f7d5a}
-.apx .adtp-track-dot{width:26px;height:26px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:800;background:#eee;color:var(--muted);border:1px solid var(--line)}
-.apx .adtp-track-step.done .adtp-track-dot{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.apx .adtp-track-step.on .adtp-track-dot{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
-.apx .adtp-track-lbl{font-size:.82rem;font-weight:700;white-space:nowrap}
-.apx .adtp-cols{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
-.apx .adtp-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
-.apx .adtp-card-h{display:flex;align-items:center;justify-content:space-between;font-size:.7rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-.apx .adtp-card-x{color:#a8894e;font-weight:800}
-.apx .adtp-empty{color:var(--muted);font-size:.86rem}
-.apx .adtp-equip{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.apx .adtp-equip-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--line);font-size:.88rem}
-.apx .adtp-equip-row:first-child{border-top:none}
-.apx .adtp-q{font-weight:800;color:#a8894e;min-width:32px}
-.apx .adtp-n{flex:1;color:var(--ink)}
-.apx .adtp-p{color:var(--muted);font-weight:600}
-.apx .adtp-notes{font-size:.88rem;color:var(--ink);line-height:1.5;white-space:pre-wrap}
-.apx .adtp-crow{font-size:.88rem;color:var(--ink);padding:3px 0}
-.apx .adtp-crow.lnk{color:#8a6d2f;text-decoration:none;display:block}
-.apx .adtp-crow.lnk:hover{text-decoration:underline}
-.apx .adtp-muted{color:var(--muted)}
-.apx .adtp-sched{display:flex;gap:8px;flex-wrap:wrap}
-.apx .adtp-sched .apx-input{flex:1;min-width:130px}
-.apx .adtp-btns{display:flex;gap:8px;margin-top:11px}
-.apx .adtp-btn{height:36px;padding:0 18px;border:none;border-radius:8px;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
-.apx .adtp-btn.gold{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A}
-.apx .adtp-btn.green{background:#2f7d5a;color:#fff}
-.apx .adtp-btn:disabled{opacity:.5;cursor:default}
-.apx .adtp-err{font-size:.82rem;color:#c0392b;margin-top:8px}
-.apx .adtp-done{font-size:.9rem;font-weight:800;color:var(--green)}
-@media(max-width:820px){.apx .adtp-cols{grid-template-columns:1fr}}
+.adtp{font-family:var(--font-sans),inherit}
+.adtp-badge{display:inline-block;font-size:.72rem;font-weight:800;letter-spacing:.02em;color:var(--dv-gold-deep,#A8842F);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:4px 12px;margin-bottom:12px}
+.adtp-muted{color:var(--dv-meta,#787D84);font-size:.86rem}
+.adtp-list{border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden}
+.adtp-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.88rem;color:var(--dv-ink,#101418)}
+.adtp-row:first-child{border-top:none}
+.adtp-q{font-weight:800;color:var(--dv-gold-deep,#A8842F);min-width:32px}
+.adtp-n{flex:1}
+.adtp-p{color:var(--dv-meta,#787D84);font-weight:600}
+.adtp-notes{margin-top:12px;font-size:.86rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;line-height:1.5}
+.adtp-notes span{display:block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
+.adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
+.adtp-ok b{color:var(--dv-ink,#101418)}
+.adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
+.adtp-form input,.adtp-form select{height:40px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;flex:1;min-width:140px}
+.adtp-form input:focus,.adtp-form select:focus{border-color:var(--dv-gold,#C9A96E)}
+.adtp-btn{height:40px;padding:0 20px;border:none;border-radius:9px;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit}
+.adtp-btn.gold{background:var(--dv-ink,#101418);color:#fff}
+.adtp-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
+.adtp-btn:hover{filter:brightness(1.1)}
+.adtp-btn:disabled{opacity:.5;cursor:default}
+.adtp-err{font-size:.82rem;color:var(--dv-red,#C4553D);margin-bottom:8px}
 `;
