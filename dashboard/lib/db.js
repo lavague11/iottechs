@@ -585,6 +585,9 @@ function init() {
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
+  if (!adtCols.includes("deal_signed_name")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signed_name TEXT");       // customer's typed signature name on the quote
+  if (!adtCols.includes("deal_signed_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signed_at TEXT");           // Eastern wall-clock (datetime('now','localtime')) they signed — formatted by fmtSignStamp
+  if (!adtCols.includes("deal_signature_data")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signature_data TEXT"); // PNG dataURL of the typed signature
   if (!adtCols.includes("archived")) db.exec("ALTER TABLE adt_applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: hidden from lists, kept for audit
   if (!adtCols.includes("verification_doc")) db.exec("ALTER TABLE adt_applications ADD COLUMN verification_doc TEXT"); // commercial business-verification file: JSON {name,type,data(dataURL)}
   if (!adtCols.includes("docs_note")) db.exec("ALTER TABLE adt_applications ADD COLUMN docs_note TEXT"); // when status=needs_docs, which documents the office needs
@@ -3606,6 +3609,20 @@ export function acceptAdtDeal(adtId) {
     db.prepare(`UPDATE adt_applications SET deal_accepted_at = ?, updated_at = datetime('now','localtime')
                 WHERE adt_id = ? COLLATE NOCASE`).run(new Date().toISOString(), String(adtId));
   }
+  return getAdtApplication(adtId);
+}
+// Customer SIGNS their shared quote — stores the typed signature + Eastern timestamp and marks the
+// deal accepted in the same step (signing IS accepting). Idempotent: an existing signature is a locked
+// record and is never overwritten. Timestamp is Eastern wall-clock so lib/proposal.fmtSignStamp reads it right.
+export function signAdtDeal(adtId, { name, data } = {}) {
+  const cur = getAdtApplication(adtId);
+  if (!cur || !cur.deal_shared_at) return null;   // can only sign a shared quote
+  if (cur.deal_signed_at) return cur;             // already signed — locked
+  db.prepare(`UPDATE adt_applications SET deal_signed_name = ?, deal_signature_data = ?,
+              deal_signed_at = datetime('now','localtime'),
+              deal_accepted_at = COALESCE(deal_accepted_at, datetime('now','localtime')),
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
+    .run(String(name || "").trim(), data || null, String(adtId));
   return getAdtApplication(adtId);
 }
 

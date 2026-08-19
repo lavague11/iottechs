@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { createAdtApplication, acceptAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc } from "../../lib/db";
+import { createAdtApplication, acceptAdtDeal, signAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 import { makeAccessToken, accessTtlFor, makeToken, parseToken, parseAccessToken } from "../../lib/auth";
 
@@ -144,5 +144,19 @@ export async function acceptAdtQuoteAction(adtId) {
   if (!app) return { error: "Application not found." };
   if (!app.deal_shared_at) return { error: "No quote to accept yet." };
   acceptAdtDeal(adtId);
+  return { ok: true };
+}
+
+// Quote — the customer SIGNS the quote (the required step to move forward). Same signature contract as
+// the proposal: a typed full name + rasterized PNG. Signing records the agreement AND accepts the deal.
+export async function signAdtQuoteAction(adtId, sig) {
+  const app = getAdtApplication(adtId);
+  if (!app) return { error: "Application not found." };
+  if (!(await canAccessAdt(app))) return { error: "Not authorized." };
+  if (!app.deal_shared_at) return { error: "No quote to sign yet." };
+  const name = String(sig?.name || "").trim();
+  if (name.length < 2) return { error: "Please enter your full name to sign." };
+  if (!sig?.data) return { error: "A signature is required." };
+  signAdtDeal(adtId, { name, data: sig.data });
   return { ok: true };
 }

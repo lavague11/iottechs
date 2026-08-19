@@ -55,6 +55,9 @@ export default async function AdtPage({ searchParams }) {
     has_verbal: !!rec.verbal_password,
     emergency: (() => { try { return JSON.parse(rec.emergency_contacts || "[]"); } catch { return []; } })(),
     deal_accepted: !!rec.deal_accepted_at, status: rec.status || "submitted",
+    // The customer's own signature on their quote (theirs to see) — name, Eastern stamp, and image.
+    deal_signed: !!rec.deal_signed_at, deal_signed_name: rec.deal_signed_name || "",
+    deal_signed_at: rec.deal_signed_at || null, deal_signature_data: rec.deal_signature_data || null,
     docs_note: rec.status === "needs_docs" ? (rec.docs_note || "") : "",
     customer_docs: rec.customer_docs || [],
   } : null;

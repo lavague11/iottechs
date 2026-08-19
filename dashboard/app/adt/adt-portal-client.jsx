@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adtSummary, adtStatusMeta } from "../../lib/adt";
-import { acceptAdtQuoteAction, lockAdtAction, uploadAdtDocAction, removeAdtDocAction } from "./actions";
+import { fmtSignStamp } from "../../lib/proposal";
+import { signAdtQuoteAction, lockAdtAction, uploadAdtDocAction, removeAdtDocAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
+import ProposalSignModal from "../project/[accessId]/proposal-sign-modal";
 import AdtIntake from "./adt-intake";
 import AdtGate from "./adt-gate";
 
@@ -54,18 +56,51 @@ const DVI = {
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
 };
 
-// Customer accepts ("picks up") the quote staff shared with them.
-function AcceptQuote({ app, accepted }) {
+// Customer SIGNS the quote staff shared with them — the required step before we schedule. Same
+// signature tool as the proposal (typed name → cursive PNG), same Eastern-time stamp on the record.
+function SignQuote({ app }) {
   const router = useRouter();
   const [err, setErr] = useState("");
+  const [open, setOpen] = useState(false);
   const [pending, startTx] = useTransition();
-  const accept = () => startTx(async () => { setErr(""); const r = await acceptAdtQuoteAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
-  if (accepted) return <div className="adtc-pad"><div className="adtc-ok">✓ Quote accepted — thank you! We'll take it from here and reach out to install.</div></div>;
+  const signed = !!app.deal_signed;
+  const telHref = `tel:${SUPPORT_PHONE.replace(/\D/g, "")}`;
+  const sign = (sig) => startTx(async () => {
+    setErr("");
+    const r = await signAdtQuoteAction(app.adt_id, sig);
+    if (r?.error) { setErr(r.error); return; }
+    setOpen(false); router.refresh();
+  });
+
+  if (signed) return (
+    <div className="adtc-pad">
+      <div className="adtc-ok" style={{ marginBottom: 12 }}>✓ Quote signed — thank you! We'll schedule your install and reach out.</div>
+      <div className="adtc-signrec">
+        <div className="adtc-signrec-h">Signed &amp; approved</div>
+        {app.deal_signature_data
+          ? <img src={app.deal_signature_data} alt="Your signature" className="adtc-signrec-img" />
+          : <span className="adtc-signrec-typed">{app.deal_signed_name}</span>}
+        <div className="adtc-signrec-meta">{app.deal_signed_name}{app.deal_signed_at ? ` · Signed ${fmtSignStamp(app.deal_signed_at)}` : ""}</div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="adtc-pad">
-      <div className="adtc-muted" style={{ marginBottom: 12 }}>Happy with your quote? Accept it and we'll schedule your install. Questions first? Call <a href={`tel:${SUPPORT_PHONE.replace(/\D/g, "")}`}>{SUPPORT_PHONE}</a>.</div>
+      <div className="adtc-muted" style={{ marginBottom: 12 }}>Happy with your quote? Sign to approve it and we'll schedule your install. Questions first? Call <a href={telHref}>{SUPPORT_PHONE}</a>.</div>
       {err && <div className="adt-err" style={{ marginBottom: 10 }}>{err}</div>}
-      <button className="adtc-btn" disabled={pending} onClick={accept}>{pending ? "Accepting…" : "Accept quote"}</button>
+      <button className="adtc-btn" disabled={pending} onClick={() => setOpen(true)}>Review &amp; sign</button>
+      <ProposalSignModal
+        open={open}
+        heading="Sign your ADT quote"
+        subheading="Approve your monitoring plan &amp; equipment"
+        reference={app.adt_id}
+        defaultName={app.name || ""}
+        agreeText="I have reviewed my ADT quote above and authorize IOT TECHS to proceed with my installation and monitoring service."
+        busy={pending}
+        onConfirm={sign}
+        onCancel={() => setOpen(false)}
+      />
     </div>
   );
 }
@@ -77,7 +112,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const isComm = app.property_type === "commercial";
   const scheduled = !!app.schedule_date;
   const done = app.stage === "completed";
-  const accepted = !!app.deal_accepted;
+  const signed = !!app.deal_signed;   // the quote is signed → the Quote stage is complete and we can schedule
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [], asap = !!app.asap;
   const hasPrefs = prefDays.length > 0 || prefWins.length > 0 || asap;
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
@@ -183,7 +218,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const quoteNode = quote
     ? <QuotePanel adtId={app.adt_id} quote={quote} bare />
     : <div className="adtc-pad"><div className="adtc-muted">Your installer will build your quote here. We'll email you when it's ready to review.</div></div>;
-  const acceptNode = <AcceptQuote app={app} accepted={accepted} />;
+  const signNode = <SignQuote app={app} />;
   const completeNode = (
     <div className="adtc-pad">
       {done
@@ -209,11 +244,11 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle",
       tools: [{ name: "Your application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: equipmentNode }] },
-    { name: "Quote", pill: accepted ? "Accepted" : quote ? "Ready" : "Pending", pct: accepted ? 100 : quote ? 100 : 0, tint: "purple",
-      turn: quote && !accepted ? "mine" : "idle", need: "Review & accept your quote",
+    { name: "Quote", pill: signed ? "Signed" : quote ? "Ready" : "Pending", pct: signed ? 100 : quote ? 60 : 0, tint: "purple",
+      turn: quote && !signed ? "mine" : "idle", need: "Review & sign your quote",
       tools: [
         { name: "Your quote", label: quote ? "View pricing" : "Awaiting quote", state: quote ? "done" : "active", heavy: !!quote, node: quoteNode },
-        ...(quote ? [{ name: accepted ? "Accepted" : "Accept quote", label: accepted ? "✓ Accepted" : "Tap to accept", state: accepted ? "done" : "active", node: acceptNode }] : []),
+        ...(quote ? [{ name: signed ? "Signed" : "Review & sign", label: signed ? "✓ Signed" : "Signature required", state: signed ? "done" : "active", node: signNode }] : []),
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green", turn: "idle",
       tools: [{ name: "Installation", label: done ? "Live" : scheduled ? DAY_FMT(app.schedule_date) : "Awaiting install", state: done ? "done" : "active", node: completeNode }] },
@@ -276,6 +311,11 @@ const CUSTCSS = `
 .adtc-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:11px}
 .adtc-btn{height:44px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
 .adtc-btn:disabled{opacity:.55;cursor:default}
+.adtc-signrec{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-raise,#FBFBFA);padding:14px 16px}
+.adtc-signrec-h{font-size:.62rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:8px}
+.adtc-signrec-img{max-height:70px;max-width:100%;display:block}
+.adtc-signrec-typed{font-size:1.7rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive}
+.adtc-signrec-meta{margin-top:8px;padding-top:8px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.78rem;color:var(--dv-meta,#787D84)}
 .adtc-steps{margin-top:14px}
 .adtc-ul{margin:6px 0 0;padding-left:18px;color:var(--dv-ink,#101418);font-size:.88rem;line-height:1.7}
 .adtc-ul b{color:var(--dv-gold-deep,#A8842F)}

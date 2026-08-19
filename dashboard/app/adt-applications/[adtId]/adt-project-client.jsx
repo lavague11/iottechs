@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
+import { fmtSignStamp } from "../../../lib/proposal";
 import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 
@@ -229,18 +230,27 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const [shareErr, setShareErr] = useState("");
   const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
   const accepted = !!app.deal_accepted;
+  const signed = !!app.deal_signed;
 
   // Submit from inside the ADT Tool → share the quote with the customer (the "send it like the proposal" step).
   const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} onSubmit={() => doShare(true)} />;
   const shareNode = (
     <div style={pad} className="adtp">
-      {accepted && <div className="adtp-ok">✓ Customer accepted the quote</div>}
+      {signed ? (
+        <div className="adtp-signrec">
+          <div className="adtp-signrec-h">✓ Signed by customer</div>
+          {app.deal_signature_data
+            ? <img src={app.deal_signature_data} alt="Customer signature" className="adtp-signrec-img" />
+            : <span className="adtp-signrec-typed">{app.deal_signed_name}</span>}
+          <div className="adtp-signrec-meta">{app.deal_signed_name}{app.deal_signed_at ? ` · Signed ${fmtSignStamp(app.deal_signed_at)}` : ""}</div>
+        </div>
+      ) : accepted ? <div className="adtp-ok">✓ Customer accepted the quote</div> : null}
       {shared
-        ? !accepted && <div className="adtp-ok">✓ Shared — the customer sees their quote on the ADT portal</div>
+        ? !signed && <div className="adtp-ok">✓ Shared — the customer sees their quote and can sign it on the ADT portal</div>
         : <div className="adtp-muted" style={{ marginBottom: 10 }}>The customer sees no pricing until you share it. They'll get retail, activation, your applied credit, and due-at-install — never cost or commission.</div>}
       {shareErr && <div className="adtp-err">{shareErr}</div>}
       {shared
-        ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
+        ? !signed && <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
         : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
       {!hasDeal && !shared && <div className="adtp-muted" style={{ marginTop: 8 }}>Price the deal first.</div>}
     </div>
@@ -253,7 +263,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       turn: done ? "idle" : "mine", need: "Price the deal",
       tools: [
         { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
-        { name: "Customer quote", label: accepted ? "Accepted by customer" : shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
+        { name: "Customer quote", label: signed ? "Signed by customer" : shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green",
       turn: done ? "idle" : "mine", need: "Schedule + complete the install",
@@ -365,6 +375,11 @@ const CSS = `
 .adtp-editbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 4px;font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
+.adtp-signrec{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-raise,#FBFBFA);padding:13px 15px;margin-bottom:12px}
+.adtp-signrec-h{font-size:.82rem;font-weight:800;color:var(--dv-green,#2E7D5B);margin-bottom:9px}
+.adtp-signrec-img{max-height:64px;max-width:100%;display:block}
+.adtp-signrec-typed{font-size:1.6rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive}
+.adtp-signrec-meta{margin-top:8px;padding-top:8px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.76rem;color:var(--dv-meta,#787D84)}
 .adtp-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
 .adtp-form input,.adtp-form select{height:40px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;flex:1;min-width:140px}
 .adtp-form input:focus,.adtp-form select:focus{border-color:var(--dv-gold,#C9A96E)}

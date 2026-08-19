@@ -29,6 +29,8 @@ export default async function AdtProjectPage({ params }) {
     pref_days: app.pref_days || [], pref_windows: app.pref_windows || [], deal_json: app.deal_json || "",
     verification_doc: office ? (app.verification_doc || null) : null,
     deal_shared: !!app.deal_shared_at, deal_accepted: !!app.deal_accepted_at,
+    deal_signed: !!app.deal_signed_at, deal_signed_name: app.deal_signed_name || "",
+    deal_signed_at: app.deal_signed_at || null, deal_signature_data: app.deal_signature_data || null,
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };
   return <AdtProjectClient user={user} alerts={alerts} app={a} />;
