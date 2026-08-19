@@ -48,6 +48,26 @@ export function customerAnnouncement(f = {}) {
   return null;
 }
 
+// Server-friendly "does the customer owe an action right now?" — derived from db.buildStageFacts
+// field names (survey_accepted / proposal_status / proposal_signed / deposit_recorded /
+// final_balance_paid / stage). Returns { label, cta, target, order } or null when the ball is on the
+// company's side. `order` = flow position, so a customer with several projects can be shown their
+// pending actions in chronological order. `target` is the stage the project's gateway centers on.
+export function customerTodo(f = {}) {
+  const S = f.stage;
+  if (S === "site_survey" && !f.survey_accepted)
+    return { label: "Review & approve your site survey", cta: "Review survey", target: "site_survey", order: 1 };
+  if ((S === "proposal" || S === "approval_deposit") && f.proposal_status !== "accepted")
+    return { label: "Review & accept your proposal", cta: "Review proposal", target: "proposal", order: 2 };
+  if (S === "approval_deposit" && !f.proposal_signed)
+    return { label: "Sign your agreement", cta: "Sign now", target: "approval_deposit", order: 3 };
+  if (S === "approval_deposit" && !f.deposit_recorded)
+    return { label: "Pay your deposit", cta: "Pay deposit", target: "approval_deposit", order: 4 };
+  if (S === "payment" && !f.final_balance_paid)
+    return { label: "Pay your final balance", cta: "Pay balance", target: "approval_deposit", order: 5 };
+  return null;
+}
+
 export function customerAction(stage, f = {}) {
   switch (stage) {
     case "inquiry":

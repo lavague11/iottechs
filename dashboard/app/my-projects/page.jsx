@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { parseToken } from "../../lib/auth";
-import { getProjectsByContactEmail, getUserById, getServiceCallsForCustomer, getProjectCameraLabels } from "../../lib/db";
+import { getProjectsByContactEmail, getUserById, getServiceCallsForCustomer, getProjectCameraLabels, buildStageFacts } from "../../lib/db";
+import { customerTodo } from "../../lib/customer-action";
 import MyProjectsClient from "./my-projects-client";
 
 export default async function MyProjectsPage() {
@@ -35,6 +36,9 @@ export default async function MyProjectsPage() {
     date: p.date,
     issue: p.issue,
     customer_pin: p.customer_pin, // their OWN project PIN — used to display + copy the login link
+    // Does the customer owe an action on this project right now? Computed from the same facts the
+    // stage-flow gates on, so the landing page can route them straight to it. null = nothing to do.
+    todo: (() => { try { const f = buildStageFacts(p.access_id); return f ? customerTodo(f) : null; } catch { return null; } })(),
   }));
 
   // Their service calls (matched by email OR phone — intake often captures phone-only), slimmed

@@ -464,9 +464,11 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
   const first = firstName(name);
   const avtr  = initials(name);
 
-  const needsSig = projects.filter(p => ["proposal","approval_deposit"].includes(p.stage));
-  const needsQC  = projects.filter(p => p.stage === "qc");
-  const notifCount = needsSig.length + needsQC.length;
+  // What the customer actually owes right now, precise + ordered chronologically (survey → accept →
+  // sign → deposit → final balance). Each links straight to its project, where the gateway centers on
+  // the exact step. Only real customer actions appear — never "QC" (that's the office's move).
+  const actionItems = projects.filter(p => p.todo).sort((a, b) => (a.todo.order || 9) - (b.todo.order || 9));
+  const notifCount = actionItems.length;
 
   const counts = {
     all: projects.length,
@@ -524,17 +526,21 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-user-menu .um-link svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;flex-shrink:0}
 
         .cp-req-actions{display:grid;gap:10px;margin-top:16px}
-        .cp-req-card{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;transition:border-color .2s,box-shadow .2s;cursor:pointer}
+        .cp-req-card{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;transition:border-color .2s,box-shadow .2s;cursor:pointer;text-decoration:none;color:inherit}
         .cp-req-card:hover{border-color:var(--gold);box-shadow:0 10px 24px -14px rgba(14,19,32,.35)}
+        .cp-req-card.pay{border-color:#bfe0cd;background:#f6fbf8}
+        .cp-req-card.pay:hover{border-color:#2E7D5B}
         .cp-req-ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
         .cp-req-ic svg{width:17px;height:17px;fill:none;stroke-width:2}
         .cp-req-ic.sig{background:#faf4e8}.cp-req-ic.sig svg{stroke:var(--gold-deep)}
-        .cp-req-ic.qc{background:var(--accent-soft)}.cp-req-ic.qc svg{stroke:var(--accent)}
+        .cp-req-ic.review{background:#faf4e8}.cp-req-ic.review svg{stroke:var(--gold-deep)}
+        .cp-req-ic.money{background:#e9f3ed}.cp-req-ic.money svg{stroke:#2E7D5B}
         .cp-req-body{flex:1;min-width:0}
         .cp-req-body .r-title{font-weight:700;font-size:.92rem;margin-bottom:2px}
         .cp-req-body .r-sub{font-size:.82rem;color:var(--muted)}
-        .cp-req-arrow{color:var(--muted);font-size:.9rem;transition:transform .2s}
-        .cp-req-card:hover .cp-req-arrow{transform:translateX(3px)}
+        .cp-req-cta{font-size:.82rem;font-weight:800;color:var(--gold-deep);white-space:nowrap;transition:transform .2s}
+        .cp-req-card:hover .cp-req-cta{transform:translateX(3px)}
+        .cp-req-card.pay .cp-req-cta{color:#2E7D5B}
 
         .cp-welcome{padding:36px 0 0}
         .cp-welcome h1{font-size:clamp(1.35rem,2.6vw,1.8rem);font-weight:700;margin-bottom:14px}
@@ -688,15 +694,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                 <div className={`cp-notif-panel${notifOpen?" open":""}`}>
                   <div className="cp-np-head">Notifications</div>
                   {notifCount===0 && <div className="cp-no-notif">You're all caught up.</div>}
-                  {needsSig.map(p=>(
-                    <div key={p.access_id} className="cp-np-item" onClick={()=>document.getElementById("projects")?.scrollIntoView({behavior:"smooth"})}>
-                      <span className="cp-np-dot"/><div><div className="cp-np-title">Signature required</div><div className="cp-np-sub">{p.customer} · Proposal needs approval</div></div>
-                    </div>
-                  ))}
-                  {needsQC.map(p=>(
-                    <div key={p.access_id} className="cp-np-item" onClick={()=>document.getElementById("projects")?.scrollIntoView({behavior:"smooth"})}>
-                      <span className="cp-np-dot"/><div><div className="cp-np-title">QC required</div><div className="cp-np-sub">{p.customer} · Final QC checklist pending</div></div>
-                    </div>
+                  {actionItems.map(p=>(
+                    <a key={p.access_id} href={`/project/${p.access_id}`} className="cp-np-item" style={{textDecoration:"none",color:"inherit"}}>
+                      <span className="cp-np-dot"/><div><div className="cp-np-title">{p.todo.label}</div><div className="cp-np-sub">{p.customer}</div></div>
+                    </a>
                   ))}
                 </div>
               </div>
@@ -724,22 +725,27 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         <section className="cp-welcome">
           <div className="cp-wrap">
             <h1 className="cp-disp">Welcome back, <em>{first}</em>.</h1>
-            {(needsSig.length>0||needsQC.length>0) && (
+            {actionItems.length>0 && (
               <div className="cp-req-actions">
-                {needsSig.map(p=>(
-                  <div key={p.access_id} className="cp-req-card" onClick={()=>document.getElementById("projects")?.scrollIntoView({behavior:"smooth"})}>
-                    <span className="cp-req-ic sig"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
-                    <div className="cp-req-body"><div className="r-title">Signature required</div><div className="r-sub">{p.customer} · Proposal ready for sign-off</div></div>
-                    <span className="cp-req-arrow">→</span>
-                  </div>
-                ))}
-                {needsQC.map(p=>(
-                  <div key={p.access_id} className="cp-req-card" onClick={()=>document.getElementById("projects")?.scrollIntoView({behavior:"smooth"})}>
-                    <span className="cp-req-ic qc"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-                    <div className="cp-req-body"><div className="r-title">QC required</div><div className="r-sub">{p.customer} · Final QC checklist pending</div></div>
-                    <span className="cp-req-arrow">→</span>
-                  </div>
-                ))}
+                {actionItems.map(p=>{
+                  const pay = (p.todo.order||0) >= 4;   // deposit / final balance
+                  const sign = p.todo.order === 3;
+                  return (
+                    <a key={p.access_id} href={`/project/${p.access_id}`} className={`cp-req-card${pay?" pay":""}`}>
+                      <span className={`cp-req-ic ${pay?"money":sign?"sig":"review"}`}>
+                        {pay ? (
+                          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2 0 0 1 2.5-1.5c1.4 0 2.5.8 2.5 1.8 0 2.4-5 1.4-5 3.6 0 1 1.1 1.8 2.5 1.8a2.5 2 0 0 0 2.5-1.5"/></svg>
+                        ) : sign ? (
+                          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        )}
+                      </span>
+                      <div className="cp-req-body"><div className="r-title">{p.todo.label}</div><div className="r-sub">{p.customer}{p.address?` · ${p.address}`:""}</div></div>
+                      <span className="cp-req-cta">{p.todo.cta} →</span>
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>
