@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adtSummary, adtStatusMeta } from "../../lib/adt";
-import { acceptAdtQuoteAction, lockAdtAction } from "./actions";
+import { acceptAdtQuoteAction, lockAdtAction, uploadAdtDocAction, removeAdtDocAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
 import AdtIntake from "./adt-intake";
 import AdtGate from "./adt-gate";
 
 // Customer support line shown on the Complete stage. TODO: replace with the real ADT/IOT TECHS number.
-const SUPPORT_PHONE = "(800) 555-0100";
+const SUPPORT_PHONE = "(646) 396-0775";
 
 // Capitalize each word (names); format a phone as (xxx) xxx-xxxx as it's typed.
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -85,6 +85,31 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const [locked, setLocked] = useState(false);
   const telHref = `tel:${SUPPORT_PHONE.replace(/\D/g, "")}`;
 
+  // Needs-docs uploads — the customer sends the requested documents right here.
+  const [cdocs, setCdocs] = useState(app.customer_docs || []);
+  const [uerr, setUerr] = useState("");
+  const [uploading, startUpload] = useTransition();
+  const onUploadDoc = (e) => {
+    const file = e.target.files?.[0]; if (e.target) e.target.value = "";
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { setUerr("File is too large (max 8MB)."); return; }
+    setUerr("");
+    const rd = new FileReader();
+    rd.onload = () => {
+      const doc = { name: file.name, type: file.type, data: String(rd.result) };
+      startUpload(async () => {
+        const r = await uploadAdtDocAction(app.adt_id, doc);
+        if (r?.error) { setUerr(r.error); return; }
+        setCdocs((d) => [...d, doc]);
+      });
+    };
+    rd.readAsDataURL(file);
+  };
+  const onRemoveDoc = (i) => startUpload(async () => {
+    const r = await removeAdtDocAction(app.adt_id, i);
+    if (!r?.error) setCdocs((d) => d.filter((_, x) => x !== i));
+  });
+
   // Locked (project parity): show the PIN gate; back in with the admin PIN or the account's last-4.
   if (locked) return <AdtGate adtId={app.adt_id} firstName={String(app.name || "").trim().split(/\s+/)[0] || ""} onUnlocked={() => setLocked(false)} />;
 
@@ -95,7 +120,24 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         <div className="adtc-docsbanner">
           <b>Action needed — we need a few documents to continue.</b>
           {app.docs_note && <span>{app.docs_note}</span>}
-          <em>Call <a href={telHref}>{SUPPORT_PHONE}</a> or reply to your installer to send them over.</em>
+          <div className="adtc-docup">
+            {cdocs.map((d, i) => (
+              <div className="adtc-docrow" key={i}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg>
+                <a className="adtc-docn" href={d.data} download={d.name} target="_blank" rel="noreferrer">{d.name}</a>
+                <button type="button" className="adtc-docx" onClick={() => onRemoveDoc(i)} disabled={uploading} aria-label={`Remove ${d.name}`}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </div>
+            ))}
+            <label className={`adtc-docadd${uploading ? " busy" : ""}`}>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <span>{uploading ? "Uploading…" : cdocs.length ? "Upload another" : "Upload document"}</span>
+              <input type="file" accept=".pdf,image/*" onChange={onUploadDoc} hidden disabled={uploading} />
+            </label>
+          </div>
+          {uerr && <div className="adtc-docerr">{uerr}</div>}
+          <em>Or call <a href={telHref}>{SUPPORT_PHONE}</a> — we're here to help.</em>
         </div>
       )}
       <div className="adtc-app">
@@ -271,6 +313,15 @@ const CUSTCSS = `
 .adtc-docsbanner span{display:block;font-size:.9rem;color:#0B0F1A;margin-top:5px}
 .adtc-docsbanner em{display:block;font-style:normal;font-size:.82rem;margin-top:7px;color:#8a4b12}
 .adtc-docsbanner a{color:#8a4b12;font-weight:800;text-decoration:none}
+.adtc-docup{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.adtc-docrow{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid #f0d0a8;border-radius:9px;padding:7px 8px 7px 11px;color:#8a4b12;max-width:100%}
+.adtc-docn{font-size:.82rem;font-weight:700;color:#0B0F1A !important;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adtc-docx{display:grid;place-items:center;width:22px;height:22px;border:none;background:transparent;color:#8a4b12;cursor:pointer;border-radius:6px}
+.adtc-docx:hover:not(:disabled){background:#f8e3cd}
+.adtc-docadd{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1.5px dashed #e0b483;border-radius:9px;padding:8px 13px;color:#8a4b12;font-size:.82rem;font-weight:800;cursor:pointer}
+.adtc-docadd:hover{border-color:#C9A96E;background:#fffaf2}
+.adtc-docadd.busy{opacity:.6;cursor:default}
+.adtc-docerr{font-size:.8rem;color:#c0392b;font-weight:700;margin-top:7px}
 .adtc-support{margin-top:16px;font-size:.88rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:11px 13px}
 .adtc-support a{color:var(--dv-gold-deep,#A8842F);font-weight:800;text-decoration:none}
 .adtc-muted a{color:var(--dv-gold-deep,#A8842F);font-weight:700;text-decoration:none}

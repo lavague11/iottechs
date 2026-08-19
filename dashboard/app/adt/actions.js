@@ -1,9 +1,48 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { createAdtApplication, acceptAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin } from "../../lib/db";
+import { createAdtApplication, acceptAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
-import { makeAccessToken, accessTtlFor, makeToken } from "../../lib/auth";
+import { makeAccessToken, accessTtlFor, makeToken, parseToken, parseAccessToken } from "../../lib/auth";
+
+const STAFF = new Set(["admin", "manager", "sales", "tech"]);
+const digits = (s) => String(s || "").replace(/\D/g, "");
+
+// May the current visitor act on this ADT account? Staff, a valid PIN grant for THIS account, or the
+// signed-in owner (email/phone match) — mirrors the read gate in app/adt/page.jsx.
+async function canAccessAdt(rec) {
+  const jar = await cookies();
+  const sess = jar.get("iot_session")?.value ? await parseToken(jar.get("iot_session").value) : null;
+  if (sess && STAFF.has(sess.role)) return true;
+  const accessRaw = jar.get("iot_access")?.value;
+  const access = accessRaw ? await parseAccessToken(accessRaw) : null;
+  if (access && String(access.accessId) === String(rec.adt_id)) return true;
+  if (sess?.role === "customer") {
+    const u = sess.id ? getUserById(sess.id) : null;
+    const emailOwns = sess.email && rec.email && sess.email.trim().toLowerCase() === rec.email.trim().toLowerCase();
+    const phoneOwns = digits(u?.phone).length >= 7 && digits(u?.phone) === digits(rec.phone);
+    if (emailOwns || phoneOwns) return true;
+  }
+  return false;
+}
+
+// Customer uploads a requested document (needs-docs). Guarded to the account owner / PIN holder.
+export async function uploadAdtDocAction(adtId, doc) {
+  const rec = getAdtApplication(adtId);
+  if (!rec) return { error: "Application not found." };
+  if (!(await canAccessAdt(rec))) return { error: "Not authorized." };
+  if (!doc || !doc.data) return { error: "No file to upload." };
+  addAdtCustomerDoc(adtId, doc);
+  return { ok: true };
+}
+
+export async function removeAdtDocAction(adtId, idx) {
+  const rec = getAdtApplication(adtId);
+  if (!rec) return { error: "Application not found." };
+  if (!(await canAccessAdt(rec))) return { error: "Not authorized." };
+  removeAdtCustomerDoc(adtId, Number(idx));
+  return { ok: true };
+}
 
 // Master admin PIN — unlocks any account (same as the project gate). Defaults to 8965; override in prod.
 const ADMIN_MASTER_PIN = String(process.env.ADMIN_MASTER_PIN || "8965").trim();

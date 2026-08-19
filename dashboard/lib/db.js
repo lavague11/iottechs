@@ -581,6 +581,7 @@ function init() {
   if (!adtCols.includes("pref_windows")) db.exec("ALTER TABLE adt_applications ADD COLUMN pref_windows TEXT"); // JSON ["Morning",…] — preferred time windows
   if (!adtCols.includes("asap")) db.exec("ALTER TABLE adt_applications ADD COLUMN asap INTEGER DEFAULT 0"); // standalone flag: customer wants the install as soon as possible
   if (!adtCols.includes("contact_name")) db.exec("ALTER TABLE adt_applications ADD COLUMN contact_name TEXT"); // commercial: the person to reach (name field holds the business)
+  if (!adtCols.includes("customer_docs")) db.exec("ALTER TABLE adt_applications ADD COLUMN customer_docs TEXT"); // JSON [{name,type,data(dataURL),at},…] docs the customer uploaded for a needs-docs request
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
@@ -3496,6 +3497,7 @@ export function getAdtApplication(adtId) {
   try { r.equipment = JSON.parse(r.equipment || "{}"); } catch { r.equipment = {}; }
   try { r.pref_days = JSON.parse(r.pref_days || "[]"); } catch { r.pref_days = []; }
   try { r.pref_windows = JSON.parse(r.pref_windows || "[]"); } catch { r.pref_windows = []; }
+  try { r.customer_docs = r.customer_docs ? JSON.parse(r.customer_docs) : []; } catch { r.customer_docs = []; }
   r.asap = !!r.asap;
   try { r.verification_doc = r.verification_doc ? JSON.parse(r.verification_doc) : null; } catch { r.verification_doc = null; }
   return r;
@@ -3540,6 +3542,26 @@ export function setAdtStatus(adtId, status) {
   return getAdtApplication(adtId);
 }
 // Which documents the office still needs (shown to the customer when status = needs_docs).
+// Customer-uploaded documents for a needs-docs request. Each is a small dataURL blob (capped list).
+export function addAdtCustomerDoc(adtId, doc) {
+  const cur = getAdtApplication(adtId);
+  if (!cur || !doc || !doc.data) return null;
+  const list = Array.isArray(cur.customer_docs) ? cur.customer_docs : [];
+  if (list.length >= 12) return cur;   // cap the number kept per application
+  list.push({ name: String(doc.name || "document").slice(0, 140), type: String(doc.type || ""), data: String(doc.data), at: new Date().toISOString() });
+  db.prepare("UPDATE adt_applications SET customer_docs = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(list), String(adtId));
+  return getAdtApplication(adtId);
+}
+export function removeAdtCustomerDoc(adtId, idx) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  const list = Array.isArray(cur.customer_docs) ? cur.customer_docs : [];
+  if (idx >= 0 && idx < list.length) list.splice(idx, 1);
+  db.prepare("UPDATE adt_applications SET customer_docs = ?, updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE")
+    .run(list.length ? JSON.stringify(list) : null, String(adtId));
+  return getAdtApplication(adtId);
+}
 export function setAdtDocsNote(adtId, note) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;

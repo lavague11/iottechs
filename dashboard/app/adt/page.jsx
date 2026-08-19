@@ -56,6 +56,7 @@ export default async function AdtPage({ searchParams }) {
     emergency: (() => { try { return JSON.parse(rec.emergency_contacts || "[]"); } catch { return []; } })(),
     deal_accepted: !!rec.deal_accepted_at, status: rec.status || "submitted",
     docs_note: rec.status === "needs_docs" ? (rec.docs_note || "") : "",
+    customer_docs: rec.customer_docs || [],
   } : null;
 
   // The customer's quote — ONLY once staff shared it, and ALWAYS sanitized (no cost/commission).

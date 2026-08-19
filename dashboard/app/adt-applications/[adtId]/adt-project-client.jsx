@@ -150,6 +150,19 @@ export default function AdtProjectClient({ user, alerts, app }) {
           {err && <span className="adtp-docs-err">{err}</span>}
         </div>
       )}
+      {app.customer_docs?.length > 0 && (
+        <div className="adtp-updocs">
+          <span className="adtp-sub" style={{ margin: "0 0 7px" }}>Documents the customer uploaded</span>
+          <div className="adtp-updocs-list">
+            {app.customer_docs.map((d, i) => (
+              <a key={i} className="adtp-updoc" href={d.data} download={d.name} target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg>
+                {d.name}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
       <div className="adtp-cd">
         <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div></div>
@@ -322,6 +335,11 @@ const CSS = `
 .adtp-docs-in{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 11px;font-size:.86rem;font-family:inherit;resize:vertical;outline:none;background:#fff;color:var(--dv-ink,#101418)}
 .adtp-docs-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .adtp-docs-err{font-size:.78rem;color:#c0392b;font-weight:600}
+.adtp-updocs{margin-bottom:14px}
+.adtp-updocs-list{display:flex;flex-wrap:wrap;gap:8px}
+.adtp-updoc{display:inline-flex;align-items:center;gap:7px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:8px 12px;font-size:.83rem;font-weight:600;color:var(--dv-ink,#101418);text-decoration:none}
+.adtp-updoc:hover{border-color:var(--dv-gold,#C9A96E)}
+.adtp-updoc svg{color:var(--dv-gold-deep,#9A7B43)}
 .adtp-foot{display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adtp-foot span{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .adtp-foot b{font-size:1.15rem;font-weight:800;color:var(--dv-ink,#101418)}
