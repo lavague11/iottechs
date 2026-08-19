@@ -188,14 +188,6 @@ export default function AdtProjectClient({ user, alerts, app }) {
         </a>
       </>)}
 
-      <div className="adtp-cd-sec">Equipment <em>${summary.price.toLocaleString()} · {summary.points} pts · {summary.count} item{summary.count === 1 ? "" : "s"}</em></div>
-      {summary.lines.length === 0 ? <div className="adtp-muted" style={{ padding: "0 2px" }}>No equipment on file.</div> : (
-        <div className="adtp-list">
-          {summary.lines.map((l) => (
-            <div key={l.id} className="adtp-row"><span className="adtp-q">{l.qty}×</span><span className="adtp-n">{l.name}</span><span className="adtp-p">{l.linePrice ? `$${l.linePrice.toLocaleString()}` : ""}{l.linePrice && l.linePoints ? " · " : ""}{l.linePoints ? `${l.linePoints} pts` : (l.linePrice ? "" : "0 pts")}</span></div>
-          ))}
-        </div>
-      )}
       {(prefDays.length || prefWins.length || app.asap) ? (
         <div className="adtp-pref">
           <span>Preferred install times</span>
@@ -206,7 +198,6 @@ export default function AdtProjectClient({ user, alerts, app }) {
         </div>
       ) : null}
       {app.notes && <div className="adtp-notes"><span>Notes</span>{app.notes}</div>}
-      <div className="adtp-foot"><span>Estimated total</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
     </div>
   );
 
@@ -251,7 +242,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle", need: "",
-      tools: [{ name: "Application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: applyNode }] },
+      tools: [{ name: "Customer's application", label: isComm ? "Commercial" : "Residential", state: "done", node: applyNode }] },
     { name: "Deal", pill: hasDeal ? (shared ? "Shared" : "Priced") : "Open", pct: hasDeal ? 100 : 0, tint: "purple",
       turn: done ? "idle" : "mine", need: "Price the deal",
       tools: [
