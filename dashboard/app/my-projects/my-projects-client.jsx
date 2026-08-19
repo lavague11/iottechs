@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
 import { PHASES, phasesForType, masterToPhaseKey, phaseLabelOf } from "../../lib/spec";
@@ -70,10 +71,14 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [addrPicked, setAddrPicked] = useState(false);   // true only once a Google place is chosen
   function set(k,v){ setF(p=>({...p,[k]:v})); }
   function setTC(k,v){ setF(p=>({...p,[k]:toTitleCase(v)})); }
   async function submit(e){
-    e.preventDefault(); setErr(""); setBusy(true);
+    e.preventDefault(); setErr("");
+    if(!f.service){ setErr("Please choose a service type."); return; }
+    if(!addrPicked || !/\b\d{5}\b/.test(f.address)){ setErr("Pick your service address from the suggestions — a full address including ZIP code."); return; }
+    setBusy(true);
     try {
       const r = await fetch("/api/demo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(f)});
       const j = await r.json();
@@ -90,15 +95,19 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
       </div>
       <div className="am-row2">
         <div className="am-field"><label>Phone</label><input type="tel" value={f.phone} onChange={e=>set("phone",formatPhone(e.target.value))} placeholder="(646) 555-0100"/></div>
-        <div className="am-field"><label>Company Name <span className="am-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} value={f.company} onChange={v=>set("company",toTitleCase(v))} onPlace={p=>setF(prev=>({...prev, company:toTitleCase(p.name||prev.company), address:p.address||prev.address}))} placeholder="Acme Corp"/></div>
+        <div className="am-field"><label>Company Name <span className="am-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} value={f.company} onChange={v=>set("company",toTitleCase(v))} onPlace={p=>{ setF(prev=>({...prev, company:toTitleCase(p.name||prev.company), address:p.address||prev.address})); if(p.address) setAddrPicked(true); }} placeholder="Acme Corp"/></div>
       </div>
       <div className="am-field">
         <label>Service Address</label>
-        <AddressAutocomplete value={f.address} onChange={v=>set("address",v)}/>
+        <AddressAutocomplete value={f.address}
+          onChange={v=>{ set("address",v); setAddrPicked(false); }}
+          onPlace={p=>{ set("address", p.address||p.name||""); setAddrPicked(!!p.address); }}
+          placeholder="Start typing your address…"/>
+        {f.address && !addrPicked && <div className="am-hint">Choose the matching address from the dropdown.</div>}
       </div>
       <div className="am-field">
         <label>Service Type</label>
-        <select value={f.service} onChange={e=>set("service",e.target.value)}>
+        <select value={f.service} onChange={e=>set("service",e.target.value)} required>
           <option value="">Select a service…</option>
           {SERVICES.map(s=><option key={s}>{s}</option>)}
         </select>
@@ -265,10 +274,12 @@ function SuccessView({ name, data, onClose }) {
 }
 
 function ActionModal({ type, user, projects, openSvcProjectIds, onClose }) {
+  const router = useRouter();
   const [step, setStep]       = useState("start");
   const [doneData, setDoneData] = useState(null);
 
-  function handleDone(data) { setDoneData(data || {}); }
+  // Show the success card AND refresh the server data so the new project appears without a manual reload.
+  function handleDone(data) { setDoneData(data || {}); router.refresh(); }
 
   if (doneData) return (
     <div className="am-overlay" onClick={e=>{ if(e.target.classList.contains("am-overlay")) onClose(); }}>
@@ -649,6 +660,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .am-field input:focus,.am-field select:focus,.am-field textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.15)}
         .am-field textarea{resize:vertical;min-height:90px}
         .am-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
+        .am-hint{font-size:.78rem;color:var(--muted);margin-top:5px}
         .am-note{font-size:.83rem;color:#7a5f1f;background:#faf4e8;border:1px solid #ecdcb4;border-left:3px solid var(--gold,#C9A96E);border-radius:0 8px 8px 0;padding:9px 12px;line-height:1.45}
         .am-submit{width:100%;padding:13px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:background .18s,transform .15s}
         .am-submit:hover:not(:disabled){background:var(--ink);color:var(--gold);transform:translateY(-1px)}
