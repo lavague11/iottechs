@@ -3,7 +3,7 @@ import { listAdtApplications } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import AdtApplicationsClient from "./adt-applications-client";
 
-// Office view for ADT (24/7 Monitoring) applications — the Apply→Schedule→Complete intakes from
+// Office view for ADT Monitoring applications — the Apply→Schedule→Complete intakes from
 // the /adt portal. Staff only.
 export default async function AdtApplicationsPage() {
   const user = await getSessionUser();
