@@ -2063,16 +2063,18 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const iDate = lp.install_date || lp.date || null;
         const dOpen = iDate ? (new Date(iDate + "T00:00:00") <= new Date(new Date().setHours(0, 0, 0, 0))) : false;
         const techLocked = cView === "tech" && !(woAccepted && dOpen);
-        tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
-          node: techLocked
-            ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
-            : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
-                role={cView} readOnly={cView === "customer" || !!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
-        if (staff || cView === "tech" || cView === "customer") {
-          // Customers see Add-ons always; grayed stub until there's an approved change order to review.
-          const hasAddon = staff || cView === "tech" || toolMeta?.addendum?.count > 0;
+        // The installation work order / checklist is an internal ops document — never shown to the customer.
+        if (cView !== "customer") {
+          tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
+            node: techLocked
+              ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
+              : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                  role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
+        }
+        // Job-site add-ons: staff/tech always; the customer only sees it once an actual change order exists.
+        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: hasAddon ? <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> : null });
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         return tools;
       }
