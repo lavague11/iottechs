@@ -398,8 +398,7 @@ const CSS = `
 .dv-readout .pct{font-size:20px;font-weight:700;letter-spacing:-.03em}
 .dv-readout .cap{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-top:5px}
 
-.dv-deck{flex:1 1 auto;position:relative;overflow:hidden;touch-action:pan-y;cursor:grab}
-.dv-deck:active{cursor:grabbing}
+.dv-deck{flex:1 1 auto;position:relative;overflow:hidden;touch-action:pan-y;cursor:default}
 .dv-slide{position:absolute;top:0;left:0;height:100%;width:100%;will-change:transform,opacity}
 .dv-pane{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}

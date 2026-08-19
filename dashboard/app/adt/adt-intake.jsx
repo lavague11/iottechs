@@ -19,9 +19,9 @@ const AUTO = { panel5: 1, lte: 1, contact: 1, glass: 1, motion: 1 };    // prese
 // Customer (simple) view: three plain-language coverage questions instead of the full picker. The
 // control panel + cell backup are always included (part of AUTO) — the rep refines the rest later.
 const SIMPLE_Q = [
-  { id: "contact", label: "Doors & windows to protect", sub: "One sensor per entry point" },
-  { id: "glass",   label: "Glass break sensors",        sub: "For rooms with large windows" },
-  { id: "motion",  label: "Motion sensors",             sub: "Detects movement inside a room" },
+  { id: "contact", label: "Doors",              sub: "One sensor per door" },
+  { id: "glass",   label: "Glass break sensors", sub: "For rooms with large windows" },
+  { id: "motion",  label: "Motion sensors",      sub: "Detects movement inside a room" },
 ];
 
 // A small placeholder glyph per equipment group — swap for real product photos later.
@@ -157,7 +157,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   return (
     <form className="ai" onSubmit={submit}>
       <style>{CSS}</style>
-      {prefill?.name && <div className="ai-prefill">✓ We pre-filled what's on your account — review it, add your equipment and secure details, then submit.</div>}
+      {prefill?.name && <div className="ai-prefill">✓ Verify your information below, then submit.</div>}
 
       <div className="ai-secrow">
         <div className="ai-chip" onClick={() => setPropertyType(null)}>{isComm ? "Commercial" : "Residential"} · Change</div>
@@ -328,7 +328,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai-winlbl">Time window</div>
       <div className="ai-wins">{WINS.map((w) => <button type="button" key={w.key} className={"ai-win" + (wins.includes(w.key) ? " on" : "")} onClick={() => wtoggle(w.key)}><b>{w.key}</b><span>{w.sub}</span></button>)}</div>
 
-      {summary.lines.length > 0 && (
+      {!simple && summary.lines.length > 0 && (
         <div className="ai-cart">
           <div className="ai-cart-t">Your order <em>· {summary.count} item{summary.count === 1 ? "" : "s"} · {summary.points} pt{summary.points === 1 ? "" : "s"}</em></div>
           {summary.lines.map((l) => (
