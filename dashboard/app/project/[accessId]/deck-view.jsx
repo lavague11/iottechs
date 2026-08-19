@@ -104,6 +104,20 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const cur = stages[idx] || {};
   const turnText = cur.turn === "customer" ? "Waiting on customer" : cur.turn === "mine" ? `Next · ${cur.need || ""}` : (cur.need || "");
 
+  // Stage marker state — one shared language across every Deck (camera + ADT):
+  //   todo (white) · active (blinking yellow, being worked on) · done (solid yellow, submitted/waiting)
+  //   · attention (blinking red, needs approval/signature) · complete (green).
+  // A stage can name its own `mark`; otherwise we derive a sensible default from where we are + turn.
+  const markOf = (s, i) => {
+    if (s.mark) return s.mark;                                   // explicit override wins
+    if (i < idx || s.pct >= 100) return "complete";             // behind us / fully done → green
+    if (i > idx) return "todo";                                 // not reached yet → white
+    const tools = s.tools || [];                                // the current stage:
+    if (s.turn === "customer") return "attention";              // an approval/signature is outstanding → blink red
+    if (tools.length > 0 && tools.every((t) => t.state === "done")) return "done"; // work submitted, waiting → solid yellow
+    return "active";                                            // being worked on → blink yellow
+  };
+
   return (
     <div className="dv-shell" data-tint={cur.tint || "ink"}>
       {/* top bar */}
@@ -216,7 +230,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             return (
               <button key={i} className={`dv-seg${done ? " done" : ""}${current ? " current" : ""}`} onClick={() => go(i)}>
                 <div className="dv-bar"><i style={{ width: fill + "%", background: current ? "var(--dv-gold)" : "var(--dv-ink)" }} /></div>
-                <div className="dv-lab"><span className="dv-beacon" /><b>{done ? "✓" : i + 1}</b><span className="nm">{s.name}</span></div>
+                <div className="dv-lab"><span className={`dv-beacon m-${markOf(s, i)}`} /><b>{done ? "✓" : i + 1}</b><span className="nm">{s.name}</span></div>
               </button>
             );
           })}
@@ -388,10 +402,19 @@ const CSS = `
 .dv-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .25s}
 .dv-seg:hover .dv-lab,.dv-seg.done .dv-lab{color:var(--dv-ink-soft)}
 .dv-seg.current .dv-lab{color:var(--dv-ink)}
-.dv-beacon{width:6px;height:6px;border-radius:99px;flex:0 0 auto;background:transparent;position:relative;transform:scale(.4);transition:transform .35s var(--dv-eo)}
-.dv-seg.current .dv-beacon{background:var(--dv-gold-deep);transform:scale(1);animation:dvbeat 1.9s var(--dv-e) infinite}
-.dv-seg.current .dv-beacon::after{content:'';position:absolute;inset:-3px;border-radius:99px;border:1.5px solid var(--dv-gold-deep);animation:dvring 1.9s var(--dv-e) infinite}
-.dv-seg.done .dv-beacon{background:var(--dv-green);transform:scale(1)}
+/* Stage markers — one shared status language across every Deck:
+   white = not started · blinking yellow = being worked on · solid yellow = done/submitted
+   · blinking red = needs approval or signature · green = complete. */
+.dv-beacon{width:7px;height:7px;border-radius:99px;flex:0 0 auto;position:relative;
+  background:#fff;border:1.5px solid var(--dv-faint);transition:background .3s,border-color .3s}
+.dv-beacon.m-todo{background:#fff;border-color:var(--dv-faint)}
+.dv-beacon.m-done{background:var(--dv-gold);border-color:var(--dv-gold-deep)}
+.dv-beacon.m-complete{background:var(--dv-green);border-color:var(--dv-green)}
+.dv-beacon.m-active{background:var(--dv-gold);border-color:var(--dv-gold-deep);animation:dvBlinkY 1.1s ease-in-out infinite}
+.dv-beacon.m-attention{background:var(--dv-red,#C4553D);border-color:var(--dv-red,#C4553D);animation:dvBlinkR .8s ease-in-out infinite}
+@keyframes dvBlinkY{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}50%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+@keyframes dvBlinkR{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(196,85,61,.6)}50%{opacity:.5;box-shadow:0 0 0 5px rgba(196,85,61,0)}}
+@media (prefers-reduced-motion:reduce){.dv-beacon.m-active,.dv-beacon.m-attention{animation:none}}
 @keyframes dvbeat{0%,100%{opacity:1}55%{opacity:.35}}
 @keyframes dvring{0%{transform:scale(.6);opacity:.7}70%,100%{transform:scale(1.7);opacity:0}}
 .dv-readout{flex:0 0 auto;text-align:right;line-height:1}

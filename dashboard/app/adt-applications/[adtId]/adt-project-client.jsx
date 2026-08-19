@@ -258,15 +258,20 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle", need: "",
+      mark: app.status === "needs_docs" ? "attention" : "complete",
       tools: [{ name: "Customer's application", label: isComm ? "Commercial" : "Residential", state: "done", node: applyNode }] },
     { name: "Deal", pill: hasDeal ? (shared ? "Shared" : "Priced") : "Open", pct: hasDeal ? 100 : 0, tint: "purple",
       turn: done ? "idle" : "mine", need: "Price the deal",
+      // priced-not-shared = done (solid yellow); shared-not-signed = the customer owes a signature (blink red); signed = complete.
+      mark: signed ? "complete" : shared ? "attention" : hasDeal ? "done" : "active",
       tools: [
         { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
         { name: "Customer quote", label: signed ? "Signed by customer" : shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green",
       turn: done ? "idle" : "mine", need: "Schedule + complete the install",
+      // signed but not yet scheduled → the office needs to book the install (needs attention).
+      mark: done ? "complete" : scheduled ? "active" : signed ? "attention" : "todo",
       tools: [{ name: "Schedule & finish", label: done ? `Done ${fmtDay(app.completed_at)}` : scheduled ? fmtDay(app.schedule_date) : "Set install date", state: done ? "done" : "active", node: completeNode }] },
   ];
 

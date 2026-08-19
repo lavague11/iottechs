@@ -243,14 +243,17 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
 
   const stages = [
     { name: "Apply", pill: "Applied", pct: 100, tint: "gold", turn: "idle",
+      mark: app.status === "needs_docs" ? "attention" : "complete",
       tools: [{ name: "Your application", label: `${app.points || 0} pts · ${summary.count} item${summary.count === 1 ? "" : "s"}`, state: "done", node: equipmentNode }] },
     { name: "Quote", pill: signed ? "Signed" : quote ? "Ready" : "Pending", pct: signed ? 100 : quote ? 60 : 0, tint: "purple",
       turn: quote && !signed ? "mine" : "idle", need: "Review & sign your quote",
+      mark: signed ? "complete" : quote ? "attention" : "active",
       tools: [
         { name: "Your quote", label: quote ? "View pricing" : "Awaiting quote", state: quote ? "done" : "active", heavy: !!quote, node: quoteNode },
         ...(quote ? [{ name: signed ? "Signed" : "Review & sign", label: signed ? "✓ Signed" : "Signature required", state: signed ? "done" : "active", node: signNode }] : []),
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green", turn: "idle",
+      mark: done ? "complete" : scheduled ? "active" : "todo",
       tools: [{ name: "Installation", label: done ? "Live" : scheduled ? DAY_FMT(app.schedule_date) : "Awaiting install", state: done ? "done" : "active", node: completeNode }] },
   ];
 
