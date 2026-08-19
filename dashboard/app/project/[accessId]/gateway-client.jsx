@@ -2091,9 +2091,30 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "System QR", label: "Activation QR",
             node: lp.system_qr ? <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> : null });
         }
-        tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
-          node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
-            readOnly={!!previewRole || cView === "customer" || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
+        if (cView === "customer") {
+          // Quality control is internal — the customer instead gets the "set up your phone" guide
+          // (the mobile-app setup walkthrough from the support library, tied to their System QR).
+          tools.push({ name: "Set Up Your Phone", label: "App setup",
+            node: (
+              <div style={pad}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 12, padding: "22px 18px", border: "1px solid var(--dv-line,#E4E4DF)", borderRadius: 12, background: "var(--dv-raise,#FBFBFA)" }}>
+                  <span style={{ width: 46, height: 46, borderRadius: 12, display: "grid", placeItems: "center", background: "#e9f3ed", color: "var(--dv-green,#2E7D5B)" }}>
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 18h.01"/></svg>
+                  </span>
+                  <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--dv-ink,#101418)" }}>Set up your cameras on your phone</div>
+                  <div style={{ fontSize: ".9rem", color: "var(--dv-meta,#787D84)", maxWidth: 360, lineHeight: 1.5 }}>A quick guided walkthrough — install the app, scan your activation code, and see your cameras live. Takes about 5 minutes.</div>
+                  <a href="/guide/mobile-setup" target="_blank" rel="noreferrer"
+                     style={{ marginTop: 4, textDecoration: "none", height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", borderRadius: 10, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontWeight: 800, fontSize: ".92rem" }}>
+                    Start setup guide →
+                  </a>
+                </div>
+              </div>
+            ) });
+        } else {
+          tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
+            node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
+              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
+        }
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
             node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
