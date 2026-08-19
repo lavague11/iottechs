@@ -87,10 +87,12 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
 
   async function advance() {
     setAdvancing(true); setErr(null);
-    const r = await setStage(accessId, role, "completion");
+    // QC passing moves the job to Payment (collect the final balance). setStage chains straight on to
+    // Completion when the balance is already $0, so a fully-paid job still closes in one click.
+    const r = await setStage(accessId, role, "payment");
     setAdvancing(false);
     if (r?.error) { setErr(r.error); return; }
-    onStageChange?.("completion");
+    onStageChange?.(r.stage || "payment");
   }
 
   if (!items.length) {
@@ -164,7 +166,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
       {allPass ? (
         canAdvance ? (
           <button type="button" className="qc-advance" disabled={advancing} onClick={advance}>
-            {advancing ? "Closing…" : "QC Passed — Close Job"}
+            {advancing ? "Advancing…" : "QC Passed — Advance →"}
           </button>
         ) : (
           <div className="qc-done-note">All devices passed QC{isCustomer ? " — your installer is wrapping up." : " — an admin or manager can close the job."}</div>

@@ -1,8 +1,9 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
+import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance } from "../../../lib/email";
 
@@ -307,13 +308,19 @@ export async function setStage(accessId, viewRole, stageKey) {
   const changed = p.stage !== stageKey;
   const updated = updateStage(accessId, stageKey);
   if (!updated) return { ok: false, error: "Could not update the project." };
+  // If this was a FORWARD move, let the spine chain any now-satisfied auto stages — e.g. closing QC
+  // moves the job to `payment`, which then advances itself to `completion` the moment the final
+  // balance is $0. Forward-only, so a deliberate rewind by an admin is never undone.
+  let finalStage = stageKey;
+  const from = MASTER_ORDER.indexOf(p.stage), to = MASTER_ORDER.indexOf(stageKey);
+  if (to > from) { try { finalStage = maybeAutoAdvance(accessId) || stageKey; } catch { /* keep stageKey */ } }
   // Notify the customer when they've entered a stage that needs their action — only on a real
   // move (not re-setting the same stage). Fire-and-forget; no-op until email is configured.
-  if (changed) emailStageAdvance(accessId, stageKey).catch(() => {});
+  if (changed) emailStageAdvance(accessId, finalStage).catch(() => {});
   // Bust the cached render so a reload reflects the new stage (not just the in-session update).
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
-  return { ok: true, stage: stageKey, label: stageLabel(stageKey) };
+  return { ok: true, stage: finalStage, label: stageLabel(finalStage) };
 }
 
 export async function addAssignmentAction(accessId, { userId, userName, userEmail, role }) {
