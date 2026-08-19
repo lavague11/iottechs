@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
-import { loginAction } from "./actions";
+import { loginAction, signupAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { TaglinePill, Wordmark } from "../components/brand";
 import FaceScan from "../components/face-scan";
@@ -93,6 +93,21 @@ export default function LoginClient({ next }) {
         setError(result.error);
       } else {
         // success — trigger warp
+        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 100);
+        setTimeout(() => setGranted(true), 1200);
+      }
+    });
+  }
+
+  function handleSignup(e) {
+    e.preventDefault();
+    setError(null);
+    const fd = new FormData(e.target);
+    startTransition(async () => {
+      const result = await signupAction(fd);
+      if (result?.error) {
+        setError(result.error);
+      } else {
         setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 100);
         setTimeout(() => setGranted(true), 1200);
       }
@@ -224,6 +239,17 @@ export default function LoginClient({ next }) {
             {faceState === "scanning" ? "Scanning…" : "Scan my face"}
           </button>
         </div>
+        ) : mode === "signup" ? (
+        <form className="lg-form" onSubmit={handleSignup}>
+          <input type="hidden" name="next" value={next} />
+          <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required disabled={pending || granted} /></div>
+          <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" disabled={pending || granted} /></div>
+          <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" disabled={pending || granted} /></div>
+          <div className="lg-field"><label className="lg-label">Password</label><input name="password" type="password" className="lg-input" placeholder="At least 6 characters" autoComplete="new-password" required disabled={pending || granted} /></div>
+          <div className="lg-field"><label className="lg-label">Confirm password</label><input name="confirm" type="password" className="lg-input" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} /></div>
+          {error && <div className="lg-err">{error}</div>}
+          <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Creating…" : "Create account →"}</button>
+        </form>
         ) : (
         <div className="lgf">
           <div className="lgf-prompt">Find your project</div>
@@ -243,9 +269,10 @@ export default function LoginClient({ next }) {
             <>
               <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
               <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
+              <button className="gw2-lbtn" onClick={() => { setMode("signup"); setError(null); }}>Create account</button>
             </>
           ) : (
-            <button className="gw2-lbtn" onClick={() => setMode("password")}>← Password</button>
+            <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Password"}</button>
           )}
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>Need help?</button>
         </div>
@@ -272,7 +299,7 @@ export default function LoginClient({ next }) {
             <div className="gw2-mhd"><span>Need help signing in?</span><button className="gw2-mclose" onClick={() => setShowHelp(false)}>✕</button></div>
             <div className="gw2-mbd">
               <p>New here, or need a hand getting in? Create an account, reset your password, or reach our team.</p>
-              <a className="gw2-hrow" href="/#demo"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><div><div className="gw2-hk">Create an account</div><div className="gw2-hv">New customer? Start here</div></div></a>
+              <button className="gw2-hrow" onClick={() => { setShowHelp(false); setError(null); setMode("signup"); }} style={{ width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><div><div className="gw2-hk">Create an account</div><div className="gw2-hv">New customer? Start here</div></div></button>
               <a className="gw2-hrow" href="/forgot"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div><div className="gw2-hk">Reset my password</div><div className="gw2-hv">Verify with the last 4 of your phone</div></div></a>
               <a className="gw2-hrow" href="mailto:support@iot-techs.com?subject=Login%20help%20-%20IOT%20TECHS"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div><div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div></a>
               <a className="gw2-hrow" href="sms:+16463960775"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div><div><div className="gw2-hk">Text us</div><div className="gw2-hv">646-396-0775</div></div></a>
