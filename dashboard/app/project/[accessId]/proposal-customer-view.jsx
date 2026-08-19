@@ -856,8 +856,8 @@ const PCV_CSS = `
 .pcv-pcp-badge.ok{color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border:1px solid rgba(46,125,91,.28)}
 .pcv-pcp-terms{margin:12px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
 .pcv-pcp-terms li{font-size:.79rem;color:var(--dv-ink-soft,#3A4048);line-height:1.4}
-.pcv-pcp-approve{margin-top:14px;background:var(--dv-ink,#101418)!important;border-color:var(--dv-ink,#101418)!important}
-.pcv-pcp-approve:hover:not(:disabled){background:var(--dv-ink,#101418)!important}
+.pcv-pcp-approve{margin-top:14px;padding:0 22px;background:linear-gradient(180deg,#E8CB94,#C9A96E)!important;border:none!important;color:#0B0F1A!important;font-weight:800!important}
+.pcv-pcp-approve:hover:not(:disabled){filter:brightness(1.04)}
 .pcv-pcp-agreed{margin-top:12px;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);display:flex;flex-direction:column;gap:2px}
 .pcv-pcp-agreed-note{font-size:.76rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pcv-pcp-void-target{align-self:flex-start;background:none;border:1px dashed transparent;border-radius:8px;padding:3px 7px;margin:-3px -7px;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);transition:background .12s,border-color .12s}
@@ -876,6 +876,9 @@ const PCV_CSS = `
 .pcv-select:hover{filter:brightness(1.03)}
 .pcv-select:disabled{opacity:.5;cursor:default}
 .pcv-select.outline{background:transparent;border:1px solid var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
+/* The primary "Approve & Sign" accept CTA reads as the signable action — a professional gold button. */
+.pcv-accept-actions .pcv-select:not(.outline){background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;padding:0 22px;font-weight:800;box-shadow:0 2px 10px rgba(201,169,110,.35)}
+.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){filter:brightness(1.04)}
 
 .pcv-actions{margin:16px 22px 0;display:flex;gap:10px}
 .pcv-actions-col{flex-direction:column;align-items:stretch}

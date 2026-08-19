@@ -339,7 +339,9 @@ export function fmtSignStamp(s) {
   const [, Y, Mo, D, H, Mi] = m;
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   let h = parseInt(H, 10); const ap = h < 12 ? "AM" : "PM"; h = h % 12; if (h === 0) h = 12;
-  return `${months[parseInt(Mo, 10) - 1]} ${parseInt(D, 10)}, ${Y} · ${h}:${Mi} ${ap}`;
+  // Signatures are stamped in Eastern time (the server is pinned to America/New_York) no matter where
+  // the signer is — label it "ET" so it's unambiguous on the record.
+  return `${months[parseInt(Mo, 10) - 1]} ${parseInt(D, 10)}, ${Y} · ${h}:${Mi} ${ap} ET`;
 }
 // Compact floor label — always the floor's position in the list ("FP1", "FP2", …),
 // regardless of its actual survey name. Deliberately ignores any digit already in the
