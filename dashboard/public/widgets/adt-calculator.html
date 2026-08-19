@@ -224,6 +224,43 @@ body.locked #reset{display:none}
 /* Submit only exists inside the Deck (needs a parent to receive it) and only for staff, never the customer view */
 #submit{display:none}
 body.embed:not(.view-cust) #submit{display:inline-flex;align-items:center;justify-content:center}
+
+/* ---- collapsible section cards (details/summary) ---- */
+details.card>summary{list-style:none;cursor:pointer;position:relative}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary h2{padding-right:36px}
+details.card>summary::after{content:'';position:absolute;right:16px;top:50%;width:8px;height:8px;
+  border-right:2px solid var(--gold-dim);border-bottom:2px solid var(--gold-dim);
+  transform:translateY(-70%) rotate(45deg);transition:transform .18s;pointer-events:none}
+details.card[open]>summary::after{transform:translateY(-30%) rotate(-135deg)}
+details.card>summary:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+
+/* ---- admin bottom-line summary ---- */
+.sumc{padding:6px 4px}
+.sumc-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px;
+  border-top:1px solid var(--band);font-size:15px}
+.sumc-row:first-child{border-top:0}
+.sumc-row span{color:var(--muted);font-size:12.5px;letter-spacing:.02em;text-transform:uppercase;font-weight:600}
+.sumc-row b{font-size:19px;font-weight:800;color:var(--ink)}
+.sumc-row.save{background:linear-gradient(180deg,rgba(28,138,69,.08),transparent)}
+.sumc-row.save span{color:var(--green)}
+.sumc-row.save b{color:var(--green)}
+
+/* ---- clearer equipment items ---- */
+.item{padding:12px 2px}
+.iname{font-weight:600;color:var(--ink)}
+.item.on .iname{font-weight:800}
+.isub{color:var(--muted);font-size:11px}
+.iprice{font-weight:800;color:var(--ink)}
+.ibot{justify-content:flex-end;margin-top:6px}
+.item.on{background:rgba(201,169,110,.08);box-shadow:-14px 0 0 rgba(201,169,110,.08),14px 0 0 rgba(201,169,110,.08)}
+
+/* ---- embed (in the Deck): drop the rep/customer name fields, the view switcher, and the funding readouts; stack single-column ---- */
+body.embed .who{display:none}
+body.embed .seg{display:none}
+body.embed #bandFlag{display:none}
+body.embed #mmrNet{display:none}
+body.embed .wrap{grid-template-columns:1fr;max-width:680px}
 /* embed mode: the Deck stage rail is the header, so drop the tool's own chrome and blend in */
 body.embed header{display:none}
 body.embed{padding-top:0}
@@ -248,8 +285,8 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
 <div class="wrap">
 
   <!-- DEAL -->
-  <div class="card col1">
-    <h2>Deal</h2>
+  <details class="card col1" open>
+    <summary><h2>Deal</h2></summary>
     <div class="body">
       <div class="who">
         <input type="text" id="rep" placeholder="Rep">
@@ -274,26 +311,7 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
       <div class="field"><label for="nest">Nest Aware Plus<span class="hint">Raises the fundable band</span></label>
         <select id="nest"><option>No</option><option>Yes</option></select></div>
     </div>
-  </div>
-
-  <!-- NUMBERS -->
-  <div class="card col2 internal-only">
-    <h2>The numbers</h2>
-    <div class="sum">
-      <div class="sq"><div class="k">Budget</div><div class="v gold" id="qBudget">$0</div></div>
-      <div class="sq"><div class="k">Equipment cost</div><div class="v" id="qCost">$0</div></div>
-      <div class="sq"><div class="k">Equipment retail</div><div class="v" id="qRetail">$0</div></div>
-      <div class="sq"><div class="k">Equipment margin</div><div class="v" id="qMarg">$0</div></div>
-    </div>
-    <div class="scen" id="scen"></div>
-    <div class="body">
-      <div class="field" style="padding:0"><label for="cGiven">Credit given</label>
-        <span class="moneyin"><span>$</span><input type="number" id="cGiven" value="1000" step="50" inputmode="decimal"></span></div>
-    </div>
-    <details class="brk" id="brk"><summary><span class="brkl">Full breakdown</span></summary>
-      <div class="fall" id="fall"></div>
-    </details>
-  </div>
+  </details>
 
   <!-- PROMO (customer view) -->
   <div class="card col2 cust-only">
@@ -327,8 +345,8 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
   </div>
 
   <!-- EQUIPMENT -->
-  <div class="card col1">
-    <h2>Equipment</h2>
+  <details class="card col1" open>
+    <summary><h2>Equipment</h2></summary>
     <div class="body">
       <div class="tools">
         <input type="text" id="search" placeholder="Search device or part #">
@@ -337,12 +355,41 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
       <div id="eq"></div>
       <div class="eqfoot"><span id="eqLab">Cost of goods</span><span id="eqTotal">$0</span></div>
     </div>
-  </div>
+  </details>
 
   <!-- CART -->
-  <div class="card col1">
-    <h2>Cart <span class="count" id="cartCount">0</span></h2>
+  <details class="card col1" open>
+    <summary><h2>Cart <span class="count" id="cartCount">0</span></h2></summary>
     <div class="body" id="cartBody"></div>
+  </details>
+
+  <!-- NUMBERS (admin) — moved under the cart -->
+  <details class="card col1 internal-only">
+    <summary><h2>The numbers</h2></summary>
+    <div class="sum">
+      <div class="sq"><div class="k">Budget</div><div class="v gold" id="qBudget">$0</div></div>
+      <div class="sq"><div class="k">Equipment cost</div><div class="v" id="qCost">$0</div></div>
+      <div class="sq"><div class="k">Equipment retail</div><div class="v" id="qRetail">$0</div></div>
+      <div class="sq"><div class="k">Equipment margin</div><div class="v" id="qMarg">$0</div></div>
+    </div>
+    <div class="scen" id="scen"></div>
+    <div class="body">
+      <div class="field" style="padding:0"><label for="cGiven">Credit given</label>
+        <span class="moneyin"><span>$</span><input type="number" id="cGiven" value="1000" step="50" inputmode="decimal"></span></div>
+    </div>
+    <details class="brk" id="brk"><summary><span class="brkl">Full breakdown</span></summary>
+      <div class="fall" id="fall"></div>
+    </details>
+  </details>
+
+  <!-- ADMIN SUMMARY — the bottom line, always visible -->
+  <div class="card col1 internal-only sumc-card">
+    <div class="sumc">
+      <div class="sumc-row save"><span>Total savings</span><b id="sTotSave">$0</b></div>
+      <div class="sumc-row"><span>Customer pays</span><b id="sCustPay">$0</b></div>
+      <div class="sumc-row"><span>Net commission</span><b id="sNet">$0</b></div>
+      <div class="sumc-row"><span>Rep earns</span><b id="sRep">$0</b></div>
+    </div>
   </div>
 
 </div>
@@ -770,6 +817,12 @@ function calc(){
   $('qCost').textContent = money(cogs);
   $('qRetail').textContent = money(retail);
   $('qMarg').textContent = money(margin);
+
+  /* admin bottom-line summary (always visible under the cart) */
+  if($('sTotSave')) $('sTotSave').textContent = money(given);
+  if($('sCustPay')) $('sCustPay').textContent = money(pays + act);
+  if($('sNet'))     $('sNet').textContent     = money(commission);
+  if($('sRep'))     $('sRep').textContent     = money(repDeal);
 
   const scenData = {
     free:   {t:'Free system', amt:commAtCost,   cr:retail, pay:act},
