@@ -10,7 +10,7 @@ import AdtIntake from "../../adt/adt-intake";
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
 // reload — or another role — opens the same numbers. Sales gets Rep view (locked); office gets Admin.
-function DealFrame({ adtId, view, locked, rep, cust, deal, seed }) {
+function DealFrame({ adtId, view, locked, rep, cust, deal, seed, onSubmit }) {
   const ref = useRef(null);
   const saveTimer = useRef(null);
   // No saved deal yet → seed the calculator from the application's equipment (application → quote).
@@ -25,11 +25,16 @@ function DealFrame({ adtId, view, locked, rep, cust, deal, seed }) {
         clearTimeout(saveTimer.current);
         const payload = m.deal;
         saveTimer.current = setTimeout(() => { saveAdtDealAction(adtId, payload); }, 700);
+      } else if (m.type === "adt-deal-submit") {
+        // Submit = flush the numbers now, then hand off to the Deck (share the quote with the customer).
+        clearTimeout(saveTimer.current);
+        if (m.deal) saveAdtDealAction(adtId, m.deal);
+        onSubmit?.();
       }
     }
     window.addEventListener("message", onMsg);
     return () => { window.removeEventListener("message", onMsg); clearTimeout(saveTimer.current); };
-  }, [adtId, deal]);
+  }, [adtId, deal, onSubmit]);
   const qs = new URLSearchParams({ embed: "1", view, adt: adtId });
   if (locked) qs.set("lock", "1");
   if (rep) qs.set("rep", rep);
@@ -220,12 +225,13 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   );
 
-  const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} />;
-
   const [shared, setShared] = useState(!!app.deal_shared);
   const [shareErr, setShareErr] = useState("");
   const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
   const accepted = !!app.deal_accepted;
+
+  // Submit from inside the ADT Tool → share the quote with the customer (the "send it like the proposal" step).
+  const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} onSubmit={() => doShare(true)} />;
   const shareNode = (
     <div style={pad} className="adtp">
       {accepted && <div className="adtp-ok">✓ Customer accepted the quote</div>}

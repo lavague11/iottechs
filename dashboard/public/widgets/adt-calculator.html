@@ -5,16 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ADT Tool · IOT TECHS</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
 :root{
-  --cream:#FAF8F4; --paper:#FFFFFF; --band:#F0EDE8;
-  --ink:#0B0F1A; --slate:#2C3347; --gold:#C9A96E; --gold-dim:#8F7434;
-  --line:#DED8CC; --muted:#3F3B34; --red:#8E3B32; --green:#1F5138;
-  --f:"Helvetica Neue",Helvetica,Arial,sans-serif;
-  --m:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  /* matched to the IOT deck theme (Hanken Grotesk + soft neutrals) */
+  --cream:#F6F7F9; --paper:#FFFFFF; --band:#EEF0F4;
+  --ink:#101418; --slate:#2C3347; --gold:#C9A96E; --gold-dim:#A8842F;
+  --line:#E6E8EE; --muted:#5B6275; --red:#C4553D; --green:#1C8A45;
+  --f:'Hanken Grotesk',system-ui,-apple-system,Segoe UI,sans-serif;
+  --m:'Hanken Grotesk',system-ui,sans-serif;
+  --title:'Bricolage Grotesque','Hanken Grotesk',sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.45;
+     font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;
      padding-bottom:calc(88px + env(safe-area-inset-bottom))}
 h1,h2{margin:0;font-weight:700}
 input,select,button{font-family:inherit;font-size:16px;color:inherit}
@@ -24,7 +28,7 @@ header{background:var(--ink);color:var(--cream);padding:14px 16px;border-bottom:
   display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand{font-size:9.5px;letter-spacing:.3em;color:var(--gold);text-transform:uppercase}
 header h1{font-size:17px;letter-spacing:.02em;margin-top:4px;text-transform:uppercase}
-.gear-btn{border:1px solid var(--gold);color:var(--gold);background:transparent;border-radius:2px;
+.gear-btn{border:1px solid var(--gold);color:var(--gold);background:transparent;border-radius:9px;
   padding:9px 12px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
 
 .wrap{max-width:1120px;margin:0 auto;padding:13px 12px 24px;display:grid;gap:13px}
@@ -32,41 +36,41 @@ header h1{font-size:17px;letter-spacing:.02em;margin-top:4px;text-transform:uppe
   .wrap{grid-template-columns:1.05fr .95fr;gap:18px;padding:20px 16px 40px;align-items:start}
   .col1{grid-column:1}.col2{grid-column:2}
 }
-.card{background:var(--paper);border:1px solid var(--line)}
-.card h2{background:var(--slate);color:#fff;font-size:11px;letter-spacing:.18em;text-transform:uppercase;
-  padding:11px 14px;border-left:4px solid var(--gold);display:flex;justify-content:space-between;align-items:center;gap:10px}
-.card h2 .sub{font-weight:400;letter-spacing:.04em;text-transform:none;color:#C7C0AE;font-size:11px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(16,20,24,.03)}
+.card h2{background:var(--paper);color:var(--ink);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  padding:13px 15px;border-bottom:1px solid var(--line);border-left:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.card h2 .sub{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px}
 .count{background:var(--gold);color:var(--ink);font-family:var(--m);font-size:11px;padding:2px 7px;border-radius:999px}
 .body{padding:12px 14px}
 
 /* deal inputs */
 .who{display:flex;gap:8px;padding:0 0 11px;border-bottom:1px solid var(--band);margin-bottom:10px}
-.who input{flex:1;min-height:44px;padding:10px;border:1px solid var(--line);background:#FFFDF7;border-radius:2px}
+.who input{flex:1;min-height:44px;padding:10px;border:1px solid var(--line);background:#FFFDF7;border-radius:9px}
 .field{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;min-height:52px}
 .field + .field{border-top:1px solid var(--band)}
 .field label{font-size:14px}
 .field .hint{display:block;font-size:11.5px;color:var(--muted);font-family:var(--m);margin-top:2px}
 .field .hint b{color:var(--ink)}
 input[type=number],select,input[type=text]{border:1px solid var(--line);background:#FFFDF7;padding:10px;
-  width:148px;text-align:right;font-family:var(--m);font-size:16px;border-radius:2px;min-height:44px}
+  width:148px;text-align:right;font-family:var(--m);font-size:16px;border-radius:9px;min-height:44px}
 select{text-align:left;width:200px;font-family:var(--f);font-size:15px}
 input:focus,select:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
 
 .tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:4px 0 8px}
 @media(min-width:520px){.tiers{grid-template-columns:repeat(7,1fr)}}
-.tier{border:1px solid var(--line);background:#fff;padding:9px 4px;border-radius:2px;min-height:48px;font-family:var(--m);font-size:15px}
+.tier{border:1px solid var(--line);background:#fff;padding:9px 4px;border-radius:9px;min-height:48px;font-family:var(--m);font-size:15px}
 .tier b{display:block;font-family:var(--f);font-size:9.5px;color:var(--muted);letter-spacing:.06em;font-weight:400}
 .tier[aria-pressed=true]{background:var(--ink);color:var(--cream);border-color:var(--ink)}
 .tier[aria-pressed=true] b{color:var(--gold)}
 
 .moneyin{display:inline-flex;align-items:center;border:1px solid var(--line);background:#FFFDF7;
-  border-radius:2px;min-height:44px;padding-left:9px}
+  border-radius:9px;min-height:44px;padding-left:9px}
 .moneyin > span{font-family:var(--m);font-size:15px;color:var(--muted)}
 .moneyin input{border:0;background:transparent;min-height:42px;width:92px;padding:0 9px 0 2px;text-align:right}
 .moneyin.pct{padding-left:0}
 .moneyin.pct input{width:66px;padding-right:2px}
 .rate{display:flex;align-items:center;gap:6px}
-.rate button{width:42px;height:44px;border:1px solid var(--line);background:#fff;font-size:19px;border-radius:2px;color:var(--slate)}
+.rate button{width:42px;height:44px;border:1px solid var(--line);background:#fff;font-size:19px;border-radius:9px;color:var(--slate)}
 .rate .moneyin input{width:82px;font-size:17px;font-weight:700}
 .flag{margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;display:block}
 .flag.ok{background:#EAF0EA;color:var(--green);border-left:3px solid var(--green)}
@@ -107,7 +111,7 @@ input:focus,select:focus,button:focus-visible,summary:focus-visible{outline:2px 
 .tools{display:flex;gap:8px;align-items:center;padding-bottom:8px}
 #search{flex:1;width:auto;text-align:left;font-family:var(--f);font-size:15px;min-height:42px}
 .chkbox{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:10px;letter-spacing:.1em;
-  text-transform:uppercase;border:1px solid var(--line);border-radius:2px;padding:6px 9px;white-space:nowrap}
+  text-transform:uppercase;border:1px solid var(--line);border-radius:9px;padding:6px 9px;white-space:nowrap}
 .chkbox input{width:18px;height:18px;accent-color:var(--slate);margin:0}
 details.cat{border-top:1px solid var(--line)}
 details.cat:first-of-type{border-top:0}
@@ -130,7 +134,7 @@ details[open] .caret{transform:rotate(90deg)}
 body.takeover .qgrp.ex{display:flex}
 body:not(.takeover) .qlab{display:none}
 .qgrp.ex .qlab{color:var(--gold-dim)}
-.step{display:flex;align-items:center;border:1px solid var(--line);border-radius:2px;overflow:hidden;flex:none}
+.step{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none}
 .step button{width:40px;height:40px;border:0;background:#fff;font-size:20px;color:var(--slate)}
 .step button:active{background:var(--band)}
 .step input{width:38px;height:40px;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);
@@ -146,7 +150,7 @@ body:not(.takeover) .qlab{display:none}
 .cart-line{display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-top:1px solid var(--band);font-size:14.5px}
 .cart-line:first-child{border-top:0}
 .qb{flex:none;width:52px;min-height:42px;text-align:center;background:#FFFDF7;font-family:var(--m);
-  font-weight:700;font-size:17px;padding:6px 4px;border:1px solid var(--line);border-radius:2px}
+  font-weight:700;font-size:17px;padding:6px 4px;border:1px solid var(--line);border-radius:9px}
 .cn{flex:1;min-width:0;line-height:1.3}
 .cart-line .q{font-family:var(--m);color:var(--muted);font-size:12px;display:block;margin-top:2px}
 .cart-line .v{font-family:var(--m);flex:none;font-weight:700;padding-top:3px}
@@ -173,7 +177,7 @@ th:first-child{text-align:left}
 td{padding:5px 4px;border-top:1px solid var(--band);font-size:14px;text-align:right;font-family:var(--m)}
 td:first-child{text-align:left}
 .unit{width:74px;padding:8px;font-size:14px;min-height:40px;border:1px solid var(--line);background:#FFFDF7;
-  text-align:right;font-family:var(--m);border-radius:2px}
+  text-align:right;font-family:var(--m);border-radius:9px}
 
 /* sticky */
 .sticky{position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:var(--cream);display:flex;
@@ -189,9 +193,9 @@ td:first-child{text-align:left}
 .sticky .sub b{color:var(--cream);font-weight:700}
 .acts{display:flex;gap:7px;flex:none}
 .btn{border:1px solid var(--gold);background:transparent;color:var(--gold);padding:0 11px;height:46px;
-  font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:2px;white-space:nowrap}
+  font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:9px;white-space:nowrap}
 .btn.solid{background:var(--gold);color:var(--ink);font-weight:700}
-.seg{display:flex;border:1px solid var(--gold);border-radius:2px;overflow:hidden;flex:none}
+.seg{display:flex;border:1px solid var(--gold);border-radius:9px;overflow:hidden;flex:none}
 .seg button{border:0;background:transparent;color:var(--gold);height:46px;padding:0 10px;
   font-size:10px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
 .seg button[aria-pressed=true]{background:var(--gold);color:var(--ink);font-weight:700}
@@ -217,6 +221,9 @@ body:not(.view-cust) .cust-only{display:none}
 /* embedded in the IOT Deck: role is fixed, so hide the view switcher + Clear */
 body.locked .seg{display:none}
 body.locked #reset{display:none}
+/* Submit only exists inside the Deck (needs a parent to receive it) and only for staff, never the customer view */
+#submit{display:none}
+body.embed:not(.view-cust) #submit{display:inline-flex;align-items:center;justify-content:center}
 /* embed mode: the Deck stage rail is the header, so drop the tool's own chrome and blend in */
 body.embed header{display:none}
 body.embed{padding-top:0}
@@ -412,7 +419,8 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
       <button type="button" id="vAdm" aria-pressed="true">Admin</button>
     </span>
     <button class="btn" id="reset">Clear</button>
-    <button class="btn solid" id="save">Save</button>
+    <button class="btn" id="save">Save</button>
+    <button class="btn solid" id="submit">Submit</button>
   </div>
 </div>
 
@@ -512,7 +520,7 @@ let tier = 'Com';
 const PROMOS = { IOT500: 500, IOT1000: 1000, IOT1500: 1500 };   // uppercase only
 let promoCode = '', promoAmt = 0;
 let custLockedCredit = null;   // a shared quote passes the rep's credit; cust view applies it as the credit
-let mode = 'deal';                                     // 'free' | 'deal' | 'retail'
+let mode = 'free';                                     // 'free' | 'deal' | 'retail' — every deal starts as a free system (credit = full retail, customer pays only activation)
 
 /* ---------------- build ---------------- */
 $('tierSel').innerHTML = TIERS.map(t=>
@@ -963,7 +971,7 @@ $('reset').addEventListener('click', ()=>{
   $('mmr').value = PKGS[1].d.toFixed(2); $('pkg').value = 1; $('nest').value = 'No';
   $('fAct').value=99; $('fAdm').value=199; $('fMer').value=0; $('fAdc').value=0;
   $('xLabChg').value=0; $('xLabCost').value=0; $('xPartChg').value=0; $('xPartCost').value=0;
-  tier='Com'; $('tierSel').value='Com'; mode='deal'; userCredit = 1000;
+  tier='Com'; $('tierSel').value='Com'; mode='free'; userCredit = 1000;
   $('cGiven').value = 1000; $('cGivenRep').value = 1000;
   $('promo').value=''; promoCode=''; promoAmt=0;
   $('promoMsg').className='pmsg'; $('promoMsg').textContent='';
@@ -1132,7 +1140,7 @@ calc();
       fAct:$('fAct').value, fAdm:$('fAdm').value, fMer:$('fMer').value, fAdc:$('fAdc').value,
       xLabChg:$('xLabChg').value, xLabCost:$('xLabCost').value, xPartChg:$('xPartChg').value, xPartCost:$('xPartCost').value,
       repPct:$('repPct').value, repFloor:$('repFloor').value,
-      cGiven:$('cGiven').value, promo:$('promo').value, exAll:$('exAll').checked,
+      cGiven:$('cGiven').value, mode, promo:$('promo').value, exAll:$('exAll').checked,
       qtys, prices, rates
     };
   }
@@ -1154,7 +1162,8 @@ calc();
       if(d.qtys) Object.entries(d.qtys).forEach(([i,v])=>{ set('qn'+i,v[0]); set('qe'+i,v[1]); });
       if(d.seedByName) Object.entries(d.seedByName).forEach(([name,qty])=>{ const it = EQUIP.find(e=>e.n===name); if(it) $('qn'+it.i).value = Math.max(0, +qty||0); });   // application → quote
       if(d.exAll){ $('exAll').checked = true; document.body.classList.add('takeover'); }
-      if(d.cGiven!=null){ $('cGiven').value = d.cGiven; $('cGivenRep').value = d.cGiven; }
+      if(d.cGiven!=null){ $('cGiven').value = d.cGiven; $('cGivenRep').value = d.cGiven; userCredit = Math.max(0, +d.cGiven||0); }
+      if(d.mode) mode = d.mode;                                                        // restore the saved scenario (free/deal/retail); new deals default to free
       if(d.given!=null){ custLockedCredit = Math.max(0, +d.given||0); }               // rep's credit → cust view
       if(d.promo) $('promo').value = d.promo;
     } finally { hydrating = false; }
@@ -1171,6 +1180,20 @@ calc();
   let gotDeal = false;
   window.addEventListener('message', e=>{ const m = e.data||{}; if(m.type === 'adt-deal-load'){ gotDeal = true; if(m.deal) hydrate(m.deal); } });
   ['input','change','click'].forEach(ev=> document.addEventListener(ev, pushSave, true));
+
+  /* Submit — the "same as the proposal" hand-off: flush the current numbers, then tell the Deck to
+     put the quote in front of the customer to sign. The Deck decides what happens next. */
+  const submitBtn = $('submit');
+  if(submitBtn){
+    submitBtn.addEventListener('click', ()=>{
+      clearTimeout(saveTimer);
+      const deal = serialize();
+      try{ parent.postMessage({type:'adt-deal-save',   adt, deal}, '*'); }catch(e){}
+      try{ parent.postMessage({type:'adt-deal-submit', adt, deal}, '*'); }catch(e){}
+      submitBtn.textContent = 'Submitted'; submitBtn.disabled = true;
+      setTimeout(()=>{ submitBtn.textContent = 'Submit'; submitBtn.disabled = false; }, 2600);
+    });
+  }
 
   // Re-announce until the parent answers with the saved deal — robust against effect-attach races.
   let tries = 0;
