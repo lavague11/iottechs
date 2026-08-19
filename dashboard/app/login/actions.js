@@ -51,7 +51,7 @@ export async function signupAction(formData) {
 
   if (!name) return { error: "Please enter your name." };
   if (!email && !phone) return { error: "Enter an email or phone number." };
-  if (password.length < 6) return { error: "Password must be at least 6 characters." };
+  if (password.length < 6 || !/[A-Z]/.test(password)) return { error: "Password needs 6+ characters and a capital letter." };
   if (password !== confirm) return { error: "Passwords don't match." };
 
   // Match an existing record by email then phone. An account that already has a password can't be

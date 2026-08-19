@@ -15,6 +15,12 @@ function speedStatus(mbps) {
   return { label: "Poor", color: "#E05A5A" };
 }
 
+// Signup input helpers — capitalize each name word, live-format the phone, and validate email/password.
+const suTitle = (s) => String(s || "").replace(/(^|[\s'-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+const suPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (!d) return ""; if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const pwStrong = (p) => String(p || "").length >= 6 && /[A-Z]/.test(p);
+
 export default function LoginClient({ next }) {
   const [error, setError]         = useState(null);
   const [pending, startTransition] = useTransition();
@@ -32,6 +38,8 @@ export default function LoginClient({ next }) {
   const [faceMsg, setFaceMsg]     = useState("");
   const [pinId, setPinId]         = useState("");
   const [pinErr, setPinErr]       = useState("");
+  const [su, setSu]               = useState({ name: "", email: "", phone: "", password: "", confirm: "" });
+  const suSet = (k, v) => setSu((p) => ({ ...p, [k]: v }));
   const faceVideoRef  = useRef(null);
   const faceStreamRef = useRef(null);
 
@@ -102,6 +110,11 @@ export default function LoginClient({ next }) {
   function handleSignup(e) {
     e.preventDefault();
     setError(null);
+    if (!su.name.trim())                              { setError("Please enter your name."); return; }
+    if (!EMAIL_RE.test(su.email.trim()))             { setError("Enter a valid email address."); return; }
+    if (su.phone.replace(/\D/g, "").length !== 10)   { setError("Enter a valid 10-digit phone number."); return; }
+    if (!pwStrong(su.password))                       { setError("Password needs 6+ characters and a capital letter."); return; }
+    if (su.password !== su.confirm)                   { setError("Passwords don't match."); return; }
     const fd = new FormData(e.target);
     startTransition(async () => {
       const result = await signupAction(fd);
@@ -242,11 +255,11 @@ export default function LoginClient({ next }) {
         ) : mode === "signup" ? (
         <form className="lg-form" onSubmit={handleSignup}>
           <input type="hidden" name="next" value={next} />
-          <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required disabled={pending || granted} /></div>
-          <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" disabled={pending || granted} /></div>
-          <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" disabled={pending || granted} /></div>
-          <div className="lg-field"><label className="lg-label">Password</label><input name="password" type="password" className="lg-input" placeholder="At least 6 characters" autoComplete="new-password" required disabled={pending || granted} /></div>
-          <div className="lg-field"><label className="lg-label">Confirm password</label><input name="confirm" type="password" className="lg-input" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} /></div>
+          <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required disabled={pending || granted} value={su.name} onChange={(e) => suSet("name", suTitle(e.target.value))} /></div>
+          <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" required disabled={pending || granted} value={su.email} onChange={(e) => suSet("email", e.target.value.trim())} />{su.email && !EMAIL_RE.test(su.email) && <div className="lg-mini no">Invalid email</div>}</div>
+          <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" inputMode="tel" required disabled={pending || granted} value={su.phone} onChange={(e) => suSet("phone", suPhone(e.target.value))} /></div>
+          <div className="lg-field"><label className="lg-label">Password</label><input name="password" type="password" className="lg-input" placeholder="6+ characters, 1 capital" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 6+ characters & a capital"}</div>}</div>
+          <div className="lg-field"><label className="lg-label">Confirm password</label><input name="confirm" type="password" className="lg-input" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} value={su.confirm} onChange={(e) => suSet("confirm", e.target.value)} />{su.confirm && <div className={`lg-mini ${su.password === su.confirm ? "ok" : "no"}`}>{su.password === su.confirm ? "Passwords match" : "No match"}</div>}</div>
           {error && <div className="lg-err">{error}</div>}
           <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Creating…" : "Create account →"}</button>
         </form>
@@ -328,6 +341,9 @@ const CSS = `
 .lg-form{display:flex;flex-direction:column;gap:12px}
 .lg-field{display:flex;flex-direction:column;gap:5px}
 .lg-label{color:rgba(255,255,255,.45);font-size:.72rem;letter-spacing:1px;font-weight:600}
+.lg-mini{font-size:.72rem;font-weight:600;margin-top:1px}
+.lg-mini.ok{color:#7ad39a}
+.lg-mini.no{color:#ff8a8a}
 .lg-input{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:11px 13px;color:#f0e8d6;font-size:.9rem;font-family:inherit;outline:none;transition:border-color .2s,background .2s}
 .lg-input:focus{border-color:rgba(201,169,110,.5);background:rgba(255,255,255,.07)}
 .lg-input::placeholder{color:rgba(255,255,255,.2)}
