@@ -58,13 +58,14 @@ export function customerTodo(f = {}) {
   if (S === "site_survey" && !f.survey_accepted)
     return { label: "Review & approve your site survey", cta: "Review survey", target: "site_survey", order: 1 };
   if ((S === "proposal" || S === "approval_deposit") && f.proposal_status !== "accepted")
-    return { label: "Review & accept your proposal", cta: "Review proposal", target: "proposal", order: 2 };
+    return { label: (f.proposal_version > 1 ? "Your proposal has been revised — review & accept" : "A new proposal is ready — review & accept"),
+             cta: "Review proposal", target: "proposal", order: 2 };
   if (S === "approval_deposit" && !f.proposal_signed)
-    return { label: "Sign your agreement", cta: "Sign now", target: "approval_deposit", order: 3 };
+    return { label: "Sign your agreement to get started", cta: "Sign now", target: "approval_deposit", order: 3 };
   if (S === "approval_deposit" && !f.deposit_recorded)
-    return { label: "Pay your deposit", cta: "Pay deposit", target: "approval_deposit", order: 4 };
+    return { label: "Pay your deposit to lock in your install date", cta: "Pay deposit", target: "approval_deposit", order: 4 };
   if (S === "payment" && !f.final_balance_paid)
-    return { label: "Pay your final balance", cta: "Pay balance", target: "approval_deposit", order: 5 };
+    return { label: "Pay your final balance to complete your project", cta: "Pay balance", target: "approval_deposit", order: 5 };
   return null;
 }
 

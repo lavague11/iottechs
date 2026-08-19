@@ -2148,6 +2148,7 @@ export function buildStageFacts(accessId) {
     // approve → satisfied (customer can sail straight through).
     survey_accepted: surveyStageSatisfied(accessId),
     proposal_status: prop?.status || null,
+    proposal_version: prop?.version || 1,
     proposal_signed: !!prop?.signed_name,
     tech_accepted: !!prop?.tech_signed_name,
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
