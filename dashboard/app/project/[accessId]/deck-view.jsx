@@ -37,6 +37,12 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [savingCust, setSavingCust] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moved, setMoved] = useState(false);
+  // "Complete but unread" markers blink green until the viewer has actually looked at the finished
+  // stage; once seen they go solid green. Seen-state is per viewer (this browser), remembered across
+  // visits in localStorage and keyed to the project/account so each one tracks its own.
+  const seenKey = `dvseen:${customer?.code || "deck"}`;
+  const [seen, setSeen] = useState(() => new Set());
+  const [seenLoaded, setSeenLoaded] = useState(false);
   const deckRef = useRef(null);
   const startX = useRef(null);
   const capturing = useRef(false);
@@ -106,9 +112,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
 
   // Stage marker state — one shared language across every Deck (camera + ADT):
   //   todo (white) · active (blinking yellow, being worked on) · done (solid yellow, submitted/waiting)
-  //   · attention (blinking red, needs approval/signature) · complete (green).
+  //   · attention (blinking red, needs approval/signature) · complete (green) · complete-unread (blinking green).
   // A stage can name its own `mark`; otherwise we derive a sensible default from where we are + turn.
-  const markOf = (s, i) => {
+  const baseMark = (s, i) => {
     if (s.mark) return s.mark;                                   // explicit override wins
     if (i < idx || s.pct >= 100) return "complete";             // behind us / fully done → green
     if (i > idx) return "todo";                                 // not reached yet → white
@@ -117,6 +123,31 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     if (tools.length > 0 && tools.every((t) => t.state === "done")) return "done"; // work submitted, waiting → solid yellow
     return "active";                                            // being worked on → blink yellow
   };
+  // A completed stage the viewer hasn't looked at yet blinks green ("complete-unread"); once seen, solid green.
+  const markOf = (s, i) => {
+    const m = baseMark(s, i);
+    if (m === "complete" && seenLoaded && !seen.has(s.name)) return "complete-unread";
+    return m;
+  };
+
+  // Load this viewer's seen-set once (client only).
+  useEffect(() => {
+    let set = new Set();
+    try { set = new Set(JSON.parse(localStorage.getItem(seenKey) || "[]")); } catch { /* first visit */ }
+    setSeen(set); setSeenLoaded(true);
+  }, [seenKey]);
+  // Landing on a completed stage marks it read → its marker settles from blinking to solid green.
+  useEffect(() => {
+    if (!seenLoaded) return;
+    const s = stages[idx];
+    if (!s || baseMark(s, idx) !== "complete") return;
+    setSeen((prev) => {
+      if (prev.has(s.name)) return prev;                        // already read → no state change
+      const next = new Set(prev); next.add(s.name);
+      try { localStorage.setItem(seenKey, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, [idx, seenLoaded, stages, seenKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="dv-shell" data-tint={cur.tint || "ink"}>
@@ -410,11 +441,13 @@ const CSS = `
 .dv-beacon.m-todo{background:#fff;border-color:var(--dv-faint)}
 .dv-beacon.m-done{background:var(--dv-gold);border-color:var(--dv-gold-deep)}
 .dv-beacon.m-complete{background:var(--dv-green);border-color:var(--dv-green)}
+.dv-beacon.m-complete-unread{background:var(--dv-green);border-color:var(--dv-green);animation:dvBlinkG 1.25s ease-in-out infinite}
 .dv-beacon.m-active{background:var(--dv-gold);border-color:var(--dv-gold-deep);animation:dvBlinkY 1.1s ease-in-out infinite}
 .dv-beacon.m-attention{background:var(--dv-red,#C4553D);border-color:var(--dv-red,#C4553D);animation:dvBlinkR .8s ease-in-out infinite}
 @keyframes dvBlinkY{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}50%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
 @keyframes dvBlinkR{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(196,85,61,.6)}50%{opacity:.5;box-shadow:0 0 0 5px rgba(196,85,61,0)}}
-@media (prefers-reduced-motion:reduce){.dv-beacon.m-active,.dv-beacon.m-attention{animation:none}}
+@keyframes dvBlinkG{0%,100%{box-shadow:0 0 0 0 rgba(46,125,91,.55)}50%{box-shadow:0 0 0 4px rgba(46,125,91,0)}}
+@media (prefers-reduced-motion:reduce){.dv-beacon.m-active,.dv-beacon.m-attention,.dv-beacon.m-complete-unread{animation:none}}
 @keyframes dvbeat{0%,100%{opacity:1}55%{opacity:.35}}
 @keyframes dvring{0%{transform:scale(.6);opacity:.7}70%,100%{transform:scale(1.7);opacity:0}}
 .dv-readout{flex:0 0 auto;text-align:right;line-height:1}
