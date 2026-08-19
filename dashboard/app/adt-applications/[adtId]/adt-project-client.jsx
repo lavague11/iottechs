@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { fmtSignStamp } from "../../../lib/proposal";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
@@ -52,7 +52,9 @@ const DVI = {
   mail: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
 };
-const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
+// Parse a date-only string ("2026-08-20") as LOCAL midnight, not UTC — otherwise it renders a day early
+// in Eastern (UTC-parsed midnight is the previous evening here). Datetimes keep their time.
+const fmtDay = (d) => { if (!d) return ""; try { const s = String(d).trim(); const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"); return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
 const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (d.length !== 9) return t; return comm ? `${d.slice(0, 2)}-${d.slice(2)}` : `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length < 10) return s || ""; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 // Mask everything but the last 4 digits of a formatted tax id ("123-45-6789" → "•••-••-6789").
@@ -297,6 +299,11 @@ export default function AdtProjectClient({ user, alerts, app }) {
     ].filter(Boolean),
   };
 
+  // Lock → clear this browser's access (server), then hard-reload to the account gate (page.jsx). A
+  // full navigation unmounts the Deck so none of its data lingers client-side until a PIN is re-entered.
+  const doLock = () => startTx(async () => { await lockAdtStaffAction(); window.location.href = `/adt-applications/${app.adt_id}`; });
+
+  const myView = { admin: "Admin view", manager: "Manager view", sales: "Sales view" }[user?.role] || "Staff view";
   return (
     <>
       <DeckView
@@ -306,7 +313,12 @@ export default function AdtProjectClient({ user, alerts, app }) {
         canAdvance={false}
         customer={customer}
         statusChip={sm}
-        roleLabel={{ admin: "Admin view", manager: "Manager view", sales: "Sales view" }[user?.role] || "Staff view"}
+        roleLabel={myView}
+        roleMenu={[
+          { label: myView, on: true },
+          { label: "Customer view", onClick: () => router.push(`/adt?id=${app.adt_id}`) },
+          { label: "Lock", onClick: doLock },
+        ]}
         menu={[{ label: "All ADT applications", onClick: () => router.push("/adt-applications") }]}
       />
       <style>{CSS}</style>

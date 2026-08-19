@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
 import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus, updateAdtApplication, setAdtDocsNote } from "../../lib/db";
@@ -15,6 +16,16 @@ async function requireStaff() {
 async function requireOffice() {
   const u = await getSessionUser();
   return u && ["admin", "manager"].includes(u.role) ? u : null;
+}
+
+// "Lock" from the staff Deck's role menu. Staff reach the Deck through a global session, so a real
+// lock means ending this browser's access — clear the session AND any account PIN grant. The next
+// person then hits the account gate (page.jsx) and must PIN back in.
+export async function lockAdtStaffAction() {
+  const jar = await cookies();
+  jar.delete("iot_session");
+  jar.delete("iot_access");
+  return { ok: true };
 }
 
 // Which documents the office needs (paired with the needs_docs status).

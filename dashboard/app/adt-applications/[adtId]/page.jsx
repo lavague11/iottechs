@@ -1,15 +1,47 @@
 import { redirect } from "next/navigation";
-import { getAdtApplication, decBlob } from "../../../lib/db";
+import { cookies } from "next/headers";
+import { getAdtApplication, getUserById, decBlob } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
+import { parseToken, parseAccessToken } from "../../../lib/auth";
 import AdtProjectClient from "./adt-project-client";
+import AdtGate from "../../adt/adt-gate";
+
+const digits = (s) => String(s || "").replace(/\D/g, "");
+
+// A non-staff visitor who already holds customer access to THIS account (the owner, or a PIN grant)
+// belongs on their own customer view — not the staff Deck. Mirrors the /adt read gate (minus staff).
+async function customerHasAccess(rec) {
+  const jar = await cookies();
+  const accessRaw = jar.get("iot_access")?.value;
+  const access = accessRaw ? await parseAccessToken(accessRaw) : null;
+  if (access && String(access.accessId) === String(rec.adt_id)) return true;
+  const sess = jar.get("iot_session")?.value ? await parseToken(jar.get("iot_session").value) : null;
+  if (sess?.role === "customer") {
+    const u = sess.id ? getUserById(sess.id) : null;
+    const emailOwns = sess.email && rec.email && sess.email.trim().toLowerCase() === rec.email.trim().toLowerCase();
+    const phoneOwns = digits(u?.phone).length >= 7 && digits(u?.phone) === digits(rec.phone);
+    if (emailOwns || phoneOwns) return true;
+  }
+  return false;
+}
 
 // Dedicated project page for a single ADT account — full-page, project-style chrome (header + stage
-// rail + equipment/contact/schedule sections). Staff only. Opened from the /adt-applications list.
+// rail + equipment/contact/schedule sections). Staff Deck. Opened from the /adt-applications list, or
+// shared as a link — a non-staff visitor can PIN in (same gate as the customer portal).
 export default async function AdtProjectPage({ params }) {
   const { adtId } = await params;
   const user = await getSessionUser();
-  // Deck is open to admin/manager (Admin view) and sales (Rep view). Technicians have no view here.
-  if (!user || !["admin", "manager", "sales"].includes(user.role)) redirect("/login");
+  const isStaff = user && ["admin", "manager", "sales"].includes(user.role);
+
+  // Non-staff visitor: let them PIN in instead of forcing a full login. If they already have customer
+  // access (owner / account PIN), send them to THEIR view; otherwise show the account gate. The master
+  // admin PIN resolves to a staff session and lands back here on the staff Deck.
+  if (!isStaff) {
+    const rec = getAdtApplication(adtId);
+    if (!rec) redirect("/login");
+    if (await customerHasAccess(rec)) redirect(`/adt?id=${adtId}`);
+    return <AdtGate adtId={adtId} firstName={String(rec.name || "").trim().split(/\s+/)[0] || ""} />;
+  }
   const office = ["admin", "manager"].includes(user.role);   // sees SSN/EIN + verbal password
 
   const app = getAdtApplication(adtId);
