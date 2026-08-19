@@ -47,9 +47,26 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   const ex = existing;
   const [propertyType, setPropertyType] = useState(ex?.property_type || null);
   const [showTax, setShowTax] = useState(false);
-  const [f, setF] = useState(ex
-    ? { name: ex.name || "", contactFirst: (ex.contact_name || "").trim().split(/\s+/)[0] || "", contactLast: (ex.contact_name || "").trim().split(/\s+/).slice(1).join(" "), email: ex.email || "", phone: ex.phone || "", address: ex.address || "", notes: ex.notes || "", taxId: ex.tax_id || "", verbalPassword: ex.verbal_password || "" }
-    : { name: prefill?.name || "", contactFirst: "", contactLast: "", email: prefill?.email || "", phone: prefill?.phone || "", address: prefill?.address || "", notes: "", taxId: "", verbalPassword: "" });
+  const [f, setF] = useState(() => {
+    const comm = (ex?.property_type || "") === "commercial";
+    // The prefilled account name is always a PERSON. For residential it fills Full name; for commercial
+    // it seeds the contact first/last (the business name is NOT captured at signup, so it stays blank).
+    const personName = ex ? (comm ? "" : (ex.name || "")) : (prefill?.name || "");
+    const business   = ex && comm ? (ex.name || "") : "";
+    const parts = String(ex ? (ex.contact_name || "") : (prefill?.name || "")).trim().split(/\s+/);
+    return {
+      name: personName,
+      business,
+      contactFirst: parts[0] || "",
+      contactLast: parts.slice(1).join(" "),
+      email: (ex ? ex.email : prefill?.email) || "",
+      phone: (ex ? ex.phone : prefill?.phone) || "",
+      address: (ex ? ex.address : prefill?.address) || "",
+      notes: ex ? (ex.notes || "") : "",
+      taxId: ex ? (ex.tax_id || "") : "",
+      verbalPassword: ex ? (ex.verbal_password || "") : "",
+    };
+  });
   const [emg, setEmg] = useState(ex ? padEmg(ex.emergency) : [{ name: "", phone: "" }, { name: "", phone: "" }]);
   const [qty, setQty] = useState(ex ? { ...(ex.equipment || {}) } : { ...AUTO });   // fresh: 5in panel + LTE preselected
   const [days, setDays] = useState(ex ? [...(ex.pref_days || [])] : [...DAYS]);      // fresh: "Any day" preselected
@@ -71,6 +88,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   };
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const setTC = (k) => (e) => setF((p) => ({ ...p, [k]: titleCase(e.target.value) }));   // capitalize each word (names, business)
   const ec = (i, field) => (e) => { const v = field === "name" ? titleCase(e.target.value) : fmtPhone(e.target.value); setEmg((prev) => prev.map((c, x) => (x === i ? { ...c, [field]: v } : c))); };
   // One panel only (5in ↔ 7in exclusive, max 1); LTE is locked at its fixed qty.
   const applyQty = (id, next) => setQty((q) => {
@@ -96,10 +114,17 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
 
   function submit(e) {
     e?.preventDefault(); setErr("");
+    const comm = propertyType === "commercial";
+    if (comm) {
+      if (!f.business.trim()) { setErr("Enter the business name."); return; }
+      if (!f.contactFirst.trim() || !f.contactLast.trim()) { setErr("Enter the contact's first and last name."); return; }
+    } else if (f.name.trim().split(/\s+/).filter(Boolean).length < 2) {
+      setErr("Enter your first and last name."); return;
+    }
     if (!emg.some((c) => c.name.trim() && c.phone.replace(/\D/g, "").length >= 10)) { setErr("Add at least one emergency contact — a name and phone number."); return; }
     if (!f.verbalPassword.trim()) { setErr("Please set a verbal password."); return; }
     startTx(async () => {
-      const payload = { ...f, equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, asap, contactName: propertyType === "commercial" ? `${f.contactFirst || ""} ${f.contactLast || ""}`.trim() : "", verificationDoc: propertyType === "commercial" ? doc : null };
+      const payload = { ...f, name: comm ? f.business.trim() : f.name.trim(), equipment: qty, propertyType, emergency: emg, prefDays: days, prefWindows: wins, asap, contactName: comm ? `${f.contactFirst || ""} ${f.contactLast || ""}`.trim() : "", verificationDoc: comm ? doc : null };
       const r = onSubmit ? await onSubmit(payload) : await submitAdtApplicationAction(payload);
       if (r?.error) { setErr(r.error); return; }
       if (r?.adtId) router.push(`/adt?id=${encodeURIComponent(r.adtId)}`);   // fresh create → account Deck
@@ -142,12 +167,12 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai-grid">
         {isComm ? (
           <>
-            <label className="ai-fld"><span>First name</span><input value={f.contactFirst} onChange={set("contactFirst")} placeholder="First" autoComplete="given-name" /></label>
-            <label className="ai-fld"><span>Last name</span><input value={f.contactLast} onChange={set("contactLast")} placeholder="Last" autoComplete="family-name" /></label>
-            <label className="ai-fld"><span>Business name</span><input value={f.name} onChange={set("name")} placeholder="Acme Holdings LLC" autoComplete="organization" /></label>
+            <label className="ai-fld"><span>First name</span><input value={f.contactFirst} onChange={setTC("contactFirst")} placeholder="First" autoComplete="given-name" /></label>
+            <label className="ai-fld"><span>Last name</span><input value={f.contactLast} onChange={setTC("contactLast")} placeholder="Last" autoComplete="family-name" /></label>
+            <label className="ai-fld"><span>Business name</span><input value={f.business} onChange={setTC("business")} placeholder="Acme Holdings LLC" autoComplete="organization" /></label>
           </>
         ) : (
-          <label className="ai-fld"><span>Full name</span><input value={f.name} onChange={set("name")} placeholder="Jane Doe" autoComplete="name" /></label>
+          <label className="ai-fld"><span>Full name</span><input value={f.name} onChange={setTC("name")} placeholder="Jane Doe" autoComplete="name" /></label>
         )}
         <label className="ai-fld"><span>Phone</span><input value={f.phone} onChange={set("phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="tel" /></label>
         <label className="ai-fld"><span>Email</span><input value={f.email} onChange={set("email")} placeholder="you@email.com" type="email" autoComplete="email" /></label>
