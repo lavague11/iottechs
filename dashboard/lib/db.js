@@ -1962,6 +1962,15 @@ const db = new Proxy({}, {
   },
 });
 
+// Flush the WAL into the main .db file so a file-level copy (backup / migration) is complete.
+export function checkpointDb() {
+  try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); return true; } catch { return false; }
+}
+// Absolute path of the SQLite file — used by the DB export/restore migration routes.
+export function dbFilePath() {
+  return path.join(process.env.DB_DIR || path.join(process.cwd(), "data"), "dashboard.db");
+}
+
 const decorate = (r) => ({
   ...r,
   stageLabel: stageLabel(r.stage),
