@@ -159,6 +159,9 @@ body:not(.takeover) .qlab{display:none}
 /* settings overlay */
 .sheet{position:fixed;inset:0;background:var(--cream);z-index:40;overflow-y:auto;display:none}
 .sheet.open{display:block}
+/* privacy screen: the eye toggle in the Settings header masks cost + commission until revealed */
+#hideFigs{display:grid;place-items:center;padding:9px 11px}
+#sheet.figs-hidden .sens{-webkit-text-security:disc;text-security:disc;color:var(--muted)}
 .sheet header{position:sticky;top:0;z-index:2}
 .sheet .wrap{grid-template-columns:1fr;max-width:820px}
 .grid3{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;padding:7px 0;border-top:1px solid var(--band)}
@@ -401,7 +404,12 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
       <div class="brand">IOT TECHS</div>
       <h1>Settings</h1>
     </div>
-    <button class="gear-btn" id="closeSet">Done</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="gear-btn" id="hideFigs" aria-label="Hide cost &amp; commission" title="Hide cost &amp; commission">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button class="gear-btn" id="closeSet">Done</button>
+    </div>
   </header>
   <div class="wrap">
 
@@ -418,9 +426,9 @@ body.ro .step input,body.ro .rate input{background:#f4f1ea}
       <h2>Rep commission <span class="sub">what the sales rep earns</span></h2>
       <div class="body">
         <div class="field"><label for="repPct">Rep split<span class="hint">Share of the deal's net commission</span></label>
-          <span class="moneyin pct"><input type="number" id="repPct" value="50" step="5" min="0" max="100" inputmode="decimal"><span style="padding-right:10px">%</span></span></div>
+          <span class="moneyin pct"><input type="number" class="sens" id="repPct" value="50" step="5" min="0" max="100" inputmode="decimal"><span style="padding-right:10px">%</span></span></div>
         <div class="field"><label for="repFloor">Minimum per deal<span class="hint">Rep earns at least this when the deal funds</span></label>
-          <span class="moneyin"><span>$</span><input type="number" id="repFloor" value="0" step="25" inputmode="decimal"></span></div>
+          <span class="moneyin"><span>$</span><input type="number" class="sens" id="repFloor" value="0" step="25" inputmode="decimal"></span></div>
         <div class="eqfoot"><span>Rep earns on this deal</span><span id="repOut">$0</span></div>
         <p class="foot" style="margin:9px 0 0">Rep view shows only this number. It never shows cost of goods, company margin, or the full commission.</p>
       </div>
@@ -632,7 +640,7 @@ $('pricing').innerHTML = CATS.map((cat,ci)=>`
     <div class="grid3">
       <span class="gname">${x.n}<i>${x.pn}</i></span>
       <input type="number" id="l${x.i}" value="${x.l}" step="1" inputmode="decimal" aria-label="${x.n} labor">
-      <input type="number" id="e${x.i}" value="${x.e}" step="0.01" inputmode="decimal" aria-label="${x.n} cost">
+      <input type="number" class="sens" id="e${x.i}" value="${x.e}" step="0.01" inputmode="decimal" aria-label="${x.n} cost">
       <input type="number" id="p${x.i}" value="${dflt(x).toFixed(2)}" step="1" inputmode="decimal" aria-label="${x.n} retail">
     </div>`).join('')}`).join('');
 
@@ -997,6 +1005,16 @@ $('openSet').addEventListener('click', ()=>{
   $('sheet').classList.add('open'); window.scrollTo(0,0);
 });
 $('closeSet').addEventListener('click', ()=>{ $('sheet').classList.remove('open'); calc(); });
+
+/* Settings privacy screen: eye toggle masks the cost + commission fields (same show/hide idea as a password) */
+const EYE_ON  = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+$('hideFigs').addEventListener('click', ()=>{
+  const hidden = $('sheet').classList.toggle('figs-hidden');
+  $('hideFigs').innerHTML = hidden ? EYE_OFF : EYE_ON;
+  const lbl = hidden ? 'Show cost & commission' : 'Hide cost & commission';
+  $('hideFigs').setAttribute('aria-label', lbl); $('hideFigs').setAttribute('title', lbl);
+});
 
 $('search').addEventListener('input', e=>{
   const q = e.target.value.trim().toLowerCase();
