@@ -160,7 +160,8 @@
   /* cone shows for the selected/hovered/panel-highlighted camera, and for all when "show all angles" is on */
   /* A placed camera is just its icon. Its cone/angle shows only when angle display is on
      (angle mode or the show toggle → body.show-all-angles), or on a deliberate panel-card hover (.hl). */
-  .devNode.hl .fovWrap,body.show-all-angles .devNode .fovWrap,body.show-fov .devNode .fovWrap{display:block}
+  /* a camera's cone shows only once it's actually been aimed (.aimed) — never a default direction */
+  .devNode.hl.aimed .fovWrap,body.show-all-angles .devNode.aimed .fovWrap,body.show-fov .devNode.aimed .fovWrap{display:block}
   /* bottom-right "Show" control (Angles / FOV on-off) */
   .showCtl{position:absolute;right:14px;bottom:14px;z-index:7;display:none;flex-direction:column;align-items:flex-end;gap:8px}
   .showBtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:1px solid var(--line);border-radius:99px;background:rgba(255,255,255,.92);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
@@ -656,7 +657,7 @@
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
       if(!d || !d.cone) return;
       var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
-      d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI);
+      d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI); d.aimed=true;
       d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale));   // reach to the tap, in scene px (÷ zoom)
       renderDevice(d); growCone(d.id); queueSave(); });
 
@@ -686,7 +687,7 @@
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group, across floors
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
-      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
+      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
@@ -698,7 +699,7 @@
       renderDevice(d);
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
-      el.style.left=d.x+"%"; el.style.top=d.y+"%"; el.classList.toggle("sel",d.id===selId);
+      el.style.left=d.x+"%"; el.style.top=d.y+"%"; el.classList.toggle("sel",d.id===selId); el.classList.toggle("aimed",!!d.aimed);
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=d.tag;
@@ -786,7 +787,7 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,fov:d.fov,range:d.range,name:d.name}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -800,7 +801,7 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
     // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned
@@ -893,7 +894,7 @@
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
     function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
-        function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); renderDevice(d); }
+        function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); d.aimed=true; renderDevice(d); }
         function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); queueSave(); }
         lab.addEventListener("pointermove",mv); lab.addEventListener("pointerup",up); }); }
 
