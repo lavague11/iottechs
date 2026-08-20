@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { createAdtApplication, acceptAdtDeal, signAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc } from "../../lib/db";
+import { createAdtApplication, acceptAdtDeal, signAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc, setAdtStatus } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 import { makeAccessToken, accessTtlFor, makeToken, parseToken, parseAccessToken } from "../../lib/auth";
 
@@ -33,7 +33,9 @@ export async function uploadAdtDocAction(adtId, doc) {
   if (!(await canAccessAdt(rec))) return { error: "Not authorized." };
   if (!doc || !doc.data) return { error: "No file to upload." };
   addAdtCustomerDoc(adtId, doc);
-  return { ok: true };
+  // The customer answered a needs-docs request → move it back into the office's review queue.
+  if (rec.status === "needs_docs") setAdtStatus(adtId, "in_review");
+  return { ok: true, status: rec.status === "needs_docs" ? "in_review" : rec.status };
 }
 
 export async function removeAdtDocAction(adtId, idx) {
