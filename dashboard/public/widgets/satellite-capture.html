@@ -146,10 +146,6 @@
         <button class="rz" id="rotZero">0°</button>
         <span class="val" id="rotVal">0°</span>
       </div>
-      <div class="pop" id="popCrop">
-        <button class="rz" id="cropReset">Whole view</button>
-        <span class="pophint">Drag a box on the map to crop.</span>
-      </div>
       <button class="tb" id="tLevel" title="Level the aerial"><svg viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="2"/><circle cx="12" cy="12" r="1.5"/><path d="M9 9.5v5M15 9.5v5"/></svg><span>Level</span></button>
       <button class="tb" id="tCrop" title="Crop the aerial"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span>Crop</span></button>
       <span class="tsep"></span>
@@ -235,10 +231,7 @@
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
   var capturedCurrent=false, cropMode=false;
   var preview=$("preview");
-  function closePops(except){
-    if(except!=="level"){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); }
-    if(except!=="crop"){ $("popCrop").classList.remove("on"); if(!cropMode) $("tCrop").classList.remove("on"); }
-  }
+  function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); }
   // Back from the frozen preview to the live, pannable map so the framing can change again.
   function backToLive(){ preview.classList.remove("show"); resetCompare(); enhancedOnce=false; capturedCurrent=false; $("tEnhance").classList.remove("busy"); }
   // Any framing change (rotate/zoom/crop) drops a stale capture so the next action re-shoots.
@@ -251,18 +244,16 @@
     return capture().then(function(ok){ if(ok){ capturedCurrent=true; preview.classList.add("show"); } return ok; });
   }
   $("tLevel").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
-    var open=!$("popLevel").classList.contains("on"); closePops("level");
+    var open=!$("popLevel").classList.contains("on"); closePops();
     $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); });
   $("tCrop").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
     if(cropMode){
-      // second tap: apply — freeze the drawn box into a cropped preview (or just close if nothing was drawn)
+      // second tap: crop — the drawn box if there is one, otherwise the whole view
       cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); closePops();
-      if(rect) ensureCaptured();
+      ensureCaptured();
     } else {
-      cropMode=true; $("draw").classList.add("on"); $("tCrop").classList.add("on");
-      closePops("crop"); $("popCrop").classList.add("on");
+      cropMode=true; $("draw").classList.add("on"); $("tCrop").classList.add("on"); closePops();
     } });
-  $("cropReset").addEventListener("click", function(){ rect=null; paint(); invalidateCapture(); });
   // Committing (Enhance/Download/Done) freezes the frame — tuck the popovers + crop tool away first.
   function commitUI(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } closePops(); }
   $("tDl").addEventListener("click", function(){ commitUI(); ensureCaptured().then(function(ok){ if(ok) downloadImg(); }); });
