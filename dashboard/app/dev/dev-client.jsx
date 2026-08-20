@@ -5,6 +5,7 @@ import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction } from "./actions";
+import { setLoginTwoFactorAction } from "../login/actions";
 
 const ROUTE_BADGE = {
   exists:  { label: "Live",            cls: "rs-live" },
@@ -219,7 +220,36 @@ function ApiKeysCard({ secrets, onFlash }) {
   );
 }
 
-export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [] }) {
+// The SMS-2FA kill-switch. Admin flips it off when Twilio is misbehaving so logins fall back to password.
+function TwoFactorCard({ twoFactor, onFlash }) {
+  const [on, setOn] = useState(!!twoFactor.enabled);
+  const [busy, startTx] = useTransition();
+  const ready = !!twoFactor.ready;
+  function flip() {
+    const next = !on;
+    startTx(async () => {
+      const r = await setLoginTwoFactorAction(next);
+      if (r?.error) { onFlash(r.error); return; }
+      setOn(next);
+      onFlash(next ? "SMS 2FA turned on" : "SMS 2FA turned off — password login only");
+    });
+  }
+  return (
+    <div className="kv-card">
+      <div className="kv-head">
+        <div>
+          <div className="kv-title">SMS 2-Factor Login</div>
+          <div className="kv-sub">Phone-number login texts a one-time code (Twilio Verify). Turn this off if Twilio is down — everyone falls back to password / Face ID / PIN. {ready ? "Twilio is configured." : "Add the three TWILIO_ keys above to enable it."}</div>
+        </div>
+        <button type="button" role="switch" aria-checked={on} className={`tf-switch${on ? " on" : ""}`} disabled={busy} onClick={flip}><span className="tf-knob" /></button>
+      </div>
+      <div className="kv-sub" style={{ marginTop: 8 }}>Status: <b style={{ color: on ? (ready ? "#1c8a45" : "#b87300") : "#b87300" }}>{on ? (ready ? "On — codes texted at login" : "On, but waiting on the Twilio keys") : "Off — password login only"}</b></div>
+      <style>{`.tf-switch{position:relative;width:46px;height:26px;border-radius:99px;border:none;background:#c9ccd4;cursor:pointer;transition:background .18s;flex:none}.tf-switch.on{background:#1c8a45}.tf-switch:disabled{opacity:.6;cursor:default}.tf-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.3)}.tf-switch.on .tf-knob{transform:translateX(20px)}`}</style>
+    </div>
+  );
+}
+
+export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [], twoFactor = {} }) {
   const [tasks, setTasks] = useState(initTasks);
   const [pending, startTx] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
@@ -329,6 +359,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
 
         {/* API key vault */}
         <ApiKeysCard secrets={secrets} onFlash={flash} />
+        <TwoFactorCard twoFactor={twoFactor} onFlash={flash} />
 
         {/* Add form */}
         {showAdd && (

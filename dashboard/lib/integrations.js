@@ -29,6 +29,27 @@ export const INTEGRATIONS = [
     clientExposed: false,
   },
   {
+    key: "TWILIO_ACCOUNT_SID",
+    name: "Twilio Account SID",
+    powers: "Phone-number SMS 2FA at login (Twilio Verify)",
+    docs: "https://console.twilio.com",
+    clientExposed: false,
+  },
+  {
+    key: "TWILIO_AUTH_TOKEN",
+    name: "Twilio Auth Token",
+    powers: "Paired secret for the Twilio Account SID — server-side only",
+    docs: "https://console.twilio.com",
+    clientExposed: false,
+  },
+  {
+    key: "TWILIO_VERIFY_SERVICE_SID",
+    name: "Twilio Verify Service SID",
+    powers: "The Verify service (VA…) that sends & checks login codes",
+    docs: "https://console.twilio.com/us1/develop/verify/services",
+    clientExposed: false,
+  },
+  {
     key: "ANTHROPIC_API_KEY",
     name: "Anthropic (ID Scanner)",
     powers: "Reads driver's licenses on the ID Scanner (/id-scan) via Claude vision",

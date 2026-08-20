@@ -4000,6 +4000,16 @@ export function deleteSecret(key) {
   return { ok: true };
 }
 
+// Global SMS-2FA kill-switch. Default ON — an admin flips it OFF (stored in the vault) when Twilio is
+// having problems, so people fall back to password login without waiting for a text that won't arrive.
+export function loginTwoFactorEnabled() {
+  const v = String(getSecret("LOGIN_2FA_ENABLED") || "").trim().toLowerCase();
+  return !(v === "off" || v === "0" || v === "false");   // unset / anything else → enabled
+}
+export function setLoginTwoFactor(on, actorName) {
+  return setSecret("LOGIN_2FA_ENABLED", on ? "on" : "off", actorName);
+}
+
 // ---- Identity / biometrics (Face ID + Driver's Licence library) ----------
 // AES-256-GCM at rest for the stored photos. The key lives in the vault
 // (BIOMETRIC_ENC_KEY); it's generated once on first use so a fresh deploy is

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
-import { loginAction, signupAction } from "./actions";
+import { loginAction, signupAction, start2faAction, verify2faAction, resend2faAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { TaglinePill, Wordmark } from "../components/brand";
 
@@ -49,11 +49,17 @@ export default function LoginClient({ next }) {
   const speedRunId = useRef(0);
   const canvasRef  = useRef(null);
   const canvasCtrl = useRef(null);
-  const [mode, setMode]           = useState("password");   // password | face | pin
+  const [mode, setMode]           = useState("phone");   // phone | password | face | pin | signup
   const [faceState, setFaceState] = useState("idle");
   const [faceMsg, setFaceMsg]     = useState("");
   const [pinId, setPinId]         = useState("");
   const [pinErr, setPinErr]       = useState("");
+  // phone + SMS 2FA (the default): enter the number → text a code → verify
+  const [phone, setPhone]         = useState("");
+  const [phStep, setPhStep]       = useState("enter");   // enter | code
+  const [code, setCode]           = useState("");
+  const [masked, setMasked]       = useState("");
+  const [noAccount, setNoAccount] = useState(false);
   const [su, setSu]               = useState({ name: "", email: "", phone: "", password: "", confirm: "" });
   const suSet = (k, v) => setSu((p) => ({ ...p, [k]: v }));
   const faceVideoRef  = useRef(null);
@@ -121,6 +127,30 @@ export default function LoginClient({ next }) {
         setTimeout(() => setGranted(true), 1200);
       }
     });
+  }
+
+  // Phone step 1 — request a code (or fall back to password if 2FA is off/unavailable).
+  function handlePhone(e) {
+    e.preventDefault(); setError(null); setNoAccount(false);
+    startTransition(async () => {
+      const r = await start2faAction(phone);
+      if (r?.sent) { setMasked(r.masked || ""); setCode(""); setPhStep("code"); }
+      else if (r?.fallback) { setMode("password"); }   // 2FA off / Twilio down → sign in with a password instead
+      else if (r?.error) { setError(r.error); if (r.noAccount) setNoAccount(true); }
+    });
+  }
+  // Phone step 2 — verify the texted code (server signs in + redirects on success).
+  function handleCode(e) {
+    e.preventDefault(); setError(null);
+    startTransition(async () => {
+      const r = await verify2faAction(phone, code, next);
+      if (r?.error) setError(r.error);
+      else { setTimeout(() => { setCardWarp(true); canvasCtrl.current?.startWarp?.(); }, 100); setTimeout(() => setGranted(true), 1200); }
+    });
+  }
+  function handleResend() {
+    setError(null);
+    startTransition(async () => { const r = await resend2faAction(phone); if (r?.error) setError(r.error); });
   }
 
   function handleSignup(e) {
@@ -231,12 +261,36 @@ export default function LoginClient({ next }) {
           <div className="gw2-subtag">Secure Access</div>
         </div>
 
-        {mode === "password" ? (
+        {mode === "phone" ? (
+          phStep === "enter" ? (
+          <form className="lg-form" onSubmit={handlePhone}>
+            <div className="lg-field">
+              <label className="lg-label">Phone number</label>
+              <input value={phone} onChange={(e) => setPhone(suPhone(e.target.value))} type="tel" inputMode="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" autoFocus required disabled={pending || granted} />
+            </div>
+            {error && <div className="lg-err">{error}{noAccount && <> — <button type="button" className="lg-err-link" onClick={() => { setMode("signup"); setError(null); }}>Create account</button></>}</div>}
+            <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Sending…" : "Text me a code →"}</button>
+          </form>
+          ) : (
+          <form className="lg-form" onSubmit={handleCode}>
+            <div className="lg-field">
+              <label className="lg-label">Enter the code texted to {masked}</label>
+              <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} type="text" inputMode="numeric" autoComplete="one-time-code" className="lg-input" placeholder="6-digit code" autoFocus required disabled={pending || granted} />
+            </div>
+            {error && <div className="lg-err">{error}</div>}
+            <button className="lg-btn" type="submit" disabled={pending || granted || code.length < 4}>{pending ? "Verifying…" : "Verify →"}</button>
+            <div className="lg-2fa-sub">
+              <button type="button" className="gw2-lbtn" onClick={handleResend} disabled={pending}>Resend code</button>
+              <button type="button" className="gw2-lbtn" onClick={() => { setPhStep("enter"); setError(null); }}>← Change number</button>
+            </div>
+          </form>
+          )
+        ) : mode === "password" ? (
         <form className="lg-form" onSubmit={handleSubmit}>
           <input type="hidden" name="next" value={next} />
           <div className="lg-field">
             <label className="lg-label">Email, Phone, or Username</label>
-            <input name="identifier" type="text" className="lg-input" placeholder="Enter email or username" autoComplete="username" required disabled={pending || granted} />
+            <input name="identifier" type="text" className="lg-input" placeholder="Enter email or username" autoComplete="username" defaultValue={phone} required disabled={pending || granted} />
           </div>
           <div className="lg-field">
             <label className="lg-label">Password</label>
@@ -294,13 +348,20 @@ export default function LoginClient({ next }) {
         )}
 
         <div className="gw2-actions">
-          {mode === "password" ? (
+          {mode === "phone" ? (
             <>
+              <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); }}>Password</button>
+              <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
+              <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
+            </>
+          ) : mode === "password" ? (
+            <>
+              <button className="gw2-lbtn" onClick={() => { setMode("phone"); setError(null); }}>Phone</button>
               <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
               <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
             </>
           ) : (
-            <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Password"}</button>
+            <button className="gw2-lbtn" onClick={() => { setMode("phone"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Back"}</button>
           )}
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>help</button>
         </div>
@@ -367,6 +428,7 @@ const CSS = `
 .lg-pw .lg-input{flex:1;min-width:0;width:100%;padding-right:42px}
 .lg-pw-eye{position:absolute;top:50%;right:5px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;border:none;background:none;color:rgba(255,255,255,.38);cursor:pointer;border-radius:8px;transition:color .15s,background .15s}
 .lg-pw-eye:hover{color:rgba(201,169,110,.9);background:rgba(255,255,255,.06)}
+.lg-2fa-sub{display:flex;justify-content:space-between;align-items:center;margin-top:2px}
 .lg-err{background:rgba(210,60,60,.12);border:1px solid rgba(210,60,60,.3);border-radius:8px;padding:9px 12px;color:#ff8a8a;font-size:.8rem;text-align:center}
 .lg-err-link{color:#ffc0c0;font-weight:700;text-decoration:underline;text-underline-offset:2px}
 .lg-err-link:hover{color:#fff}
