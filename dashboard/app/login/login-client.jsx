@@ -4,6 +4,22 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { loginAction, signupAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { TaglinePill, Wordmark } from "../components/brand";
+
+// Password field with a show/hide eye toggle on the right. Passes every input prop straight through,
+// so it drops in for both the uncontrolled login field and the controlled sign-up fields.
+function PwInput({ className = "lg-input", ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="lg-pw">
+      <input {...props} type={show ? "text" : "password"} className={className} />
+      <button type="button" className="lg-pw-eye" tabIndex={-1} aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow((s) => !s)}>
+        {show
+          ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+      </button>
+    </span>
+  );
+}
 import FaceScan from "../components/face-scan";
 
 function speedStatus(mbps) {
@@ -224,7 +240,7 @@ export default function LoginClient({ next }) {
           </div>
           <div className="lg-field">
             <label className="lg-label">Password</label>
-            <input name="password" type="password" className="lg-input" placeholder="••••••••" autoComplete="current-password" required disabled={pending || granted} />
+            <PwInput name="password" placeholder="••••••••" autoComplete="current-password" required disabled={pending || granted} />
           </div>
           {error && (
             <div className="lg-err">
@@ -258,8 +274,8 @@ export default function LoginClient({ next }) {
           <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required disabled={pending || granted} value={su.name} onChange={(e) => suSet("name", suTitle(e.target.value))} /></div>
           <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" required disabled={pending || granted} value={su.email} onChange={(e) => suSet("email", e.target.value.trim())} />{su.email && !EMAIL_RE.test(su.email) && <div className="lg-mini no">Invalid email</div>}</div>
           <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" inputMode="tel" required disabled={pending || granted} value={su.phone} onChange={(e) => suSet("phone", suPhone(e.target.value))} /></div>
-          <div className="lg-field"><label className="lg-label">Password</label><input name="password" type="password" className="lg-input" placeholder="6+ characters, 1 capital" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 6+ characters & a capital"}</div>}</div>
-          <div className="lg-field"><label className="lg-label">Confirm password</label><input name="confirm" type="password" className="lg-input" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} value={su.confirm} onChange={(e) => suSet("confirm", e.target.value)} />{su.confirm && <div className={`lg-mini ${su.password === su.confirm ? "ok" : "no"}`}>{su.password === su.confirm ? "Passwords match" : "No match"}</div>}</div>
+          <div className="lg-field"><label className="lg-label">Password</label><PwInput name="password" placeholder="6+ characters, 1 capital" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 6+ characters & a capital"}</div>}</div>
+          <div className="lg-field"><label className="lg-label">Confirm password</label><PwInput name="confirm" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} value={su.confirm} onChange={(e) => suSet("confirm", e.target.value)} />{su.confirm && <div className={`lg-mini ${su.password === su.confirm ? "ok" : "no"}`}>{su.password === su.confirm ? "Passwords match" : "No match"}</div>}</div>
           {error && <div className="lg-err">{error}</div>}
           <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Creating…" : "Create account →"}</button>
         </form>
@@ -282,12 +298,11 @@ export default function LoginClient({ next }) {
             <>
               <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
               <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
-              <button className="gw2-lbtn" onClick={() => { setMode("signup"); setError(null); }}>Create account</button>
             </>
           ) : (
             <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Password"}</button>
           )}
-          <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>Need help?</button>
+          <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>help</button>
         </div>
       </div>
 
@@ -348,6 +363,10 @@ const CSS = `
 .lg-input:focus{border-color:rgba(201,169,110,.5);background:rgba(255,255,255,.07)}
 .lg-input::placeholder{color:rgba(255,255,255,.2)}
 .lg-input:disabled{opacity:.5}
+.lg-pw{position:relative;display:flex}
+.lg-pw .lg-input{flex:1;min-width:0;width:100%;padding-right:42px}
+.lg-pw-eye{position:absolute;top:50%;right:5px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;border:none;background:none;color:rgba(255,255,255,.38);cursor:pointer;border-radius:8px;transition:color .15s,background .15s}
+.lg-pw-eye:hover{color:rgba(201,169,110,.9);background:rgba(255,255,255,.06)}
 .lg-err{background:rgba(210,60,60,.12);border:1px solid rgba(210,60,60,.3);border-radius:8px;padding:9px 12px;color:#ff8a8a;font-size:.8rem;text-align:center}
 .lg-err-link{color:#ffc0c0;font-weight:700;text-decoration:underline;text-underline-offset:2px}
 .lg-err-link:hover{color:#fff}
