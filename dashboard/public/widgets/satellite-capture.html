@@ -405,22 +405,23 @@
   $("cmpTagB").addEventListener("click", function(){ stopCmpLoop(); showSide(true); cmpLoop=setTimeout(autoCompare, 10000); });
   $("cmpTagA").addEventListener("click", function(){ stopCmpLoop(); showSide(false); });
 
-  var scanTimer=null, hasVids=false;
-  // Probe the two enhance clips. If BOTH load, switch to video mode; otherwise keep the CSS globe.
-  (function(){ var vo=$("vidOut"), vi=$("vidIn"), okO=false, okI=false;
+  var scanTimer=null, hasVidOut=false, hasVidIn=false;
+  // Probe each enhance clip independently — each is used the moment it's present; missing clips fall
+  // back to the CSS globe (zoom-out) / CSS punch-in (zoom-in).
+  (function(){ var vo=$("vidOut"), vi=$("vidIn");
     vo.src="media/enhance-zoomout.mp4"; vi.src="media/enhance-zoomin.mp4";
-    vo.addEventListener("loadeddata", function(){ okO=true; if(okO&&okI) hasVids=true; });
-    vi.addEventListener("loadeddata", function(){ okI=true; if(okO&&okI) hasVids=true; });
-    vo.addEventListener("error", function(){ hasVids=false; }); vi.addEventListener("error", function(){ hasVids=false; });
+    vo.addEventListener("loadeddata", function(){ hasVidOut=true; }); vo.addEventListener("error", function(){ hasVidOut=false; });
+    vi.addEventListener("loadeddata", function(){ hasVidIn=true; });  vi.addEventListener("error", function(){ hasVidIn=false; });
   })();
   function startDots(){ clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
   function scanOn(on){ var s=$("scan");
     if(on){ s.classList.remove("exit","vid-in"); s.classList.add("on"); startDots();
-      if(hasVids){ s.classList.add("has-vid","vid-out"); var v=$("vidOut"); try{ v.loop=false; v.currentTime=0; v.play(); v.onended=function(){ try{v.pause();}catch(_){} }; }catch(_){} }
+      if(hasVidOut){ s.classList.add("has-vid","vid-out"); var v=$("vidOut"); try{ v.loop=false; v.currentTime=0; v.play(); v.onended=function(){ try{v.pause();}catch(_){} }; }catch(_){} }
+      else { s.classList.remove("has-vid","vid-out"); }   // no zoom-out clip → CSS globe
     } else { s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{$("vidOut").pause();$("vidIn").pause();}catch(_){} } }
   // Exit — play the zoom-IN clip (or the CSS punch-back-in), then hand off (reveal the enhanced aerial).
   function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
-    if(hasVids){ s.classList.remove("vid-out"); s.classList.add("vid-in"); var v=$("vidIn"), done=false;
+    if(hasVidIn){ s.classList.add("has-vid"); s.classList.remove("vid-out"); s.classList.add("vid-in"); var v=$("vidIn"), done=false;
       function fin(){ if(done)return; done=true; s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{v.pause();}catch(_){} if(cb)cb(); }
       try{ v.currentTime=0; v.onended=fin; v.play(); }catch(_){ fin(); return; }
       setTimeout(fin, 6000);   // safety net if the clip stalls
