@@ -32,6 +32,18 @@ async function flushDraft(accessId, stageKey) {
   return null;
 }
 
+// Shared submit used by BOTH the approval bar and the tool's own in-tool Submit button — pushes the
+// latest local draft up, then marks the tool submitted for customer review. Returns {error} or the
+// fresh {acceptances}.
+export async function submitTool(accessId, stageKey, on = true) {
+  if (on) {
+    const syncErr = await flushDraft(accessId, stageKey);
+    if (syncErr) return { error: syncErr };
+  }
+  const r = await submitToolAction(accessId, stageKey, on);
+  return r || {};
+}
+
 // Survey-stage approval, data-aware:
 //  - ToolApproveBar sits UNDER a tool (survey / mockup). It only appears when that tool has
 //    data. The customer approves it there; if the tool later changes, the stored fingerprint
@@ -51,7 +63,7 @@ export function surveySatisfied(toolMeta, acceptances) {
 const LABEL = { site_survey: "site survey", mockup: "mockup" };
 const fmt = (s) => { try { return new Date(String(s).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return s; } };
 
-export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
+export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange, externalSubmit = false }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   if (!meta?.has) return null;                       // nothing here yet for this tool
@@ -106,14 +118,14 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
         ) : submittedStale ? (
           <div className="tab-row">
             <span className="tab-warn">!</span>
-            <span className="tab-msg"><b>You've changed this {label}</b> since submitting — re-submit so the customer reviews the latest.</span>
-            <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>
+            <span className="tab-msg"><b>You've changed this {label}</b> since submitting — {externalSubmit ? "re-submit it from the tool above so the customer reviews the latest." : "re-submit so the customer reviews the latest."}</span>
+            {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>}
           </div>
         ) : (
           <div className="tab-row">
             <span className="tab-dot" />
-            <span className="tab-msg">When this {label} is ready, submit it for the customer to review.</span>
-            <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>
+            <span className="tab-msg">When this {label} is ready, {externalSubmit ? "submit it with the button in the tool above." : "submit it for the customer to review."}</span>
+            {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>}
           </div>
         )}
         {err && <div className="tab-err">{err}</div>}
@@ -159,7 +171,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
 // Compact header affordance so office roles see the Submit action WITHOUT expanding the tool.
 // Mirrors ToolApproveBar's office logic but as a single pill: Submit → Submitted → Approved.
 // The full bar (below the tool) still handles unsubmit / re-submit / detail.
-export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange }) {
+export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange, externalSubmit = false }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const isOffice = ["admin", "manager", "sales"].includes(role);
@@ -170,6 +182,7 @@ export function ToolSubmitButton({ accessId, stageKey, meta, acceptance, submiss
   // always know where the control is — it enables the moment the tool has something to send.
   if (hasData && toolAccepted(meta, acceptance))  return <span className="pv-tool-chip go">Approved</span>;
   if (hasData && toolAccepted(meta, submission))  return <span className="pv-tool-chip sent">Submitted</span>;
+  if (externalSubmit) return null;                     // this tool submits from inside itself — no header button
   async function go(e) {
     e.stopPropagation();                                // don't toggle the accordion
     if (busy || preview || !hasData) return;

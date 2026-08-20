@@ -20,7 +20,7 @@ import WorkOrderCard    from "./work-order-card";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
-import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted } from "./survey-approve";
+import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
 import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
@@ -1970,10 +1970,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div style={heavyCol}>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} />
+                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal}
+                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }} />
                 </div>
                 <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
+                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit /></div>
               </div>
             ) },
           { name: "Mockups", label: "Mockup generator", heavy: true,
@@ -2820,7 +2821,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
               chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
               headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />}>
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />}>
               <SiteSurveyWidget
                 accessId={lp.access_id}
                 view={view}
@@ -2828,9 +2829,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 noApproval
                 customerName={lp.contact_name || lp.customer}
                 onHasData={setSurveyHasLocal}
+                onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }}
               />
               <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} />
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />
               <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
             </FlowStep>
           )}

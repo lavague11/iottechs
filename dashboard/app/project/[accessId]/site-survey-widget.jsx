@@ -7,7 +7,7 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit }) {
   const readOnly = view === "customer" || customerView;
   const [floorCount, setFloorCount] = useState(null);
   const [items, setItems] = useState([]);
@@ -49,10 +49,12 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         if (typeof e.data.hasContent === "boolean") onHasData?.(e.data.hasContent);
       }
       if (e.data.type === "iotSurveyZoom" && e.data.img) { setZoomImg(e.data.img); setZoomed(false); }
+      // The tool's own "Submit for approval" button → run the real server submit (the bar is status-only).
+      if (e.data.type === "iotSurvey2Submit") onSubmit?.();
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [accessId]);
+  }, [accessId, onSubmit]);
 
   // Full-screen overlay: lock page scroll + Esc to exit.
   useEffect(() => {
