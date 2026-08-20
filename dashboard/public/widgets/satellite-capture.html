@@ -61,15 +61,45 @@
     background:linear-gradient(180deg,transparent,rgba(255,240,205,.5) 55%,rgba(255,255,255,.92) 92%,rgba(255,240,205,.4));
     box-shadow:0 0 48px 12px rgba(185,138,46,.5);animation:revScan 1.5s ease-in-out both}
   @keyframes revScan{0%{top:-14%}100%{top:100%}}
-  /* in-progress enhance: a scanning beam + shimmering grid to keep you company */
-  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:rgba(12,14,16,.30)}
+  /* in-progress enhance: a Google-Earth drone pull-back into space (rotating globe), then a fast
+     punch back in when it lands. "We're fixing our satellites." */
+  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0b1a34,#02040a 70%)}
   #scan.on{display:block}
-  #scan .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(185,138,46,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(185,138,46,.16) 1px,transparent 1px);background-size:28px 28px;-webkit-mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);animation:gridpulse 1.7s ease-in-out infinite}
-  @keyframes gridpulse{0%,100%{opacity:.28}50%{opacity:.6}}
-  #scan .beam{position:absolute;left:0;right:0;height:42%;top:-42%;background:linear-gradient(180deg,transparent,rgba(185,138,46,.20) 55%,rgba(255,240,205,.55) 92%,rgba(255,255,255,.9));box-shadow:0 0 30px 8px rgba(185,138,46,.35);animation:scanmove 1.5s cubic-bezier(.55,0,.45,1) infinite}
-  #scan .beam::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,244,214,.95),transparent)}
-  @keyframes scanmove{0%{top:-42%}100%{top:100%}}
-  #scan .cap{position:absolute;left:0;right:0;bottom:20px;text-align:center;color:#fff;font-size:13px;font-weight:700;letter-spacing:.03em;text-shadow:0 1px 8px rgba(0,0,0,.55)}
+  #scan .stars{position:absolute;inset:0;opacity:0;animation:starsIn 1.3s ease .25s forwards;
+    background-image:
+      radial-gradient(1.2px 1.2px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 68%,#cfe0ff,transparent),
+      radial-gradient(1.4px 1.4px at 46% 14%,#fff,transparent),radial-gradient(1px 1px at 62% 52%,#fff,transparent),
+      radial-gradient(1.2px 1.2px at 78% 28%,#dbe8ff,transparent),radial-gradient(1px 1px at 88% 74%,#fff,transparent),
+      radial-gradient(1px 1px at 8% 84%,#fff,transparent),radial-gradient(1.3px 1.3px at 36% 88%,#fff,transparent),
+      radial-gradient(1px 1px at 70% 82%,#cfe0ff,transparent),radial-gradient(1.2px 1.2px at 54% 34%,#fff,transparent),
+      radial-gradient(1px 1px at 20% 46%,#fff,transparent),radial-gradient(1px 1px at 94% 44%,#fff,transparent)}
+  @keyframes starsIn{to{opacity:.9}}
+  #scan .space{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform-origin:50% 50%;
+    animation:zoomOut 1.6s cubic-bezier(.16,.84,.3,1) both}
+  @keyframes zoomOut{0%{transform:scale(7.5)}100%{transform:scale(1)}}
+  #scan.exit .space{animation:zoomIn .95s cubic-bezier(.7,0,.85,.35) both}
+  @keyframes zoomIn{0%{transform:scale(1);opacity:1}72%{opacity:1}100%{transform:scale(13);opacity:0}}
+  .earth{width:min(46vmin,260px);height:min(46vmin,260px);border-radius:50%;position:relative;overflow:hidden;
+    box-shadow:0 0 70px 14px rgba(70,140,255,.4),0 0 150px 40px rgba(40,90,200,.22)}
+  .earth::before{content:"";position:absolute;inset:0;background-repeat:repeat-x;background-size:200% 100%;
+    background-image:
+      radial-gradient(ellipse 20% 30% at 14% 42%,#2f8a45 0 58%,transparent 61%),
+      radial-gradient(ellipse 15% 24% at 38% 62%,#37954d 0 58%,transparent 61%),
+      radial-gradient(ellipse 19% 32% at 60% 34%,#2c8a44 0 58%,transparent 61%),
+      radial-gradient(ellipse 13% 20% at 80% 60%,#35914a 0 58%,transparent 61%),
+      radial-gradient(ellipse 12% 18% at 96% 30%,#2f8a45 0 58%,transparent 61%),
+      linear-gradient(#12559e,#0c4487);
+    animation:earthSpin 7s linear infinite}
+  @keyframes earthSpin{from{background-position:0 0}to{background-position:-200% 0}}
+  .earth .cloud{position:absolute;inset:0;background-repeat:repeat-x;background-size:200% 100%;opacity:.55;mix-blend-mode:screen;
+    background-image:radial-gradient(ellipse 16% 11% at 30% 30%,#fff 0 52%,transparent 56%),
+      radial-gradient(ellipse 20% 9% at 66% 56%,#fff 0 52%,transparent 56%),
+      radial-gradient(ellipse 13% 8% at 48% 74%,#fff 0 52%,transparent 56%);
+    animation:earthSpin 5s linear infinite}
+  .earth::after{content:"";position:absolute;inset:0;border-radius:50%;
+    box-shadow:inset -28px -20px 55px rgba(0,0,0,.68),inset 26px 18px 45px rgba(150,200,255,.28);
+    background:radial-gradient(circle at 33% 28%,rgba(255,255,255,.42),rgba(255,255,255,0) 42%)}
+  #scan .cap{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#eaf1ff;font-size:14px;font-weight:700;letter-spacing:.04em;text-shadow:0 1px 10px rgba(0,0,0,.7);z-index:2}
   #scan .cap b{display:inline-block;min-width:16px;text-align:left}
   .pvbar{position:absolute;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:9}
   /* revision box — opens on a second wand click to say what to change */
@@ -147,7 +177,11 @@
       <span class="cmpTag b" id="cmpTagB">Before</span>
       <span class="cmpTag a" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
-      <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Enhancing aerial<b id="scanDots">…</b></div></div>
+      <div id="scan">
+        <div class="stars"></div>
+        <div class="space"><div class="earth"><div class="cloud"></div></div></div>
+        <div class="cap">We&rsquo;re fixing our satellites<b id="scanDots">…</b></div>
+      </div>
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
     </div>
 
@@ -361,9 +395,12 @@
   $("cmpTagA").addEventListener("click", function(){ stopCmpLoop(); showSide(false); });
 
   var scanTimer=null;
-  function scanOn(on){ var s=$("scan"); s.classList.toggle("on",on);
-    if(on){ var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
-    else { clearInterval(scanTimer); scanTimer=null; } }
+  function scanOn(on){ var s=$("scan");
+    if(on){ s.classList.remove("exit"); s.classList.add("on"); clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
+    else { s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; } }
+  // Animated exit — the fast Google-Earth punch back in, then hand off (reveal the enhanced aerial).
+  function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
+    s.classList.add("exit"); setTimeout(function(){ s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); }, 950); }
 
   var enhancedOnce=false;
   function enhance(revision){ if(!capCanvas) return; var w=$("tEnhance");
@@ -381,8 +418,9 @@
           var cw=Math.max(1,Math.round(ow*k)), ch=Math.max(1,Math.round(oh*k)), cx=Math.round(offX*k), cy=Math.round(offY*k);
           var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
           cv.getContext("2d").drawImage(ai, cx,cy,cw,ch, 0,0,cw,ch);   // crop back to the original aspect
-          capCanvas=cv; scanOn(false); w.classList.remove("busy"); enhancedOnce=true; w.title="Revise…";
-          showCompare(beforeSrc, cv.toDataURL("image/jpeg",0.92));      // reveal + before/after
+          capCanvas=cv; w.classList.remove("busy"); enhancedOnce=true; w.title="Revise…";
+          var afterUrl=cv.toDataURL("image/jpeg",0.92);
+          scanExit(function(){ showCompare(beforeSrc, afterUrl); });   // punch back in from space → reveal + before/after
         };
         ai.src="data:image/png;base64,"+d.b64;
       }).catch(function(e){ scanOn(false); w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
