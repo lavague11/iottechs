@@ -34,14 +34,28 @@
   /* before/after compare — enhanced is the base (#prevImg); original overlays it, clipped to the left of the handle */
   #cmpBefore{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:6;display:none;pointer-events:none}
   #preview.cmp #cmpBefore{display:block}
-  #cmpHandle{position:absolute;top:0;bottom:0;left:50%;z-index:7;width:2px;background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(0,0,0,.18);display:none;cursor:ew-resize;touch-action:none}
+  /* auto before/after scanner — a glowing line rides the reveal edge (no dragging) */
+  #cmpHandle{position:absolute;top:0;bottom:0;left:0;z-index:7;width:3px;transform:translateX(-1px);
+    background:linear-gradient(180deg,rgba(255,240,205,.15),rgba(255,244,214,.98) 45%,rgba(255,240,205,.15));
+    box-shadow:0 0 20px 4px rgba(185,138,46,.75),0 0 0 1px rgba(0,0,0,.12);display:none;pointer-events:none}
   #preview.cmp #cmpHandle{display:block}
-  #cmpHandle .grip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#0e1320}
-  #cmpHandle .grip svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  .cmpTag{position:absolute;top:12px;z-index:7;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:rgba(12,14,16,.6);padding:3px 9px;border-radius:20px;display:none}
+  #cmpHandle .grip{display:none}   /* no drag knob in auto mode */
+  .cmpTag{position:absolute;top:12px;z-index:8;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:rgba(12,14,16,.55);padding:5px 12px;border-radius:20px;display:none;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px);transition:transform .12s,background .2s,box-shadow .2s;-webkit-user-select:none;user-select:none}
   #preview.cmp .cmpTag{display:block}
+  .cmpTag:hover{transform:scale(1.06)}
   .cmpTag.b{left:12px}
-  .cmpTag.a{right:12px;background:rgba(185,138,46,.9)}
+  .cmpTag.a{right:12px;background:rgba(185,138,46,.65)}
+  .cmpTag.live{box-shadow:0 0 0 2px rgba(255,244,214,.9),0 4px 16px rgba(185,138,46,.45)}   /* the side currently shown */
+  .cmpTag.b.live{background:rgba(12,14,16,.9)}
+  .cmpTag.a.live{background:rgba(185,138,46,.98)}
+  /* pixel "materialize" reveal of the enhanced aerial + a scanner sweep once it lands */
+  @keyframes pxReveal{0%{filter:blur(18px) contrast(1.7) brightness(1.25);transform:scale(1.05);opacity:.25}
+    45%{opacity:1}100%{filter:none;transform:none;opacity:1}}
+  #preview.revealing #prevImg{animation:pxReveal 1.5s cubic-bezier(.2,.7,.2,1) both;image-rendering:pixelated}
+  #preview.revealing::after{content:"";position:absolute;left:0;right:0;height:14%;z-index:9;pointer-events:none;
+    background:linear-gradient(180deg,transparent,rgba(255,240,205,.5) 55%,rgba(255,255,255,.92) 92%,rgba(255,240,205,.4));
+    box-shadow:0 0 48px 12px rgba(185,138,46,.5);animation:revScan 1.5s ease-in-out both}
+  @keyframes revScan{0%{top:-14%}100%{top:100%}}
   /* in-progress enhance: a scanning beam + shimmering grid to keep you company */
   #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:rgba(12,14,16,.30)}
   #scan.on{display:block}
@@ -124,8 +138,8 @@
     <div id="preview">
       <img id="prevImg" alt="captured aerial">
       <img id="cmpBefore" alt="original aerial">
-      <span class="cmpTag b">Before</span>
-      <span class="cmpTag a">After</span>
+      <span class="cmpTag b" id="cmpTagB">Before</span>
+      <span class="cmpTag a" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Enhancing aerial<b id="scanDots">…</b></div></div>
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
@@ -312,32 +326,33 @@
   function usePreview(){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src}, "*"); }catch(e){} }
   function downloadImg(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); }
 
-  /* before/after compare: enhanced = #prevImg (base), original = #cmpBefore (clipped left of the handle) */
-  var cmpPos=50;   // % — left of the handle shows the original, right shows the enhanced
+  /* Auto before/after scanner — no dragging. #prevImg (enhanced) is the base; #cmpBefore (original)
+     overlays it, revealed from the left as a glowing scanner line sweeps. cmpPos: 0 = all AFTER
+     (enhanced) · 100 = all BEFORE (original). It plays itself; the Before/After tags jump on tap. */
+  var cmpPos=0, cmpLoop=null;
   function setCut(pos){ cmpPos=Math.max(0,Math.min(100,pos));
     $("cmpBefore").style.clipPath="inset(0 "+(100-cmpPos)+"% 0 0)";
-    $("cmpHandle").style.left=cmpPos+"%"; }
-  function cmpTransition(on){
-    $("cmpBefore").style.transition=on?"clip-path 1.05s cubic-bezier(.22,.7,.2,1)":"none";
-    $("cmpHandle").style.transition=on?"left 1.05s cubic-bezier(.22,.7,.2,1)":"none"; }
-  function resetCompare(){ preview.classList.remove("cmp"); cmpTransition(false); setCut(50); $("cmpBefore").src=""; }
+    $("cmpHandle").style.left=cmpPos+"%";
+    $("cmpTagB").classList.toggle("live",cmpPos>=50); $("cmpTagA").classList.toggle("live",cmpPos<50); }
+  function cmpTransition(on){ var t=on?"1.1s cubic-bezier(.6,0,.2,1)":"none";
+    $("cmpBefore").style.transition=on?"clip-path "+t:"none"; $("cmpHandle").style.transition=on?"left "+t:"none"; }
+  function stopCmpLoop(){ if(cmpLoop){ clearTimeout(cmpLoop); cmpLoop=null; } }
+  function showSide(before){ cmpTransition(true); setCut(before?100:0); }
+  function autoCompare(){ stopCmpLoop(); showSide(false);   // begin on the enhanced result
+    var before=false;
+    function tick(){ before=!before; showSide(before); cmpLoop=setTimeout(tick, before?10000:4500); }  // before holds ~10s
+    cmpLoop=setTimeout(tick, 4500);
+  }
+  function resetCompare(){ stopCmpLoop(); preview.classList.remove("cmp","revealing"); cmpTransition(false); setCut(0); $("cmpBefore").src=""; }
   function showCompare(beforeSrc, afterSrc){
     $("cmpBefore").src=beforeSrc; $("prevImg").src=afterSrc;
-    preview.classList.add("cmp");
-    cmpTransition(false); setCut(100);   // start fully on the ORIGINAL
-    requestAnimationFrame(function(){ requestAnimationFrame(function(){
-      cmpTransition(true); setCut(0);                 // sweep → reveal the enhanced aerial
-      setTimeout(function(){ setCut(50); }, 1150);    // then settle to a 50/50 compare
-      setTimeout(function(){ cmpTransition(false); }, 2250);
-    }); });
+    preview.classList.add("cmp"); cmpTransition(false); setCut(0);   // land on the enhanced result
+    preview.classList.add("revealing");                              // pixel materialize + scanner sweep
+    setTimeout(function(){ preview.classList.remove("revealing"); autoCompare(); }, 1550);
   }
-  // drag the divider to compare
-  (function(){ var h=$("cmpHandle"), dragging=false;
-    function toPos(clientX){ var r=$("preview").getBoundingClientRect(); return (clientX-r.left)/r.width*100; }
-    h.addEventListener("pointerdown", function(e){ e.preventDefault(); dragging=true; cmpTransition(false); h.setPointerCapture(e.pointerId); });
-    h.addEventListener("pointermove", function(e){ if(dragging) setCut(toPos(e.clientX)); });
-    h.addEventListener("pointerup", function(e){ dragging=false; try{h.releasePointerCapture(e.pointerId);}catch(_){} });
-  })();
+  // Tap the tags to jump — no slider. Before auto-returns to After after ~10s; After just holds.
+  $("cmpTagB").addEventListener("click", function(){ stopCmpLoop(); showSide(true); cmpLoop=setTimeout(autoCompare, 10000); });
+  $("cmpTagA").addEventListener("click", function(){ stopCmpLoop(); showSide(false); });
 
   var scanTimer=null;
   function scanOn(on){ var s=$("scan"); s.classList.toggle("on",on);
