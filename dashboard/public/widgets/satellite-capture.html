@@ -133,6 +133,7 @@
       <div class="pop" id="popLevel">
         <label>Rotate</label>
         <input id="rot" type="range" min="-45" max="45" value="0">
+        <button class="rz" id="rot90" title="Turn a further 90°">+90°</button>
         <button class="rz" id="rotZero">0°</button>
         <span class="val" id="rotVal">0°</span>
       </div>
@@ -185,7 +186,8 @@
     initDraw();
     search(($("q").value||DEMO).trim());
   };
-  function setRot(deg){ viewRot=norm(deg); $("rot").value=viewRot; $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
+  var rotCoarse=0;   // 90° steps from the +90° button; the slider is the fine ±45 trim on top, so any angle is reachable
+  function applyRot(){ viewRot=norm(rotCoarse + (parseInt($("rot").value,10)||0)); $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
   function search(q){ if(!q||!geocoder) return; $("show").disabled=true;
     geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length) return;
       var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
@@ -196,8 +198,9 @@
       if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }
 
   /* ---------- slider handlers (ids unchanged; live-edit the map) ---------- */
-  $("rot").addEventListener("input", function(){ setRot(parseInt(this.value,10)); invalidateCapture(); });
-  $("rotZero").addEventListener("click", function(){ setRot(0); invalidateCapture(); });
+  $("rot").addEventListener("input", function(){ applyRot(); invalidateCapture(); });
+  $("rot90").addEventListener("click", function(){ rotCoarse=(rotCoarse+90)%360; applyRot(); invalidateCapture(); });
+  $("rotZero").addEventListener("click", function(){ rotCoarse=0; $("rot").value=0; applyRot(); invalidateCapture(); });
   $("zoom").addEventListener("input", function(){ map.setZoom(parseFloat(this.value)); $("zoomVal").textContent=parseFloat(this.value).toFixed(1); invalidateCapture(); });
   function ensureRect(){ if(!rect){ var st=document.querySelector(".stage"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
 
@@ -223,8 +226,14 @@
     var open=!$("popLevel").classList.contains("on"); closePops("level");
     $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); });
   $("tCrop").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
-    cropMode=!cropMode; $("draw").classList.toggle("on",cropMode); $("tCrop").classList.toggle("on",cropMode);
-    closePops("crop"); $("popCrop").classList.toggle("on",cropMode); });
+    if(cropMode){
+      // second tap: apply — freeze the drawn box into a cropped preview (or just close if nothing was drawn)
+      cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); closePops();
+      if(rect) ensureCaptured();
+    } else {
+      cropMode=true; $("draw").classList.add("on"); $("tCrop").classList.add("on");
+      closePops("crop"); $("popCrop").classList.add("on");
+    } });
   $("cropReset").addEventListener("click", function(){ rect=null; paint(); invalidateCapture(); });
   // Committing (Enhance/Download/Done) freezes the frame — tuck the popovers + crop tool away first.
   function commitUI(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } closePops(); }
