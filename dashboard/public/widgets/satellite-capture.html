@@ -30,6 +30,11 @@
 
   #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
   #preview.show{display:block}
+  /* leveling grid — fixed reference lines (4 across, 4 down) shown while Level is active */
+  #levelGrid{position:absolute;inset:0;z-index:9;pointer-events:none;display:none;opacity:.7;mix-blend-mode:difference;
+    background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
+    background-size:20% 20%}
+  #levelGrid.on{display:block}
   #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
   /* before/after compare — enhanced is the base (#prevImg); original overlays it, clipped to the left of the handle */
   #cmpBefore{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:6;display:none;pointer-events:none}
@@ -133,6 +138,7 @@
   </div>
   <div class="stage">
     <div id="mapRot"><div id="map"></div></div>
+    <div id="levelGrid"></div>
     <div id="draw"><canvas id="drawCv"></canvas></div>
     <div id="msg" class="on">Loading map…</div>
     <div id="preview">
@@ -229,7 +235,7 @@
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
   var capturedCurrent=false, cropMode=false;
   var preview=$("preview");
-  function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); }
+  function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); $("levelGrid").classList.remove("on"); }
   // Back from the frozen preview to the live, pannable map so the framing can change again.
   function backToLive(){ preview.classList.remove("show"); resetCompare(); enhancedOnce=false; capturedCurrent=false; $("tEnhance").classList.remove("busy"); }
   // Any framing change (rotate/zoom/crop) drops a stale capture so the next action re-shoots.
@@ -243,7 +249,7 @@
   }
   $("tLevel").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
     var open=!$("popLevel").classList.contains("on"); closePops();
-    $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); });
+    $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); $("levelGrid").classList.toggle("on",open); });
   $("tCrop").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
     if(cropMode){
       // second tap: crop — the drawn box if there is one, otherwise the whole view
