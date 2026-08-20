@@ -67,8 +67,9 @@
   /* video mode (when the two enhance clips are present) replaces the CSS globe */
   #scan .scanVid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:1;background:#02040a}
   #scan.has-vid .stars,#scan.has-vid .space{display:none}
-  #scan.vid-out #vidOut{display:block}
-  #scan.vid-in #vidIn{display:block}
+  #scan.vid-start #vidStart{display:block}
+  #scan.vid-load #vidLoad{display:block}
+  #scan.vid-end #vidEnd{display:block}
   #scan .stars{position:absolute;inset:0;opacity:0;animation:starsIn 1.3s ease .25s forwards;
     background-image:
       radial-gradient(1.2px 1.2px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 68%,#cfe0ff,transparent),
@@ -182,9 +183,10 @@
       <span class="cmpTag cmpA" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan">
-        <video id="vidOut" class="scanVid" muted playsinline preload="auto"></video>
-        <video id="vidIn" class="scanVid" muted playsinline preload="auto"></video>
-        <!-- CSS-globe fallback: used until the two videos are present -->
+        <video id="vidStart" class="scanVid" muted playsinline preload="auto"></video>
+        <video id="vidLoad" class="scanVid" muted playsinline preload="auto"></video>
+        <video id="vidEnd" class="scanVid" muted playsinline preload="auto"></video>
+        <!-- CSS-globe fallback if the clips are missing -->
         <div class="stars"></div>
         <div class="space"><div class="earth"><div class="cloud"></div></div></div>
         <div class="cap">We&rsquo;re fixing our satellites<b id="scanDots">…</b></div>
@@ -389,42 +391,40 @@
     $("cmpBefore").style.transition=on?"clip-path "+t:"none"; $("cmpHandle").style.transition=on?"left "+t:"none"; }
   function stopCmpLoop(){ if(cmpLoop){ clearTimeout(cmpLoop); cmpLoop=null; } }
   function showSide(before){ cmpTransition(true); setCut(before?100:0); }
-  function autoCompare(){ stopCmpLoop(); showSide(false);   // begin on the enhanced result
-    var before=false;
-    function tick(){ before=!before; showSide(before); cmpLoop=setTimeout(tick, before?10000:4500); }  // before holds ~10s
-    cmpLoop=setTimeout(tick, 4500);
-  }
   function resetCompare(){ stopCmpLoop(); preview.classList.remove("cmp","revealing"); cmpTransition(false); setCut(0); $("cmpBefore").src=""; }
   function showCompare(beforeSrc, afterSrc){
     $("cmpBefore").src=beforeSrc; $("prevImg").src=afterSrc;
-    preview.classList.add("cmp"); cmpTransition(false); setCut(0);   // land on the enhanced result
-    preview.classList.add("revealing");                              // pixel materialize + scanner sweep
-    setTimeout(function(){ preview.classList.remove("revealing"); autoCompare(); }, 1550);
+    preview.classList.add("cmp"); cmpTransition(false); setCut(0);   // show the enhanced result; no auto-cycle — tap the tags to compare
   }
-  // Tap the tags to jump — no slider. Before auto-returns to After after ~10s; After just holds.
-  $("cmpTagB").addEventListener("click", function(){ stopCmpLoop(); showSide(true); cmpLoop=setTimeout(autoCompare, 10000); });
-  $("cmpTagA").addEventListener("click", function(){ stopCmpLoop(); showSide(false); });
+  // Manual only — tap a tag to jump to that side. Nothing animates on its own.
+  $("cmpTagB").addEventListener("click", function(){ showSide(true); });   // Before
+  $("cmpTagA").addEventListener("click", function(){ showSide(false); });  // After
 
-  var scanTimer=null, hasVidOut=false, hasVidIn=false;
-  // Probe each enhance clip independently — each is used the moment it's present; missing clips fall
-  // back to the CSS globe (zoom-out) / CSS punch-in (zoom-in).
-  (function(){ var vo=$("vidOut"), vi=$("vidIn");
-    vo.src="media/enhance-zoomout.mp4"; vi.src="media/enhance-zoomin.mp4";
-    vo.addEventListener("loadeddata", function(){ hasVidOut=true; }); vo.addEventListener("error", function(){ hasVidOut=false; });
-    vi.addEventListener("loadeddata", function(){ hasVidIn=true; });  vi.addEventListener("error", function(){ hasVidIn=false; });
+  var scanTimer=null, hasStart=false, hasLoad=false, hasEnd=false;
+  // 3 enhance clips: zoom-out (start) → rotating (loops while enhancing) → zoom-in (reveal). Each is
+  // probed independently; a missing loading clip falls back to the CSS globe, a missing zoom-in to the
+  // CSS punch-in, so nothing breaks.
+  (function(){ var a=$("vidStart"), b=$("vidLoad"), c=$("vidEnd");
+    a.src="media/zoom-out.mp4"; b.src="media/rotating.mp4"; c.src="media/zoom-in.mp4";
+    a.addEventListener("loadeddata",function(){hasStart=true;}); a.addEventListener("error",function(){hasStart=false;});
+    b.addEventListener("loadeddata",function(){hasLoad=true;});  b.addEventListener("error",function(){hasLoad=false;});
+    c.addEventListener("loadeddata",function(){hasEnd=true;});   c.addEventListener("error",function(){hasEnd=false;});
   })();
   function startDots(){ clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
+  function playV(v){ try{ v.currentTime=0; var p=v.play(); if(p&&p.catch)p.catch(function(){}); }catch(_){} }
+  function loadLoop(){ var s=$("scan"); s.classList.remove("vid-start"); s.classList.add("vid-load"); var v=$("vidLoad"); v.loop=true; playV(v); }   // rotating loop for the wait
   function scanOn(on){ var s=$("scan");
-    if(on){ s.classList.remove("exit","vid-in"); s.classList.add("on"); startDots();
-      if(hasVidOut){ s.classList.add("has-vid","vid-out"); var v=$("vidOut"); try{ v.loop=false; v.currentTime=0; v.play(); v.onended=function(){ try{v.pause();}catch(_){} }; }catch(_){} }
-      else { s.classList.remove("has-vid","vid-out"); }   // no zoom-out clip → CSS globe
-    } else { s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{$("vidOut").pause();$("vidIn").pause();}catch(_){} } }
+    if(on){ s.classList.remove("exit","vid-start","vid-load","vid-end"); s.classList.add("on"); startDots();
+      if(hasLoad){ s.classList.add("has-vid");
+        if(hasStart){ s.classList.add("vid-start"); var a=$("vidStart"); a.loop=false; a.onended=loadLoop; playV(a); }   // zoom out → then loop
+        else loadLoop();
+      } else { s.classList.remove("has-vid"); }   // no loading clip → CSS globe
+    } else { s.classList.remove("on","exit","has-vid","vid-start","vid-load","vid-end"); clearInterval(scanTimer); scanTimer=null; try{$("vidStart").pause();$("vidLoad").pause();$("vidEnd").pause();}catch(_){} } }
   // Exit — play the zoom-IN clip (or the CSS punch-back-in), then hand off (reveal the enhanced aerial).
   function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
-    if(hasVidIn){ s.classList.add("has-vid"); s.classList.remove("vid-out"); s.classList.add("vid-in"); var v=$("vidIn"), done=false;
-      function fin(){ if(done)return; done=true; s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{v.pause();}catch(_){} if(cb)cb(); }
-      try{ v.currentTime=0; v.onended=fin; v.play(); }catch(_){ fin(); return; }
-      setTimeout(fin, 6000);   // safety net if the clip stalls
+    if(hasEnd){ s.classList.add("has-vid"); s.classList.remove("vid-start","vid-load"); s.classList.add("vid-end"); var v=$("vidEnd"), done=false;
+      function fin(){ if(done)return; done=true; s.classList.remove("on","exit","has-vid","vid-start","vid-load","vid-end"); clearInterval(scanTimer); scanTimer=null; try{v.pause();}catch(_){} if(cb)cb(); }
+      v.loop=false; v.onended=fin; playV(v); setTimeout(fin, 8000);   // safety net if the clip stalls
     } else {
       s.classList.add("exit"); setTimeout(function(){ s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); }, 950);
     } }
