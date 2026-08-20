@@ -64,6 +64,11 @@
      punch back in when it lands. "We're fixing our satellites." */
   #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0b1a34,#02040a 70%)}
   #scan.on{display:block}
+  /* video mode (when the two enhance clips are present) replaces the CSS globe */
+  #scan .scanVid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:1;background:#02040a}
+  #scan.has-vid .stars,#scan.has-vid .space{display:none}
+  #scan.vid-out #vidOut{display:block}
+  #scan.vid-in #vidIn{display:block}
   #scan .stars{position:absolute;inset:0;opacity:0;animation:starsIn 1.3s ease .25s forwards;
     background-image:
       radial-gradient(1.2px 1.2px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 68%,#cfe0ff,transparent),
@@ -177,6 +182,9 @@
       <span class="cmpTag cmpA" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan">
+        <video id="vidOut" class="scanVid" muted playsinline preload="auto"></video>
+        <video id="vidIn" class="scanVid" muted playsinline preload="auto"></video>
+        <!-- CSS-globe fallback: used until the two videos are present -->
         <div class="stars"></div>
         <div class="space"><div class="earth"><div class="cloud"></div></div></div>
         <div class="cap">We&rsquo;re fixing our satellites<b id="scanDots">…</b></div>
@@ -393,13 +401,28 @@
   $("cmpTagB").addEventListener("click", function(){ stopCmpLoop(); showSide(true); cmpLoop=setTimeout(autoCompare, 10000); });
   $("cmpTagA").addEventListener("click", function(){ stopCmpLoop(); showSide(false); });
 
-  var scanTimer=null;
+  var scanTimer=null, hasVids=false;
+  // Probe the two enhance clips. If BOTH load, switch to video mode; otherwise keep the CSS globe.
+  (function(){ var vo=$("vidOut"), vi=$("vidIn"), okO=false, okI=false;
+    vo.src="media/enhance-zoomout.mp4"; vi.src="media/enhance-zoomin.mp4";
+    vo.addEventListener("loadeddata", function(){ okO=true; if(okO&&okI) hasVids=true; });
+    vi.addEventListener("loadeddata", function(){ okI=true; if(okO&&okI) hasVids=true; });
+    vo.addEventListener("error", function(){ hasVids=false; }); vi.addEventListener("error", function(){ hasVids=false; });
+  })();
+  function startDots(){ clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
   function scanOn(on){ var s=$("scan");
-    if(on){ s.classList.remove("exit"); s.classList.add("on"); clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
-    else { s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; } }
-  // Animated exit — the fast Google-Earth punch back in, then hand off (reveal the enhanced aerial).
+    if(on){ s.classList.remove("exit","vid-in"); s.classList.add("on"); startDots();
+      if(hasVids){ s.classList.add("has-vid","vid-out"); var v=$("vidOut"); try{ v.loop=false; v.currentTime=0; v.play(); v.onended=function(){ try{v.pause();}catch(_){} }; }catch(_){} }
+    } else { s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{$("vidOut").pause();$("vidIn").pause();}catch(_){} } }
+  // Exit — play the zoom-IN clip (or the CSS punch-back-in), then hand off (reveal the enhanced aerial).
   function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
-    s.classList.add("exit"); setTimeout(function(){ s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); }, 950); }
+    if(hasVids){ s.classList.remove("vid-out"); s.classList.add("vid-in"); var v=$("vidIn"), done=false;
+      function fin(){ if(done)return; done=true; s.classList.remove("on","exit","has-vid","vid-out","vid-in"); clearInterval(scanTimer); scanTimer=null; try{v.pause();}catch(_){} if(cb)cb(); }
+      try{ v.currentTime=0; v.onended=fin; v.play(); }catch(_){ fin(); return; }
+      setTimeout(fin, 6000);   // safety net if the clip stalls
+    } else {
+      s.classList.add("exit"); setTimeout(function(){ s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); }, 950);
+    } }
 
   var enhancedOnce=false;
   function enhance(revision){ if(!capCanvas) return; var w=$("tEnhance");
