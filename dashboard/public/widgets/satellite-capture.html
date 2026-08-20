@@ -113,6 +113,8 @@
   .zb{width:38px;height:38px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--ink);font-size:21px;font-weight:600;cursor:pointer;display:grid;place-items:center;line-height:1}
   .zb:hover{background:var(--soft)}
   .zbval{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;padding:1px 0}
+  /* Google Places autocomplete dropdown — above everything */
+  .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
 </style>
 </head>
 <body>
@@ -179,7 +181,7 @@
     if(!key){ msg("Add GOOGLE_MAPS_API_KEY in Development ▸ API Keys, then reopen."); return; }
     API_KEY=key;
     var s=document.createElement("script");
-    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=geometry&callback=initMap&v=weekly";
+    s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&libraries=geometry,places&callback=initMap&v=weekly";
     s.async=true; s.onerror=function(){ msg("Map failed to load — check the key + billing."); };
     document.head.appendChild(s);
   }).catch(function(){ msg("Couldn't reach /api/config."); });
@@ -197,6 +199,19 @@
     $("zoomOut").addEventListener("click", function(){ bumpZoom(-0.5); });
     $("show").addEventListener("click", function(){ search($("q").value.trim()); });
     $("q").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); search($("q").value.trim()); }});
+    // Google Places autocomplete on the address box — pick a suggestion → fly the map there.
+    try {
+      if(google.maps.places){
+        // No `types` filter → addresses AND businesses/establishments both suggest.
+        var ac=new google.maps.places.Autocomplete($("q"), { fields:["geometry","formatted_address","name"] });
+        ac.addListener("place_changed", function(){ var p=ac.getPlace(); if(!p||!p.geometry) return;
+          map.setCenter(p.geometry.location); map.setZoom(20);
+          if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:p.geometry.location});
+          // For a business, show "Name — address"; for a plain address just the address.
+          $("q").value = (p.name && p.formatted_address && p.formatted_address.indexOf(p.name)<0) ? (p.name+" — "+p.formatted_address) : (p.formatted_address || p.name || $("q").value);
+          invalidateCapture(); });
+      }
+    } catch(e){}
     initDraw();
     search(($("q").value||DEMO).trim());
   };
