@@ -50,6 +50,27 @@ export const INTEGRATIONS = [
     clientExposed: false,
   },
   {
+    key: "TELNYX_API_KEY",
+    name: "Telnyx API Key",
+    powers: "Alternative SMS 2FA provider (Telnyx Verify) — cheaper per message",
+    docs: "https://portal.telnyx.com/#/app/api-keys",
+    clientExposed: false,
+  },
+  {
+    key: "TELNYX_VERIFY_PROFILE_ID",
+    name: "Telnyx Verify Profile ID",
+    powers: "The Telnyx Verify profile that sends & checks login codes",
+    docs: "https://portal.telnyx.com/#/app/verify",
+    clientExposed: false,
+  },
+  {
+    key: "SMS_PROVIDER",
+    name: "SMS Provider (optional)",
+    powers: "Force which SMS 2FA provider to use: 'telnyx' or 'twilio'. Leave blank to auto-detect from whichever keys are filled in.",
+    docs: "",
+    clientExposed: false,
+  },
+  {
     key: "ANTHROPIC_API_KEY",
     name: "Anthropic (ID Scanner)",
     powers: "Reads driver's licenses on the ID Scanner (/id-scan) via Claude vision",

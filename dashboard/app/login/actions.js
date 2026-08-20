@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyUserByCredential, recordLogin, recordLogout, getUserByEmail, getUserByPhone, userHasPassword, createCustomerUser, updateUser, loginTwoFactorEnabled, setLoginTwoFactor } from "../../lib/db";
-import { twilioVerifyConfigured, toE164, startVerification, checkVerification } from "../../lib/twilio-verify";
+import { smsVerifyConfigured, toE164, startVerification, checkVerification } from "../../lib/sms-verify";
 import { makeToken, parseToken } from "../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
@@ -89,7 +89,7 @@ export async function start2faAction(phoneRaw) {
   if (!user) return { error: "No account found for that number.", noAccount: true };
   if (user.disabled) return { error: "This account has been disabled." };
 
-  if (!(twilioVerifyConfigured() && loginTwoFactorEnabled())) {
+  if (!(smsVerifyConfigured() && loginTwoFactorEnabled())) {
     return { fallback: true, hasPassword: userHasPassword(user.id), phone: e164, masked: maskPhone(e164) };
   }
   const r = await startVerification(e164);
@@ -116,7 +116,7 @@ export async function verify2faAction(phoneRaw, code, next) {
 export async function resend2faAction(phoneRaw) {
   const e164 = toE164(phoneRaw);
   if (!e164) return { error: "Enter your number again." };
-  if (!(twilioVerifyConfigured() && loginTwoFactorEnabled())) return { error: "Text codes are unavailable right now — use your password." };
+  if (!(smsVerifyConfigured() && loginTwoFactorEnabled())) return { error: "Text codes are unavailable right now — use your password." };
   const r = await startVerification(e164);
   return r.ok ? { sent: true } : { error: r.error || "Couldn't resend the code." };
 }
