@@ -45,14 +45,13 @@
     box-shadow:0 0 20px 4px rgba(185,138,46,.75),0 0 0 1px rgba(0,0,0,.12);display:none;pointer-events:none}
   #preview.cmp #cmpHandle{display:block}
   #cmpHandle .grip{display:none}   /* no drag knob in auto mode */
-  .cmpTag{position:absolute;top:12px;z-index:8;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:rgba(12,14,16,.55);padding:5px 12px;border-radius:20px;display:none;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px);transition:transform .12s,background .2s,box-shadow .2s;-webkit-user-select:none;user-select:none}
+  /* Before / After — identical minimal opaque pills; only the active (live) side gets the gold accent */
+  .cmpTag{position:absolute;top:12px;z-index:8;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#12151b;padding:6px 14px;border-radius:20px;display:none;cursor:pointer;pointer-events:auto;box-shadow:0 2px 10px rgba(0,0,0,.35);transition:transform .12s,background .2s,box-shadow .2s;-webkit-user-select:none;user-select:none}
   #preview.cmp .cmpTag{display:block}
-  .cmpTag:hover{transform:scale(1.06)}
-  .cmpTag.b{left:12px}
-  .cmpTag.a{right:12px;background:rgba(185,138,46,.65)}
-  .cmpTag.live{box-shadow:0 0 0 2px rgba(255,244,214,.9),0 4px 16px rgba(185,138,46,.45)}   /* the side currently shown */
-  .cmpTag.b.live{background:rgba(12,14,16,.9)}
-  .cmpTag.a.live{background:rgba(185,138,46,.98)}
+  .cmpTag:hover{transform:scale(1.05)}
+  .cmpTag.cmpB{left:12px}
+  .cmpTag.cmpA{right:12px}
+  .cmpTag.live{background:#b98a2e;box-shadow:0 0 0 2px rgba(255,244,214,.85),0 3px 14px rgba(185,138,46,.5)}
   /* pixel "materialize" reveal of the enhanced aerial + a scanner sweep once it lands */
   @keyframes pxReveal{0%{filter:blur(18px) contrast(1.7) brightness(1.25);transform:scale(1.05);opacity:.25}
     45%{opacity:1}100%{filter:none;transform:none;opacity:1}}
@@ -174,8 +173,8 @@
     <div id="preview">
       <img id="prevImg" alt="captured aerial">
       <img id="cmpBefore" alt="original aerial">
-      <span class="cmpTag b" id="cmpTagB">Before</span>
-      <span class="cmpTag a" id="cmpTagA">After</span>
+      <span class="cmpTag cmpB" id="cmpTagB">Before</span>
+      <span class="cmpTag cmpA" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan">
         <div class="stars"></div>
