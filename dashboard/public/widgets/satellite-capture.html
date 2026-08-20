@@ -254,17 +254,21 @@
       }
     } catch(e){}
     initDraw();
-    search(($("q").value||DEMO).trim());
+    search(($("q").value||DEMO).trim(), true);
   };
   var rotCoarse=0;   // 90° steps from the +90° button; the slider is the fine ±45 trim on top, so any angle is reachable
   function applyRot(){ viewRot=norm(rotCoarse + (parseInt($("rot").value,10)||0)); $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
-  function search(q){ if(!q||!geocoder) return; $("show").disabled=true;
-    geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false; if(st!=="OK"||!res.length) return;
-      var loc=res[0].geometry.location; map.setCenter(loc); map.setZoom(20);
+  function search(q, isInitial){ if(!q||!geocoder) return; $("show").disabled=true;
+    geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false;
+      if(st!=="OK"||!res.length){ if(isInitial && q!==DEMO) search(DEMO,true); return; }   // couldn't find it → land on the test property
+      var r=res[0], t=(r.types||[]).join(" ");
+      // On first load, a project saved with only a state/county/country (no street) geocodes to a
+      // useless centroid ("New Jersey, USA"). Don't strand the user there — fall back to the test
+      // property. A precise street address is always honored; typed searches are never overridden.
+      if(isInitial && q!==DEMO && /administrative_area_level_1|administrative_area_level_2|\bcountry\b/.test(t) && !/street_address|premise|route|point_of_interest|establishment/.test(t)){ search(DEMO,true); return; }
+      var loc=r.geometry.location; map.setCenter(loc); map.setZoom(20);
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc});
-      // Expand a bare street into Google's full address, but never SHRINK an already-full one
-      // (the project's stored address wins if the geocode came back shorter/partial).
-      var cur=($("q").value||"").trim(), fa=res[0].formatted_address||"";
+      var cur=($("q").value||"").trim(), fa=r.formatted_address||"";
       if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }
 
   /* ---------- slider handlers (ids unchanged; live-edit the map) ---------- */
