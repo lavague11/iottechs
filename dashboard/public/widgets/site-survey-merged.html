@@ -775,7 +775,7 @@
       if(!d || !d.cone) return;
       var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
       d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI); d.aimed=true;
-      d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale));   // reach to the tap, in scene px (÷ zoom)
+      d.range=Math.max(40, Math.min(maxReach(), Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale)));   // reach to the tap (scene px ÷ zoom), capped so it can't span the map
       renderDevice(d); growCone(d.id); queueSave(); });
     // Kill the mobile long-press context menu (text-select / Save Image) on the plan.
     work.addEventListener("contextmenu", function(e){ e.preventDefault(); });
@@ -788,6 +788,9 @@
       var W=work.clientWidth, H=work.clientHeight;                     // keep the scene covering the viewport
       zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }   // always clamp + apply, even on a pure pan
     function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
+    // A camera's reach (cone length) is capped to ~half the plan's longer side — enough for a realistic
+    // cone, but it can never shoot across the whole aerial (and off into the panel) from a far/stray tap.
+    function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.5) : 600; }
     work.addEventListener("wheel", function(e){ if(e.target.closest(".devmenu,.ctxbar,.utils,.plandim")) return;
       e.preventDefault(); var r=work.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.12:1/1.12); }, {passive:false});
     var pinchDist=0, pinchCx=0, pinchCy=0;
@@ -841,7 +844,7 @@
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.left=cen+"px"; wrap.style.top=cen+"px"; wrap.style.transform="rotate("+d.aim+"deg)";
-        var R=(d.range||RANGE), ap=br, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;
+        var R=Math.min(d.range||RANGE, maxReach()), ap=br, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;   // cap display too, so already-placed cameras with a huge stored reach are reined in
         svg.setAttribute("width",W); svg.setAttribute("height",H); svg.style.left="0px"; svg.style.top=(-R)+"px"; svg.setAttribute("viewBox","0 "+(-R)+" "+W+" "+H);
         if(d.fov>=359){ path.setAttribute("d","M "+(ap-R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap+R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap-R)+" 0 Z"); }   // 360° coverage → full circle
         else { var a1x=(ap+R*Math.cos(-half)).toFixed(1), a1y=(R*Math.sin(-half)).toFixed(1), a2x=(ap+R*Math.cos(half)).toFixed(1), a2y=(R*Math.sin(half)).toFixed(1), lg=d.fov>180?1:0;
