@@ -325,8 +325,9 @@
     ensureRect();
     return capture().then(function(ok){ if(ok){ capturedCurrent=true; preview.classList.add("show"); } return ok; });
   }
+  function exitCrop(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } }
   $("tLevel").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
-    var open=!$("popLevel").classList.contains("on"); closePops();
+    var open=!$("popLevel").classList.contains("on"); exitCrop(); closePops();   // Level and Crop are mutually exclusive — leaving one enters the other cleanly (no rotate-vs-crop-layer tangle)
     $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); $("levelGrid").classList.toggle("on",open); });
   $("tCrop").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
     if(cropMode){
