@@ -1068,7 +1068,7 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,devices:f.devices||[],started:!!f.started}; }); }
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource so the Background tab reopens the saved plan (not the chooser)
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
@@ -1133,14 +1133,14 @@
       // Background step shows the source chooser (redo from any source, devices stay); other steps show the plan
       var chooser=(idx===0), cbg=document.getElementById("changeBgBtn");
       if(chooser){
-        if(bgHasImage && (curBgSource==="satellite" || curBgSource==="draw")){
-          // Reopen the background tool you used (satellite or draw) — state preserved in-session — to
-          // revise / re-enhance, instead of forcing a re-pick. "Change background" reopens the chooser.
-          ensureBgToolSrc(curBgSource==="draw" ? DRAW_SRC : SAT_SRC);
-          satFrame.style.display="block";
+        if(bgHasImage){
+          // The Background tab just SHOWS the saved plan (the last-saved background + its devices) — it
+          // never forces the chooser or re-opens the editor. "Change background" swaps it (→ chooser).
+          satFrame.style.display="none";
           document.getElementById("bgstep").style.display="none";
-          document.getElementById("working").style.display="none";
+          document.getElementById("working").style.display="block";
           if(cbg) cbg.style.display="inline-flex";
+          fitScene();
         } else {
           satFrame.style.display="none";
           document.getElementById("bgstep").style.display="";
