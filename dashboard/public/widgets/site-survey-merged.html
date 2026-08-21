@@ -296,6 +296,12 @@
   #loupe .lxh::before,#loupe .lxh::after{content:"";position:absolute;background:rgba(185,138,46,.95)}
   #loupe .lxh::before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
   #loupe .lxh::after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%)}
+  /* Full-screen viewer of the finished aerial (tap the plan to open; it never edits the image). */
+  #bgViewer{position:fixed;inset:0;z-index:60;background:rgba(10,12,16,.93);display:none;align-items:center;justify-content:center;padding:14px}
+  #bgViewer.on{display:flex}
+  #bgViewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  #bgViewer .bvClose{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  #bgViewer .bvClose:hover{background:rgba(255,255,255,.28)}
   @media (max-width:900px){
     .doors{grid-template-columns:1fr}
     .canvasCol{padding:14px 12px 0}
@@ -719,6 +725,24 @@
       if(activePtrs.size>0) return;                                    // another finger still down → was a pinch
       if(placePt) placeAt(placePt.x, placePt.y); });
     work.addEventListener("pointercancel", function(){ placing=false; hideLoupe(); });
+
+    // ---- tap the finished aerial → view it full-screen (a viewer; it never edits the image) ----
+    var bgViewer=null;
+    function openBgViewer(){ if(!bgData) return;
+      if(!bgViewer){ bgViewer=document.createElement("div"); bgViewer.id="bgViewer";
+        bgViewer.innerHTML='<img alt="Aerial"><button class="bvClose" type="button" aria-label="Close">&times;</button>';
+        document.body.appendChild(bgViewer);
+        bgViewer.addEventListener("click", function(e){ if(e.target===bgViewer || e.target.classList.contains("bvClose")) bgViewer.classList.remove("on"); }); }
+      bgViewer.querySelector("img").src=bgData; bgViewer.classList.add("on"); }
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape" && bgViewer && bgViewer.classList.contains("on")) bgViewer.classList.remove("on"); });
+    // A clean tap on the empty aerial (not while placing/aiming, not on a device) opens the viewer.
+    var vwDown=null;
+    work.addEventListener("pointerdown", function(e){ if(armedK||angleMode||inChrome(e)){ vwDown=null; return; } vwDown={x:e.clientX,y:e.clientY,id:e.pointerId}; });
+    work.addEventListener("pointerup", function(e){ if(!vwDown||e.pointerId!==vwDown.id) return; var v=vwDown; vwDown=null;
+      if(activePtrs.size>0) return;                                    // multi-touch → pan/zoom, not a tap
+      if(Math.hypot(e.clientX-v.x,e.clientY-v.y)>10) return;           // moved → was a pan
+      if(!bgHasImage) return;
+      openBgViewer(); });
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
