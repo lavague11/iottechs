@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import SignaturePanel from "./signature-panel";
+import SurveyDevices from "./survey-devices";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
@@ -14,6 +15,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [fs, setFs] = useState(false);
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
+  const [roster, setRoster] = useState([]);       // device roster mirrored from the tool (moved outside)
+  const [curFloorState, setCurFloorState] = useState(0);
+  const frameRef = useRef(null);
+  // Drive an edit back into the tool (rename/FOV/delete/select/photo/switch-floor), applied live.
+  const cmd = useCallback((payload) => {
+    try { frameRef.current?.contentWindow?.postMessage({ type: "iotSurveyCmd", project: accessId, ...payload }, "*"); } catch { /* frame gone */ }
+  }, [accessId]);
   // The redesigned Site Survey tool (chooser → Satellite/Upload/Draw → Place → Angles → Submit).
   // Staff edit; customers get ?ro=1. It persists to its own store (survey2) so the swap doesn't
   // disturb existing "survey" data / downstream consumers while the redesign is wired up.
@@ -48,6 +56,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         // background is added — no waiting on the server's tool-meta poll.
         if (typeof e.data.hasContent === "boolean") onHasData?.(e.data.hasContent);
       }
+      if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); }
       if (e.data.type === "iotSurveyZoom" && e.data.img) { setZoomImg(e.data.img); setZoomed(false); }
       // The tool's own "Submit for approval" button → run the real server submit (the bar is status-only).
       if (e.data.type === "iotSurvey2Submit") onSubmit?.();
@@ -90,6 +99,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   }, [zoomImg]);
 
   return (
+    <>
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       <div className="ss-embed-bar">
         <span className="ss-embed-tag">
@@ -109,6 +119,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       {synced ? (
         <iframe
           key={src}
+          ref={frameRef}
           className="ss-embed-frame"
           src={src}
           title="Site Survey"
@@ -149,5 +160,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         />
       )}
     </div>
+    {/* The device roster lives OUTSIDE the tool now — below the map, never overlapping it. Hidden while
+        the tool is full-screen (the overlay covers the page). */}
+    {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} cmd={cmd} />}
+    </>
   );
 }

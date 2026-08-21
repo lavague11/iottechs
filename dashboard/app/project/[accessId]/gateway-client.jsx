@@ -11,7 +11,6 @@ import { GatewayScreen } from "../../components/gateway-screen";
 import DeckView         from "./deck-view";
 import JobLog           from "./job-log";
 import SiteSurveyWidget  from "./site-survey-widget";
-import SurveyCameras     from "./survey-cameras";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
@@ -2848,7 +2847,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onHasData={setSurveyHasLocal}
                 onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }}
               />
-              <SurveyCameras accessId={lp.access_id} view={view} customerView={!!previewRole} />
               <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />
               <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />

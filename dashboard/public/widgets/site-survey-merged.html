@@ -82,6 +82,7 @@
   body.ro .plandim{display:none}
 
   /* right panel + collapse rail (same as survey tool) */
+  .side,.sideOpen{display:none!important}   /* device roster moved OUTSIDE the tool → React host panel below the map; the in-tool DOM stays (hidden) as working state */
   .side{flex:none;width:300px;padding:14px 18px 0 14px;display:flex;flex-direction:column;min-height:0}
   .panel{flex:1;background:#fff;border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0;overflow:hidden;margin-bottom:14px}
   .panelHead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
@@ -971,7 +972,23 @@
     }
     // The SURVEY panel: every floor under a collapsible divider (floor 2 continues floor 1). The
     // current floor's devices are fully editable; other floors list their devices (click to open).
+    // The device roster lives OUTSIDE the tool now (a panel below the map, in the React host). We keep
+    // the in-tool DOM (hidden) as the working state, and mirror the full roster up on every change so
+    // the outside panel can rename / set FOV / delete / photograph each device, live.
+    function reportDevices(){ try{
+      var payload=floors.map(function(f,fi){
+        var isCur=fi===curFloor, list=isCur?devices:(f.devices||[]);
+        return { name:f.name||("Floor "+(fi+1)), current:isCur, devices:list.map(function(d,di){
+          var it=cat(d.k)||{};
+          return { id:isCur?d.id:null, floor:fi, di:di, k:d.k, kind:(it.name||d.k),
+                   tag:d.tag||"", name:d.name||"", cone:!!(isCur?d.cone:it.cone), fov:d.fov||it.fov||0,
+                   color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed,
+                   photo:d.photo||null, photoName:d.photoName||null, busy:!!d.photoBusy }; }) };
+      });
+      parent.postMessage({ type:"iotSurveyDevices", project:PID, curFloor:curFloor, ro:RO, floors:payload }, "*");
+    }catch(e){} }
     function renderPanel(){
+      reportDevices();   // keep the outside panel in sync on every change
       var others=floors.reduce(function(n,f,i){ return i===curFloor?n:n+((f.devices&&f.devices.length)||0); },0);
       if(!devices.length && !others){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
       panelBody.innerHTML="";
@@ -991,6 +1008,19 @@
         devs.forEach(function(d){ panelBody.appendChild(isCur?makeCard(d):makeOtherCard(d,fi)); });
       });
     }
+    // Commands from the OUTSIDE device panel (React host) → drive the same in-tool operations, live.
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotSurveyCmd"||(PID&&m.project!==PID)) return;
+      if(RO) return;
+      if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
+      var d=(m.id!=null)?byIdDev(m.id):null;
+      if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
+      if(!d) return;
+      if(m.cmd==="rename"){ d.name=cap(String(m.name||"").trim())||cap(cat(d.k).name); renderDevice(d); renderPanel(); queueSave(); }
+      else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }
+      else if(m.cmd==="delete"){ removeDevice(d.id); }
+      else if(m.cmd==="photo"){ d.photo=m.photo||null; d.photoName=m.photo?(m.photoName||d.name||null):null; renderDevice(d); renderPanel(); queueSave(); }
+      else if(m.cmd==="clearPhoto"){ d.photo=null; d.photoName=null; renderDevice(d); renderPanel(); queueSave(); }
+    });
     function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
       devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); queueSave(); }
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
@@ -1180,7 +1210,7 @@
       backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
       var hints={0:bgHasImage?"":"Choose a background to begin.",
-                 1:"Place devices with +, set camera angles with the arrow.",2:"Review the plan, then submit — or add another floor."};
+                 1:"",2:"Review the plan, then submit — or add another floor."};
       setHint(RO ? "" : (hints[idx]||""));   // customers don't get editing prompts
       queueSave();
     }
