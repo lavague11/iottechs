@@ -28,6 +28,8 @@
   .tbtn svg{width:16px;height:16px}
   .tbtn.gold{margin-left:auto;background:var(--gold);color:#fff;border-color:var(--gold)}
   .tbtn.gold:hover{background:#bd9a59;border-color:#bd9a59}
+  .tbtn.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+  .tbtn.on:hover{background:#bd9a59;border-color:#bd9a59}
   .tgroup{display:flex;align-items:center;gap:9px}
   .tgroup>label{font-size:9.5px;letter-spacing:.16em;color:#9a7b3e;font-weight:bold;text-transform:uppercase}
   .num{height:38px;width:62px;padding:0 8px;text-align:center;background:#fff;border:1px solid var(--line);
@@ -64,7 +66,7 @@
   .mini{background:#f3f4f6;border:1px solid var(--line);color:#9a7b3e;font-size:11px;
         font-weight:bold;padding:5px 11px;cursor:pointer}
   .mini:hover{background:#e9ebef}
-  .cvwrap{padding:14px;background:#fff}
+  .cvwrap{padding:0;background:#fff}
   .cvwrap canvas{width:100%;height:auto;display:block;cursor:pointer}
   .pagenav{display:none;align-items:center;justify-content:center;gap:20px;
        max-width:1180px;margin:16px auto 4px}
@@ -157,6 +159,10 @@
       </div>
     </div></div>
 
+  <button class="tbtn" id="frameBtn" type="button" title="Phone frame on/off">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+    Frame</button>
+
   <button class="tbtn gold" id="eCust">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
     Customer View</button>
@@ -205,7 +211,7 @@
 
 <script>
 /* IOT TECHS — CCTV Mockup. Top toolbar · stacked mockups · auto-save · customer view. */
-const S={client:'',slots:[],names:[],count:9,view:4,frame:true,page:0,hidden:{},hover:{p:null,i:null},_cv:[]};
+const S={client:'',slots:[],names:[],count:9,view:4,frame:false,page:0,hidden:{},hover:{p:null,i:null},_cv:[]};
 const GRID={1:{cols:1,rows:1},4:{cols:2,rows:2},9:{cols:3,rows:3},16:{cols:4,rows:4}};
 let pendingSlot=null;
 function per(){return S.view;}
@@ -251,13 +257,13 @@ function drawCell(c,x,y,w,h,i,o){o=o||{};
   dot(c,x+pad+cf*0.32,y+pad+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
   osd(c,nameOf(i),x+pad+cf*0.95,y+pad+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
   c.restore();
-  c.strokeStyle=ph?'rgba(255,255,255,.06)':'#c4c9d2';c.lineWidth=1;c.strokeRect(x+.5,y+.5,w-1,h-1);
+  if(!ph){c.strokeStyle='#c4c9d2';c.lineWidth=1;c.strokeRect(x+.5,y+.5,w-1,h-1);}   // hairline only on empty tiles; real photos stay seamless
   if(o.hover===i){c.save();c.fillStyle='rgba(201,169,110,.2)';c.fillRect(x,y,w,h);
     c.strokeStyle='#C9A96E';c.lineWidth=3;c.strokeRect(x+2,y+2,w-4,h-4);
     if(!ph){c.lineWidth=Math.max(3,Math.min(w,h)*0.02);c.lineCap='round';const s2=Math.min(w,h)*0.1;
       c.beginPath();c.moveTo(x+w/2-s2,y+h/2);c.lineTo(x+w/2+s2,y+h/2);c.moveTo(x+w/2,y+h/2-s2);c.lineTo(x+w/2,y+h/2+s2);c.stroke();}
     c.restore();}}
-function gridRects(X,Y,W,H,page){const g=GRID[S.view],gap=Math.max(2,W*0.004);
+function gridRects(X,Y,W,H,page){const g=GRID[S.view],gap=S.gap||0;   // 0 = seamless, images touch edge-to-edge
   const tw=(W-(g.cols+1)*gap)/g.cols,th=(H-(g.rows+1)*gap)/g.rows,out=[];
   for(let r=0;r<g.rows;r++)for(let col=0;col<g.cols;col++){const cell=r*g.cols+col,i=page*per()+cell;
     out.push({i,x:X+gap+col*(tw+gap),y:Y+gap+r*(th+gap),w:tw,h:th});}return out;}
@@ -285,6 +291,7 @@ const stack=document.getElementById('stack');
 function rebuildCards(){
   const n=mockups(),d=dims();
   if(S.page>=n)S.page=n-1; if(S.page<0)S.page=0;
+  const _fb=document.getElementById('frameBtn'); if(_fb)_fb.classList.toggle('on',!!S.frame);
   const p=S.page,a=p*per()+1,b=Math.min(S.count,p*per()+per());
   stack.innerHTML='';S._cv=[];
   const card=document.createElement('div');card.className='card';
@@ -425,6 +432,8 @@ function bulkAdd(list){const files=[...list].filter(okImg);if(!files.length)retu
 const fileInput=document.getElementById('file');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
 fileInput.onchange=e=>bulkAdd(e.target.files);
+const frameBtn=document.getElementById('frameBtn');
+frameBtn.onclick=()=>{ if(IOT_RO)return; S.frame=!S.frame; rebuildCards(); touch(); };
 
 /* ===== export helpers + customer view ===== */
 function exCanvas(page){const d=dims();const oc=document.createElement('canvas');oc.width=d.W*2;oc.height=d.H*2;
