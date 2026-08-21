@@ -417,9 +417,26 @@ function shrinkPhoto(img,url){
   return new Promise(res=>{const im2=new Image();im2.onload=()=>res({img:im2,url:u2});
     im2.onerror=()=>res({img,url});im2.src=u2;});
 }
+// Prefer server-side conversion: POST to /api/media, which turns iPhone HEIC (and anything else)
+// into a JPEG and returns a SMALL URL we store instead of a multi-MB base64 data-URL. Same-origin,
+// so the staff session cookie rides along. Returns {img,url} or null (unauthenticated / offline).
+async function uploadPhoto(f){
+  try{
+    const fd=new FormData(); fd.append('file', f, (f&&f.name)||'photo.jpg');
+    const pid=new URLSearchParams(location.search).get('project'); if(pid) fd.append('project',pid);
+    fd.append('kind','mockup');
+    const r=await fetch('/api/media',{method:'POST',body:fd,credentials:'same-origin'});
+    if(!r.ok) return null;
+    const j=await r.json(); if(!j||!j.ok||!j.url) return null;
+    return (await loadImageURL(j.url)) || null;   // {img, url:'/api/media/:id'}
+  }catch(_){ return null; }
+}
 async function loadImageFile(f){
+  const up=await uploadPhoto(f);                  // server path: HEIC-safe, returns a URL
+  if(up) return up;
+  // Fallback: in-browser decode (offline / standalone / not signed in). HEIC only if the browser can.
   if(isHeic(f)&&window.heic2any){
-    try{const out=await heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}catch(_){/* fall through — some browsers decode HEIC natively */}
+    try{const out=await heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}catch(_){/* some browsers decode HEIC natively */}
   }
   return new Promise(res=>{const rd=new FileReader();rd.onload=()=>{const img=new Image();
     img.onload=()=>shrinkPhoto(img,rd.result).then(res);img.onerror=()=>res(undefined);img.src=rd.result;};rd.readAsDataURL(f);});}
