@@ -425,7 +425,7 @@ function FlowStep({ n, total, status, color, required, icon, title, sub, chip, h
           <button type="button" className="pv-tool-toggle" onClick={toggleOpen}>
             {shaded ? tick : <span className="pv-tool-icon">{icon}</span>}
             <span className="pv-tool-title">{title}</span>
-            {shaded ? <span className="pv-tool-sub done">Complete</span> : <span className="pv-tool-sub">{sub}</span>}
+            {shaded ? <span className="pv-tool-sub done">Complete</span> : (sub && <span className="pv-tool-sub">{sub}</span>)}
             {status === "active" && !shaded && <span className="flow-next-tag">Your next step</span>}
             {chip}
           </button>
@@ -2515,14 +2515,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
           <FlowStep status={svcCall.diagnostics.length ? "done" : "active"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>}
-            title="Service Diagnostic" sub="60-second check · Guided steps · On the record"
+            title="Service Diagnostic"
             chip={cView === "customer" && !svcCall.diagnostics.length ? <span className="pv-tool-chip go">Try it first</span> : null}>
             <SvcDiagnosticPanel svcCall={svcCall} view={cView} preview={!!previewRole} />
           </FlowStep>
           {cView !== "tech" && (cView !== "customer" || svcCall.invoice) && (
             <FlowStep status={svcCall.invoice?.signed_name ? "done" : svcCall.invoice ? "active" : "upcoming"} color="#C9A96E" required
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
-              title="Service Invoice" sub="Rate card · Approve &amp; sign · Balance"
+              title="Service Invoice"
               chip={cView === "customer" && svcCall.invoice && !svcCall.invoice.signed_name ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}>
               <SvcInvoicePanel svcCall={svcCall} view={cView} preview={!!previewRole} />
             </FlowStep>
@@ -2753,12 +2753,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap" style={{ marginBottom: 14 }}>
           <FlowStep n={1} total={2} status={leadConfirmed ? "done" : "active"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
-            title="Your Information" sub="Confirm the details we have — or fix anything that's wrong.">
+            title="Your Information">
             <LeadInfoStep accessId={lp.access_id} project={lp} preview={!!previewRole} onConfirmed={() => setLeadConfirmed(true)} />
           </FlowStep>
           <FlowStep n={2} total={2} status={lp.date ? "done" : leadConfirmed ? "active" : "upcoming"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
-            title="Schedule Your Appointment" sub="Pick a time for your free walkthrough & demo."
+            title="Schedule Your Appointment"
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
             <SchedulingWidget
               accessId={lp.access_id}
@@ -2777,7 +2777,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {/* Survey Scheduling + Details & Notes merged into one card (booking + POC + questions). */}
           <FlowStep status={lp.date ? "done" : "active"} color="#C9A96E" required
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
-            title="Survey Scheduling &amp; Notes" sub="Book the visit · Point of contact · Questions"
+            title="Survey Scheduling &amp; Notes"
             chip={lp.date ? <span className="pv-tool-chip">Scheduled · {fmtDate(lp.date)}</span> : null} completable>
             <SchedulingWidget
               accessId={lp.access_id}
@@ -2834,7 +2834,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {showSurvey && (
             <FlowStep n={stepNum("survey")} total={stepTotal} status={stepStatus("survey")} color="#C9A96E"
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
-              title="Site Survey" sub="Floor plans · Device placement · Multi-floor · Auto-save"
+              title="Site Survey"
               chip={svMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
               headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />}>
@@ -2857,7 +2857,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {showMockup && (
             <FlowStep n={stepNum("mockup")} total={stepTotal} status={stepStatus("mockup")} color="#C9A96E"
               icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
-              title="Mockups" sub="System diagrams · Product photos · Design references"
+              title="Mockups"
               chip={mkMeta.has && isCust ? <span className="pv-tool-chip go">Review &amp; approve</span> : null}
               headerAction={<ToolSubmitButton accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                 acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} />}>
@@ -3038,7 +3038,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap">
           <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" required title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
-            sub="Book the install visit · Pick a time window" bare>
+            bare>
             <SchedulingWidget
               accessId={lp.access_id}
               assignments={localAssignments}
@@ -3053,7 +3053,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </FlowStep>
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Package tracking · equipment received" completable autoComplete={shipStatus.delivered}
+            completable autoComplete={shipStatus.delivered}
             canComplete={shipStatus.count > 0} cantHint="Add a tracking number first" bare>
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
@@ -3072,7 +3072,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className="pv-survey-tools flow-wrap">
           <FlowStep status={installEvents > 0 ? "done" : "active"} color="#C9A96E" required title="Install Scheduling"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
-            sub="Your install visit" bare>
+            bare>
             <SchedulingWidget
               accessId={lp.access_id}
               assignments={localAssignments}
@@ -3089,7 +3089,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {(toolMeta?.tracking?.count > 0) && (
           <FlowStep status="open" color="#C9A96E" title="Shipment Tracking"
             icon={<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg>}
-            sub="Package tracking · equipment received" completable
+            completable
             autoComplete={shipStatus.delivered || toolMeta?.tracking?.delivered} bare>
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
