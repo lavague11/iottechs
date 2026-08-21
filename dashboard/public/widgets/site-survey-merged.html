@@ -155,6 +155,26 @@
   .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none}
   .devNode.aim .icLabel{pointer-events:auto;cursor:grab}
   .devNode.aim.sel .icLabel{background:var(--gold)}
+  /* View photo — a real shot of what the camera sees, attached per device */
+  .devNode .viewBadge{position:absolute;right:-5px;top:-5px;width:17px;height:17px;border-radius:50%;border:2px solid #fff;background:#0c0f14 center/cover no-repeat;box-shadow:0 1px 5px rgba(16,17,18,.42);display:none;cursor:pointer;z-index:6}
+  .devNode.has-photo .viewBadge{display:block}
+  #viewPop{position:fixed;z-index:60;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgba(16,17,18,.28);padding:6px;width:238px;pointer-events:none}
+  #viewPop img{width:100%;height:152px;object-fit:cover;border-radius:8px;display:block;background:#0c0f14}
+  #viewPop .vpName{font-size:12px;font-weight:700;color:var(--ink);padding:7px 6px 5px;letter-spacing:.01em}
+  #viewPop .vpHint{font-size:9px;color:var(--muted);padding:0 6px 4px;text-transform:uppercase;letter-spacing:.11em}
+  /* panel card — view-photo control */
+  .card .pv{margin-top:8px}
+  .card .pv .pvAdd{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;border:1px dashed var(--line);background:var(--soft);color:var(--muted);border-radius:9px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .card .pv .pvAdd:hover{border-color:var(--gold);color:var(--ink)}
+  .card .pv .pvAdd svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;flex:none}
+  .card .pv.has{display:flex;align-items:center;gap:9px}
+  .card .pv .pvThumb{width:46px;height:33px;border-radius:7px;background:#0c0f14 center/cover no-repeat;flex:none;cursor:pointer;border:1px solid var(--line)}
+  .card .pv .pvName{flex:1;min-width:0;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:var(--ink);padding:4px 6px;border-radius:7px}
+  .card .pv .pvName:focus{outline:none;border-color:var(--line);background:var(--soft)}
+  .card .pv .pvx{flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+  .card .pv .pvx:hover{background:var(--soft);color:#c0392b}
+  body.ro .card .pv .pvAdd,body.ro .card .pv .pvx{display:none}
+  body.ro .card .pv .pvName{pointer-events:none}
   /* FOV cone + line — only shown in the Angles step */
   .devNode .fovWrap{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform-origin:0 0;display:none;z-index:2}
   /* cone shows for the selected/hovered/panel-highlighted camera, and for all when "show all angles" is on */
@@ -697,13 +717,23 @@
       var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
-        '<div class="icLabel"></div>';
+        '<div class="icLabel"></div>'+
+        '<div class="viewBadge" title="View photo"></div>';
       document.getElementById("scene").appendChild(el);
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
+      // Hover (desktop) previews the camera's view photo; tapping the badge pins it (mobile).
+      el.addEventListener("mouseenter", function(){ if(d.photo && !popPinned) showViewPop(d, el, false); });
+      el.addEventListener("mouseleave", function(){ if(!popPinned) hideViewPop(); });
+      var vb=el.querySelector(".viewBadge");
+      vb.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      vb.addEventListener("click", function(e){ e.stopPropagation(); if(!d.photo) return;
+        if(popId===d.id && popPinned){ hideViewPop(); } else { showViewPop(d, el, true); } });
       renderDevice(d);
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
       el.style.left=d.x+"%"; el.style.top=d.y+"%"; el.classList.toggle("sel",d.id===selId); el.classList.toggle("aimed",!!d.aimed);
+      el.classList.toggle("has-photo",!!d.photo);
+      var vb=el.querySelector(".viewBadge"); if(vb) vb.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=d.tag;
@@ -733,8 +763,12 @@
       card.addEventListener("mouseenter", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.add("hl"); });
       card.addEventListener("mouseleave", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.remove("hl"); });
       var showFov=(angleMode && d.cone);
+      var CAMSVG='<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>';
       card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
-        (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'');
+        (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'')+
+        (d.photo
+          ? '<div class="pv has"><span class="pvThumb" style="background-image:url('+d.photo+')"></span><input class="pvName" type="text" spellcheck="false" placeholder="View name"><div class="pvx" title="Remove photo">&times;</div></div>'
+          : '<div class="pv"><button class="pvAdd" type="button">'+CAMSVG+'View photo</button></div>');
       card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
       card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
       var nmi=card.querySelector(".nm"); nmi.value=d.name;
@@ -749,8 +783,50 @@
         var fr=card.querySelector(".fovR"), fv=fr.nextElementSibling;
         fr.addEventListener("pointerdown", function(){ if(selId!==d.id) markSel(d.id); });
         fr.addEventListener("input", function(){ if(selId!==d.id) markSel(d.id); d.fov=+fr.value; fv.textContent=d.fov+"°"; renderDevice(d); queueSave(); }); }
+      // view photo: add / rename / preview / remove
+      var pv=card.querySelector(".pv");
+      if(pv){
+        var add=pv.querySelector(".pvAdd"); if(add) add.addEventListener("click", function(e){ e.stopPropagation(); openPhotoPicker(d.id); });
+        var th=pv.querySelector(".pvThumb"); if(th) th.addEventListener("click", function(e){ e.stopPropagation(); select(d.id); var el=document.getElementById("dev-"+d.id); if(el && d.photo) showViewPop(d, el, true); });
+        var pn=pv.querySelector(".pvName");
+        if(pn){ pn.value=d.photoName||d.name||"";
+          pn.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+          pn.addEventListener("input", function(){ d.photoName=pn.value; if(popId===d.id){ var c=document.querySelector("#viewPop .vpName"); if(c) c.textContent=pn.value||d.name; } queueSave(); }); }
+        var px=pv.querySelector(".pvx"); if(px) px.addEventListener("click", function(e){ e.stopPropagation(); d.photo=null; d.photoName=null; renderDevice(d); renderPanel(); if(popId===d.id) hideViewPop(); queueSave(); });
+      }
       return card;
     }
+    // ---- view-photo engine: pick/take a shot, downscale, attach to a device, preview on hover/tap ----
+    function byIdDev(id){ for(var i=0;i<devices.length;i++){ if(devices[i].id===id) return devices[i]; } return null; }
+    var photoInput=document.createElement("input"); photoInput.type="file"; photoInput.accept="image/*"; photoInput.style.display="none"; document.body.appendChild(photoInput);
+    var photoTargetId=null;
+    function openPhotoPicker(id){ if(RO) return; photoTargetId=id; photoInput.value=""; photoInput.click(); }
+    photoInput.addEventListener("change", function(){ var f=photoInput.files&&photoInput.files[0]; if(!f) return; var d=byIdDev(photoTargetId); if(!d) return;
+      compressImg(f, function(url){ if(!url) return; d.photo=url; if(!d.photoName||!d.photoName.trim()) d.photoName=d.name; renderDevice(d); renderPanel(); queueSave(); }); });
+    // Downscale to a sane long-edge + JPEG so many cameras' photos still fit localStorage / the survey doc.
+    function compressImg(file, cb){ try{ var img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){ try{ URL.revokeObjectURL(url); }catch(e){}
+        var MAX=1100, w=img.naturalWidth||1, h=img.naturalHeight||1, sc=Math.min(1, MAX/w, MAX/h);
+        w=Math.max(1,Math.round(w*sc)); h=Math.max(1,Math.round(h*sc));
+        var c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h);
+        var out; try{ out=c.toDataURL("image/jpeg",0.7); }catch(e){ out=null; } cb(out); };
+      img.onerror=function(){ try{ URL.revokeObjectURL(url); }catch(e){} cb(null); };
+      img.src=url; }catch(e){ cb(null); } }
+    // Floating preview popover (position:fixed so the scene transform never clips it).
+    var popEl=null, popId=null, popPinned=false;
+    function ensureViewPop(){ if(popEl) return popEl; popEl=document.createElement("div"); popEl.id="viewPop";
+      popEl.innerHTML='<img alt=""><div class="vpName"></div><div class="vpHint">Camera view</div>'; document.body.appendChild(popEl); return popEl; }
+    function showViewPop(d, anchorEl, pinned){ if(!d||!d.photo||!anchorEl) return; var p=ensureViewPop();
+      p.querySelector("img").src=d.photo; p.querySelector(".vpName").textContent=d.photoName||d.name||"Camera view";
+      p.style.display="block"; popId=d.id; popPinned=!!pinned;
+      var r=anchorEl.getBoundingClientRect(), pw=p.offsetWidth, ph=p.offsetHeight;
+      var left=r.left+r.width/2-pw/2, top=r.top-ph-10; if(top<8) top=r.bottom+10;
+      left=Math.max(8, Math.min(left, window.innerWidth-pw-8)); top=Math.max(8, Math.min(top, window.innerHeight-ph-8));
+      p.style.left=Math.round(left)+"px"; p.style.top=Math.round(top)+"px"; }
+    function hideViewPop(){ popPinned=false; popId=null; if(popEl) popEl.style.display="none"; }
+    // A pinned (tapped) preview dismisses on any outside tap; panning/zooming/resizing always dismisses.
+    document.addEventListener("pointerdown", function(e){ if(popPinned && !e.target.closest(".viewBadge,#viewPop")) hideViewPop(); }, true);
+    window.addEventListener("resize", hideViewPop);
     // A device on ANOTHER floor — compact; click to jump to that floor to edit it.
     function makeOtherCard(sd, floorIdx){
       var card=document.createElement("div"); card.className="card other"; var it=cat(sd.k)||{}, g=(it&&it.group)||{};
@@ -791,7 +867,7 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -805,7 +881,7 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT)};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
     // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned
