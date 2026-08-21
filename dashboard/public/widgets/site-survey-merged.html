@@ -757,14 +757,7 @@
         bgViewer.addEventListener("click", function(e){ if(e.target===bgViewer || e.target.classList.contains("bvClose")) bgViewer.classList.remove("on"); }); }
       bgViewer.querySelector("img").src=bgData; bgViewer.classList.add("on"); }
     document.addEventListener("keydown", function(e){ if(e.key==="Escape" && bgViewer && bgViewer.classList.contains("on")) bgViewer.classList.remove("on"); });
-    // A clean tap on the empty aerial (not while placing/aiming, not on a device) opens the viewer.
-    var vwDown=null;
-    work.addEventListener("pointerdown", function(e){ if(armedK||angleMode||inChrome(e)){ vwDown=null; return; } vwDown={x:e.clientX,y:e.clientY,id:e.pointerId}; });
-    work.addEventListener("pointerup", function(e){ if(!vwDown||e.pointerId!==vwDown.id) return; var v=vwDown; vwDown=null;
-      if(activePtrs.size>0) return;                                    // multi-touch → pan/zoom, not a tap
-      if(Math.hypot(e.clientX-v.x,e.clientY-v.y)>10) return;           // moved → was a pan
-      if(!bgHasImage) return;
-      openBgViewer(); });
+    // (Tap-the-aerial-to-view-full-screen was removed — it just got in the way of placing/aiming.)
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
@@ -790,7 +783,7 @@
     function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
     // A camera's reach (cone length) is capped to ~half the plan's longer side — enough for a realistic
     // cone, but it can never shoot across the whole aerial (and off into the panel) from a far/stray tap.
-    function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.5) : 600; }
+    function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.35) : 420; }
     work.addEventListener("wheel", function(e){ if(e.target.closest(".devmenu,.ctxbar,.utils,.plandim")) return;
       e.preventDefault(); var r=work.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.12:1/1.12); }, {passive:false});
     var pinchDist=0, pinchCx=0, pinchCy=0;
@@ -1178,7 +1171,8 @@
     }
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
     // Next walks the wizard; on the Submit step it submits the whole survey for approval.
-    nextBtn.addEventListener("click", function(){ if(curStep<2) goStep(curStep+1); else submit(); });
+    nextBtn.addEventListener("click", function(){ save();   // commit the current placements/angles as-is before moving on
+      if(curStep<2) goStep(curStep+1); else submit(); });
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
     addFloorBtn.addEventListener("click", addFloor);
