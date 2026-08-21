@@ -152,7 +152,7 @@
   .tb.use:hover{background:#000}
   .tsep{height:1px;width:calc(100% - 6px);background:var(--line);margin:2px auto}
   /* popovers open to the LEFT of the toolbar */
-  .pop{position:absolute;right:58px;top:50%;transform:translateY(-50%);display:none;align-items:center;gap:10px;
+  .pop{position:absolute;z-index:13;right:58px;top:50%;transform:translateY(-50%);display:none;align-items:center;gap:10px;
     background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;box-shadow:0 10px 34px rgba(16,17,18,.22);white-space:nowrap}
   .pop.on{display:flex}
   .pop label{font-size:12px;color:var(--muted);font-weight:600}
@@ -161,6 +161,17 @@
   .pop .rz{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit}
   .pop .rz:hover{border-color:var(--gold)}
   .pop .pophint{font-size:12px;color:var(--muted)}
+  /* editable exact-angle field (merged the old 0° reset + readout into one settable input) */
+  .pop .degfield{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff}
+  .pop .degfield:focus-within{border-color:var(--gold)}
+  .pop .degfield input{width:38px;border:0;outline:0;background:transparent;font:600 13px/1 var(--sans);color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .pop .degfield input::-webkit-outer-spin-button,.pop .degfield input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .pop .degfield span{font-size:13px;color:var(--muted)}
+  /* On a phone the toolbar is centred on the right edge, so its pop-out would land mid-screen — dock it to the bottom instead. */
+  @media (max-width:640px){
+    .pop{position:fixed;z-index:20;right:10px;left:10px;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);transform:none;justify-content:center;flex-wrap:wrap;box-shadow:0 10px 30px rgba(16,17,18,.22)}
+    .pop input[type=range]{width:auto;flex:1 1 120px;min-width:100px}
+  }
   /* Google Places autocomplete dropdown — above everything */
   .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
 </style>
@@ -200,8 +211,7 @@
         <label>Rotate</label>
         <input id="rot" type="range" min="-45" max="45" value="0">
         <button class="rz" id="rot90" title="Turn a further 90°">+90°</button>
-        <button class="rz" id="rotZero">0°</button>
-        <span class="val" id="rotVal">0°</span>
+        <div class="degfield"><input id="rotDeg" type="number" min="-180" max="180" step="1" value="0" title="Set the exact angle" aria-label="Angle in degrees"><span>&deg;</span></div>
       </div>
       <button class="tb" id="tLevel" title="Level the aerial"><svg viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="2"/><circle cx="12" cy="12" r="1.5"/><path d="M9 9.5v5M15 9.5v5"/></svg><span>Level</span></button>
       <button class="tb" id="tCrop" title="Crop the aerial"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span>Crop</span></button>
@@ -259,7 +269,7 @@
     search(($("q").value||DEMO).trim(), true);
   };
   var rotCoarse=0;   // 90° steps from the +90° button; the slider is the fine ±45 trim on top, so any angle is reachable
-  function applyRot(){ viewRot=norm(rotCoarse + (parseInt($("rot").value,10)||0)); $("rotVal").textContent=viewRot+"°"; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
+  function applyRot(){ viewRot=norm(rotCoarse + (parseInt($("rot").value,10)||0)); var _rd=$("rotDeg"); if(_rd && document.activeElement!==_rd) _rd.value=viewRot; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
   function search(q, isInitial){ if(!q||!geocoder) return; $("show").disabled=true;
     geocoder.geocode({address:q}, function(res,st){ $("show").disabled=false;
       if(st!=="OK"||!res.length){ if(isInitial && q!==DEMO) search(DEMO,true); return; }   // couldn't find it → land on the test property
@@ -276,12 +286,16 @@
   /* ---------- slider handlers (ids unchanged; live-edit the map) ---------- */
   $("rot").addEventListener("input", function(){ applyRot(); invalidateCapture(); });
   $("rot90").addEventListener("click", function(){ rotCoarse=(rotCoarse+90)%360; applyRot(); invalidateCapture(); });
-  $("rotZero").addEventListener("click", function(){ rotCoarse=0; $("rot").value=0; applyRot(); invalidateCapture(); });
+  // Type an exact angle — sets the absolute rotation (the ±45 slider becomes a fine trim on top of it).
+  function commitRotDeg(){ var d=parseInt($("rotDeg").value,10); if(isNaN(d)) d=0; rotCoarse=norm(d); $("rot").value=0; applyRot(); invalidateCapture(); }
+  $("rotDeg").addEventListener("change", commitRotDeg);
+  $("rotDeg").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); commitRotDeg(); $("rotDeg").blur(); } });
   function ensureRect(){ if(!rect){ var st=document.querySelector(".stage"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
 
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
   var capturedCurrent=false, cropMode=false;
   var preview=$("preview");
+  document.body.appendChild($("popLevel"));   // lift the Level pop out of the (transformed) toolbar so it can dock as a fixed bottom bar on mobile
   function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); $("levelGrid").classList.remove("on"); }
   // Back from the frozen preview to the live, pannable map so the framing can change again.
   function backToLive(){ preview.classList.remove("show"); resetCompare(); enhancedOnce=false; capturedCurrent=false; $("tEnhance").classList.remove("busy"); }
