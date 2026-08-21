@@ -12,10 +12,13 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   // Edit lock: only Admin / Manager / Sales rep build the mockup. Every other role
   // (Customer, Technician, Vendor, …) — and the admin "customer view" preview — is read-only.
   const readOnly = !["admin", "manager", "sales"].includes(view) || customerView;
-  const [stat, setStat] = useState(null);   // {count, filled, view, page, pages}
+  const [stat, setStat] = useState(null);   // {count, filled, view, page, pages, surveyDriven}
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
+  const [cameras, setCameras] = useState(null);   // survey camera roster (single source of truth)
+  const [frameReady, setFrameReady] = useState(false);
+  const surveyDriven = !!(cameras && cameras.length);
   const frameRef = useRef(null);
   const fileRef  = useRef(null);   // the picker lives HERE (parent doc) so the click is a real user gesture
 
@@ -45,13 +48,29 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
     return () => { live = false; if (stop) stop(); };
   }, [accessId]);
 
+  // The mockup grid is driven by the Site Survey cameras (single source of truth) — fetch the roster
+  // and feed it to the iframe once it's ready. Cameras are entered ONCE in the survey; here the office
+  // only attaches each camera's mockup photo. Re-fed whenever the roster changes (idempotent apply).
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/project-cameras?accessId=${encodeURIComponent(accessId)}`)
+      .then((r) => r.json()).then((j) => { if (live) setCameras(j?.ok && Array.isArray(j.cameras) ? j.cameras : []); })
+      .catch(() => { if (live) setCameras([]); });
+    return () => { live = false; };
+  }, [accessId]);
+  useEffect(() => {
+    if (frameReady && cameras && cameras.length) cmd({ cmd: "cameras", cameras });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameReady, cameras]);
+
   useEffect(() => {
     function onMsg(e) {
       if (e.data?.type === "iotMockup" && e.data.project === accessId) {
+        setFrameReady(true);
         setStat({
           count: e.data.count, filled: e.data.filled,
           view: e.data.view, page: e.data.page, pages: e.data.pages,
-          height: e.data.height,
+          height: e.data.height, surveyDriven: e.data.surveyDriven,
         });
         if (e.data.items) setItems(e.data.items);
         // Report content up so the office's Submit enables the instant a photo lands (no waiting
@@ -95,15 +114,22 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
         <div className="mk-controls">
           {!readOnly && (
             <>
-              {/* Cameras count */}
-              <label className="mk-count">
-                <span>Cameras</span>
-                <input
-                  type="number" min="1" max="64"
-                  value={stat?.count ?? 9}
-                  onChange={(e) => cmd({ cmd: "setCount", n: e.target.value })}
-                />
-              </label>
+              {/* Cameras count — manual when standalone; derived from the survey when it drives the grid */}
+              {surveyDriven ? (
+                <span className="mk-fromsurvey" title="Camera list comes from the Site Survey — add or rename cameras there">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                  From survey · {cameras.length}
+                </span>
+              ) : (
+                <label className="mk-count">
+                  <span>Cameras</span>
+                  <input
+                    type="number" min="1" max="64"
+                    value={stat?.count ?? 9}
+                    onChange={(e) => cmd({ cmd: "setCount", n: e.target.value })}
+                  />
+                </label>
+              )}
 
               {/* Upload — real file input in THIS document (opens reliably on iPhone), multiple + HEIC */}
               <input ref={fileRef} type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF" multiple capture={undefined} style={{ display: "none" }} onChange={onPick} />

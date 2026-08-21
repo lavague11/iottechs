@@ -4847,7 +4847,7 @@ export function getProjectCameras(accessId) {
     const d = JSON.parse(row?.data || "{}");
     const floors = Array.isArray(d.floors) ? d.floors : [];
     floors.forEach((f, fi) => {
-      (Array.isArray(f?.devices) ? f.devices : []).forEach((dev) => {
+      (Array.isArray(f?.devices) ? f.devices : []).forEach((dev, di) => {
         if (dev && dev.k === "cam") {
           out.push({
             name: dev.name || null,
@@ -4855,12 +4855,30 @@ export function getProjectCameras(accessId) {
             photo: dev.photo || null,       // /api/media/:id (or a legacy/fallback data-URL)
             photoName: dev.photoName || null,
             floor: fi,
+            floorName: f?.name || `Floor ${fi + 1}`,
+            di,                              // index in floors[fi].devices — the locator for setSurveyCameraPhoto
           });
         }
       });
     });
   } catch { /* bad blob → no cameras */ }
   return out;
+}
+
+// Attach / replace / clear a survey camera's view photo, targeting one device by (floor, di) — the
+// locator getProjectCameras hands out. This is the server-side twin the page-level camera list writes
+// through, so a photo edited there lands in the same survey2 blob the survey tool and mockup read.
+// (photo=null clears it.) Returns the refreshed camera list, or null if the target no longer matches.
+export function setSurveyCameraPhoto(accessId, floor, di, photo, photoName) {
+  const row = getToolData(accessId, "survey2");
+  let d;
+  try { d = JSON.parse(row?.data || "{}"); } catch { return null; }
+  const dev = d?.floors?.[floor]?.devices?.[di];
+  if (!dev || dev.k !== "cam") return null;         // moved/removed since read → refuse rather than clobber
+  dev.photo = photo || null;
+  dev.photoName = photo ? (photoName || dev.photoName || dev.name || null) : null;
+  saveToolData(accessId, "survey2", JSON.stringify(d), "camera-list");
+  return getProjectCameras(accessId);
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.

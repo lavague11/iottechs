@@ -118,7 +118,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
         ) : submittedStale ? (
           <div className="tab-row">
             <span className="tab-warn">!</span>
-            <span className="tab-msg"><b>You've changed this {label}</b> since submitting — {externalSubmit ? "re-submit it from the tool above so the customer reviews the latest." : "re-submit so the customer reviews the latest."}</span>
+            <span className="tab-msg"><b>Edited since submitting.</b> {externalSubmit ? "Re-submit from the tool above." : "Re-submit so the customer sees the latest."}</span>
             {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>}
           </div>
         ) : (

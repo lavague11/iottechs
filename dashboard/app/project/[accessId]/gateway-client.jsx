@@ -11,6 +11,7 @@ import { GatewayScreen } from "../../components/gateway-screen";
 import DeckView         from "./deck-view";
 import JobLog           from "./job-log";
 import SiteSurveyWidget  from "./site-survey-widget";
+import SurveyCameras     from "./survey-cameras";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
@@ -2847,6 +2848,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onHasData={setSurveyHasLocal}
                 onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }}
               />
+              <SurveyCameras accessId={lp.access_id} view={view} customerView={!!previewRole} />
               <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />
               <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
@@ -3965,6 +3967,7 @@ const PV_CSS = `
 .pvx .mk-count{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .pvx .mk-count input{width:52px;height:30px;padding:0 6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.82rem;font-weight:700;font-family:inherit;outline:none}
 .pvx .mk-count input:focus{border-color:var(--gold)}
+.pvx .mk-fromsurvey{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid var(--gold);border-radius:8px;background:rgba(201,169,110,.1);color:var(--gold-deep,#8a6d2f);font-size:.72rem;font-weight:700;letter-spacing:.02em;white-space:nowrap}
 .pvx .mk-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .mk-danger{border-color:#e0b0a8;background:#fdf0ef;color:#a8442f}
 .pvx .mk-danger:hover{background:#a8442f;border-color:#a8442f;color:#fff}

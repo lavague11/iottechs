@@ -318,6 +318,10 @@ function refreshAll(){rebuildCards();touch();}
 
 /* ===== interaction ===== */
 var IOT_RO=false; // set by the IOT TECHS embed shim below — read-only mode disables editing, keeps photo viewing
+// When the host feeds the survey camera roster (single source of truth), the grid is DRIVEN by it:
+// count + names come from the survey and can't be edited here (rename a camera in the survey). The
+// office only attaches the mockup/view photo per camera. Empty until a 'cameras' command arrives.
+var SURVEY_DRIVEN=false, SURVEY_CAMS=[];
 const nameEdit=document.getElementById('nameEdit'),slotFile=document.getElementById('slotFile');
 function tileAt(e,canvas,page){const rect=canvas.getBoundingClientRect(),sx=canvas.width/rect.width,sy=canvas.height/rect.height;
   const cx=(e.clientX-rect.left)*sx,cy=(e.clientY-rect.top)*sy,a=screenArea();
@@ -327,7 +331,7 @@ function doSingleClick(h){
   const ph=S.slots[h.i];
   if(IOT_RO){ if(ph)openLightbox(h.i); return; }               // read-only: view the photo, never edit
   const inTop=h.cy<=h.y+h.h*0.28;
-  if(ph&&inTop){const pad=Math.max(7,h.h*0.05);
+  if(ph&&inTop&&!SURVEY_DRIVEN){const pad=Math.max(7,h.h*0.05);   // names come from the survey when it drives the grid
     nameEdit.style.left=(h.rect.left+(h.x+pad)/h.sx)+'px';nameEdit.style.top=(h.rect.top+(h.y+pad*0.6)/h.sy)+'px';
     nameEdit.style.width=Math.max(120,(h.w*0.72)/h.sx)+'px';nameEdit.value=S.names[h.i]||'';nameEdit.placeholder='CAM '+(h.i+1);
     nameEdit.dataset.i=h.i;nameEdit.style.display='block';nameEdit.focus();nameEdit.select();
@@ -559,6 +563,7 @@ rebuildCards();
   var RO=Q.get('ro')==='1'||EXP;
   var EMBED=Q.get('embed')==='1'||!!Q.get('project');
   var KEY='iot_cctv_'+PID;
+  var restoreDone=Promise.resolve();   // resolves once saved photos are back, so a survey merge never races the restore
 
   // Measured height of the actual mockup content (so the host can shrink the iframe to fit — no dead gap).
   function contentH(){
@@ -568,7 +573,8 @@ rebuildCards();
 
   // Camera list for the host's approval checklist.
   function mockupItems(){
-    try{ var out=[]; for(var i=0;i<S.count;i++) out.push({id:'c'+i,tag:'CAM '+(i+1),name:nameOf(i)}); return out; }
+    try{ var out=[]; for(var i=0;i<S.count;i++){ var sc=SURVEY_DRIVEN&&SURVEY_CAMS[i];
+      out.push({id:'c'+i,tag:(sc&&sc.tag)||'CAM '+(i+1),name:nameOf(i)}); } return out; }
     catch(e){ return []; }
   }
 
@@ -577,7 +583,7 @@ rebuildCards();
     try{
       if(window.parent&&window.parent!==window)
         window.parent.postMessage({type:'iotMockup',project:PID,count:S.count,filled:filledCount(),
-          view:S.view,page:S.page,pages:mockups(),height:contentH(),items:mockupItems()},'*');
+          view:S.view,page:S.page,pages:mockups(),height:contentH(),items:mockupItems(),surveyDriven:SURVEY_DRIVEN},'*');
     }catch(_e){}
   }
 
@@ -604,14 +610,32 @@ rebuildCards();
   try{ new ResizeObserver(function(){ iotNotify(); }).observe(document.getElementById('stack')); }catch(_e){}
   window.addEventListener('resize',iotNotify);
 
+  // Apply the survey camera roster: count + names are the survey's; each empty slot pre-fills with that
+  // camera's view photo (office photos already placed here win). Runs after restore so it never races it.
+  function applyCameras(cams){
+    SURVEY_CAMS=Array.isArray(cams)?cams:[]; SURVEY_DRIVEN=SURVEY_CAMS.length>0;
+    if(!SURVEY_DRIVEN){ iotNotify(); return; }
+    S.count=SURVEY_CAMS.length;
+    SURVEY_CAMS.forEach(function(c,i){ S.names[i]=(c&&(c.name||c.tag))||S.names[i]||''; });
+    syncCount();
+    var toLoad=[];
+    SURVEY_CAMS.forEach(function(c,i){ if(c&&c.photo&&!S.slots[i]) toLoad.push({i:i,url:c.photo}); });
+    if(toLoad.length){
+      Promise.all(toLoad.map(function(t){ return loadImageURL(t.url).then(function(sl){ if(sl&&!S.slots[t.i])S.slots[t.i]=sl; }).catch(function(){}); }))
+        .then(function(){ refreshAll(); });
+    } else refreshAll();
+  }
+
   // Host → tool commands from the native toolbar in the React wrapper.
   window.addEventListener('message',function(ev){
     var m=ev.data; if(!m||m.type!=='iotMockupCmd')return;
     if(m.cmd==='setView'){ setView(m.v,true); }
-    else if(m.cmd==='setCount'){ S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
+    else if(m.cmd==='setCount'){ if(SURVEY_DRIVEN)return; S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
     else if(m.cmd==='upload'){ var u=document.getElementById('uploadBtn'); if(u)u.click(); }
     else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
-    else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0; rebuildCards(); touch(); }
+    else if(m.cmd==='cameras'){ restoreDone.then(function(){ applyCameras(m.cameras); }); }
+    else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0;
+      if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
     else if(m.cmd==='customerView'){ try{openCustomerView();}catch(_e){} }
     else if(m.cmd==='page'){ var n=mockups();
       if(m.dir<0&&S.page>0){S.page--;rebuildCards();}
@@ -657,7 +681,7 @@ rebuildCards();
       if(typeof d.view==='number')S.view=d.view;
       S.names=d.names||[];
       var photos=d.photos||[];
-      Promise.all(photos.map(function(u){return u?loadImageURL(u):Promise.resolve(undefined);}))
+      restoreDone=Promise.all(photos.map(function(u){return u?loadImageURL(u):Promise.resolve(undefined);}))
         .then(function(slots){S.slots=slots;syncControls();rebuildCards();iotNotify();});
     } else { iotNotify(); }
   }catch(e){}

@@ -1166,7 +1166,7 @@
       addFloorBtn.style.display = onSubmit ? "" : "none";
       backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
-      var hints={0:bgHasImage?"Pick a new background — your devices stay put.":"Choose a background to begin.",
+      var hints={0:bgHasImage?"":"Choose a background to begin.",
                  1:"Place devices with +, set camera angles with the arrow.",2:"Review the plan, then submit — or add another floor."};
       setHint(RO ? "" : (hints[idx]||""));   // customers don't get editing prompts
       queueSave();
