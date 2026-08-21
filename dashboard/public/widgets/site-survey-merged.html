@@ -166,6 +166,7 @@
   .card .pv{margin-top:8px}
   .card .pv .pvAdd{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;border:1px dashed var(--line);background:var(--soft);color:var(--muted);border-radius:9px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
   .card .pv .pvAdd:hover{border-color:var(--gold);color:var(--ink)}
+  .card .pv .pvAdd[disabled]{opacity:.55;cursor:default;border-style:solid}
   .card .pv .pvAdd svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;flex:none}
   .card .pv.has{display:flex;align-items:center;gap:9px}
   .card .pv .pvThumb{width:46px;height:33px;border-radius:7px;background:#0c0f14 center/cover no-repeat;flex:none;cursor:pointer;border:1px solid var(--line)}
@@ -766,7 +767,9 @@
       var CAMSVG='<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>';
       card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
         (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'')+
-        (d.photo
+        (d.photoBusy
+          ? '<div class="pv"><button class="pvAdd" type="button" disabled>'+CAMSVG+'Adding photo…</button></div>'
+          : d.photo
           ? '<div class="pv has"><span class="pvThumb" style="background-image:url('+d.photo+')"></span><input class="pvName" type="text" spellcheck="false" placeholder="View name"><div class="pvx" title="Remove photo">&times;</div></div>'
           : '<div class="pv"><button class="pvAdd" type="button">'+CAMSVG+'View photo</button></div>');
       card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
@@ -798,11 +801,27 @@
     }
     // ---- view-photo engine: pick/take a shot, downscale, attach to a device, preview on hover/tap ----
     function byIdDev(id){ for(var i=0;i<devices.length;i++){ if(devices[i].id===id) return devices[i]; } return null; }
-    var photoInput=document.createElement("input"); photoInput.type="file"; photoInput.accept="image/*"; photoInput.style.display="none"; document.body.appendChild(photoInput);
+    var photoInput=document.createElement("input"); photoInput.type="file"; photoInput.accept="image/*,.heic,.heif"; photoInput.style.display="none"; document.body.appendChild(photoInput);
     var photoTargetId=null;
     function openPhotoPicker(id){ if(RO) return; photoTargetId=id; photoInput.value=""; photoInput.click(); }
-    photoInput.addEventListener("change", function(){ var f=photoInput.files&&photoInput.files[0]; if(!f) return; var d=byIdDev(photoTargetId); if(!d) return;
-      compressImg(f, function(url){ if(!url) return; d.photo=url; if(!d.photoName||!d.photoName.trim()) d.photoName=d.name; renderDevice(d); renderPanel(); queueSave(); }); });
+    photoInput.addEventListener("change", function(){ var f=photoInput.files&&photoInput.files[0]; if(!f) return; var d=byIdDev(photoTargetId); if(!d) return; attachPhoto(d, f); });
+    // Attach a view photo: convert + store server-side (HEIC-safe) and keep the returned URL; if that
+    // fails (offline / not signed in), fall back to a client-downscaled data URL so it still works.
+    function attachPhoto(d, f){ d.photoBusy=true; renderPanel();
+      uploadSurveyPhoto(f, function(serverUrl){
+        function done(url){ d.photoBusy=false; if(url){ d.photo=url; if(!d.photoName||!d.photoName.trim()) d.photoName=d.name; } renderDevice(d); renderPanel(); queueSave(); }
+        if(serverUrl) done(serverUrl); else compressImg(f, done);
+      }); }
+    // POST to /api/media, which turns iPhone HEIC (and anything else) into a JPEG and returns a small
+    // /api/media/:id URL we store instead of a multi-MB base64 data-URL. Same-origin → staff cookie rides along.
+    function uploadSurveyPhoto(f, cb){ try{
+      var fd=new FormData(); fd.append("file", f, (f&&f.name)||"photo.jpg");
+      if(PID) fd.append("project", PID); fd.append("kind","survey-view");
+      fetch("/api/media",{method:"POST",body:fd,credentials:"same-origin"})
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(j){ cb(j&&j.ok&&j.url?j.url:null); })
+        .catch(function(){ cb(null); });
+    }catch(e){ cb(null); } }
     // Downscale to a sane long-edge + JPEG so many cameras' photos still fit localStorage / the survey doc.
     function compressImg(file, cb){ try{ var img=new Image(), url=URL.createObjectURL(file);
       img.onload=function(){ try{ URL.revokeObjectURL(url); }catch(e){}
