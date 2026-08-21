@@ -1092,6 +1092,25 @@ function init() {
     )
   `);
 
+  // ---- Uploaded photos (HEIC-safe): the /api/media route converts every upload to JPEG
+  // server-side (iPhone HEIC → JPEG, since browsers/desktops can't decode HEVC) and stores the
+  // bytes here. Tools save the returned /api/media/:id URL instead of multi-MB base64 data-URLs.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media (
+      id                TEXT PRIMARY KEY,
+      project_access_id TEXT,
+      kind              TEXT,
+      mime              TEXT NOT NULL DEFAULT 'image/jpeg',
+      bytes             BLOB NOT NULL,
+      w                 INTEGER,
+      h                 INTEGER,
+      created_by        TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      voided            INTEGER DEFAULT 0
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_media_project ON media(project_access_id)`);
+
   // ---- Per-stage customer acceptances (site survey / mockup gating) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS stage_acceptances (
@@ -4799,6 +4818,22 @@ export function saveToolData(accessId, tool, data, byName) {
     DO UPDATE SET data=excluded.data, updated_by=excluded.updated_by, updated_at=excluded.updated_at
   `).run(String(accessId), String(tool), String(data), byName || null);
   return getToolData(accessId, tool);
+}
+
+// ---- Uploaded media (HEIC-safe photos). Bytes are already-converted JPEG from /api/media. ----
+export function insertMedia({ id, projectAccessId, kind, mime, bytes, w, h, createdBy }) {
+  db.prepare(
+    `INSERT INTO media (id, project_access_id, kind, mime, bytes, w, h, created_by)
+     VALUES (?,?,?,?,?,?,?,?)`
+  ).run(String(id), projectAccessId ? String(projectAccessId) : null, kind || null,
+        mime || "image/jpeg", bytes, w || null, h || null, createdBy || null);
+  return id;
+}
+export function getMedia(id) {
+  return db.prepare("SELECT id, mime, bytes, voided FROM media WHERE id=?").get(String(id)) || null;
+}
+export function voidMedia(id) {
+  db.prepare("UPDATE media SET voided=1 WHERE id=?").run(String(id));
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
