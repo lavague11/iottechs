@@ -159,7 +159,10 @@
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* View photo — a real shot of what the camera sees, attached per device */
   .devNode .viewBadge{position:absolute;right:-5px;top:-5px;width:17px;height:17px;border-radius:50%;border:2px solid #fff;background:#0c0f14 center/cover no-repeat;box-shadow:0 1px 5px rgba(16,17,18,.42);display:none;cursor:pointer;z-index:6}
-  .devNode.has-photo .viewBadge{display:block}
+  /* When a camera has a view photo, the icon itself BECOMES the photo (tap it to see the full view). */
+  .devNode.has-photo .devDot{background-size:cover;background-position:center;background-repeat:no-repeat;color:transparent}
+  .devNode.has-photo .devDot svg{display:none}
+  .devNode.has-photo .viewBadge{display:none}
   #viewPop{position:fixed;z-index:60;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgba(16,17,18,.28);padding:6px;width:238px;pointer-events:none}
   #viewPop img{width:100%;height:152px;object-fit:cover;border-radius:8px;display:block;background:#0c0f14}
   #viewPop .vpName{font-size:12px;font-weight:700;color:var(--ink);padding:7px 6px 5px;letter-spacing:.01em}
@@ -753,7 +756,7 @@
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
       el.style.left=d.x+"%"; el.style.top=d.y+"%"; el.classList.toggle("sel",d.id===selId); el.classList.toggle("aimed",!!d.aimed);
       el.classList.toggle("has-photo",!!d.photo);
-      var vb=el.querySelector(".viewBadge"); if(vb) vb.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
+      var dot=el.querySelector(".devDot"); if(dot) dot.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=d.tag;
@@ -1001,13 +1004,18 @@
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(RO) return;
+      dot.addEventListener("pointerdown", function(e){ if(RO){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only: tap a photographed camera to view it
         if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → drag maps correctly at any zoom
-        function mv(ev){ d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
-        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); queueSave(); }
+        var moved=false, sx=e.clientX, sy=e.clientY;
+        function mv(ev){ if(!moved && Math.hypot(ev.clientX-sx,ev.clientY-sy)<=6) return;   // ignore tiny jitter so a tap doesn't nudge the camera
+          moved=true; d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
+        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up);
+          if(moved){ queueSave(); }
+          else if(d.photo){ if(popId===d.id && popPinned) hideViewPop(); else showViewPop(d, el, true); }   // a clean tap on a photographed camera → toggle its full view
+        }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
     function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
