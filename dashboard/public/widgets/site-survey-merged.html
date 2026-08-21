@@ -186,11 +186,15 @@
   #angleModeBtn.on svg{stroke:#fff}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
   .devmenu.show{display:block}
+  .devmenu .mg{position:relative}
   .devmenu .mg + .mg{border-top:1px solid var(--line)}
-  .devmenu .mgrp{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 11px;cursor:pointer;user-select:none;border-radius:8px}
-  .devmenu .mgrp:hover{background:var(--soft)}
-  .devmenu .mgrp .chev{width:12px;height:12px;flex:none;opacity:.55;transition:transform .15s}
-  .devmenu .mg.open .mgrp .chev{transform:rotate(90deg)}
+  .devmenu .mgrp{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 11px 9px 8px;cursor:pointer;user-select:none;border-radius:8px;border-left:3px solid transparent;transition:background .15s,color .15s,border-color .15s}
+  .devmenu .mgrp .gleft{display:flex;align-items:center;gap:8px;min-width:0}
+  .devmenu .mgrp .gdot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--gc,var(--muted));box-shadow:0 0 0 2px color-mix(in srgb,var(--gc,#888) 24%,#fff)}
+  .devmenu .mgrp .chev{width:12px;height:12px;flex:none;opacity:.5;color:var(--gc,var(--muted));transition:transform .15s,opacity .15s}
+  .devmenu .mgrp:hover{background:color-mix(in srgb,var(--gc,#888) 9%,#fff)}
+  .devmenu .mg.open .mgrp{background:color-mix(in srgb,var(--gc,#888) 13%,#fff);border-left-color:var(--gc,var(--muted));color:color-mix(in srgb,var(--gc,#555) 80%,#000)}
+  .devmenu .mg.open .mgrp .chev{transform:rotate(90deg);opacity:1}
   .devmenu .mitems{display:none;padding-bottom:4px}
   .devmenu .mg.open .mitems{display:block}
   .devmenu .mi{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:8px;cursor:pointer;font-size:14px}
@@ -567,10 +571,10 @@
 
     // ---- picker: collapsible colour-coded groups; selecting a type ARMS it (menu stays open) ----
     var CHEV='<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>';
-    devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mg" data-g="'+g.key+'">'+
-      '<div class="mgrp">'+g.name+CHEV+'</div>'+
+    devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mg" data-g="'+g.key+'" style="--gc:'+g.color+'">'+
+      '<div class="mgrp"><span class="gleft"><span class="gdot"></span>'+g.name+'</span>'+CHEV+'</div>'+
       '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("")+
-      '<div class="mg" data-g="settings"><div class="mgrp">Settings'+CHEV+'</div><div class="mitems">'+
+      '<div class="mg" data-g="settings" style="--gc:#8a9099"><div class="mgrp"><span class="gleft"><span class="gdot"></span>Settings</span>'+CHEV+'</div><div class="mitems">'+
         '<div class="setrow"><label>Icon size</label><button class="szTog" id="setIsz" title="Cycle small / medium / large">S</button></div>'+
         '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
         '<div class="setrow"><label>All angles</label><button class="settog" id="setAllAngles" title="Show every camera’s angle at once"><span class="knob"></span></button></div>'+
