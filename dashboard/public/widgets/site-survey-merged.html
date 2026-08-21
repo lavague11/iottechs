@@ -145,6 +145,8 @@
   /* ===== device system: picker, armed placement, border-label aim (Angles step) ===== */
   #working.arming{cursor:crosshair}
   .devNode{position:absolute;transform:translate(-50%,-50%);width:var(--isz,40px);height:var(--isz,40px);z-index:3}
+  /* Stop the mobile long-press hijack (iOS text-select / "Save Image") on the plan + its markers. */
+  #working,#scene,.devNode,.devNode *{-webkit-touch-callout:none;-webkit-user-select:none;-moz-user-select:none;user-select:none}
   .devNode .devDot{width:var(--isz,40px);height:var(--isz,40px);border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center;cursor:grab}
   .devNode .devDot:active{cursor:grabbing}
   .devNode.aim .devDot,.devNode.aim .devDot:active{cursor:pointer}   /* Angles: the icon doesn't move — only aim/length */
@@ -668,16 +670,31 @@
       var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
       else if(curStep===1) setHint("Add cameras & devices, then place them on the plan."); }
-    // click empty plan → drop the armed device (hides the menu so it's out of the way; stays armed for the next one)
-    work.addEventListener("pointerdown", function(e){ if(RO||!armedK) return;
-      if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
-      var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → % holds at any zoom
-      addDevice(armedK, (e.clientX-r.left)/r.width*100, (e.clientY-r.top)/r.height*100);
-      devMenu.classList.remove("show"); });
+    // Placement — touch-safe. On a phone a two-finger pinch-zoom also fires pointerdowns, which used
+    // to drop stray cameras; so on touch we place on a clean single-finger TAP (pointerup, little
+    // movement, no second finger down), never on the raw pointerdown. Mouse still places immediately.
+    var activePtrs=new Set(), placeTimer=null;
+    work.addEventListener("pointerdown", function(e){ if(e.pointerType!=="mouse") activePtrs.add(e.pointerId); }, true);
+    function ptrGone(e){ if(e.pointerType!=="mouse") activePtrs.delete(e.pointerId); }
+    work.addEventListener("pointerup", ptrGone, true);
+    work.addEventListener("pointercancel", ptrGone, true);
+    function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
+    function placeAt(cx,cy){ if(RO||!armedK) return; var r=document.getElementById("scene").getBoundingClientRect();
+      addDevice(armedK,(cx-r.left)/r.width*100,(cy-r.top)/r.height*100); devMenu.classList.remove("show"); }
+    work.addEventListener("pointerdown", function(e){
+      if(RO||!armedK||inChrome(e)) return;
+      if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }   // mouse: immediate
+      // Touch: a two-finger pinch-zoom fires pointerdowns too. Wait a beat — if a 2nd finger lands
+      // it's a pinch → cancel; otherwise it's a genuine single-finger tap → place.
+      clearTimeout(placeTimer);
+      if(activePtrs.size>1) return;
+      var cx=e.clientX, cy=e.clientY;
+      placeTimer=setTimeout(function(){ if(activePtrs.size<=1) placeAt(cx,cy); }, 80); });
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
     work.addEventListener("pointerdown", function(e){ if(RO || !angleMode || selId==null) return;
+      if(activePtrs.size>1) return;                                   // pinch-zoom in progress → don't re-aim
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
       if(!d || !d.cone) return;
@@ -685,6 +702,8 @@
       d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI); d.aimed=true;
       d.range=Math.max(40, Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale));   // reach to the tap, in scene px (÷ zoom)
       renderDevice(d); growCone(d.id); queueSave(); });
+    // Kill the mobile long-press context menu (text-select / Save Image) on the plan.
+    work.addEventListener("contextmenu", function(e){ e.preventDefault(); });
 
     // ---- wheel / two-finger pinch zoom on the plan (Place + Angles); zooms toward the cursor ----
     var scene=document.getElementById("scene"), zScale=1, zTx=0, zTy=0;
