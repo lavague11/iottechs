@@ -179,6 +179,16 @@
     .head input{padding:7px 11px;font-size:14px}
     .head button{width:36px;height:36px}
   }
+  /* Desktop (roomy viewport): the thumb-first vertical rail on the right edge reads as an awkward
+     floating strip with a mid-screen pop-out. Dock it as a proper horizontal toolbar centred along
+     the bottom, with the Rotate pop opening straight above it — the conventional editor layout. */
+  @media (min-width:641px) and (min-height:561px){
+    .tbar{top:auto;bottom:16px;right:50%;transform:translateX(50%);flex-direction:row;align-items:center;gap:4px;padding:6px 8px;border-radius:14px}
+    .tb{flex-direction:column;width:58px;height:50px;gap:3px;font-size:9.5px}
+    .tb svg{width:20px;height:20px}
+    .tsep{width:1px;height:34px;margin:0 3px}
+    .pop{right:50%;left:auto;top:auto;bottom:78px;transform:translateX(50%);justify-content:center}
+  }
   /* Google Places autocomplete dropdown — above everything */
   .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
 </style>
