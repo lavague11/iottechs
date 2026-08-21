@@ -292,9 +292,11 @@
     .doors{grid-template-columns:1fr}
     .canvasCol{padding:14px 12px 0}
     .bgstep{padding:18px;max-height:100%;overflow-y:auto}   /* the From-library button is reachable now */
-    /* Survey panel → slide-over drawer instead of display:none (which stranded it with no way to
-       reopen). The existing collapse rail (▸) + panel chevron open/close it over the canvas. */
-    .side{position:absolute;top:8px;right:8px;bottom:8px;width:min(300px,86%);z-index:20;padding:12px 12px 0;background:var(--soft);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 44px rgba(16,17,18,.3)}
+    /* Survey panel → bottom sheet (was a right-side drawer that covered the map). Docks to the bottom
+       of the canvas, full width, scrollable; the collapse chevron + reopen tab open/close it. */
+    .side{position:absolute;left:8px;right:8px;bottom:8px;top:auto;width:auto;max-height:46%;z-index:20;padding:10px 12px 0;background:var(--soft);border:1px solid var(--line);border-radius:14px;box-shadow:0 -8px 34px rgba(16,17,18,.3)}
+    .sideOpen{top:auto;bottom:8px;right:8px;width:auto;height:34px;padding:0 14px;border:1px solid var(--line);border-radius:9px;gap:6px;box-shadow:0 6px 18px rgba(16,17,18,.18)}
+    .sideOpen svg{transform:rotate(-90deg)}   /* chevron points up — "open the sheet" */
   }
   @media (max-width:640px){
     /* Phones: ~half-size device icons + tighter controls. Label/cone offsets track --isz (calc), so
