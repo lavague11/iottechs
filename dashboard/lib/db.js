@@ -1616,15 +1616,32 @@ export function addFloorplan({ image, thumb, name, project, kind, actor } = {}) 
   ).run(name || null, image, thumb || null, hash, project || null, kind || "aerial", actor || null);
   return { ok: true, id: Number(r.lastInsertRowid) };
 }
-// List for the picker grid — thumbs only (full image fetched on pick), newest first.
-export function listFloorplans(limit = 60) {
+// List for the picker grid — thumbs only (full image fetched on pick), newest first. When `project`
+// is given, only that project's own saved plans are returned (the survey library is per-project — you
+// reuse plans you made HERE, not every other job's aerials).
+export function listFloorplans(limit = 60, project = null) {
+  const lim = Math.max(1, Math.min(200, limit));
+  if (project) {
+    return db.prepare(
+      "SELECT id,name,COALESCE(thumb,image) AS thumb,source_project,kind,created_at FROM floorplan_library WHERE source_project=? ORDER BY id DESC LIMIT ?"
+    ).all(String(project), lim);
+  }
   return db.prepare(
     "SELECT id,name,COALESCE(thumb,image) AS thumb,source_project,kind,created_at FROM floorplan_library ORDER BY id DESC LIMIT ?"
-  ).all(Math.max(1, Math.min(200, limit)));
+  ).all(lim);
 }
 // Full plan image by id (fetched when the user actually picks one).
 export function getFloorplan(id) {
   return db.prepare("SELECT id,name,image,kind FROM floorplan_library WHERE id=?").get(Number(id) || 0) || null;
+}
+// Remove a saved plan from the library. Scoped to a project when given, so a survey can only delete
+// the plans it owns (never another job's). Returns how many rows went.
+export function deleteFloorplan(id, project = null) {
+  const nid = Number(id) || 0;
+  const r = project
+    ? db.prepare("DELETE FROM floorplan_library WHERE id=? AND source_project=?").run(nid, String(project))
+    : db.prepare("DELETE FROM floorplan_library WHERE id=?").run(nid);
+  return { ok: true, removed: r.changes };
 }
 
 // Mockup library — every project's mockup with a first-photo thumbnail. Photos are inline data
