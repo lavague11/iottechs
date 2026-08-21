@@ -1511,6 +1511,22 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   }, [view]);
   const toggleDeck = () => setDeckMode((m) => { const n = !m; try { localStorage.setItem("iot_deck", n ? "1" : "0"); } catch { /* no storage */ } return n; });
   const canToggleDeck = ["admin", "manager", "sales", "tech"].includes(view);
+  // Reopen a project on the stage you were last viewing (staff only). Restored after mount — like the
+  // deck-mode choice above — to avoid a hydration mismatch. An explicit ?stage= deep-link (role switch)
+  // and the customer's own guided flow both take precedence, so this never fights them.
+  const lastStageKey = `iot_laststage_${project.access_id}`;
+  useEffect(() => {
+    if (previewRole || view === "customer" || stageParamRef.current) return;
+    try {
+      const saved = localStorage.getItem(lastStageKey);
+      if (saved && typeKeys.includes(saved)) setViewingStage(saved);
+    } catch { /* no storage */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (previewRole || view === "customer") return;
+    try { localStorage.setItem(lastStageKey, viewingStage); } catch { /* no storage */ }
+  }, [viewingStage, view, previewRole, lastStageKey]);
   const [busy, setBusy]                 = useState(false);
   const [err,  setErr]                  = useState("");
   const [jumpToast, setJumpToast]       = useState(null);

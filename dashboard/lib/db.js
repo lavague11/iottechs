@@ -4836,6 +4836,33 @@ export function voidMedia(id) {
   db.prepare("UPDATE media SET voided=1 WHERE id=?").run(String(id));
 }
 
+// The project's canonical camera list, derived from the Site Survey (tool "survey2"): every placed
+// camera device (k==="cam") across all floors, with its name/tag and view photo. This is the single
+// source of truth the CCTV mockup grid — and later the proposal/PDF — reflect, so cameras are entered
+// ONCE, in the survey, and everything downstream builds from them.
+export function getProjectCameras(accessId) {
+  const row = getToolData(accessId, "survey2");
+  const out = [];
+  try {
+    const d = JSON.parse(row?.data || "{}");
+    const floors = Array.isArray(d.floors) ? d.floors : [];
+    floors.forEach((f, fi) => {
+      (Array.isArray(f?.devices) ? f.devices : []).forEach((dev) => {
+        if (dev && dev.k === "cam") {
+          out.push({
+            name: dev.name || null,
+            tag: dev.tag || null,
+            photo: dev.photo || null,       // /api/media/:id (or a legacy/fallback data-URL)
+            photoName: dev.photoName || null,
+            floor: fi,
+          });
+        }
+      });
+    });
+  } catch { /* bad blob → no cameras */ }
+  return out;
+}
+
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
 export function getApprovedAddons(accessId) {
   const rec = getToolData(accessId, "addendum");
