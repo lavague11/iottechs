@@ -168,9 +168,16 @@
   .pop .degfield input::-webkit-outer-spin-button,.pop .degfield input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .pop .degfield span{font-size:13px;color:var(--muted)}
   /* On a phone the toolbar is centred on the right edge, so its pop-out would land mid-screen — dock it to the bottom instead. */
-  @media (max-width:640px){
+  /* Narrow phones OR short landscape: dock the Level pop to the bottom instead of mid-screen. */
+  @media (max-width:640px), (max-height:560px){
     .pop{position:fixed;z-index:20;right:10px;left:10px;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);transform:none;justify-content:center;flex-wrap:wrap;box-shadow:0 10px 30px rgba(16,17,18,.22)}
     .pop input[type=range]{width:auto;flex:1 1 120px;min-width:100px}
+  }
+  /* Landscape / short viewport: shrink the search header so the map (.stage flex:1) keeps real height. */
+  @media (max-height:520px){
+    .head{padding:6px 12px}
+    .head input{padding:7px 11px;font-size:14px}
+    .head button{width:36px;height:36px}
   }
   /* Google Places autocomplete dropdown — above everything */
   .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
