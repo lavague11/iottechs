@@ -103,7 +103,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       <div className="ss-embed-bar">
         <span className="ss-embed-tag">
-          {readOnly ? "Customer view — tap the plan to zoom" : "Live survey editor"}
+          {readOnly ? "Customer view" : "Live survey editor"}
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
         {fs ? (
@@ -142,7 +142,6 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
               onClick={() => setZoomed((z) => !z)}
             />
           </div>
-          <div className="ss-zoom-hint">{zoomed ? "Click image to zoom out · drag to pan" : "Click image to zoom in"}</div>
         </div>
       )}
 
