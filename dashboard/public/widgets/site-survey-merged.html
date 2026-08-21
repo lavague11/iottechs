@@ -700,7 +700,9 @@
       var hdr=e.target.closest(".mgrp");
       if(hdr){ hdr.parentNode.classList.toggle("open"); saveMenuGroups(); return; }   // expand/collapse a group
       var mi=e.target.closest(".mi"); if(!mi) return;
-      arm(mi.dataset.k===armedK ? null : mi.dataset.k);   // click a type to arm it; click it again to unselect
+      var newK=mi.dataset.k===armedK ? null : mi.dataset.k;
+      arm(newK);                                          // click a type to arm it; click it again to unselect
+      if(newK) devMenu.classList.remove("show");          // a device is selected → hide the menu so you can place right away (Esc or the + button to change)
     });
     document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
     var PLUS_SVG='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
