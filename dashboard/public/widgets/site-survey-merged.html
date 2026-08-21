@@ -515,16 +515,37 @@
       var im=new Image();
       im.onload=function(){
         sceneAspect=(im.naturalWidth/im.naturalHeight)||1;   // anchor the plate to this photo's shape
+        var best;
         try{
           var MAX=1600, w=im.naturalWidth, h=im.naturalHeight, s=Math.min(1, MAX/Math.max(w,h));
           var cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(w*s)); cv.height=Math.max(1,Math.round(h*s));
           cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
           var small=cv.toDataURL("image/jpeg",0.85);
-          finishBackground(small.length<dataUrl.length ? small : dataUrl, skipSave);
-        }catch(e){ finishBackground(dataUrl, skipSave); }
+          best=small.length<dataUrl.length ? small : dataUrl;
+        }catch(e){ best=dataUrl; }
+        if(!skipSave) saveToLibrary(best, pendingBgSource==="satellite"?"aerial":"floorplan");   // the library keeps the real plan image
+        // Store the plan as a small /api/media URL, NOT a multi-MB data URL. A big aerial inline
+        // blows the ~5 MB localStorage quota, so save() throws (silently) and the whole floor is lost
+        // on reload — and it never reaches the server either, since the sync mirrors localStorage.
+        // Offline / not signed in → fall back to the inline data URL so it still works.
+        uploadBackground(best, function(url){ finishBackground(url || best, skipSave); });
       };
       im.onerror=function(){ finishBackground(dataUrl, skipSave); };
       im.src=dataUrl;
+    }
+    // Push a plan image (a data: URL) to the server and keep the returned /api/media/:id URL. Anything
+    // that's already a URL (a library pick that was stored server-side) passes straight through.
+    function uploadBackground(src, cb){
+      if(RO || !src || src.indexOf("data:")!==0){ cb(src||null); return; }
+      try{
+        fetch(src).then(function(r){ return r.blob(); }).then(function(b){
+          var fd=new FormData(); fd.append("file", b, "floorplan.jpg");
+          if(PID) fd.append("project", PID); fd.append("kind","survey-bg");
+          return fetch("/api/media",{method:"POST",body:fd,credentials:"same-origin"});
+        }).then(function(r){ return r&&r.ok?r.json():null; })
+          .then(function(j){ cb(j&&j.ok&&j.url?j.url:null); })
+          .catch(function(){ cb(null); });
+      }catch(e){ cb(null); }
     }
     function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
@@ -534,8 +555,7 @@
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
-      snapFloor(); renderFloorTabs();   // this background is now this floor's plan
-      if(dataUrl && !skipSave) saveToLibrary(dataUrl, curBgSource==="satellite"?"aerial":"floorplan");   // reusable global library (deduped server-side)
+      snapFloor(); queueSave(); renderFloorTabs();   // this background is now this floor's plan — persist it right away
       sideCollapsed=(window.innerWidth<=900); applySideCollapsed();   // reveal the device panel on desktop; on mobile keep the drawer closed (rail ▸ opens it) so the canvas stays usable
       goStep(1);   // → Place
     }
@@ -761,10 +781,10 @@
     // ---- wheel / two-finger pinch zoom on the plan (Place + Angles); zooms toward the cursor ----
     var scene=document.getElementById("scene"), zScale=1, zTx=0, zTy=0;
     function applyZoom(){ scene.style.transform="translate("+zTx+"px,"+zTy+"px) scale("+zScale+")"; }
-    function zoomAt(mx,my,factor){ var z2=Math.max(1, Math.min(4, zScale*factor)); if(z2===zScale) return;
-      zTx=mx-(mx-zTx)/zScale*z2; zTy=my-(my-zTy)/zScale*z2; zScale=z2;
+    function zoomAt(mx,my,factor){ var z2=Math.max(1, Math.min(4, zScale*factor));
+      if(z2!==zScale){ zTx=mx-(mx-zTx)/zScale*z2; zTy=my-(my-zTy)/zScale*z2; zScale=z2; }   // scale toward (mx,my)
       var W=work.clientWidth, H=work.clientHeight;                     // keep the scene covering the viewport
-      zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }
+      zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }   // always clamp + apply, even on a pure pan
     function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
     work.addEventListener("wheel", function(e){ if(e.target.closest(".devmenu,.ctxbar,.utils,.plandim")) return;
       e.preventDefault(); var r=work.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.12:1/1.12); }, {passive:false});
@@ -773,8 +793,14 @@
       pinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
       pinchCx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left; pinchCy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top; } }, {passive:true});
     work.addEventListener("touchmove", function(e){ if(e.touches.length===2){ e.preventDefault();
+      var r=work.getBoundingClientRect();
       var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-      if(pinchDist>0) zoomAt(pinchCx,pinchCy, d/pinchDist); pinchDist=d; } }, {passive:false});
+      var cx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left, cy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+      // Two-finger drag PANS (so the corners are reachable at any zoom); the pinch distance zooms
+      // toward wherever the fingers are now — not a frozen start point.
+      zTx+=cx-pinchCx; zTy+=cy-pinchCy;
+      zoomAt(cx, cy, (pinchDist>0 && d>0) ? d/pinchDist : 1);
+      pinchDist=d; pinchCx=cx; pinchCy=cy; } }, {passive:false});
     work.addEventListener("touchend", function(e){ if(e.touches.length<2) pinchDist=0; });
     var cbtn=document.getElementById("centerBtn"); if(cbtn) cbtn.addEventListener("click", resetZoom);   // Center resets the view
 

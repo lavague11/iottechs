@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SignaturePanel from "./signature-panel";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
@@ -55,6 +55,22 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, [accessId, onSubmit]);
+
+  // On a phone in landscape the inline frame is cramped and awkward to edit, so auto-expand to the
+  // full-screen overlay (the same one the ⛶ button gives). Rotating back to portrait collapses it —
+  // but only if WE opened it, so a deliberate full-screen in portrait is left alone. Tablets keep the
+  // inline view (their landscape viewport is tall enough).
+  const autoFsRef = useRef(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: landscape) and (max-height: 600px)");
+    const sync = () => {
+      if (mq.matches) setFs((cur) => { if (!cur) autoFsRef.current = true; return true; });
+      else if (autoFsRef.current) { autoFsRef.current = false; setFs(false); }
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   // Full-screen overlay: lock page scroll + Esc to exit.
   useEffect(() => {
