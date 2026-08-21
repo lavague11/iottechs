@@ -288,6 +288,14 @@
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}
   body.ro .devNode .devDot{cursor:default}
 
+  /* Placement/drag magnifier loupe (touch): magnifies the aerial under the finger with a crosshair,
+     offset above the fingertip so you can place precisely on a small screen. */
+  #loupe{position:fixed;z-index:40;width:124px;height:124px;border-radius:50%;border:3px solid #fff;box-shadow:0 8px 26px rgba(16,17,18,.42);background:#e9ebef no-repeat;display:none;pointer-events:none;overflow:hidden}
+  #loupe.on{display:block}
+  #loupe .lxh{position:absolute;left:50%;top:50%;width:20px;height:20px;transform:translate(-50%,-50%);box-shadow:0 0 0 1px rgba(255,255,255,.55)}
+  #loupe .lxh::before,#loupe .lxh::after{content:"";position:absolute;background:rgba(185,138,46,.95)}
+  #loupe .lxh::before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
+  #loupe .lxh::after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%)}
   @media (max-width:900px){
     .doors{grid-template-columns:1fr}
     .canvasCol{padding:14px 12px 0}
@@ -675,10 +683,7 @@
       var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
       if(k) setHint("Click on the plan to place "+cat(k).name+"s — Esc to stop.");
       else if(curStep===1) setHint("Add cameras & devices, then place them on the plan."); }
-    // Placement — touch-safe. On a phone a two-finger pinch-zoom also fires pointerdowns, which used
-    // to drop stray cameras; so on touch we place on a clean single-finger TAP (pointerup, little
-    // movement, no second finger down), never on the raw pointerdown. Mouse still places immediately.
-    var activePtrs=new Set(), placeTimer=null;
+    var activePtrs=new Set();
     work.addEventListener("pointerdown", function(e){ if(e.pointerType!=="mouse") activePtrs.add(e.pointerId); }, true);
     function ptrGone(e){ if(e.pointerType!=="mouse") activePtrs.delete(e.pointerId); }
     work.addEventListener("pointerup", ptrGone, true);
@@ -686,15 +691,34 @@
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
     function placeAt(cx,cy){ if(RO||!armedK) return; var r=document.getElementById("scene").getBoundingClientRect();
       addDevice(armedK,(cx-r.left)/r.width*100,(cy-r.top)/r.height*100); devMenu.classList.remove("show"); }
+    // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
+    var loupeEl=null;
+    function ensureLoupe(){ if(loupeEl) return loupeEl; loupeEl=document.createElement("div"); loupeEl.id="loupe"; loupeEl.innerHTML='<div class="lxh"></div>'; document.body.appendChild(loupeEl); return loupeEl; }
+    function showLoupe(fx,fy){ if(!bgData) return; var lp=ensureLoupe(); var sr=document.getElementById("scene").getBoundingClientRect();
+      if(!sr.width||!sr.height) return; var L=124, Z=2.3, u=(fx-sr.left)/sr.width, v=(fy-sr.top)/sr.height;   // scene is sized to the image aspect → clean uniform magnify
+      lp.style.backgroundImage="url("+bgData+")"; lp.style.backgroundRepeat="no-repeat";
+      lp.style.backgroundSize=(sr.width*Z)+"px "+(sr.height*Z)+"px";
+      lp.style.backgroundPosition=(L/2 - u*sr.width*Z)+"px "+(L/2 - v*sr.height*Z)+"px";
+      var left=Math.max(6, Math.min(fx-L/2, window.innerWidth-L-6)), top=fy-L-26; if(top<6) top=fy+26;   // above the fingertip, flip below if no room
+      lp.style.left=left+"px"; lp.style.top=top+"px"; lp.classList.add("on"); }
+    function hideLoupe(){ if(loupeEl) loupeEl.classList.remove("on"); }
+    // Loupe-guided placement (touch): press → loupe appears; slide to aim; lift to drop the camera at
+    // the crosshair. Mouse places immediately (precise cursor). A second finger (pinch) cancels it.
+    var placing=false, placePt=null;
     work.addEventListener("pointerdown", function(e){
       if(RO||!armedK||inChrome(e)) return;
-      if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }   // mouse: immediate
-      // Touch: a two-finger pinch-zoom fires pointerdowns too. Wait a beat — if a 2nd finger lands
-      // it's a pinch → cancel; otherwise it's a genuine single-finger tap → place.
-      clearTimeout(placeTimer);
-      if(activePtrs.size>1) return;
-      var cx=e.clientX, cy=e.clientY;
-      placeTimer=setTimeout(function(){ if(activePtrs.size<=1) placeAt(cx,cy); }, 80); });
+      if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }
+      if(activePtrs.size>1){ placing=false; hideLoupe(); return; }
+      placing=true; placePt={x:e.clientX,y:e.clientY};
+      try{ work.setPointerCapture(e.pointerId); }catch(_){}
+      showLoupe(e.clientX,e.clientY); });
+    work.addEventListener("pointermove", function(e){ if(!placing) return;
+      if(activePtrs.size>1){ placing=false; hideLoupe(); return; }
+      placePt={x:e.clientX,y:e.clientY}; showLoupe(e.clientX,e.clientY); });
+    work.addEventListener("pointerup", function(e){ if(!placing) return; placing=false; hideLoupe();
+      if(activePtrs.size>0) return;                                    // another finger still down → was a pinch
+      if(placePt) placeAt(placePt.x, placePt.y); });
+    work.addEventListener("pointercancel", function(){ placing=false; hideLoupe(); });
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
@@ -1011,10 +1035,11 @@
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → drag maps correctly at any zoom
-        var moved=false, sx=e.clientX, sy=e.clientY;
+        var moved=false, sx=e.clientX, sy=e.clientY, isTouch=e.pointerType!=="mouse";
         function mv(ev){ if(!moved && Math.hypot(ev.clientX-sx,ev.clientY-sy)<=6) return;   // ignore tiny jitter so a tap doesn't nudge the camera
-          moved=true; d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d); }
-        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up);
+          moved=true; d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d);
+          if(isTouch) showLoupe(ev.clientX, ev.clientY); }   // magnifier while dragging on a phone
+        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); hideLoupe();
           if(moved){ queueSave(); }
           else if(d.photo){ if(popId===d.id && popPinned) hideViewPop(); else showViewPop(d, el, true); }   // a clean tap on a photographed camera → toggle its full view
         }
