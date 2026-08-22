@@ -138,7 +138,6 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       <div className="ai">
         <style>{CSS}</style>
         <div className="ai-gate-h">What are we protecting?</div>
-        <div className="ai-gate-p">Pick the kind of property — it tailors the rest of your ADT setup.</div>
         <div className="ai-ptype">
           <button type="button" className="ai-ptype-box" onClick={() => setPropertyType("residential")}>
             <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11.5 12 4l9 7.5" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>
@@ -157,8 +156,6 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
   return (
     <form className="ai" onSubmit={submit}>
       <style>{CSS}</style>
-      {prefill?.name && <div className="ai-prefill">✓ Verify your information below, then submit.</div>}
-
       <div className="ai-secrow">
         <div className="ai-chip" onClick={() => setPropertyType(null)}>{isComm ? "Commercial" : "Residential"} · Change</div>
       </div>
@@ -209,7 +206,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       {simple ? (
         <>
           <div className="ai-sec-t">Your protection <em>· how much coverage?</em></div>
-          <div className="ai-note" style={{ marginBottom: 12 }}>Every ADT system includes a smart control panel and 24/7 cellular backup. Just tell us how much coverage you need — we'll tailor the rest.</div>
+          <div className="ai-note" style={{ marginBottom: 12 }}>Every ADT system includes a smart control panel and 24/7 cellular backup.</div>
           {SIMPLE_Q.map((q) => {
             const n = qty[q.id] || 0;
             return (
@@ -240,7 +237,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         if (!picks.length) return null;
         return (
           <div className="ai-best">
-            <div className="ai-best-t">Popular add-ons <em>· tap to add</em></div>
+            <div className="ai-best-t">Popular add-ons</div>
             <div className="ai-best-row">
               {picks.map((it) => {
                 const n = qty[it.id] || 0;
