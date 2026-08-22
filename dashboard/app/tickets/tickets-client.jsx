@@ -44,7 +44,7 @@ export default function TicketsClient({ user, alerts, tickets }) {
   return (
     <AdminShell user={user} alerts={alerts} active="tickets">
       <div className="apx-wrap">
-        <div className="page-head"><h1>Tickets</h1><div className="ph-sub">Service issues &amp; requests · click a ticket to manage it</div></div>
+        <div className="page-head"><h1>Tickets</h1><div className="ph-sub">Service issues &amp; requests</div></div>
 
         <div className="kpi-row k4">
           {KPI.map((k) => <div key={k.label} className={`kpi ${k.cls}`}><div className="k-label">{k.label}</div><div className="k-val">{k.val}</div></div>)}

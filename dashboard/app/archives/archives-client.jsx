@@ -83,7 +83,7 @@ export default function ArchivesClient({ user, alerts, archives: initArchives })
 
         <div className="welcome">
           <h1>The <em>Archives</em></h1>
-          <p className="ar-sub">Deleted records land here. Restore them to their original place, or permanently remove them. Nothing is ever hard-deleted without passing through here.</p>
+          <p className="ar-sub">Deleted records land here. Nothing is ever hard-deleted without passing through here.</p>
         </div>
 
         <div className="ar-bar">

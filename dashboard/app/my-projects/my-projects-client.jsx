@@ -103,7 +103,6 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
           onChange={v=>{ set("address",v); setAddrPicked(false); }}
           onPlace={p=>{ set("address", p.address||p.name||""); setAddrPicked(!!p.address); }}
           placeholder="Start typing your address…"/>
-        {f.address && !addrPicked && <div className="am-hint">Choose the matching address from the dropdown.</div>}
       </div>
       <div className="am-field">
         <label>Service Type</label>
@@ -265,7 +264,6 @@ function SuccessView({ name, data, onClose }) {
               <span className="am-proj-pin">{pin}</span>
             </div>
           )}
-          <div className="am-proj-note">Save these — you can use them to track your project at any time.</div>
         </div>
       )}
       <button className="am-submit am-done-btn" onClick={onClose}>Done</button>

@@ -210,7 +210,7 @@ export default function ApplyClient() {
               {/* STEP 1 — job */}
               {step === 1 && (
                 <div className="ap-pane">
-                  <div className="ap-form-head"><h2>What are you applying for?</h2><p className="ap-sub">Pick the role that fits you best.</p></div>
+                  <div className="ap-form-head"><h2>What are you applying for?</h2></div>
                   <div className="ap-grid2">
                     {POSITIONS.map((p) => (
                       <button type="button" key={p.key} className={`ap-pick${position === p.key ? " on" : ""}`} onClick={() => setPosition(p.key)}>
@@ -226,7 +226,7 @@ export default function ApplyClient() {
               {/* STEP 2 — applicant info */}
               {step === 2 && (
                 <div className="ap-pane">
-                  <div className="ap-form-head"><h2>Tell us about yourself</h2><p className="ap-sub">How we reach you, and when you can start.</p></div>
+                  <div className="ap-form-head"><h2>Tell us about yourself</h2></div>
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
                       <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>

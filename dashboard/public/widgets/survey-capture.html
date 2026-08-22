@@ -156,7 +156,6 @@
     <div class="choose-in">
       <div class="eyebrow">Step 1 &middot; Background</div>
       <h1>Start the floor plan</h1>
-      <p class="sub">Pick how the canvas begins. You can change it later.</p>
       <div class="opts">
         <button class="opt primary" data-go="capture">
           <span class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></span>
@@ -236,7 +235,7 @@
     </div>
     <div id="boardCanvasWrap">
       <img id="boardImg" alt="captured background" style="display:none">
-      <div id="boardEmpty">The survey board mounts here &mdash; cameras, FOV cones, rooms &mdash; over the chosen background.</div>
+      <div id="boardEmpty"></div>
     </div>
     <div id="boardBar">
       <button id="boardBack" class="lite">&larr; Change background</button>
@@ -305,7 +304,6 @@
 <div id="promptModal">
   <div id="promptBox">
     <h3 id="promptTitle">Edit prompt</h3>
-    <p class="sub">The instruction sent to the AI. Saving sets it as the default for all future surveys.</p>
     <textarea id="promptText" spellcheck="false"></textarea>
     <div class="row">
       <button id="promptReset" class="lite">Reset to default</button>

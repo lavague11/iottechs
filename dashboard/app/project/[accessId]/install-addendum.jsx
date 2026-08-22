@@ -196,10 +196,6 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         <button type="button" className="adn-newbtn" onClick={() => setBuilding(true)}>+ New addendum</button>
       ))}
 
-      {isCustomer && pending.length > 0 && (
-        <div className="adn-cust-note">A change was added to your job — review and sign the add-on above to approve the extra work &amp; charges.</div>
-      )}
-
       <ProposalSignModal
         open={!!signId}
         heading="Approve Add-on"

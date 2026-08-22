@@ -48,8 +48,8 @@ export default function OperationsClient({ user, alerts, expenses, requests, wor
             {stalled.length === 0 && totalActions === 0
               ? `All clear, ${first}. Nothing's stalled and nothing needs a decision right now.`
               : stalled.length > 0
-                ? `${first}, ${custWaiting} job${custWaiting === 1 ? "" : "s"} ${custWaiting === 1 ? "is" : "are"} waiting on the customer and ${usWaiting} on your team${staleCount > 0 ? ` — ${staleCount} stalled 7+ days` : ""}. Everything that needs to move, in one place.`
-                : `${totalActions} item${totalActions === 1 ? "" : "s"} need a decision, ${first}. Everything operational that's waiting on you, in one place.`}
+                ? `${first}, ${custWaiting} job${custWaiting === 1 ? "" : "s"} ${custWaiting === 1 ? "is" : "are"} waiting on the customer and ${usWaiting} on your team${staleCount > 0 ? ` — ${staleCount} stalled 7+ days` : ""}.`
+                : `${totalActions} item${totalActions === 1 ? "" : "s"} need a decision, ${first}.`}
           </p>
         </div>
 

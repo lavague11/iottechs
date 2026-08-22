@@ -36,7 +36,7 @@ export default function ManagerClient({ user, alerts, jobs, stats, approvals: in
   return (
     <AdminShell user={user} alerts={alerts} active="manager">
       <div className="apx-wrap">
-        <div className="page-head"><h1>Manager Dashboard</h1><div className="ph-sub">Operations · pipeline · approvals</div></div>
+        <div className="page-head"><h1>Manager Dashboard</h1></div>
 
         <div className="kpi-row k5">
           {KPI.map((k) => <div key={k.label} className={`kpi ${k.cls}`}><div className="k-label">{k.label}</div><div className="k-val" style={{ fontSize: k.big ? undefined : "1.35rem" }}>{k.val}</div></div>)}

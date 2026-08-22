@@ -19,7 +19,6 @@ export default async function TechSupportPage() {
       articles={articles}
       audience="tech"
       heading="Tech Support"
-      subheading="Field diagnostics & service-call reference"
     />
   );
 }

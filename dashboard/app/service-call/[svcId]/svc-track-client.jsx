@@ -220,7 +220,6 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
               <div className="st-diag-pick">
                 <div className="st-tag">Quick check</div>
                 <h2>Which camera is the problem?</h2>
-                <p className="st-pick-sub">This is your floor plan from our install — tap every camera acting up.</p>
                 <SvcCamMap accessId={call.svc_project_id} onPick={toggleCam} cameras={cameras} selected={camSel} />
                 <div className="st-cams">
                   {cameras.map((c) => (
@@ -242,7 +241,6 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
               <div className="st-diag-pick">
                 <div className="st-tag">Quick check</div>
                 <h2>Where are you not seeing the cameras?</h2>
-                <p className="st-pick-sub">Pick what matches — we&rsquo;ll walk you through it one step at a time.</p>
                 {SVC_DIAG_ENTRIES.map((en) => (
                   <button className="st-pick" key={en.start} onClick={() => pickEntry(en)}>
                     <span className="st-pick-t">{en.title}</span>

@@ -115,7 +115,6 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
           </div>
           {njOpen && (
             <form className="nj-form" onSubmit={(e) => { e.preventDefault(); createJobSite(); }}>
-              <div className="nj-hint">Log a job from the field — just the customer name and address. The office fills in the rest.</div>
               <div className="nj-grid">
                 <label className="nj-field">
                   <span className="nj-lbl">Customer name</span>

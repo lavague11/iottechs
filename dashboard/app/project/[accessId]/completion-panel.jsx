@@ -200,7 +200,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           </div>
           <div className="cmp-card-body">
             <div className="cmp-card-title">System QR · Activate your app</div>
-            <div className="cmp-card-sub">Scan this in the ANNKE Vision app (tap +, top-right) to connect to your cameras.</div>
+            <div className="cmp-card-sub">Scan this in the ANNKE Vision app to connect to your cameras.</div>
             <button type="button" className="cmp-btn cmp-qr-btn" onClick={() => setQrOpen(true)}>View System QR</button>
           </div>
         </div>

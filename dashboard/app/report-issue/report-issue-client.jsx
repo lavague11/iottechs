@@ -89,7 +89,7 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
           <form className="ri-card" onSubmit={submit}>
             <div className="ri-tag">Service Call</div>
             <h1>What&rsquo;s going on?</h1>
-            <p className="ri-sub">Tell us what isn&rsquo;t working and we&rsquo;ll get a technician on it. This opens a tracked service call — not a new project.</p>
+            <p className="ri-sub">This opens a tracked service call — not a new project.</p>
 
             {/* What's wrong */}
             <label className="ri-label">What&rsquo;s the issue?</label>

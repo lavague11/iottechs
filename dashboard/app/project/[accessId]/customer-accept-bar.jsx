@@ -25,7 +25,6 @@ export default function CustomerAcceptBar({ accessId, acceptances = {}, onChange
       <style>{CAB_CSS}</style>
       <div className="cab-head">
         <span className="cab-title">Review &amp; Accept</span>
-        <span className="cab-sub">Confirm your site survey below to unlock your proposal.</span>
       </div>
       <div className="cab-rows">
         <button type="button" className={`cab-row${surveyOk ? " on" : ""}`} disabled={busy || preview} onClick={() => toggle("site_survey")}>

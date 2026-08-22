@@ -47,7 +47,6 @@ export default function TrackApplicationPage() {
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
         </div>
         <h1>Track your application</h1>
-        <p className="tr-sub">Enter your Application ID and PIN to see where things stand.</p>
 
         <form onSubmit={submit}>
           <label className="tr-lbl" htmlFor="tr-id">Application ID</label>

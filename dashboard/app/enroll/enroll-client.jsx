@@ -169,7 +169,6 @@ export default function EnrollClient({ user, alerts, current, invite }) {
 
         {step === "consent" && (
           <div className="enr-card">
-            <h2>Before we start</h2>
             <p className="enr-p">We&rsquo;ll store an encrypted copy of your {idName} and a face image, used only to verify it&rsquo;s you when you sign in. We never sell it, and you can delete it whenever you want.</p>
             <label className="enr-consent">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />

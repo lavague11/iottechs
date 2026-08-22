@@ -272,7 +272,6 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       {/* deck */}
       <main className={`dv-deck${moved ? " moved" : ""}`} id="dv-deck" tabIndex={0} ref={deckRef}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
-        {!moved && <div className="dv-hint mono">drag · scroll · ← →</div>}
         {stages.map((s, i) => (
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
             <div className="dv-pane">

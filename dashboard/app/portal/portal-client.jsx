@@ -46,7 +46,6 @@ export default function PortalClient({ user, alerts, jobs, customers, initialQ =
       <div className="apx-wrap">
         <div className="page-head">
           <h1>Customer Portal</h1>
-          <div className="ph-sub">Look up a customer or search every project on file.</div>
         </div>
 
         <div className="sec-head">

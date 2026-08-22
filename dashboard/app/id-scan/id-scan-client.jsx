@@ -27,7 +27,7 @@ export default function IdScanClient({ user, alerts }) {
       <div className="apx-wrap">
         <div className="welcome">
           <h1>ID <em>Scanner</em></h1>
-          <p className="ids-sub">Photograph a driver&rsquo;s licence — it&rsquo;s read, validated, and turned into a customer record. Verify every field against the document before it lands on a contract.</p>
+          <p className="ids-sub">Verify every field against the document before it lands on a contract.</p>
         </div>
 
         <IdCapture onChange={setRecord} title="Customer ID" />

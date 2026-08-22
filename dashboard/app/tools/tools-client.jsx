@@ -39,7 +39,7 @@ export default function ToolsClient({ user, alerts }) {
       <div className="apx-wrap">
         <div className="welcome">
           <h1>Document <em>Tools</em></h1>
-          <p className="tl-sub">Capture, read and search every document tied to a customer or project. Admin &amp; manager only.</p>
+          <p className="tl-sub">Admin &amp; manager only.</p>
         </div>
 
         {/* The Library — search across everything captured */}

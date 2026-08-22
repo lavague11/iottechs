@@ -51,7 +51,6 @@ export default function InfoConfirmModal({ accessId, project, onDone }) {
           </div>
           <div>
             <div className="icm-title">Welcome{first ? `, ${first}` : ""}!</div>
-            <div className="icm-sub">Let’s make sure your details are right — this is how we’ll reach you about your project.</div>
           </div>
         </div>
 

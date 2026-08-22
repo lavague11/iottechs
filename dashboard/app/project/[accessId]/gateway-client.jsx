@@ -2881,9 +2881,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <button className="pv-continue-btn" disabled={!!previewRole} onClick={() => browse("proposal")}>
                   Everything approved — Continue to Proposal →
                 </button>
-              ) : (
-                <div className="pv-continue-hint">Open each item above and approve it to continue to your proposal.</div>
-              )}
+              ) : null}
             </div>
           )}
         </div>

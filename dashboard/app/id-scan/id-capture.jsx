@@ -1055,7 +1055,6 @@ function Lightbox({ shot, onDownload, onClose }) {
           }}
         />
       </div>
-      <p className="lbHint">Pinch, scroll or double-tap to zoom · drag to pan</p>
     </div>
   );
 }

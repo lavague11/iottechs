@@ -171,7 +171,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
           </div>
         </div>
       )}
-      <div className="adtp-cd-sec">Customer details <em style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--dv-meta,#787D84)" }}>· tap to copy</em></div>
+      <div className="adtp-cd-sec">Customer details</div>
       <div className="adtp-cd">
         <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div></div>
         {isComm && app.contact_name && <div className="adtp-cd-f"><CopyBtn text={app.contact_name} /><div className="adtp-cd-v"><span>Contact</span><b>{app.contact_name}</b></div></div>}

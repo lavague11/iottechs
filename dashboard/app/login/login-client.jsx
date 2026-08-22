@@ -343,7 +343,6 @@ export default function LoginClient({ next }) {
           </div>
           {pinErr && <div className="lg-err">{pinErr}</div>}
           <button className="lg-btn" type="button" onClick={findProject}>Find it →</button>
-          <p className="lgf-hint">You&rsquo;ll enter your PIN on the next screen.</p>
         </div>
         )}
 
@@ -387,7 +386,6 @@ export default function LoginClient({ next }) {
           <div className="gw2-modal">
             <div className="gw2-mhd"><span>Need help signing in?</span><button className="gw2-mclose" onClick={() => setShowHelp(false)}>✕</button></div>
             <div className="gw2-mbd">
-              <p>New here, or need a hand getting in? Create an account, reset your password, or reach our team.</p>
               <button className="gw2-hrow" onClick={() => { setShowHelp(false); setError(null); setMode("signup"); }} style={{ width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><div><div className="gw2-hk">Create an account</div><div className="gw2-hv">New customer? Start here</div></div></button>
               <a className="gw2-hrow" href="/forgot"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div><div className="gw2-hk">Reset my password</div><div className="gw2-hv">Verify with the last 4 of your phone</div></div></a>
               <a className="gw2-hrow" href="mailto:support@iot-techs.com?subject=Login%20help%20-%20IOT%20TECHS"><div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div><div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div></a>

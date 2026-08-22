@@ -21,7 +21,7 @@ export default function FinancesClient({ user, alerts, stats, txn }) {
   return (
     <AdminShell user={user} alerts={alerts} active="finances">
       <div className="apx-wrap">
-        <div className="page-head"><h1>Finances</h1><div className="ph-sub">Revenue, pipeline, expenses &amp; profit at a glance</div></div>
+        <div className="page-head"><h1>Finances</h1></div>
 
         <div className="kpi-row">
           {KPI.map((k) => <div key={k.label} className={`kpi ${k.cls}`}><div className="k-label">{k.label}</div><div className="k-val" style={{ fontSize: "1.4rem" }}>{k.val}</div></div>)}

@@ -15,8 +15,7 @@ export default function FaceVerifyClient({ user, alerts }) {
           <h1>Face <em>Verify</em></h1>
           <p className="fv-sub">
             1:1 facial verification — match a live face against the licence portrait on file. The face match runs
-            entirely on this device; no face image is ever uploaded. Load the customer&rsquo;s ID in the <strong>Internal</strong> panel,
-            then run the scan — a confident match returns <strong>Verified</strong>, a borderline read goes to <strong>Review</strong>.
+            entirely on this device; no face image is ever uploaded.
             The <strong>Document check</strong> reads the licence text server-side to flag expiry, tampering, and
             screen/photocopy shots; only the verdict is shown, nothing is stored.
           </p>
