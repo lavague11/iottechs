@@ -188,7 +188,7 @@
   /* A placed camera is just its icon. Its cone/angle shows only when angle display is on
      (angle mode or the show toggle → body.show-all-angles), or on a deliberate panel-card hover (.hl). */
   /* a camera's cone shows only once it's actually been aimed (.aimed) — never a default direction */
-  .devNode.hl.aimed .fovWrap,body.show-all-angles .devNode.aimed .fovWrap,body.show-fov .devNode.aimed .fovWrap{display:block}
+  body.show-all-angles .devNode.aimed .fovWrap,body.show-fov .devNode.aimed .fovWrap{display:block}
   /* bottom-right "Show" control (Angles / FOV on-off) */
   .showCtl{position:absolute;right:14px;bottom:14px;z-index:7;display:none;flex-direction:column;align-items:flex-end;gap:8px}
   .showBtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:1px solid var(--line);border-radius:99px;background:rgba(255,255,255,.92);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
@@ -1008,6 +1008,8 @@
       if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
+      // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
+      if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
       if(!d) return;
       if(m.cmd==="rename"){ d.name=cap(String(m.name||"").trim())||cap(cat(d.k).name); renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }

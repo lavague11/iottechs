@@ -91,15 +91,14 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
                 {isCur ? (
                   <div className="sd-grid">
                     {f.devices.map((d, i) => (
-                      <div key={d.id ?? i} className="sd-card">
+                      <div key={d.id ?? i} className="sd-card"
+                        onMouseEnter={() => cmd({ cmd: "hover", id: d.id })}
+                        onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
                         <div className="sd-r1">
-                          <span className="sd-chip" style={{ background: d.color }}>{(d.tag || "").replace(/^I/, "") || (i + 1)}</span>
+                          <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{(d.tag || "").replace(/^I/, "") || (i + 1)}</span>
                           <input className="sd-nm" defaultValue={d.name} spellCheck={false}
                             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                             onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); }} />
-                          <button className="sd-sel" title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>
-                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>
-                          </button>
                           {confirmDel === d.id ? (
                             <span className="sd-confirm">
                               <button className="sd-del yes" onClick={() => { cmd({ cmd: "delete", id: d.id }); setConfirmDel(null); }}>Delete</button>
@@ -109,14 +108,6 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
                             <button className="sd-x" title="Delete device" onClick={() => setConfirmDel(d.id)}>×</button>
                           )}
                         </div>
-                        {d.cone && d.fov < 359 && (
-                          <div className="sd-fov">
-                            <label>FOV</label>
-                            <input type="range" min="20" max="180" defaultValue={d.fov} key={`fov-${d.id}`}
-                              onChange={(e) => cmd({ cmd: "fov", id: d.id, fov: +e.target.value })} />
-                            <span className="sd-fv">{d.fov}°</span>
-                          </div>
-                        )}
                         {d.k === "cam" && (
                           <div className="sd-pv">
                             {d.busy || busyId === d.id ? (
@@ -176,20 +167,17 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
         .sd-fhead.cur{color:var(--gold-deep,#8a6d2f);cursor:default}
         .sd-fn{font-weight:600}
         .sd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:9px}
-        .sd-card{border:1px solid var(--line,#e6e2d9);border-radius:10px;background:#fff;padding:9px}
+        .sd-card{border:1px solid var(--line,#e6e2d9);border-radius:10px;background:#fff;padding:9px;transition:border-color .13s,box-shadow .13s,transform .13s}
+        .sd-card:hover{border-color:var(--gold,#c9a96e);box-shadow:0 4px 14px rgba(201,169,110,.18);transform:translateY(-1px)}
         .sd-r1{display:flex;align-items:center;gap:7px}
-        .sd-chip{flex:none;min-width:26px;height:22px;padding:0 6px;border-radius:6px;color:#fff;font-size:.68rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+        .sd-chip{flex:none;min-width:26px;height:22px;padding:0 6px;border-radius:6px;color:#fff;font-size:.68rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .12s,box-shadow .12s}
+        .sd-chip:hover{filter:brightness(1.08);box-shadow:0 0 0 2px rgba(201,169,110,.4)}
         .sd-nm{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;padding:5px 7px;font-size:.82rem;font-weight:600;color:var(--ink,#1a1a1a);font-family:inherit;background:var(--bg-soft,#f5f2ea)}
         .sd-nm:focus{outline:none;border-color:var(--gold,#c9a96e);background:#fff}
-        .sd-sel,.sd-x{flex:none;border:0;background:none;cursor:pointer;color:var(--muted,#6f7686);padding:4px;border-radius:6px}
-        .sd-sel:hover{color:var(--gold-deep,#8a6d2f)}.sd-x{font-size:18px;line-height:1;width:26px;height:26px}.sd-x:hover{color:#c0392b}
+        .sd-x{flex:none;border:0;background:none;cursor:pointer;color:var(--muted,#6f7686);padding:4px;border-radius:6px;font-size:18px;line-height:1;width:26px;height:26px}.sd-x:hover{color:#c0392b}
         .sd-confirm{display:flex;align-items:center;gap:4px}
         .sd-del{border:1px solid var(--line,#d9d4c8);border-radius:6px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 7px}
         .sd-del.yes{background:#c0392b;color:#fff;border-color:#c0392b}.sd-del.no{background:none;color:var(--muted,#6f7686);font-size:15px;line-height:1;padding:2px 6px}
-        .sd-fov{display:flex;align-items:center;gap:8px;margin-top:8px}
-        .sd-fov label{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6f7686)}
-        .sd-fov input[type=range]{flex:1;accent-color:var(--gold,#c9a96e)}
-        .sd-fv{font-size:.72rem;color:var(--muted,#6f7686);min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
         .sd-pv{display:flex;align-items:center;gap:7px;margin-top:8px}
         .sd-thumb{flex:none;width:42px;height:32px;border-radius:6px;background-size:cover;background-position:center;cursor:zoom-in;border:1px solid var(--line,#e6e2d9)}
         .sd-btn{height:30px;padding:0 10px;border:1px solid var(--line,#d9d4c8);border-radius:7px;background:var(--bg-soft,#f5f2ea);color:var(--ink,#1a1a1a);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
