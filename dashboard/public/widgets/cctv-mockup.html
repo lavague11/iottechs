@@ -70,6 +70,11 @@
   .screentrack{display:flex;height:100%;will-change:transform}
   .screentrack.anim{transition:transform .36s cubic-bezier(.22,.9,.24,1)}
   .screentrack canvas{flex:0 0 100%;width:100%;height:100%;display:block}
+  /* double-click a camera → zoom into it (fill the phone), not a horizontal slide */
+  @keyframes mkZoomIn{from{transform:scale(1.16);opacity:.3}to{transform:scale(1);opacity:1}}
+  @keyframes mkZoomOut{from{transform:scale(.84);opacity:.3}to{transform:scale(1);opacity:1}}
+  .screentrack canvas.zin{animation:mkZoomIn .3s cubic-bezier(.22,.9,.24,1)}
+  .screentrack canvas.zout{animation:mkZoomOut .3s cubic-bezier(.22,.9,.24,1)}
   .iphone .island{position:absolute;left:2%;top:50%;transform:translateY(-50%);width:2%;height:23%;background:#000;
     border-radius:99px;z-index:3;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
   .iphone .home{position:absolute;right:1.3%;top:50%;transform:translateY(-50%);width:.5%;height:22%;background:rgba(255,255,255,.5);
@@ -323,15 +328,17 @@ function rebuildCards(){
     stage.appendChild(dotsEl);
   } else dotsEl=null;
   const cap=document.createElement('div');cap.className='caplabel';cap.id='capLabel';stage.appendChild(cap);
-  updateCap();positionTrack(false);bindSwipe();
-  requestAnimationFrame(()=>positionTrack(false));   // width is 0 until layout settles inside the iframe
+  updateCap();positionTrack(false,true);bindSwipe();
+  requestAnimationFrame(()=>positionTrack(false,true));   // width is 0 until layout settles inside the iframe
 }
 function updateCap(){const cap=document.getElementById('capLabel');if(!cap)return;
   const a=S.page*per()+1,b=Math.min(S.count,S.page*per()+per());
   cap.innerHTML='<b>View '+(S.page+1)+' of '+mockups()+'</b> · CAM '+a+'–'+b;}
-function positionTrack(dragging){if(!trackEl||!screenEl)return;
+function positionTrack(dragging,instant){if(!trackEl||!screenEl)return;
   const w=screenEl.clientWidth;if(w)swipe.w=w;
   const off=-S.page*swipe.w+(dragging?swipe.dx:0);
+  if(instant){trackEl.classList.remove('anim');trackEl.style.transform='translateX('+off+'px)';
+    void trackEl.offsetWidth;requestAnimationFrame(()=>{if(trackEl)trackEl.classList.add('anim');});return;}
   trackEl.classList.toggle('anim',!dragging);
   trackEl.style.transform='translateX('+off+'px)';}
 function goPage(p){const n=mockups();p=Math.max(0,Math.min(n-1,p));S.page=p;
@@ -340,9 +347,15 @@ function goPage(p){const n=mockups();p=Math.max(0,Math.min(n-1,p));S.page=p;
 // Double-click a camera → that one photo fills the whole phone (1×1 view, paged to it). Double-click
 // again → back to the grid it came from. Swipe still moves camera-to-camera while zoomed in.
 function focusCamera(i){
-  if(S.view!==1){ S._prevView=S.view; setView(1,true); goPage(i); }
-  else { const pv=S._prevView||4; setView(pv,true); goPage(Math.floor(i/pv)); }
+  var dir;
+  if(S.view!==1){ S._prevView=S.view; setView(1,false); S.page=i; dir='in'; }
+  else { const pv=S._prevView||4; setView(pv,false); S.page=Math.floor(i/pv); dir='out'; }
+  rebuildCards();   // reposition instantly to the target view/page — NO horizontal slide…
+  zoomAnim(dir);    // …then zoom into (or out of) it
 }
+function zoomAnim(dir){const cv=S._cv[S.page];if(!cv)return;const cls=dir==='in'?'zin':'zout';
+  cv.classList.remove('zin','zout');void cv.offsetWidth;cv.classList.add(cls);
+  cv.addEventListener('animationend',function(){cv.classList.remove(cls);},{once:true});}
 function bindSwipe(){if(!screenEl)return;
   screenEl.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;
     swipe.down=true;swipe.drag=false;swipe.x0=e.clientX;swipe.y0=e.clientY;swipe.dx=0;});
