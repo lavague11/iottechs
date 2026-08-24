@@ -112,7 +112,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
         ) : submittedCurrent ? (
           <div className="tab-row">
             <span className="tab-check">✓</span>
-            <span className="tab-msg">Submitted for review{submission.at ? ` · ${fmt(submission.at)}` : ""} — awaiting customer approval.</span>
+            <span className="tab-msg">Awaiting customer approval.</span>
             <button className="tab-btn ghost" disabled={busy || preview} onClick={() => submit(false)}>Unsubmit</button>
           </div>
         ) : submittedStale ? (

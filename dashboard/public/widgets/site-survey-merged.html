@@ -331,24 +331,26 @@
     .door{padding:16px 12px}
   }
   @media (max-width:700px){
-    /* The overlay already shows a "Site Survey" title bar — drop the tool's own header and tighten
-       the frame so the aerial gets the space. */
+    /* The overlay already shows a "Site Survey" title bar — drop the tool's own header, take the frame
+       edge-to-edge, and FLOAT the step tabs + nav over the map so the aerial gets the whole height. */
     .top{display:none}
-    .canvasCol{padding:8px 10px 0}
-    .canvasWrap{margin-bottom:8px}
+    body{position:relative}
+    .canvasCol{padding:0}
+    .canvasWrap{margin:0;border-width:0;border-radius:0}
+    #surveyWiz{position:absolute;left:0;right:0;bottom:0;z-index:14;background:rgba(255,255,255,.86);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid var(--line)}
+    #surveyWiz .steps{padding:7px 16px 0}
+    #surveyWiz .nav{padding:9px 16px}
+    /* lift the in-canvas controls above the floating bar so they aren't covered */
+    .utils,.showCtl{bottom:104px}
   }
-  /* Landscape phone: header + tabs + floor nav were eating ~1/3 of the height, shrinking the aerial to
-     a tiny centered strip. Compact the chrome and hand the freed height to the map so the whole plan
-     shows as large as it can. */
+  /* Landscape phone: compact the floating bar further so it covers as little of the map as possible. */
   @media (max-height:540px) and (orientation:landscape){
-    .top{display:none}
-    .canvasCol{padding:6px 10px 0}
-    .canvasWrap{margin-bottom:6px}
-    .steps{padding:5px 14px 0}
-    .steps .s{padding-bottom:5px;font-size:10px}
-    .nav{padding:7px 14px;gap:8px}
-    button.b{padding:7px 13px;font-size:12.5px}
-    .ftab{padding:5px 11px;font-size:11px}
+    #surveyWiz .steps{padding:5px 14px 0}
+    #surveyWiz .steps .s{padding-bottom:5px;font-size:10px}
+    #surveyWiz .nav{padding:6px 14px;gap:8px}
+    #surveyWiz button.b{padding:6px 13px;font-size:12.5px}
+    #surveyWiz .ftab{padding:4px 11px;font-size:11px}
+    .utils,.showCtl{bottom:74px}
   }
 </style>
 </head>
@@ -1072,7 +1074,12 @@
       if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; return; }  // no image → CSS inset:0 (full)
       if(!sceneAspect){ var im=new Image(); im.onload=function(){ sceneAspect=(im.naturalWidth/im.naturalHeight)||1; fitScene(); }; im.onerror=function(){ sceneAspect=1; fitScene(); }; im.src=bgData; return; }
       var cw=host.clientWidth, ch=host.clientHeight; if(!cw||!ch) return;
-      var w,h; if(cw/ch>sceneAspect){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
+      // Phones/landscape: COVER — the aerial fills the canvas edge-to-edge (pan to reach the cropped
+      // sides). Desktop: CONTAIN — the whole plan stays visible. Device coords are % of the scene, so
+      // either fit keeps them locked to the image.
+      var cover=false; try{ cover=window.matchMedia("(max-width:700px), (max-height:540px) and (orientation:landscape)").matches; }catch(e){}
+      var wide=cw/ch>sceneAspect, byHeight=cover?!wide:wide;
+      var w,h; if(byHeight){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
       scene.style.right="auto"; scene.style.bottom="auto";
       scene.style.left=Math.round((cw-w)/2)+"px"; scene.style.top=Math.round((ch-h)/2)+"px";
       scene.style.width=w+"px"; scene.style.height=h+"px";

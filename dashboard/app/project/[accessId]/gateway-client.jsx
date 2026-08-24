@@ -1987,7 +1987,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal}
-                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }} />
+                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }} />
                 </div>
                 <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                   acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit /></div>
@@ -2845,7 +2845,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 noApproval
                 customerName={lp.contact_name || lp.customer}
                 onHasData={setSurveyHasLocal}
-                onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) onApprove(r.acceptances); }}
+                onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
               />
               <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
                 acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />
