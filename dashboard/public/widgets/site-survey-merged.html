@@ -331,26 +331,22 @@
     .door{padding:16px 12px}
   }
   @media (max-width:700px){
-    /* The overlay already shows a "Site Survey" title bar — drop the tool's own header, take the frame
-       edge-to-edge, and FLOAT the step tabs + nav over the map so the aerial gets the whole height. */
+    /* The overlay already shows a "Site Survey" title bar — drop the tool's own header and take the
+       frame edge-to-edge. The step tabs + nav stay in normal flow BELOW the map (a floating bar was
+       covering the survey, esp. in the shorter inline frame — you couldn't see the bottom of it). */
     .top{display:none}
-    body{position:relative}
     .canvasCol{padding:0}
-    .canvasWrap{margin:0;border-width:0;border-radius:0}
-    #surveyWiz{position:absolute;left:0;right:0;bottom:0;z-index:14;background:rgba(255,255,255,.86);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid var(--line)}
+    .canvasWrap{margin:0 0 8px;border-width:0;border-radius:0}
     #surveyWiz .steps{padding:7px 16px 0}
     #surveyWiz .nav{padding:9px 16px}
-    /* lift the in-canvas controls above the floating bar so they aren't covered */
-    .utils,.showCtl{bottom:104px}
   }
-  /* Landscape phone: compact the floating bar further so it covers as little of the map as possible. */
+  /* Landscape phone: compact the nav so it takes as little height as possible under the map. */
   @media (max-height:540px) and (orientation:landscape){
     #surveyWiz .steps{padding:5px 14px 0}
     #surveyWiz .steps .s{padding-bottom:5px;font-size:10px}
     #surveyWiz .nav{padding:6px 14px;gap:8px}
     #surveyWiz button.b{padding:6px 13px;font-size:12.5px}
     #surveyWiz .ftab{padding:4px 11px;font-size:11px}
-    .utils,.showCtl{bottom:74px}
   }
 </style>
 </head>
