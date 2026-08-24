@@ -57,23 +57,35 @@
   .gb.on{background:var(--gold);color:#fff}
   /* ---- main stack ---- */
   .mapwrap{flex:1;min-width:0;background:var(--soft);overflow-y:auto;padding:18px}
-  #stack{width:100%;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
-  .card{background:#fff;border:1px solid #e3e6ea;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-  .cardhead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
-       background:#fafbfc;border-bottom:1px solid #ebedf0}
-  .ttl{font-size:12px;font-weight:bold;letter-spacing:.05em;color:var(--ink)}
-  .ttl i{color:#b08f4f;font-style:normal;font-weight:normal;font-size:11px;margin-left:4px}
-  .mini{background:#f3f4f6;border:1px solid var(--line);color:#9a7b3e;font-size:11px;
-        font-weight:bold;padding:5px 11px;cursor:pointer}
-  .mini:hover{background:#e9ebef}
-  .cvwrap{padding:0;background:#fff}
-  .cvwrap canvas{width:100%;height:auto;display:block;cursor:pointer}
-  .pagenav{display:none;align-items:center;justify-content:center;gap:20px;
-       max-width:1180px;margin:16px auto 4px}
-  .parrow{width:44px;height:44px;background:#fff;border:1px solid var(--line);color:#9a7b3e;
-       font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-  .parrow:hover{background:#f3f4f6;border-color:#c7a86b}
-  .pageind{font-size:13px;font-weight:bold;letter-spacing:.04em;color:#3a3f48;min-width:120px;text-align:center}
+  #stack{width:100%;max-width:1180px;margin:0 auto}
+  /* ---- one fixed iPhone; the SCREEN pages between camera views (swipe the grid, not the phone) ---- */
+  .stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 6px}
+  .iphone{position:relative;width:min(100%,880px);aspect-ratio:2.16 / 1;border-radius:7.6%/16.4%;
+    background:linear-gradient(150deg,#40434b 0%,#191a1f 44%,#0a0b0e 100%);padding:1.05%;
+    box-shadow:0 36px 64px -24px rgba(8,10,18,.62),0 10px 24px rgba(8,10,18,.30),
+      inset 0 0 0 1.4px rgba(255,255,255,.10),inset 0 0 4px 1px rgba(0,0,0,.55)}
+  .iphone .screen{position:relative;width:100%;height:100%;border-radius:6%/13%;overflow:hidden;background:#000;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.7);cursor:grab;touch-action:pan-y}
+  .iphone .screen.dragging{cursor:grabbing}
+  .screentrack{display:flex;height:100%;will-change:transform}
+  .screentrack.anim{transition:transform .36s cubic-bezier(.22,.9,.24,1)}
+  .screentrack canvas{flex:0 0 100%;width:100%;height:100%;display:block}
+  .iphone .island{position:absolute;left:2%;top:50%;transform:translateY(-50%);width:2%;height:23%;background:#000;
+    border-radius:99px;z-index:3;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+  .iphone .home{position:absolute;right:1.3%;top:50%;transform:translateY(-50%);width:.5%;height:22%;background:rgba(255,255,255,.5);
+    border-radius:99px;z-index:3}
+  .iphone .glare{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:4;
+    background:linear-gradient(118deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.05) 20%,rgba(255,255,255,0) 40%)}
+  .iphone .bpwr{position:absolute;right:-.5%;top:34%;width:1.15%;height:15%;
+    background:linear-gradient(90deg,#33353c,#141519);border-radius:0 2px 2px 0}
+  .iphone .bvol{position:absolute;left:30%;top:-.55%;height:1.35%;width:7%;
+    background:linear-gradient(180deg,#33353c,#141519);border-radius:2px 2px 0 0}
+  .iphone .bvol.b2{left:40%}
+  .dots{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:18px;flex-wrap:wrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:#cbd0d8;border:none;padding:0;cursor:pointer;transition:.18s}
+  .dot.on{background:var(--gold);width:22px;border-radius:99px}
+  .caplabel{text-align:center;font-size:11.5px;font-weight:bold;letter-spacing:.05em;color:#8a8f99;margin-top:10px}
+  .caplabel b{color:#3a3f48}
   #nameEdit{position:fixed;display:none;z-index:2000;background:#fff;border:2px solid var(--gold);
        color:var(--ink);font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;padding:5px 8px;outline:none;min-width:120px}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:2200;
@@ -169,13 +181,7 @@
   <span class="savestat" id="saveStatus"></span>
 </div>
 
-<div class="mapwrap"><div id="stack"></div>
-  <div class="pagenav" id="pageNav">
-    <button class="parrow" id="pgPrev" title="Previous">‹</button>
-    <span class="pageind" id="pageInd"></span>
-    <button class="parrow" id="pgNext" title="Next">›</button>
-  </div>
-</div>
+<div class="mapwrap"><div id="stack"></div></div>
 
 <input id="nameEdit" maxlength="28"/>
 <div class="toast" id="toast"></div>
@@ -286,35 +292,66 @@ function renderTo(c,W,H,page,o){
   const isW=g.phH*0.038,isH=g.phH*0.34;roundRect(c,g.px+g.bz*0.5,g.py+g.phH/2-isH/2,isW,isH,isW/2);c.fillStyle='#26282d';c.fill();
   const hiW=g.phH*0.038,hiH=g.phH*0.30;roundRect(c,g.px+g.phW-g.bz*0.5-hiW,g.py+g.phH/2-hiH/2,hiW,hiH,hiW/2);c.fillStyle='#26282d';c.fill();}
 
-/* ===== stacked cards ===== */
+/* ===== one fixed iPhone; its SCREEN pages between camera views (swipe the grid, not the phone) ===== */
 const stack=document.getElementById('stack');
+// Display canvas = the phone SCREEN only (frameless — the iPhone bezel is real CSS). Landscape 2.16:1.
+function screenDims(){return {W:1600,H:Math.round(1600/2.16)};}   // 1600×740
+let screenEl=null, trackEl=null, dotsEl=null;
+const swipe={down:false,drag:false,x0:0,y0:0,dx:0,w:0};
+function iotNotifyHook(){}   // the embed shim points this at iotNotify so swipe keeps the host's page indicator in sync
+function renderPageCanvas(canvas,p){const d=screenDims();
+  if(canvas.width!==d.W||canvas.height!==d.H){canvas.width=d.W;canvas.height=d.H;}
+  const c=canvas.getContext('2d');c.fillStyle='#0b0d10';c.fillRect(0,0,d.W,d.H);
+  drawGrid(c,0,0,d.W,d.H,p,{interactive:!IOT_RO,hover:(S.hover.p===p?S.hover.i:null)});}
 function rebuildCards(){
-  const n=mockups(),d=dims();
+  const n=mockups();
   if(S.page>=n)S.page=n-1; if(S.page<0)S.page=0;
   const _fb=document.getElementById('frameBtn'); if(_fb)_fb.classList.toggle('on',!!S.frame);
-  const p=S.page,a=p*per()+1,b=Math.min(S.count,p*per()+per());
   stack.innerHTML='';S._cv=[];
-  const card=document.createElement('div');card.className='card';
-  card.innerHTML=`<div class="cardhead"><span class="ttl">Mockup ${p+1}<i>CAM ${a}–${b}</i></span></div>`;
-  const wrap=document.createElement('div');wrap.className='cvwrap';
-  const canvas=document.createElement('canvas');canvas.width=d.W;canvas.height=d.H;wrap.appendChild(canvas);
-  card.appendChild(wrap);stack.appendChild(card);S._cv[p]=canvas;
-  bindCanvas(canvas,p);renderPage(p);
-  updatePageNav(n);
+  const stage=document.createElement('div');stage.className='stage';
+  const phone=document.createElement('div');phone.className='iphone';
+  const screen=document.createElement('div');screen.className='screen';
+  const track=document.createElement('div');track.className='screentrack anim';
+  for(let p=0;p<n;p++){const cv=document.createElement('canvas');track.appendChild(cv);S._cv[p]=cv;
+    bindCanvas(cv,p);renderPageCanvas(cv,p);}
+  screen.appendChild(track);phone.appendChild(screen);
+  phone.insertAdjacentHTML('beforeend','<div class="island"></div><div class="home"></div><div class="glare"></div><div class="bpwr"></div><div class="bvol"></div><div class="bvol b2"></div>');
+  stage.appendChild(phone);stack.appendChild(stage);
+  screenEl=screen;trackEl=track;
+  if(n>1){dotsEl=document.createElement('div');dotsEl.className='dots';
+    for(let p=0;p<n;p++){const b=document.createElement('button');b.className='dot'+(p===S.page?' on':'');b.title='View '+(p+1);b.onclick=()=>goPage(p);dotsEl.appendChild(b);}
+    stage.appendChild(dotsEl);
+  } else dotsEl=null;
+  const cap=document.createElement('div');cap.className='caplabel';cap.id='capLabel';stage.appendChild(cap);
+  updateCap();positionTrack(false);bindSwipe();
+  requestAnimationFrame(()=>positionTrack(false));   // width is 0 until layout settles inside the iframe
 }
-function updatePageNav(n){const nav=document.getElementById('pageNav');
-  if(n<=1){nav.style.display='none';return;}
-  nav.style.display='flex';
-  document.getElementById('pageInd').textContent='Page '+(S.page+1)+' of '+n;
-  document.getElementById('pgPrev').style.visibility=S.page>0?'visible':'hidden';
-  document.getElementById('pgNext').style.visibility=S.page<n-1?'visible':'hidden';}
-document.getElementById('pgPrev').onclick=()=>{if(S.page>0){S.page--;rebuildCards();}};
-document.getElementById('pgNext').onclick=()=>{if(S.page<mockups()-1){S.page++;rebuildCards();}};
-function renderPage(p){const canvas=S._cv[p];if(!canvas)return;const d=dims();
-  if(canvas.width!==d.W||canvas.height!==d.H){canvas.width=d.W;canvas.height=d.H;}
-  renderTo(canvas.getContext('2d'),d.W,d.H,p,{interactive:true,hover:(S.hover.p===p?S.hover.i:null)});}
+function updateCap(){const cap=document.getElementById('capLabel');if(!cap)return;
+  const a=S.page*per()+1,b=Math.min(S.count,S.page*per()+per());
+  cap.innerHTML='<b>View '+(S.page+1)+' of '+mockups()+'</b> · CAM '+a+'–'+b;}
+function positionTrack(dragging){if(!trackEl||!screenEl)return;
+  const w=screenEl.clientWidth;if(w)swipe.w=w;
+  const off=-S.page*swipe.w+(dragging?swipe.dx:0);
+  trackEl.classList.toggle('anim',!dragging);
+  trackEl.style.transform='translateX('+off+'px)';}
+function goPage(p){const n=mockups();p=Math.max(0,Math.min(n-1,p));S.page=p;
+  if(dotsEl)[...dotsEl.children].forEach((d,i)=>d.classList.toggle('on',i===S.page));
+  updateCap();positionTrack(false);iotNotifyHook();}
+function bindSwipe(){if(!screenEl)return;
+  screenEl.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;
+    swipe.down=true;swipe.drag=false;swipe.x0=e.clientX;swipe.y0=e.clientY;swipe.dx=0;});
+  screenEl.addEventListener('pointermove',e=>{if(!swipe.down)return;
+    const dx=e.clientX-swipe.x0,dy=e.clientY-swipe.y0;
+    if(!swipe.drag){ if(mockups()>1&&Math.abs(dx)>8&&Math.abs(dx)>Math.abs(dy)){swipe.drag=true;screenEl.classList.add('dragging');trackEl.classList.remove('anim');try{screenEl.setPointerCapture(e.pointerId);}catch(_){}} else return; }
+    e.preventDefault();swipe.dx=dx;positionTrack(true);});
+  const end=()=>{if(!swipe.down)return;swipe.down=false;
+    if(swipe.drag){swipe.drag=false;screenEl.classList.remove('dragging');
+      const th=swipe.w*0.16;let p=S.page;if(swipe.dx<=-th)p++;else if(swipe.dx>=th)p--;swipe.dx=0;goPage(p);}};
+  screenEl.addEventListener('pointerup',end);screenEl.addEventListener('pointercancel',end);}
+function renderPage(p){const cv=S._cv[p];if(cv)renderPageCanvas(cv,p);}
 function renderAll(){for(let p=0;p<S._cv.length;p++)if(S._cv[p])renderPage(p);}
 function refreshAll(){rebuildCards();touch();}
+window.addEventListener('resize',()=>positionTrack(false));
 
 /* ===== interaction ===== */
 var IOT_RO=false; // set by the IOT TECHS embed shim below — read-only mode disables editing, keeps photo viewing
@@ -324,7 +361,7 @@ var IOT_RO=false; // set by the IOT TECHS embed shim below — read-only mode di
 var SURVEY_DRIVEN=false, SURVEY_CAMS=[];
 const nameEdit=document.getElementById('nameEdit'),slotFile=document.getElementById('slotFile');
 function tileAt(e,canvas,page){const rect=canvas.getBoundingClientRect(),sx=canvas.width/rect.width,sy=canvas.height/rect.height;
-  const cx=(e.clientX-rect.left)*sx,cy=(e.clientY-rect.top)*sy,a=screenArea();
+  const cx=(e.clientX-rect.left)*sx,cy=(e.clientY-rect.top)*sy,a={X:0,Y:0,W:canvas.width,H:canvas.height};
   const hit=gridRects(a.X,a.Y,a.W,a.H,page).find(r=>cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h&&r.i<S.count);
   return hit?{...hit,cx,cy,rect,sx,sy}:null;}
 function doSingleClick(h){
@@ -605,6 +642,7 @@ rebuildCards();
   // Re-notify on every rebuild (covers page nav + count/layout changes) so the host stays in sync.
   var _rebuild=rebuildCards;
   rebuildCards=function(){ _rebuild.apply(this,arguments); iotNotify(); };
+  iotNotifyHook=iotNotify;   // swipe/goPage → keep the host's Page indicator in sync
 
   // The canvas sizes to its aspect ratio after layout settles — re-report height when the stack resizes.
   try{ new ResizeObserver(function(){ iotNotify(); }).observe(document.getElementById('stack')); }catch(_e){}
@@ -637,9 +675,7 @@ rebuildCards();
     else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0;
       if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
     else if(m.cmd==='customerView'){ try{openCustomerView();}catch(_e){} }
-    else if(m.cmd==='page'){ var n=mockups();
-      if(m.dir<0&&S.page>0){S.page--;rebuildCards();}
-      else if(m.dir>0&&S.page<n-1){S.page++;rebuildCards();} }
+    else if(m.cmd==='page'){ goPage(S.page+(+m.dir||0)); }
   });
 
   IOT_RO=RO;
