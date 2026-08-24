@@ -330,6 +330,26 @@
     .door svg{width:24px;height:24px;margin-bottom:8px}
     .door{padding:16px 12px}
   }
+  @media (max-width:700px){
+    /* The overlay already shows a "Site Survey" title bar — drop the tool's own header and tighten
+       the frame so the aerial gets the space. */
+    .top{display:none}
+    .canvasCol{padding:8px 10px 0}
+    .canvasWrap{margin-bottom:8px}
+  }
+  /* Landscape phone: header + tabs + floor nav were eating ~1/3 of the height, shrinking the aerial to
+     a tiny centered strip. Compact the chrome and hand the freed height to the map so the whole plan
+     shows as large as it can. */
+  @media (max-height:540px) and (orientation:landscape){
+    .top{display:none}
+    .canvasCol{padding:6px 10px 0}
+    .canvasWrap{margin-bottom:6px}
+    .steps{padding:5px 14px 0}
+    .steps .s{padding-bottom:5px;font-size:10px}
+    .nav{padding:7px 14px;gap:8px}
+    button.b{padding:7px 13px;font-size:12.5px}
+    .ftab{padding:5px 11px;font-size:11px}
+  }
 </style>
 </head>
 <body>
