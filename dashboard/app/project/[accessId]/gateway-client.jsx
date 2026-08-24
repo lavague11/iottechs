@@ -3972,6 +3972,11 @@ const PV_CSS = `
 .pvx .mk-seg-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:26px;border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
 .pvx .mk-seg-btn:hover{color:var(--ink)}
 .pvx .mk-seg-btn.on{background:var(--gold);color:#fff}
+.pvx .mk-layout{position:relative}
+.pvx .mk-layoutmenu{position:absolute;top:calc(100% + 4px);left:0;z-index:40;display:flex;flex-direction:column;gap:2px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--bg-soft,#faf8f4);box-shadow:0 12px 30px rgba(16,17,18,.16);min-width:134px}
+.pvx .mk-layoutopt{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:7px;background:transparent;color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;white-space:nowrap}
+.pvx .mk-layoutopt:hover{background:rgba(201,169,110,.12)}
+.pvx .mk-layoutopt.on,.pvx .mk-layoutopt.on svg{color:var(--gold-deep,#8a6d2f)}
 .pvx .mk-pagenav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:2px}
 .pvx .mk-parrow{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--gold-deep);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .pvx .mk-parrow:hover:not(:disabled){border-color:var(--gold)}

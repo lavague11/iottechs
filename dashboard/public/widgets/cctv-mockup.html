@@ -337,6 +337,12 @@ function positionTrack(dragging){if(!trackEl||!screenEl)return;
 function goPage(p){const n=mockups();p=Math.max(0,Math.min(n-1,p));S.page=p;
   if(dotsEl)[...dotsEl.children].forEach((d,i)=>d.classList.toggle('on',i===S.page));
   updateCap();positionTrack(false);iotNotifyHook();}
+// Double-click a camera → that one photo fills the whole phone (1×1 view, paged to it). Double-click
+// again → back to the grid it came from. Swipe still moves camera-to-camera while zoomed in.
+function focusCamera(i){
+  if(S.view!==1){ S._prevView=S.view; setView(1,true); goPage(i); }
+  else { const pv=S._prevView||4; setView(pv,true); goPage(Math.floor(i/pv)); }
+}
 function bindSwipe(){if(!screenEl)return;
   screenEl.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;
     swipe.down=true;swipe.drag=false;swipe.x0=e.clientX;swipe.y0=e.clientY;swipe.dx=0;});
@@ -379,9 +385,11 @@ let lastTile={p:null,i:null};   // tile currently under the cursor — the targe
 function bindCanvas(canvas,page){
   canvas.addEventListener('click',e=>{if(nameEdit.style.display==='block')return;
     const h=tileAt(e,canvas,page);if(!h)return;
-    if(S.slots[h.i]){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}else doSingleClick(h);});
+    // Single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A FILLED tile
+    // does nothing on single-click — double-click fills the whole phone with that camera (1×1 view).
+    if(!S.slots[h.i]&&!IOT_RO){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}});
   canvas.addEventListener('dblclick',e=>{clearTimeout(clickTimer);const h=tileAt(e,canvas,page);
-    if(h&&S.slots[h.i])openLightbox(h.i);});
+    if(h&&h.i<S.count)focusCamera(h.i);});
   if(IOT_RO)return;                                             // no drag/drop uploads in read-only mode
   // Track the tile under the pointer so a paste (which carries no drag position) knows where to land.
   canvas.addEventListener('mousemove',e=>{const h=tileAt(e,canvas,page);lastTile=h?{p:page,i:h.i}:{p:null,i:null};});
