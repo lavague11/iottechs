@@ -251,7 +251,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       ]);
       const jobs = [];
       let hasMockupPhoto = false;
-      try { const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null; hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.startsWith("data:image")); } catch { /* bad blob */ }
+      // A placed photo is either an inline data: URL or (normal path) a small /api/media URL — count both.
+      try { const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null; hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.length > 0); } catch { /* bad blob */ }
       if (hasMockupPhoto && mk?.saved?.data) jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
       if (sv?.saved?.data) jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       await Promise.all(jobs);

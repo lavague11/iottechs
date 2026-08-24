@@ -12,8 +12,11 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
     let floors;
     try {
       const d = JSON.parse(surveyData);
+      // A floor's background is either an inline data: URL (offline fallback) or a small /api/media
+      // URL (the normal path — big aerials are uploaded so they don't blow the localStorage quota).
+      // Accept BOTH; both are same-origin so the canvas stays untainted for toDataURL.
       floors = (d.floors || [])
-        .filter((f) => f && typeof f.bg === "string" && f.bg.startsWith("data:image"))
+        .filter((f) => f && typeof f.bg === "string" && f.bg.length > 0)
         .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x && x.k === "cam") }));
     } catch { return resolve([]); }
     if (!floors.length) return resolve([]);
