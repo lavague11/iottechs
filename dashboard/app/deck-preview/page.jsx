@@ -2,6 +2,7 @@
 import { useState } from "react";
 import DeckView from "../project/[accessId]/deck-view";
 import SiteSurveyWidget from "../project/[accessId]/site-survey-widget";
+import MockupWidget from "../project/[accessId]/mockup-widget";
 
 // Standalone preview of the redesigned project deck (Consulting wired with the real tool set).
 // Sample data only — no API. Lets us review the shell + one stage before porting into the gateway.
@@ -19,7 +20,8 @@ const STAGES = [
         ) },
       { name: "Site Survey", state: "active", label: "Site Survey tool", heavy: true,
         node: <SiteSurveyWidget accessId="deckpreview" view="admin" noApproval /> },
-      { name: "Mockups", label: "Mockup generator", heavy: true },
+      { name: "Mockups", label: "Mockup generator", heavy: true,
+        node: <MockupWidget accessId="deckpreview" view="admin" noApproval embedded /> },
     ] },
   { name: "Proposal", pill: "Reviewing", pct: 25, turn: "mine", tint: "gold",
     need: "Approval & deposit, then create the work order",
