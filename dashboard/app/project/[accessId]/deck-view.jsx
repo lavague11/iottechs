@@ -45,27 +45,31 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [seenLoaded, setSeenLoaded] = useState(false);
   const deckRef = useRef(null);
   const startX = useRef(null);
+  const startY = useRef(null);
   const capturing = useRef(false);
   const wheelLock = useRef(false);
 
   const go = useCallback((i) => { const n = Math.max(0, Math.min(N - 1, i)); setMoved(true); onIdx ? onIdx(n) : null; }, [N, onIdx]);
 
-  // ── drag ── capture only AFTER a real horizontal move, so taps still fire the button click
+  // ── drag ── capture only AFTER a real horizontal move, so taps still fire the button click.
+  // Never start a drag from an interactive control — on touch, finger jitter on a button tap would
+  // otherwise trip the capture and steal the click (the tool would never open on mobile).
   function onPointerDown(e) {
-    if (e.target.closest("[data-stop]")) return;
-    startX.current = e.clientX; capturing.current = false;
+    if (e.target.closest("[data-stop], button, a, input, textarea, select, label")) return;
+    startX.current = e.clientX; startY.current = e.clientY; capturing.current = false;
   }
   function onPointerMove(e) {
     if (startX.current == null) return;
-    const dx = e.clientX - startX.current;
-    if (!capturing.current && Math.abs(dx) > 5) { capturing.current = true; deckRef.current?.setPointerCapture?.(e.pointerId); }
+    const dx = e.clientX - startX.current, dy = e.clientY - startY.current;
+    // Only a clearly-horizontal swipe pages the deck — vertical scrolls and taps pass through.
+    if (!capturing.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { capturing.current = true; deckRef.current?.setPointerCapture?.(e.pointerId); }
     if (capturing.current) setDrag(dx);
   }
   function endDrag() {
     if (startX.current == null) return;
     const w = deckRef.current?.offsetWidth || 1, d = drag, thr = Math.min(110, w * 0.16);
     const wasDrag = capturing.current;
-    startX.current = null; capturing.current = false; setDrag(0);
+    startX.current = null; startY.current = null; capturing.current = false; setDrag(0);
     if (!wasDrag) return;                                 // a tap — let the click through
     if (d < -thr) go(idx + 1); else if (d > thr) go(idx - 1);
   }
@@ -505,6 +509,14 @@ const CSS = `
 .dv-overlay-body .ss-embed-bar:not(:has(.mk-controls)){display:none}
 .dv-overlay-body .ss-embed-open{display:none}
 .dv-overlay-body .ss-embed-frame{flex:1;width:100%;height:auto!important;min-height:0;border:none;background:var(--dv-raise);display:block}
+/* Mobile: the map is the working surface. Stop the 50/50 flex split with the device roster —
+   give the survey/tool the full screen and let the roster scroll beneath it (a sliver peeks to
+   hint there's more below). Bigger canvas = room to place and aim icons with a finger. */
+@media (max-width:700px){
+  .dv-overlay-body{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .dv-overlay-body>.ss-embed{height:calc(100dvh - 120px)}
+  .dv-overlay-body>.sd-wrap{margin:0;border-left:0;border-right:0;border-radius:0}
+}
 
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft);background:var(--dv-paper);flex:0 0 auto}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
