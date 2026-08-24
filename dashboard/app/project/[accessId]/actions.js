@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -321,6 +321,25 @@ export async function setStage(accessId, viewRole, stageKey) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, stage: finalStage, label: stageLabel(finalStage) };
+}
+
+// Booking the survey visit (scheduling tool) mirrors its date onto projects.date and lets the spine
+// advance inquiry → site_survey. Stage-guarded: only acts while the project is still in `inquiry`, so
+// an install-visit booking later in the lifecycle is a harmless no-op. Staff-only.
+export async function bookSurveyDateAction(accessId, dateStr) {
+  const tok = await getAnyTok();
+  // Staff book the survey; the customer can also book their own appointment (both should set the date
+  // and advance inquiry → site_survey). A PIN token must match this project.
+  if (!tok || !["admin", "manager", "sales", "customer"].includes(tok.role)) return { ok: false };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false };
+  const p = getJobByAccessId(accessId);
+  if (!p) return { ok: false };
+  if (p.stage !== "inquiry") return { ok: true, stage: p.stage };   // only the inquiry survey-booking advances
+  setSurveyDate(accessId, dateStr);
+  let stage = p.stage;
+  try { stage = maybeAutoAdvance(accessId) || stage; } catch { /* keep current */ }
+  try { const { revalidatePath } = await import("next/cache"); revalidatePath(`/project/${accessId}`); } catch {}
+  return { ok: true, stage };
 }
 
 export async function addAssignmentAction(accessId, { userId, userName, userEmail, role }) {

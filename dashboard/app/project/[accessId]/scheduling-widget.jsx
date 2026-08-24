@@ -101,7 +101,7 @@ const Ico = {
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
-export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", onCount }) {
+export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", onCount, onBooked }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -150,6 +150,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     setSaving(true);
     const ev = { id: uid(), ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
+    onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
     setShowForm(false);
     setForm(f => ({ ...f, date: tomorrowISO(), notes:"", invitees: autoNames }));
     setSaving(false);

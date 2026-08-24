@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -559,7 +559,7 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
 // The stage's "next step" call-to-action — lives at the BOTTOM of the tool list (below the last
 // tool card) instead of under the progress bar. Tells each role what's outstanding and advances
 // once the stage is clear. Same look/logic as the old in-bar strip, just relocated.
-function StageAdvance({ role, busy, techSigned, custApproved, missingFor, projectStage, stages, canControl, onBrowse, onJump }) {
+function StageAdvance({ role, busy, techSigned, custApproved, missingFor, projectStage, stages, canControl, onBrowse, onAdvance, nextLabel }) {
   const projectIdx = stages.findIndex((s) => s.key === projectStage);
   if (role === "tech") {
     if (!techSigned) {
@@ -613,8 +613,7 @@ function StageAdvance({ role, busy, techSigned, custApproved, missingFor, projec
     );
   }
   if (!canControl) return null;   // all clear — customers just watch it advance
-  const nextStage = projectIdx >= 0 && projectIdx < stages.length - 1 ? stages[projectIdx + 1] : null;
-  if (!nextStage) {
+  if (!nextLabel) {               // no next master stage → this is the finish line
     return (
       <div className="pbar-advance done bottom">
         <span className="pba-check">✓</span>
@@ -622,10 +621,13 @@ function StageAdvance({ role, busy, techSigned, custApproved, missingFor, projec
       </div>
     );
   }
+  // Advance by the next MASTER stage (onAdvance → doMove(nextProjectKey)) — one step at a time, never
+  // skipping a sub-stage. `projectStage` is a phase key here, so label the "complete" half with the
+  // phase's real name (phaseLabelOf), never the raw key.
   return (
-    <button type="button" className="pbar-advance bottom" disabled={busy} onClick={() => onJump(nextStage.key)}>
+    <button type="button" className="pbar-advance bottom" disabled={busy} onClick={() => onAdvance && onAdvance()}>
       <span className="pba-check">✓</span>
-      <span className="pba-msg"><b>{stageShortLabel(projectStage)} complete.</b> Continue to {nextStage.short || nextStage.label}</span>
+      <span className="pba-msg"><b>{phaseLabelOf(projectStage)} complete.</b> Continue to {nextLabel}</span>
       <span className="pba-arrow">→</span>
     </button>
   );
@@ -1844,6 +1846,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (masterToPhaseKey(projectStage) === key) return projectStage;   // land on the active sub-stage
     return phase.primary;
   }
+  // MOVING the project into a phase must land on the phase's FIRST master stage (not `primary`, which
+  // is a BROWSE target). Otherwise a jump into e.g. "Install" would set `install` and skip `schedule`
+  // (Fulfillment). Server auto-advance then cascades forward through any already-satisfied auto stages.
+  function phaseFirst(key) {
+    if (key && !String(key).startsWith("ph_")) return key;   // already a master stage — pass through
+    const phase = phaseList.find((p) => p.key === key);
+    if (!phase) return projectStage;
+    return (phase.members && phase.members[0]) || phase.primary;
+  }
   // Honest completion % based on real 9-stage position (not the 4 phases) — so "at payment" reads
   // ~88%, not a misleading 100% just because it's the last phase. 100% is reserved for the true
   // finish line: the balance is paid AND the system is released (completed_at is stamped).
@@ -1912,6 +1923,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     else setErr(res.error || "Could not move the step.");
   }
 
+  // Booking the survey visit mirrors the date onto the project so the spine can advance
+  // inquiry → site_survey. Stage-guarded server-side (no-op unless still in inquiry).
+  function onSurveyBooked(date) {
+    if (previewRole || !date) return;
+    bookSurveyDateAction(project.access_id, date).then((r) => { if (r?.ok) syncStage(r.stage); }).catch(() => {});
+  }
+
   // Pre-flight: warn if the target stage has unmet/unverifiable requirements before advancing.
   function requestMove(stageKey) {
     if (!stageKey || busy) return;
@@ -1977,7 +1995,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <div style={{ padding: "16px 18px" }}>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
-                  currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} />
+                  currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} onBooked={onSurveyBooked} />
               </div>
             ) },
           { name: "Site Survey", label: "Site Survey tool", heavy: true,
@@ -2497,7 +2515,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         pctOverride={phasePct}
         justDone={justDone}
         canControl={canControl && !previewRole}
-        onJump={(k) => doMove(phaseLanding(k))}
+        onJump={(k) => doMove(phaseFirst(k))}
         missingFor={(k) => missingReqsFor(phaseLanding(k), lp, localAssignments)}
         role={cView}
         techSigned={!!proposalData?.tech_signed_name}
@@ -2768,6 +2786,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               project={lp}
               view={view}
               customerView={!!previewRole}
+              onBooked={onSurveyBooked}
             />
           </FlowStep>
         </div>
@@ -2787,6 +2806,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               project={lp}
               view={view}
               customerView={!!previewRole}
+              onBooked={onSurveyBooked}
             />
             <div style={{ height: 1, background: "var(--line,#e6e8ee)", margin: "16px 0 4px" }} />
             <InquiryExtras accessId={lp.access_id} project={lp} role={cView} preview={!!previewRole} />
@@ -3118,7 +3138,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           stages={stageList}
           canControl={canControl && !previewRole}
           onBrowse={(k) => browse(phaseLanding(k))}
-          onJump={(k) => doMove(phaseLanding(k))}
+          onAdvance={() => nextProjectKey && doMove(nextProjectKey)}
+          nextLabel={nextProjectKey ? stageShortLabel(nextProjectKey) : null}
         />
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (

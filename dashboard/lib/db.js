@@ -2150,6 +2150,17 @@ export function updateStage(accessId, stage, byName) {
   return getJobByAccessId(accessId);
 }
 
+// The survey visit is booked in the scheduling TOOL (its own blob), but the `inquiry` stage's
+// requirement checks `projects.date`. Mirror the booked date onto the column so inquiry can
+// auto-advance to site_survey. Only fills an EMPTY date — never overwrites a set one, so a later
+// install booking can't clobber the survey date. Returns true if it wrote.
+export function setSurveyDate(accessId, dateStr) {
+  if (!dateStr) return false;
+  const info = db.prepare("UPDATE projects SET date = ? WHERE access_id = ? COLLATE NOCASE AND (date IS NULL OR date = '')")
+    .run(String(dateStr), String(accessId || "").trim());
+  return info.changes > 0;
+}
+
 // ---- Stage auto-advance ------------------------------------------------------
 // Build the fact object lib/stage-flow.js checks run against — same field names the
 // page hands the gateway, sourced straight from the DB so server decisions are current.
