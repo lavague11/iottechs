@@ -370,6 +370,11 @@ export async function recordPaymentAction(accessId, payment) {
     source: isCustomer ? "customer" : "staff", note: payment.note,
     paidAt: payment.paidAt,   // staff-set date the money changed hands
   }, actorName(tok));
+  try {
+    const amt = "$" + (+payment.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const verb = isCustomer ? "Payment submitted" : "Payment recorded";
+    logProjectEvent(accessId, { kind: "pay", label: `${verb} — ${amt}${payment.kind ? ` · ${payment.kind}` : ""}${payment.method ? ` (${payment.method})` : ""}`, actor: actorName(tok) });
+  } catch { /* best-effort */ }
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, payments };
@@ -387,7 +392,14 @@ export async function deletePaymentAction(accessId, id) {
   } else if (!STAFF.has(tok.role)) {
     return { error: "Only Admin & Manager can remove payments." };
   }
+  const before = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
   const payments = deleteProjectPayment(accessId, id, { id: tok.id ?? null, name: actorName(tok) });
+  try {
+    if (before) {
+      const amt = "$" + (+before.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      logProjectEvent(accessId, { kind: "request", label: `Payment canceled — ${amt}${before.kind ? ` · ${before.kind}` : ""}`, actor: actorName(tok) });
+    }
+  } catch { /* best-effort */ }
   await revalidate(accessId);
   return { ok: true, payments };
 }
@@ -416,7 +428,14 @@ export async function voidTechSignatureAction(accessId) {
 export async function confirmPaymentAction(accessId, id) {
   const tok = await getSessionRole();
   if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can confirm payments." };
+  const before = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
   const payments = confirmProjectPayment(accessId, id);
+  try {
+    if (before) {
+      const amt = "$" + (+before.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      logProjectEvent(accessId, { kind: "pay", label: `Payment confirmed — ${amt} received${before.kind ? ` · ${before.kind}` : ""}`, actor: actorName(tok) });
+    }
+  } catch { /* best-effort */ }
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, payments };
