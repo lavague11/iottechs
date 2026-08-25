@@ -8,7 +8,7 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false }) {
   const readOnly = view === "customer" || customerView;
   const [floorCount, setFloorCount] = useState(null);
   const [items, setItems] = useState([]);
@@ -58,12 +58,20 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       }
       if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); }
       if (e.data.type === "iotSurveyZoom" && e.data.img) { setZoomImg(e.data.img); setZoomed(false); }
-      // The tool's own "Submit for approval" button → run the real server submit (the bar is status-only).
+      // The tool's own nav buttons drive the real server submit/unsubmit (the status now lives inside the tool).
       if (e.data.type === "iotSurvey2Submit") onSubmit?.();
+      if (e.data.type === "iotSurvey2Unsubmit") onUnsubmit?.();
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [accessId, onSubmit]);
+  }, [accessId, onSubmit, onUnsubmit]);
+
+  // Feed the SERVER's submit/approve truth into the tool so its inline nav tag ("Awaiting approval" /
+  // "Customer approved") stays accurate — on first load and whenever it changes.
+  const pushSubmitState = useCallback(() => {
+    try { frameRef.current?.contentWindow?.postMessage({ type: "iotSurveySubmitState", project: accessId, submitted: !!submitted, approved: !!approved }, "*"); } catch { /* frame gone */ }
+  }, [accessId, submitted, approved]);
+  useEffect(() => { pushSubmitState(); }, [pushSubmitState]);
 
   // On a phone in landscape the inline frame is cramped and awkward to edit, so auto-expand to the
   // full-screen overlay (the same one the ⛶ button gives). Rotating back to portrait collapses it —
@@ -124,6 +132,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           src={src}
           title="Site Survey"
           allow="geolocation"
+          onLoad={pushSubmitState}
         />
       ) : (
         <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>

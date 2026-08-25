@@ -119,6 +119,10 @@
   .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
   button.b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
   button.b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
+  /* inline submit-status tag (Awaiting approval / Customer approved) — lives in the nav next to Back/Submit */
+  .awaitTag{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:var(--r);background:rgba(58,165,93,.12);color:#2a8a4e;font-size:13px;font-weight:700;white-space:nowrap}
+  .awaitTag svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  body.ro .awaitTag{display:none!important}   /* the customer never sees submit status */
 
   /* background-build mode strip */
   .bgstrip{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)}
@@ -444,6 +448,8 @@
       <div class="hint" id="wizHint"></div>
       <button class="b lite" id="addFloorBtn" style="display:none">+ Add a new floor</button>
       <button class="b lite" id="backBtn" style="display:none">Back</button>
+      <span class="awaitTag" id="awaitTag" style="display:none"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span id="awaitTxt">Awaiting approval</span></span>
+      <button class="b lite" id="unsubmitBtn" style="display:none">Unsubmit</button>
       <button class="b" id="nextBtn">Next</button>
     </div>
   </div>
@@ -1040,7 +1046,7 @@
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
 
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
-    var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false;
+    var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
@@ -1125,10 +1131,19 @@
       loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
     }
     function setStatus(){ var pill=document.querySelector(".pill"); if(!pill) return;
-      pill.innerHTML='<span class="g" style="background:'+(submitted?"#3aa55d":"var(--gold)")+'"></span>'+(submitted?"Submitted":"Draft"); }
+      var lbl=approved?"Approved":(submitted?"Submitted":"Draft"), col=approved?"#2a8a4e":(submitted?"#3aa55d":"var(--gold)");
+      pill.innerHTML='<span class="g" style="background:'+col+'"></span>'+lbl; }
     function submit(){ snapFloor(); submitted=true; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
-      setHint("Submitted for approval."); }
+      if(curStep===2) goStep(2); }
+    // Office pulls it back for edits — clears the awaiting state and tells the host to unsubmit server-side.
+    function unsubmit(){ submitted=false; approved=false; setStatus(); save();
+      try{ parent.postMessage({type:"iotSurvey2Unsubmit", project:PID}, "*"); }catch(e){}
+      if(curStep===2) goStep(2); }
+    // Host feeds the SERVER's truth (submitted / customer-approved) so the nav tag reflects reality even
+    // after an edit invalidates a prior submission.
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.project!==PID||m.type!=="iotSurveySubmitState") return;
+      submitted=!!m.submitted; approved=!!m.approved; setStatus(); if(curStep===2) goStep(2); });
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
@@ -1189,6 +1204,7 @@
     var addFloorBtn=document.getElementById("addFloorBtn");
     var backBtn=document.getElementById("backBtn");
     var nextBtn=document.getElementById("nextBtn");
+    var awaitTag=document.getElementById("awaitTag"), awaitTxt=document.getElementById("awaitTxt"), unsubmitBtn=document.getElementById("unsubmitBtn");
     function goStep(idx){
       idx=Math.max(0,Math.min(2,idx));   // 0 Background · 1 Setup · 2 Submit (clamps any stale 4-step save)
       if(idx>0 && !bgHasImage) return;   // gate: can't Setup/Submit until this floor has a background
@@ -1228,6 +1244,13 @@
       addFloorBtn.style.display = onSubmit ? "" : "none";
       backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
+      // Submit step: show the Submit button only while it's a draft; once submitted the status lives
+      // right here in the nav (a small "Awaiting approval" / "Customer approved" tag + Unsubmit) — no
+      // separate approval bar below the tool covering the survey.
+      var done=onSubmit&&(submitted||approved);
+      nextBtn.style.display = done ? "none" : "";
+      if(awaitTag){ awaitTag.style.display = done ? "" : "none"; awaitTxt.textContent = approved ? "Customer approved" : "Awaiting approval"; }
+      if(unsubmitBtn) unsubmitBtn.style.display = (onSubmit && submitted && !approved && !RO) ? "" : "none";
       setHint("");   // no step instructions — the UI speaks for itself
       queueSave();
     }
@@ -1238,6 +1261,7 @@
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
     addFloorBtn.addEventListener("click", addFloor);
+    if(unsubmitBtn) unsubmitBtn.addEventListener("click", unsubmit);
 
     restore();   // reopen the saved survey (all floors) for this project (if any)
   </script>

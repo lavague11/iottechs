@@ -2005,10 +2005,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal}
-                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }} />
+                    submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
+                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
+                    onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }} />
                 </div>
-                <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit /></div>
               </div>
             ) },
           { name: "Mockups", label: "Mockup generator", heavy: true,
@@ -2865,10 +2865,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 noApproval
                 customerName={lp.contact_name || lp.customer}
                 onHasData={setSurveyHasLocal}
+                submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}
+                approved={toolAccepted(svMetaEff, acceptances.site_survey)}
                 onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
+                onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
               />
-              <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} externalSubmit />
               <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
             </FlowStep>
           )}
