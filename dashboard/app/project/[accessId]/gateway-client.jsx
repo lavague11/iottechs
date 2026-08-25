@@ -2107,8 +2107,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           { name: "Site Survey", label: "Site Survey tool", heavy: true,
             state: toolAccepted(svMetaEff, acceptances.site_survey) ? "done" : "active",
             node: (
-              <div style={heavyCol}>
-                <div style={{ flex: 1, minHeight: 0 }}>
+              <div style={heavyCol} className="ss-tool-col">
+                <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
