@@ -356,6 +356,9 @@ function focusCamera(i){
 function zoomAnim(dir){const cv=S._cv[S.page];if(!cv)return;const cls=dir==='in'?'zin':'zout';
   cv.classList.remove('zin','zout');void cv.offsetWidth;cv.classList.add(cls);
   cv.addEventListener('animationend',function(){cv.classList.remove(cls);},{once:true});}
+// Read-only customer tapped a camera → tell the host which one so it pops the comment toast.
+function postComment(i){ if(i<0||i>=S.count)return;
+  try{ parent.postMessage({type:'iotMockupComment', project:(new URLSearchParams(location.search).get('project')||'default'), anchor:nameOf(i)}, '*'); }catch(_e){} }
 function bindSwipe(){if(!screenEl)return;
   screenEl.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;
     swipe.down=true;swipe.drag=false;swipe.x0=e.clientX;swipe.y0=e.clientY;swipe.dx=0;});
@@ -398,9 +401,12 @@ let lastTile={p:null,i:null};   // tile currently under the cursor — the targe
 function bindCanvas(canvas,page){
   canvas.addEventListener('click',e=>{if(nameEdit.style.display==='block')return;
     const h=tileAt(e,canvas,page);if(!h)return;
-    // Single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A FILLED tile
-    // does nothing on single-click — double-click fills the whole phone with that camera (1×1 view).
-    if(!S.slots[h.i]&&!IOT_RO){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}});
+    // Read-only (customer): a single tap on a camera → leave a comment tagged to it (delayed so a
+    // double-tap zoom can cancel). They can't edit anything — a comment is their only write.
+    if(IOT_RO){ clearTimeout(clickTimer); clickTimer=setTimeout(()=>postComment(h.i),220); return; }
+    // Editing: single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A
+    // FILLED tile does nothing on single-click — double-click fills the whole phone (1×1 view).
+    if(!S.slots[h.i]){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}});
   canvas.addEventListener('dblclick',e=>{clearTimeout(clickTimer);const h=tileAt(e,canvas,page);
     if(h&&h.i<S.count)focusCamera(h.i);});
   if(IOT_RO)return;                                             // no drag/drop uploads in read-only mode

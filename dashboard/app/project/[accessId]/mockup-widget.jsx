@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import SignaturePanel from "./signature-panel";
+import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
 // Embeds the full self-contained CCTV Mockup tool (public/widgets/cctv-mockup.html).
@@ -17,6 +18,7 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   const [fs, setFs] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
   const [layoutOpen, setLayoutOpen] = useState(false);       // layout dropdown open/closed
+  const [commentAnchor, setCommentAnchor] = useState(null);  // a read-only customer tapped this camera → comment toast
   const [cameras, setCameras] = useState(null);   // survey camera roster (single source of truth)
   const [frameReady, setFrameReady] = useState(false);
   const surveyDriven = !!(cameras && cameras.length);
@@ -78,6 +80,8 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
         // on the server tool-meta poll) — mirrors the survey widget's onHasData.
         if (typeof e.data.filled === "number") onHasData?.(e.data.filled > 0);
       }
+      // A read-only customer tapped a camera → open the anchored comment toast.
+      if (e.data?.type === "iotMockupComment" && e.data.project === accessId) setCommentAnchor(e.data.anchor || null);
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -217,6 +221,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           <button className="mk-parrow" disabled={stat.page >= stat.pages - 1} onClick={() => cmd({ cmd: "page", dir: 1 })}>›</button>
         </div>
       )}
+
+      {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
+      <ToolComments accessId={accessId} scope="mockup" role={view} preview={customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} />
 
       {/* Legacy per-item approval — superseded by the gateway's ToolApproveBar (noApproval). */}
       {!noApproval && (
