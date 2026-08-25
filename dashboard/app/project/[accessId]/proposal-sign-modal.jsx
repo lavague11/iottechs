@@ -75,7 +75,14 @@ export default function ProposalSignModal({
           </label>
 
           <div className="psm-actions">
-            <button type="button" className="psm-btn go" disabled={!canSign} onClick={confirm}>{busy ? "Signing…" : "Approve & Sign"}</button>
+            <button type="button" className="psm-btn go" disabled={!canSign} onClick={confirm}>
+              {busy ? "Signing…" : (
+                <>
+                  <svg className="psm-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+                  Approve &amp; Sign
+                </>
+              )}
+            </button>
             <button type="button" className="psm-clear" onClick={() => { setName(""); setAgree(false); }}>Clear</button>
             <button type="button" className="psm-btn ghost" onClick={onCancel} disabled={busy}>Cancel</button>
           </div>
@@ -95,7 +102,7 @@ const PSM_CSS = `
   font-family:var(--font);animation:psmPop .18s ease}
 @keyframes psmPop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .psm-ribbon{display:flex;align-items:center;gap:10px;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);padding:12px 18px;font-weight:600;font-size:.86rem;border-bottom:1px solid var(--dv-line,#E4E4DF)}
-.psm-tag{background:#FFC61E;color:#1f1a05;font-weight:700;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em}
+.psm-tag{background:#F5D658;color:#1f1a05;font-weight:600;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em;border:1px solid #3E6FB0}
 .psm-body{padding:20px}
 .psm-sub{font-size:.8rem;font-weight:500;color:var(--dv-meta,#787D84);margin-bottom:14px}
 .psm-row{display:flex;gap:14px;flex-wrap:wrap}
@@ -110,10 +117,11 @@ const PSM_CSS = `
 .psm-agree input{width:17px;height:17px;margin-top:1px;accent-color:var(--dv-ink,#101418);flex:0 0 auto}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
-/* The signable action — a plain, flat DocuSign-style yellow (no gradient/glow). */
-.psm-btn.go{background:#FFC61E;color:#1f1a05;font-weight:700;border:none;box-shadow:none}
-.psm-btn.go:hover{transform:none;background:#F2B90A;filter:none}
-.psm-btn.go:disabled{background:var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);cursor:not-allowed;transform:none;filter:none}
+/* The signable action — DocuSign signing-field style: soft yellow fill, blue field border. */
+.psm-btn.go{display:inline-flex;align-items:center;gap:8px;background:#F5D658;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0;box-shadow:none;padding:11px 20px}
+.psm-btn.go:hover{transform:none;background:#F2CE3E;filter:none}
+.psm-btn.go:disabled{background:var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);border-color:var(--dv-line,#E4E4DF);cursor:not-allowed;transform:none;filter:none}
+.psm-ico{flex:0 0 auto}
 .psm-btn.ghost{background:transparent;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);padding:12px 18px}
 .psm-btn.ghost:hover{transform:none;border-color:var(--dv-faint,#A1A6AC);color:var(--dv-ink,#101418)}
 .psm-btn.ghost:disabled{opacity:.5;cursor:default}

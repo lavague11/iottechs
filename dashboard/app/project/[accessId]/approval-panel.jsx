@@ -449,7 +449,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         ) : isCustomer ? (
           <div className="apv-sign-form">
             <p>Sign to authorize this agreement — same signature tool you used to accept.</p>
-            <button className="apv-btn gold sign" disabled={busy} onClick={() => setSignOpen(true)}>Sign Agreement</button>
+            <button className="apv-btn gold sign" disabled={busy} onClick={() => setSignOpen(true)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+              Sign Agreement
+            </button>
           </div>
         ) : (
           <div className="apv-await">Awaiting customer signature.</div>
@@ -704,11 +707,11 @@ const APV_CSS = `
 select.apv-input{cursor:pointer}
 .apv-btn{height:38px;padding:0 18px;border:none;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .apv-btn.gold{background:var(--dv-ink,#101418);color:#fff}
-/* Sign Agreement — the signable action gets a plain, flat DocuSign-style yellow. */
-.apv-btn.gold.sign{background:#FFC61E;color:#1f1a05;font-weight:700;border:none}
+/* Sign Agreement — DocuSign signing-field style: soft yellow fill, blue field border. */
+.apv-btn.gold.sign{display:inline-flex;align-items:center;gap:8px;background:#F5D658;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0}
 .apv-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
 .apv-btn:hover{filter:brightness(1.12)}
-.apv-btn.gold.sign:hover{background:#F2B90A;filter:none}
+.apv-btn.gold.sign:hover{background:#F2CE3E;filter:none}
 .apv-btn:disabled{opacity:.45;cursor:default}
 .apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .apv-chip-btn{height:30px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);

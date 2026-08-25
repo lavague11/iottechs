@@ -644,10 +644,21 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 <p>Accept the option{p.payload.options.length > 1 ? "(s)" : ""} you want{p.payload.options.length > 1 ? " — you can pick more than one" : ""}, request a change, or decline.</p>
                 <div className="pcv-accept-actions">
                   <button className={`pcv-select${optAccepted ? " outline" : ""}`} disabled={busy} onClick={() => choose(opt.id)}>
-                    {optAccepted ? `Remove Option ${opt.id}` : `Approve & Sign — ${money(t.grand)}`}
+                    {optAccepted ? `Remove Option ${opt.id}` : (
+                      <>
+                        <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+                        Approve &amp; Sign — {money(t.grand)}
+                      </>
+                    )}
                   </button>
-                  <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>✎ Request Change</button>
-                  <button className="pcv-btn" onClick={() => { setDeclineOpen(true); setReviseMode(false); }}>✕ Decline</button>
+                  <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>
+                    <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                    Request Change
+                  </button>
+                  <button className="pcv-btn" onClick={() => { setDeclineOpen(true); setReviseMode(false); }}>
+                    <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    Decline
+                  </button>
                 </div>
                 {declineOpen && (
                   <div className="pcv-confirm-strip">
@@ -669,7 +680,12 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         <div className="pcv-accept-dl">
           <button type="button" className="pcv-dl" disabled={dlBusy} onClick={handleDownload}
                   title="Download a PDF of this proposal (includes the mockup & site survey)">
-            {dlBusy ? "Preparing…" : "⭳ Download PDF"}
+            {dlBusy ? "Preparing…" : (
+              <>
+                <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                Download PDF
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -872,13 +888,16 @@ const PCV_CSS = `
 .pcv-accept-box p{margin:0;font-size:.8rem;color:var(--dv-meta,#787D84)}
 .pcv-accept-selected{font-size:.86rem;font-weight:600;color:var(--dv-green,#2E7D5B)}
 .pcv-select{height:44px;border:none;border-radius:9px;background:var(--dv-ink,#101418);
-  color:#fff;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
+  color:#fff;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;
+  display:inline-flex;align-items:center;justify-content:center;gap:9px}
 .pcv-select:hover{filter:brightness(1.03)}
 .pcv-select:disabled{opacity:.5;cursor:default}
 .pcv-select.outline{background:transparent;border:1px solid var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
-/* The primary "Approve & Sign" accept CTA — a plain, flat DocuSign-style yellow (no gradient/glow). */
-.pcv-accept-actions .pcv-select:not(.outline){background:#FFC61E;color:#1f1a05;padding:0 22px;font-weight:700;border:none;box-shadow:none}
-.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){background:#F2B90A;filter:none}
+/* The "Approve & Sign" CTA — DocuSign signing-field style: soft yellow fill, blue field border. */
+.pcv-accept-actions .pcv-select:not(.outline){background:#F5D658;color:#1f1a05;padding:0 22px;font-weight:600;border:2px solid #3E6FB0;box-shadow:none}
+.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){background:#F2CE3E;filter:none}
+.pcv-ico{flex:0 0 auto;display:inline-block;vertical-align:-2px}
+.pcv-btn,.pcv-dl{display:inline-flex;align-items:center;gap:6px}
 
 .pcv-actions{margin:16px 22px 0;display:flex;gap:10px}
 .pcv-actions-col{flex-direction:column;align-items:stretch}
