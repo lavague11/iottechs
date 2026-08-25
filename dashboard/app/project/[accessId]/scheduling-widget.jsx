@@ -156,7 +156,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
-    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date }).catch(() => {});   // Job Log
+    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev }).catch(() => {});   // Job Log + email invite
     setShowForm(false);
     setForm(f => ({ ...f, date: tomorrowISO(), notes:"", invitees: autoNames }));
     setSaving(false);
@@ -165,7 +165,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   function deleteEvent(id) {
     const ev = data.events.find(e => e.id === id);
     update(d => { d.events = d.events.filter(e => e.id !== id); });
-    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date }).catch(() => {});   // Job Log
+    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev }).catch(() => {});   // Job Log + cancellation email
   }
 
   function copyInvite(ev) {

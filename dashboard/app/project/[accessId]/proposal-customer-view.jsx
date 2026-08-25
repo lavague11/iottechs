@@ -344,13 +344,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
           </span>
         </button>
-        <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal">
+        <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label="Share">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-          {copied ? "Copied" : "Share"}
+          <span className="pcv-hd-lbl">{copied ? "Copied" : "Share"}</span>
         </button>
-        <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF">
+        <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF" aria-label="Download PDF">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-          {dlBusy ? "…" : "PDF"}
+          <span className="pcv-hd-lbl">{dlBusy ? "…" : "PDF"}</span>
         </button>
         <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
       </div>
@@ -871,12 +871,21 @@ const PCV_CSS = `
 .pcv-fold-hd.done{border-left-color:var(--dv-green,#2E7D5B)}
 .pcv-fold-ic{flex-shrink:0;width:30px;height:30px;border-radius:8px;background:rgba(201,169,110,.12);color:var(--dv-gold-deep,#A8842F);display:grid;place-items:center}
 .pcv-fold-hd.done .pcv-fold-ic{background:rgba(46,125,91,.08);color:var(--dv-green,#2E7D5B)}
-.pcv-fold-title{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
-.pcv-fold-chip{font-size:.68rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84);
+.pcv-fold-title{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcv-fold-chip{flex-shrink:0;white-space:nowrap;font-size:.68rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84);
   background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;padding:3px 9px}
 .pcv-fold-chip.ok{color:var(--dv-gold-deep,#A8842F);background:rgba(201,169,110,.10);border-color:rgba(201,169,110,.30)}
 .pcv-fold-chip.done{color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-color:rgba(46,125,91,.28)}
 .pcv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.72rem;color:var(--dv-faint,#A1A6AC)}
+.pcv-hd-lbl{display:inline}
+/* Narrow screens: the title + status chip + Share/PDF collided. Drop the button text (icon-only,
+   still labelled for screen readers) and let the icons hold their own so nothing overlaps. */
+@media (max-width:560px){
+  .pcv-fold-row{gap:6px}
+  .pcv-hd-lbl{display:none}
+  .pcv-hd-ic{padding:0 8px;gap:0}
+  .pcv-fold-hd{padding:11px 12px;gap:8px}
+}
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:var(--dv-paper,#F4F4F2);
   color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--dv-line,#E4E4DF)}

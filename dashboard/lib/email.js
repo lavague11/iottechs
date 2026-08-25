@@ -11,22 +11,36 @@
 //   EMAIL_FROM       "IOT TECHS <notify@yourdomain.com>" (default uses Resend's shared sender).
 //   APP_URL          absolute base for links in emails, e.g. https://yourdomain.com
 
+import { secretValue } from "./db";
+
 const ENDPOINT = "https://api.resend.com/emails";
 
+// Read config through the vault (app_secrets, Development ▸ API Keys) first, then env — same as
+// the other integrations (tracking / sms). Putting RESEND_API_KEY in the vault now enables email.
+function resendKey() {
+  return secretValue("RESEND_API_KEY");
+}
+
 export function emailEnabled() {
-  return !!process.env.RESEND_API_KEY;
+  return !!resendKey();
 }
 
 function fromAddress() {
-  return process.env.EMAIL_FROM || "IOT TECHS <onboarding@resend.dev>";
+  return secretValue("EMAIL_FROM") || "IOT TECHS <onboarding@resend.dev>";
+}
+
+function fromEmailOnly() {
+  const f = fromAddress();
+  const m = f.match(/<([^>]+)>/);
+  return (m ? m[1] : f).trim();
 }
 
 function appUrl() {
-  return (process.env.APP_URL || "").replace(/\/+$/, "");
+  return (secretValue("APP_URL") || "").replace(/\/+$/, "");
 }
 
 // Low-level send. Returns {ok,id} | {skipped:true} | {ok:false,error}. Never throws.
-export async function sendEmail({ to, subject, html, text, replyTo }) {
+export async function sendEmail({ to, subject, html, text, replyTo, attachments }) {
   const recipient = String(to || "").trim();
   if (!recipient || !recipient.includes("@")) return { ok: false, error: "no-recipient" };
   if (!emailEnabled()) {
@@ -37,7 +51,7 @@ export async function sendEmail({ to, subject, html, text, replyTo }) {
     const res = await fetch(ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${resendKey()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -47,6 +61,7 @@ export async function sendEmail({ to, subject, html, text, replyTo }) {
         html,
         text: text || undefined,
         ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(attachments?.length ? { attachments } : {}),
       }),
     });
     if (!res.ok) {
@@ -210,6 +225,106 @@ export async function emailProposalReady(accessId) {
     return await sendCustomerEmail(accessId, STAGE_EMAIL.proposal);
   } catch (e) {
     console.error(`[email:proposal] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
+// ---- Appointment invitations ------------------------------------------------
+// A booked survey/install visit emails the customer + assigned team a branded note AND a real
+// calendar (.ics) attachment so it lands in Gmail/Apple Mail as an accept/decline invite. A
+// cancellation re-sends the same event with METHOD:CANCEL so calendars drop it automatically.
+const pad2 = (n) => String(n).padStart(2, "0");
+function icsStamp(dateStr, timeStr) {
+  const [h, m] = String(timeStr || "09:00").split(":").map(Number);
+  const [y, mo, d] = String(dateStr || "2026-01-01").split("-").map(Number);
+  return `${y}${pad2(mo)}${pad2(d)}T${pad2(h || 0)}${pad2(m || 0)}00`;
+}
+const icsEsc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, "\\n");
+
+// Floating local time (no TZID) — the event shows at the hour it was booked in the reader's calendar,
+// matching how the in-app "Add to calendar" .ics behaves.
+export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail } = {}) {
+  const start = icsStamp(ev.date, ev.time);
+  const [h, m] = String(ev.time || "09:00").split(":").map(Number);
+  const [y, mo, d] = String(ev.date || "2026-01-01").split("-").map(Number);
+  const endD = new Date(y, mo - 1, d, h || 0, (m || 0) + (Number(ev.duration) || 60));
+  const end = `${endD.getFullYear()}${pad2(endD.getMonth() + 1)}${pad2(endD.getDate())}T${pad2(endD.getHours())}${pad2(endD.getMinutes())}00`;
+  const cancel = method === "CANCEL";
+  return [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//IOT TECHS//Scheduling//EN", "CALSCALE:GREGORIAN",
+    `METHOD:${method}`,
+    "BEGIN:VEVENT",
+    `UID:${ev.id || `${ev.date}${ev.time}`}@iottechs`,
+    `SEQUENCE:${cancel ? 1 : 0}`,
+    organizerEmail ? `ORGANIZER:mailto:${organizerEmail}` : null,
+    `DTSTART:${start}`, `DTEND:${end}`,
+    `SUMMARY:${icsEsc(ev.title || "IOT TECHS Visit")}`,
+    ev.location ? `LOCATION:${icsEsc(ev.location)}` : null,
+    ev.notes ? `DESCRIPTION:${icsEsc(ev.notes)}` : null,
+    `STATUS:${cancel ? "CANCELLED" : "CONFIRMED"}`,
+    "END:VEVENT", "END:VCALENDAR",
+  ].filter(Boolean).join("\r\n");
+}
+
+function appointmentWhen(ev) {
+  if (!ev?.date) return "";
+  try {
+    const day = new Date(`${ev.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+    const [h, m] = String(ev.time || "").split(":").map(Number);
+    if (Number.isNaN(h)) return day;
+    const t = new Date(2000, 0, 1, h, m || 0).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return `${day} · ${t}`;
+  } catch { return ev.date; }
+}
+
+// Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
+// assigned staff) — client-supplied emails are never trusted. Best-effort; never throws.
+export async function sendAppointmentEmails(accessId, { verb, event } = {}) {
+  try {
+    if (!event?.date) return { ok: false, error: "no-event" };
+    const { getJobByAccessId, getProjectAssignments } = await import("./db.js");
+    const p = getJobByAccessId(accessId);
+    if (!p) return { ok: false, error: "no-project" };
+    const set = new Map();
+    const add = (email, name) => {
+      const e = String(email || "").trim();
+      if (e && e.includes("@") && !set.has(e.toLowerCase())) set.set(e.toLowerCase(), { email: e, name: name || "" });
+    };
+    add(p.contact_email, p.contact_name || p.customer);                 // the customer
+    try { getProjectAssignments(accessId).forEach((a) => add(a.user_email, a.user_name)); } catch {}  // assigned team
+    const recipients = [...set.values()];
+    if (!recipients.length) return { ok: false, error: "no-recipients" };
+
+    const cancel = verb === "canceled";
+    const noun = (event.kind === "install" || /install/i.test(event.title || "")) ? "installation" : "site survey";
+    const whenLine = appointmentWhen(event);
+    const ics = buildAppointmentIcs(event, { method: cancel ? "CANCEL" : "REQUEST", organizerEmail: fromEmailOnly() });
+    const attachments = [{ filename: `iot-techs-${event.date || "visit"}.ics`, content: Buffer.from(ics, "utf8").toString("base64") }];
+    const ctaUrl = projectLink(accessId);
+    const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}` : `Your ${noun} is scheduled`;
+    const payload = {
+      heading: cancel ? "Your appointment was canceled" : `Your ${noun} is scheduled`,
+      intro: cancel ? "This appointment has been canceled. We'll be in touch to reschedule." : "Here are the details — add it to your calendar with the attached invite.",
+      lines: [
+        event.title ? `What: ${event.title}` : null,
+        whenLine ? `When: ${whenLine}` : null,
+        event.location ? `Where: ${event.location}` : null,
+        event.notes ? `Notes: ${event.notes}` : null,
+      ].filter(Boolean),
+      ctaLabel: ctaUrl ? "Open Project" : null,
+      ctaUrl,
+      footNote: "Reply to this email if you have any questions.",
+    };
+    const html = renderEmail(payload);
+    const text = plainText(payload);
+    let sent = 0;
+    for (const r of recipients) {
+      const res = await sendEmail({ to: r.email, subject, html, text, attachments });
+      if (res?.ok || res?.skipped) sent++;
+    }
+    return { ok: true, sent, recipients: recipients.length };
+  } catch (e) {
+    console.error(`[email:appointment] ${e?.message || e}`);
     return { ok: false, error: "exception" };
   }
 }

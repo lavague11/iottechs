@@ -5,7 +5,7 @@ import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyU
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
-import { emailStageAdvance } from "../../../lib/email";
+import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
 
 export async function getPreviewTokenAction(accessId, role) {
   // Preview tokens grant a role's view of a project. Scope minting by who's asking:
@@ -344,7 +344,7 @@ export async function bookSurveyDateAction(accessId, dateStr) {
 
 // Log an appointment change to the Job Log (scheduled / canceled). The scheduling tool saves via
 // client autosync (no server action), so the widget calls this alongside its save/delete.
-export async function logAppointmentAction(accessId, { verb, title, date }) {
+export async function logAppointmentAction(accessId, { verb, title, date, event } = {}) {
   const tok = await getAnyTok();
   if (!tok || !["admin", "manager", "sales", "customer"].includes(tok.role)) return { ok: false };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false };
@@ -357,6 +357,12 @@ export async function logAppointmentAction(accessId, { verb, title, date }) {
       actor: tok.name || tok.contact_name || tok.role || "—",
     });
   } catch { /* best-effort */ }
+  // Email the customer + assigned team an invite (.ics) on booking, a cancellation on delete.
+  // Recipients are resolved server-side; the client only supplies the event content.
+  try {
+    const ev = event && event.date ? event : (date ? { title, date } : null);
+    if (ev) await sendAppointmentEmails(accessId, { verb, event: ev });
+  } catch { /* email is best-effort, never blocks the save */ }
   return { ok: true };
 }
 
