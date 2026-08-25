@@ -370,11 +370,8 @@ export async function recordPaymentAction(accessId, payment) {
     source: isCustomer ? "customer" : "staff", note: payment.note,
     paidAt: payment.paidAt,   // staff-set date the money changed hands
   }, actorName(tok));
-  try {
-    const amt = "$" + (+payment.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const verb = isCustomer ? "Payment submitted" : "Payment recorded";
-    logProjectEvent(accessId, { kind: "pay", label: `${verb} — ${amt}${payment.kind ? ` · ${payment.kind}` : ""}${payment.method ? ` (${payment.method})` : ""}`, actor: actorName(tok) });
-  } catch { /* best-effort */ }
+  // Payment events are DERIVED from the payment records in the Job Log (so existing deposits show too),
+  // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, payments };
@@ -428,17 +425,18 @@ export async function voidTechSignatureAction(accessId) {
 export async function confirmPaymentAction(accessId, id) {
   const tok = await getSessionRole();
   if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can confirm payments." };
-  const before = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
   const payments = confirmProjectPayment(accessId, id);
-  try {
-    if (before) {
-      const amt = "$" + (+before.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      logProjectEvent(accessId, { kind: "pay", label: `Payment confirmed — ${amt} received${before.kind ? ` · ${before.kind}` : ""}`, actor: actorName(tok) });
-    }
-  } catch { /* best-effort */ }
+  // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, payments };
+}
+
+// The Job Log derives payment events from the payment records, so existing deposits/payments show
+// (not just ones made after logging was added). Read-gated to the people on the project.
+export async function getPaymentsForLogAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false, payments: [] };
+  return { ok: true, payments: getProjectPayments(accessId) };
 }
 
 // Reads are gated too: a project's acceptance state and its notes thread are private to the

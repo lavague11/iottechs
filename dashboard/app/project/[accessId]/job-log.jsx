@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { getNotesAction, addNoteAction, setNoteVisibilityAction, resolveNotePublicAction, getEventsAction } from "./proposal-actions";
+import { getNotesAction, addNoteAction, setNoteVisibilityAction, resolveNotePublicAction, getEventsAction, getPaymentsForLogAction } from "./proposal-actions";
 
 // The Job Log — a per-project record with two halves:
 //   • Activity: a timestamped trail — the inquiry, the milestones that carry a signature/approval
@@ -45,6 +45,7 @@ function fmtTs(s) {
   return `${day} · ${h}:${mm} ${ap}`;
 }
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Forensic events show only in the staff "Advanced" view; milestones/inquiry are in Basic too.
 const ADVANCED_KINDS = new Set(["call", "login", "view", "change", "resubmit"]);
 const SearchIco = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>;
@@ -53,6 +54,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   const isCust = role === "customer";
   const [notes, setNotes] = useState([]);
   const [events, setEvents] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [draft, setDraft] = useState("");
   const [pub, setPub] = useState(false);   // compose visibility (staff choose; customer forced public)
   const [busy, setBusy] = useState(false);
@@ -67,7 +69,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   useEffect(() => {
     let live = true;
     getNotesAction(accessId).then((r) => { if (live && r?.ok) setNotes(r.notes || []); }).catch(() => {});
-    if (!isCust) getEventsAction(accessId).then((r) => { if (live && r?.ok) setEvents(r.events || []); }).catch(() => {});
+    if (!isCust) {
+      getEventsAction(accessId).then((r) => { if (live && r?.ok) setEvents(r.events || []); }).catch(() => {});
+      getPaymentsForLogAction(accessId).then((r) => { if (live && r?.ok) setPayments(r.payments || []); }).catch(() => {});
+    }
     return () => { live = false; };
   }, [accessId, isCust]);
 
@@ -77,9 +82,22 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
     .map(([stage, v]) => ({ verb: LOG_MAP[stage]?.verb, kind: LOG_MAP[stage]?.kind, at: v?.at, by: v?.by }))
     .filter((e) => e.verb && e.at);
   const evts = events.map((e) => ({ verb: e.label, kind: e.kind, at: e.created_at, by: e.actor }));
+  // Payment events are DERIVED from the payment records (one per payment, by status) so every payment
+  // shows — including deposits recorded before event-logging existed. Cancellations are separate
+  // project_events (a canceled payment's record is gone, so it can't be derived).
+  const PAY_KIND = { deposit: "Deposit", final: "Final payment", partial: "Partial payment", other: "Payment" };
+  const payEvts = (payments || []).map((p) => {
+    const base = PAY_KIND[p.kind] || "Payment";
+    const amt = money(p.amount);
+    let verb = p.status === "pending" ? `${base} submitted — ${amt}`
+      : p.source === "customer" ? `${base} confirmed — ${amt} received`
+      : `${base} recorded — ${amt}`;
+    if (p.method) verb += ` (${p.method})`;
+    return { verb, kind: "pay", at: p.created_at, by: p.recorded_by };
+  });
   // extraEvents = derived-from-state milestones (proposal signed, change requests) that aren't in
   // stage_acceptances or project_events — so they show even for actions taken before event logging.
-  const merged = [...milestones, ...evts, ...(extraEvents || []).filter((e) => e && e.verb && e.at)]
+  const merged = [...milestones, ...evts, ...payEvts, ...(extraEvents || []).filter((e) => e && e.verb && e.at)]
     .sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const inqAt = project?.created_at || project?.date;
   const full = [...merged, ...(inqAt ? [{ verb: "Inquiry received", kind: "open", at: inqAt, by: null }] : [])];
