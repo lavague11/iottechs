@@ -1200,11 +1200,15 @@ function init() {
   if (!supCols.includes("slug")) db.exec("ALTER TABLE support_articles ADD COLUMN slug TEXT");
   // `audience` = 'customer' (the public/help library) or 'tech' (the technician support portal).
   if (!supCols.includes("audience")) db.exec("ALTER TABLE support_articles ADD COLUMN audience TEXT DEFAULT 'customer'");
-  // Seed the built-in Mobile App Setup guide once (the animated device walkthrough).
+  // Seed the built-in Mobile App Setup guide once (the animated device walkthrough)…
   if (db.prepare("SELECT COUNT(*) AS n FROM support_articles WHERE kind='guide'").get().n === 0) {
     db.prepare("INSERT INTO support_articles (title, body, category, kind, slug, pinned, author) VALUES (?,?,?,?,?,?,?)")
       .run("Mobile App Setup", JSON.stringify(MOBILE_SETUP_GUIDE), "Getting Started", "guide", "mobile-setup", 1, "IOT TECHS");
   }
+  // …and keep its body in sync with the code on every boot. It's the built-in, code-defined guide
+  // (the code is the source of truth), so edits to MOBILE_SETUP_GUIDE — new steps, store links —
+  // actually ship instead of being frozen at the first seed.
+  db.prepare("UPDATE support_articles SET body=? WHERE slug='mobile-setup' AND kind='guide'").run(JSON.stringify(MOBILE_SETUP_GUIDE));
   // Backfill: the first guide predates slugs and its URL is already in customers' hands.
   db.prepare("UPDATE support_articles SET slug='mobile-setup' WHERE kind='guide' AND (slug IS NULL OR slug='') AND title LIKE 'Mobile App Setup%'").run();
   for (const g of db.prepare("SELECT id, title FROM support_articles WHERE kind='guide' AND (slug IS NULL OR slug='')").all()) {
