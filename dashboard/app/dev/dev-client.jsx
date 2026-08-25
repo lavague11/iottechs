@@ -250,6 +250,41 @@ function TwoFactorCard({ twoFactor, onFlash }) {
   );
 }
 
+// One-click database backup — downloads a complete, consistent snapshot of the whole DB (every
+// project, proposal, signature, survey, and photo) as a single .db file. Off-site backup + the
+// snapshot you'd restore on a new server when migrating.
+function BackupCard({ onFlash }) {
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/backup");
+      if (!res.ok) { onFlash("Backup failed — try again."); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const a = document.createElement("a");
+      a.href = url; a.download = `iot-techs-backup-${stamp}.db`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      onFlash(`Backup downloaded (${(blob.size / 1048576).toFixed(1)} MB)`);
+    } catch { onFlash("Backup failed — try again."); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="kv-card">
+      <div className="kv-head">
+        <div>
+          <div className="kv-title">Database backup</div>
+          <div className="kv-sub">Download a complete, consistent snapshot of the entire database — every project, proposal, signature, survey, and photo — in one file. Your off-site backup, and the exact snapshot you'd restore on a new server.</div>
+        </div>
+        <button className="kv-addbtn" disabled={busy} onClick={download}>{busy ? "Preparing…" : "Download backup"}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [], twoFactor = {} }) {
   const [tasks, setTasks] = useState(initTasks);
   const [pending, startTx] = useTransition();
@@ -361,6 +396,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
         {/* API key vault */}
         <ApiKeysCard secrets={secrets} onFlash={flash} />
         <TwoFactorCard twoFactor={twoFactor} onFlash={flash} />
+        <BackupCard onFlash={flash} />
 
         {/* Add form */}
         {showAdd && (

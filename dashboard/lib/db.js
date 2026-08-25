@@ -2017,6 +2017,16 @@ export function dbFilePath() {
   return path.join(process.env.DB_DIR || path.join(process.cwd(), "data"), "dashboard.db");
 }
 
+// Write a clean, transactionally-consistent copy of the ENTIRE database (every table + the media
+// blobs) to destPath. VACUUM INTO is atomic and safe to run while the app is live — the copy is a
+// complete point-in-time snapshot, never a half-written file. Powers the one-click backup / the
+// Render→VPS migration export. destPath must not already exist.
+export function backupDatabaseTo(destPath) {
+  checkpointDb();   // fold the WAL in first so the snapshot is fully current
+  db.exec(`VACUUM INTO '${String(destPath).replace(/'/g, "''")}'`);
+  return destPath;
+}
+
 const decorate = (r) => ({
   ...r,
   stageLabel: stageLabel(r.stage),
