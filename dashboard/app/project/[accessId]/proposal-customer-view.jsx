@@ -334,16 +334,26 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
           + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
           Deposit" is the focus, but the customer can reopen it anytime. */}
-      <button type="button" className={`pcv-fold-hd${locked ? " done" : ""}`} onClick={toggleDoc} aria-expanded={docOpen}>
-        <span className="pcv-fold-ic">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </span>
-        <span className="pcv-fold-title">System Proposal</span>
-        <span className={`pcv-fold-chip${locked ? " done" : acceptedSet.size > 0 ? " ok" : ""}`}>
-          {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
-        </span>
-        <span className="pcv-fold-chev">{docOpen ? "▲" : "▼"}</span>
-      </button>
+      <div className="pcv-fold-row">
+        <button type="button" className={`pcv-fold-hd${locked ? " done" : ""}`} onClick={toggleDoc} aria-expanded={docOpen}>
+          <span className="pcv-fold-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </span>
+          <span className="pcv-fold-title">System Proposal</span>
+          <span className={`pcv-fold-chip${locked ? " done" : acceptedSet.size > 0 ? " ok" : ""}`}>
+            {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
+          </span>
+        </button>
+        <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+          {copied ? "Copied" : "Share"}
+        </button>
+        <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+          {dlBusy ? "…" : "PDF"}
+        </button>
+        <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
+      </div>
 
       {docOpen && (
       <div className="pcv-foldwrap">
@@ -354,17 +364,6 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           <span className="pcv-contact">(646) 396-0775 · support@iot-techs.com · www.iot-techs.com</span>
         </div>
         <div className="pcv-hd-right">
-          <div className="pcv-hd-actions">
-            <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-              {copied ? "Copied" : "Share"}
-            </button>
-            <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-              {dlBusy ? "…" : "PDF"}
-            </button>
-          </div>
-          <span className="pcv-doctag">System Proposal</span>
           <span className="pcv-pill">Security &amp; Low Voltage</span>
           <span className="pcv-hd-meta">{propDate}</span>
           <span className="pcv-hd-meta">Proposal #: {propNum}</span>
@@ -863,7 +862,9 @@ const PCV_CSS = `
 /* Fold header — collapses the whole proposal; matches the page's FlowStep tool-cards (raised row,
    1px border with a status-colored left rule, soft-tint icon, status chip, chevron). Gold while in
    progress, green once accepted+signed — same "complete = green" convention as the other cards. */
-.pcv-fold-hd{display:flex;align-items:center;gap:10px;width:100%;margin:0;background:var(--dv-raise,#FBFBFA);
+.pcv-fold-row{display:flex;align-items:center;gap:8px}
+.pcv-fold-chev-btn{flex:0 0 auto;border:none;background:none;color:var(--dv-faint,#A1A6AC);cursor:pointer;font-size:.72rem;padding:6px 4px;font-family:inherit}
+.pcv-fold-hd{display:flex;align-items:center;gap:10px;flex:1;min-width:0;margin:0;background:var(--dv-raise,#FBFBFA);
   border:1px solid var(--dv-line,#E4E4DF);border-left:3px solid var(--dv-gold,#C9A96E);border-radius:12px;padding:11px 16px;
   cursor:pointer;text-align:left;font-family:inherit;transition:background .12s}
 .pcv-fold-hd:hover{background:var(--dv-paper,#F4F4F2)}

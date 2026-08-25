@@ -2127,7 +2127,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
-            state: acceptances?.approval_deposit ? "done" : "active",
+            // Done once signed AND the deposit is recorded by the office (green); until then it's the
+            // open step (yellow). The stale acceptances.approval_deposit flag was never set.
+            state: (custFacts.proposal_signed && custFacts.deposit_recorded) ? "done" : "active",
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
@@ -2263,6 +2265,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       }
       if (pk === "ph_proposal") {
         if (f.proposal_status === "accepted" && f.proposal_signed && f.deposit_recorded) return "APPROVED";
+        if (f.deposit_submitted && !f.deposit_recorded) return "REVIEW";                                        // customer paid, office must record → blink yellow for both
         if (f.proposal_status === "sent") return "AWAITING";                                                    // customer to accept
         if (f.proposal_status === "accepted" && (!f.proposal_signed || !f.deposit_recorded)) return "AWAITING"; // sign / deposit
         if (f.proposal_status) return "WORKING";                                                                // draft / changes / declined
@@ -2279,6 +2282,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const markForState = (state) => {
       switch (state) {
         case "APPROVED": return "complete";                              // solid green — both audiences
+        case "REVIEW":   return "active";                               // blink yellow for BOTH — customer paid, office must record the deposit
         case "AWAITING": return isCust ? "active" : "complete-unread";   // customer blink-yellow · internal blink-green
         case "WORKING":  return isCust ? "todo" : "active";              // customer waits (white) · internal in-progress
         default:         return "todo";                                  // upcoming — white
