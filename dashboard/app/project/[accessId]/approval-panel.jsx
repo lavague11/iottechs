@@ -449,7 +449,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         ) : isCustomer ? (
           <div className="apv-sign-form">
             <p>Sign to authorize this agreement — same signature tool you used to accept.</p>
-            <button className="apv-btn gold" disabled={busy} onClick={() => setSignOpen(true)}>Sign Agreement</button>
+            <button className="apv-btn gold sign" disabled={busy} onClick={() => setSignOpen(true)}>Sign Agreement</button>
           </div>
         ) : (
           <div className="apv-await">Awaiting customer signature.</div>
@@ -704,8 +704,11 @@ const APV_CSS = `
 select.apv-input{cursor:pointer}
 .apv-btn{height:38px;padding:0 18px;border:none;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .apv-btn.gold{background:var(--dv-ink,#101418);color:#fff}
+/* Sign Agreement — the signable action gets the classy DocuSign-style yellow. */
+.apv-btn.gold.sign{background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;font-weight:800;border:1px solid #E7B10A;box-shadow:0 3px 14px rgba(233,193,20,.42),inset 0 1px 0 rgba(255,255,255,.45)}
 .apv-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
 .apv-btn:hover{filter:brightness(1.12)}
+.apv-btn.gold.sign:hover{filter:brightness(1.03);transform:translateY(-1px)}
 .apv-btn:disabled{opacity:.45;cursor:default}
 .apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .apv-chip-btn{height:30px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);

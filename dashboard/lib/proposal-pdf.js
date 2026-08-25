@@ -1,5 +1,5 @@
 "use client";
-import { jsPDF } from "jspdf";
+import { jsPDF, AcroFormTextField } from "jspdf";
 import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS } from "./proposal";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
@@ -420,6 +420,24 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
     doc.text("AUTHORIZED SIGNATURE", sc[0], y + 48);
+
+    // Fillable-PDF fields: while the proposal isn't signed, drop real AcroForm text fields over the
+    // name / date / signature lines so the customer can fill it in and sign right in a PDF reader.
+    const fillableBox = (x, yTop, w, h) => {
+      doc.setFillColor(250, 248, 243); doc.setDrawColor(212, 205, 191); doc.setLineWidth(0.5);
+      doc.roundedRect(x, yTop, w, h, 2, 2, "FD");
+    };
+    const addField = (name, x, yTop, w, h, fontSize) => {
+      try {
+        const fld = new AcroFormTextField();
+        fld.Rect = [x, yTop, w, h];
+        fld.fieldName = name;
+        fld.value = "";
+        fld.fontSize = fontSize || 10;
+        doc.addField(fld);
+      } catch { /* viewer/build without AcroForm — the printed box below still works by hand */ }
+    };
+
     if (accepted && p.signature_data) {
       // Drawn signature imported from the customer's on-screen acceptance.
       try { doc.addImage(p.signature_data, "PNG", sc[0], y + 50, 132, 22); } catch { /* bad data url — fall back to name */ }
@@ -435,8 +453,13 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(140, 47, 47);
       doc.text("DECLINED", sc[0], y + 64);
     } else {
-      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-      doc.text("X  ___________________________________", sc[0], y + 64);
+      // Name + Date fields (row 1, under their labels) and the Signature field (row 2).
+      fillableBox(sc[0] - 3, y + 15, (sc[1] - sc[0]) - 12, 15);
+      fillableBox(sc[1] - 3, y + 15, (sc[2] - sc[1]) - 12, 15);
+      fillableBox(sc[0] - 3, y + 51, rw * 0.5, 16);
+      addField("proposal_" + propNum + "_name_" + opt.id, sc[0], y + 16, (sc[1] - sc[0]) - 14, 13, 10);
+      addField("proposal_" + propNum + "_date_" + opt.id, sc[1], y + 16, (sc[2] - sc[1]) - 14, 13, 10);
+      addField("proposal_" + propNum + "_sign_" + opt.id, sc[0], y + 52, rw * 0.5 - 6, 14, 14);
     }
 
     if (p.created_by_name) {

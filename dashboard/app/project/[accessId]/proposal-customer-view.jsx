@@ -876,9 +876,9 @@ const PCV_CSS = `
 .pcv-select:hover{filter:brightness(1.03)}
 .pcv-select:disabled{opacity:.5;cursor:default}
 .pcv-select.outline{background:transparent;border:1px solid var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
-/* The primary "Approve & Sign" accept CTA reads as the signable action — a professional gold button. */
-.pcv-accept-actions .pcv-select:not(.outline){background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;padding:0 22px;font-weight:800;box-shadow:0 2px 10px rgba(201,169,110,.35)}
-.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){filter:brightness(1.04)}
+/* The primary "Approve & Sign" accept CTA reads as the signable action — a classy DocuSign-style yellow. */
+.pcv-accept-actions .pcv-select:not(.outline){background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;padding:0 22px;font-weight:800;border:1px solid #E7B10A;box-shadow:0 3px 14px rgba(233,193,20,.42),inset 0 1px 0 rgba(255,255,255,.45)}
+.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){filter:brightness(1.03);transform:translateY(-1px)}
 
 .pcv-actions{margin:16px 22px 0;display:flex;gap:10px}
 .pcv-actions-col{flex-direction:column;align-items:stretch}
