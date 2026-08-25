@@ -344,7 +344,7 @@ export async function bookSurveyDateAction(accessId, dateStr) {
 
 // Log an appointment change to the Job Log (scheduled / canceled). The scheduling tool saves via
 // client autosync (no server action), so the widget calls this alongside its save/delete.
-export async function logAppointmentAction(accessId, { verb, title, date, event } = {}) {
+export async function logAppointmentAction(accessId, { verb, title, date, event, inviteeEmails } = {}) {
   const tok = await getAnyTok();
   if (!tok || !["admin", "manager", "sales", "customer"].includes(tok.role)) return { ok: false };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false };
@@ -358,10 +358,15 @@ export async function logAppointmentAction(accessId, { verb, title, date, event 
     });
   } catch { /* best-effort */ }
   // Email the customer + assigned team an invite (.ics) on booking, a cancellation on delete.
-  // Recipients are resolved server-side; the client only supplies the event content.
+  // Customer + assignments are resolved server-side (trusted). A STAFF booker may also invite
+  // typed/guest emails and themselves — passed here and honored only for staff (anti-spam).
   try {
     const ev = event && event.date ? event : (date ? { title, date } : null);
-    if (ev) await sendAppointmentEmails(accessId, { verb, event: ev });
+    const staff = ["admin", "manager", "sales", "tech"].includes(tok.role);
+    if (ev) await sendAppointmentEmails(accessId, {
+      verb, event: ev,
+      extraEmails: staff ? [tok.email, ...(Array.isArray(inviteeEmails) ? inviteeEmails : [])] : [],
+    });
   } catch { /* email is best-effort, never blocks the save */ }
   return { ok: true };
 }

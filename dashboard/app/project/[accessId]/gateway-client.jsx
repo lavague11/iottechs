@@ -4379,6 +4379,9 @@ const PV_CSS = `
 .pvx .sched-invopt:hover{background:var(--bg-tint)}
 .pvx .sched-invopt-name{font-size:.84rem;font-weight:600;color:var(--ink);flex-shrink:0}
 .pvx .sched-invopt-email{font-size:.74rem;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .sched-invadd{color:var(--gold-deep,#8a6d2f)}
+.pvx .sched-invadd .sched-invopt-name{color:var(--gold-deep,#8a6d2f);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .sched-invadd svg{color:var(--gold-deep,#8a6d2f);flex-shrink:0}
 .pvx .sched-form-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .pvx .sched-cancel-btn{background:none;border:none;color:var(--muted);font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer;padding:8px 4px}
 .pvx .sched-cancel-btn:hover{color:var(--ink)}

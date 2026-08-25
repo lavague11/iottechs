@@ -156,7 +156,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
-    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev }).catch(() => {});   // Job Log + email invite
+    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + email invite
     setShowForm(false);
     setForm(f => ({ ...f, date: tomorrowISO(), notes:"", invitees: autoNames }));
     setSaving(false);
@@ -165,7 +165,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   function deleteEvent(id) {
     const ev = data.events.find(e => e.id === id);
     update(d => { d.events = d.events.filter(e => e.id !== id); });
-    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev }).catch(() => {});   // Job Log + cancellation email
+    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + cancellation email
   }
 
   function copyInvite(ev) {
@@ -194,9 +194,11 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     if (currentUser) add(currentUser.name, currentUser.email, currentUser.role, currentUser.role === "customer" ? "customer" : "staff");
     return [...byKey.values()];
   })();
+  const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
   const nameToEmail = {};
   people.forEach(p => { nameToEmail[p.name] = p.email || ""; });
-  const emailsFor = ev => (ev.invitees || []).map(n => nameToEmail[n]).filter(Boolean);
+  // An invitee is either a known person's name (→ their email) or a raw typed email (→ itself).
+  const emailsFor = ev => (ev.invitees || []).map(n => nameToEmail[n] || (isEmail(n) ? String(n).trim() : "")).filter(Boolean);
   const roleFor   = nm => (people.find(p => p.name === nm)?.role) || "";
 
   // Auto-invite set = the people actually ON THIS PROJECT (its customer + assigned team) plus
@@ -214,6 +216,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     ? people.filter(p => !form.invitees.includes(p.name) &&
         `${p.name} ${p.email} ${p.role}`.toLowerCase().includes(invSearch.trim().toLowerCase())).slice(0, 8)
     : [];
+  // Invite by email: when the box holds a valid email that isn't already invited and isn't one of
+  // the known people, offer to add it as-is (external guest).
+  const emailToAdd = (() => { const q = invSearch.trim();
+    return (isEmail(q) && !form.invitees.includes(q) && !people.some(p => (p.email || "").toLowerCase() === q.toLowerCase())) ? q : ""; })();
   const addInvitee    = nm => { setForm(f => f.invitees.includes(nm) ? f : ({ ...f, invitees: [...f.invitees, nm] })); setInvSearch(""); };
   const removeInvitee = nm => setForm(f => ({ ...f, invitees: f.invitees.filter(x => x !== nm) }));
 
@@ -274,9 +280,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
             <label className="sched-lbl">Invite Members</label>
             {/* Search first, then the invited chips sit right below it */}
             <div className="sched-invsearch">
-              <input className="sched-input" value={invSearch} placeholder=""
-                     autoComplete="off" onChange={e => setInvSearch(e.target.value)} />
-              {invMatches.length > 0 && (
+              <input className="sched-input" value={invSearch} placeholder="Search a name or type an email…"
+                     autoComplete="off" onChange={e => setInvSearch(e.target.value)}
+                     onKeyDown={e => { if (e.key === "Enter" && emailToAdd) { e.preventDefault(); addInvitee(emailToAdd); } }} />
+              {(invMatches.length > 0 || emailToAdd) && (
                 <div className="sched-invdd">
                   {invMatches.map(p => (
                     <button key={(p.email || p.name)} type="button" className="sched-invopt"
@@ -286,6 +293,14 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                       <span className={`sched-chip-role${p.role === "customer" ? " cust" : ""}`}>{p.role || "member"}</span>
                     </button>
                   ))}
+                  {emailToAdd && (
+                    <button type="button" className="sched-invopt sched-invadd"
+                            onMouseDown={e => { e.preventDefault(); addInvitee(emailToAdd); }}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
+                      <span className="sched-invopt-name">Invite {emailToAdd}</span>
+                      <span className="sched-chip-role">email</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

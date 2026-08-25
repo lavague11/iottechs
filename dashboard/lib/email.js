@@ -282,7 +282,7 @@ function appointmentWhen(ev) {
 
 // Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
 // assigned staff) — client-supplied emails are never trusted. Best-effort; never throws.
-export async function sendAppointmentEmails(accessId, { verb, event } = {}) {
+export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [] } = {}) {
   try {
     if (!event?.date) return { ok: false, error: "no-event" };
     const { getJobByAccessId, getProjectAssignments } = await import("./db.js");
@@ -295,6 +295,7 @@ export async function sendAppointmentEmails(accessId, { verb, event } = {}) {
     };
     add(p.contact_email, p.contact_name || p.customer);                 // the customer
     try { getProjectAssignments(accessId).forEach((a) => add(a.user_email, a.user_name)); } catch {}  // assigned team
+    (Array.isArray(extraEmails) ? extraEmails : []).forEach((e) => add(e));  // staff booker + typed guest invitees
     const recipients = [...set.values()];
     if (!recipients.length) return { ok: false, error: "no-recipients" };
 
