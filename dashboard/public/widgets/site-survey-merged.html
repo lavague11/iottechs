@@ -352,7 +352,12 @@
     .canvasCol{padding:0}
     .canvasWrap{margin:0 0 8px;border-width:0;border-radius:0}
     #surveyWiz .steps{padding:7px 16px 0}
-    #surveyWiz .nav{padding:9px 16px}
+    /* Let the action row wrap so Back / Awaiting approval / Unsubmit / Next never clip off the
+       right edge — the floor tabs take the first line, the buttons flow onto the next as needed. */
+    #surveyWiz .nav{padding:9px 16px;flex-wrap:wrap;gap:8px}
+    #surveyWiz .floorTabs{flex:1 1 100%;min-width:0}
+    #surveyWiz .nav .hint{flex:1 1 100%}
+    #surveyWiz .nav .b,#surveyWiz .nav .awaitTag{flex:0 0 auto}
   }
   /* Landscape phone: compact the nav so it takes as little height as possible under the map. */
   @media (max-height:540px) and (orientation:landscape){
