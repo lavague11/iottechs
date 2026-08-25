@@ -30,6 +30,14 @@ function itemNameNode(name, outdoor) {
 // as a PDF, just interactive (option tabs, expandable breakdowns, Select / Request changes).
 // Receives the server-sanitized proposal (no cost/margin — stripped before it ever reaches
 // the browser). `preview` = staff looking through the customer-view toggle → actions disabled.
+// Pretty US phone: (xxx) xxx-xxxx. Leaves anything non-standard as-is.
+const fmtPhone = (v) => {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 11 && d[0] === "1") return `(${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+  return v;
+};
+
 export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false }) {
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
@@ -347,11 +355,23 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-info-box">
         <div className="pcv-info-row">
           <div><span className="pcv-info-lbl">Prepared For</span><b>{customerName || "Client TBD"}</b></div>
-          <div><span className="pcv-info-lbl">Project Address</span><b>{customerAddress || "Address TBD"}</b></div>
+          <div><span className="pcv-info-lbl">Project Address</span>
+            {customerAddress
+              ? <a className="pcv-info-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`} target="_blank" rel="noreferrer">{customerAddress}</a>
+              : <b>Address TBD</b>}
+          </div>
         </div>
         <div className="pcv-info-row">
-          <div><span className="pcv-info-lbl">Phone</span><b>{customerPhone || "—"}</b></div>
-          <div><span className="pcv-info-lbl">Email</span><b>{customerEmail || "—"}</b></div>
+          <div><span className="pcv-info-lbl">Phone</span>
+            {customerPhone
+              ? <a className="pcv-info-link" href={`tel:${String(customerPhone).replace(/[^\d+]/g, "")}`}>{fmtPhone(customerPhone)}</a>
+              : <b>—</b>}
+          </div>
+          <div><span className="pcv-info-lbl">Email</span>
+            {customerEmail
+              ? <a className="pcv-info-link" href={`mailto:${customerEmail}`}>{customerEmail}</a>
+              : <b>—</b>}
+          </div>
         </div>
       </div>
 
@@ -439,9 +459,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
               <button key={o.id} type="button" className={`pcv-opt-card${on ? " on" : ""}`} style={{ "--oc": oc }} onClick={() => setViewingOpt(o.id)}>
                 <span className="pcv-opt-badge2">{o.id}</span>
                 <span className="pcv-opt-info">
+                  <span className="pcv-opt-optlbl">Option {o.id}{on ? " · Viewing" : ""}</span>
                   <span className="pcv-opt-nm">{o.name}
-                    {acceptedSet.has(o.id) && <span className="pcv-opt-chk">✓ Accepted</span>}
-                    {Object.prototype.hasOwnProperty.call(declinedMap, o.id) && <span className="pcv-opt-chk dec">✕ Declined</span>}
+                    {acceptedSet.has(o.id) && <span className="pcv-opt-chk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Accepted</span>}
+                    {Object.prototype.hasOwnProperty.call(declinedMap, o.id) && <span className="pcv-opt-chk dec"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>Declined</span>}
                   </span>
                   <span className="pcv-opt-tot">{money(ot.grand)}</span>
                 </span>
@@ -762,6 +783,8 @@ const PCV_CSS = `
 .pcv-info-row div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .pcv-info-row b{font-size:.82rem;color:var(--dv-ink,#101418);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-info-lbl{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.pcv-info-link{font-size:.82rem;font-weight:600;color:var(--dv-blue,#3E6C9E);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pcv-info-link:hover{text-decoration:underline}
 /* Your System Layout — floor plan(s) with cameras + mockup photos */
 .pcv-layout{margin:16px 22px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden;background:#fff}
 .pcv-layout-hd{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--dv-raise,#FBFBFA);border:none;cursor:pointer;font-family:inherit;text-align:left}
@@ -798,8 +821,9 @@ const PCV_CSS = `
 .pcv-opt-badge2{width:30px;height:30px;flex-shrink:0;border-radius:8px;background:var(--oc);color:#fff;
   display:flex;align-items:center;justify-content:center;font-size:.92rem;font-weight:600}
 .pcv-opt-info{display:flex;flex-direction:column;gap:1px;min-width:0;text-align:left}
+.pcv-opt-optlbl{font-size:.56rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--oc)}
 .pcv-opt-nm{font-size:.8rem;font-weight:600;color:var(--dv-ink,#101418);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pcv-opt-chk{font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
+.pcv-opt-chk{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
 .pcv-opt-tot{font-size:.86rem;font-weight:600;color:var(--oc)}
 
 .pcv-section-hd{margin:18px 22px 0;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;
