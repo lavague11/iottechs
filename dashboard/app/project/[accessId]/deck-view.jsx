@@ -433,7 +433,7 @@ const CSS = `
 .dv-code{font-size:11px;letter-spacing:.09em;color:var(--dv-meta);padding:5px 8px;border:1px solid var(--dv-line);border-radius:7px}
 .dv-title{font-size:23px;font-weight:600;letter-spacing:-.028em;margin:0}
 .dv-chev{color:var(--dv-faint);transition:transform .34s var(--dv-e)}.dv-chev.up{transform:rotate(180deg);color:var(--dv-ink)}
-.dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
 .dv-chip.live{background:#E9F3ED;color:var(--dv-green)}
 /* Clickable "your next step" chip — draws a gentle pulse so the customer notices the one action owed. */
 .dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
@@ -598,5 +598,13 @@ const CSS = `
 @keyframes dvrise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
 @media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-pane-head{padding:20px 16px 14px}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}}
+/* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
+@media (max-width:560px){
+  .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
+  .dv-cust-in{margin:12px 14px 0;padding:16px;grid-template-columns:1fr;gap:14px}
+  .dv-field dd{font-size:14px}
+  .dv-cust-actions{flex-wrap:nowrap;gap:6px;justify-content:flex-start;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dv-cust-actions .dv-ico{width:34px;flex:0 0 auto}
+}
 @media (prefers-reduced-motion:reduce){.dv-shell *{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 `;

@@ -35,6 +35,6 @@ services:
       - key: APP_URL
         sync: false          # your live URL, e.g. https://yourdomain.com — used in email links
       - key: EMAIL_FROM
-        value: IOT TECHS <onboarding@resend.dev>   # swap to your verified domain sender once live
+        value: IOT TECHS <notify@send.iot-techs.com>   # verified Resend sending domain (send.iot-techs.com)
       - key: RESEND_API_KEY
         sync: false          # set in the dashboard (secret) — leave unset to keep email disabled

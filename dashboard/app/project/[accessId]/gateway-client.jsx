@@ -4403,6 +4403,17 @@ const PV_CSS = `
 .pvx .sched-ev-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .pvx .sched-ev-row{display:flex;align-items:flex-start;gap:8px}
 .pvx .sched-ev-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:.95rem;color:var(--ink);flex:1;line-height:1.3}
+/* Phones: keep the Date/Time/Duration row from overflowing, and give the event title its own line
+   so it stops wrapping into a cramped column beside the action icons. */
+@media (max-width:560px){
+  .pvx .pv-sched-modal{padding:18px 15px 15px;max-height:92vh}
+  .pvx .sched-row-3{grid-template-columns:1fr 1fr}
+  .pvx .sched-event{padding:12px;gap:10px}
+  .pvx .sched-ev-tile{width:44px;height:48px}
+  .pvx .sched-ev-row{flex-wrap:wrap}
+  .pvx .sched-ev-title{flex:1 1 100%}
+  .pvx .sched-ev-acts{margin-left:auto}
+}
 .pvx .sched-ev-acts{display:flex;gap:4px;flex-shrink:0}
 .pvx .sched-ev-ico{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer;font-family:inherit;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.12s}
 .pvx .sched-ev-ico:hover{border-color:var(--gold);color:var(--gold-deep)}
