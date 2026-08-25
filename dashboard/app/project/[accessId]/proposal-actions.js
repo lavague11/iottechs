@@ -649,6 +649,28 @@ export async function getSurveyNotesAction(accessId) {
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { notes: [] };
   return { notes: getScopedNotes(accessId, "survey") };
 }
+// Generalized tap-to-comment: a read-only customer taps an item on a tool (survey / mockup / portal)
+// and leaves a comment TAGGED to that item (anchor, e.g. "Camera 3"). Staff see the thread. Customers
+// still can't edit anything — a comment is their only write.
+const NOTE_SCOPES = new Set(["survey", "mockup", "portal"]);
+export async function addToolNoteAction(accessId, scope, anchor, body) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const text = String(body || "").trim();
+  if (!text) return { error: "Write a comment first." };
+  const sc = NOTE_SCOPES.has(String(scope)) ? String(scope) : "general";
+  const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: text, scope: sc, anchor: anchor || null });
+  await revalidate(accessId);
+  return { ok: true, notes };
+}
+export async function getToolNotesAction(accessId, scope) {
+  const tok = await getSessionRole();
+  if (!tok) return { notes: [] };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { notes: [] };
+  const sc = NOTE_SCOPES.has(String(scope)) ? String(scope) : "general";
+  return { notes: getScopedNotes(accessId, sc) };
+}
 export async function setPocAction(accessId, { name, phone }) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired — unlock the project again." };

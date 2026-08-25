@@ -1063,6 +1063,9 @@ function init() {
   // A tech/sales rep can't publish directly — they REQUEST it (pending_public=1) and an admin or
   // manager approves. Admin/manager set public straight away.
   if (!noteCols.includes("pending_public")) db.exec("ALTER TABLE project_notes ADD COLUMN pending_public INTEGER DEFAULT 0");
+  // `anchor` tags a comment to the specific ITEM the customer tapped (e.g. "Camera 3", "Front Door")
+  // within a scope, so tap-to-comment threads read against the thing they're about.
+  if (!noteCols.includes("anchor")) db.exec("ALTER TABLE project_notes ADD COLUMN anchor TEXT");
 
   // ---- Job Log events ----  append-only activity beyond stage acceptances (calls placed, etc.).
   db.exec(`
@@ -4935,11 +4938,11 @@ export function getScopedNotes(accessId, scope) {
   return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? AND COALESCE(scope,'general')=? ORDER BY id DESC LIMIT 100")
     .all(String(accessId), String(scope)).map((r) => ({ ...r }));
 }
-export function addProjectNote(accessId, { role, name, body, scope, isPublic }) {
+export function addProjectNote(accessId, { role, name, body, scope, anchor, isPublic }) {
   // A customer's note is always public; staff choose (default internal).
   const pub = role === "customer" ? 1 : (isPublic ? 1 : 0);
-  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body, scope, public) VALUES (?,?,?,?,?,?)")
-    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20), pub);
+  db.prepare("INSERT INTO project_notes (project_access_id, author_role, author_name, body, scope, anchor, public) VALUES (?,?,?,?,?,?,?)")
+    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20), anchor ? String(anchor).slice(0, 80) : null, pub);
   return scope ? getScopedNotes(accessId, scope) : getProjectNotes(accessId);
 }
 // Set a note public/internal outright (admin/manager). Always clears any pending request.
