@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "next start",
+    "start": "TZ=America/New_York next start",
     "start:local": "next start -p 3100"
   },
   "dependencies": {
