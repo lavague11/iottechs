@@ -422,7 +422,7 @@ function SystemPicker({ projects = [], onContinue, onBack, onUnlock, projectRef 
   // Nothing to show and an unlock path available → ask for the project ID + PIN. This is the
   // public-link case: the steps are open to anyone, but the QR needs the project's credentials.
   if (withQr.length === 0 && onUnlock) {
-    return <QrUnlock projectRef={projectRef} onUnlock={onUnlock} onFound={(p) => { setFound([p]); setSel(p.access_id); }} onBack={onBack} />;
+    return <QrUnlock projectRef={projectRef} onUnlock={onUnlock} onFound={(p) => { setFound([p]); setSel(p.access_id); }} onBack={onBack} onContinue={onContinue} />;
   }
 
   if (withQr.length === 0) {
@@ -477,7 +477,7 @@ function SystemPicker({ projects = [], onContinue, onBack, onUnlock, projectRef 
 // Full-screen QR viewer: big code, download, and an X to close. Used from the guide's system picker.
 // Project ID + PIN gate for the QR on the public guide. Same credentials as the project page —
 // this doesn't create a new way in, it just asks for the existing one at the point of need.
-function QrUnlock({ projectRef, onUnlock, onFound, onBack }) {
+function QrUnlock({ projectRef, onUnlock, onFound, onBack, onContinue }) {
   const [ref, setRef]   = useState(projectRef || "");
   const [pin, setPin]   = useState("");
   const [busy, setBusy] = useState(false);
@@ -503,7 +503,7 @@ function QrUnlock({ projectRef, onUnlock, onFound, onBack }) {
   return (
     <div className="gw-qrhelp">
       <h2 className="gw-ask-q">Find your system</h2>
-      <p className="gw-ask-sub">Enter your Project ID and PIN to pull up your QR code. They’re on your welcome card.</p>
+      <p className="gw-ask-sub">Enter your Project ID and PIN to pull up your QR code — they’re on your welcome card. Don’t have it handy? You can skip this and add your system in the app later.</p>
       <form className="gw-unlock" onSubmit={submit}>
         <input className="gw-unlock-in" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Project ID (or last 4)" autoComplete="off" autoFocus={!projectRef} />
         <input className="gw-unlock-in" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN" inputMode="numeric" autoComplete="off" autoFocus={!!projectRef} />
@@ -513,6 +513,9 @@ function QrUnlock({ projectRef, onUnlock, onFound, onBack }) {
           <button type="submit" className="gw-next" disabled={busy || !ref.trim() || !pin.trim()}>{busy ? "Checking…" : "Show my QR →"}</button>
         </div>
       </form>
+      {onContinue && (
+        <button type="button" className="gw-skip" onClick={() => onContinue(null)}>Skip — I don’t have my QR code</button>
+      )}
     </div>
   );
 }
@@ -1025,6 +1028,8 @@ const CSS = `
 .gw-back:hover:not(:disabled){border-color:#C9A96E;color:#b08f4f}
 .gw-back:disabled{opacity:.4;cursor:default}
 .gw-next{background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;color:#fff;box-shadow:0 10px 24px -10px rgba(176,143,79,.7)}
+.gw-skip{display:block;margin:16px auto 0;background:none;border:none;color:#7a8494;font-size:.82rem;font-weight:600;text-decoration:underline;cursor:pointer;font-family:inherit}
+.gw-skip:hover{color:#0e1320}
 .gw-next:hover{filter:brightness(1.06);transform:translateY(-1px)}
 /* Last step: Replay sits to the left of Finish. */
 .gw-foot-end{display:flex;align-items:center;gap:9px}
