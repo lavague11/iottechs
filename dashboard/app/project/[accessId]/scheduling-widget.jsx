@@ -168,13 +168,13 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     setSaving(true);
     if (editingId != null) {
       // Reschedule / edit an existing appointment in place — then re-send an updated invite so the
-      // customer's calendar and everyone's inbox reflect the change.
-      let ev = null;
-      update(d => { const e = d.events.find(x => x.id === editingId); if (e) { Object.assign(e, form); ev = { ...e }; } });
-      if (ev) {
-        onBooked?.(ev.date);
-        logAppointmentAction(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
-      }
+      // customer's calendar and everyone's inbox reflect the change. Build the merged event
+      // SYNCHRONOUSLY (the update() setter runs async, so we can't read it back out of the callback).
+      const existing = data.events.find(x => x.id === editingId) || {};
+      const ev = { ...existing, ...form, id: editingId };
+      update(d => { const e = d.events.find(x => x.id === editingId); if (e) Object.assign(e, form); });
+      onBooked?.(ev.date);
+      logAppointmentAction(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
       closeForm();
       setSaving(false);
       return;
