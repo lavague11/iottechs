@@ -100,7 +100,11 @@ const Ico = {
   x:      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   mail:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
   bell:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  edit:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
 };
+
+// Appointment types — quick-fill chips; the title stays freely typeable.
+const APPT_TYPES = ["Installation", "Consultation", "Service Call", "Site Survey", "Upgrade", "Repair", "Meeting"];
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
@@ -123,7 +127,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   // "2503 Jay Pl — Site Survey" / "… — Installation". Visit type follows the appointment kind so an
   // install booking never mislabels itself as a survey. Falls back to the caller's default.
   const visitType = apptKind === "install" ? "Installation" : "Site Survey";
-  const streetTitle = project?.address ? `${String(project.address).split(",")[0].trim()} — ${visitType}` : defaultTitle;
+  const streetPrefix = project?.address ? String(project.address).split(",")[0].trim() : "IOT TECHS";
+  const streetTitle = project?.address ? `${streetPrefix} — ${visitType}` : defaultTitle;
+  // Quick-fill the title with a chosen appointment type, keeping the property prefix.
+  const applyType = (type) => setForm(f => ({ ...f, title: `${streetPrefix} — ${type}` }));
   const [form, setForm]         = useState({
     title: streetTitle, date:"", time:"10:00",
     duration:"60", location: project?.address||"", notes:"", invitees:[],
@@ -131,6 +138,9 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   const [saving, setSaving]     = useState(false);
   const [copied, setCopied]     = useState(null);
   const [sendState, setSendState] = useState({});   // `${eventId}:${verb}` → "busy" | "sent" | "err"
+  const [editingId, setEditingId] = useState(null); // event id being edited (reschedule) vs. null = new
+  const [sendMenu, setSendMenu]   = useState(null);  // event id whose Send menu is open
+  const [confirmCancel, setConfirmCancel] = useState(false);  // "Are you sure?" inside the edit form
 
   // Default a new event's date to tomorrow (client-only to avoid hydration mismatch).
   useEffect(() => {
@@ -156,19 +166,42 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   function saveEvent() {
     if (!form.date) return;
     setSaving(true);
+    if (editingId != null) {
+      // Reschedule / edit an existing appointment in place — then re-send an updated invite so the
+      // customer's calendar and everyone's inbox reflect the change.
+      let ev = null;
+      update(d => { const e = d.events.find(x => x.id === editingId); if (e) { Object.assign(e, form); ev = { ...e }; } });
+      if (ev) {
+        onBooked?.(ev.date);
+        logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
+      }
+      closeForm();
+      setSaving(false);
+      return;
+    }
     const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
     logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + email invite
-    setShowForm(false);
-    setForm(f => ({ ...f, date: tomorrowISO(), notes:"", invitees: autoNames }));
+    closeForm();
     setSaving(false);
+  }
+
+  function startEdit(ev) {
+    setForm({ title: ev.title || streetTitle, date: ev.date || "", time: ev.time || "10:00",
+      duration: ev.duration || "60", location: ev.location || project?.address || "", notes: ev.notes || "", invitees: ev.invitees || [] });
+    setEditingId(ev.id); setConfirmCancel(false); setShowForm(true);
+  }
+  function closeForm() {
+    setShowForm(false); setEditingId(null); setConfirmCancel(false);
+    setForm(f => ({ ...f, title: streetTitle, date: tomorrowISO(), notes: "", invitees: autoNames }));
   }
 
   function deleteEvent(id) {
     const ev = data.events.find(e => e.id === id);
     update(d => { d.events = d.events.filter(e => e.id !== id); });
     if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + cancellation email
+    if (editingId === id) closeForm();
   }
 
   function copyInvite(ev) {
@@ -269,7 +302,12 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
         <div className="sched-form">
           <div className="sched-row">
             <label className="sched-lbl">Event Title</label>
-            <input className="sched-input" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="IOT TECHS — Site Survey" />
+            <input className="sched-input" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Type anything, or pick a type below" />
+            <div className="sched-types">
+              {APPT_TYPES.map(t => (
+                <button type="button" key={t} className={`sched-type${form.title.endsWith(`— ${t}`) ? " on" : ""}`} onClick={() => applyType(t)}>{t}</button>
+              ))}
+            </div>
           </div>
           <div className="sched-row sched-row-3">
             <div>
@@ -343,8 +381,17 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
               onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="" />
           </div>
           <div className="sched-form-acts">
-            <button type="button" className="sched-cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
-            {form.date && (
+            <button type="button" className="sched-cancel-btn" onClick={closeForm}>{editingId != null ? "Close" : "Cancel"}</button>
+            {editingId != null && (
+              confirmCancel
+                ? <span className="sched-cancel-confirm">
+                    <span className="sched-cancel-q">Cancel this appointment?</span>
+                    <button type="button" className="sched-cancel-yes" onClick={() => deleteEvent(editingId)}>Yes, cancel</button>
+                    <button type="button" className="sched-cancel-no" onClick={() => setConfirmCancel(false)}>No</button>
+                  </span>
+                : <button type="button" className="sched-cancel-appt" onClick={() => setConfirmCancel(true)}>Cancel appointment</button>
+            )}
+            {form.date && !confirmCancel && (
               <div className="sched-cal-group">
                 <span className="sched-cal-lbl">Add to calendar</span>
                 <a className="sched-cal-ico" title="Google Calendar" href={gcalUrl(form, form.invitees.map(n=>nameToEmail[n]).filter(Boolean))} target="_blank" rel="noopener noreferrer">{Ico.gcal}</a>
@@ -352,7 +399,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
               </div>
             )}
             <button className="sched-save-btn" disabled={!form.date||saving} onClick={saveEvent}>
-              {saving?"Saving…":"Save Event"}
+              {saving ? "Saving…" : editingId != null ? "Update" : "Save Event"}
             </button>
           </div>
         </div>
@@ -374,19 +421,27 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                   <div className="sched-ev-row">
                     <span className="sched-ev-title">{ev.title}</span>
                     <div className="sched-ev-acts">
-                      {ev.location && <a className="sched-ev-ico" href={mapsDir(ev.location)} target="_blank" rel="noopener noreferrer" title="Get directions">{Ico.dir}</a>}
                       <a className="sched-ev-ico" href={gcalUrl(ev, emailsFor(ev))} target="_blank" rel="noopener noreferrer" title="Add to Google Calendar">{Ico.gcal}</a>
                       <button className="sched-ev-ico" onClick={()=>downloadIcs(ev)} title="Add to Apple / iCloud Calendar">{Ico.apple}</button>
-                      <button className="sched-ev-ico" onClick={()=>copyInvite(ev)} title="Copy details">{copied===ev.id ? Ico.check : Ico.copy}</button>
-                      {!isReadOnly && <button className="sched-ev-ico" disabled={sendState[`${ev.id}:scheduled`]==="busy"} onClick={()=>sendAppt(ev,"scheduled")} title="Email the invitation now">{sendState[`${ev.id}:scheduled`]==="sent" ? Ico.check : Ico.mail}</button>}
-                      {!isReadOnly && <button className="sched-ev-ico" disabled={sendState[`${ev.id}:reminder`]==="busy"} onClick={()=>sendAppt(ev,"reminder")} title="Send a reminder now">{sendState[`${ev.id}:reminder`]==="sent" ? Ico.check : Ico.bell}</button>}
-                      {!isReadOnly && <button className="sched-ev-ico sched-ev-del" onClick={()=>deleteEvent(ev.id)} title="Remove">{Ico.x}</button>}
+                      {!isReadOnly && (
+                        <span className="sched-send-wrap">
+                          <button className="sched-ev-ico" disabled={sendState[`${ev.id}:scheduled`]==="busy"||sendState[`${ev.id}:reminder`]==="busy"}
+                            onClick={()=>setSendMenu(m => m===ev.id ? null : ev.id)} title="Send email">
+                            {(sendState[`${ev.id}:scheduled`]==="sent"||sendState[`${ev.id}:reminder`]==="sent") ? Ico.check : Ico.mail}
+                          </button>
+                          {sendMenu===ev.id && (
+                            <span className="sched-send-menu">
+                              <button type="button" onClick={()=>{ setSendMenu(null); sendAppt(ev,"scheduled"); }}>Send invitation</button>
+                              <button type="button" onClick={()=>{ setSendMenu(null); sendAppt(ev,"reminder"); }}>Send reminder</button>
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {!isReadOnly && <button className="sched-ev-ico" onClick={()=>startEdit(ev)} title="Edit / reschedule">{Ico.edit}</button>}
                     </div>
                   </div>
                   <div className="sched-ev-line">{Ico.clock}<span>{fmtDate(ev.date)} · {timeRange(ev.time, ev.duration)}</span></div>
-                  {ev.location && <div className="sched-ev-line">{Ico.pin}<span>{ev.location}</span>
-                    <a className="sched-ev-dir" href={mapsDir(ev.location)} target="_blank" rel="noopener noreferrer">{Ico.dir} Directions</a>
-                  </div>}
+                  {ev.location && <div className="sched-ev-line">{Ico.pin}<a className="sched-ev-addr" href={mapsDir(ev.location)} target="_blank" rel="noopener noreferrer">{ev.location}</a></div>}
                   {ev.invitees?.length > 0 && <div className="sched-ev-line">{Ico.people}<span>{ev.invitees.join(", ")}</span></div>}
                   {ev.notes && <div className="sched-ev-notes">{ev.notes}</div>}
                 </div>

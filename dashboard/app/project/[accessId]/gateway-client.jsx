@@ -2366,9 +2366,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       name: lp.customer,
       statusText: stageShortLabel(barMarker),
       fields: [
-        lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "" },
-        lp.address && { k: "Job site", v: lp.address },
-        lp.contact_email && { k: "Email", v: lp.contact_email },
+        lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null },
+        lp.address && { k: "Job site", v: lp.address, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lp.address)}` },
+        lp.contact_email && { k: "Email", v: lp.contact_email, href: `mailto:${lp.contact_email}` },
       ].filter(Boolean),
       actions: [
         lp.contact_phone && { label: "Call", icon: DVI.call, href: `tel:${lp.contact_phone}`,
@@ -4406,6 +4406,26 @@ const PV_CSS = `
 .pvx .sched-ev-acts{display:flex;gap:4px;flex-shrink:0}
 .pvx .sched-ev-ico{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer;font-family:inherit;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.12s}
 .pvx .sched-ev-ico:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-ev-addr{color:var(--accent);text-decoration:none}
+.pvx .sched-ev-addr:hover{text-decoration:underline}
+/* Send-email split button: one icon opens a tiny Invitation / Reminder menu */
+.pvx .sched-send-wrap{position:relative;display:inline-flex}
+.pvx .sched-send-menu{position:absolute;z-index:40;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 14px 40px rgba(11,15,26,.16);overflow:hidden;min-width:150px;display:flex;flex-direction:column}
+.pvx .sched-send-menu button{text-align:left;border:none;background:#fff;padding:9px 13px;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:600;color:var(--ink);white-space:nowrap;border-bottom:1px solid var(--line)}
+.pvx .sched-send-menu button:last-child{border-bottom:none}
+.pvx .sched-send-menu button:hover{background:var(--bg-tint)}
+/* Appointment-type quick chips under the title */
+.pvx .sched-types{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pvx .sched-type{border:1px solid var(--line);border-radius:100px;background:#fff;padding:4px 11px;font-size:.74rem;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:.12s}
+.pvx .sched-type:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-type.on{background:var(--ink);border-color:var(--ink);color:#fff}
+/* Cancel-appointment (inside the edit form) */
+.pvx .sched-cancel-appt{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--red);font-size:.78rem;font-weight:600;padding:8px 12px;cursor:pointer;font-family:inherit}
+.pvx .sched-cancel-appt:hover{border-color:var(--red);background:var(--red-soft)}
+.pvx .sched-cancel-confirm{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pvx .sched-cancel-q{font-size:.78rem;font-weight:600;color:var(--ink)}
+.pvx .sched-cancel-yes{border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;font-size:.76rem;font-weight:700;padding:7px 12px;cursor:pointer;font-family:inherit}
+.pvx .sched-cancel-no{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);font-size:.76rem;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
 .pvx .sched-ev-del:hover{border-color:var(--red)!important;color:var(--red)!important;background:var(--red-soft)!important}
 .pvx .sched-ev-line{display:flex;align-items:center;gap:7px;font-size:.8rem;color:var(--muted)}
 .pvx .sched-ev-line svg{flex-shrink:0;color:var(--gold-deep)}

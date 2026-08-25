@@ -246,20 +246,25 @@ const icsEsc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\
 
 // Floating local time (no TZID) — the event shows at the hour it was booked in the reader's calendar,
 // matching how the in-app "Add to calendar" .ics behaves.
-export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail } = {}) {
+export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, attendees = [] } = {}) {
   const start = icsStamp(ev.date, ev.time);
   const [h, m] = String(ev.time || "09:00").split(":").map(Number);
   const [y, mo, d] = String(ev.date || "2026-01-01").split("-").map(Number);
   const endD = new Date(y, mo - 1, d, h || 0, (m || 0) + (Number(ev.duration) || 60));
   const end = `${endD.getFullYear()}${pad2(endD.getMonth() + 1)}${pad2(endD.getDate())}T${pad2(endD.getHours())}${pad2(endD.getMinutes())}00`;
   const cancel = method === "CANCEL";
+  // ATTENDEE lines with RSVP=TRUE are what make Gmail/Apple treat this as an INVITE (auto-add +
+  // Yes/Maybe/No buttons) rather than a plain "add to calendar" attachment.
+  const attLines = (attendees || []).filter((a) => a?.email).map((a) =>
+    `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE${a.name ? `;CN=${icsEsc(a.name)}` : ""}:mailto:${a.email}`);
   return [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//IOT TECHS//Scheduling//EN", "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",
     `UID:${ev.id || `${ev.date}${ev.time}`}@iottechs`,
     `SEQUENCE:${cancel ? 1 : 0}`,
-    organizerEmail ? `ORGANIZER:mailto:${organizerEmail}` : null,
+    organizerEmail ? `ORGANIZER;CN=IOT TECHS:mailto:${organizerEmail}` : null,
+    ...attLines,
     `DTSTART:${start}`, `DTEND:${end}`,
     `SUMMARY:${icsEsc(ev.title || "IOT TECHS Visit")}`,
     ev.location ? `LOCATION:${icsEsc(ev.location)}` : null,
@@ -303,8 +308,10 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const reminder = verb === "reminder";
     const noun = (event.kind === "install" || /install/i.test(event.title || "")) ? "installation" : "site survey";
     const whenLine = appointmentWhen(event);
-    const ics = buildAppointmentIcs(event, { method: cancel ? "CANCEL" : "REQUEST", organizerEmail: fromEmailOnly() });
-    const attachments = [{ filename: `iot-techs-${event.date || "visit"}.ics`, content: Buffer.from(ics, "utf8").toString("base64") }];
+    const method = cancel ? "CANCEL" : "REQUEST";
+    const ics = buildAppointmentIcs(event, { method, organizerEmail: fromEmailOnly(), attendees: recipients });
+    // content_type carries the METHOD so Gmail/Apple render it as an accept/decline invite.
+    const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);
     const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
       : reminder ? `Reminder: your ${noun} is tomorrow`
@@ -326,8 +333,9 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     };
     const html = renderEmail(payload);
     const text = plainText(payload);
-    let sent = 0;
+    let sent = 0, i = 0;
     for (const r of recipients) {
+      if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // stay under Resend's ~2/sec rate limit so no recipient gets dropped
       const res = await sendEmail({ to: r.email, subject, html, text, attachments });
       if (res?.ok || res?.skipped) sent++;
     }

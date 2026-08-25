@@ -278,7 +278,10 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             ) : (
               <>
                 {(customer.fields || []).map((f, i) => (
-                  <div className="dv-field" key={i}><dt>{f.k}</dt><dd>{f.v}{f.sub && <small>{f.sub}</small>}</dd></div>
+                  <div className="dv-field" key={i}><dt>{f.k}</dt><dd>
+                    {f.href ? <a className="dv-flink" href={f.href} target={f.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">{f.v}</a> : f.v}
+                    {f.sub && (f.subHref ? <small><a className="dv-flink" href={f.subHref}>{f.sub}</a></small> : <small>{f.sub}</small>)}
+                  </dd></div>
                 ))}
                 {(customer.actions?.length > 0 || customer.canEdit) && (
                   <div className="dv-cust-actions">
@@ -462,6 +465,8 @@ const CSS = `
 .dv-field dt{font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-bottom:6px}
 .dv-field dd{font-size:13.5px;color:var(--dv-ink);line-height:1.5}
 .dv-field dd small{display:block;color:var(--dv-meta);font-size:12px;margin-top:2px}
+.dv-flink{color:inherit;text-decoration:none;cursor:pointer;transition:color .12s}
+.dv-flink:hover{color:var(--dv-gold-deep,#A8842F);text-decoration:underline}
 .dv-cust-actions{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1;padding-top:4px;border-top:1px solid var(--dv-line-soft)}
 .dv-mini{display:inline-flex;align-items:center;gap:7px;height:31px;padding:0 12px;border-radius:9px;border:1px solid var(--dv-line);font-size:12.5px;font-weight:500;color:var(--dv-ink-soft);background:var(--dv-paper);text-decoration:none}
 .dv-mini:hover{border-color:var(--dv-ink);color:var(--dv-ink)}
