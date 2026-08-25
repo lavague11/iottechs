@@ -6,7 +6,7 @@
 // Camera Mounting $20, Camera Programming $20, Camera Waterproofing $20.
 
 export const OPTION_LETTERS = ["A", "B", "C"];
-export const OPTION_NAMES = ["Premium Security", "Recommended", "Premium"];
+export const OPTION_NAMES = ["Premium Security", "Alternative Option", "Premium"];
 
 export const PROPOSAL_SERVICES = [
   { key: "camera", label: "Security Cameras" },
