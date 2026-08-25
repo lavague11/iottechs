@@ -1788,6 +1788,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: "Proposal" };
     if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: "Approval & Deposit" };
     if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: "Approval & Deposit" };
+    if (f.deposit_recorded && custStage === "schedule")                           return { label: "Scheduling your installation", target: "schedule", spot: null, muted: true };
     if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
@@ -1804,6 +1805,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status === "changes_requested")  return { label: "Revise proposal",           target: "proposal",         spot: "Proposal" };
     if (f.proposal_status === "accepted" && !f.proposal_signed)  return { label: "Awaiting signature", target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
+    if (f.deposit_recorded && custStage === "schedule")          return { label: "Schedule install",   target: "schedule",         spot: null };
     return null;
   }
   const headerAction = !acceptLoaded ? null
