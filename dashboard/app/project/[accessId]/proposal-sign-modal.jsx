@@ -95,7 +95,7 @@ const PSM_CSS = `
   font-family:var(--font);animation:psmPop .18s ease}
 @keyframes psmPop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .psm-ribbon{display:flex;align-items:center;gap:10px;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);padding:12px 18px;font-weight:600;font-size:.86rem;border-bottom:1px solid var(--dv-line,#E4E4DF)}
-.psm-tag{background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;font-weight:800;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em;box-shadow:0 1px 4px rgba(233,193,20,.4)}
+.psm-tag{background:#FFC61E;color:#1f1a05;font-weight:700;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em}
 .psm-body{padding:20px}
 .psm-sub{font-size:.8rem;font-weight:500;color:var(--dv-meta,#787D84);margin-bottom:14px}
 .psm-row{display:flex;gap:14px;flex-wrap:wrap}
@@ -110,10 +110,10 @@ const PSM_CSS = `
 .psm-agree input{width:17px;height:17px;margin-top:1px;accent-color:var(--dv-ink,#101418);flex:0 0 auto}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
-/* The signable action — a classy DocuSign-style yellow. */
-.psm-btn.go{background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;font-weight:800;border:1px solid #E7B10A;box-shadow:0 3px 14px rgba(233,193,20,.42),inset 0 1px 0 rgba(255,255,255,.45)}
-.psm-btn.go:hover{transform:translateY(-1px);filter:brightness(1.03)}
-.psm-btn.go:disabled{background:var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);border-color:var(--dv-line,#E4E4DF);box-shadow:none;cursor:not-allowed;transform:none;filter:none}
+/* The signable action — a plain, flat DocuSign-style yellow (no gradient/glow). */
+.psm-btn.go{background:#FFC61E;color:#1f1a05;font-weight:700;border:none;box-shadow:none}
+.psm-btn.go:hover{transform:none;background:#F2B90A;filter:none}
+.psm-btn.go:disabled{background:var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);cursor:not-allowed;transform:none;filter:none}
 .psm-btn.ghost{background:transparent;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);padding:12px 18px}
 .psm-btn.ghost:hover{transform:none;border-color:var(--dv-faint,#A1A6AC);color:var(--dv-ink,#101418)}
 .psm-btn.ghost:disabled{opacity:.5;cursor:default}

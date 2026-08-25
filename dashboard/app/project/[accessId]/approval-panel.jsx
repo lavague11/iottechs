@@ -704,11 +704,11 @@ const APV_CSS = `
 select.apv-input{cursor:pointer}
 .apv-btn{height:38px;padding:0 18px;border:none;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .apv-btn.gold{background:var(--dv-ink,#101418);color:#fff}
-/* Sign Agreement — the signable action gets the classy DocuSign-style yellow. */
-.apv-btn.gold.sign{background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;font-weight:800;border:1px solid #E7B10A;box-shadow:0 3px 14px rgba(233,193,20,.42),inset 0 1px 0 rgba(255,255,255,.45)}
+/* Sign Agreement — the signable action gets a plain, flat DocuSign-style yellow. */
+.apv-btn.gold.sign{background:#FFC61E;color:#1f1a05;font-weight:700;border:none}
 .apv-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
 .apv-btn:hover{filter:brightness(1.12)}
-.apv-btn.gold.sign:hover{filter:brightness(1.03);transform:translateY(-1px)}
+.apv-btn.gold.sign:hover{background:#F2B90A;filter:none}
 .apv-btn:disabled{opacity:.45;cursor:default}
 .apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .apv-chip-btn{height:30px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);

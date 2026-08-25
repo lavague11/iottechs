@@ -644,7 +644,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 <p>Accept the option{p.payload.options.length > 1 ? "(s)" : ""} you want{p.payload.options.length > 1 ? " — you can pick more than one" : ""}, request a change, or decline.</p>
                 <div className="pcv-accept-actions">
                   <button className={`pcv-select${optAccepted ? " outline" : ""}`} disabled={busy} onClick={() => choose(opt.id)}>
-                    {optAccepted ? `Remove Option ${opt.id}` : `✍ Approve & Sign — ${money(t.grand)}`}
+                    {optAccepted ? `Remove Option ${opt.id}` : `Approve & Sign — ${money(t.grand)}`}
                   </button>
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>✎ Request Change</button>
                   <button className="pcv-btn" onClick={() => { setDeclineOpen(true); setReviseMode(false); }}>✕ Decline</button>
@@ -876,9 +876,9 @@ const PCV_CSS = `
 .pcv-select:hover{filter:brightness(1.03)}
 .pcv-select:disabled{opacity:.5;cursor:default}
 .pcv-select.outline{background:transparent;border:1px solid var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
-/* The primary "Approve & Sign" accept CTA reads as the signable action — a classy DocuSign-style yellow. */
-.pcv-accept-actions .pcv-select:not(.outline){background:linear-gradient(180deg,#FFDC5E,#F3C111);color:#2a2100;padding:0 22px;font-weight:800;border:1px solid #E7B10A;box-shadow:0 3px 14px rgba(233,193,20,.42),inset 0 1px 0 rgba(255,255,255,.45)}
-.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){filter:brightness(1.03);transform:translateY(-1px)}
+/* The primary "Approve & Sign" accept CTA — a plain, flat DocuSign-style yellow (no gradient/glow). */
+.pcv-accept-actions .pcv-select:not(.outline){background:#FFC61E;color:#1f1a05;padding:0 22px;font-weight:700;border:none;box-shadow:none}
+.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){background:#F2B90A;filter:none}
 
 .pcv-actions{margin:16px 22px 0;display:flex;gap:10px}
 .pcv-actions-col{flex-direction:column;align-items:stretch}
