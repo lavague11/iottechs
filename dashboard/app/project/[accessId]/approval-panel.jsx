@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { optionTotals, fmtSignStamp } from "../../../lib/proposal";
+import { optionTotals, fmtSignStamp, displayOptionName } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
@@ -49,7 +49,7 @@ function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
 // `embedded` = mounted inside the deck's full-screen overlay, which already shows the tool's
 // name in its bar. When embedded we drop our own collapse/title header (no second, redundant
 // title bar) and stay always-open. This is the standing convention for deck-embedded tools.
-export default function ApprovalPanel({ accessId, role, customerName, customerAddress, onStageChange, onBrowseStage, stage = "approval_deposit", embedded = false }) {
+export default function ApprovalPanel({ accessId, role, customerName, customerAddress, customerPhone, customerEmail, onStageChange, onBrowseStage, stage = "approval_deposit", embedded = false }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
   // The person who paid, by NAME. New entries stamp a real name; older/generic ones ("customer",
@@ -358,13 +358,26 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   // Download a brand invoice — accepted charges + add-ons, the confirmed payments, and the balance
   // due. Same money picture shown on this card, so the paper always matches the screen.
   function downloadInvoice() {
+    const fmtPhone = (v) => { const d = String(v || "").replace(/\D/g, ""); if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; if (d.length === 11 && d[0] === "1") return `(${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`; return v; };
+    // Short "what's included" line under each option — item count by kind (e.g. "5 cameras · 1 recorder").
+    const itemSummary = (o) => {
+      const items = (o.services || []).flatMap((s) => s.items || []).filter((it) => !it.waived);
+      if (!items.length) return "";
+      const cams = items.filter((it) => /cam/i.test(it.name || "")).length;
+      const nvrs = items.filter((it) => /nvr|recorder|dvr/i.test(it.name || "")).length;
+      const other = items.length - cams - nvrs;
+      return [cams && `${cams} camera${cams > 1 ? "s" : ""}`, nvrs && `${nvrs} recorder${nvrs > 1 ? "s" : ""}`, other > 0 && `${other} item${other > 1 ? "s" : ""}`].filter(Boolean).join("  ·  ");
+    };
     const lines = [
-      ...shown.map((o) => ({ label: `Security System — Option ${o.id}${o.name ? ` (${o.name})` : ""}`,
+      ...shown.map((o) => ({ label: `Security System — Option ${o.id}${o.name ? ` (${displayOptionName(o.name)})` : ""}`,
+        sub: itemSummary(o),
         amount: optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand })),
       ...(addons.list || []).map((a) => ({ label: `Add-on · ${a.title}`, amount: a.total })),
     ];
     downloadInvoicePdf(
-      { customerName, customerAddress, invoiceNo: "INV-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1), proposalNo: propNum },
+      { customerName, customerAddress, customerPhone: fmtPhone(customerPhone), customerEmail,
+        projectId: accessId, depositPct: p.deposit_pct,
+        invoiceNo: "INV-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1), proposalNo: propNum },
       { lines, grandWithAddons, paidTotal, balance },
       payments,   // full ledger — page 1 lists confirmed receipts, page 2 the complete records
     );

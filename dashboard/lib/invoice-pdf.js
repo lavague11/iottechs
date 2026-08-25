@@ -9,7 +9,7 @@ const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).slice
 const titleCaseX = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
-  const { customerName, customerAddress, customerPhone, customerEmail, invoiceNo, proposalNo, issuedAt } = meta;
+  const { customerName, customerAddress, customerPhone, customerEmail, invoiceNo, proposalNo, issuedAt, projectId, depositPct } = meta;
   const { lines = [], grandWithAddons = 0, paidTotal = 0, balance = 0 } = figs;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
@@ -42,7 +42,7 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   doc.text(titleCaseX(customerName) || "Customer", lm, y + 16);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(70, 76, 84);
   let by = y + 31;
-  [customerAddress, customerPhone, customerEmail].filter(Boolean).forEach((t) => { doc.text(String(t), lm, by); by += 13; });
+  [customerAddress, customerPhone, customerEmail, projectId && ("Project " + projectId)].filter(Boolean).forEach((t) => { doc.text(String(t), lm, by); by += 13; });
 
   // ── Charges ──────────────────────────────────────────────────────────────
   y = Math.max(by + 14, 196);
@@ -50,20 +50,28 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
   doc.text("DESCRIPTION", lm + 12, y + 14.5); rt("AMOUNT", rm - 12, y + 14.5);
   y += 22;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
   lines.forEach((ln, i) => {
-    if (i % 2) { doc.setFillColor(...PAPER); doc.rect(lm, y, rm - lm, 20, "F"); }
-    doc.setTextColor(...INK); doc.text(String(ln.label || ""), lm + 12, y + 13.5);
+    const h = ln.sub ? 32 : 20;                       // taller row when there's a "what's included" sub-line
+    if (i % 2) { doc.setFillColor(...PAPER); doc.rect(lm, y, rm - lm, h, "F"); }
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...INK);
+    doc.text(String(ln.label || ""), lm + 12, y + 13.5);
     rt(money(ln.amount), rm - 12, y + 13.5);
-    doc.setDrawColor(...LINE); doc.line(lm, y + 20, rm, y + 20);
-    y += 20;
+    if (ln.sub) { doc.setFontSize(8); doc.setTextColor(...META); doc.text(String(ln.sub), lm + 12, y + 25); }
+    doc.setDrawColor(...LINE); doc.line(lm, y + h, rm, y + h);
+    y += h;
   });
   // Grand total row
   doc.setFillColor(...PAPER); doc.rect(lm, y, rm - lm, 26, "F");
   doc.setDrawColor(...GOLD); doc.setLineWidth(1); doc.line(lm, y, rm, y); doc.setLineWidth(0.2);
   doc.setTextColor(...INK); doc.setFont("helvetica", "bold"); doc.setFontSize(10.5);
   doc.text("Total", lm + 12, y + 17); rt(money(grandWithAddons), rm - 12, y + 17);
-  y += 40;
+  y += 30;
+  if (depositPct) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...META);
+    doc.text(`Terms: ${depositPct}% deposit before we begin  ·  balance of ${100 - depositPct}% on completion.`, lm + 2, y + 6);
+    y += 14;
+  }
+  y += 12;
 
   // ── Payments received ──────────────────────────────────────────────────────
   doc.setTextColor(...META); doc.setFont("helvetica", "bold"); doc.setFontSize(8);

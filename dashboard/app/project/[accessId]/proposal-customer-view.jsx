@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
@@ -238,7 +238,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
   const acceptedSet = new Set(p.accepted_options || []);
   const declinedMap = p.declined_options || {};
-  const optName = (id) => p.payload.options.find((o) => o.id === id)?.name || `Option ${id}`;
+  const optName = (id) => displayOptionName(p.payload.options.find((o) => o.id === id)?.name) || `Option ${id}`;
   const opt = p.payload.options.find((o) => o.id === viewingOpt) || p.payload.options[0];
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
@@ -470,7 +470,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 <span className="pcv-opt-badge2">{o.id}</span>
                 <span className="pcv-opt-info">
                   <span className="pcv-opt-optlbl">Option {o.id}{on ? " · Viewing" : ""}{isFirst && <span className="pcv-opt-rec">Recommended</span>}</span>
-                  <span className="pcv-opt-nm">{o.name}
+                  <span className="pcv-opt-nm">{displayOptionName(o.name)}
                     {acceptedSet.has(o.id) && <span className="pcv-opt-chk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Accepted</span>}
                     {Object.prototype.hasOwnProperty.call(declinedMap, o.id) && <span className="pcv-opt-chk dec"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>Declined</span>}
                   </span>
@@ -482,7 +482,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         </div>
       )}
 
-      <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${opt.name})` : ""}</div>
+      <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
       <div className="pcv-table">
         <div className="pcv-table-head">
           <span>#</span><span>Description</span><span className="r">Qty</span><span className="r">Unit</span><span className="r">Total</span>

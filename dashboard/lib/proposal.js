@@ -8,6 +8,13 @@
 export const OPTION_LETTERS = ["A", "B", "C"];
 export const OPTION_NAMES = ["Premium Security", "Alternative Option", "Premium"];
 
+// "Recommended" was the old auto-default for Option B; Option A now carries the Recommended badge, so
+// it's retired as a name. Normalize on DISPLAY (customer view, PDF, breakdown headers) so existing
+// proposals show "Alternative Option" without a data migration. Staff edit fields keep the raw value.
+export function displayOptionName(name) {
+  return name === "Recommended" ? "Alternative Option" : name;
+}
+
 export const PROPOSAL_SERVICES = [
   { key: "camera", label: "Security Cameras" },
   { key: "sound",  label: "Sound System" },

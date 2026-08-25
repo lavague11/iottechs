@@ -2126,6 +2126,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
                   customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                  customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                   onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} />
               </div></AccordionProvider>
             ) });
@@ -2209,7 +2210,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
             node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
-              customerAddress={lp.address} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
+              customerAddress={lp.address} customerPhone={lp.contact_phone} customerEmail={lp.contact_email} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
         }
         // Quality control is internal (the customer's phone-setup guide now lives in Install).
         if (cView !== "customer") {

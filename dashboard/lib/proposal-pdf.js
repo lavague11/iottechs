@@ -1,6 +1,6 @@
 "use client";
 import { jsPDF, AcroFormTextField } from "jspdf";
-import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS } from "./proposal";
+import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -193,7 +193,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
     if (p.payload.options.length > 1) {
       doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
-      doc.text(`Option ${opt.id} — ${opt.name}`, lm, y);
+      doc.text(`Option ${opt.id} — ${displayOptionName(opt.name)}`, lm, y);
       y += 14.4;
     }
 
