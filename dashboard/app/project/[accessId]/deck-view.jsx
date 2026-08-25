@@ -566,6 +566,17 @@ const CSS = `
   .dv-overlay-body>.ss-embed{height:calc(100dvh - 120px)}
   .dv-overlay-body>.sd-wrap{margin:0;border-left:0;border-right:0;border-radius:0}
 }
+/* Desktop Site Survey: the device roster (.sd-wrap) sits BELOW the map but the overlay clips
+   overflow, so on PC the roster was unreachable (it showed on phones, which already scroll). Only
+   the survey overlay carries .sd-wrap, so scope the scroll to it: let the body scroll, give the map
+   a tall fixed height, and the roster flows into view beneath it. !important beats the inline
+   height:100% on the tool's wrapper divs. */
+@media (min-width:701px){
+  .dv-overlay-body:has(.sd-wrap){display:block;overflow-y:auto}
+  .dv-overlay-body:has(.sd-wrap)>*{height:auto!important}
+  .dv-overlay-body:has(.sd-wrap) .ss-embed{height:auto!important}
+  .dv-overlay-body:has(.sd-wrap) .ss-embed-frame{height:72vh!important}
+}
 
 .dv-advance{padding:16px 20px 26px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--dv-line-soft);background:var(--dv-paper);flex:0 0 auto}
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
