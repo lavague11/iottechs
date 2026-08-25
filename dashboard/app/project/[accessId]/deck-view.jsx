@@ -146,7 +146,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   // A completed stage the viewer hasn't looked at yet blinks green ("complete-unread"); once seen, solid green.
   const markOf = (s, i) => {
     const m = baseMark(s, i);
-    if (m === "complete" && seenLoaded && !seen.has(s.name)) return "complete-unread";
+    // Only auto-blink DERIVED completes (a stage the viewer hasn't looked at). An explicit s.mark is
+    // authoritative — e.g. "complete" must stay SOLID green (approved), "complete-unread" stays blinking.
+    if (!s.mark && m === "complete" && seenLoaded && !seen.has(s.name)) return "complete-unread";
     return m;
   };
 
@@ -212,16 +214,13 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
         )}
-        {statusChip
-          ? (statusChip.onClick
-              ? <button className="dv-chip dv-chip-act" style={{ background: statusChip.color + "1f", color: statusChip.color }}
-                  onClick={(e) => { e.stopPropagation(); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); }}>
-                  <i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}
-                  <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-                </button>
-              : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>)
-          : <span className="dv-chip live"><i className="dv-dot" />Active</span>}
-        <span className={`dv-status ${cur.turn}`}><i />{turnText}</span>
+        {statusChip && (statusChip.onClick
+          ? <button className={`dv-chip dv-chip-act${statusChip.muted ? " muted" : ""}`} style={{ background: statusChip.color + "1f", color: statusChip.color }}
+              onClick={(e) => { e.stopPropagation(); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); }}>
+              <i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}
+              <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+            </button>
+          : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>)}
 
         <div className="dv-cluster">
           {menu.length > 0 && (
@@ -416,6 +415,7 @@ const CSS = `
 /* Clickable "your next step" chip — draws a gentle pulse so the customer notices the one action owed. */
 .dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
 .dv-chip-act:hover{filter:brightness(.96)}
+.dv-chip-act.muted{animation:none}   /* a "waiting on the customer" status, not an action — no pulse */
 .dv-chip-act .dv-chip-arw{margin-left:1px;opacity:.85}
 .dv-chip-act .dv-dot{animation:none}
 @keyframes dvChipPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.4)}50%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}

@@ -1762,6 +1762,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     survey_done:       !!acceptances?.site_survey,
     mockup_has:        !!toolMeta?.mockup?.has,
     mockup_published:  !!acceptances?.submit_mockup,
+    mockup_submitted:  !!acceptances?.submit_mockup,
     mockup_done:       !!acceptances?.mockup,
     proposal_version:  proposalData?.version || null,
   };
@@ -1781,7 +1782,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
-  const headerAction = (cView === "customer" && acceptLoaded) ? customerNextAction() : null;
+  // The office's view of the SAME current step, so internal roles stay on the same page as the customer:
+  // an action they still owe (Submit / Build / Revise) or a "waiting on the customer" status (muted).
+  function officeNextAction() {
+    const f = custFacts;
+    if (f.survey_has && !f.survey_submitted)        return { label: "Submit site survey",       target: "site_survey",      spot: "Site Survey" };
+    if (f.survey_submitted && !f.survey_done)       return { label: "Awaiting survey approval",  target: "site_survey",      spot: "Site Survey",         muted: true };
+    if (f.mockup_has && !f.mockup_submitted)        return { label: "Submit mockup",             target: "site_survey",      spot: "Mockups" };
+    if (f.mockup_submitted && !f.mockup_done)       return { label: "Awaiting mockup approval",  target: "site_survey",      spot: "Mockups",             muted: true };
+    if (!f.proposal_status)                          return { label: "Build proposal",            target: "proposal",         spot: "Proposal" };
+    if (f.proposal_status === "sent")               return { label: "Awaiting proposal",         target: "proposal",         spot: "Proposal",            muted: true };
+    if (f.proposal_status === "changes_requested")  return { label: "Revise proposal",           target: "proposal",         spot: "Proposal" };
+    if (f.proposal_status === "accepted" && !f.proposal_signed)  return { label: "Awaiting signature", target: "approval_deposit", spot: "Approval & Deposit", muted: true };
+    if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
+    return null;
+  }
+  const headerAction = !acceptLoaded ? null
+    : cView === "customer" ? customerNextAction()
+    : ["admin", "manager", "sales"].includes(cView) ? officeNextAction()
+    : null;
 
   // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
   // a real customer, once they're past the welcome + tour, and only if this exact item hasn't popped
@@ -2209,32 +2228,48 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const canAdv = ["admin", "manager"].includes(cView);
     const curPhaseIdx = Math.max(0, phaseList.findIndex((p) => p.key === vPhase));
     const projCompleted = !!lp.completed_at;
-    // The customer's bar reflects THEIR obligations, not the office's internal stage: a phase the
-    // office has finished but the customer still owes an approval/signature on blinks yellow (mark
-    // "active"); it only turns green ("complete") once BOTH sides are done. Staff keep the default
-    // position-based marker. Phases with no customer obligation return undefined → default logic.
-    const custMarkFor = (pk) => {
-      if (cView !== "customer") return undefined;
+    const isCust = cView === "customer";
+    // ONE shared status language across every role (the deck marker dots):
+    //   AWAITING  = an internal party submitted it and it's waiting on the customer's approval/signature
+    //               → internal sees BLINKING GREEN ("we sent it, waiting on them"); the customer sees
+    //                 BLINKING YELLOW ("needs your attention / your signature").
+    //   APPROVED  = the customer approved / paid → SOLID GREEN for everyone.
+    //   WORKING   = the office is still preparing it → internal blinks yellow (being worked on); the
+    //               customer just waits (white — not their turn yet).
+    //   UPCOMING  = not reached yet → white.
+    const phaseState = (pk, i) => {
       const f = custFacts;
+      const pos = i < curPhaseIdx ? "APPROVED" : i === curPhaseIdx ? "WORKING" : "UPCOMING";
       if (pk === "ph_survey") {
-        const done = (!f.survey_has || f.survey_done) && (!f.mockup_has || f.mockup_done) && (f.survey_has || f.mockup_has);
-        if (done) return "complete";
-        if ((f.survey_has && !f.survey_done) || (f.mockup_has && !f.mockup_done)) return "active";
-        return undefined;
+        const hasData = f.survey_has || f.mockup_has;
+        if (!hasData) return "UPCOMING";
+        const approved = (!f.survey_has || f.survey_done) && (!f.mockup_has || f.mockup_done);
+        if (approved) return "APPROVED";
+        const allSubmitted = (!f.survey_has || f.survey_submitted) && (!f.mockup_has || f.mockup_submitted);
+        return allSubmitted ? "AWAITING" : "WORKING";
       }
       if (pk === "ph_proposal") {
-        const done = f.proposal_status === "accepted" && f.proposal_signed && f.deposit_recorded;
-        if (done) return "complete";
-        if ((f.proposal_status && f.proposal_status !== "accepted") || (f.proposal_status === "accepted" && (!f.proposal_signed || !f.deposit_recorded))) return "active";
-        return undefined;
+        if (f.proposal_status === "accepted" && f.proposal_signed && f.deposit_recorded) return "APPROVED";
+        if (f.proposal_status === "sent") return "AWAITING";                                                    // customer to accept
+        if (f.proposal_status === "accepted" && (!f.proposal_signed || !f.deposit_recorded)) return "AWAITING"; // sign / deposit
+        if (f.proposal_status) return "WORKING";                                                                // draft / changes / declined
+        return pos === "UPCOMING" ? "UPCOMING" : "WORKING";
       }
       if (pk === "ph_wrap") {
-        if (f.final_balance_paid) return "complete";
-        if (custStage === "payment") return "active";
-        return undefined;
+        if (f.final_balance_paid) return "APPROVED";
+        if (custStage === "payment") return "AWAITING";                                                         // customer owes final payment
+        return pos;
       }
-      if (pk === "ph_complete") return projCompleted ? "complete" : undefined;
-      return undefined;
+      if (pk === "ph_complete") return projCompleted ? "APPROVED" : (pos === "APPROVED" ? "WORKING" : pos);
+      return pos;   // ph_install and any others — internal work, position-based
+    };
+    const markForState = (state) => {
+      switch (state) {
+        case "APPROVED": return "complete";                              // solid green — both audiences
+        case "AWAITING": return isCust ? "active" : "complete-unread";   // customer blink-yellow · internal blink-green
+        case "WORKING":  return isCust ? "todo" : "active";              // customer waits (white) · internal in-progress
+        default:         return "todo";                                  // upcoming — white
+      }
     };
     const deckStages = phaseList.map((p, i) => {
       const next = phaseList[i + 1];
@@ -2244,12 +2279,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const pct = isComplete
         ? (projCompleted ? 100 : (i <= curPhaseIdx ? 90 : 0))
         : (i < curPhaseIdx ? 100 : Math.min(95, Math.round(((i + 1) / phaseList.length) * 100)));
-      const custMark = custMarkFor(p.key);
+      const mark = markForState(phaseState(p.key, i));
       return {
         name: p.label,
         pill: phaseStatusWord(p.key),
         pct,
-        ...(custMark ? { mark: custMark } : {}),
+        mark,
         tint: isComplete ? "green" : p.key === "ph_survey" ? "blue" : "gold",
         // Completion is a read-only wrap-up — render the panel inline, no tool rows / advance.
         completion: isComplete ? (
@@ -2304,7 +2339,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
-        statusChip={headerAction ? { label: headerAction.label, color: "#C9A96E", openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
+        statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
         progressPct={custProgressPct}
         menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
