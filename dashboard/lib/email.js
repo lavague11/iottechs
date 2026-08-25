@@ -70,7 +70,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, attachments 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`[email:error] ${res.status} sending to ${recipient}: ${body.slice(0, 300)}`);
-      return { ok: false, error: `http_${res.status}` };
+      return { ok: false, error: `http_${res.status}`, detail: body.slice(0, 200) };
     }
     const data = await res.json().catch(() => ({}));
     return { ok: true, id: data?.id || null };
@@ -334,12 +334,14 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const html = renderEmail(payload);
     const text = plainText(payload);
     let sent = 0, i = 0;
+    const results = [];
     for (const r of recipients) {
       if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // stay under Resend's ~2/sec rate limit so no recipient gets dropped
       const res = await sendEmail({ to: r.email, subject, html, text, attachments });
+      results.push({ email: r.email, ok: !!res?.ok, skipped: !!res?.skipped, error: res?.error || null, detail: res?.detail || null });
       if (res?.ok || res?.skipped) sent++;
     }
-    return { ok: true, sent, recipients: recipients.length };
+    return { ok: true, sent, recipients: recipients.length, results };
   } catch (e) {
     console.error(`[email:appointment] ${e?.message || e}`);
     return { ok: false, error: "exception" };

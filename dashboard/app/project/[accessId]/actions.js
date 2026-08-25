@@ -385,7 +385,7 @@ export async function sendAppointmentEmailAction(accessId, { verb, event, invite
       event,
       extraEmails: [tok.email, ...(Array.isArray(inviteeEmails) ? inviteeEmails : [])],
     });
-    return { ok: true, sent: r?.sent || 0 };
+    return { ok: true, sent: r?.sent || 0, results: r?.results || [] };
   } catch { return { ok: false, error: "send-failed" }; }
 }
 
