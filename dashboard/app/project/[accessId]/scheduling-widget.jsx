@@ -173,7 +173,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
       update(d => { const e = d.events.find(x => x.id === editingId); if (e) { Object.assign(e, form); ev = { ...e }; } });
       if (ev) {
         onBooked?.(ev.date);
-        logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
+        logAppointmentAction(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
       }
       closeForm();
       setSaving(false);

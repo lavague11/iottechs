@@ -246,7 +246,7 @@ const icsEsc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\
 
 // Floating local time (no TZID) — the event shows at the hour it was booked in the reader's calendar,
 // matching how the in-app "Add to calendar" .ics behaves.
-export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, attendees = [] } = {}) {
+export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, attendees = [], sequence = 0 } = {}) {
   const start = icsStamp(ev.date, ev.time);
   const [h, m] = String(ev.time || "09:00").split(":").map(Number);
   const [y, mo, d] = String(ev.date || "2026-01-01").split("-").map(Number);
@@ -262,7 +262,7 @@ export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, at
     `METHOD:${method}`,
     "BEGIN:VEVENT",
     `UID:${ev.id || `${ev.date}${ev.time}`}@iottechs`,
-    `SEQUENCE:${cancel ? 1 : 0}`,
+    `SEQUENCE:${sequence}`,
     organizerEmail ? `ORGANIZER;CN=IOT TECHS:mailto:${organizerEmail}` : null,
     ...attLines,
     `DTSTART:${start}`, `DTEND:${end}`,
@@ -306,20 +306,25 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
 
     const cancel = verb === "canceled";
     const reminder = verb === "reminder";
+    const updated = verb === "updated";
     const noun = (event.kind === "install" || /install/i.test(event.title || "")) ? "installation" : "site survey";
     const whenLine = appointmentWhen(event);
     const method = cancel ? "CANCEL" : "REQUEST";
-    const ics = buildAppointmentIcs(event, { method, organizerEmail: fromEmailOnly(), attendees: recipients });
+    // Bump SEQUENCE on a reschedule/cancel so calendar apps treat it as an UPDATE to the same event
+    // (same UID) rather than a duplicate.
+    const ics = buildAppointmentIcs(event, { method, organizerEmail: fromEmailOnly(), attendees: recipients, sequence: (cancel || updated) ? 1 : 0 });
     // content_type carries the METHOD so Gmail/Apple render it as an accept/decline invite.
     const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);
     const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
       : reminder ? `Reminder: your ${noun} is tomorrow`
+      : updated ? `Updated: your ${noun} was rescheduled`
       : `Your ${noun} is scheduled`;
     const payload = {
-      heading: cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : `Your ${noun} is scheduled`,
+      heading: cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`,
       intro: cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
         : reminder ? "A quick reminder about your upcoming appointment — see you then."
+        : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
         : "Here are the details — add it to your calendar with the attached invite.",
       lines: [
         event.title ? `What: ${event.title}` : null,

@@ -351,9 +351,10 @@ export async function logAppointmentAction(accessId, { verb, title, date, event,
   try {
     const canceled = verb === "canceled";
     const when = date ? ` — ${date}` : "";
+    const label = canceled ? "Appointment canceled" : verb === "updated" ? "Appointment rescheduled" : "Appointment scheduled";
     logProjectEvent(accessId, {
       kind: canceled ? "request" : "schedule",
-      label: `${canceled ? "Appointment canceled" : "Appointment scheduled"}${title ? ` · ${title}` : ""}${when}`.slice(0, 300),
+      label: `${label}${title ? ` · ${title}` : ""}${when}`.slice(0, 300),
       actor: tok.name || tok.contact_name || tok.role || "—",
     });
   } catch { /* best-effort */ }
