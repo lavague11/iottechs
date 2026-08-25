@@ -12,6 +12,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
   const [confirmDel, setConfirmDel] = useState(null);
   const [capture, setCapture] = useState(-1);     // rapid-capture index into the current floor's cameras
   const [lightbox, setLightbox] = useState(null);
+  const [aiIds, setAiIds] = useState(() => new Set());  // cameras currently being AI-named
+  const [aiAll, setAiAll] = useState(null);             // {done,total} while auto-naming every camera
   const fileRef = useRef(null);
   const targetRef = useRef(null);                  // device id the picker is aiming at
 
@@ -44,6 +46,49 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
     inp.click();
   }
 
+  // ---- AI auto-name ---------------------------------------------------------------------------
+  // Read the camera's own photo (what it sees) and let Claude vision suggest a location label —
+  // "Front Yard", "Driveway", "Garage". Saved via the same rename cmd, so it flows to the proposal.
+  async function photoToBase64(url) {
+    const blob = await fetch(url, { credentials: "same-origin" }).then((r) => r.blob());
+    const mediaType = (blob.type && blob.type.startsWith("image/")) ? blob.type : "image/jpeg";
+    const imageBase64 = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+    return { imageBase64, mediaType };
+  }
+  const nameOne = useCallback(async (d, existing) => {
+    if (!d?.photo) return null;
+    setAiIds((s) => new Set(s).add(d.id));
+    try {
+      const { imageBase64, mediaType } = await photoToBase64(d.photo);
+      const floorName = (Array.isArray(roster) ? roster[curFloor]?.name : "") || "";
+      const j = await fetch("/api/name-camera", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+        body: JSON.stringify({ imageBase64, mediaType, context: { floor: floorName, existing } }),
+      }).then((r) => r.ok ? r.json() : null).catch(() => null);
+      if (j?.ok && j.name) { cmd({ cmd: "rename", id: d.id, name: j.name }); return j.name; }
+      return null;
+    } catch { return null; }
+    finally { setAiIds((s) => { const n = new Set(s); n.delete(d.id); return n; }); }
+  }, [cmd, roster, curFloor]);
+  async function nameAllCams() {
+    if (aiAll) return;
+    const targets = cams.filter((d) => d.photo);
+    if (!targets.length) return;
+    const existing = new Set(curDevices.map((d) => (d.name || "").trim()).filter(Boolean));
+    setAiAll({ done: 0, total: targets.length });
+    for (let i = 0; i < targets.length; i++) {
+      const nm = await nameOne(targets[i], [...existing]);   // sequential so names dedupe as we go
+      if (nm) existing.add(nm);
+      setAiAll({ done: i + 1, total: targets.length });
+    }
+    setAiAll(null);
+  }
+
   if (readOnly) return null;                        // office/field tool — customers see cameras in the survey view
   if (!total) return null;                          // render only when there's something to manage
 
@@ -57,6 +102,16 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
         <svg className={`sd-chev${open ? " on" : ""}`} viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
         <span className="sd-title">Survey devices</span>
         <span className="sd-count">{total} device{total !== 1 ? "s" : ""}</span>
+        {cams.some((d) => d.photo) && (
+          <span className={`sd-ai-all${aiAll ? " busy" : ""}`} role="button" tabIndex={0}
+            title="Name every photographed camera from its photo"
+            onClick={(e) => { e.stopPropagation(); if (!aiAll) { setOpen(true); nameAllCams(); } }}>
+            {aiAll
+              ? <svg className="sd-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>
+              : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z" /><path d="M18.5 13l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>}
+            {aiAll ? `Naming… ${aiAll.done}/${aiAll.total}` : "Auto-name"}
+          </span>
+        )}
         {cams.length > 0 && !inCapture && (
           <span className="sd-cap" role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); setOpen(true); setCapture(0); }}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
@@ -96,9 +151,17 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
                         onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
                         <div className="sd-r1">
                           <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{(d.tag || "").replace(/^I/, "") || (i + 1)}</span>
-                          <input className="sd-nm" defaultValue={d.name} spellCheck={false}
+                          <input key={d.name} className="sd-nm" defaultValue={d.name} spellCheck={false}
                             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                             onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); }} />
+                          {d.k === "cam" && d.photo && (
+                            <button className="sd-ai" title="Auto-name from photo" disabled={aiIds.has(d.id) || !!aiAll}
+                              onClick={() => nameOne(d, curDevices.map((x) => (x.name || "").trim()).filter(Boolean))}>
+                              {aiIds.has(d.id)
+                                ? <svg className="sd-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>
+                                : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z" /><path d="M18.5 13l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>}
+                            </button>
+                          )}
                           {confirmDel === d.id ? (
                             <span className="sd-confirm">
                               <button className="sd-del yes" onClick={() => { cmd({ cmd: "delete", id: d.id }); setConfirmDel(null); }}>Delete</button>
@@ -157,6 +220,15 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
         .sd-count{font-size:.72rem;color:var(--muted,#6f7686);font-weight:600}
         .sd-cap{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:700;color:var(--gold-deep,#8a6d2f);border:1px solid var(--gold,#c9a96e);border-radius:8px;padding:5px 10px;cursor:pointer}
         .sd-cap:hover{background:rgba(201,169,110,.12)}
+        .sd-ai-all{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:700;color:var(--gold-deep,#8a6d2f);border:1px solid var(--gold,#c9a96e);border-radius:8px;padding:5px 10px;cursor:pointer}
+        .sd-ai-all:hover{background:rgba(201,169,110,.12)}
+        .sd-ai-all.busy{opacity:.7;cursor:default}
+        .sd-ai-all + .sd-cap{margin-left:0}
+        .sd-ai{flex:none;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line,#e6e2d9);border-radius:6px;background:var(--bg-soft,#f5f2ea);color:var(--gold-deep,#8a6d2f);cursor:pointer;padding:0}
+        .sd-ai:hover:not(:disabled){border-color:var(--gold,#c9a96e);background:rgba(201,169,110,.12)}
+        .sd-ai:disabled{opacity:.55;cursor:default}
+        .sd-spin{animation:sd-spin .7s linear infinite;transform-origin:center}
+        @keyframes sd-spin{to{transform:rotate(360deg)}}
         .sd-capbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line,#e6e2d9);background:rgba(201,169,110,.08)}
         .sd-capnow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.sd-capnow strong{font-size:.92rem}
         .sd-capstep{font-size:.7rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-deep,#8a6d2f)}
