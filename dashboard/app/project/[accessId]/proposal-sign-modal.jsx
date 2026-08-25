@@ -102,7 +102,7 @@ const PSM_CSS = `
   font-family:var(--font);animation:psmPop .18s ease}
 @keyframes psmPop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .psm-ribbon{display:flex;align-items:center;gap:10px;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);padding:12px 18px;font-weight:600;font-size:.86rem;border-bottom:1px solid var(--dv-line,#E4E4DF)}
-.psm-tag{background:#F5D658;color:#1f1a05;font-weight:600;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em;border:1px solid #3E6FB0}
+.psm-tag{background:#F7DC6F;color:#1f1a05;font-weight:600;font-size:.62rem;padding:3px 9px;border-radius:20px;letter-spacing:.06em;border:1px solid #3E6FB0}
 .psm-body{padding:20px}
 .psm-sub{font-size:.8rem;font-weight:500;color:var(--dv-meta,#787D84);margin-bottom:14px}
 .psm-row{display:flex;gap:14px;flex-wrap:wrap}
@@ -118,8 +118,8 @@ const PSM_CSS = `
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
 /* The signable action — DocuSign signing-field style: soft yellow fill, blue field border. */
-.psm-btn.go{display:inline-flex;align-items:center;gap:8px;background:#F5D658;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0;box-shadow:none;padding:11px 20px}
-.psm-btn.go:hover{transform:none;background:#F2CE3E;filter:none}
+.psm-btn.go{display:inline-flex;align-items:center;gap:8px;background:#F7DC6F;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0;box-shadow:none;padding:11px 20px}
+.psm-btn.go:hover{transform:none;background:#F2D45A;filter:none}
 .psm-btn.go:disabled{background:var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);border-color:var(--dv-line,#E4E4DF);cursor:not-allowed;transform:none;filter:none}
 .psm-ico{flex:0 0 auto}
 .psm-btn.ghost{background:transparent;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);padding:12px 18px}

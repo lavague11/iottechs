@@ -708,10 +708,10 @@ select.apv-input{cursor:pointer}
 .apv-btn{height:38px;padding:0 18px;border:none;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .apv-btn.gold{background:var(--dv-ink,#101418);color:#fff}
 /* Sign Agreement — DocuSign signing-field style: soft yellow fill, blue field border. */
-.apv-btn.gold.sign{display:inline-flex;align-items:center;gap:8px;background:#F5D658;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0}
+.apv-btn.gold.sign{display:inline-flex;align-items:center;gap:8px;background:#F7DC6F;color:#1f1a05;font-weight:600;border:2px solid #3E6FB0}
 .apv-btn.green{background:var(--dv-green,#2E7D5B);color:#fff}
 .apv-btn:hover{filter:brightness(1.12)}
-.apv-btn.gold.sign:hover{background:#F2CE3E;filter:none}
+.apv-btn.gold.sign:hover{background:#F2D45A;filter:none}
 .apv-btn:disabled{opacity:.45;cursor:default}
 .apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .apv-chip-btn{height:30px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);

@@ -647,7 +647,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                     {optAccepted ? `Remove Option ${opt.id}` : (
                       <>
                         <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                        Approve &amp; Sign — {money(t.grand)}
+                        Approve &amp; Sign
                       </>
                     )}
                   </button>
@@ -894,8 +894,8 @@ const PCV_CSS = `
 .pcv-select:disabled{opacity:.5;cursor:default}
 .pcv-select.outline{background:transparent;border:1px solid var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
 /* The "Approve & Sign" CTA — DocuSign signing-field style: soft yellow fill, blue field border. */
-.pcv-accept-actions .pcv-select:not(.outline){background:#F5D658;color:#1f1a05;padding:0 22px;font-weight:600;border:2px solid #3E6FB0;box-shadow:none}
-.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){background:#F2CE3E;filter:none}
+.pcv-accept-actions .pcv-select:not(.outline){background:#F7DC6F;color:#1f1a05;padding:0 22px;font-weight:600;border:2px solid #3E6FB0;box-shadow:none}
+.pcv-accept-actions .pcv-select:not(.outline):hover:not(:disabled){background:#F2D45A;filter:none}
 .pcv-ico{flex:0 0 auto;display:inline-block;vertical-align:-2px}
 .pcv-btn,.pcv-dl{display:inline-flex;align-items:center;gap:6px}
 
