@@ -1494,6 +1494,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
+  // ?open=<tool> (share links) → auto-open that tool on the deck once it's loaded (e.g. open the
+  // actual proposal document, not just land on the proposal step). Mapped to the deck tool name.
+  const openToolParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("open") : null;
+  const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment" };
+  const openToolOnMount = openToolParam ? (OPEN_TOOL_NAMES[openToolParam.toLowerCase()] || null) : null;
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
   // Deck shell: the redesigned horizontal stage deck — now the default for EVERY role (staff and
   // customers), on every project new or old. Resolution order (set after mount to avoid a hydration
@@ -2341,6 +2346,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         customer={deckCustomer}
         statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
         progressPct={custProgressPct}
+        openToolOnMount={openToolOnMount}
         menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}

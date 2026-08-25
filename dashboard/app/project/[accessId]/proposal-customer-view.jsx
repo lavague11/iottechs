@@ -214,7 +214,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
   // Share a link that opens straight to this proposal (still PIN-gated at the door).
   async function shareProposal() {
-    const url = `${window.location.origin}/project/${accessId}?stage=proposal`;
+    const url = `${window.location.origin}/project/${accessId}?stage=proposal&open=proposal`;
     try { if (navigator.share) { await navigator.share({ title: "IOT TECHS proposal", url }); return; } } catch { /* share sheet cancelled — fall through to copy */ }
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); }
     catch { window.prompt("Copy this link to share the proposal:", url); }

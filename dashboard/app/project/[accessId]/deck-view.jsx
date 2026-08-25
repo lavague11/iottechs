@@ -25,7 +25,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
@@ -66,6 +66,17 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     }
     return false;
   }, [stages, go]);
+
+  // Share links (?open=<tool>) land the recipient with that tool already OPEN (e.g. the actual
+  // proposal document, not just the proposal step). Fires once the tool's data has loaded in.
+  const openedOnMountRef = useRef(false);
+  useEffect(() => {
+    if (openedOnMountRef.current || !openToolOnMount) return;
+    const ready = stages.some((s) => (s.tools || []).some((t) => t.name === openToolOnMount && t.node));
+    if (!ready) return;
+    openedOnMountRef.current = true;
+    openNamedTool(openToolOnMount);
+  }, [openToolOnMount, stages, openNamedTool]);
 
   // ── drag ── capture only AFTER a real horizontal move, so taps still fire the button click.
   // Never start a drag from an interactive control — on touch, finger jitter on a button tap would
