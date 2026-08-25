@@ -1094,6 +1094,14 @@ function init() {
       UNIQUE(project_access_id, tool)
     )
   `);
+  // One row per appointment we've already sent a 24h reminder for — so the hourly sweep fires
+  // each reminder exactly once (see lib/appointment-reminders.js).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appt_reminders (
+      event_key TEXT PRIMARY KEY,
+      sent_at   TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
 
   // ---- Uploaded photos (HEIC-safe): the /api/media route converts every upload to JPEG
   // server-side (iPhone HEIC → JPEG, since browsers/desktops can't decode HEVC) and stores the
@@ -4863,6 +4871,19 @@ export function saveToolData(accessId, tool, data, byName) {
     DO UPDATE SET data=excluded.data, updated_by=excluded.updated_by, updated_at=excluded.updated_at
   `).run(String(accessId), String(tool), String(data), byName || null);
   return getToolData(accessId, tool);
+}
+
+// ---- Appointment reminders (24h) ------------------------------------------------------------
+// Every project's booked appointments (the scheduling widget's `schedule` blob) — the reminder
+// sweep reads these to find visits happening within the next 24h.
+export function allScheduleBlobs() {
+  return db.prepare("SELECT project_access_id, data FROM project_tool_data WHERE tool='schedule'").all();
+}
+// Atomically claim a reminder: returns true only the FIRST time this event_key is seen, so the
+// hourly sweep sends each 24h reminder exactly once even if instances/sweeps overlap.
+export function claimAppointmentReminder(eventKey) {
+  const r = db.prepare("INSERT OR IGNORE INTO appt_reminders (event_key) VALUES (?)").run(String(eventKey));
+  return r.changes > 0;
 }
 
 // ---- Uploaded media (HEIC-safe photos). Bytes are already-converted JPEG from /api/media. ----

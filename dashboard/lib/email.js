@@ -300,15 +300,20 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     if (!recipients.length) return { ok: false, error: "no-recipients" };
 
     const cancel = verb === "canceled";
+    const reminder = verb === "reminder";
     const noun = (event.kind === "install" || /install/i.test(event.title || "")) ? "installation" : "site survey";
     const whenLine = appointmentWhen(event);
     const ics = buildAppointmentIcs(event, { method: cancel ? "CANCEL" : "REQUEST", organizerEmail: fromEmailOnly() });
     const attachments = [{ filename: `iot-techs-${event.date || "visit"}.ics`, content: Buffer.from(ics, "utf8").toString("base64") }];
     const ctaUrl = projectLink(accessId);
-    const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}` : `Your ${noun} is scheduled`;
+    const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
+      : reminder ? `Reminder: your ${noun} is tomorrow`
+      : `Your ${noun} is scheduled`;
     const payload = {
-      heading: cancel ? "Your appointment was canceled" : `Your ${noun} is scheduled`,
-      intro: cancel ? "This appointment has been canceled. We'll be in touch to reschedule." : "Here are the details — add it to your calendar with the attached invite.",
+      heading: cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : `Your ${noun} is scheduled`,
+      intro: cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
+        : reminder ? "A quick reminder about your upcoming appointment — see you then."
+        : "Here are the details — add it to your calendar with the attached invite.",
       lines: [
         event.title ? `What: ${event.title}` : null,
         whenLine ? `When: ${whenLine}` : null,
