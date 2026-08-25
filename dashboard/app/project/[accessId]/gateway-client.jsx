@@ -11,6 +11,7 @@ import { GatewayScreen } from "../../components/gateway-screen";
 import DeckView         from "./deck-view";
 import JobLog           from "./job-log";
 import SiteSurveyWidget  from "./site-survey-widget";
+import ToolComments      from "./tool-comments";
 import SchedulingWidget  from "./scheduling-widget";
 import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
@@ -3140,6 +3141,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onAdvance={() => nextProjectKey && doMove(nextProjectKey)}
           nextLabel={nextProjectKey ? stageShortLabel(nextProjectKey) : null}
         />
+      )}
+      {/* Portal comments — the customer can leave a comment on their project page (they can't edit
+          anything else here); staff see the thread. Item-anchored comments live on the survey/mockup. */}
+      {!lp.lost_reason && (
+        <div style={{ marginTop: 4 }}>
+          <ToolComments accessId={lp.access_id} scope="portal" role={cView} preview={!!previewRole} anchor={null} onClose={() => {}} />
+        </div>
       )}
       {["admin","manager","sales"].includes(view) && lp.lost_reason && (
         <div className="pv-close-bar" style={{ gap: 10 }}>
