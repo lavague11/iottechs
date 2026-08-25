@@ -455,11 +455,12 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             const oc = serviceColor(o.services?.[0]?.key) || OPTION_TABCOLORS[o.id] || "var(--gold)";
             const ot = optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
             const on = o.id === opt.id;
+            const isFirst = o.id === p.payload.options[0].id;   // the first option is always the recommended one
             return (
-              <button key={o.id} type="button" className={`pcv-opt-card${on ? " on" : ""}`} style={{ "--oc": oc }} onClick={() => setViewingOpt(o.id)}>
+              <button key={o.id} type="button" className={`pcv-opt-card${on ? " on" : ""}${isFirst ? " rec" : ""}`} style={{ "--oc": oc }} onClick={() => setViewingOpt(o.id)}>
                 <span className="pcv-opt-badge2">{o.id}</span>
                 <span className="pcv-opt-info">
-                  <span className="pcv-opt-optlbl">Option {o.id}{on ? " · Viewing" : ""}</span>
+                  <span className="pcv-opt-optlbl">Option {o.id}{on ? " · Viewing" : ""}{isFirst && <span className="pcv-opt-rec">Recommended</span>}</span>
                   <span className="pcv-opt-nm">{o.name}
                     {acceptedSet.has(o.id) && <span className="pcv-opt-chk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Accepted</span>}
                     {Object.prototype.hasOwnProperty.call(declinedMap, o.id) && <span className="pcv-opt-chk dec"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>Declined</span>}
@@ -822,6 +823,9 @@ const PCV_CSS = `
   display:flex;align-items:center;justify-content:center;font-size:.92rem;font-weight:600}
 .pcv-opt-info{display:flex;flex-direction:column;gap:1px;min-width:0;text-align:left}
 .pcv-opt-optlbl{font-size:.56rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--oc)}
+.pcv-opt-rec{margin-left:6px;font-size:.54rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.12);border-radius:100px;padding:1px 6px}
+.pcv-opt-card.rec{box-shadow:inset 0 0 0 1px rgba(46,125,91,.35)}
+.pcv-opt-card.rec.on{box-shadow:inset 0 0 0 2px var(--oc)}
 .pcv-opt-nm{font-size:.8rem;font-weight:600;color:var(--dv-ink,#101418);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pcv-opt-chk{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
 .pcv-opt-tot{font-size:.86rem;font-weight:600;color:var(--oc)}
