@@ -2200,7 +2200,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   </span>
                   <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--dv-ink,#101418)" }}>Set up your cameras on your phone</div>
                   <div style={{ fontSize: ".9rem", color: "var(--dv-meta,#787D84)", maxWidth: 360, lineHeight: 1.5 }}>A quick guided walkthrough — install the app, scan your activation code, and see your cameras live. Takes about 5 minutes.</div>
-                  <a href="/guide/mobile-setup" target="_blank" rel="noreferrer"
+                  <a href="/guide/mobile-setup"
                      style={{ marginTop: 4, textDecoration: "none", height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", borderRadius: 10, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontWeight: 800, fontSize: ".92rem" }}>
                     Start setup guide →
                   </a>

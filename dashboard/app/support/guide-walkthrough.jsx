@@ -30,6 +30,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
   // (step.landscape) always show landscape; the rest follow the toggle / device rotation, and only
   // flip if they actually have a landscape version — a portrait-only step stays portrait.
   const stepHasLand  = !!(step.imageLandscape || step.videoLandscape);
+  // Only offer the orientation toggle when SOME step actually has a landscape version (e.g. recorder
+  // guides). An all-portrait guide like mobile-setup has nothing to flip to, so hide it.
+  const anyLandscape = (steps || []).some((s) => s.imageLandscape || s.videoLandscape || s.landscape);
   const showLand     = !!step.landscape || (orient === "landscape" && stepHasLand);
   const stepImage    = showLand ? (step.imageLandscape || step.image) : step.image;
   const stepVideo    = showLand ? (step.videoLandscape || step.video) : step.video;
@@ -102,17 +105,19 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
                   <div className="gw-prog-track"><div className="gw-prog-fill" style={{ width: `${Math.round(((i + 1) / total) * 100)}%` }} /></div>
                   <span className="gw-prog-pct">{Math.round(((i + 1) / total) * 100)}%</span>
                 </div>
-                {/* Orientation toggle — flips the whole demo to the landscape versions. Rotating a
-                    real phone does this automatically; the toggle is for desktop. */}
-                <button
-                  className={`gw-orient${orient === "landscape" ? " on" : ""}`}
-                  onClick={() => setOrient((o) => (o === "landscape" ? "portrait" : "landscape"))}
-                  title={orient === "landscape" ? "Portrait view" : "Landscape view"}
-                  aria-pressed={orient === "landscape"}
-                >
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M12 3v3M12 18v3" /></svg>
-                  {orient === "landscape" ? "Landscape" : "Portrait"}
-                </button>
+                {/* Orientation toggle — only for guides that actually have landscape versions (e.g.
+                    recorder screens). Hidden on all-portrait guides like mobile-setup. */}
+                {anyLandscape && (
+                  <button
+                    className={`gw-orient${orient === "landscape" ? " on" : ""}`}
+                    onClick={() => setOrient((o) => (o === "landscape" ? "portrait" : "landscape"))}
+                    title={orient === "landscape" ? "Portrait view" : "Landscape view"}
+                    aria-pressed={orient === "landscape"}
+                  >
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M12 3v3M12 18v3" /></svg>
+                    {orient === "landscape" ? "Landscape" : "Portrait"}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -286,22 +291,17 @@ function StepText({ label, step, password, platform }) {
         ) : step.text}
       </p>
       {step.store && (
-        // Only their own store — showing both just asks them to make a decision they already made
-        // at the first question.
+        // Both stores — the customer opens this on a desktop as often as a phone, so give them the
+        // App Store AND Google Play link rather than guessing their platform.
         <div className="gw-stores">
-          {(() => {
-            const os = platform === "android" ? "android" : "ios";
-            return (
-              <a className="gw-store" href={STORE[os]} target="_blank" rel="noopener noreferrer">
-                {os === "ios" ? (
-                  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M3.6 2.2a1 1 0 0 0-.5.9v17.8a1 1 0 0 0 .5.9l9.3-9.8L3.6 2.2ZM14.2 10.5l2.9-3-9.3-5.3a1 1 0 0 0-.4-.1l6.8 8.4ZM14.2 13.5l-6.8 8.4a1 1 0 0 0 .4-.1l9.3-5.3-2.9-3ZM18.3 8.4l-3.2 3.6 3.2 3.6 2.4-1.4a1.3 1.3 0 0 0 0-2.3l-2.4-1.5Z"/></svg>
-                )}
-                {os === "ios" ? "Open the App Store" : "Open Google Play"}
-              </a>
-            );
-          })()}
+          <a className="gw-store" href={STORE.ios} target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M16.4 12.9c0-2 1.6-3 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .6 1 1.4 2 2.4 2s1.3-.6 2.5-.6 1.5.6 2.6.6 1.7-1 2.4-2c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.7ZM14.6 6.3c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.5-.9 1.4-.8 2.3.9 0 1.8-.5 2.3-1.1Z"/></svg>
+            App Store
+          </a>
+          <a className="gw-store" href={STORE.android} target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" stroke="none"><path d="M3.6 2.2a1 1 0 0 0-.5.9v17.8a1 1 0 0 0 .5.9l9.3-9.8L3.6 2.2ZM14.2 10.5l2.9-3-9.3-5.3a1 1 0 0 0-.4-.1l6.8 8.4ZM14.2 13.5l-6.8 8.4a1 1 0 0 0 .4-.1l9.3-5.3-2.9-3ZM18.3 8.4l-3.2 3.6 3.2 3.6 2.4-1.4a1.3 1.3 0 0 0 0-2.3l-2.4-1.5Z"/></svg>
+            Google Play
+          </a>
         </div>
       )}
       {step.why && <div className="gw-why">{step.why}</div>}

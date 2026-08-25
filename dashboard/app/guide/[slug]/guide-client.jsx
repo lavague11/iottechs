@@ -20,7 +20,14 @@ export default function GuidePageClient({ title, steps, flow, projects, projectR
           projectRef={projectRef}
           loggedIn={loggedIn}
           onUnlock={unlockGuideQrAction}
-          onClose={() => { window.location.href = loggedIn ? "/support" : "/"; }}
+          onClose={() => {
+            // The guide opens in a new tab from the project — closing should return the customer to
+            // where they were, not dump them on the login/home screen. Close the tab if we opened one;
+            // otherwise step back; only fall back to a page as a last resort.
+            if (window.history.length > 1) { window.history.back(); return; }
+            window.close();
+            setTimeout(() => { if (!window.closed) window.location.href = loggedIn ? "/support" : "/"; }, 150);
+          }}
         />
       ) : (
         <div className="gpg-done">
