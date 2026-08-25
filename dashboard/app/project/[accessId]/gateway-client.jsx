@@ -1504,24 +1504,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [deckOpenSignal, setDeckOpenSignal] = useState(null);
   const openDeckTool = (name) => setDeckOpenSignal((s) => ({ name, n: (s?.n || 0) + 1 }));
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
-  // Deck shell: the redesigned horizontal stage deck — now the default for EVERY role (staff and
-  // customers), on every project new or old. Resolution order (set after mount to avoid a hydration
-  // mismatch): ?deck=1/0 in the URL wins for that load → a persisted in-app choice (localStorage) →
-  // otherwise the deck. Staff get a "Classic view" / "Deck" toggle (persisted) to switch back.
-  const [deckMode, setDeckMode] = useState(false);
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("deck");
-    if (q === "1") { setDeckMode(true); return; }
-    if (q === "0") { setDeckMode(false); return; }
-    try {
-      const saved = localStorage.getItem("iot_deck");
-      if (saved === "1") { setDeckMode(true); return; }
-      if (saved === "0") { setDeckMode(false); return; }
-    } catch { /* no storage */ }
-    setDeckMode(true);   // default: everyone gets the deck
-  }, [view]);
-  const toggleDeck = () => setDeckMode((m) => { const n = !m; try { localStorage.setItem("iot_deck", n ? "1" : "0"); } catch { /* no storage */ } return n; });
-  const canToggleDeck = ["admin", "manager", "sales", "tech"].includes(view);
+  // The deck is the ONLY project view now — the classic layout is retired. Render it ALWAYS: as a
+  // constant (not post-mount state) so there's no flash of the old view before it swaps in, and no
+  // toggle back to classic. (The classic JSX further down is unreachable dead code, left in place.)
+  const deckMode = true;
+  const canToggleDeck = false;
+  const toggleDeck = () => {};
   // Reopen a project on the stage you were last viewing (staff only). Restored after mount — like the
   // deck-mode choice above — to avoid a hydration mismatch. An explicit ?stage= deep-link (role switch)
   // and the customer's own guided flow both take precedence, so this never fights them.
