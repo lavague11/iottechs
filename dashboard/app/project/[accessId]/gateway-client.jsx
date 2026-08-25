@@ -1768,8 +1768,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
-  // The customer's current action card (headline / sub / cta / target) — drives the next-step spotlight banner.
-  const custAct     = (cView === "customer" && acceptLoaded && !previewRole) ? customerAction(custStage, custFacts) : null;
+  // The customer's current action card (headline / sub / cta / target) — drives the next-step spotlight
+  // banner. Shown in the customer view AND the staff "customer view" preview (so office can see what the
+  // customer is being nudged to do); the auto-chaining still only fires for a real customer's progression.
+  const custAct     = (cView === "customer" && acceptLoaded) ? customerAction(custStage, custFacts) : null;
 
   // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
   // a real customer, once they're past the welcome + tour, and only if this exact item hasn't popped
