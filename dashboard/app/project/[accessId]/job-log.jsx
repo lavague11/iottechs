@@ -25,6 +25,7 @@ const KIND_COLOR = {
   submit: "var(--dv-blue,#3E6C9E)", approve: "var(--dv-green,#2E7D5B)", sign: "var(--dv-gold-deep,#A8842F)",
   review: "var(--dv-blue,#3E6C9E)", pay: "var(--dv-green,#2E7D5B)", done: "var(--dv-green,#2E7D5B)",
   call: "var(--dv-gold-deep,#A8842F)", open: "var(--dv-faint,#A1A6AC)",
+  request: "var(--dv-gold,#C9A96E)",
 };
 // A tool comment is tagged with the surface it came from + the item it was tapped on (e.g. a mockup
 // camera). Surface the tool + item so a note like "TOO FAR" reads against the camera it's about.
@@ -48,7 +49,7 @@ const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ADVANCED_KINDS = new Set(["call", "login", "view", "change", "resubmit"]);
 const SearchIco = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>;
 
-export default function JobLog({ accessId, role, acceptances = {}, project, preview, staffUsers = [] }) {
+export default function JobLog({ accessId, role, acceptances = {}, project, preview, staffUsers = [], extraEvents = [] }) {
   const isCust = role === "customer";
   const [notes, setNotes] = useState([]);
   const [events, setEvents] = useState([]);
@@ -76,7 +77,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
     .map(([stage, v]) => ({ verb: LOG_MAP[stage]?.verb, kind: LOG_MAP[stage]?.kind, at: v?.at, by: v?.by }))
     .filter((e) => e.verb && e.at);
   const evts = events.map((e) => ({ verb: e.label, kind: e.kind, at: e.created_at, by: e.actor }));
-  const merged = [...milestones, ...evts].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  // extraEvents = derived-from-state milestones (proposal signed, change requests) that aren't in
+  // stage_acceptances or project_events — so they show even for actions taken before event logging.
+  const merged = [...milestones, ...evts, ...(extraEvents || []).filter((e) => e && e.verb && e.at)]
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const inqAt = project?.created_at || project?.date;
   const full = [...merged, ...(inqAt ? [{ verb: "Inquiry received", kind: "open", at: inqAt, by: null }] : [])];
   // Basic = milestones + inquiry (customer-safe); Advanced (staff) adds forensic events.

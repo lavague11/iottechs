@@ -2337,7 +2337,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       canEdit: ["admin", "manager", "sales", "tech", "customer"].includes(cView) && !previewRole,
       onSave: async (vals) => { const r = await updateProjectInfoAction(lp.access_id, vals); if (r?.ok) setLocalProj((p) => ({ ...p, ...vals })); return r; },
     };
-    const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} />;
+    // Job Log entries derived from the proposal's own state (not stage_acceptances / project_events),
+    // so the proposal signature and each relocation/removal request show up — including ones made
+    // before this logging existed.
+    const jobExtra = [];
+    if (proposalData?.signed_at) jobExtra.push({ verb: `Proposal signed & accepted${proposalData.selected_option ? ` — Option ${proposalData.selected_option}` : ""}`, kind: "sign", at: proposalData.signed_at, by: proposalData.signed_name });
+    if (proposalData?.status === "changes_requested") {
+      let cf = {}; try { cf = JSON.parse(proposalData.customer_flags || "{}") || {}; } catch { cf = {}; }
+      const nm = {};
+      (proposalData?.payload?.options || []).forEach((o) => (o.services || []).forEach((s) => (s.items || []).forEach((it) => { nm[it.id] = it.name; })));
+      const parts = Object.entries(cf).map(([id, f]) => `${f?.type === "remove" ? "Removal" : "Relocation"}: ${nm[id] || "item"}`);
+      if (parts.length) jobExtra.push({ verb: `Change requested — ${parts.join(", ")}`, kind: "request", at: proposalData.updated_at || proposalData.signed_at || lp.date, by: lp.contact_name || lp.customer });
+    }
+    const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} extraEvents={jobExtra} />;
     return (
       <DeckView
         stages={deckStages}
