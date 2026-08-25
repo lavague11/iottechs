@@ -42,6 +42,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
   const [dlBusy, setDlBusy] = useState(false);             // building the PDF (survey rasterize can take a moment)
+  const [copied, setCopied] = useState(false);             // "Copied" flash after Share
   const [voidPcpOpen, setVoidPcpOpen] = useState(false);   // admin void of the PCP agreement signature
   const [err, setErr] = useState(null);
   const [reqOpen, setReqOpen] = useState(false);
@@ -209,6 +210,14 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     } finally {
       setDlBusy(false);
     }
+  }
+
+  // Share a link that opens straight to this proposal (still PIN-gated at the door).
+  async function shareProposal() {
+    const url = `${window.location.origin}/project/${accessId}?stage=proposal`;
+    try { if (navigator.share) { await navigator.share({ title: "IOT TECHS proposal", url }); return; } } catch { /* share sheet cancelled — fall through to copy */ }
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { window.prompt("Copy this link to share the proposal:", url); }
   }
 
   if (!p || !p.payload) {
@@ -698,8 +707,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             {!canAct && acceptedSet.size === 0 && <p>This proposal isn’t open for action right now.</p>}
           </>
         )}
-        {/* Download is always available at the bottom of the proposal. */}
+        {/* Share (deep-link straight to this proposal, still PIN-gated) + Download, at the bottom. */}
         <div className="pcv-accept-dl">
+          <button type="button" className="pcv-dl" onClick={shareProposal}
+                  title="Copy a link that opens straight to this proposal">
+            <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+            {copied ? "Copied" : "Share"}
+          </button>
           <button type="button" className="pcv-dl" disabled={dlBusy} onClick={handleDownload}
                   title="Download a PDF of this proposal (includes the mockup & site survey)">
             {dlBusy ? "Preparing…" : (
@@ -1006,7 +1020,7 @@ const PCV_CSS = `
 .pcv-accept-actions .pcv-select{flex:1;min-width:200px}
 .pcv-locked-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
 .pcv-locked-row .pcv-locked-note{margin-top:0;flex:1;min-width:180px}
-.pcv-accept-dl{margin-top:12px;padding-top:12px;border-top:1px solid var(--dv-line,#E4E4DF);display:flex;justify-content:flex-end}
+.pcv-accept-dl{margin-top:12px;padding-top:12px;border-top:1px solid var(--dv-line,#E4E4DF);display:flex;justify-content:flex-end;gap:8px}
 .pcv-send-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .pcv-send-count{font-size:.82rem;font-weight:600;color:var(--dv-ink-soft,#3A4048);flex:1;min-width:150px}
 .pcv-send-bar .pcv-select{height:40px;padding:0 18px}

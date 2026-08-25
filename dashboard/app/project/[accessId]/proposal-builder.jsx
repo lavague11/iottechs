@@ -39,6 +39,7 @@ function loadSurveyForImport(accessId) {
 export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
   const [dlBusy, setDlBusy] = useState(false);                // building the proposal PDF
+  const [copied, setCopied] = useState(false);                // "Copied" flash after Share
   const [meta, setMeta] = useState(initial || null);          // server row (status, version, sent_at…)
   const [payload, setPayload] = useState(() => initial?.payload || blankPayload());
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
@@ -261,6 +262,14 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     finally { setDlBusy(false); }
   }
 
+  // Share a link that opens the customer straight to THIS proposal (still PIN-gated at the door).
+  async function shareProposal() {
+    const url = `${window.location.origin}/project/${accessId}?stage=proposal`;
+    try { if (navigator.share) { await navigator.share({ title: "Your IOT TECHS proposal", url }); return; } } catch { /* share sheet cancelled — fall through to copy */ }
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { window.prompt("Copy this link to share the proposal:", url); }
+  }
+
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
   const disc = payload.discount || { type: "flat", value: 0 };
   const pcp = (payload.pcp_credit && typeof payload.pcp_credit === "object") ? payload.pcp_credit : { type: "flat", value: +payload.pcp_credit || 0 };
@@ -315,10 +324,23 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <span className="prop-eye-n">{viewCount}</span>
           </button>
         );
+        // Share a link straight to this proposal (PIN-gated) + download the PDF — up here so staff can
+        // send it to collect the signature fast, without scrolling to the bottom.
+        const shareBtn = (
+          <button className="prop-eye" onClick={shareProposal} title="Copy a link that opens straight to this proposal">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+            {copied && <span className="prop-eye-n">Copied</span>}
+          </button>
+        );
+        const download = (
+          <button className="prop-eye" disabled={dlBusy} onClick={handleDownload} title="Download the proposal PDF (with mockup & survey)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        );
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{eye}{gear}</div>;
+          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -329,6 +351,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
               <span className="pv-tool-title">Proposal builder{meta?.version ? ` · v${meta.version}` : ""}</span>
               {statusChip}
             </button>
+            {shareBtn}
+            {download}
             {eye}
             {gear}
             <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
