@@ -118,8 +118,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   }, [accessId]);
   const [showForm, setShowForm] = useState(false);
   // Smart default title (DoD #1): the property's street address + the visit type, e.g.
-  // "2503 Jay Pl — Site Survey". Falls back to the caller's default when there's no address.
-  const streetTitle = project?.address ? `${String(project.address).split(",")[0].trim()} — Site Survey` : defaultTitle;
+  // "2503 Jay Pl — Site Survey" / "… — Installation". Visit type follows the appointment kind so an
+  // install booking never mislabels itself as a survey. Falls back to the caller's default.
+  const visitType = apptKind === "install" ? "Installation" : "Site Survey";
+  const streetTitle = project?.address ? `${String(project.address).split(",")[0].trim()} — ${visitType}` : defaultTitle;
   const [form, setForm]         = useState({
     title: streetTitle, date:"", time:"10:00",
     duration:"60", location: project?.address||"", notes:"", invitees:[],
