@@ -25,7 +25,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
@@ -50,6 +50,22 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const wheelLock = useRef(false);
 
   const go = useCallback((i) => { const n = Math.max(0, Math.min(N - 1, i)); setMoved(true); onIdx ? onIdx(n) : null; }, [N, onIdx]);
+  // Jump to a named tool AND open it — used by the "your next step" chip so tapping it lands the
+  // customer on the exact tool (heavy tools launch full-screen; light ones expand inline).
+  const openNamedTool = useCallback((name) => {
+    if (!name) return false;
+    for (let i = 0; i < stages.length; i++) {
+      const ti = (stages[i].tools || []).findIndex((t) => t.name === name && t.node);
+      if (ti >= 0) {
+        go(i);
+        const t = stages[i].tools[ti];
+        if (t.heavy) setOverlay({ i, ti, name: t.name });
+        else setOpenTool((o) => ({ ...o, [i]: ti }));
+        return true;
+      }
+    }
+    return false;
+  }, [stages, go]);
 
   // ── drag ── capture only AFTER a real horizontal move, so taps still fire the button click.
   // Never start a drag from an interactive control — on touch, finger jitter on a button tap would
@@ -199,7 +215,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         {statusChip
           ? (statusChip.onClick
               ? <button className="dv-chip dv-chip-act" style={{ background: statusChip.color + "1f", color: statusChip.color }}
-                  onClick={(e) => { e.stopPropagation(); statusChip.onClick(); }}>
+                  onClick={(e) => { e.stopPropagation(); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); }}>
                   <i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}
                   <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
                 </button>
@@ -276,7 +292,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             );
           })}
         </div>
-        <div className="dv-readout"><div className="pct mono">{cur.pct}%</div><div className="cap mono">{cur.name}</div></div>
+        <div className="dv-readout"><div className="pct mono">{progressPct != null ? progressPct : cur.pct}%</div><div className="cap mono">{cur.name}</div></div>
       </nav>
 
       {/* deck */}

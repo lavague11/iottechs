@@ -1775,10 +1775,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const f = custFacts;
     if (f.survey_has && !f.survey_done)   return { label: "Approve site survey", target: "site_survey",      spot: "Site Survey" };
     if (f.mockup_has && !f.mockup_done)   return { label: "Approve mockup",        target: "site_survey",      spot: "Mockups" };
-    if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: null };
-    if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: null };
-    if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: null };
-    if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: null };
+    if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: "Proposal" };
+    if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: "Approval & Deposit" };
+    if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: "Approval & Deposit" };
+    if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
   const headerAction = (cView === "customer" && acceptLoaded) ? customerNextAction() : null;
@@ -2263,6 +2263,18 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
       };
     });
+    // Customer readout % — based on ITEMS actually approved/paid, not the stage index, so it advances
+    // as each obligation is ticked off (survey → mockup → accept → sign → deposit → pay → complete).
+    const custSteps = [];
+    if (custFacts.survey_has) custSteps.push(custFacts.survey_done);
+    if (custFacts.mockup_has) custSteps.push(custFacts.mockup_done);
+    custSteps.push(custFacts.proposal_status === "accepted");
+    custSteps.push(custFacts.proposal_signed);
+    custSteps.push(custFacts.deposit_recorded);
+    custSteps.push(custFacts.final_balance_paid);
+    custSteps.push(projCompleted);
+    const custProgressPct = (cView === "customer" && custSteps.length)
+      ? Math.round((100 * custSteps.filter(Boolean).length) / custSteps.length) : null;
     const deckCustomer = {
       code: lp.access_id,
       name: lp.customer,
@@ -2292,7 +2304,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
-        statusChip={headerAction ? { label: headerAction.label, color: "#C9A96E", onClick: () => browse(headerAction.target) } : null}
+        statusChip={headerAction ? { label: headerAction.label, color: "#C9A96E", openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
+        progressPct={custProgressPct}
         menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}

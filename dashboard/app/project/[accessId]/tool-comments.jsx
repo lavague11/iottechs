@@ -11,13 +11,16 @@ import { addToolNoteAction, getToolNotesAction } from "./proposal-actions";
 // Props: accessId, scope ("survey"|"mockup"|"portal"), role, preview, anchor (the tapped item or
 // null), onClose. When `anchor` is set the add-toast pops; the grouped thread list always renders
 // (only when there ARE comments) so staff can act on them.
-export default function ToolComments({ accessId, scope, role, preview, anchor, onClose }) {
+export default function ToolComments({ accessId, scope, role, preview, anchor, onClose, hideGeneral = false }) {
   const [notes, setNotes] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [genText, setGenText] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const isCustomer = role === "customer";
+  // Some tools (the survey) comment by tapping an item, so they suppress the always-on general box —
+  // no lone "Send" floating under the approve bar. Existing comment threads still render (read-only).
+  const showGeneral = isCustomer && !preview && !hideGeneral;
 
   const load = useCallback(() => {
     getToolNotesAction(accessId, scope).then((r) => { if (r?.notes) setNotes(r.notes); }).catch(() => {});
@@ -58,7 +61,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
 
   // Nothing to show for a STAFF viewer with no thread open and no comments yet. The customer always
   // gets the general comment box (their way to leave a note that isn't about one specific item).
-  if (anchor == null && groups.length === 0 && !(isCustomer && !preview)) return null;
+  if (anchor == null && groups.length === 0 && !showGeneral) return null;
 
   return (
     <>
@@ -97,7 +100,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
 
       {/* Always-on grouped thread — staff (and the customer) see what's been said, by item; the
           customer gets a general comment box for notes that aren't about one specific item. */}
-      {(groups.length > 0 || (isCustomer && !preview)) && (
+      {(groups.length > 0 || showGeneral) && (
         <div className="tc-thread">
           <div className="tc-thread-lbl">{isCustomer ? "Comments" : "Customer comments"}</div>
           {groups.map((g) => (
@@ -112,7 +115,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
               ))}
             </div>
           ))}
-          {isCustomer && !preview && (
+          {showGeneral && (
             <div className="tc-row" style={{ marginTop: groups.length ? 11 : 2 }}>
               <input className="tc-in" placeholder="Leave a comment…" value={genText} maxLength={2000}
                 onChange={(e) => setGenText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitGeneral(); }} />

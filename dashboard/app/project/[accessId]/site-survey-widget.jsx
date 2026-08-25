@@ -176,7 +176,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         the tool is full-screen (the overlay covers the page). */}
     {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} cmd={cmd} />}
     {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
-    <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} />
+    <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
     </>
   );
 }
