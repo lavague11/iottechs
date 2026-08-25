@@ -287,6 +287,15 @@
   .cfNo:hover{background:var(--soft)}
   .cfYes{background:#d9534f;color:#fff;border-color:#d9534f}
   .cfYes:hover{background:#c9302c}
+  /* add-floor import chooser — start a new floor from the previous one's background (± items) */
+  #floorModal{position:fixed;inset:0;z-index:21;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
+  #floorModal.on{display:flex}
+  .cfCol{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .flOpt{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid var(--line);border-radius:10px;background:#fff;padding:11px 13px;cursor:pointer;font-family:inherit}
+  .flOpt:hover{border-color:var(--gold);background:var(--soft)}
+  .flOpt b{font-size:13.5px;color:var(--ink)}
+  .flOpt span{font-size:11.5px;color:var(--muted)}
+  .flCancel{margin-top:4px;align-self:flex-end;background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;padding:6px 4px}
   /* delete-floor x on the floor tabs */
   .ftab .fdel{margin-left:7px;opacity:.5;font-size:14px;line-height:1;cursor:pointer}
   .ftab .fdel:hover{opacity:1}
@@ -465,6 +474,17 @@
 
   <!-- confirm dialog (destructive actions) -->
   <div id="confirmModal"><div class="cfCard"><div class="cfMsg" id="cfMsg"></div><div class="cfBtns"><button class="cfNo" id="cfNo">Cancel</button><button class="cfYes" id="cfYes">Delete</button></div></div></div>
+
+  <!-- add-floor: import the background from the previous floor? (with items or just the plan) -->
+  <div id="floorModal"><div class="cfCard">
+    <div class="cfMsg">Start the new floor from <b id="flPrev">the previous floor</b>?</div>
+    <div class="cfCol">
+      <button class="flOpt" id="flBoth"><b>Background + items</b><span>Copy the plan and all placed cameras/devices</span></button>
+      <button class="flOpt" id="flBg"><b>Background only</b><span>Copy just the plan image — place devices fresh</span></button>
+      <button class="flOpt" id="flBlank"><b>Blank floor</b><span>Start from the background chooser</span></button>
+    </div>
+    <button class="flCancel" id="flCancel">Cancel</button>
+  </div></div>
 
   <!-- upload source picker -->
 
@@ -1096,7 +1116,18 @@
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
     }
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
-    function addFloor(){ snapFloor(); floors.push({name:"Floor "+(floors.length+1),bg:null,devices:[],started:false}); loadFloor(floors.length-1); renderFloorTabs(); goStep(0); queueSave(); }
+    function createFloor(from, withItems){
+      var f={ name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
+        devices:(from&&withItems)?JSON.parse(JSON.stringify(from.devices||[])):[], started:!!(from&&from.bg) };
+      floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
+      goStep(f.started ? 1 : 0);   // carried a background over → straight to Setup; else the chooser
+      queueSave();
+    }
+    // New floor: if the current floor has a background, offer to import it (with or without the placed
+    // items) — buildings often reuse the same plan, but not always, so it's a choice, never automatic.
+    function addFloor(){ snapFloor(); var prev=floors[curFloor];
+      if(prev && prev.bg){ askFloorImport(prev.name, function(mode){ createFloor(mode==="none"?null:prev, mode==="bgitems"); }); }
+      else createFloor(null, false); }
     function renderFloorTabs(){ var tabs=document.querySelector(".floorTabs"); if(!tabs) return; tabs.innerHTML="";
       floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":"");
         var nm=document.createElement("span"); nm.className="fnm"; nm.textContent=f.name; b.appendChild(nm);
@@ -1187,6 +1218,16 @@
     document.getElementById("cfNo").addEventListener("click", closeConfirm);
     document.getElementById("cfYes").addEventListener("click", function(){ var f=pendingYes; closeConfirm(); if(f) f(); });
     document.getElementById("confirmModal").addEventListener("click", function(e){ if(e.target===this) closeConfirm(); });
+    // add-floor import chooser
+    var floorCb=null;
+    function askFloorImport(prevName, cb){ document.getElementById("flPrev").textContent=prevName||"the previous floor"; floorCb=cb; document.getElementById("floorModal").classList.add("on"); }
+    function closeFloorModal(){ document.getElementById("floorModal").classList.remove("on"); floorCb=null; }
+    function pickFloor(mode){ var f=floorCb; closeFloorModal(); if(f) f(mode); }
+    document.getElementById("flBoth").addEventListener("click", function(){ pickFloor("bgitems"); });
+    document.getElementById("flBg").addEventListener("click", function(){ pickFloor("bg"); });
+    document.getElementById("flBlank").addEventListener("click", function(){ pickFloor("none"); });
+    document.getElementById("flCancel").addEventListener("click", closeFloorModal);
+    document.getElementById("floorModal").addEventListener("click", function(e){ if(e.target===this) closeFloorModal(); });
 
     // ---- Upload or reuse: one door → the library modal, which offers "Upload from device" plus this
     // project's saved plans (Upload + Library merged into a single choice). ----
