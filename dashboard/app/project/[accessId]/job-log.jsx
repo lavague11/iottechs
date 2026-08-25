@@ -26,6 +26,12 @@ const KIND_COLOR = {
   review: "var(--dv-blue,#3E6C9E)", pay: "var(--dv-green,#2E7D5B)", done: "var(--dv-green,#2E7D5B)",
   call: "var(--dv-gold-deep,#A8842F)", open: "var(--dv-faint,#A1A6AC)",
 };
+// A tool comment is tagged with the surface it came from + the item it was tapped on (e.g. a mockup
+// camera). Surface the tool + item so a note like "TOO FAR" reads against the camera it's about.
+const SCOPE_LABEL = { survey: "Site Survey", mockup: "Mockup", portal: "Portal" };
+function anchorLabel(n) {
+  return [SCOPE_LABEL[n.scope], n.anchor].filter(Boolean).join(" · ");
+}
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function fmtTs(s) {
@@ -243,6 +249,12 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
                   <span className="jl-note-ts mono">{fmtTs(n.created_at)}</span>
                   {renderBadge(n)}
                 </div>
+                {anchorLabel(n) && (
+                  <div className="jl-note-anchor">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z" /><circle cx="12" cy="10" r="3" /></svg>
+                    {anchorLabel(n)}
+                  </div>
+                )}
                 <div className={`jl-note-body ${expanded.has(n.id) ? "open" : ""}`} onClick={() => toggleExpand(n.id)} title="Click to expand / collapse">{renderBody(n.body)}</div>
               </li>
             ))}
@@ -312,6 +324,8 @@ const CSS = `
 .jl-cy{background:#e9f0f8;color:#2f5c8f;border-color:#aec6e2}
 .jl-cn{background:#fbe9e6;color:#b23b28;border-color:#e3b4ab}
 .jl-badge.tog{cursor:pointer}
+.jl-note-anchor{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--dv-gold-deep,#A8842F);background:#F7EFDD;border-radius:100px;padding:2px 9px;margin-bottom:6px}
+.jl-note-anchor svg{flex:0 0 auto}
 .jl-note-body{font-size:14px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .jl-note-body.open{white-space:pre-wrap;overflow:visible}
 .jl-tools{display:inline-flex;align-items:center;gap:8px}
