@@ -21,7 +21,6 @@ import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
 import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
-import SurveyComments from "./survey-comments";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
@@ -2870,7 +2869,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
                 onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
               />
-              <SurveyComments accessId={lp.access_id} role={cView} preview={!!previewRole} />
             </FlowStep>
           )}
 

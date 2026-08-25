@@ -865,6 +865,8 @@
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
       var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
+    // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
+    function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
     function mountDevice(d){
       var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
@@ -873,6 +875,8 @@
         '<div class="viewBadge" title="View photo"></div>';
       document.getElementById("scene").appendChild(el);
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d);
+      // Read-only (customer): tapping a camera marker leaves a comment tagged to it (their only write).
+      if(RO){ el.style.cursor="pointer"; el.addEventListener("click", function(e){ e.stopPropagation(); postSurveyComment(d); }); }
       // Hover (desktop) previews the camera's view photo; tapping the badge pins it (mobile).
       el.addEventListener("mouseenter", function(){ if(d.photo && !popPinned) showViewPop(d, el, false); });
       el.addEventListener("mouseleave", function(){ if(!popPinned) hideViewPop(); });

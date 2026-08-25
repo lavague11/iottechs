@@ -15,6 +15,8 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
   const [notes, setNotes] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [genText, setGenText] = useState("");
+  const [genBusy, setGenBusy] = useState(false);
   const isCustomer = role === "customer";
 
   const load = useCallback(() => {
@@ -31,6 +33,16 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
     setBusy(false);
     if (r?.ok) { setNotes(r.notes); setText(""); }
   }
+  // A general (un-anchored) comment — the always-on box, so the customer can leave a note that isn't
+  // about one specific item.
+  async function submitGeneral() {
+    const t = genText.trim();
+    if (!t || genBusy || preview) return;
+    setGenBusy(true);
+    const r = await addToolNoteAction(accessId, scope, null, t);
+    setGenBusy(false);
+    if (r?.ok) { setNotes(r.notes); setGenText(""); }
+  }
 
   const fmt = (s) => { try { return new Date(String(s).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric" }); } catch { return ""; } };
 
@@ -44,8 +56,9 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
   });
   const activeThread = anchor != null ? notes.filter((n) => (n.anchor || "") === String(anchor)) : [];
 
-  // Nothing to show for a viewer with no thread open and no comments yet.
-  if (anchor == null && groups.length === 0) return null;
+  // Nothing to show for a STAFF viewer with no thread open and no comments yet. The customer always
+  // gets the general comment box (their way to leave a note that isn't about one specific item).
+  if (anchor == null && groups.length === 0 && !(isCustomer && !preview)) return null;
 
   return (
     <>
@@ -82,10 +95,11 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
         </div>
       )}
 
-      {/* Always-on grouped thread — so staff (and the customer) see what's been said, by item */}
-      {groups.length > 0 && (
+      {/* Always-on grouped thread — staff (and the customer) see what's been said, by item; the
+          customer gets a general comment box for notes that aren't about one specific item. */}
+      {(groups.length > 0 || (isCustomer && !preview)) && (
         <div className="tc-thread">
-          <div className="tc-thread-lbl">{isCustomer ? "Your comments" : "Customer comments"}</div>
+          <div className="tc-thread-lbl">{isCustomer ? "Comments" : "Customer comments"}</div>
           {groups.map((g) => (
             <div className="tc-group" key={g.key}>
               <div className="tc-group-h">{g.key}</div>
@@ -98,6 +112,13 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
               ))}
             </div>
           ))}
+          {isCustomer && !preview && (
+            <div className="tc-row" style={{ marginTop: groups.length ? 11 : 2 }}>
+              <input className="tc-in" placeholder="Leave a comment…" value={genText} maxLength={2000}
+                onChange={(e) => setGenText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitGeneral(); }} />
+              <button className="tc-btn" onClick={submitGeneral} disabled={genBusy || !genText.trim()}>{genBusy ? "…" : "Send"}</button>
+            </div>
+          )}
         </div>
       )}
 

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import SignaturePanel from "./signature-panel";
 import SurveyDevices from "./survey-devices";
+import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
@@ -16,6 +17,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
   const [roster, setRoster] = useState([]);       // device roster mirrored from the tool (moved outside)
+  const [commentAnchor, setCommentAnchor] = useState(null);   // a read-only customer tapped this camera → comment toast
   const [curFloorState, setCurFloorState] = useState(0);
   const frameRef = useRef(null);
   // Drive an edit back into the tool (rename/FOV/delete/select/photo/switch-floor), applied live.
@@ -61,6 +63,8 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       // The tool's own nav buttons drive the real server submit/unsubmit (the status now lives inside the tool).
       if (e.data.type === "iotSurvey2Submit") onSubmit?.();
       if (e.data.type === "iotSurvey2Unsubmit") onUnsubmit?.();
+      // A read-only customer tapped a camera marker → open the anchored comment toast.
+      if (e.data.type === "iotSurveyComment") setCommentAnchor(e.data.anchor || null);
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -171,6 +175,8 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     {/* The device roster lives OUTSIDE the tool now — below the map, never overlapping it. Hidden while
         the tool is full-screen (the overlay covers the page). */}
     {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} cmd={cmd} />}
+    {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
+    <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} />
     </>
   );
 }
