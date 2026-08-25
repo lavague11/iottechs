@@ -1499,6 +1499,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const openToolParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("open") : null;
   const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment" };
   const openToolOnMount = openToolParam ? (OPEN_TOOL_NAMES[openToolParam.toLowerCase()] || null) : null;
+  // Imperative "open this deck tool now" signal (e.g. a "Review & Approve" link that jumps to the
+  // proposal document). Bumping the nonce tells DeckView to open the named tool.
+  const [deckOpenSignal, setDeckOpenSignal] = useState(null);
+  const openDeckTool = (name) => setDeckOpenSignal((s) => ({ name, n: (s?.n || 0) + 1 }));
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
   // Deck shell: the redesigned horizontal stage deck — now the default for EVERY role (staff and
   // customers), on every project new or old. Resolution order (set after mount to avoid a hydration
@@ -2127,6 +2131,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
                   customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
+                  onOpenProposal={() => openDeckTool("Proposal")}
                   onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} />
               </div></AccordionProvider>
             ) });
@@ -2360,6 +2365,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
+        openToolSignal={deckOpenSignal}
         menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}

@@ -354,6 +354,16 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           <span className="pcv-contact">(646) 396-0775 · support@iot-techs.com · www.iot-techs.com</span>
         </div>
         <div className="pcv-hd-right">
+          <div className="pcv-hd-actions">
+            <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+              {copied ? "Copied" : "Share"}
+            </button>
+            <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              {dlBusy ? "…" : "PDF"}
+            </button>
+          </div>
           <span className="pcv-doctag">System Proposal</span>
           <span className="pcv-pill">Security &amp; Low Voltage</span>
           <span className="pcv-hd-meta">{propDate}</span>
@@ -785,6 +795,10 @@ const PCV_CSS = `
 .pcv-pill{margin:2px 0}
 .pcv-contact{font-size:.7rem;color:var(--dv-meta,#787D84)}
 .pcv-hd-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.pcv-hd-actions{display:flex;gap:8px;margin-bottom:4px}
+.pcv-hd-ic{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pcv-hd-ic:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-faint,#A1A6AC)}
+.pcv-hd-ic:disabled{opacity:.5;cursor:default}
 .pcv-doctag{font-size:.72rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;
   color:var(--dv-meta,#787D84);border-bottom:1px solid var(--dv-line,#E4E4DF);padding-bottom:2px}
 .pcv-pill{background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);border:1px solid var(--dv-line,#E4E4DF);font-size:.66rem;font-weight:500;letter-spacing:.03em;

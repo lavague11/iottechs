@@ -49,7 +49,7 @@ function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
 // `embedded` = mounted inside the deck's full-screen overlay, which already shows the tool's
 // name in its bar. When embedded we drop our own collapse/title header (no second, redundant
 // title bar) and stay always-open. This is the standing convention for deck-embedded tools.
-export default function ApprovalPanel({ accessId, role, customerName, customerAddress, customerPhone, customerEmail, onStageChange, onBrowseStage, stage = "approval_deposit", embedded = false }) {
+export default function ApprovalPanel({ accessId, role, customerName, customerAddress, customerPhone, customerEmail, onStageChange, onBrowseStage, onOpenProposal, stage = "approval_deposit", embedded = false }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
   // The person who paid, by NAME. New entries stamp a real name; older/generic ones ("customer",
@@ -197,8 +197,11 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               </button>
               {gateOpen && (<>
                 <div className="apv-gate-sub">{sub}</div>
-                {onBrowseStage && showBtn && (
-                  <button type="button" className="apv-gate-btn" onClick={() => onBrowseStage("proposal")}>✍ Review &amp; Approve</button>
+                {(onOpenProposal || onBrowseStage) && showBtn && (
+                  <button type="button" className="apv-gate-btn" onClick={() => { if (onOpenProposal) onOpenProposal(); else onBrowseStage?.("proposal"); }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+                    Review &amp; Approve
+                  </button>
                 )}
               </>)}
             </div>
@@ -685,7 +688,7 @@ const APV_CSS = `
 .apv-gate-hd{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left}
 .apv-gate-title{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-meta,#787D84)}
 .apv-gate-sub{font-size:.83rem;color:var(--dv-meta,#787D84);line-height:1.45;max-width:520px;margin-top:6px}
-.apv-gate-btn{margin-top:12px;height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:500;cursor:pointer;font-family:inherit}
+.apv-gate-btn{display:inline-flex;align-items:center;gap:8px;margin-top:12px;height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:500;cursor:pointer;font-family:inherit}
 .apv-gate-btn:hover{filter:brightness(1.12)}
 .apv-note{margin:14px 2px 0;padding:9px 12px;border-radius:8px;font-size:.8rem;font-weight:600}
 .apv-note.err{background:#fbe9e6;border:1px solid #e3b4ab;color:var(--dv-red,#C4553D)}
