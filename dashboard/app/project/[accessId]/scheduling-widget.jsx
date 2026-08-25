@@ -102,7 +102,7 @@ const Ico = {
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
-export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", onCount, onBooked }) {
+export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", apptKind = null, onCount, onBooked, onEvents }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -134,6 +134,8 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
 
   // Report how many events are scheduled so the caller can gate a step's "done" on a real booking.
   useEffect(() => { onCount?.(data.events.length); }, [data.events.length, onCount]);
+  // Report the full event list so a caller (the deck header chip) can show the actual day + time.
+  useEffect(() => { onEvents?.(data.events); }, [data.events, onEvents]);
 
   const isReadOnly = view === "customer" || customerView;
 
@@ -149,7 +151,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   function saveEvent() {
     if (!form.date) return;
     setSaving(true);
-    const ev = { id: uid(), ...form, created: new Date().toISOString().slice(0,10) };
+    const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
     logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date }).catch(() => {});   // Job Log

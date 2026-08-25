@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
@@ -13,6 +13,7 @@ import JobLog           from "./job-log";
 import SiteSurveyWidget  from "./site-survey-widget";
 import ToolComments      from "./tool-comments";
 import SchedulingWidget  from "./scheduling-widget";
+import { seedToolData }   from "./tool-sync";
 import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
@@ -48,6 +49,7 @@ const DVI = {
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
   card: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
   edit: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  cal: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
 };
 // Build + download a .vcf with the customer's full contact card (name · phone · email · address).
 function downloadVCard(p) {
@@ -1672,6 +1674,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [localAssignments, setLocalAssignments] = useState(assignments);
   const [installDone, setInstallDone]   = useState(false);   // install checklist reports "every device done"
   const [installEvents, setInstallEvents] = useState(null);  // scheduling widget event count (install phase) — gate "done" on a real booking
+  const [schedEvents, setSchedEvents]   = useState([]);      // all booked appointments (survey + install) — drives the header chip's date/time
+  const [schedModal, setSchedModal]     = useState(null);    // scheduling overlay: null | "survey" | "install"
   const [shipStatus, setShipStatus]     = useState({ count: 0, delivered: false }); // shipment tracker: hide until a #, auto-complete on delivered
   const [addonCount, setAddonCount]     = useState(0);       // job-site add-ons count — hide the step until one is submitted
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
@@ -1766,17 +1770,61 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
+
+  // ---- Appointments (survey + install) --------------------------------------------------------
+  // Scheduling moved OUT of the per-stage tool cards and into the contact action bar + the header
+  // chip. We keep the whole event list here so the chip can show the real day/time and the modal is
+  // a single overlay reused for both a survey visit (Consulting) and the install (Install).
+  const applySchedEvents = useCallback((evs) => {
+    setSchedEvents((prev) => (JSON.stringify(prev) === JSON.stringify(evs || []) ? prev : (evs || [])));
+  }, []);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try { await seedToolData(lp.access_id, "schedule", `sched_v1_${lp.access_id}`, { force: cView === "customer" }); } catch {}
+      if (!live) return;
+      try { const r = JSON.parse(localStorage.getItem(`sched_v1_${lp.access_id}`) || "{}"); applySchedEvents(Array.isArray(r?.events) ? r.events : []); } catch {}
+    })();
+    return () => { live = false; };
+  }, [lp.access_id, cView, applySchedEvents]);
+  // An event is a "survey" or "install" appointment — tagged on new bookings; older ones fall back to
+  // their title (the install default is "…Installation").
+  const apptKindOf = (ev) => (ev?.kind === "install" || ev?.kind === "survey") ? ev.kind : (/install/i.test(ev?.title || "") ? "install" : "survey");
+  // The one appointment to surface for a kind: the soonest still-upcoming, else the most recent.
+  function pickAppt(kind) {
+    const list = schedEvents.filter((e) => e?.date && apptKindOf(e) === kind)
+      .map((e) => ({ e, t: new Date(`${e.date}T${e.time || "00:00"}`).getTime() }))
+      .filter((x) => !Number.isNaN(x.t)).sort((a, b) => a.t - b.t);
+    if (!list.length) return null;
+    const nowT = Date.now();
+    return (list.find((x) => x.t >= nowT - 3600e3) || list[list.length - 1]).e;
+  }
+  function apptLabel(ev) {
+    try {
+      const d = new Date(`${ev.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const [h, m] = String(ev.time || "").split(":").map(Number);
+      if (Number.isNaN(h)) return d;
+      const t = new Date(2000, 0, 1, h, m || 0).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      return `${d}, ${t}`;
+    } catch { return fmtDate(ev?.date); }
+  }
+  // Which kind the action-bar "Schedule" button books, based on the phase in view.
+  const schedKindNow = masterToPhaseKey(viewingStage) === "ph_install" ? "install" : "survey";
+  const openSchedule = (kind) => setSchedModal(kind || schedKindNow);
+
   // The customer's ONE next action, shown as a chip next to their name (replaces the generic "Active").
   // Walks survey → mockup → proposal → sign → deposit → final payment; tapping it browses to the step
   // and spotlights the exact tool card. Shown in the customer view AND the staff "customer view" preview.
   function customerNextAction() {
     const f = custFacts;
+    // A booked site-survey visit they don't have results for yet — tell them when the tech is coming.
+    if (!f.survey_has && !f.survey_done) { const a = pickAppt("survey"); if (a) return { label: `Survey · ${apptLabel(a)}`, schedule: "survey", muted: true }; }
     if (f.survey_has && !f.survey_done)   return { label: "Approve site survey", target: "site_survey",      spot: "Site Survey" };
     if (f.mockup_has && !f.mockup_done)   return { label: "Approve mockup",        target: "site_survey",      spot: "Mockups" };
     if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: "Proposal" };
     if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: "Approval & Deposit" };
     if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: "Approval & Deposit" };
-    if (f.deposit_recorded && custStage === "schedule")                           return { label: "Scheduling your installation", target: "schedule", spot: null, muted: true };
+    if (f.deposit_recorded && custStage === "schedule") { const a = pickAppt("install"); return a ? { label: `Install · ${apptLabel(a)}`, schedule: "install", muted: true } : { label: "Scheduling your installation", target: "schedule", spot: null, muted: true }; }
     if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
@@ -1784,6 +1832,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // an action they still owe (Submit / Build / Revise) or a "waiting on the customer" status (muted).
   function officeNextAction() {
     const f = custFacts;
+    // Consulting: book the site-survey visit from the header before there's anything to submit.
+    if (!f.survey_has && !f.survey_submitted && ["inquiry", "site_survey"].includes(custStage)) {
+      const a = pickAppt("survey");
+      return a ? { label: `Survey · ${apptLabel(a)}`, schedule: "survey", muted: true }
+               : { label: "Schedule survey", schedule: "survey" };
+    }
     if (f.survey_has && !f.survey_submitted)        return { label: "Submit site survey",       target: "site_survey",      spot: "Site Survey" };
     if (f.survey_submitted && !f.survey_done)       return { label: "Awaiting site survey approval", target: "site_survey",   spot: "Site Survey",         muted: true };
     if (f.mockup_has && !f.mockup_submitted)        return { label: "Submit mockup",             target: "site_survey",      spot: "Mockups" };
@@ -1793,7 +1847,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status === "changes_requested")  return { label: "Revise proposal",           target: "proposal",         spot: "Proposal" };
     if (f.proposal_status === "accepted" && !f.proposal_signed)  return { label: "Awaiting signature", target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
-    if (f.deposit_recorded && custStage === "schedule")          return { label: "Schedule install",   target: "schedule",         spot: null };
+    if (f.deposit_recorded && custStage === "schedule") {
+      const a = pickAppt("install");
+      return a ? { label: `Install · ${apptLabel(a)}`, schedule: "install", muted: true }
+               : { label: "Schedule install", schedule: "install" };
+    }
     return null;
   }
   const headerAction = !acceptLoaded ? null
@@ -2045,13 +2103,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const barWrap = { padding: "10px 14px", borderTop: "1px solid var(--dv-line,#E4E4DF)", flex: "0 0 auto", background: "var(--dv-raise,#FBFBFA)" };
         const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
         const all = [
-          { name: "Survey Scheduling", label: "Scheduler", state: toolMeta?.schedule?.count > 0 ? "done" : "active",
-            node: (
-              <div style={{ padding: "16px 18px" }}>
-                <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
-                  currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} onBooked={onSurveyBooked} />
-              </div>
-            ) },
+          // Scheduling moved to the contact action bar + the header chip (openSchedule) — no tool card.
           { name: "Site Survey", label: "Site Survey tool", heavy: true,
             state: toolAccepted(svMetaEff, acceptances.site_survey) ? "done" : "active",
             node: (
@@ -2084,11 +2136,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ) },
         ];
         // Customers see the consulting tools — a survey/mockup with nothing to review yet renders as
-        // a grayed, non-clickable stub (node dropped) instead of disappearing. The Scheduler is the
-        // one exception the owner asked to fully hide until there's an actual booking to show.
+        // a grayed, non-clickable stub (node dropped) instead of disappearing.
         if (cView === "customer") {
           return all
-            .filter((t) => t.name !== "Survey Scheduling" || toolMeta?.schedule?.count > 0)
             .map((t) =>
               ((t.name === "Site Survey" && !svMetaEff.has) || (t.name === "Mockups" && !mkMetaEff.has))
                 ? { ...t, node: null }
@@ -2145,11 +2195,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const staff = ["admin", "manager"].includes(cView);
         const pad = { padding: "16px 18px" };
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
-        if (staff || cView === "customer") {
-          tools.push({ name: "Install Scheduling", label: "Scheduler", state: installEvents > 0 ? "done" : "active",
-            node: <div style={pad}><SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
-              currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} defaultTitle="IOT TECHS — Installation" onCount={setInstallEvents} /></div> });
-        }
+        // Install scheduling moved to the contact action bar + the header chip (openSchedule) — no tool card.
         if (staff || cView === "customer") {
           // Tracking only appears once the office actually posts a shipment — no empty stub for the customer.
           const hasTracking = staff || toolMeta?.tracking?.count > 0;
@@ -2329,6 +2375,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onClick: () => { if (!previewRole && cView !== "customer") logCallAction(lp.access_id, lp.customer); } },
         lp.contact_email && { label: "Message", icon: DVI.mail, href: `mailto:${lp.contact_email}` },
         { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
+        { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSchedule(schedKindNow); } },
         { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
       ].filter(Boolean),
       // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
@@ -2350,13 +2397,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     }
     const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} extraEvents={jobExtra} />;
     return (
+      <>
       <DeckView
         stages={deckStages}
         idx={Math.max(0, phaseList.findIndex((p) => p.key === vPhase))}
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
-        statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.spot, onClick: () => browse(headerAction.target) } : null}
+        statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.schedule ? null : headerAction.spot, onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target) } : null}
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
@@ -2368,6 +2416,24 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales"] : []}
         onLock={onReAuth}
       />
+      {schedModal && (
+        <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) setSchedModal(null); }}>
+          <div className="pv-modal pv-sched-modal">
+            <button className="pv-modal-x" onClick={() => setSchedModal(null)}>✕</button>
+            <h2 className="pv-modal-title">{schedModal === "install" ? "Schedule installation" : "Schedule site survey"}</h2>
+            <div className="pv-sched-body">
+              <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+                currentUser={currentUser} project={lp} view={view} customerView={!!previewRole}
+                apptKind={schedModal}
+                defaultTitle={schedModal === "install" ? "IOT TECHS — Installation" : undefined}
+                onEvents={applySchedEvents}
+                onCount={schedModal === "install" ? setInstallEvents : undefined}
+                onBooked={schedModal === "install" ? undefined : onSurveyBooked} />
+            </div>
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
@@ -3991,6 +4057,9 @@ const PV_CSS = `
 .pvx .pv-modal-x{position:absolute;top:14px;right:14px;width:28px;height:28px;background:var(--bg-soft);border:none;border-radius:7px;cursor:pointer;font-size:1rem;color:var(--muted);display:flex;align-items:center;justify-content:center;line-height:1}
 .pvx .pv-modal-x:hover{background:var(--line)}
 .pvx .pv-modal-icon{margin-bottom:12px}
+.pvx .pv-sched-modal{max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;padding:24px 24px 20px}
+.pvx .pv-sched-modal .pv-modal-title{margin-bottom:14px}
+.pvx .pv-sched-body{overflow-y:auto;flex:1;min-height:0;margin:0 -6px;padding:0 6px}
 .pvx .pv-modal-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.18rem;margin:0 0 4px}
 .pvx .pv-modal-sub{font-size:.86rem;color:var(--muted);margin:0 0 18px}
 .pvx .pv-close-reasons{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
