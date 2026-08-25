@@ -30,7 +30,7 @@ import QCChecklist       from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
-import { customerPointer, customerAnnouncement } from "../../../lib/customer-action";
+import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -1768,6 +1768,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
+  // The customer's current action card (headline / sub / cta / target) — drives the next-step spotlight banner.
+  const custAct     = (cView === "customer" && acceptLoaded && !previewRole) ? customerAction(custStage, custFacts) : null;
 
   // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
   // a real customer, once they're past the welcome + tour, and only if this exact item hasn't popped
@@ -1797,6 +1799,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (stageParamRef.current) { stageParamRef.current = null; return; }
     setViewingStage(custStage);
     setGateMsg(null);
+    // Chaining: once they finish a step, custStage advances → land on the next and spotlight it, so the
+    // customer is walked through their approvals one at a time. Only when a real action is still pending.
+    if (customerAction(custStage, custFacts)?.tone === "action") spotlight();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [custStage, acceptLoaded]);
 
@@ -1953,6 +1958,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     }
     setGateMsg(msg);
     setViewingStage(stageKey);
+  }
+
+  // Spotlight — pulse + scroll the current tool card into view so the customer's eye lands on exactly
+  // what needs their action. Fires when they're directed to a step (the next-step banner) and, via the
+  // re-center effect, automatically after they finish one and progress to the next.
+  function spotlight() {
+    if (typeof document === "undefined") return;
+    setTimeout(() => {
+      const el = document.querySelector(".pv-survey-tools .flow-step") || document.querySelector(".flow-step") || document.querySelector(".pv-survey-tools");
+      if (!el) return;
+      try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* older browsers */ }
+      el.classList.add("pv-spotlit");
+      setTimeout(() => el.classList.remove("pv-spotlit"), 2400);
+    }, 180);
   }
   // What (if anything) blocks a technician from ACTING in a stage yet. Null = clear to work.
   function techStepBlockMessage(stageKey) {
@@ -2558,8 +2577,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {!previewRole && (view === "admin" || view === "manager" || view === "tech") && projectStage === "qc" && (
         <WorkOrderPanel accessId={project.access_id} workOrders={workOrders} view={view} />
       )}
-      {/* (Removed the "Your next step" hero — redundant with the tool card's own next-step tag.
-          custStage/custPointer still drive the bar marker, landing, and % below.) */}
+      {/* Next-step spotlight — directs the customer to what needs their approval, and (via the re-center
+          effect + spotlight()) walks them to the next one automatically after each approval. */}
+      {custAct && (
+        custAct.tone === "action" ? (
+          <button type="button" className="pv-next act" onClick={() => { if (custAct.target) browse(custAct.target); spotlight(); }}>
+            <span className="pv-next-ic"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+            <span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span>
+            <span className="pv-next-cta">{custAct.cta || "Show me"} <span aria-hidden="true">→</span></span>
+          </button>
+        ) : custAct.tone === "done" ? (
+          <div className="pv-next done"><span className="pv-next-ic">✓</span><span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span></div>
+        ) : (
+          <div className="pv-next wait"><span className="pv-next-ic" aria-hidden="true">⏳</span><span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span></div>
+        )
+      )}
       {cView === "customer" && (
         <button type="button" onClick={() => setTourOpen(true)}
           style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px auto 8px", padding: "4px 8px", background: "none", border: "none", color: "#9aa1af", fontSize: ".78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
@@ -3673,6 +3705,24 @@ const PV_CSS = `
 /* Revamped customer inquiry experience */
 .pvx .ciq{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:4px}
 @media(max-width:760px){.pvx .ciq{grid-template-columns:1fr}}
+/* Next-step spotlight banner (customer) + the pulse on the tool card it points at */
+.pvx .pv-next{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;border-radius:14px;padding:13px 16px;margin:2px 0 12px;font-family:inherit}
+.pvx .pv-next.act{cursor:pointer;background:linear-gradient(120deg,#2C3347,#0e1320);color:#fff;box-shadow:0 8px 24px -10px rgba(14,19,32,.55);transition:transform .13s;animation:pvNextBreathe 2.8s ease-in-out infinite}
+.pvx .pv-next.act:hover{transform:translateY(-1px)}
+@keyframes pvNextBreathe{0%,100%{box-shadow:0 8px 24px -10px rgba(14,19,32,.55),0 0 0 0 rgba(201,169,110,0)}50%{box-shadow:0 8px 24px -10px rgba(14,19,32,.55),0 0 0 4px rgba(201,169,110,.28)}}
+.pvx .pv-next.wait{background:var(--bg-soft,#faf8f4);border:1px solid var(--line,#e6e2d9);color:var(--ink,#1a1a1a)}
+.pvx .pv-next.done{background:rgba(46,125,91,.08);border:1px solid rgba(46,125,91,.3);color:var(--ink,#1a1a1a)}
+.pvx .pv-next-ic{flex:none;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.pvx .pv-next.act .pv-next-ic{background:var(--gold,#c9a96e);color:#0b0f1a}
+.pvx .pv-next.wait .pv-next-ic{color:var(--gold-deep,#8a6d2f)}
+.pvx .pv-next.done .pv-next-ic{background:var(--green,#2E7D5B);color:#fff}
+.pvx .pv-next-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pvx .pv-next-body b{font-size:.9rem;font-weight:700}
+.pvx .pv-next-body span{font-size:.78rem;opacity:.85}
+.pvx .pv-next.wait .pv-next-body span,.pvx .pv-next.done .pv-next-body span{color:var(--muted,#6f7686);opacity:1}
+.pvx .pv-next-cta{flex:none;font-size:.82rem;font-weight:800;color:var(--gold,#c9a96e);white-space:nowrap}
+.pvx .pv-spotlit{animation:pvSpot 1.2s ease-in-out 2}
+@keyframes pvSpot{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,0)}50%{box-shadow:0 0 0 4px rgba(201,169,110,.45)}}
 .pvx .ciq-hero{position:relative;overflow:hidden;border-radius:18px;padding:30px 26px;color:#fff;background:linear-gradient(150deg,#2C3347 0%,#0e1320 100%);display:flex;flex-direction:column;align-items:flex-start;gap:12px}
 .pvx .ciq-glow{position:absolute;top:-60px;right:-50px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(201,169,110,.45),transparent 70%);pointer-events:none}
 .pvx .ciq-badge{position:relative;width:56px;height:56px;border-radius:16px;background:linear-gradient(145deg,var(--gold),var(--gold-deep));color:#0e1320;display:grid;place-items:center;box-shadow:0 10px 26px -8px rgba(201,169,110,.6)}
