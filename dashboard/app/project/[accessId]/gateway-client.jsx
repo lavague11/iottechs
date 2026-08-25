@@ -1787,11 +1787,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   function officeNextAction() {
     const f = custFacts;
     if (f.survey_has && !f.survey_submitted)        return { label: "Submit site survey",       target: "site_survey",      spot: "Site Survey" };
-    if (f.survey_submitted && !f.survey_done)       return { label: "Awaiting survey approval",  target: "site_survey",      spot: "Site Survey",         muted: true };
+    if (f.survey_submitted && !f.survey_done)       return { label: "Awaiting site survey approval", target: "site_survey",   spot: "Site Survey",         muted: true };
     if (f.mockup_has && !f.mockup_submitted)        return { label: "Submit mockup",             target: "site_survey",      spot: "Mockups" };
     if (f.mockup_submitted && !f.mockup_done)       return { label: "Awaiting mockup approval",  target: "site_survey",      spot: "Mockups",             muted: true };
     if (!f.proposal_status)                          return { label: "Build proposal",            target: "proposal",         spot: "Proposal" };
-    if (f.proposal_status === "sent")               return { label: "Awaiting proposal",         target: "proposal",         spot: "Proposal",            muted: true };
+    if (f.proposal_status === "sent")               return { label: "Awaiting signature",        target: "proposal",         spot: "Proposal",            muted: true };
     if (f.proposal_status === "changes_requested")  return { label: "Revise proposal",           target: "proposal",         spot: "Proposal" };
     if (f.proposal_status === "accepted" && !f.proposal_signed)  return { label: "Awaiting signature", target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
