@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { seedToolData, startToolAutosync } from "./tool-sync";
-import { logAppointmentAction } from "./actions";
+import { logAppointmentAction, sendAppointmentEmailAction } from "./actions";
 import AddressAutocomplete from "../../components/address-autocomplete";
 
 function schedKey(id) { return `sched_v1_${id}`; }
@@ -98,6 +98,8 @@ const Ico = {
   copy:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
   check:  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
   x:      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  mail:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
+  bell:   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
@@ -128,6 +130,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   });
   const [saving, setSaving]     = useState(false);
   const [copied, setCopied]     = useState(null);
+  const [sendState, setSendState] = useState({});   // `${eventId}:${verb}` → "busy" | "sent" | "err"
 
   // Default a new event's date to tomorrow (client-only to avoid hydration mismatch).
   useEffect(() => {
@@ -172,6 +175,18 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const who = ev.invitees?.length ? ev.invitees.join(", ") : "assigned team";
     const txt = `📅 ${ev.title}\n📍 ${ev.location||"TBD"}\n🕐 ${fmtDate(ev.date)} at ${ev.time} (${ev.duration} min)\n👥 ${who}${ev.notes?`\n\nNotes: ${ev.notes}`:""}`;
     navigator.clipboard.writeText(txt).then(() => { setCopied(ev.id); setTimeout(()=>setCopied(null),2000); });
+  }
+
+  // Manually (re)send the invite or a reminder email for one appointment — to the customer, team,
+  // guests, and the staff member clicking. `verb`: "scheduled" (invite) | "reminder".
+  async function sendAppt(ev, verb) {
+    if (isReadOnly) return;
+    const k = `${ev.id}:${verb}`;
+    setSendState(s => ({ ...s, [k]: "busy" }));
+    let ok = false;
+    try { const r = await sendAppointmentEmailAction(accessId, { verb, event: ev, inviteeEmails: emailsFor(ev) }); ok = !!r?.ok; } catch {}
+    setSendState(s => ({ ...s, [k]: ok ? "sent" : "err" }));
+    setTimeout(() => setSendState(s => { const n = { ...s }; delete n[k]; return n; }), 2600);
   }
 
   // ---- People pool: everyone invitable — internal staff + this project's customer(s) --------
@@ -363,6 +378,8 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                       <a className="sched-ev-ico" href={gcalUrl(ev, emailsFor(ev))} target="_blank" rel="noopener noreferrer" title="Add to Google Calendar">{Ico.gcal}</a>
                       <button className="sched-ev-ico" onClick={()=>downloadIcs(ev)} title="Add to Apple / iCloud Calendar">{Ico.apple}</button>
                       <button className="sched-ev-ico" onClick={()=>copyInvite(ev)} title="Copy details">{copied===ev.id ? Ico.check : Ico.copy}</button>
+                      {!isReadOnly && <button className="sched-ev-ico" disabled={sendState[`${ev.id}:scheduled`]==="busy"} onClick={()=>sendAppt(ev,"scheduled")} title="Email the invitation now">{sendState[`${ev.id}:scheduled`]==="sent" ? Ico.check : Ico.mail}</button>}
+                      {!isReadOnly && <button className="sched-ev-ico" disabled={sendState[`${ev.id}:reminder`]==="busy"} onClick={()=>sendAppt(ev,"reminder")} title="Send a reminder now">{sendState[`${ev.id}:reminder`]==="sent" ? Ico.check : Ico.bell}</button>}
                       {!isReadOnly && <button className="sched-ev-ico sched-ev-del" onClick={()=>deleteEvent(ev.id)} title="Remove">{Ico.x}</button>}
                     </div>
                   </div>

@@ -371,6 +371,24 @@ export async function logAppointmentAction(accessId, { verb, title, date, event,
   return { ok: true };
 }
 
+// Manually (re)send an appointment invite or a reminder for one event — powers the per-appointment
+// "Invite" / "Remind" buttons. Staff-only; includes the acting staff member + the event's invited
+// emails, same trust model as booking (customers can't blast arbitrary addresses).
+export async function sendAppointmentEmailAction(accessId, { verb, event, inviteeEmails } = {}) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager", "sales", "tech"].includes(tok.role)) return { ok: false, error: "forbidden" };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false, error: "forbidden" };
+  if (!event?.date) return { ok: false, error: "no-event" };
+  try {
+    const r = await sendAppointmentEmails(accessId, {
+      verb: verb === "reminder" ? "reminder" : "scheduled",
+      event,
+      extraEmails: [tok.email, ...(Array.isArray(inviteeEmails) ? inviteeEmails : [])],
+    });
+    return { ok: true, sent: r?.sent || 0 };
+  } catch { return { ok: false, error: "send-failed" }; }
+}
+
 // Log a job-site add-on change to the Job Log (created / approved / voided / removed). Add-ons save
 // via client autosync too, so the widget calls this alongside its persist.
 export async function logAddendumAction(accessId, { verb, title, amount }) {
