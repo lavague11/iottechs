@@ -304,6 +304,7 @@
   /* read-only (customer) view: hide editing, show the finished plan + cones */
   body.ro #addDeviceBtn,body.ro .devmenu,body.ro .utils{display:none}
   body.ro .wiz .nav .b,body.ro .wiz .floorTabs{display:none}
+  body.ro #surveyWiz{display:none}   /* customer just reviews the plan to approve — no Background/Setup/Submit tabs or nav */
   body.ro .card .x,body.ro .card .fov input{display:none}
   body.ro .devNode .fovWrap{display:block}
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}
@@ -1166,7 +1167,10 @@
       loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
     }
     function setStatus(){ var pill=document.querySelector(".pill"); if(!pill) return;
-      var lbl=approved?"Approved":(submitted?"Submitted":"Draft"), col=approved?"#2a8a4e":(submitted?"#3aa55d":"var(--gold)");
+      var lbl, col;
+      if(approved){ lbl="Approved"; col="#2a8a4e"; }
+      else if(submitted){ lbl = RO ? "Awaiting approval" : "Submitted"; col="#3aa55d"; }   // customer sees it as awaiting THEIR approval
+      else { lbl="Draft"; col="var(--gold)"; }
       pill.innerHTML='<span class="g" style="background:'+col+'"></span>'+lbl; }
     function submit(){ snapFloor(); submitted=true; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}

@@ -1768,10 +1768,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Only trust the pointer once acceptances have loaded (before that we'd read a half-empty picture).
   const custPointer = (cView === "customer" && acceptLoaded) ? customerPointer(custFacts) : null;
   const custStage   = custPointer || projectStage;   // their current step, else follow the real project
-  // The customer's current action card (headline / sub / cta / target) — drives the next-step spotlight
-  // banner. Shown in the customer view AND the staff "customer view" preview (so office can see what the
-  // customer is being nudged to do); the auto-chaining still only fires for a real customer's progression.
-  const custAct     = (cView === "customer" && acceptLoaded) ? customerAction(custStage, custFacts) : null;
+  // The customer's ONE next action, shown as a chip next to their name (replaces the generic "Active").
+  // Walks survey → mockup → proposal → sign → deposit → final payment; tapping it browses to the step
+  // and spotlights the exact tool card. Shown in the customer view AND the staff "customer view" preview.
+  function customerNextAction() {
+    const f = custFacts;
+    if (f.survey_has && !f.survey_done)   return { label: "Approve site survey", target: "site_survey",      spot: "Site Survey" };
+    if (f.mockup_has && !f.mockup_done)   return { label: "Approve mockup",        target: "site_survey",      spot: "Mockups" };
+    if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: null };
+    if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: null };
+    if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: null };
+    if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: null };
+    return null;
+  }
+  const headerAction = (cView === "customer" && acceptLoaded) ? customerNextAction() : null;
 
   // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
   // a real customer, once they're past the welcome + tour, and only if this exact item hasn't popped
@@ -1965,10 +1975,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Spotlight — pulse + scroll the current tool card into view so the customer's eye lands on exactly
   // what needs their action. Fires when they're directed to a step (the next-step banner) and, via the
   // re-center effect, automatically after they finish one and progress to the next.
-  function spotlight() {
+  function spotlight(titleMatch) {
     if (typeof document === "undefined") return;
     setTimeout(() => {
-      const el = document.querySelector(".pv-survey-tools .flow-step") || document.querySelector(".flow-step") || document.querySelector(".pv-survey-tools");
+      let el = null;
+      // Prefer the card whose title matches (e.g. "Mockups") so we land on the exact tool, not just the phase.
+      if (titleMatch) {
+        el = [...document.querySelectorAll(".flow-step")].find((n) => (n.querySelector(".fs-title, .flow-step-title, h3, h4")?.textContent || "").trim().toLowerCase().includes(String(titleMatch).toLowerCase())) || null;
+      }
+      el = el || document.querySelector(".pv-survey-tools .flow-step") || document.querySelector(".flow-step") || document.querySelector(".pv-survey-tools");
       if (!el) return;
       try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* older browsers */ }
       el.classList.add("pv-spotlit");
@@ -2030,6 +2045,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
                     onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }} />
                 </div>
+                {/* Staff submit lives inside the tool nav now; the customer gets the same Approve bar the mockup has. */}
+                {cView === "customer" && (
+                  <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
+                    acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
+                )}
               </div>
             ) },
           { name: "Mockups", label: "Mockup generator", heavy: true,
@@ -2109,10 +2129,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               currentUser={currentUser} project={lp} view={view} customerView={!!previewRole} defaultTitle="IOT TECHS — Installation" onCount={setInstallEvents} /></div> });
         }
         if (staff || cView === "customer") {
-          // Customers see Tracking always; it's a grayed stub until there's a shipment to track.
+          // Tracking only appears once the office actually posts a shipment — no empty stub for the customer.
           const hasTracking = staff || toolMeta?.tracking?.count > 0;
-          tools.push({ name: "Shipment Tracking", label: "Tracking",
-            node: hasTracking ? <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> : null });
+          if (hasTracking) {
+            tools.push({ name: "Shipment Tracking", label: "Tracking",
+              node: <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> });
+          }
         }
         // Installation checklist — tech's is locked until the work order is accepted AND install day.
         const woAccepted = !!proposalData?.tech_signed_name;
@@ -2132,24 +2154,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
             node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
-        return tools;
-      }
-      if (pk === "ph_wrap") {
-        const tools = [];
-        const cust = lp.company_name || lp.contact_name || lp.customer;
-        const pad = { padding: "16px 18px" };
-        const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
-        if (["admin", "manager", "tech"].includes(cView)) {
-          tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
-            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
-        } else if (cView === "customer") {
-          // Customer sees the Activation QR tool always; grayed stub until the system QR is uploaded.
-          tools.push({ name: "System QR", label: "Activation QR",
-            node: lp.system_qr ? <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> : null });
-        }
+        // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
+        // connect the app to their cameras as soon as the system goes in.
         if (cView === "customer") {
-          // Quality control is internal — the customer instead gets the "set up your phone" guide
-          // (the mobile-app setup walkthrough from the support library, tied to their System QR).
           tools.push({ name: "Set Up Your Phone", label: "App setup",
             node: (
               <div style={pad}>
@@ -2166,15 +2173,34 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </div>
               </div>
             ) });
-        } else {
-          tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
-            node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
-              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
         }
+        return tools;
+      }
+      if (pk === "ph_wrap") {
+        const tools = [];
+        const cust = lp.company_name || lp.contact_name || lp.customer;
+        const pad = { padding: "16px 18px" };
+        const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
+        // Closeout order: Final Payment first, then internal QC, then the Activation QR handover LAST.
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
             node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
               customerAddress={lp.address} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
+        }
+        // Quality control is internal (the customer's phone-setup guide now lives in Install).
+        if (cView !== "customer") {
+          tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
+            node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
+              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
+        }
+        // Activation QR handover — the last closeout step.
+        if (["admin", "manager", "tech"].includes(cView)) {
+          tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
+        } else if (cView === "customer" && lp.system_qr) {
+          // Customer only sees the Activation QR once it actually exists — no empty stub.
+          tools.push({ name: "System QR", label: "Activation QR",
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
         return tools;
       }
@@ -2182,15 +2208,48 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     };
     const canAdv = ["admin", "manager"].includes(cView);
     const curPhaseIdx = Math.max(0, phaseList.findIndex((p) => p.key === vPhase));
+    const projCompleted = !!lp.completed_at;
+    // The customer's bar reflects THEIR obligations, not the office's internal stage: a phase the
+    // office has finished but the customer still owes an approval/signature on blinks yellow (mark
+    // "active"); it only turns green ("complete") once BOTH sides are done. Staff keep the default
+    // position-based marker. Phases with no customer obligation return undefined → default logic.
+    const custMarkFor = (pk) => {
+      if (cView !== "customer") return undefined;
+      const f = custFacts;
+      if (pk === "ph_survey") {
+        const done = (!f.survey_has || f.survey_done) && (!f.mockup_has || f.mockup_done) && (f.survey_has || f.mockup_has);
+        if (done) return "complete";
+        if ((f.survey_has && !f.survey_done) || (f.mockup_has && !f.mockup_done)) return "active";
+        return undefined;
+      }
+      if (pk === "ph_proposal") {
+        const done = f.proposal_status === "accepted" && f.proposal_signed && f.deposit_recorded;
+        if (done) return "complete";
+        if ((f.proposal_status && f.proposal_status !== "accepted") || (f.proposal_status === "accepted" && (!f.proposal_signed || !f.deposit_recorded))) return "active";
+        return undefined;
+      }
+      if (pk === "ph_wrap") {
+        if (f.final_balance_paid) return "complete";
+        if (custStage === "payment") return "active";
+        return undefined;
+      }
+      if (pk === "ph_complete") return projCompleted ? "complete" : undefined;
+      return undefined;
+    };
     const deckStages = phaseList.map((p, i) => {
       const next = phaseList[i + 1];
-      // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion.
-      const pct = i < curPhaseIdx ? 100 : Math.round(((i + 1) / phaseList.length) * 100);
       const isComplete = p.key === "ph_complete";
+      // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion — but a
+      // phase that isn't actually finished never reads 100% (that would paint its dot green early).
+      const pct = isComplete
+        ? (projCompleted ? 100 : (i <= curPhaseIdx ? 90 : 0))
+        : (i < curPhaseIdx ? 100 : Math.min(95, Math.round(((i + 1) / phaseList.length) * 100)));
+      const custMark = custMarkFor(p.key);
       return {
         name: p.label,
         pill: phaseStatusWord(p.key),
         pct,
+        ...(custMark ? { mark: custMark } : {}),
         tint: isComplete ? "green" : p.key === "ph_survey" ? "blue" : "gold",
         // Completion is a read-only wrap-up — render the panel inline, no tool rows / advance.
         completion: isComplete ? (
@@ -2233,6 +2292,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
+        statusChip={headerAction ? { label: headerAction.label, color: "#C9A96E", onClick: () => browse(headerAction.target) } : null}
         menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}
@@ -2579,20 +2639,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       {!previewRole && (view === "admin" || view === "manager" || view === "tech") && projectStage === "qc" && (
         <WorkOrderPanel accessId={project.access_id} workOrders={workOrders} view={view} />
       )}
-      {/* Next-step spotlight — directs the customer to what needs their approval, and (via the re-center
-          effect + spotlight()) walks them to the next one automatically after each approval. */}
-      {custAct && (
-        custAct.tone === "action" ? (
-          <button type="button" className="pv-next act" onClick={() => { if (custAct.target) browse(custAct.target); spotlight(); }}>
-            <span className="pv-next-ic"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
-            <span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span>
-            <span className="pv-next-cta">{custAct.cta || "Show me"} <span aria-hidden="true">→</span></span>
-          </button>
-        ) : custAct.tone === "done" ? (
-          <div className="pv-next done"><span className="pv-next-ic">✓</span><span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span></div>
-        ) : (
-          <div className="pv-next wait"><span className="pv-next-ic" aria-hidden="true">⏳</span><span className="pv-next-body"><b>{custAct.headline}</b>{custAct.sub && <span>{custAct.sub}</span>}</span></div>
-        )
+      {/* Next-step banner (classic view) — the customer's one outstanding approval/signature. The deck
+          view shows the same as a chip next to the name; both browse to the step + spotlight the card. */}
+      {headerAction && (
+        <button type="button" className="pv-next act" onClick={() => { if (headerAction.target) browse(headerAction.target); spotlight(headerAction.spot); }}>
+          <span className="pv-next-ic"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+          <span className="pv-next-body"><b>{headerAction.label}</b></span>
+          <span className="pv-next-cta">Show me <span aria-hidden="true">→</span></span>
+        </button>
       )}
       {cView === "customer" && (
         <button type="button" onClick={() => setTourOpen(true)}

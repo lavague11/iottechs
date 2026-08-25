@@ -197,7 +197,13 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           </button>
         )}
         {statusChip
-          ? <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>
+          ? (statusChip.onClick
+              ? <button className="dv-chip dv-chip-act" style={{ background: statusChip.color + "1f", color: statusChip.color }}
+                  onClick={(e) => { e.stopPropagation(); statusChip.onClick(); }}>
+                  <i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}
+                  <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>)
           : <span className="dv-chip live"><i className="dv-dot" />Active</span>}
         <span className={`dv-status ${cur.turn}`}><i />{turnText}</span>
 
@@ -391,6 +397,13 @@ const CSS = `
 .dv-chev{color:var(--dv-faint);transition:transform .34s var(--dv-e)}.dv-chev.up{transform:rotate(180deg);color:var(--dv-ink)}
 .dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .dv-chip.live{background:#E9F3ED;color:var(--dv-green)}
+/* Clickable "your next step" chip — draws a gentle pulse so the customer notices the one action owed. */
+.dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
+.dv-chip-act:hover{filter:brightness(.96)}
+.dv-chip-act .dv-chip-arw{margin-left:1px;opacity:.85}
+.dv-chip-act .dv-dot{animation:none}
+@keyframes dvChipPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.4)}50%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+@media (prefers-reduced-motion:reduce){.dv-chip-act{animation:none}}
 .dv-dot{width:5px;height:5px;border-radius:99px;background:currentColor;animation:dvpulse 2.4s var(--dv-e) infinite}
 @keyframes dvpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .dv-status{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--dv-ink-soft)}
