@@ -25,8 +25,11 @@ export function emailEnabled() {
   return !!resendKey();
 }
 
+// Sender. Defaults to the IOT TECHS sending subdomain (send.iot-techs.com) so email works the moment
+// that domain verifies in Resend — no vault step needed. A vault EMAIL_FROM still overrides if set.
+// NOTE: Resend rejects a domain until it shows "Verified"; before then, sends fail (see Resend → Logs).
 function fromAddress() {
-  return secretValue("EMAIL_FROM") || "IOT TECHS <onboarding@resend.dev>";
+  return secretValue("EMAIL_FROM") || "IOT TECHS <notify@send.iot-techs.com>";
 }
 
 function fromEmailOnly() {
