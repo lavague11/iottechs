@@ -476,7 +476,8 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
       </div>
       </>)}
 
-      {/* ③ Payments — deposit on the approval portal, remaining balance on the final portal */}
+      {/* ③ Payments — pulled to the TOP of the tool (order:-1) so Deposit & Payments leads. */}
+      <div className="apv-sec-pay">
       <ToolHead icon="card" title={isFinal ? "Final Payment" : "Deposit & Payments"}
         done={isFinal ? balance <= 0 : depositOk}
         doneLabel={isFinal ? "Paid in full" : "Deposit received"}
@@ -624,6 +625,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         )}
         {isCustomer && <div className="apv-fine">Your submission shows as pending until our team confirms receipt — the balance updates once confirmed.</div>}
       </div>
+      </div>
       {/* Work-order creation moved to its own "Create Work Order" card (tech assignment + tech pricing
           + create), so Approval & Deposit stays focused on the deposit. See work-order-card.jsx. */}
 
@@ -693,6 +695,8 @@ const APV_CSS = `
 .apv-note{margin:14px 2px 0;padding:9px 12px;border-radius:8px;font-size:.8rem;font-weight:600}
 .apv-note.err{background:#fbe9e6;border:1px solid #e3b4ab;color:var(--dv-red,#C4553D)}
 
+.apv-foldbody{display:flex;flex-direction:column}
+.apv-sec-pay{order:-1}   /* Deposit & Payments leads the tool; summary + signature follow */
 .apv-summary{margin:14px 2px 0;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:7px}
 .apv-sum-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.84rem}
 .apv-sum-lbl{color:var(--dv-meta,#787D84);font-weight:500}

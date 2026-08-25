@@ -342,6 +342,42 @@ export async function bookSurveyDateAction(accessId, dateStr) {
   return { ok: true, stage };
 }
 
+// Log an appointment change to the Job Log (scheduled / canceled). The scheduling tool saves via
+// client autosync (no server action), so the widget calls this alongside its save/delete.
+export async function logAppointmentAction(accessId, { verb, title, date }) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager", "sales", "customer"].includes(tok.role)) return { ok: false };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false };
+  try {
+    const canceled = verb === "canceled";
+    const when = date ? ` — ${date}` : "";
+    logProjectEvent(accessId, {
+      kind: canceled ? "request" : "schedule",
+      label: `${canceled ? "Appointment canceled" : "Appointment scheduled"}${title ? ` · ${title}` : ""}${when}`.slice(0, 300),
+      actor: tok.name || tok.contact_name || tok.role || "—",
+    });
+  } catch { /* best-effort */ }
+  return { ok: true };
+}
+
+// Log a job-site add-on change to the Job Log (created / approved / voided / removed). Add-ons save
+// via client autosync too, so the widget calls this alongside its persist.
+export async function logAddendumAction(accessId, { verb, title, amount }) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager", "sales", "tech", "customer"].includes(tok.role)) return { ok: false };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false };
+  try {
+    const amt = amount != null ? ` — $${(+amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "";
+    const map = { created: "Add-on created", approved: "Add-on approved", voided: "Add-on voided", removed: "Add-on removed" };
+    logProjectEvent(accessId, {
+      kind: verb === "approved" ? "approve" : "request",
+      label: `${map[verb] || "Add-on"}${title ? ` · ${title}` : ""}${amt}`.slice(0, 300),
+      actor: tok.name || tok.contact_name || tok.role || "—",
+    });
+  } catch { /* best-effort */ }
+  return { ok: true };
+}
+
 export async function addAssignmentAction(accessId, { userId, userName, userEmail, role }) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";

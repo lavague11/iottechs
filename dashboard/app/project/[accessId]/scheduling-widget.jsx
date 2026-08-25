@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { seedToolData, startToolAutosync } from "./tool-sync";
+import { logAppointmentAction } from "./actions";
 import AddressAutocomplete from "../../components/address-autocomplete";
 
 function schedKey(id) { return `sched_v1_${id}`; }
@@ -151,12 +152,17 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const ev = { id: uid(), ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
+    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date }).catch(() => {});   // Job Log
     setShowForm(false);
     setForm(f => ({ ...f, date: tomorrowISO(), notes:"", invitees: autoNames }));
     setSaving(false);
   }
 
-  function deleteEvent(id) { update(d => { d.events = d.events.filter(e => e.id !== id); }); }
+  function deleteEvent(id) {
+    const ev = data.events.find(e => e.id === id);
+    update(d => { d.events = d.events.filter(e => e.id !== id); });
+    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date }).catch(() => {});   // Job Log
+  }
 
   function copyInvite(ev) {
     const who = ev.invitees?.length ? ev.invitees.join(", ") : "assigned team";

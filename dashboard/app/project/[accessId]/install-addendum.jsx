@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { titleCase } from "../../../lib/proposal";
 import { getToolDataAction, saveToolDataAction } from "./proposal-actions";
+import { logAddendumAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
 
 // On-site addendum builder. Things change on the job (customer wants 3 more cameras) — the office
@@ -66,18 +67,21 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     if (!items.length) return;
     const rec = { id: newId(), title: draft.title.trim() || "Job-site add-on", items, discount: +draft.discount || 0, at: new Date().toISOString(), status: "pending" };
     persist([...addendums, rec]);
+    logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
     setDraft({ title: "", items: [blankItem()], discount: "" }); setBuilding(false);
   }
-  const removeAddendum = (id) => persist(addendums.filter((a) => a.id !== id));
+  const removeAddendum = (id) => { const a = addendums.find((x) => x.id === id); persist(addendums.filter((x) => x.id !== id)); if (a) logAddendumAction(accessId, { verb: "removed", title: a.title }).catch(() => {}); };
   // Void an addendum (any status) — it stays on record with the date, but drops out of billing and
   // the install checklist (getApprovedAddons only counts status "approved").
-  const voidAddendum = (id) => persist(addendums.map((a) => (a.id === id ? { ...a, status: "voided", voidedAt: new Date().toISOString() } : a)));
+  const voidAddendum = (id) => { const a = addendums.find((x) => x.id === id); persist(addendums.map((x) => (x.id === id ? { ...x, status: "voided", voidedAt: new Date().toISOString() } : x))); if (a) logAddendumAction(accessId, { verb: "voided", title: a.title }).catch(() => {}); };
   // Un-void: a voided addendum returns to pending (if never signed) or approved (if it had been signed).
   const unvoidAddendum = (id) => persist(addendums.map((a) => (a.id === id ? { ...a, status: a.signedName ? "approved" : "pending", voidedAt: undefined } : a)));
 
   // ---- Approval (customer) ----
   function approve(sign) {
-    persist(addendums.map((a) => (a.id === signId ? { ...a, status: "approved", signedName: sign.name, signedAt: new Date().toISOString(), signatureData: sign.data } : a)));
+    const a = addendums.find((x) => x.id === signId);
+    persist(addendums.map((x) => (x.id === signId ? { ...x, status: "approved", signedName: sign.name, signedAt: new Date().toISOString(), signatureData: sign.data } : x)));
+    if (a) logAddendumAction(accessId, { verb: "approved", title: a.title, amount: custTotal(a) }).catch(() => {});   // Job Log
     setSignId(null);
   }
 
