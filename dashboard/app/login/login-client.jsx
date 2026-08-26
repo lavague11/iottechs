@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { loginAction, signupAction, start2faAction, verify2faAction, resend2faAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
-import { TaglinePill, Wordmark } from "../components/brand";
 
 // Password field with a show/hide eye toggle on the right. Passes every input prop straight through,
 // so it drops in for both the uncontrolled login field and the controlled sign-up fields.
@@ -21,6 +20,7 @@ function PwInput({ className = "lg-input", ...props }) {
   );
 }
 import FaceScan from "../components/face-scan";
+import { GW2_LIGHT_CSS } from "../components/gateway-screen";
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -236,7 +236,7 @@ export default function LoginClient({ next }) {
 
   return (
     <div className="gw2-root gw2-light">
-      <style>{CSS}</style>
+      <style>{CSS + GW2_LIGHT_CSS}</style>
       <div className="gw2-aura" />
       <div className="gw2-grid" />
       <canvas ref={canvasRef} className="gw2-net" />
@@ -256,8 +256,12 @@ export default function LoginClient({ next }) {
       <div className={`gw2-card${cardWarp ? " gw2-warp" : ""}`}>
         <div className="gw2-ring" />
         <div className="gw2-brand">
-          <h1 style={{ display: "flex", justifyContent: "center" }}><a href="/" aria-label="IOT TECHS home" style={{ display: "inline-flex" }}><Wordmark height={30} techsColor="#C9A96E" /></a></h1>
-          <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)", margin: "6px 0 4px" }} />
+          <div className="gw2-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#C9A96E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3"/><circle cx="12" cy="15.5" r="1.4"/>
+            </svg>
+          </div>
+          <h1><a href="/" aria-label="IOT TECHS home" style={{ color: "inherit", textDecoration: "none" }}>IOT&nbsp;TECHS</a></h1>
           <div className="gw2-subtag">Secure Access</div>
         </div>
 
@@ -286,25 +290,22 @@ export default function LoginClient({ next }) {
           </form>
           )
         ) : mode === "password" ? (
-        <form className="lg-form" onSubmit={handleSubmit}>
+        <form className="gw2-lf" onSubmit={handleSubmit}>
           <input type="hidden" name="next" value={next} />
-          <div className="lg-field">
-            <label className="lg-label">Email, Phone, or Username</label>
-            <input name="identifier" type="text" className="lg-input" placeholder="Enter email or username" autoComplete="username" defaultValue={phone} required disabled={pending || granted} />
-          </div>
-          <div className="lg-field">
-            <label className="lg-label">Password</label>
-            <PwInput name="password" placeholder="••••••••" autoComplete="current-password" required disabled={pending || granted} />
+          <div className="gw2-prompt">Sign in</div>
+          <div className="gw2-lf-fields">
+            <input name="identifier" type="text" className="gw2-lf-input" placeholder="Email, phone, or username" autoComplete="username" defaultValue={phone} autoFocus required disabled={pending || granted} />
+            <PwInput name="password" className="gw2-lf-input" placeholder="Password" autoComplete="current-password" required disabled={pending || granted} />
           </div>
           {error && (
-            <div className="lg-err">
+            <div className="gw2-lf-err">
               {error}
               {error.toLowerCase().includes("invalid") && (
                 <> — <a href="/forgot" className="lg-err-link">Reset password</a></>
               )}
             </div>
           )}
-          <button className="lg-btn" type="submit" disabled={pending || granted}>
+          <button className="gw2-lf-btn" type="submit" disabled={pending || granted}>
             {pending ? "Signing in…" : "Sign In →"}
           </button>
         </form>
@@ -399,79 +400,32 @@ export default function LoginClient({ next }) {
   );
 }
 
+// The gw2 shell, sign-in form (gw2-lf*), brand/lock badge, keypad, footer chips and modals ALL come
+// from globals.css + the shared GW2_LIGHT_CSS (imported), so /login is identical to the project lock
+// screen. Only the login-only secondary modes (phone/SMS code, sign-up, Face ID) keep their own lg-*
+// / lgf-* styles here, with matching light-card overrides.
 const CSS = `
-.gw2-root *{box-sizing:border-box;margin:0;padding:0}
-.gw2-root{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#060b14;overflow:hidden;font-family:'Hanken Grotesk',system-ui,sans-serif}
-.gw2-aura{position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 40%,rgba(30,50,100,.45) 0%,transparent 70%)}
-.gw2-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(50,87,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(50,87,255,.06) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,#000 30%,transparent 100%)}
-.gw2-net{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.5}
-.gw2-card{position:relative;z-index:10;width:340px;background:rgba(10,16,30,.92);border:1px solid rgba(201,169,110,.22);border-radius:20px;padding:32px 28px 24px;backdrop-filter:blur(20px);box-shadow:0 32px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);display:flex;flex-direction:column;gap:20px;transition:transform .6s cubic-bezier(.22,1,.36,1),opacity .6s}
-.gw2-warp{transform:scale(1.04) translateY(-6px);opacity:0;pointer-events:none}
-.gw2-ring{position:absolute;inset:-1px;border-radius:21px;background:conic-gradient(from 200deg,transparent 60%,rgba(201,169,110,.5) 75%,rgba(201,169,110,.8) 80%,rgba(201,169,110,.5) 85%,transparent 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;padding:1px;animation:gw2Rotate 3s linear infinite;pointer-events:none}
-@keyframes gw2Rotate{to{transform:rotate(360deg)}}
-.gw2-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-.gw2-brand h1{color:#f0e8d6;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.45rem;font-weight:800;letter-spacing:2px}
-.gw2-subtag{color:rgba(201,169,110,.6);font-size:.7rem;letter-spacing:3px;font-weight:600}
 .lg-form{display:flex;flex-direction:column;gap:12px}
 .lg-field{display:flex;flex-direction:column;gap:5px}
-.lg-label{color:rgba(255,255,255,.45);font-size:.72rem;letter-spacing:1px;font-weight:600}
+.lg-label{color:rgba(255,255,255,.5);font-size:.72rem;letter-spacing:1px;font-weight:600}
 .lg-mini{font-size:.72rem;font-weight:600;margin-top:1px}
 .lg-mini.ok{color:#7ad39a}
 .lg-mini.no{color:#ff8a8a}
-.lg-input{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:11px 13px;color:#f0e8d6;font-size:.9rem;font-family:inherit;outline:none;transition:border-color .2s,background .2s}
-.lg-input:focus{border-color:rgba(201,169,110,.5);background:rgba(255,255,255,.07)}
-.lg-input::placeholder{color:rgba(255,255,255,.2)}
+.lg-input{background:rgba(255,255,255,.05);border:1px solid rgba(201,169,110,.22);border-radius:9px;padding:11px 14px;color:#FAF8F4;font-size:14px;font-family:inherit;outline:none;width:100%;transition:border-color .18s,background .18s}
+.lg-input:focus{border-color:#C9A96E}
+.lg-input::placeholder{color:rgba(255,255,255,.22)}
 .lg-input:disabled{opacity:.5}
 .lg-pw{position:relative;display:flex}
-.lg-pw .lg-input{flex:1;min-width:0;width:100%;padding-right:42px}
-.lg-pw-eye{position:absolute;top:50%;right:5px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;border:none;background:none;color:rgba(255,255,255,.38);cursor:pointer;border-radius:8px;transition:color .15s,background .15s}
+.lg-pw .lg-input,.lg-pw .gw2-lf-input{flex:1;min-width:0;width:100%;padding-right:42px}
+.lg-pw-eye{position:absolute;top:50%;right:6px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;border:none;background:none;color:rgba(255,255,255,.4);cursor:pointer;border-radius:8px;transition:color .15s,background .15s}
 .lg-pw-eye:hover{color:rgba(201,169,110,.9);background:rgba(255,255,255,.06)}
 .lg-2fa-sub{display:flex;justify-content:space-between;align-items:center;margin-top:2px}
 .lg-err{background:rgba(210,60,60,.12);border:1px solid rgba(210,60,60,.3);border-radius:8px;padding:9px 12px;color:#ff8a8a;font-size:.8rem;text-align:center}
 .lg-err-link{color:#ffc0c0;font-weight:700;text-decoration:underline;text-underline-offset:2px}
 .lg-err-link:hover{color:#fff}
-.lg-btn{background:linear-gradient(135deg,#c9a96e,#b08f4f);color:#0a1020;border:none;border-radius:10px;padding:12px;font-size:.9rem;font-weight:700;font-family:inherit;cursor:pointer;transition:opacity .2s,transform .1s;letter-spacing:.5px}
-.lg-btn:hover:not(:disabled){opacity:.9;transform:translateY(-1px)}
+.lg-btn{background:#C9A96E;color:#0B0F1A;border:none;border-radius:9px;padding:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:.04em;transition:background .18s}
+.lg-btn:hover:not(:disabled){background:#b8944f}
 .lg-btn:disabled{opacity:.5;cursor:default}
-.gw2-actions{display:flex;justify-content:space-between;align-items:center}
-.gw2-lbtn{background:none;border:none;color:rgba(201,169,110,.5);font-size:.72rem;font-family:inherit;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:5px;transition:color .15s}
-.gw2-lbtn:hover{color:rgba(201,169,110,.85)}
-.gw2-help-btn{color:rgba(255,255,255,.3)}
-.gw2-help-btn:hover{color:rgba(255,255,255,.6)}
-.gw2-granted{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;animation:gw2FadeIn .4s ease forwards}
-.gw2-gck{width:72px;height:72px;border-radius:50%;background:rgba(93,184,122,.15);border:1.5px solid rgba(93,184,122,.4);display:grid;place-items:center;color:#5DB87A}
-.gw2-granted h2{color:#f0e8d6;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.1rem;letter-spacing:3px}
-.gw2-granted p{color:rgba(201,169,110,.6);font-size:.8rem;letter-spacing:1px}
-@keyframes gw2FadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
-/* Modals */
-.gw2-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:100}
-.gw2-modal{background:#0e1828;border:1px solid rgba(201,169,110,.2);border-radius:16px;width:320px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.6)}
-.gw2-mhd{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.07);font-size:.72rem;letter-spacing:2px;color:rgba(201,169,110,.7);font-weight:700}
-.gw2-mclose{background:none;border:none;color:rgba(255,255,255,.3);font-size:1rem;cursor:pointer;line-height:1;padding:2px 6px}
-.gw2-mclose:hover{color:#fff}
-.gw2-mbd{padding:20px 18px;display:flex;flex-direction:column;gap:12px}
-.gw2-mbd p{color:rgba(255,255,255,.5);font-size:.8rem;line-height:1.6}
-.gw2-hrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);text-decoration:none;color:inherit;transition:background .15s}
-.gw2-hrow:hover{background:rgba(255,255,255,.08)}
-.gw2-hic{font-size:1.2rem;width:32px;text-align:center}
-.gw2-hk{color:#f0e8d6;font-size:.82rem;font-weight:600}
-.gw2-hv{color:rgba(201,169,110,.7);font-size:.75rem;margin-top:1px}
-/* Diagnostics */
-.gw2-loc-bd{padding:0}
-.gw2-lrow{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.06)}
-.gw2-lrow.last{border-bottom:none}
-.gw2-lk{color:rgba(255,255,255,.35);font-size:.72rem;letter-spacing:.5px;font-weight:600;padding-top:2px}
-.gw2-lv{text-align:right}
-.gw2-lv-main{color:#f0e8d6;font-size:.8rem}
-.gw2-lv-sub{color:rgba(255,255,255,.3);font-size:.68rem;margin-top:2px}
-.gw2-lskel{display:inline-block;height:12px;border-radius:6px;background:linear-gradient(90deg,rgba(255,255,255,.08) 25%,rgba(255,255,255,.14) 50%,rgba(255,255,255,.08) 75%);background-size:200% 100%;animation:gw2Shimmer 1.4s infinite}
-@keyframes gw2Shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.gw2-speed-row{display:flex;align-items:center;gap:7px;justify-content:flex-end}
-.gw2-speed-badge{font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:100px;border:1px solid;letter-spacing:.5px}
-.gw2-speed-reload{background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;padding:2px;display:flex;align-items:center}
-.gw2-speed-reload:hover{color:rgba(255,255,255,.7)}
-@keyframes gw2SpinIcon{to{transform:rotate(360deg)}}
-.mono{font-family:Menlo,Consolas,monospace;letter-spacing:.3px}
 /* Face ID mode */
 .lgf{display:flex;flex-direction:column;gap:14px}
 .lgf-prompt{text-align:center;font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,169,110,.7)}
@@ -481,12 +435,9 @@ const CSS = `
 .lgf-stage{position:relative;width:168px;height:168px;margin:2px auto 0;display:grid;place-items:center}
 .lgf-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none}
 .lgf-hint{text-align:center;font-size:.72rem;color:rgba(255,255,255,.42);margin-top:2px}
-/* ---- Light card (matches the project gateway's white Secure Access card) ----
-   Only the card + its contents go light; the animated dark starfield behind it stays. */
-.gw2-light .gw2-card{background:#fff;border:1px solid rgba(14,19,32,.06);border-radius:22px;box-shadow:0 44px 90px -26px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.18);backdrop-filter:none;-webkit-backdrop-filter:none}
-.gw2-light .gw2-ring{border-radius:22px}
-.gw2-light .gw2-brand h1{color:#0e1320}
-.gw2-light .gw2-subtag{color:#b08f4f}
+/* Several sign-in options can wrap on the narrow card */
+.gw2-actions{flex-wrap:wrap;gap:8px;justify-content:center}
+/* Light-card overrides for the login-only classes (the shell + gw2-lf form use GW2_LIGHT_CSS) */
 .gw2-light .lg-label{color:#6b7280}
 .gw2-light .lg-input{background:#f4f5f7;border:1px solid #e6e8ee;color:#0e1320}
 .gw2-light .lg-input::placeholder{color:#9aa0ab}
@@ -495,7 +446,7 @@ const CSS = `
 .gw2-light .lg-pw-eye{color:#9aa0ab}
 .gw2-light .lg-pw-eye:hover{color:#b08f4f;background:#faf4e8}
 .gw2-light .lg-btn{background:#C9A96E;color:#0e1320}
-.gw2-light .lg-btn:hover:not(:disabled){background:#b08f4f;color:#fff;transform:translateY(-1px)}
+.gw2-light .lg-btn:hover:not(:disabled){background:#b08f4f;color:#fff}
 .gw2-light .lgf-prompt{color:#6b7280}
 .gw2-light .lgf-prompt.ok{color:#1c8a45}
 .gw2-light .lgf-prompt.err{color:#c0392b}
@@ -505,10 +456,4 @@ const CSS = `
 .gw2-light .lg-err{background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.28);color:#c0392b}
 .gw2-light .lg-err-link{color:#8f2018}
 .gw2-light .lg-err-link:hover{color:#c0392b}
-/* Footer action links become subtle light-gray chips, like the gateway */
-.gw2-light .gw2-lbtn{background:#f4f5f7;border:1px solid #e6e8ee;color:#2C3347;border-radius:8px;padding:6px 11px;font-weight:600}
-.gw2-light .gw2-lbtn:hover{border-color:rgba(201,169,110,.55);background:#faf4e8;color:#0e1320}
-.gw2-light .gw2-help-btn{background:none;border:none;color:#b08f4f;padding:6px 4px}
-.gw2-light .gw2-help-btn:hover{background:none;color:#0e1320}
-.gw2-light .gw2-actions{gap:8px;flex-wrap:wrap}
 `;

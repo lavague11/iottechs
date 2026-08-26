@@ -66,7 +66,7 @@ function LoginForm({ busy, onSubmit }) {
 // Light-card override for the PIN gate — matches the home-page login modal (white card, gold
 // accents, Bricolage heading, light-gray keypad) while keeping the animated dark starfield behind
 // it. Scoped to .gw2-light so the staff /login screen (its own inline gw2 styles) stays dark.
-const GW2_LIGHT_CSS = `
+export const GW2_LIGHT_CSS = `
 .gw2-light .gw2-card{background:#fff;border:1px solid rgba(14,19,32,.06);border-radius:22px;
   box-shadow:0 44px 90px -26px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.18);
   backdrop-filter:none;-webkit-backdrop-filter:none;}
