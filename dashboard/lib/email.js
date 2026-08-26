@@ -40,7 +40,9 @@ function fromEmailOnly() {
 }
 
 function appUrl() {
-  return (secretValue("APP_URL") || "").replace(/\/+$/, "");
+  // Fall back to the live domain so email links (project №, confirm, reschedule, open project)
+  // never render dead or as plain text when the APP_URL vault value is momentarily unset.
+  return (secretValue("APP_URL") || "https://iot-techs.com").replace(/\/+$/, "");
 }
 
 // Low-level send. Returns {ok,id} | {skipped:true} | {ok:false,error}. Never throws.
