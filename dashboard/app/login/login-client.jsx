@@ -113,19 +113,24 @@ export default function LoginClient({ next }) {
     if (!gone()) { if(p2) setLocData(p=>({...p,speed:(p1?(p1+p2)/2:p2).toFixed(1)})); setSpeedTesting(false); }
   }
 
+  // Success animation, then navigate CLIENT-SIDE to the destination the server action returned.
+  // We deliberately don't use a server-side redirect() — the Hostinger CDN intermittently drops the
+  // redirect response for POST server-actions ("This page couldn't load"). A plain client navigation
+  // is what the project-gate login has always used, and it goes through reliably.
+  function grantAndGo(dest) {
+    setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 100);
+    setTimeout(() => setGranted(true), 1200);
+    setTimeout(() => window.location.assign(dest || "/dashboard"), 1550);
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.target);
     startTransition(async () => {
       const result = await loginAction(fd);
-      if (result?.error) {
-        setError(result.error);
-      } else {
-        // success — trigger warp
-        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 100);
-        setTimeout(() => setGranted(true), 1200);
-      }
+      if (result?.error) setError(result.error);
+      else grantAndGo(result?.dest);
     });
   }
 
@@ -145,7 +150,7 @@ export default function LoginClient({ next }) {
     startTransition(async () => {
       const r = await verify2faAction(phone, code, next);
       if (r?.error) setError(r.error);
-      else { setTimeout(() => { setCardWarp(true); canvasCtrl.current?.startWarp?.(); }, 100); setTimeout(() => setGranted(true), 1200); }
+      else grantAndGo(r?.dest);
     });
   }
   function handleResend() {
@@ -164,12 +169,8 @@ export default function LoginClient({ next }) {
     const fd = new FormData(e.target);
     startTransition(async () => {
       const result = await signupAction(fd);
-      if (result?.error) {
-        setError(result.error);
-      } else {
-        setTimeout(() => { setCardWarp(true); if (canvasCtrl.current) canvasCtrl.current.startWarp(); }, 100);
-        setTimeout(() => setGranted(true), 1200);
-      }
+      if (result?.error) setError(result.error);
+      else grantAndGo(result?.dest);
     });
   }
 

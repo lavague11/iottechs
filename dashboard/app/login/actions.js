@@ -37,9 +37,12 @@ export async function loginAction(formData) {
     maxAge: 60 * 60 * 8,
   });
 
-  const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
   const dest = next && next !== "/" ? next : (ROLE_HOME[user.role] || "/dashboard");
-  redirect(dest);
+  // Return the destination and let the CLIENT navigate (window.location.assign) instead of a
+  // server-side redirect(). The Hostinger CDN intermittently drops the redirect response for the
+  // POST server-action, showing "This page couldn't load"; a plain client navigation avoids it —
+  // this is why the in-place project-gate login always worked.
+  return { ok: true, dest };
 }
 
 // Self-serve account creation from the dedicated /login portal. Creates a customer account (or
@@ -76,7 +79,7 @@ export async function signupAction(formData) {
   const jar = await cookies();
   jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
   const dest = next && next !== "/" ? next : "/my-projects";
-  redirect(dest);
+  return { ok: true, dest };   // client navigates (see loginAction note) — dodges the CDN redirect drop
 }
 
 // ---- Phone + SMS 2FA login (the default) ----------------------------------
@@ -110,7 +113,8 @@ export async function verify2faAction(phoneRaw, code, next) {
   const token = await makeToken(user);
   const jar = await cookies();
   jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
-  redirect(next && next !== "/" ? next : (ROLE_HOME[user.role] || "/dashboard"));
+  const dest = next && next !== "/" ? next : (ROLE_HOME[user.role] || "/dashboard");
+  return { ok: true, dest };   // client navigates (see loginAction note)
 }
 
 export async function resend2faAction(phoneRaw) {
