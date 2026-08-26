@@ -197,14 +197,17 @@ export default function ApplyClient() {
             </div>
           ) : (
             <form className="ap-form" onSubmit={submit}>
-              {/* stepper */}
-              <div className="ap-steps">
-                {STEPS.map((s) => (
-                  <div key={s.n} className={`ap-step${step === s.n ? " on" : ""}${step > s.n ? " done" : ""}`}>
-                    <span className="ap-step-n">{step > s.n ? <Icon><path d="M20 6 9 17l-5-5" /></Icon> : s.n}</span>
-                    <span className="ap-step-l">{s.label}</span>
-                  </div>
-                ))}
+              {/* deck-style beacon rail */}
+              <div className="ap-rail">
+                {STEPS.map((s) => {
+                  const mark = step > s.n ? "done" : step === s.n ? "active" : "todo";
+                  return (
+                    <div key={s.n} className={`ap-seg ${mark}`}>
+                      <div className="ap-bar"><i /></div>
+                      <div className="ap-lab"><span className="ap-beacon" /><span className="ap-seg-l">{s.n} · {s.label}</span></div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* STEP 1 — job */}
@@ -396,17 +399,20 @@ textarea.ap-in{resize:vertical}
 .ap-btn-ghost:hover{border-color:var(--ink)}
 .ap-submit{width:100%;margin-top:24px}
 .ap-note{text-align:center;color:var(--muted);font-size:.8rem;margin:16px 0 0}
-/* ---- wizard: stepper, panes, nav ---- */
-.ap-steps{display:flex;align-items:center;gap:10px;margin-bottom:24px}
-.ap-step{display:flex;align-items:center;gap:8px;flex:1}
-.ap-step-n{width:28px;height:28px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font-size:.82rem;font-weight:800;background:var(--soft);color:var(--muted);border:1.5px solid var(--line);transition:.18s}
-.ap-step-n svg{width:15px;height:15px;stroke-width:2.8}
-.ap-step.on .ap-step-n{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#fff;border-color:var(--gold)}
-.ap-step.done .ap-step-n{background:#e7f6ec;color:#1c8a45;border-color:#bfe6cd}
-.ap-step-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
-.ap-step.on .ap-step-l{color:var(--ink)}
-.ap-step:not(:last-child)::after{content:"";flex:1;height:2px;border-radius:2px;background:var(--line)}
-.ap-step.done:not(:last-child)::after{background:#bfe6cd}
+/* ---- wizard: deck-style beacon rail (thin fill bar + blinking beacon + mono label) ---- */
+.ap-rail{display:flex;gap:8px;margin-bottom:26px}
+.ap-seg{flex:1;min-width:0;display:flex;flex-direction:column}
+.ap-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.ap-bar i{position:absolute;inset:0;width:0;background:var(--gold);border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.ap-seg.done .ap-bar i,.ap-seg.active .ap-bar i{width:100%}
+.ap-seg.active .ap-bar i{background:var(--gold-deep)}
+.ap-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden}
+.ap-seg-l{overflow:hidden;text-overflow:ellipsis}
+.ap-seg.active .ap-lab,.ap-seg.done .ap-lab{color:var(--ink-soft)}
+.ap-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--faint)}
+.ap-seg.done .ap-beacon{background:var(--gold);border-color:var(--gold-deep)}
+.ap-seg.active .ap-beacon{background:var(--gold);border-color:var(--gold-deep);animation:apBeacon 1.1s ease-in-out infinite}
+@keyframes apBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
 .ap-pane{animation:apFade .22s ease}
 @keyframes apFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ap-nav{display:flex;gap:10px;margin-top:26px}

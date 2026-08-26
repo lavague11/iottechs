@@ -48,6 +48,8 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
   const first = (viewerName || app.name || "").trim().split(/\s+/)[0];
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
+  const pct = declined ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);
+  const readoutLabel = hired ? "Hired" : declined ? "Closed" : (STEPS[stepIdx]?.label || "Applied");
   const ob = app.onboarding || {};
   const onboardingDone = !!ob.profile?.submitted_at && ["safety", "handbook", "equipment"].every((k) => ob.signed?.[k]);
   const obItems = [
@@ -78,14 +80,23 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           {staff && <p className="aq-staffnote">Staff preview of the applicant view. Manage this in the <a href={`/onboarding/${app.app_id}`}>hiring portal</a>.</p>}
         </div>
 
-        {/* Stage strip — the project page's language, four plain steps */}
-        <div className="aq-card aq-stagebar">
-          {STEPS.map((s, n) => (
-            <div key={s.key} className={`aq-stage${n < stepIdx ? " done" : ""}${n === stepIdx ? " on" : ""}${declined && n === STEPS.length - 1 ? " bad" : ""}`}>
-              <span className="aq-stage-dot" />
-              <span className="aq-stage-lbl">{n === STEPS.length - 1 && (hired || declined) ? app.stage_label : s.label}</span>
-            </div>
-          ))}
+        {/* Deck beacon rail — thin fill bars + beacon dots + mono labels + % readout */}
+        <div className="aq-rail">
+          <div className="aq-track">
+            {STEPS.map((s, n) => {
+              const mk = declined && n === STEPS.length - 1 ? "bad" : n < stepIdx ? "done" : n === stepIdx ? (hired ? "done" : "active") : "todo";
+              return (
+                <div key={s.key} className={`aq-seg ${mk}`}>
+                  <div className="aq-bar"><i /></div>
+                  <div className="aq-lab"><span className="aq-beacon" /><span className="aq-seg-l">{n === STEPS.length - 1 && (hired || declined) ? app.stage_label : s.label}</span></div>
+                </div>
+              );
+            })}
+          </div>
+          <div className={`aq-readout${declined ? " bad" : ""}`}>
+            <span className="aq-pct mono">{pct}%</span>
+            <span className="aq-readout-l">{readoutLabel}</span>
+          </div>
         </div>
 
         {app.interview_at && !declined && (
@@ -155,7 +166,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
 const CSS = `
 /* Matches the project-page (deck) design system: Instrument Sans (--font-sans), warm-paper palette. */
 .aq-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A1A6AC;--line:#E4E4DF;--line-soft:#EDEDE9;
-  --gold:#C9A96E;--gold-deep:#A8842F;--bg-soft:#F4F4F2;--raise:#FBFBFA;--green:#2E7D5B;
+  --gold:#C9A96E;--gold-deep:#A8842F;--bg-soft:#F4F4F2;--raise:#FBFBFA;--green:#2E7D5B;--red:#C4553D;
   min-height:100vh;background:var(--bg-soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55}
 .aq-top{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin:0 auto;padding:20px 20px 0}
 .aq-brand{display:inline-flex}
@@ -178,17 +189,27 @@ const CSS = `
 .aq-card.open .aq-caret{transform:rotate(0)}
 .aq-card:not(.open) .aq-caret{transform:rotate(180deg)}
 .aq-card-b{padding:0 20px 18px}
-/* stage strip */
-.aq-stagebar{display:flex;gap:2px;overflow-x:auto;padding:18px 8px}
-.aq-stage{flex:1;min-width:74px;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative}
-.aq-stage:not(:last-child)::after{content:"";position:absolute;top:8px;left:calc(50% + 11px);right:calc(-50% + 11px);height:2px;background:var(--line)}
-.aq-stage.done:not(:last-child)::after{background:var(--gold)}
-.aq-stage-dot{width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1}
-.aq-stage.done .aq-stage-dot{background:var(--gold);border-color:var(--gold)}
-.aq-stage.on .aq-stage-dot{border-color:var(--gold);box-shadow:0 0 0 4px rgba(201,169,110,.22)}
-.aq-stage.on.bad .aq-stage-dot{border-color:#c9382b;box-shadow:0 0 0 4px rgba(201,56,43,.18)}
-.aq-stage-lbl{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);text-align:center;white-space:nowrap}
-.aq-stage.on .aq-stage-lbl{color:var(--ink)}
+/* deck beacon rail */
+.aq-rail{background:var(--raise);border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 44px -34px rgba(16,20,24,.3);display:flex;align-items:center;gap:18px;padding:18px 22px;margin-bottom:14px}
+.aq-track{flex:1;display:flex;gap:6px;min-width:0}
+.aq-seg{flex:1;min-width:0;display:flex;flex-direction:column}
+.aq-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.aq-bar i{position:absolute;inset:0;width:0;background:var(--gold);border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.aq-seg.done .aq-bar i,.aq-seg.active .aq-bar i{width:100%}
+.aq-seg.active .aq-bar i{background:var(--gold-deep)}
+.aq-seg.bad .aq-bar i{width:100%;background:var(--red)}
+.aq-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden}
+.aq-seg-l{overflow:hidden;text-overflow:ellipsis}
+.aq-seg.active .aq-lab,.aq-seg.done .aq-lab{color:var(--ink-soft)}
+.aq-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--faint)}
+.aq-seg.done .aq-beacon{background:var(--gold);border-color:var(--gold-deep)}
+.aq-seg.active .aq-beacon{background:var(--gold);border-color:var(--gold-deep);animation:aqBeacon 1.1s ease-in-out infinite}
+.aq-seg.bad .aq-beacon{background:var(--red);border-color:var(--red)}
+@keyframes aqBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+.aq-readout{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;line-height:1}
+.aq-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.aq-readout.bad .aq-pct{color:var(--red)}
+.aq-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:5px}
 .aq-banner{background:#e6eefc;border:1px solid #c9dbf7;color:#2540c0;border-radius:12px;padding:12px 16px;font-size:.9rem;margin-bottom:14px}
 .aq-cta{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff;border-radius:14px;padding:16px 20px;margin-bottom:14px;text-decoration:none;transition:transform .15s,box-shadow .2s}
 .aq-cta:hover{transform:translateY(-2px);box-shadow:0 16px 34px -16px rgba(176,143,79,.7)}
