@@ -390,22 +390,26 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 .pbar { display: flex; position: relative; align-items: flex-start; overflow-x: auto; }
 .pbar-track { position: absolute; top: 13px; left: calc(100% / var(--stage-count) / 2); right: calc(100% / var(--stage-count) / 2); height: 2px; background: rgba(255,255,255,.08); border-radius: 1px; }
 .pbar-fill { height: 100%; background: linear-gradient(90deg, var(--gold), rgba(201,169,110,.55)); border-radius: 1px; transition: width .6s ease; }
-.pstage { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0; background: none; border: none; cursor: default; font-family: inherit; }
-.pstage-num { width: 26px; height: 26px; border-radius: 50%; background: #141929; border: 1.5px solid rgba(255,255,255,.1); color: rgba(250,248,244,.28); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; transition: all .2s ease; font-family: Menlo, Consolas, monospace; }
-.pstage.done .pstage-num { background: var(--gold); border-color: var(--gold); color: var(--ink); font-size: 12px; }
-.pstage.current .pstage-num { background: #0f1420; border-color: var(--gold); border-width: 2px; color: var(--gold); box-shadow: 0 0 0 3px rgba(201,169,110,.15), 0 2px 10px rgba(201,169,110,.3); }
+/* Deck beacon rail: per-stage fill bar + beacon dot + mono (num · label) */
+.pstage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0; padding: 0 3px; background: none; border: none; cursor: default; font-family: inherit; text-align: left; }
+.pstage-bar { height: 2px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; position: relative; }
+.pstage-bar i { position: absolute; inset: 0; width: 0; background: var(--gold); border-radius: 99px; transition: width .6s cubic-bezier(.16,1,.3,1); }
+.pstage.done .pstage-bar i, .pstage.current .pstage-bar i { width: 100%; }
+.pstage-lab { margin-top: 9px; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(250,248,244,.35); white-space: nowrap; overflow: hidden; }
+.pstage-beacon { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 99px; background: transparent; border: 1.5px solid rgba(255,255,255,.3); }
+.pstage.done .pstage-beacon { background: var(--gold); border-color: var(--gold); }
+.pstage.current .pstage-beacon { background: var(--gold); border-color: var(--gold); }
+.pstage-num { flex: 0 0 auto; font-weight: 700; }
+.plabel { overflow: hidden; text-overflow: ellipsis; }
+.pstage.done .pstage-lab { color: rgba(201,169,110,.7); }
+.pstage.current .pstage-lab { color: var(--cream); }
 .pstage.clickable { cursor: pointer; }
-.pstage.clickable:hover .pstage-num { border-color: rgba(201,169,110,.55); color: rgba(201,169,110,.8); }
-.pstage.clickable:hover .plabel { color: rgba(201,169,110,.65); }
-.plabel { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: rgba(250,248,244,.22); text-align: center; line-height: 1.3; max-width: 60px; }
-.pstage.done .plabel { color: rgba(201,169,110,.5); }
-.pstage.current .plabel { color: var(--cream); }
+.pstage.clickable:hover .pstage-lab { color: rgba(201,169,110,.75); }
 /* Future stages — locked, dimmed */
-.pstage.future .pstage-num { opacity: .28; }
-.pstage.future .plabel { color: rgba(250,248,244,.1); }
-/* Viewing a past stage (browsing) — gold dashed outline, not filled */
-.pstage.viewing .pstage-num { background: rgba(201,169,110,.06); border-color: var(--gold); border-style: dashed; border-width: 2px; color: var(--gold); }
-.pstage.viewing .plabel { color: rgba(201,169,110,.8); }
+.pstage.future .pstage-lab { color: rgba(250,248,244,.16); }
+/* Viewing a past stage (browsing) — gold dashed beacon */
+.pstage.viewing .pstage-beacon { border-color: var(--gold); border-style: dashed; background: transparent; }
+.pstage.viewing .pstage-lab { color: rgba(201,169,110,.85); }
 /* Browse navigation banner */
 .browse-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; background: #fdf6e8; border: 1px solid rgba(201,169,110,.3); border-left: 3px solid var(--gold); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; }
 .browse-label { font-size: 13px; color: #7a5e1a; }
@@ -447,9 +451,9 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 @keyframes nudgeArrow { 0%,100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 @keyframes advanceIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes pulseDot { 0%,100% { box-shadow: 0 0 0 0 rgba(201,169,110,.6); } 50% { box-shadow: 0 0 0 5px rgba(201,169,110,0); } }
-.pstage.current .pstage-num { animation: pulseDot 1.8s ease-in-out infinite; }
+.pstage.current .pstage-beacon { animation: pulseDot 1.8s ease-in-out infinite; }
 /* Stage just completed → the dot pops its check, so you SEE the step click into place. */
-.pstage.just-done .pstage-num { animation: dotPop .7s cubic-bezier(.2,1.6,.3,1); }
+.pstage.just-done .pstage-beacon { animation: dotPop .7s cubic-bezier(.2,1.6,.3,1); }
 @keyframes dotPop { 0% { transform: scale(1); } 35% { transform: scale(1.45); } 100% { transform: scale(1); } }
 
 /* Stage-advance celebration pill — slides up from the bottom, a beat richer than a plain toast. */

@@ -484,9 +484,6 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
     <>
       <div className="pbar-wrap" style={{ "--role-c": rbar.c, "--role-cd": rbar.cd, "--role-glow": rbar.glow }}>
         <div className="pbar" ref={pbarRef} style={{ "--stage-count": stages.length }}>
-          <div className="pbar-track">
-            <div className="pbar-fill" style={{ width: `${trackFillPct}%` }} />
-          </div>
           {stages.map((s, i) => {
             const isDone    = i < projectIdx;
             const isCurrent = i === projectIdx;
@@ -508,8 +505,12 @@ function ProgressBar({ type, projectStage, viewingStage, onBrowse, canControl, o
                 onClick={isClickable ? () => handleClick(s, canBrowse, canConfirm) : undefined}
                 title={canConfirm ? `Set step to ${s.label}` : canBrowse ? `View ${s.label}` : s.label}
               >
-                <span className="pstage-num">{isDone ? "✓" : i + 1}</span>
-                <span className="plabel">{s.short || s.label}</span>
+                <span className="pstage-bar"><i /></span>
+                <span className="pstage-lab">
+                  <span className="pstage-beacon" />
+                  <span className="pstage-num">{isDone ? "✓" : i + 1}</span>
+                  <span className="plabel">{s.short || s.label}</span>
+                </span>
               </button>
             );
           })}
@@ -3830,18 +3831,17 @@ const PV_CSS = `
 
 /* Progress bar → light card + stepper */
 .pvx .pbar-wrap{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(14,19,32,.04);padding:22px 20px 16px}
-.pvx .pbar-track{background:var(--line)}
-.pvx .pbar-fill{background:linear-gradient(90deg,var(--role-c,var(--gold)),var(--role-cd,var(--gold-deep)))}
-.pvx .pstage-num{background:#fff;border:1.5px solid var(--line);color:var(--muted)}
-.pvx .pstage.done .pstage-num{background:var(--role-c,var(--gold));border-color:var(--role-c,var(--gold));color:#fff}
-.pvx .pstage.current .pstage-num{background:#fff;border-color:var(--role-c,var(--gold));border-width:2px;color:var(--role-cd,var(--gold-deep));box-shadow:0 0 0 3px var(--role-glow,rgba(201,169,110,.18))}
-.pvx .pstage.viewing .pstage-num{background:var(--role-glow,rgba(201,169,110,.18));border-color:var(--role-c,var(--gold));color:var(--role-cd,var(--gold-deep))}
-.pvx .plabel{color:var(--muted)}
-.pvx .pstage.done .plabel{color:var(--role-cd,var(--gold-deep))}
-.pvx .pstage.current .plabel{color:var(--ink)}
-.pvx .pstage.future .plabel{color:#c2c7d2}
-.pvx .pstage.clickable:hover .pstage-num{border-color:var(--role-c,var(--gold));color:var(--role-cd,var(--gold-deep))}
-.pvx .pstage.clickable:hover .plabel{color:var(--role-cd,var(--gold-deep))}
+.pvx .pstage-bar{background:var(--line)}
+.pvx .pstage-bar i{background:linear-gradient(90deg,var(--role-c,var(--gold)),var(--role-cd,var(--gold-deep)))}
+.pvx .pstage-lab{color:var(--muted)}
+.pvx .pstage-beacon{background:#fff;border-color:#c2c7d2}
+.pvx .pstage.done .pstage-beacon{background:var(--role-c,var(--gold));border-color:var(--role-c,var(--gold))}
+.pvx .pstage.current .pstage-beacon{background:var(--role-c,var(--gold));border-color:var(--role-cd,var(--gold-deep))}
+.pvx .pstage.viewing .pstage-beacon{background:#fff;border-color:var(--role-c,var(--gold))}
+.pvx .pstage.done .pstage-lab{color:var(--role-cd,var(--gold-deep))}
+.pvx .pstage.current .pstage-lab{color:var(--ink)}
+.pvx .pstage.future .pstage-lab{color:#c2c7d2}
+.pvx .pstage.clickable:hover .pstage-lab{color:var(--role-cd,var(--gold-deep))}
 .pvx .pbar-pct-row{background:var(--bg-tint);border:1px solid var(--line)}
 .pvx .pbar-pct-bar{background:repeating-linear-gradient(-55deg,var(--role-glow,rgba(201,169,110,.18)) 0,var(--role-glow,rgba(201,169,110,.18)) 6px,transparent 6px,transparent 14px),linear-gradient(90deg,var(--role-glow,rgba(201,169,110,.35)),var(--role-glow,rgba(201,169,110,.18)));border-right:2px solid var(--role-c,var(--gold))}
 .pvx .pbar-pct-label{color:var(--muted)}
