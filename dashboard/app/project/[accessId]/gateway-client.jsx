@@ -1800,6 +1800,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const nowT = Date.now();
     return (list.find((x) => x.t >= nowT - 3600e3) || list[list.length - 1]).e;
   }
+  // Soonest still-UPCOMING appointment of ANY kind — so the header chip surfaces a booked visit even
+  // when it isn't the current stage's own kind yet (e.g. a survey still on the calendar at install).
+  function pickUpcomingAny() {
+    const nowT = Date.now();
+    const list = schedEvents.filter((e) => e?.date)
+      .map((e) => ({ e, t: new Date(`${e.date}T${e.time || "00:00"}`).getTime() }))
+      .filter((x) => !Number.isNaN(x.t) && x.t >= nowT - 3600e3).sort((a, b) => a.t - b.t);
+    return list.length ? list[0].e : null;
+  }
   function apptLabel(ev) {
     try {
       const d = new Date(`${ev.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -1825,7 +1834,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: "Proposal" };
     if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: "Approval & Deposit" };
     if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: "Approval & Deposit" };
-    if (f.deposit_recorded && custStage === "schedule") { const a = pickAppt("install"); return a ? { label: `Install · ${apptLabel(a)}`, schedule: "install", muted: true } : { label: "Scheduling your installation", target: "schedule", spot: null, muted: true }; }
+    if (f.deposit_recorded && custStage === "schedule") { const a = pickAppt("install") || pickUpcomingAny(); return a ? { label: `${apptKindOf(a) === "survey" ? "Survey" : "Install"} · ${apptLabel(a)}`, schedule: "install", muted: true } : { label: "Scheduling your installation", target: "schedule", spot: null, muted: true }; }
     if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
@@ -1849,8 +1858,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status === "accepted" && !f.proposal_signed)  return { label: "Awaiting signature", target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.deposit_recorded && custStage === "schedule") {
-      const a = pickAppt("install");
-      return a ? { label: `Install · ${apptLabel(a)}`, schedule: "install", muted: true }
+      const a = pickAppt("install") || pickUpcomingAny();   // surface any upcoming visit if the install isn't booked yet
+      return a ? { label: `${apptKindOf(a) === "survey" ? "Survey" : "Install"} · ${apptLabel(a)}`, schedule: "install", muted: true }
                : { label: "Schedule install", schedule: "install" };
     }
     return null;
