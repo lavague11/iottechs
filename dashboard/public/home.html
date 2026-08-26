@@ -282,12 +282,9 @@
     .showcase{padding:46px 30px}
   }
   @media(max-width:640px){
-    nav ul{display:none;position:absolute;top:72px;left:0;right:0;flex-direction:column;background:#fff;border-bottom:1px solid var(--line);padding:8px 0}
-    nav ul.open{display:flex}
-    nav ul li{width:100%;padding:0 26px}
-    nav a.link{display:block;padding:13px 0;border-bottom:1px solid var(--line)}
-    nav li:last-child{padding:13px 26px}
-    .menu-toggle{display:block}
+    /* Login is the only header action — show it inline; the hamburger was redundant. */
+    nav ul{display:flex;align-items:center;gap:8px}
+    .menu-toggle{display:none}
     .grid3,.steps,.two{grid-template-columns:1fr}
     section{padding:66px 0}
   }
