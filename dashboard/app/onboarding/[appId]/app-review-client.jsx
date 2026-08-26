@@ -50,6 +50,8 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.key === app.stage));
+  const pct = (hired || declined) ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);
+  const readoutLabel = hired ? "Hired" : declined ? "Closed" : (STEPS[stepIdx]?.label || "Applied");
   const ob = app.onboarding || {};
   const obDone = OB_ITEMS.filter(([k]) => ob[k]).length;
   const prof = ob.profile || null;        // what the new hire filled in themselves
@@ -80,14 +82,27 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           </div>
         </div>
 
-        {/* Stage strip — click to advance, same language as the service-call detail */}
-        <div className="panel ob-stagebar">
-          {STEPS.map((s, n) => (
-            <button key={s.key} className={`ob-stage${n < stepIdx ? " done" : ""}${n === stepIdx && !hired && !declined ? " on" : ""}`}
-              disabled={pending || hired} onClick={() => run(() => setAppStageAction(app.app_id, s.set))} title={`Set ${s.label}`}>
-              <span className="ob-stage-dot" /><span className="ob-stage-lbl">{s.label}</span>
-            </button>
-          ))}
+        {/* Deck beacon rail — click a segment to advance the stage; % readout on the right */}
+        <div className="panel ob-rail">
+          <div className="ob-track">
+            {STEPS.map((s, n) => {
+              const mk = declined && n === STEPS.length - 1 ? "bad"
+                : n < stepIdx ? "done"
+                : n === stepIdx ? (hired ? "done" : "active")
+                : "todo";
+              return (
+                <button key={s.key} className={`ob-seg ${mk}`} disabled={pending || hired}
+                  onClick={() => run(() => setAppStageAction(app.app_id, s.set))} title={`Set ${s.label}`}>
+                  <div className="ob-bar"><i /></div>
+                  <div className="ob-lab"><span className="ob-beacon" /><span className="ob-seg-l">{s.label}</span></div>
+                </button>
+              );
+            })}
+          </div>
+          <div className={`ob-readout${declined ? " bad" : ""}`}>
+            <span className="ob-pct mono">{pct}%</span>
+            <span className="ob-readout-l">{readoutLabel}</span>
+          </div>
         </div>
 
         <div className="ob-grid">
@@ -283,16 +298,27 @@ const CSS = `
 .apx .ob-badge.good{color:#1c8a45;background:#e7f6ec}
 .apx .ob-badge.bad{color:#c9382b;background:#fdecec}
 .apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none}
-.apx .ob-stagebar{display:flex;gap:2px;padding:14px 10px;overflow-x:auto;margin-bottom:16px}
-.apx .ob-stage{flex:1;min-width:80px;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 2px;position:relative}
-.apx .ob-stage:not(:last-child)::after{content:"";position:absolute;top:9px;left:calc(50% + 12px);right:calc(-50% + 12px);height:2px;background:var(--line)}
-.apx .ob-stage.done:not(:last-child)::after{background:#C9A96E}
-.apx .ob-stage-dot{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1}
-.apx .ob-stage.done .ob-stage-dot{background:#C9A96E;border-color:#C9A96E}
-.apx .ob-stage.on .ob-stage-dot{border-color:#C9A96E;box-shadow:0 0 0 4px rgba(201,169,110,.22)}
-.apx .ob-stage-lbl{font-size:.7rem;font-weight:700;color:var(--muted);white-space:nowrap}
-.apx .ob-stage.on .ob-stage-lbl{color:var(--ink)}
-.apx .ob-stage:disabled{cursor:default;opacity:.75}
+.apx .ob-rail{display:flex;align-items:center;gap:18px;padding:16px 20px;margin-bottom:16px}
+.apx .ob-track{flex:1;display:flex;gap:6px;min-width:0}
+.apx .ob-seg{flex:1;min-width:0;display:flex;flex-direction:column;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-align:left}
+.apx .ob-seg:disabled{cursor:default}
+.apx .ob-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.apx .ob-bar i{position:absolute;inset:0;width:0;background:#C9A96E;border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.apx .ob-seg.done .ob-bar i,.apx .ob-seg.active .ob-bar i{width:100%}
+.apx .ob-seg.active .ob-bar i{background:var(--gold-deep,#b08f4f)}
+.apx .ob-seg.bad .ob-bar i{width:100%;background:#c9382b}
+.apx .ob-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden}
+.apx .ob-seg-l{overflow:hidden;text-overflow:ellipsis}
+.apx .ob-seg.active .ob-lab,.apx .ob-seg.done .ob-lab{color:var(--ink)}
+.apx .ob-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--muted)}
+.apx .ob-seg.done .ob-beacon{background:#C9A96E;border-color:var(--gold-deep,#b08f4f)}
+.apx .ob-seg.active .ob-beacon{background:#C9A96E;border-color:var(--gold-deep,#b08f4f);animation:obBeacon 1.1s ease-in-out infinite}
+.apx .ob-seg.bad .ob-beacon{background:#c9382b;border-color:#c9382b}
+@keyframes obBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+.apx .ob-readout{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;line-height:1}
+.apx .ob-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.apx .ob-readout.bad .ob-pct{color:#c9382b}
+.apx .ob-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
 .apx .ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:900px){.apx .ob-grid{grid-template-columns:1fr}}
 .apx .ob-card{padding:16px 18px;margin-bottom:16px}
