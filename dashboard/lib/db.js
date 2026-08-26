@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, copyFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, existsSync, renameSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
@@ -2033,6 +2033,45 @@ export function backupDatabaseTo(destPath) {
   checkpointDb();   // fold the WAL in first so the snapshot is fully current
   db.exec(`VACUUM INTO '${String(destPath).replace(/'/g, "''")}'`);
   return destPath;
+}
+
+// Replace the live database with a snapshot (from backupDatabaseTo / VACUUM INTO). Powers the admin
+// Restore page and the Render→VPS migration: download a backup on one host, upload it here, swap it
+// in atomically. The current DB is copied aside first (dashboard.db.pre-restore-<ts>.bak) so a bad
+// restore is always reversible. srcPath must be a valid SQLite file; we verify it opens and carries
+// the `users` table before touching anything. Returns the path of the safety backup we kept.
+export function restoreDatabaseFrom(srcPath) {
+  if (!existsSync(srcPath)) throw new Error("restore source not found");
+  if (statSync(srcPath).size < 4096) throw new Error("restore source too small to be a database");
+  // 1) Validate the incoming file really is our database (opens + has the users table with rows/schema).
+  let probe;
+  try {
+    probe = new DatabaseSync(srcPath, { readOnly: true });
+    const ok = probe.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+    if (!ok) throw new Error("uploaded file is not an IOT dashboard database (no users table)");
+  } finally {
+    try { probe && probe.close(); } catch (_) {}
+  }
+
+  const live = dbFilePath();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safety = `${live}.pre-restore-${stamp}.bak`;
+
+  // 2) Fold the WAL in, then drop the live handle so the file is no longer held open.
+  try { checkpointDb(); } catch (_) {}
+  try { if (g.__iotDb) g.__iotDb.close(); } catch (_) {}
+  g.__iotDb = null;
+  g.__iotDbVer = null;
+
+  // 3) Keep the current DB as a safety backup, clear stale WAL/SHM sidecars, then move the snapshot in.
+  try { if (existsSync(live)) copyFileSync(live, safety); } catch (e) { throw new Error("could not back up current DB before restore: " + e.message); }
+  for (const side of ["-wal", "-shm"]) { try { rmSync(live + side, { force: true }); } catch (_) {} }
+  renameSync(srcPath, live);
+
+  // 4) Reopen — init() re-runs the CREATE TABLE / ALTER migrations so the restored data is on the
+  //    current schema, and getDb() caches the fresh handle for every subsequent query.
+  getDb();
+  return safety;
 }
 
 const decorate = (r) => ({

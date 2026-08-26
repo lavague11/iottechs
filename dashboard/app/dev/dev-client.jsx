@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
@@ -285,6 +285,58 @@ function BackupCard({ onFlash }) {
   );
 }
 
+// One-click database RESTORE — the mirror of Backup. Upload a snapshot and it becomes the live
+// database (the receiving end of a host migration, and disaster recovery). Destructive, so it's a
+// two-step confirm; a safety copy of the current DB is kept server-side automatically.
+function RestoreCard({ onFlash }) {
+  const [file, setFile] = useState(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+
+  async function run() {
+    if (busy || !file) return;
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append("db", file);
+      const res = await fetch("/api/restore", { method: "POST", body });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) { onFlash(j.error || "Restore failed — try again."); return; }
+      onFlash("Database restored. Reloading…");
+      setTimeout(() => window.location.reload(), 1400);
+    } catch { onFlash("Restore failed — try again."); }
+    finally { setBusy(false); setConfirm(false); }
+  }
+
+  return (
+    <div className="kv-card">
+      <div className="kv-head">
+        <div>
+          <div className="kv-title">Database restore</div>
+          <div className="kv-sub">Replace the entire live database with a backup snapshot — the receiving end of a server migration, and your disaster recovery. The current database is copied aside first, so it's reversible.</div>
+          {file && <div className="kv-sub" style={{ marginTop: 6, color: "var(--pvx-gold, #B4945C)" }}>Selected: {file.name} ({(file.size / 1048576).toFixed(1)} MB)</div>}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <input ref={inputRef} type="file" accept=".db,.sqlite,application/octet-stream" style={{ display: "none" }}
+                 onChange={(e) => { setFile(e.target.files?.[0] || null); setConfirm(false); }} />
+          {!confirm ? (
+            <>
+              <button className="kv-ghostbtn" disabled={busy} onClick={() => inputRef.current?.click()}>Choose file</button>
+              <button className="kv-addbtn" disabled={busy || !file} onClick={() => setConfirm(true)}>Restore</button>
+            </>
+          ) : (
+            <>
+              <button className="kv-ghostbtn" disabled={busy} onClick={() => setConfirm(false)}>Cancel</button>
+              <button className="kv-addbtn" disabled={busy} onClick={run}>{busy ? "Restoring…" : "Confirm replace"}</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [], twoFactor = {} }) {
   const [tasks, setTasks] = useState(initTasks);
   const [pending, startTx] = useTransition();
@@ -397,6 +449,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
         <ApiKeysCard secrets={secrets} onFlash={flash} />
         <TwoFactorCard twoFactor={twoFactor} onFlash={flash} />
         <BackupCard onFlash={flash} />
+        <RestoreCard onFlash={flash} />
 
         {/* Add form */}
         {showAdd && (
@@ -543,6 +596,8 @@ const DV_CSS = `
 .apx .kv-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem}
 .apx .kv-sub{color:var(--muted);font-size:.79rem;margin-top:4px;line-height:1.45;max-width:62ch}
 .apx .kv-addbtn{flex-shrink:0;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.8rem;font-weight:600;font-family:inherit;cursor:pointer}
+.apx .kv-addbtn:disabled,.apx .kv-ghostbtn:disabled{opacity:.45;cursor:default}
+.apx .kv-ghostbtn{flex-shrink:0;background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:.8rem;font-weight:600;font-family:inherit;cursor:pointer}
 .apx .kv-addform{display:flex;gap:8px;padding:12px 18px;border-bottom:1px solid var(--line);background:#fbfaf8}
 .apx .kv-addkey{max-width:220px}
 .apx .kv-list{display:flex;flex-direction:column}
