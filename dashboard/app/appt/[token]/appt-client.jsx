@@ -13,7 +13,7 @@ function whenStr(ev) {
   } catch { return ev.date; }
 }
 
-export default function ApptClient({ token, event, invalid, mode = "change" }) {
+export default function ApptClient({ token, event, invalid, mode = "change", who = "" }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(null);   // "reschedule" | "cancel" | "confirm" while submitting
   const [done, setDone] = useState(null);    // { action }
@@ -70,8 +70,8 @@ export default function ApptClient({ token, event, invalid, mode = "change" }) {
                 </div>
               )}
               {event?.confirmed
-                ? <p style={S.p}>You've already confirmed this appointment — you're all set. See you then.</p>
-                : <p style={S.p}>Let us know you'll be there so we can lock in your slot.</p>}
+                ? <p style={S.p}>{who ? `${who}, you've` : "You've"} already confirmed this appointment — you're all set. See you then.</p>
+                : <p style={S.p}>{who ? `${who}, let` : "Let"} us know <b>you'll</b> be there so we can lock in your slot. This confirms <b>your</b> attendance only.</p>}
               {err && <div style={S.err}>{err}</div>}
               <div style={S.btns}>
                 <button style={{ ...S.btn, ...S.btnDark, ...(busy ? S.btnBusy : {}) }} disabled={!!busy} onClick={confirm}>

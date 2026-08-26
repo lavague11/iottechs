@@ -20,16 +20,23 @@ export async function GET(request) {
   }
 
   const { secretValue } = await import("../../../lib/db");
-  const base = (secretValue("APP_URL") || "https://iot-techs.onrender.com").replace(/\/+$/, "");
+  const { makeApptToken } = await import("../../../lib/auth");
+  const base = (secretValue("APP_URL") || "https://iot-techs.com").replace(/\/+$/, "");
   const event = { id: 1, kind: "install", title: "10317 Longmeadow Ave — Installation", date: "2026-08-31", time: "12:00", duration: "60", location: "10317 Longmeadow Ave, Parrish, FL 34219, USA", notes: "Gate code 4821 — please park in the driveway." };
-  const html = renderAppointmentEmail({ verb, event, noun: "installation", projectNo: "ASC0036", tech: "", ctaUrl: `${base}/project/ASC0036`, changeUrl: `${base}/appt/sample.token` });
 
+  // Resolve the recipient FIRST so the confirm/reschedule link carries a REAL, per-recipient token
+  // (so tapping Confirm in the test actually records that recipient's status).
+  let to = "";
   if (send) {
-    // Resolve the recipient: an admin sends to their own email; otherwise a CRON_KEY-gated address.
-    let to = "";
     if (send === "1") { if (!isAdmin) return new Response("Forbidden", { status: 403 }); to = user.email; }
     else { const key = secretValue("CRON_KEY"); if (!key || searchParams.get("key") !== key) return new Response("Forbidden", { status: 403 }); to = send; }
     if (!to || !to.includes("@")) return Response.json({ ok: false, error: "no-recipient" }, { status: 400 });
+  }
+  const who = { email: to || "sample@iot-techs.com", name: to ? "You" : "Sample Recipient", role: "customer" };
+  const changeUrl = `${base}/appt/${await makeApptToken("ASC0036", 1, who)}`;
+  const html = renderAppointmentEmail({ verb, event, noun: "installation", projectNo: "ASC0036", tech: "", ctaUrl: `${base}/project/ASC0036`, changeUrl });
+
+  if (send) {
     const ics = buildAppointmentIcs(event, { method: "REQUEST", attendees: [{ email: to }] });
     const attachments = [{ filename: "invite.ics", content: Buffer.from(ics, "utf8").toString("base64"), content_type: "text/calendar; method=REQUEST; charset=utf-8" }];
     const r = await sendEmail({ to, subject: "[Test] Your installation is scheduled", html, text: "Test appointment email.", attachments });

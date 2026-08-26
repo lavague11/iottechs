@@ -12,12 +12,18 @@ export default async function ApptPage({ params, searchParams }) {
   if (!t) return <ApptClient invalid />;
 
   const p = getJobByAccessId(t.accessId);
-  let ev = null;
+  const att = t.who;                                    // the specific recipient this link is for
+  let ev = null, alreadyConfirmed = false;
   try {
     const raw = getToolData(t.accessId, "schedule")?.data;
     const d = raw ? JSON.parse(raw) : {};
     ev = (d.events || []).find((e) => String(e.id) === String(t.eventId)) || null;
+    if (ev) {
+      const key = (att?.email || "customer").toLowerCase();
+      alreadyConfirmed = !!(ev.confirmations && ev.confirmations[key]) || ((!att || att.role === "customer") && !!ev.confirmed_at);
+    }
   } catch { /* show a generic prompt if the event can't be read */ }
 
-  return <ApptClient token={token} mode={mode} event={ev ? { title: ev.title, date: ev.date, time: ev.time, confirmed: !!ev.confirmed_at } : null} />;
+  const who = (att?.name || "").trim() || p?.contact_name || "";
+  return <ApptClient token={token} mode={mode} who={who} event={ev ? { title: ev.title, date: ev.date, time: ev.time, confirmed: alreadyConfirmed } : null} />;
 }

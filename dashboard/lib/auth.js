@@ -150,19 +150,43 @@ export async function verifyPreviewToken(accessId, role, token) {
   return false;
 }
 
-// Long-lived, self-contained token for a customer's "request a change" link in an appointment email.
-// Encodes accessId + eventId (both URL-safe) + an HMAC; no expiry so the link works until the visit.
-export async function makeApptToken(accessId, eventId) {
-  const sig = await previewHmac(`appt:${accessId}:${eventId}`);
-  return `${accessId}.${eventId}.${sig}`;
+// UTF-8-safe, URL-safe base64 (no padding). btoa/atob exist in both Node and the edge runtime.
+function b64u(str) {
+  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64u(s) {
+  return decodeURIComponent(escape(atob(String(s || "").replace(/-/g, "+").replace(/_/g, "/"))));
+}
+
+// Long-lived, self-contained token for an appointment "confirm / request a change" link. Encodes the
+// project + event AND the specific recipient (who), so every attendee (customer, each assigned staff/
+// tech, guest) gets their OWN link that confirms THEIR OWN status — not the customer's. HMAC-signed,
+// no expiry. `who` = { email, name, role } | null (null = generic/customer link, e.g. legacy).
+// Format: base64url(json).sig — the payload has no dots, so a 2-part token is new, 3-part is legacy.
+export async function makeApptToken(accessId, eventId, who = null) {
+  const obj = { a: String(accessId), e: String(eventId) };
+  if (who && who.email) obj.w = { m: String(who.email), n: String(who.name || ""), r: String(who.role || "") };
+  const payload = b64u(JSON.stringify(obj));
+  const sig = await previewHmac(payload);
+  return `${payload}.${sig}`;
 }
 export async function verifyApptToken(token) {
   const parts = String(token || "").split(".");
-  if (parts.length < 3) return null;
+  // New format: payload.sig (payload is base64url → contains no ".", so exactly 2 parts).
+  if (parts.length === 2) {
+    const [payload, sig] = parts;
+    if (sig !== await previewHmac(payload)) return null;
+    try {
+      const o = JSON.parse(unb64u(payload));
+      if (!o.a || !o.e) return null;
+      return { accessId: o.a, eventId: o.e, who: o.w ? { email: o.w.m, name: o.w.n, role: o.w.r } : null };
+    } catch { return null; }
+  }
+  // Legacy format: accessId.eventId.sig (no recipient — treated as the customer).
   const sig = parts.pop();
   const eventId = parts.pop();
   const accessId = parts.join(".");
   if (!accessId || !eventId) return null;
   const expected = await previewHmac(`appt:${accessId}:${eventId}`);
-  return sig === expected ? { accessId, eventId } : null;
+  return sig === expected ? { accessId, eventId, who: null } : null;
 }

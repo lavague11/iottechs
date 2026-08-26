@@ -451,13 +451,13 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const p = getJobByAccessId(accessId);
     if (!p) return { ok: false, error: "no-project" };
     const set = new Map();
-    const add = (email, name) => {
+    const add = (email, name, role) => {
       const e = String(email || "").trim();
-      if (e && e.includes("@") && !set.has(e.toLowerCase())) set.set(e.toLowerCase(), { email: e, name: name || "" });
+      if (e && e.includes("@") && !set.has(e.toLowerCase())) set.set(e.toLowerCase(), { email: e, name: name || "", role: role || "" });
     };
-    add(p.contact_email, p.contact_name || p.customer);                 // the customer
-    try { getProjectAssignments(accessId).forEach((a) => add(a.user_email, a.user_name)); } catch {}  // assigned team
-    (Array.isArray(extraEmails) ? extraEmails : []).forEach((e) => add(e));  // staff booker + typed guest invitees
+    add(p.contact_email, p.contact_name || p.customer, "customer");                        // the customer
+    try { getProjectAssignments(accessId).forEach((a) => add(a.user_email, a.user_name, a.role || "team")); } catch {}  // assigned team/tech
+    (Array.isArray(extraEmails) ? extraEmails : []).forEach((e) => add(e, "", "guest"));    // staff booker + typed guest invitees
     const recipients = [...set.values()];
     if (!recipients.length) return { ok: false, error: "no-recipients" };
 
@@ -482,10 +482,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       : reminder ? "A quick reminder about your upcoming appointment — see you then."
       : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
       : "Here are the details below. A calendar invite is attached so you can add it in one tap.";
-    // Customer-facing "request a reschedule / cancel" link — a long-lived token page, no login.
-    let changeUrl = "";
-    try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id)}`; } catch {}
-    const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech: p.tech || p.assigned_tech || "", ctaUrl, changeUrl });
+    const tech = p.tech || p.assigned_tech || "";
     const text = [heading, "", intro, "",
       event.title ? `What:  ${event.title}` : null,
       whenLine ? `When:  ${whenLine}` : null,
@@ -496,6 +493,10 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     let sent = 0, i = 0;
     for (const r of recipients) {
       if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // stay under Resend's ~2/sec rate limit so no recipient gets dropped
+      // Each recipient gets THEIR OWN confirm/reschedule token, so their Confirm records THEIR status.
+      let changeUrl = "";
+      try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
+      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl });
       const res = await sendEmail({ to: r.email, subject, html, text, attachments });
       if (res?.ok || res?.skipped) sent++;
     }
