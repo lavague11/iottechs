@@ -149,3 +149,20 @@ export async function verifyPreviewToken(accessId, role, token) {
   }
   return false;
 }
+
+// Long-lived, self-contained token for a customer's "request a change" link in an appointment email.
+// Encodes accessId + eventId (both URL-safe) + an HMAC; no expiry so the link works until the visit.
+export async function makeApptToken(accessId, eventId) {
+  const sig = await previewHmac(`appt:${accessId}:${eventId}`);
+  return `${accessId}.${eventId}.${sig}`;
+}
+export async function verifyApptToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length < 3) return null;
+  const sig = parts.pop();
+  const eventId = parts.pop();
+  const accessId = parts.join(".");
+  if (!accessId || !eventId) return null;
+  const expected = await previewHmac(`appt:${accessId}:${eventId}`);
+  return sig === expected ? { accessId, eventId } : null;
+}

@@ -12,6 +12,7 @@
 //   APP_URL          absolute base for links in emails, e.g. https://yourdomain.com
 
 import { secretValue } from "./db";
+import { makeApptToken } from "./auth";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -320,61 +321,97 @@ function gcalUrl(ev) {
   } catch { return ""; }
 }
 
-// A polished, dedicated appointment email: navy header, accent bar, a date-tile hero card, clean
-// labeled rows (address as a maps link), and Add-to-Calendar / Open-Project buttons. Table-based,
-// inline styles, no external assets or emojis — matches the brand and renders everywhere.
-function renderAppointmentEmail({ heading, intro, event, cancel, ctaUrl }) {
-  const accent = cancel ? "#C0392B" : "#C9A96E";
-  const tileBg = cancel ? "#3A1F1C" : "#0B0F1A";
-  const dp = apptDateParts(event.date);
+// Chic editorial appointment email (Playfair serif, warm cream, gold hairline). Table-based + MSO
+// conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
+// Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
+const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
+export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl }) {
+  const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
+  const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
+  const service = (event.title && event.title.includes("—")) ? event.title.split("—").pop().trim() : cap(noun || "Appointment");
+  const eyebrow = cancel ? `Your ${service} Was Canceled` : reminder ? `Appointment Reminder` : updated ? `Your ${service} Was Rescheduled` : `Your ${service} Is Scheduled`;
+  const _d = new Date(`${event.date}T00:00:00`);
+  const bigDate = Number.isNaN(_d.getTime()) ? String(event.date || "") : _d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const range = apptTimeRange(event.time, event.duration);
   const gcal = cancel ? "" : gcalUrl(event);
-  const row = (label, valueHtml) => valueHtml
-    ? `<tr><td style="padding:11px 0;border-top:1px solid #eef0f3;">
-         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9aa0ac;margin-bottom:3px;">${esc(label)}</div>
-         <div style="font-size:14.5px;color:#2a2f3a;line-height:1.5;">${valueHtml}</div></td></tr>`
+  const confirmUrl = gcal || ctaUrl;                 // primary: add-to-calendar
+  const loc = String(event.location || "");
+  const ci = loc.indexOf(",");
+  const street = ci > 0 ? loc.slice(0, ci).trim() : loc;
+  const cityLine = ci > 0 ? loc.slice(ci + 1).replace(/,?\s*USA\s*$/i, "").trim() : "";
+  const maps = loc ? mapsUrl(loc) : "";
+  const techName = (tech && String(tech).trim()) || "To be assigned";
+  const detail = (label, valueHtml) => valueHtml
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+         <tr><td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(label)}</td></tr>
+         <tr><td class="serif" style="font-size:17px; color:#161821; line-height:1.5; padding-bottom:20px;">${valueHtml}</td></tr>
+       </table>
+       <div style="height:1px; background-color:#EAE4D8; font-size:0; line-height:0; margin-bottom:20px;">&nbsp;</div>`
     : "";
-  const addrHtml = event.location
-    ? `<a href="${esc(mapsUrl(event.location))}" style="color:#3E6FB0;text-decoration:none;">${esc(event.location)}</a> <a href="${esc(mapsUrl(event.location))}" style="color:#8a6d2f;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap;">· Directions</a>`
+  const locHtml = street
+    ? (maps ? `<a href="${esc(maps)}" style="color:#161821; text-decoration:none;">${esc(street)}${cityLine ? `<br><span style="font-size:15px; color:#161821;">${esc(cityLine)}</span>` : ""}</a>`
+            : `${esc(street)}${cityLine ? `<br><span style="font-size:15px; color:#161821;">${esc(cityLine)}</span>` : ""}`)
     : "";
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f5f7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:32px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e8ec;">
-        <tr><td style="background:#0B0F1A;padding:20px 28px;"><span style="font-size:16px;font-weight:700;letter-spacing:.14em;color:#C9A96E;">IOT&nbsp;TECHS</span></td></tr>
-        <tr><td style="height:4px;line-height:4px;font-size:0;background:${accent};">&nbsp;</td></tr>
-        <tr><td style="padding:28px 28px 8px;">
-          <h1 style="margin:0 0 10px;font-size:21px;line-height:1.3;color:#0B0F1A;">${esc(heading)}</h1>
-          <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#5a6270;">${esc(intro)}</p>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e6e8ec;border-radius:12px;background:#fafbfc;">
-            <tr>
-              <td width="72" valign="top" style="padding:16px 0 16px 16px;">
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:58px;border-radius:9px;overflow:hidden;background:${tileBg};">
-                  <tr><td align="center" style="padding:6px 0 2px;font-size:11px;font-weight:700;letter-spacing:.08em;color:#C9A96E;">${esc(dp.mon)}</td></tr>
-                  <tr><td align="center" style="padding:0 0 7px;font-size:24px;font-weight:800;color:#ffffff;line-height:1;">${esc(String(dp.day))}</td></tr>
-                </table>
-              </td>
-              <td valign="middle" style="padding:16px 16px 16px 12px;">
-                <div style="font-size:16px;font-weight:700;color:#0B0F1A;line-height:1.3;">${esc(event.title || "Appointment")}</div>
-                <div style="font-size:14px;color:#5a6270;margin-top:4px;">${esc(dp.weekday)}${range ? ` · ${esc(range)}` : ""}</div>
-              </td>
-            </tr>
-          </table>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
-            ${row("Where", addrHtml)}
-            ${row("Notes", event.notes ? esc(event.notes) : "")}
-          </table>
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 6px;"><tr>
-            ${gcal ? `<td style="padding-right:8px;"><a href="${esc(gcal)}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:700;color:#0B0F1A;background:#C9A96E;text-decoration:none;border-radius:8px;">Add to Google Calendar</a></td>` : ""}
-            ${ctaUrl ? `<td><a href="${esc(ctaUrl)}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:600;color:#0B0F1A;background:#ffffff;border:1px solid #d6d9df;text-decoration:none;border-radius:8px;">Open Project</a></td>` : ""}
-          </tr></table>
-          <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#8a909c;">${cancel ? "We'll reach out to reschedule — reply to this email with any questions." : "A calendar invite is attached — open it to add this to your calendar. Reply with any questions."}</p>
+  const button = (href, label, primary) => `<td align="center" valign="middle" style="padding:0 7px;">
+      <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(href)}" style="height:52px;v-text-anchor:middle;width:${primary ? 190 : 168}px;" arcsize="0%" strokecolor="${primary ? "#161821" : "#C9BFA8"}" fillcolor="${primary ? "#161821" : "#FBFAF6"}"><w:anchorlock/><center style="color:${primary ? "#F0E7D4" : "#4A4636"};font-family:Georgia,serif;font-size:11px;letter-spacing:4px;">${esc(label.toUpperCase())}</center></v:roundrect><![endif]-->
+      <!--[if !mso]><!--><a href="${esc(href)}" style="display:inline-block; background-color:${primary ? "#161821" : "#FBFAF6"}; color:${primary ? "#F0E7D4" : "#4A4636"}; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:normal; letter-spacing:4px; text-decoration:none; padding:17px ${primary ? 42 : 30}px; text-transform:uppercase; border:1px solid ${primary ? "#161821" : "#C9BFA8"};">${esc(label)}</a><!--<![endif]-->
+    </td>`;
+  const ctaCells = cancel ? "" : [confirmUrl ? button(confirmUrl, "Confirm", true) : "", changeUrl ? button(changeUrl, "Reschedule", false) : ""].join("");
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+  <title>${esc(eyebrow)}</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body,table,td,a{ -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+    table,td{ mso-table-lspace:0pt; mso-table-rspace:0pt; } table{ border-collapse:collapse !important; }
+    body{ margin:0 !important; padding:0 !important; width:100% !important; }
+    a[x-apple-data-detectors]{ color:inherit !important; text-decoration:none !important; }
+    .serif{ font-family:'Playfair Display', Georgia, 'Times New Roman', serif; }
+    @media screen and (max-width:600px){ .container{ width:100% !important; } .px{ padding-left:30px !important; padding-right:30px !important; } .date-serif{ font-size:30px !important; } }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#EDE8DE;">
+  <div style="display:none; font-size:1px; color:#EDE8DE; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">${esc(bigDate)}${range ? ` at ${esc(range)}` : ""}${street ? ` — ${esc(street)}` : ""}</div>
+  <center style="width:100%; background-color:#EDE8DE;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#EDE8DE;"><tr><td align="center" style="padding:44px 14px;">
+      <table role="presentation" class="container" cellpadding="0" cellspacing="0" width="600" style="width:600px; max-width:600px; background-color:#FBFAF6; border:1px solid #E3DDD0;">
+        <tr><td align="center" style="padding:38px 50px 30px 50px;" class="px">
+          <div class="serif" style="font-size:23px; font-weight:600; letter-spacing:8px; color:#161821;">IOT&nbsp;TECHS</div>
+          <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:4px; color:#A79A80; margin-top:10px; text-transform:uppercase;">Security &amp; Automation</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:22px;"><tr><td style="width:70px; height:1px; font-size:0; line-height:0; background-color:#B4945C;">&nbsp;</td></tr></table>
         </td></tr>
-        <tr><td style="padding:18px 28px;background:#fafbfc;border-top:1px solid #eef0f3;"><p style="margin:0;font-size:12px;color:#9aa0ac;">IOT TECHS · Security &amp; automation, professionally installed.</p></td></tr>
+        <tr><td align="center" style="padding:6px 50px 4px 50px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:bold; letter-spacing:4px; color:#B4945C; text-transform:uppercase;">${esc(eyebrow)}</div></td></tr>
+        <tr><td align="center" style="padding:14px 50px 4px 50px;" class="px">
+          <div class="serif date-serif" style="font-size:34px; font-weight:500; color:#161821; line-height:1.25;">${esc(bigDate)}</div>
+          ${range ? `<div class="serif" style="font-size:19px; font-weight:400; font-style:italic; color:#161821; margin-top:8px;">${esc(range)}</div>` : ""}
+        </td></tr>
+        <tr><td style="padding:34px 62px 6px 62px;" class="px">
+          ${detail("Project", `&#8470;&nbsp;${esc(projectNo || "")}`)}
+          ${detail("Service", esc(service))}
+          ${detail("Location", locHtml)}
+          ${event.notes ? detail("Notes", esc(event.notes)) : ""}
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+            <tr><td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">Technician</td></tr>
+            <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(techName)}</td></tr>
+          </table>
+        </td></tr>
+        ${ctaCells ? `<tr><td align="center" style="padding:34px 50px 8px 50px;" class="px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>${ctaCells}</tr></table></td></tr>` : ""}
+        ${gcal ? `<tr><td align="center" style="padding:12px 50px 6px 50px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:1px; color:#A79A80;"><a href="${esc(gcal)}" style="color:#8A8069; text-decoration:none; border-bottom:1px solid #D8CFBB; padding-bottom:2px;">Add to calendar</a></div></td></tr>` : ""}
+        <tr><td align="center" style="padding:30px 62px 40px 62px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#8A8069; line-height:1.7;">${cancel ? "This appointment has been canceled." : "To reschedule or with any questions, simply reply to this note"}<br>${cancel ? "Reply to this note or call" : "or call"} <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.</div></td></tr>
+        <tr><td align="center" style="background-color:#161821; padding:30px 50px;" class="px">
+          <div class="serif" style="font-size:14px; font-weight:500; letter-spacing:5px; color:#FBFAF6;">IOT&nbsp;TECHS</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 12px auto;"><tr><td style="width:40px; height:1px; background-color:#B4945C; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+          <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:2px; color:#8A8B95; line-height:1.9; text-transform:uppercase;">Cameras &middot; AV &middot; Networking &middot; Low-Voltage<br>Authorized through ADT &amp; SafeStreets</div>
+        </td></tr>
       </table>
-    </td></tr>
-  </table>
-  </body></html>`;
+    </td></tr></table>
+  </center>
+</body>
+</html>`;
 }
 
 // Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
@@ -417,7 +454,10 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       : reminder ? "A quick reminder about your upcoming appointment — see you then."
       : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
       : "Here are the details below. A calendar invite is attached so you can add it in one tap.";
-    const html = renderAppointmentEmail({ heading, intro, event, cancel, ctaUrl });
+    // Customer-facing "request a reschedule / cancel" link — a long-lived token page, no login.
+    let changeUrl = "";
+    try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id)}`; } catch {}
+    const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech: p.tech || p.assigned_tech || "", ctaUrl, changeUrl });
     const text = [heading, "", intro, "",
       event.title ? `What:  ${event.title}` : null,
       whenLine ? `When:  ${whenLine}` : null,
