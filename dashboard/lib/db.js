@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, copyFileSync, existsSync, renameSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, copyFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
@@ -101,10 +101,23 @@ const SEED = [
   { n:1047, svc:"SS", type:"A", category:"completed", customer:"Sullivan Home",       address:"612 Cedar Ave, Summit, NJ 07901",           cameras:0,  value:4400,  status:"closed",        tech:"Devon", date:"2026-06-15", issue:null },
 ];
 
+// Resolve the directory the SQLite file lives in. DB_DIR wins when set. Otherwise: on Hostinger's
+// atomic Git deploys the app runs from `.../<site>/hbuilds/versions/<hash>/…`, and that whole
+// versioned folder is REPLACED on every push — a DB written inside it is silently wiped each deploy.
+// Detect that layout and anchor the data ABOVE `hbuilds` (the stable domain root) so it persists
+// across deploys with no env config. Everywhere else, fall back to ./data next to the app.
+export function dbDir() {
+  if (process.env.DB_DIR) return process.env.DB_DIR;
+  const cwd = process.cwd();
+  const marker = cwd.indexOf(`${path.sep}hbuilds${path.sep}`);
+  if (marker !== -1) return path.join(cwd.slice(0, marker), "persistent-data");
+  return path.join(cwd, "data");
+}
+
 function init() {
-  // DB lives on disk. Locally that's ./data; in production point DB_DIR at a PERSISTENT mounted
-  // volume (e.g. Render disk at /data) so the database survives deploys and restarts.
-  const dir = process.env.DB_DIR || path.join(process.cwd(), "data");
+  // DB lives on disk. Locally that's ./data; in production DB_DIR (or the hbuilds anchor in dbDir())
+  // points at a PERSISTENT location so the database survives deploys and restarts.
+  const dir = dbDir();
   mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(path.join(dir, "dashboard.db"));
   db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
@@ -2022,7 +2035,7 @@ export function checkpointDb() {
 }
 // Absolute path of the SQLite file — used by the DB export/restore migration routes.
 export function dbFilePath() {
-  return path.join(process.env.DB_DIR || path.join(process.cwd(), "data"), "dashboard.db");
+  return path.join(dbDir(), "dashboard.db");
 }
 
 // Write a clean, transactionally-consistent copy of the ENTIRE database (every table + the media
@@ -2066,7 +2079,11 @@ export function restoreDatabaseFrom(srcPath) {
   // 3) Keep the current DB as a safety backup, clear stale WAL/SHM sidecars, then move the snapshot in.
   try { if (existsSync(live)) copyFileSync(live, safety); } catch (e) { throw new Error("could not back up current DB before restore: " + e.message); }
   for (const side of ["-wal", "-shm"]) { try { rmSync(live + side, { force: true }); } catch (_) {} }
-  renameSync(srcPath, live);
+  // copyFileSync, not renameSync: the upload lands in the OS tmpdir which is on a DIFFERENT filesystem
+  // from the data dir on most hosts (VPS: /tmp vs /home), so rename() fails with EXDEV. Copy works
+  // across devices; then best-effort remove the tmp source.
+  copyFileSync(srcPath, live);
+  try { rmSync(srcPath, { force: true }); } catch (_) {}
 
   // 4) Reopen — init() re-runs the CREATE TABLE / ALTER migrations so the restored data is on the
   //    current schema, and getDb() caches the fresh handle for every subsequent query.
