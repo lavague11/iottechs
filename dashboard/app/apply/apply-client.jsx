@@ -305,9 +305,11 @@ export default function ApplyClient() {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
-.ap-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--soft:#f5f6f9;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#b08f4f;
-  min-height:100vh;background:#eceef3;color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55;
+/* Matches the project-page (deck) design system: Instrument Sans (--font-sans, loaded globally),
+   warm-paper palette, JetBrains mono for codes. No Bricolage/Hanken — the deck uses one sans. */
+.ap-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A1A6AC;--line:#E4E4DF;--line-soft:#EDEDE9;
+  --soft:#F4F4F2;--raise:#FBFBFA;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#A8842F;--green:#2E7D5B;
+  min-height:100vh;background:var(--soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55;
   display:flex;align-items:center;justify-content:center;padding:26px 18px}
 .ap-shell{width:100%;max-width:1060px;display:grid;grid-template-columns:400px 1fr;background:#fff;border-radius:26px;overflow:hidden;
   box-shadow:0 40px 100px -40px rgba(14,19,32,.5)}
@@ -323,7 +325,7 @@ const CSS = `
 .ap-aside-pill{align-self:flex-start}
 .ap-tag{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);
   background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.3);padding:5px 12px;border-radius:100px;margin-bottom:16px}
-.ap-hero-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:2rem;line-height:1.08;margin:0 0 12px;position:relative;z-index:1}
+.ap-hero-h{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:2rem;line-height:1.08;margin:0 0 12px;position:relative;z-index:1}
 .ap-hero-p{color:#b9c0d0;font-size:.95rem;margin:0 0 18px;position:relative;z-index:1;max-width:34ch}
 .ap-pay{display:inline-flex;flex-direction:column;gap:1px;align-self:flex-start;margin:0 0 22px;padding:9px 16px;border-radius:12px;
   background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.35);color:var(--gold-hi);font-weight:800;font-size:1.02rem;line-height:1.15;position:relative;z-index:1}
@@ -341,7 +343,7 @@ const CSS = `
 .ap-x{position:absolute;top:20px;right:22px;color:var(--muted);text-decoration:none;font-size:1rem;width:32px;height:32px;display:grid;place-items:center;border-radius:9px;z-index:2}
 .ap-x:hover{background:var(--soft);color:var(--ink)}
 .ap-form-head{margin-bottom:8px}
-.ap-form-head h2,.ap-success h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:1.5rem;margin:0 0 5px}
+.ap-form-head h2,.ap-success h2{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:1.5rem;margin:0 0 5px}
 .ap-sub{color:var(--muted);margin:0;font-size:.92rem}
 .ap-label{display:block;font-weight:700;font-size:.82rem;margin:20px 0 9px;color:#2a3040}
 .ap-opt{font-weight:500;color:var(--muted)}
@@ -401,7 +403,7 @@ textarea.ap-in{resize:vertical}
 .ap-step-n svg{width:15px;height:15px;stroke-width:2.8}
 .ap-step.on .ap-step-n{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#fff;border-color:var(--gold)}
 .ap-step.done .ap-step-n{background:#e7f6ec;color:#1c8a45;border-color:#bfe6cd}
-.ap-step-l{font-size:.82rem;font-weight:700;color:var(--muted);white-space:nowrap}
+.ap-step-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
 .ap-step.on .ap-step-l{color:var(--ink)}
 .ap-step:not(:last-child)::after{content:"";flex:1;height:2px;border-radius:2px;background:var(--line)}
 .ap-step.done:not(:last-child)::after{background:#bfe6cd}
@@ -415,7 +417,7 @@ textarea.ap-in{resize:vertical}
 .ap-recap{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding:12px 15px;background:var(--soft);border-radius:11px;border:1px solid var(--line)}
 .ap-recap-k{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .ap-recap-v{font-weight:800;font-size:.92rem}
-.mono{font-family:Menlo,Consolas,monospace;letter-spacing:.5px}
+.mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px}
 /* success */
 .ap-success{text-align:center;padding:26px 4px}
 .ap-check{width:64px;height:64px;border-radius:50%;background:#e7f6ec;display:grid;place-items:center;margin:0 auto 16px}
