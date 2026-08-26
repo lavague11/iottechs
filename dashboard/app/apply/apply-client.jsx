@@ -161,8 +161,8 @@ export default function ApplyClient() {
         {/* LEFT — brand / pitch */}
         <aside className="ap-aside">
           <div className="ap-aside-top">
-            <a href="/" className="ap-brand" aria-label="IOT TECHS home"><Wordmark height={26} style={{ color: "#fff" }} techsColor="#E8CB94" /></a>
-            <TaglinePill tone="dark" className="ap-aside-pill" />
+            <a href="/" className="ap-brand" aria-label="IOT TECHS home"><Wordmark height={26} techsColor="#A8842F" /></a>
+            <TaglinePill tone="light" className="ap-aside-pill" />
           </div>
           <div className="ap-aside-body">
             <div className="ap-tag">Careers · Now hiring</div>
@@ -317,28 +317,29 @@ const CSS = `
 .ap-shell{width:100%;max-width:1060px;display:grid;grid-template-columns:400px 1fr;background:#fff;border-radius:26px;overflow:hidden;
   box-shadow:0 40px 100px -40px rgba(14,19,32,.5)}
 
-/* ---- left brand panel ---- */
+/* ---- left brand panel — deck light treatment (warm paper, ink text, soft gold) ---- */
 .ap-aside{position:relative;background:
-  radial-gradient(600px 300px at 15% 0%,rgba(201,169,110,.22),transparent 60%),
-  linear-gradient(160deg,#141a2b 0%,#0b0f1a 70%);
-  color:#fff;padding:34px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:28px;overflow:hidden}
-.ap-aside::after{content:"";position:absolute;right:-80px;bottom:-80px;width:260px;height:260px;border-radius:50%;
-  background:radial-gradient(circle,rgba(201,169,110,.16),transparent 65%)}
+  radial-gradient(520px 300px at 12% -8%,rgba(201,169,110,.16),transparent 60%),
+  linear-gradient(160deg,#FBFBFA 0%,#F1F0EC 100%);
+  color:var(--ink);padding:34px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:28px;overflow:hidden;border-right:1px solid var(--line)}
+.ap-aside::after{content:"";position:absolute;right:-90px;bottom:-90px;width:260px;height:260px;border-radius:50%;
+  background:radial-gradient(circle,rgba(201,169,110,.12),transparent 65%)}
 .ap-aside-top{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+.ap-brand{color:var(--ink);display:inline-flex}
 .ap-aside-pill{align-self:flex-start}
-.ap-tag{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);
-  background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.3);padding:5px 12px;border-radius:100px;margin-bottom:16px}
-.ap-hero-h{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:2rem;line-height:1.08;margin:0 0 12px;position:relative;z-index:1}
-.ap-hero-p{color:#b9c0d0;font-size:.95rem;margin:0 0 18px;position:relative;z-index:1;max-width:34ch}
-.ap-pay{display:inline-flex;flex-direction:column;gap:1px;align-self:flex-start;margin:0 0 22px;padding:9px 16px;border-radius:12px;
-  background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.35);color:var(--gold-hi);font-weight:800;font-size:1.02rem;line-height:1.15;position:relative;z-index:1}
-.ap-pay-lbl{font-size:.6rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#c9b48a}
+.ap-tag{display:inline-block;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-deep);
+  background:rgba(201,169,110,.12);border:1px solid rgba(201,169,110,.34);padding:5px 12px;border-radius:100px;margin-bottom:16px}
+.ap-hero-h{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.024em;font-size:2rem;line-height:1.08;margin:0 0 12px;color:var(--ink);position:relative;z-index:1}
+.ap-hero-p{color:var(--muted);font-size:.95rem;margin:0 0 18px;position:relative;z-index:1;max-width:34ch}
+.ap-pay{display:inline-flex;flex-direction:column;gap:2px;align-self:flex-start;margin:0 0 22px;padding:10px 16px;border-radius:12px;
+  background:rgba(201,169,110,.10);border:1px solid rgba(201,169,110,.34);color:var(--gold-deep);font-weight:700;font-size:1.02rem;line-height:1.15;position:relative;z-index:1}
+.ap-pay-lbl{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-deep);opacity:.85}
 .ap-perks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:13px;position:relative;z-index:1}
-.ap-perks li{display:flex;align-items:center;gap:12px;font-size:.92rem;font-weight:600;color:#e7eaf1}
-.ap-perk-ic{width:34px;height:34px;flex-shrink:0;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;color:var(--gold-hi)}
-.ap-perk-ic svg{width:17px;height:17px}
-.ap-aside-foot{font-size:.85rem;color:#9aa2b4;position:relative;z-index:1}
-.ap-aside-foot a{color:var(--gold-hi);text-decoration:none;font-weight:700}
+.ap-perks li{display:flex;align-items:center;gap:12px;font-size:.92rem;font-weight:500;color:var(--ink-soft)}
+.ap-perk-ic{width:32px;height:32px;flex-shrink:0;border-radius:9px;background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.28);display:grid;place-items:center;color:var(--gold-deep)}
+.ap-perk-ic svg{width:16px;height:16px}
+.ap-aside-foot{font-size:.85rem;color:var(--muted);position:relative;z-index:1}
+.ap-aside-foot a{color:var(--gold-deep);text-decoration:none;font-weight:600}
 .ap-aside-foot a:hover{text-decoration:underline}
 
 /* ---- right form panel ---- */
