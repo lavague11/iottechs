@@ -49,7 +49,7 @@ export default function LoginClient({ next }) {
   const speedRunId = useRef(0);
   const canvasRef  = useRef(null);
   const canvasCtrl = useRef(null);
-  const [mode, setMode]           = useState("phone");   // phone | password | face | pin | signup
+  const [mode, setMode]           = useState("password"); // password | phone | face | pin | signup — default is the white Sign-In card
   const [faceState, setFaceState] = useState("idle");
   const [faceMsg, setFaceMsg]     = useState("");
   const [pinId, setPinId]         = useState("");
@@ -235,7 +235,7 @@ export default function LoginClient({ next }) {
   }
 
   return (
-    <div className="gw2-root">
+    <div className="gw2-root gw2-light">
       <style>{CSS}</style>
       <div className="gw2-aura" />
       <div className="gw2-grid" />
@@ -481,4 +481,34 @@ const CSS = `
 .lgf-stage{position:relative;width:168px;height:168px;margin:2px auto 0;display:grid;place-items:center}
 .lgf-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none}
 .lgf-hint{text-align:center;font-size:.72rem;color:rgba(255,255,255,.42);margin-top:2px}
+/* ---- Light card (matches the project gateway's white Secure Access card) ----
+   Only the card + its contents go light; the animated dark starfield behind it stays. */
+.gw2-light .gw2-card{background:#fff;border:1px solid rgba(14,19,32,.06);border-radius:22px;box-shadow:0 44px 90px -26px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.18);backdrop-filter:none;-webkit-backdrop-filter:none}
+.gw2-light .gw2-ring{border-radius:22px}
+.gw2-light .gw2-brand h1{color:#0e1320}
+.gw2-light .gw2-subtag{color:#b08f4f}
+.gw2-light .lg-label{color:#6b7280}
+.gw2-light .lg-input{background:#f4f5f7;border:1px solid #e6e8ee;color:#0e1320}
+.gw2-light .lg-input::placeholder{color:#9aa0ab}
+.gw2-light .lg-input:focus{border-color:#C9A96E;background:#fff}
+.gw2-light .lg-input:disabled{opacity:.55}
+.gw2-light .lg-pw-eye{color:#9aa0ab}
+.gw2-light .lg-pw-eye:hover{color:#b08f4f;background:#faf4e8}
+.gw2-light .lg-btn{background:#C9A96E;color:#0e1320}
+.gw2-light .lg-btn:hover:not(:disabled){background:#b08f4f;color:#fff;transform:translateY(-1px)}
+.gw2-light .lgf-prompt{color:#6b7280}
+.gw2-light .lgf-prompt.ok{color:#1c8a45}
+.gw2-light .lgf-prompt.err{color:#c0392b}
+.gw2-light .lgf-msg{color:#2C3347;background:#f4f5f7;border:1px solid #e6e8ee}
+.gw2-light .lg-mini.ok{color:#1c8a45}
+.gw2-light .lg-mini.no{color:#c0392b}
+.gw2-light .lg-err{background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.28);color:#c0392b}
+.gw2-light .lg-err-link{color:#8f2018}
+.gw2-light .lg-err-link:hover{color:#c0392b}
+/* Footer action links become subtle light-gray chips, like the gateway */
+.gw2-light .gw2-lbtn{background:#f4f5f7;border:1px solid #e6e8ee;color:#2C3347;border-radius:8px;padding:6px 11px;font-weight:600}
+.gw2-light .gw2-lbtn:hover{border-color:rgba(201,169,110,.55);background:#faf4e8;color:#0e1320}
+.gw2-light .gw2-help-btn{background:none;border:none;color:#b08f4f;padding:6px 4px}
+.gw2-light .gw2-help-btn:hover{background:none;color:#0e1320}
+.gw2-light .gw2-actions{gap:8px;flex-wrap:wrap}
 `;
