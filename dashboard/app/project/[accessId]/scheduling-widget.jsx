@@ -419,7 +419,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                 </div>
                 <div className="sched-ev-main">
                   <div className="sched-ev-row">
-                    <span className="sched-ev-title">{ev.title}</span>
+                    <span className="sched-ev-title">{ev.title}{ev.confirmed_at && <span className="sched-ev-confirmed">✓ Confirmed</span>}</span>
                     <div className="sched-ev-acts">
                       <a className="sched-ev-ico" href={gcalUrl(ev, emailsFor(ev))} target="_blank" rel="noopener noreferrer" title="Add to Google Calendar">{Ico.gcal}</a>
                       <button className="sched-ev-ico" onClick={()=>downloadIcs(ev)} title="Add to Apple / iCloud Calendar">{Ico.apple}</button>

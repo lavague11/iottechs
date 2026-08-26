@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { requestAppointmentChangeAction } from "../actions";
+import { requestAppointmentChangeAction, confirmAppointmentAction } from "../actions";
 
 function whenStr(ev) {
   if (!ev?.date) return "";
@@ -13,9 +13,9 @@ function whenStr(ev) {
   } catch { return ev.date; }
 }
 
-export default function ApptClient({ token, event, invalid }) {
+export default function ApptClient({ token, event, invalid, mode = "change" }) {
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(null);   // "reschedule" | "cancel" while submitting
+  const [busy, setBusy] = useState(null);   // "reschedule" | "cancel" | "confirm" while submitting
   const [done, setDone] = useState(null);    // { action }
   const [err, setErr] = useState("");
 
@@ -25,6 +25,16 @@ export default function ApptClient({ token, event, invalid }) {
     try {
       const r = await requestAppointmentChangeAction(token, kind, note);
       if (r?.ok) setDone({ action: r.action });
+      else setErr(r?.error || "Something went wrong. Please try again.");
+    } catch { setErr("Something went wrong. Please try again."); }
+    setBusy(null);
+  }
+  async function confirm() {
+    if (busy) return;
+    setBusy("confirm"); setErr("");
+    try {
+      const r = await confirmAppointmentAction(token);
+      if (r?.ok) setDone({ action: "confirm" });
       else setErr(r?.error || "Something went wrong. Please try again.");
     } catch { setErr("Something went wrong. Please try again."); }
     setBusy(null);
@@ -43,10 +53,34 @@ export default function ApptClient({ token, event, invalid }) {
             </>
           ) : done ? (
             <>
-              <h1 style={S.h1}>Request received</h1>
-              <p style={S.p}>{done.action === "cancel"
+              <h1 style={S.h1}>{done.action === "confirm" ? "You're confirmed" : "Request received"}</h1>
+              <p style={S.p}>{done.action === "confirm"
+                ? "Thanks for confirming — we've got you down and we'll see you then. Add it to your calendar from your invite so you don't miss it."
+                : done.action === "cancel"
                 ? "Thanks — we've let the team know you'd like to cancel. We'll be in touch to confirm."
                 : "Thanks — we've let the team know you'd like a new time. We'll reach out shortly to reschedule."}</p>
+            </>
+          ) : mode === "confirm" ? (
+            <>
+              <h1 style={S.h1}>Confirm your appointment</h1>
+              {event && (
+                <div style={S.appt}>
+                  <div style={S.apptTitle}>{event.title || "Your appointment"}</div>
+                  {whenStr(event) && <div style={S.apptWhen}>{whenStr(event)}</div>}
+                </div>
+              )}
+              {event?.confirmed
+                ? <p style={S.p}>You've already confirmed this appointment — you're all set. See you then.</p>
+                : <p style={S.p}>Let us know you'll be there so we can lock in your slot.</p>}
+              {err && <div style={S.err}>{err}</div>}
+              <div style={S.btns}>
+                <button style={{ ...S.btn, ...S.btnDark, ...(busy ? S.btnBusy : {}) }} disabled={!!busy} onClick={confirm}>
+                  {busy === "confirm" ? "Confirming…" : event?.confirmed ? "Confirm again" : "Yes, I'll be there"}
+                </button>
+                <button style={{ ...S.btn, ...S.btnGhost, ...(busy ? S.btnBusy : {}) }} disabled={!!busy} onClick={() => submit("reschedule")}>
+                  {busy === "reschedule" ? "Sending…" : "Reschedule instead"}
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -80,7 +114,7 @@ export default function ApptClient({ token, event, invalid }) {
 }
 
 const S = {
-  page: { minHeight: "100vh", background: "#f4f5f7", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 14px", fontFamily: "'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif" },
+  page: { minHeight: "100vh", background: "#f4f5f7", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 14px", fontFamily: "var(--font-sans, 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif)" },
   card: { width: "100%", maxWidth: 460, background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e6e8ec", boxShadow: "0 10px 40px rgba(11,15,26,.08)" },
   head: { background: "#0B0F1A", padding: "20px 28px" },
   brand: { fontSize: 16, fontWeight: 700, letterSpacing: ".14em", color: "#C9A96E" },
@@ -97,7 +131,8 @@ const S = {
   btns: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 },
   btn: { flex: "1 1 auto", padding: "12px 18px", borderRadius: 9, fontSize: 14.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid transparent" },
   btnGold: { background: "#C9A96E", color: "#0B0F1A", borderColor: "#C9A96E" },
-  btnGhost: { background: "#fff", color: "#C0392B", borderColor: "#e0c3c0" },
+  btnDark: { background: "#0B0F1A", color: "#F0E7D4", borderColor: "#0B0F1A" },
+  btnGhost: { background: "#fff", color: "#5a6270", borderColor: "#d6d9df" },
   btnBusy: { opacity: .6, cursor: "default" },
   foot: { padding: "16px 28px", background: "#fafbfc", borderTop: "1px solid #eef0f3", fontSize: 12, color: "#9aa0ac" },
 };

@@ -334,7 +334,9 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   const bigDate = Number.isNaN(_d.getTime()) ? String(event.date || "") : _d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const range = apptTimeRange(event.time, event.duration);
   const gcal = cancel ? "" : gcalUrl(event);
-  const confirmUrl = gcal || ctaUrl;                 // primary: add-to-calendar
+  // CONFIRM records the customer's RSVP (they'll attend) via the /appt page; falls back to the
+  // calendar link if there's no token URL.
+  const confirmUrl = changeUrl ? `${changeUrl}?do=confirm` : (gcal || ctaUrl);
   const loc = String(event.location || "");
   const ci = loc.indexOf(",");
   const street = ci > 0 ? loc.slice(0, ci).trim() : loc;
@@ -343,7 +345,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   const techName = (tech && String(tech).trim()) || "To be assigned";
   const detail = (label, valueHtml) => valueHtml
     ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-         <tr><td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(label)}</td></tr>
+         <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(label)}</td></tr>
          <tr><td class="serif" style="font-size:17px; color:#161821; line-height:1.5; padding-bottom:20px;">${valueHtml}</td></tr>
        </table>
        <div style="height:1px; background-color:#EAE4D8; font-size:0; line-height:0; margin-bottom:20px;">&nbsp;</div>`
@@ -354,7 +356,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
     : "";
   const button = (href, label, primary) => `<td align="center" valign="middle" style="padding:0 7px;">
       <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(href)}" style="height:52px;v-text-anchor:middle;width:${primary ? 190 : 168}px;" arcsize="0%" strokecolor="${primary ? "#161821" : "#C9BFA8"}" fillcolor="${primary ? "#161821" : "#FBFAF6"}"><w:anchorlock/><center style="color:${primary ? "#F0E7D4" : "#4A4636"};font-family:Georgia,serif;font-size:11px;letter-spacing:4px;">${esc(label.toUpperCase())}</center></v:roundrect><![endif]-->
-      <!--[if !mso]><!--><a href="${esc(href)}" style="display:inline-block; background-color:${primary ? "#161821" : "#FBFAF6"}; color:${primary ? "#F0E7D4" : "#4A4636"}; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:normal; letter-spacing:4px; text-decoration:none; padding:17px ${primary ? 42 : 30}px; text-transform:uppercase; border:1px solid ${primary ? "#161821" : "#C9BFA8"};">${esc(label)}</a><!--<![endif]-->
+      <!--[if !mso]><!--><a href="${esc(href)}" style="display:inline-block; background-color:${primary ? "#161821" : "#FBFAF6"}; color:${primary ? "#F0E7D4" : "#4A4636"}; font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:normal; letter-spacing:4px; text-decoration:none; padding:17px ${primary ? 42 : 30}px; text-transform:uppercase; border:1px solid ${primary ? "#161821" : "#C9BFA8"};">${esc(label)}</a><!--<![endif]-->
     </td>`;
   const ctaCells = cancel ? "" : [confirmUrl ? button(confirmUrl, "Confirm", true) : "", changeUrl ? button(changeUrl, "Reschedule", false) : ""].join("");
   return `<!DOCTYPE html>
@@ -364,13 +366,13 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
   <title>${esc(eyebrow)}</title>
   <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     body,table,td,a{ -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
     table,td{ mso-table-lspace:0pt; mso-table-rspace:0pt; } table{ border-collapse:collapse !important; }
     body{ margin:0 !important; padding:0 !important; width:100% !important; }
     a[x-apple-data-detectors]{ color:inherit !important; text-decoration:none !important; }
-    .serif{ font-family:'Playfair Display', Georgia, 'Times New Roman', serif; }
+    .serif{ font-family:'Bricolage Grotesque','Instrument Sans',Helvetica,Arial,sans-serif; }
     @media screen and (max-width:600px){ .container{ width:100% !important; } .px{ padding-left:30px !important; padding-right:30px !important; } .date-serif{ font-size:30px !important; } }
   </style>
 </head>
@@ -381,31 +383,31 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
       <table role="presentation" class="container" cellpadding="0" cellspacing="0" width="600" style="width:600px; max-width:600px; background-color:#FBFAF6; border:1px solid #E3DDD0;">
         <tr><td align="center" style="padding:38px 50px 30px 50px;" class="px">
           <div class="serif" style="font-size:23px; font-weight:600; letter-spacing:8px; color:#161821;">IOT&nbsp;TECHS</div>
-          <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:4px; color:#A79A80; margin-top:10px; text-transform:uppercase;">Security &amp; Automation</div>
+          <div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:4px; color:#A79A80; margin-top:10px; text-transform:uppercase;">Security &amp; Automation</div>
           <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:22px;"><tr><td style="width:70px; height:1px; font-size:0; line-height:0; background-color:#B4945C;">&nbsp;</td></tr></table>
         </td></tr>
-        <tr><td align="center" style="padding:6px 50px 4px 50px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:bold; letter-spacing:4px; color:#B4945C; text-transform:uppercase;">${esc(eyebrow)}</div></td></tr>
+        <tr><td align="center" style="padding:6px 50px 4px 50px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:bold; letter-spacing:4px; color:#B4945C; text-transform:uppercase;">${esc(eyebrow)}</div></td></tr>
         <tr><td align="center" style="padding:14px 50px 4px 50px;" class="px">
           <div class="serif date-serif" style="font-size:34px; font-weight:500; color:#161821; line-height:1.25;">${esc(bigDate)}</div>
           ${range ? `<div class="serif" style="font-size:19px; font-weight:400; font-style:italic; color:#161821; margin-top:8px;">${esc(range)}</div>` : ""}
         </td></tr>
         <tr><td style="padding:34px 62px 6px 62px;" class="px">
-          ${detail("Project", `&#8470;&nbsp;${esc(projectNo || "")}`)}
+          ${detail("Project", ctaUrl ? `<a href="${esc(ctaUrl)}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">&#8470;&nbsp;${esc(projectNo || "")}</a>` : `&#8470;&nbsp;${esc(projectNo || "")}`)}
           ${detail("Service", esc(service))}
           ${detail("Location", locHtml)}
           ${event.notes ? detail("Notes", esc(event.notes)) : ""}
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-            <tr><td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">Technician</td></tr>
+            <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">Technician</td></tr>
             <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(techName)}</td></tr>
           </table>
         </td></tr>
         ${ctaCells ? `<tr><td align="center" style="padding:34px 50px 8px 50px;" class="px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>${ctaCells}</tr></table></td></tr>` : ""}
-        ${gcal ? `<tr><td align="center" style="padding:12px 50px 6px 50px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:1px; color:#A79A80;"><a href="${esc(gcal)}" style="color:#8A8069; text-decoration:none; border-bottom:1px solid #D8CFBB; padding-bottom:2px;">Add to calendar</a></div></td></tr>` : ""}
-        <tr><td align="center" style="padding:30px 62px 40px 62px;" class="px"><div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#8A8069; line-height:1.7;">${cancel ? "This appointment has been canceled." : "To reschedule or with any questions, simply reply to this note"}<br>${cancel ? "Reply to this note or call" : "or call"} <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.</div></td></tr>
+        ${gcal ? `<tr><td align="center" style="padding:12px 50px 6px 50px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:1px; color:#A79A80;"><a href="${esc(gcal)}" style="color:#8A8069; text-decoration:none; border-bottom:1px solid #D8CFBB; padding-bottom:2px;">Add to calendar</a></div></td></tr>` : ""}
+        <tr><td align="center" style="padding:30px 62px 40px 62px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#8A8069; line-height:1.7;">${cancel ? "This appointment has been canceled." : "To reschedule or with any questions, simply reply to this note"}<br>${cancel ? "Reply to this note or call" : "or call"} <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.</div></td></tr>
         <tr><td align="center" style="background-color:#161821; padding:30px 50px;" class="px">
           <div class="serif" style="font-size:14px; font-weight:500; letter-spacing:5px; color:#FBFAF6;">IOT&nbsp;TECHS</div>
           <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 12px auto;"><tr><td style="width:40px; height:1px; background-color:#B4945C; font-size:0; line-height:0;">&nbsp;</td></tr></table>
-          <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:2px; color:#8A8B95; line-height:1.9; text-transform:uppercase;">Cameras &middot; AV &middot; Networking &middot; Low-Voltage<br>Authorized through ADT &amp; SafeStreets</div>
+          <div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:2px; color:#8A8B95; line-height:1.9; text-transform:uppercase;">Cameras &middot; AV &middot; Networking &middot; Low-Voltage<br>Authorized through ADT &amp; SafeStreets</div>
         </td></tr>
       </table>
     </td></tr></table>

@@ -4403,6 +4403,7 @@ const PV_CSS = `
 .pvx .sched-ev-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .pvx .sched-ev-row{display:flex;align-items:flex-start;gap:8px}
 .pvx .sched-ev-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:.95rem;color:var(--ink);flex:1;line-height:1.3}
+.pvx .sched-ev-confirmed{display:inline-block;margin-left:8px;font-family:var(--font-sans);font-size:.66rem;font-weight:700;letter-spacing:.03em;color:#2E7D5B;background:rgba(46,125,91,.1);border:1px solid rgba(46,125,91,.28);border-radius:999px;padding:2px 8px;vertical-align:middle;white-space:nowrap}
 /* Phones: keep the Date/Time/Duration row from overflowing, and give the event title its own line
    so it stops wrapping into a cramped column beside the action icons. */
 @media (max-width:560px){
