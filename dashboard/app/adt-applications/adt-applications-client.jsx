@@ -123,10 +123,11 @@ function DetailPanel({ app, summary }) {
         {ORDER.map((s, i) => {
           const done = app.stage === "completed" || i < cur;
           const on = i === cur && app.stage !== "completed";
+          const mk = done ? "done" : on ? "active" : "todo";
           return (
-            <div key={s} className={`adta-track-step${done ? " done" : ""}${on ? " on" : ""}`}>
-              <span className="adta-track-dot">{done ? "✓" : i + 1}</span>
-              <span className="adta-track-lbl">{LBL[s]}</span>
+            <div key={s} className={`adta-seg ${mk}`}>
+              <div className="adta-bar"><i /></div>
+              <div className="adta-lab"><span className="adta-beacon" /><span className="adta-seg-l">{LBL[s]}</span></div>
             </div>
           );
         })}
@@ -209,15 +210,19 @@ const CSS = `
 .apx .spill.st-done{background:var(--green-soft);color:var(--green)}
 .apx .adta-detail-row td{background:var(--bg-tint);padding:0}
 .apx .adta-detail{padding:16px 18px}
-.apx .adta-track{display:flex;align-items:center;gap:0;margin-bottom:16px;max-width:520px}
-.apx .adta-track-step{display:flex;align-items:center;gap:8px;flex:1;position:relative;color:var(--muted)}
-.apx .adta-track-step:not(:last-child)::after{content:"";flex:1;height:2px;background:var(--line);margin:0 8px}
-.apx .adta-track-step.done,.apx .adta-track-step.on{color:var(--ink)}
-.apx .adta-track-step.done:not(:last-child)::after{background:#2f7d5a}
-.apx .adta-track-dot{width:24px;height:24px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.74rem;font-weight:800;background:var(--line-soft,#eee);color:var(--muted);border:1px solid var(--line)}
-.apx .adta-track-step.done .adta-track-dot{background:#2f7d5a;border-color:#2f7d5a;color:#fff}
-.apx .adta-track-step.on .adta-track-dot{background:#C9A96E;border-color:#C9A96E;color:#0B0F1A}
-.apx .adta-track-lbl{font-size:.78rem;font-weight:700;white-space:nowrap}
+.apx .adta-track{display:flex;align-items:flex-start;gap:6px;margin-bottom:16px;max-width:520px}
+.apx .adta-seg{flex:1;min-width:0;display:flex;flex-direction:column}
+.apx .adta-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.apx .adta-bar i{position:absolute;inset:0;width:0;border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.apx .adta-seg.done .adta-bar i{width:100%;background:#2f7d5a}
+.apx .adta-seg.active .adta-bar i{width:100%;background:var(--gold-deep,#b08f4f)}
+.apx .adta-lab{margin-top:8px;display:flex;align-items:center;gap:6px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.56rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden}
+.apx .adta-seg-l{overflow:hidden;text-overflow:ellipsis}
+.apx .adta-seg.active .adta-lab,.apx .adta-seg.done .adta-lab{color:var(--ink)}
+.apx .adta-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--muted)}
+.apx .adta-seg.done .adta-beacon{background:#2f7d5a;border-color:#2f7d5a}
+.apx .adta-seg.active .adta-beacon{background:#C9A96E;border-color:var(--gold-deep,#b08f4f);animation:adtaBeacon 1.1s ease-in-out infinite}
+@keyframes adtaBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
 .apx .adta-detail-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:22px}
 .apx .adta-sub{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .apx .adta-equip-list{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
