@@ -108,6 +108,25 @@ const APPT_TYPES = ["Installation", "Consultation", "Service Call", "Site Survey
 
 const DURATIONS = [["30","30 min"],["60","1 hour"],["90","1.5 hrs"],["120","2 hrs"],["180","3 hrs"],["240","4 hrs"]];
 
+// Build the RSVP roster for an event: everyone invited + their status (going / reslot / await).
+// Sources: ev.invited (persisted at send time), ev.confirmations (keyed by email), ev.changeRequests,
+// and the legacy ev.confirmed_at customer flag. Sorted awaiting-first so the office sees who to chase.
+function rosterOf(ev) {
+  const invited = Array.isArray(ev?.invited) ? ev.invited : [];
+  if (!invited.length) return [];
+  const confs = ev.confirmations && typeof ev.confirmations === "object" ? ev.confirmations : {};
+  const reqs = Array.isArray(ev.changeRequests) ? ev.changeRequests : [];
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  const rows = invited.map((r) => {
+    const key = norm(r.email);
+    const going = !!confs[key] || (r.role === "customer" && !!ev.confirmed_at);
+    const reslot = !going && reqs.some((x) => norm(x.by) === norm(r.name) || (x.role && norm(x.role) === norm(r.role)));
+    return { email: r.email, name: r.name, role: r.role, status: going ? "going" : reslot ? "reslot" : "await" };
+  });
+  const rank = { await: 0, reslot: 1, going: 2 };
+  return rows.sort((a, b) => rank[a.status] - rank[b.status]);
+}
+
 export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", apptKind = null, onCount, onBooked, onEvents }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
@@ -444,6 +463,24 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                   {ev.location && <div className="sched-ev-line">{Ico.pin}<a className="sched-ev-addr" href={mapsDir(ev.location)} target="_blank" rel="noopener noreferrer">{ev.location}</a></div>}
                   {ev.invitees?.length > 0 && <div className="sched-ev-line">{Ico.people}<span>{ev.invitees.join(", ")}</span></div>}
                   {ev.notes && <div className="sched-ev-notes">{ev.notes}</div>}
+                  {!isReadOnly && rosterOf(ev).length > 0 && (() => {
+                    const roster = rosterOf(ev);
+                    const going = roster.filter(r => r.status === "going").length;
+                    return (
+                      <div className="sched-rsvp">
+                        <div className="sched-rsvp-head">{Ico.people}
+                          <span>{going} of {roster.length} confirmed{going < roster.length && <span className="sched-rsvp-none"> · {roster.length - going} awaiting</span>}</span>
+                        </div>
+                        <div className="sched-rsvp-list">
+                          {roster.map(r => (
+                            <span key={r.email || r.name} className={`sched-rsvp-chip ${r.status}`} title={r.status === "going" ? "Confirmed" : r.status === "reslot" ? "Asked to reschedule" : "Not confirmed yet"}>
+                              <span className="dot" />{r.name || r.email}{r.role && r.role !== "customer" && <span className="rl">· {r.role}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );

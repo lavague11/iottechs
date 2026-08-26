@@ -34,7 +34,8 @@ export async function GET(request) {
   }
   const who = { email: to || "sample@iot-techs.com", name: to ? "You" : "Sample Recipient", role: "customer" };
   const changeUrl = `${base}/appt/${await makeApptToken("ASC0036", 1, who)}`;
-  const html = renderAppointmentEmail({ verb, event, noun: "installation", projectNo: "ASC0036", tech: "", ctaUrl: `${base}/project/ASC0036`, changeUrl });
+  const internal = searchParams.get("internal") === "1";
+  const html = renderAppointmentEmail({ verb, event, noun: "installation", projectNo: "ASC0036", tech: "", ctaUrl: `${base}/project/ASC0036`, changeUrl, internal, customerName: internal ? "Mahdi Jaoui" : "" });
 
   if (send) {
     const ics = buildAppointmentIcs(event, { method: "REQUEST", attendees: [{ email: to }] });

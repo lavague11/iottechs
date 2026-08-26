@@ -351,11 +351,13 @@ function gcalUrl(ev) {
 // conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
 // Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
 const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
-export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl }) {
+export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "" }) {
   const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
   const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
   const service = (event.title && event.title.includes("—")) ? event.title.split("—").pop().trim() : cap(noun || "Appointment");
-  const eyebrow = cancel ? `Your ${service} Was Canceled` : reminder ? `Appointment Reminder` : updated ? `Your ${service} Was Rescheduled` : `Your ${service} Is Scheduled`;
+  const eyebrow = internal
+    ? (cancel ? `Assignment Canceled` : reminder ? `Assignment Reminder` : updated ? `Assignment Rescheduled` : `You're Assigned`)
+    : (cancel ? `Your ${service} Was Canceled` : reminder ? `Appointment Reminder` : updated ? `Your ${service} Was Rescheduled` : `Your ${service} Is Scheduled`);
   const _d = new Date(`${event.date}T00:00:00`);
   const bigDate = Number.isNaN(_d.getTime()) ? String(event.date || "") : _d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const range = apptTimeRange(event.time, event.duration);
@@ -384,7 +386,8 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
       <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(href)}" style="height:52px;v-text-anchor:middle;width:${primary ? 190 : 168}px;" arcsize="0%" strokecolor="${primary ? "#161821" : "#C9BFA8"}" fillcolor="${primary ? "#161821" : "#FBFAF6"}"><w:anchorlock/><center style="color:${primary ? "#F0E7D4" : "#4A4636"};font-family:Georgia,serif;font-size:11px;letter-spacing:4px;">${esc(label.toUpperCase())}</center></v:roundrect><![endif]-->
       <!--[if !mso]><!--><a href="${esc(href)}" style="display:inline-block; background-color:${primary ? "#161821" : "#FBFAF6"}; color:${primary ? "#F0E7D4" : "#4A4636"}; font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:normal; letter-spacing:4px; text-decoration:none; padding:17px ${primary ? 42 : 30}px; text-transform:uppercase; border:1px solid ${primary ? "#161821" : "#C9BFA8"};">${esc(label)}</a><!--<![endif]-->
     </td>`;
-  const ctaCells = cancel ? "" : [confirmUrl ? button(confirmUrl, "Confirm", true) : "", changeUrl ? button(changeUrl, "Reschedule", false) : ""].join("");
+  const confirmLabel = internal ? "Available" : "Confirm";
+  const ctaCells = cancel ? "" : [confirmUrl ? button(confirmUrl, confirmLabel, true) : "", changeUrl ? button(changeUrl, "Reschedule", false) : ""].join("");
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
@@ -419,6 +422,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
         </td></tr>
         <tr><td style="padding:34px 62px 6px 62px;" class="px">
           ${detail("Project", ctaUrl ? `<a href="${esc(ctaUrl)}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">&#8470;&nbsp;${esc(projectNo || "")}</a>` : `&#8470;&nbsp;${esc(projectNo || "")}`)}
+          ${internal && customerName ? detail("Customer", esc(customerName)) : ""}
           ${detail("Service", esc(service))}
           ${detail("Location", locHtml)}
           ${event.notes ? detail("Notes", esc(event.notes)) : ""}
@@ -429,7 +433,9 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
         </td></tr>
         ${ctaCells ? `<tr><td align="center" style="padding:34px 50px 8px 50px;" class="px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>${ctaCells}</tr></table></td></tr>` : ""}
         ${gcal ? `<tr><td align="center" style="padding:12px 50px 6px 50px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; letter-spacing:1px; color:#A79A80;"><a href="${esc(gcal)}" style="color:#8A8069; text-decoration:none; border-bottom:1px solid #D8CFBB; padding-bottom:2px;">Add to calendar</a></div></td></tr>` : ""}
-        <tr><td align="center" style="padding:30px 62px 40px 62px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#8A8069; line-height:1.7;">${cancel ? "This appointment has been canceled." : "To reschedule or with any questions, simply reply to this note"}<br>${cancel ? "Reply to this note or call" : "or call"} <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.</div></td></tr>
+        <tr><td align="center" style="padding:30px 62px 40px 62px;" class="px"><div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#8A8069; line-height:1.7;">${internal
+            ? (cancel ? "This assignment was canceled." : "You're assigned to this job — tap <b>Available</b> to confirm you'll be there.<br>Can't make it? Tap Reschedule or reply to this note.")
+            : (cancel ? "This appointment has been canceled.<br>Reply to this note or call" : "To reschedule or with any questions, simply reply to this note<br>or call")}${internal ? "" : ` <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.`}</div></td></tr>
         <tr><td align="center" style="background-color:#161821; padding:30px 50px;" class="px">
           <div class="serif" style="font-size:14px; font-weight:500; letter-spacing:5px; color:#FBFAF6;">IOT&nbsp;TECHS</div>
           <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 12px auto;"><tr><td style="width:40px; height:1px; background-color:#B4945C; font-size:0; line-height:0;">&nbsp;</td></tr></table>
@@ -482,10 +488,14 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     // content_type carries the METHOD so Gmail/Apple render it as an accept/decline invite.
     const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);
-    const subject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
+    const custSubject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
       : reminder ? `Reminder: your ${noun} is tomorrow`
       : updated ? `Updated: your ${noun} was rescheduled`
       : `Your ${noun} is scheduled`;
+    const staffSubject = cancel ? `Assignment canceled — ${event.title || accessId}`
+      : reminder ? `Tomorrow: you're on a ${noun} (${accessId})`
+      : updated ? `Assignment rescheduled — ${noun} (${accessId})`
+      : `You're assigned — ${noun} (${accessId})`;
     const heading = cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
     const intro = cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
       : reminder ? "A quick reminder about your upcoming appointment — see you then."
@@ -499,14 +509,30 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       event.notes ? `Notes: ${event.notes}` : null,
       ctaUrl ? `\nOpen project: ${ctaUrl}` : null,
     ].filter((s) => s != null).join("\n");
+    // Persist the invited roster on the event so the project can show "who's going" (X of Y) and
+    // flag who hasn't confirmed yet. Best-effort; never blocks the send.
+    if (!cancel) {
+      try {
+        const { getToolData, saveToolData } = await import("./db.js");
+        const raw = getToolData(accessId, "schedule")?.data;
+        const d = raw ? JSON.parse(raw) : null;
+        const ev = d && Array.isArray(d.events) ? d.events.find((e) => String(e.id) === String(event.id)) : null;
+        if (ev) {
+          ev.invited = recipients.map((r) => ({ email: r.email, name: r.name || "", role: r.role || "" }));
+          saveToolData(accessId, "schedule", JSON.stringify(d), "appt-invite");
+        }
+      } catch {}
+    }
+    const custName = p.contact_name || p.customer || "";
     let sent = 0, i = 0;
     for (const r of recipients) {
       if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // stay under Resend's ~2/sec rate limit so no recipient gets dropped
+      const isStaff = r.role && r.role !== "customer";
       // Each recipient gets THEIR OWN confirm/reschedule token, so their Confirm records THEIR status.
       let changeUrl = "";
       try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
-      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl });
-      const res = await sendEmail({ to: r.email, subject, html, text, attachments });
+      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName });
+      const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments });
       if (res?.ok || res?.skipped) sent++;
     }
     return { ok: true, sent, recipients: recipients.length };

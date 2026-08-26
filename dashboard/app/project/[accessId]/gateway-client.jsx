@@ -4453,6 +4453,21 @@ const PV_CSS = `
 .pvx .sched-ev-line span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pvx .sched-ev-notes{font-size:.79rem;color:var(--slate);background:var(--bg-soft);border-left:2px solid var(--gold);padding:6px 10px;border-radius:0 6px 6px 0;margin-top:2px}
 .pvx .sched-empty{font-size:.84rem;color:var(--muted);padding:8px 0}
+/* ---- Appointment RSVP roster (staff-only "who's going") ---- */
+.pvx .sched-rsvp{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.pvx .sched-rsvp-head{display:flex;align-items:center;gap:7px;font-size:.76rem;font-weight:700;letter-spacing:.02em;color:var(--slate);margin-bottom:6px}
+.pvx .sched-rsvp-head svg{flex-shrink:0;color:var(--gold-deep)}
+.pvx .sched-rsvp-head .sched-rsvp-none{color:var(--gold-deep)}
+.pvx .sched-rsvp-list{display:flex;flex-wrap:wrap;gap:6px}
+.pvx .sched-rsvp-chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);font-size:.72rem;font-weight:600;color:var(--slate);background:var(--bg-soft);border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 8px}
+.pvx .sched-rsvp-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.pvx .sched-rsvp-chip .rl{color:var(--muted);font-weight:500}
+.pvx .sched-rsvp-chip.going{color:#2E7D5B;background:rgba(46,125,91,.08);border-color:rgba(46,125,91,.28)}
+.pvx .sched-rsvp-chip.going .dot{background:#2E7D5B}
+.pvx .sched-rsvp-chip.reslot{color:#9A6A1B;background:rgba(201,169,110,.12);border-color:rgba(168,132,47,.4)}
+.pvx .sched-rsvp-chip.reslot .dot{background:var(--gold-deep);animation:schedBlink 1.4s ease-in-out infinite}
+.pvx .sched-rsvp-chip.await .dot{animation:schedBlink 1.4s ease-in-out infinite}
+@keyframes schedBlink{0%,100%{opacity:1}50%{opacity:.28}}
 
 /* ---- Mockup widget ---- */
 .pvx .mkp-tool{display:flex;flex-direction:column;gap:12px}
