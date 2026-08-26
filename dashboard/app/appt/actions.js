@@ -1,7 +1,7 @@
 "use server";
 
 import { verifyApptToken } from "../../lib/auth";
-import { getJobByAccessId, logProjectEvent, notifyRoles, getToolData, saveToolData } from "../../lib/db";
+import { getJobByAccessId, logProjectEvent, notifyRoles, getToolData, saveToolData, createTicket } from "../../lib/db";
 import { sendOfficeEmail } from "../../lib/email";
 
 // Customer taps "Confirm" in their appointment email → records their RSVP (they'll attend). Marks the
@@ -86,6 +86,19 @@ export async function requestAppointmentChangeAction(token, kind, note) {
   try {
     await sendOfficeEmail({ accessId: t.accessId, subject: `Appointment ${action} requested — ${who} (${t.accessId})`, heading: `Appointment ${action} requested`, lines: [`${who}${roleTag} asked to ${action} their appointment.`, clean ? `Note: “${clean}”` : null, `Project ${t.accessId}.`] });
   } catch {}
+  // Open a ticket so it lands in the tickets queue for the office to action.
+  let ticketId = null;
+  try {
+    ticketId = createTicket({
+      access_id: t.accessId,
+      subject: `Appointment ${action} requested — ${who}`,
+      priority: action === "cancel" ? "high" : "medium",
+      opened_by_name: who,
+      opened_by_role: role || "customer",
+      audience: "admin,manager",
+      body: `${who}${roleTag} asked to ${action} their appointment for project ${t.accessId}.${clean ? `\n\nNote: “${clean}”` : ""}`,
+    });
+  } catch {}
 
-  return { ok: true, action, who };
+  return { ok: true, action, who, ticketId };
 }
