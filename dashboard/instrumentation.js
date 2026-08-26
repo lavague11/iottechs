@@ -4,6 +4,13 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Pin the process timezone to Eastern on hosts that don't set TZ (Hostinger runs UTC; Render
+  // already sets TZ=America/New_York). The app is Eastern-pinned by design — datetime('now',
+  // 'localtime') and all appointment/date formatting depend on it. Assigning process.env.TZ
+  // triggers Node's tzset(), so it applies to both JS Date and the in-process SQLite localtime.
+  if (!process.env.TZ) process.env.TZ = "America/New_York";
+
   if (globalThis.__apptReminderStarted) return;   // survive HMR / repeated registration in dev
   globalThis.__apptReminderStarted = true;
 
