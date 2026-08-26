@@ -19,12 +19,30 @@ function stepIndexForStage(stage) {
   return i === -1 ? 0 : i;
 }
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Issue" };
-const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
+// Inline-SVG timeline icons (no emojis — house rule). Keyed by event kind.
+const EVENT_ICON = {
+  submitted:  <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /></>,
+  diagnostic: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
+  note:       <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+  stage:      <path d="M5 12h14M13 6l6 6-6 6" />,
+  assign:     <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  quote:      <><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>,
+  payment:    <><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>,
+  resolved:   <path d="M20 6 9 17l-5-5" />,
+  closed:     <path d="M20 6 9 17l-5-5" />,
+};
+const EvIcon = ({ kind }) => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {EVENT_ICON[kind] || <circle cx="12" cy="12" r="3.5" />}
+  </svg>
+);
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
 
 export default function SvcTrackClient({ call, events = [], diagnostics = [], viewerName, loggedIn, staff, invoice = null, payments = [], cameras = [], camFloors = [] }) {
   const router = useRouter();
   const stageIdx = stepIndexForStage(call.stage);
+  const pct = Math.round(((stageIdx + 1) / STEPS.length) * 100);
+  const readoutLabel = STEPS[stageIdx]?.label || "Received";
   const first = (viewerName || "").trim().split(/\s+/)[0];
 
   // ---- TRACE customer diagnostic state ----
@@ -108,14 +126,20 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
           {staff && <p className="st-staffnote">Staff preview of the customer tracker. Manage this call in the <a href={`/service-calls/${call.svc_id}`}>staff portal</a>.</p>}
         </div>
 
-        {/* Stage strip */}
-        <div className="st-card st-stagebar">
-          {STEPS.map((s, n) => (
-            <div key={s.key} className={`st-stage${n < stageIdx ? " done" : ""}${n === stageIdx ? " on" : ""}`}>
-              <span className="st-stage-dot" />
-              <span className="st-stage-lbl">{s.label}</span>
-            </div>
-          ))}
+        {/* Deck beacon rail + % readout */}
+        <div className="st-card st-rail">
+          <div className="st-track">
+            {STEPS.map((s, n) => {
+              const mk = n < stageIdx ? "done" : n === stageIdx ? "active" : "todo";
+              return (
+                <div key={s.key} className={`st-seg ${mk}`}>
+                  <div className="st-bar"><i /></div>
+                  <div className="st-lab"><span className="st-beacon" /><span className="st-seg-l">{s.label}</span></div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="st-readout"><span className="st-pct mono">{pct}%</span><span className="st-readout-l">{readoutLabel}</span></div>
         </div>
 
         {/* Diagnostic call-to-action */}
@@ -196,7 +220,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
           <ul className="st-timeline">
             {events.map((e) => (
               <li key={e.id}>
-                <span className="st-tl-dot">{EVENT_ICON[e.kind] || "•"}</span>
+                <span className="st-tl-dot"><EvIcon kind={e.kind} /></span>
                 <div className="st-tl-body">
                   <div className="st-tl-detail">{e.detail || e.kind}</div>
                   <div className="st-tl-meta">{fmt(e.at)}</div>
@@ -310,9 +334,10 @@ function prevNodeFrom(entryTitle, remainingPath) {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-.st-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--bg-soft:#f6f7f9;--accent:#3257ff;
-  min-height:100vh;background:radial-gradient(1100px 480px at 50% -10%,#f0f2f7 0%,#fff 55%);color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55}
+/* Matches the project-page (deck) design system: Instrument Sans, warm-paper palette. */
+.st-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A1A6AC;--line:#E4E4DF;--line-soft:#EDEDE9;
+  --gold:#C9A96E;--gold-deep:#A8842F;--bg-soft:#F4F4F2;--raise:#FBFBFA;--green:#2E7D5B;--red:#C4553D;--accent:#3E6C9E;
+  min-height:100vh;background:var(--bg-soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55}
 .st-top{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin:0 auto;padding:20px 20px 0}
 .st-brand{display:inline-flex;color:var(--ink)}
 .st-top-right{display:flex;align-items:center;gap:14px}
@@ -325,28 +350,36 @@ const CSS = `
 .st-hero{margin:8px 0 18px}
 .st-hero-tag{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold-deep)}
 .st-hot{color:#c9382b;text-transform:capitalize}
-.st-hero h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:1.7rem;margin:5px 0 6px}
+.st-hero h1{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.02em;font-size:1.7rem;margin:5px 0 6px}
 .st-issue{color:var(--muted);font-style:italic;margin:0}
 .st-staffnote{margin:10px 0 0;font-size:.82rem;color:var(--muted);background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;padding:8px 12px}
 .st-staffnote a{color:var(--gold-deep);font-weight:700}
 .st-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:14px;box-shadow:0 18px 44px -34px rgba(14,19,32,.3)}
-.st-card-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;margin-bottom:14px}
-/* stage strip */
-.st-stagebar{display:flex;gap:2px;overflow-x:auto;padding:18px 8px}
-.st-stage{flex:1;min-width:72px;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative}
-.st-stage:not(:last-child)::after{content:"";position:absolute;top:8px;left:calc(50% + 11px);right:calc(-50% + 11px);height:2px;background:var(--line)}
-.st-stage.done:not(:last-child)::after{background:var(--gold)}
-.st-stage-dot{width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1}
-.st-stage.done .st-stage-dot{background:var(--gold);border-color:var(--gold)}
-.st-stage.on .st-stage-dot{border-color:var(--gold);box-shadow:0 0 0 4px rgba(201,169,110,.22)}
-.st-stage-lbl{font-size:.68rem;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap}
-.st-stage.on .st-stage-lbl{color:var(--ink)}
+.st-card-h{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;font-size:1rem;margin-bottom:14px}
+/* deck beacon rail */
+.st-rail{display:flex;align-items:center;gap:18px;padding:18px 22px}
+.st-track{flex:1;display:flex;gap:6px;min-width:0}
+.st-seg{flex:1;min-width:0;display:flex;flex-direction:column}
+.st-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.st-bar i{position:absolute;inset:0;width:0;background:var(--gold);border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.st-seg.done .st-bar i,.st-seg.active .st-bar i{width:100%}
+.st-seg.active .st-bar i{background:var(--gold-deep)}
+.st-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden}
+.st-seg-l{overflow:hidden;text-overflow:ellipsis}
+.st-seg.active .st-lab,.st-seg.done .st-lab{color:var(--ink-soft)}
+.st-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--faint)}
+.st-seg.done .st-beacon{background:var(--gold);border-color:var(--gold-deep)}
+.st-seg.active .st-beacon{background:var(--gold);border-color:var(--gold-deep);animation:stBeacon 1.1s ease-in-out infinite}
+@keyframes stBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+.st-readout{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;line-height:1}
+.st-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.st-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:5px}
 /* diagnostic cta */
 .st-diag-cta{display:flex;align-items:center;gap:16px}
 .st-diag-ico{width:46px;height:46px;flex-shrink:0;border-radius:12px;background:#f8f0e0;display:grid;place-items:center}
 .st-diag-ico svg{width:24px;height:24px;fill:none;stroke:var(--gold-deep);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .st-diag-txt{flex:1;min-width:0}
-.st-diag-txt h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.05rem;margin:0 0 3px}
+.st-diag-txt h2{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;font-size:1.05rem;margin:0 0 3px}
 .st-diag-txt p{color:var(--muted);font-size:.86rem;margin:0}
 /* diag rows */
 .st-diag-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:.86rem}
@@ -363,11 +396,11 @@ const CSS = `
 .st-timeline{list-style:none;margin:0;padding:0}
 .st-timeline li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
 .st-timeline li:last-child{border-bottom:none}
-.st-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#f8f0e0;display:grid;place-items:center;font-size:.8rem}
+.st-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#F2ECDD;color:var(--gold-deep);display:grid;place-items:center}
 .st-tl-detail{font-size:.88rem;font-weight:600}
 .st-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .st-help{text-align:center;color:var(--muted);font-size:.84rem;margin:8px 0 0}
-.mono{font-family:Menlo,Consolas,monospace;letter-spacing:.5px;font-weight:700}
+.mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;font-weight:700}
 /* buttons */
 .st-btn{display:inline-flex;align-items:center;justify-content:center;font-weight:700;border-radius:11px;cursor:pointer;border:none;font-size:.92rem;font-family:inherit;transition:transform .15s,background .2s,box-shadow .2s}
 .st-btn-gold{background:var(--gold);color:var(--ink);padding:12px 20px;flex-shrink:0}
@@ -381,7 +414,7 @@ const CSS = `
 .st-modal-x{position:absolute;top:14px;right:16px;background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer;width:32px;height:32px;border-radius:8px}
 .st-modal-x:hover{background:var(--bg-soft);color:var(--ink)}
 .st-tag{display:inline-block;font-size:.7rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-deep);background:#f8f0e0;padding:5px 12px;border-radius:20px;margin-bottom:10px}
-.st-modal h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:1.35rem;margin:0 0 8px;line-height:1.2}
+.st-modal h2{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:1.35rem;margin:0 0 8px;line-height:1.2}
 .st-pick-sub{color:var(--muted);font-size:.9rem;margin:0 0 18px}
 .st-pick{width:100%;display:flex;flex-direction:column;gap:2px;text-align:left;padding:15px 16px;border:1.5px solid var(--line);border-radius:13px;background:#fff;cursor:pointer;font-family:inherit;margin-bottom:10px;transition:border-color .15s,background .15s,transform .1s}
 .st-pick:hover{border-color:var(--gold);background:#fdfaf2;transform:translateY(-1px)}
