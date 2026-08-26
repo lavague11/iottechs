@@ -19,7 +19,23 @@ const ROUTE = {
   solved: ["Resolved", "#1c8a45"], service: ["Book a service call", "#b3541e"],
   field: ["Field fix", "#2f5fbf"], replace: ["Replace hardware", "#b3541e"], escalate: ["Escalate", "#c9382b"],
 };
-const EVENT_ICON = { submitted: "📋", diagnostic: "🔎", note: "✎", stage: "→", assign: "👤", quote: "$", payment: "$", resolved: "✓", closed: "✓" };
+// Inline-SVG timeline icons (no emojis — house rule). Keyed by event kind.
+const EVENT_ICON = {
+  submitted:  <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /></>,
+  diagnostic: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
+  note:       <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+  stage:      <path d="M5 12h14M13 6l6 6-6 6" />,
+  assign:     <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  quote:      <><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>,
+  payment:    <><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>,
+  resolved:   <path d="M20 6 9 17l-5-5" />,
+  closed:     <path d="M20 6 9 17l-5-5" />,
+};
+const EvIcon = ({ kind }) => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {EVENT_ICON[kind] || <circle cx="12" cy="12" r="3.5" />}
+  </svg>
+);
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
@@ -30,6 +46,8 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const [detailsOpen, setDetailsOpen] = useState(true);
   const canManage = ["admin", "manager"].includes(user.role);
   const stageIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(call.stage)));
+  const pct = Math.round(((stageIdx + 1) / STEPS.length) * 100);
+  const readoutLabel = STEPS[stageIdx]?.label || "Submitted";
   const priHot = ["urgent", "high"].includes(call.priority);
 
   function setStage(stage) { startTx(async () => { const r = await setSvcStageAction(call.svc_id, stage); if (r?.ok) router.refresh(); }); }
@@ -148,15 +166,21 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
           </div>
         </div>
 
-        {/* Stage strip */}
-        <div className="panel svc-stagebar">
-          {STEPS.map((s, n) => (
-            <button key={s.key} className={`svc-stage${n < stageIdx ? " done" : ""}${n === stageIdx ? " on" : ""}`}
-              disabled={!canManage || pending} onClick={() => canManage && setStage(s.set)} title={canManage ? `Set ${s.label}` : s.label}>
-              <span className="svc-stage-dot" />
-              <span className="svc-stage-lbl">{s.label}</span>
-            </button>
-          ))}
+        {/* Deck beacon rail — click a segment to set the stage; % readout on the right */}
+        <div className="panel svc-rail">
+          <div className="svc-track">
+            {STEPS.map((s, n) => {
+              const mk = n < stageIdx ? "done" : n === stageIdx ? "active" : "todo";
+              return (
+                <button key={s.key} className={`svc-seg ${mk}`} disabled={!canManage || pending}
+                  onClick={() => canManage && setStage(s.set)} title={canManage ? `Set ${s.label}` : s.label}>
+                  <div className="svc-bar"><i /></div>
+                  <div className="svc-lab"><span className="svc-beacon" /><span className="svc-seg-l">{s.label}</span></div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="svc-readout"><span className="svc-pct mono">{pct}%</span><span className="svc-readout-l">{readoutLabel}</span></div>
         </div>
 
         <div className="svc-grid">
@@ -313,7 +337,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
           <ul className="svc-timeline">
             {events.map((e) => (
               <li key={e.id}>
-                <span className="svc-tl-dot">{EVENT_ICON[e.kind] || "•"}</span>
+                <span className="svc-tl-dot"><EvIcon kind={e.kind} /></span>
                 <div className="svc-tl-body">
                   <div className="svc-tl-detail">{e.detail || e.kind}</div>
                   <div className="svc-tl-meta">{fmt(e.at)}{e.actor_name ? ` · ${e.actor_name}` : ""}{e.actor_role ? ` (${e.actor_role})` : ""}</div>
@@ -398,16 +422,24 @@ const CSS = `
 .apx .svc-route{font-size:.74rem;font-weight:800;background:#fff;border:1px solid;border-radius:20px;padding:4px 12px}
 .apx .svc-proj-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none}
 .apx .svc-proj-btn:hover{filter:brightness(1.05)}
-.apx .svc-stagebar{display:flex;gap:2px;padding:14px 10px;overflow-x:auto;margin-bottom:16px}
-.apx .svc-stage{flex:1;min-width:74px;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 2px;position:relative}
-.apx .svc-stage:not(:last-child)::after{content:"";position:absolute;top:9px;left:calc(50% + 12px);right:calc(-50% + 12px);height:2px;background:var(--line)}
-.apx .svc-stage.done:not(:last-child)::after{background:#C9A96E}
-.apx .svc-stage-dot{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1}
-.apx .svc-stage.done .svc-stage-dot{background:#C9A96E;border-color:#C9A96E}
-.apx .svc-stage.on .svc-stage-dot{border-color:#C9A96E;box-shadow:0 0 0 4px rgba(201,169,110,.22)}
-.apx .svc-stage-lbl{font-size:.7rem;font-weight:700;color:var(--muted);white-space:nowrap}
-.apx .svc-stage.on .svc-stage-lbl{color:var(--ink)}
-.apx .svc-stage:disabled{cursor:default}
+.apx .svc-rail{display:flex;align-items:center;gap:18px;padding:16px 20px;margin-bottom:16px}
+.apx .svc-track{flex:1;display:flex;gap:6px;min-width:0}
+.apx .svc-seg{flex:1;min-width:0;display:flex;flex-direction:column;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-align:left}
+.apx .svc-seg:disabled{cursor:default}
+.apx .svc-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.apx .svc-bar i{position:absolute;inset:0;width:0;background:#C9A96E;border-radius:99px;transition:width .7s cubic-bezier(.16,1,.3,1)}
+.apx .svc-seg.done .svc-bar i,.apx .svc-seg.active .svc-bar i{width:100%}
+.apx .svc-seg.active .svc-bar i{background:var(--gold-deep,#b08f4f)}
+.apx .svc-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden}
+.apx .svc-seg-l{overflow:hidden;text-overflow:ellipsis}
+.apx .svc-seg.active .svc-lab,.apx .svc-seg.done .svc-lab{color:var(--ink)}
+.apx .svc-beacon{width:7px;height:7px;flex:0 0 auto;border-radius:99px;background:#fff;border:1.5px solid var(--muted)}
+.apx .svc-seg.done .svc-beacon{background:#C9A96E;border-color:var(--gold-deep,#b08f4f)}
+.apx .svc-seg.active .svc-beacon{background:#C9A96E;border-color:var(--gold-deep,#b08f4f);animation:svcBeacon 1.1s ease-in-out infinite}
+@keyframes svcBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
+.apx .svc-readout{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;line-height:1}
+.apx .svc-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.apx .svc-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
 .apx .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:820px){.apx .svc-grid{grid-template-columns:1fr}}
 .apx .svc-card{padding:16px 18px}
@@ -440,7 +472,7 @@ const CSS = `
 .apx .svc-timeline{list-style:none;margin:0 0 14px;padding:0}
 .apx .svc-timeline li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
 .apx .svc-timeline li:last-child{border-bottom:none}
-.apx .svc-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#f8f0e0;display:grid;place-items:center;font-size:.8rem}
+.apx .svc-tl-dot{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#f8f0e0;color:var(--gold-deep,#b08f4f);display:grid;place-items:center}
 .apx .svc-tl-detail{font-size:.86rem;color:var(--ink);font-weight:600}
 .apx .svc-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .apx .svc-note-row{display:flex;gap:8px}
