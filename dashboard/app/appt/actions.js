@@ -2,6 +2,7 @@
 
 import { verifyApptToken } from "../../lib/auth";
 import { getJobByAccessId, logProjectEvent, notifyRoles, getToolData, saveToolData } from "../../lib/db";
+import { sendOfficeEmail } from "../../lib/email";
 
 // Customer taps "Confirm" in their appointment email → records their RSVP (they'll attend). Marks the
 // event confirmed in the schedule blob (best-effort) and reliably logs it + notifies the office.
@@ -23,6 +24,9 @@ export async function confirmAppointmentAction(token) {
   } catch {}
   try {
     notifyRoles(["admin", "manager"], { type: "appt-confirm", title: "Appointment confirmed", body: `${who} (${t.accessId}) confirmed they'll attend their appointment.`, link: `/project/${t.accessId}` });
+  } catch {}
+  try {
+    await sendOfficeEmail({ accessId: t.accessId, subject: `Appointment confirmed — ${who} (${t.accessId})`, heading: "Appointment confirmed", lines: [`${who} confirmed they'll attend their appointment.`, `Project ${t.accessId}.`] });
   } catch {}
 
   return { ok: true };
@@ -55,6 +59,9 @@ export async function requestAppointmentChangeAction(token, kind, note) {
       link: `/project/${t.accessId}`,
     });
   } catch { /* best-effort */ }
+  try {
+    await sendOfficeEmail({ accessId: t.accessId, subject: `Appointment ${action} requested — ${who} (${t.accessId})`, heading: `Appointment ${action} requested`, lines: [`${who} asked to ${action} their appointment.`, clean ? `Note: “${clean}”` : null, `Project ${t.accessId}.`] });
+  } catch {}
 
   return { ok: true, action };
 }

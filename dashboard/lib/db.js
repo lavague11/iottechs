@@ -3900,6 +3900,12 @@ export function notifyRoles(roles, { type, title, body, link }, excludeUserId = 
     createNotification({ user_id: u.id, type, title, body, link });
   }
 }
+// Staff emails for a set of roles — used to email the office (admin/manager) on customer actions.
+export function getUserEmailsByRoles(roles) {
+  if (!roles?.length) return [];
+  const placeholders = roles.map(() => "?").join(",");
+  return db.prepare(`SELECT name, email, role FROM users WHERE role IN (${placeholders}) AND email IS NOT NULL AND TRIM(email) != ''`).all(...roles).map((r) => ({ ...r }));
+}
 
 // Unified notification feed — one place to see every kind of alert. Combines the persistent
 // per-user notifications (read/unread, dismissible) with live, click-through events pulled from

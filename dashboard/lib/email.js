@@ -223,6 +223,30 @@ export async function emailStageAdvance(accessId, stageKey) {
   }
 }
 
+// Email the office (admin/manager) about a customer action — e.g. an appointment confirmation or a
+// reschedule/cancel request. Best-effort; never throws. Uses the branded template.
+export async function sendOfficeEmail({ subject, heading, lines = [], accessId } = {}) {
+  try {
+    const { getUserEmailsByRoles } = await import("./db.js");
+    const recips = getUserEmailsByRoles(["admin", "manager"]).filter((u) => u.email && u.email.includes("@"));
+    if (!recips.length) return { ok: false, error: "no-office" };
+    const ctaUrl = accessId ? projectLink(accessId) : null;
+    const payload = { heading, intro: "", lines: (lines || []).filter(Boolean), ctaLabel: ctaUrl ? "Open Project" : null, ctaUrl, footNote: "You're receiving this as an IOT TECHS admin/manager." };
+    const html = renderEmail(payload);
+    const text = plainText(payload);
+    let sent = 0, i = 0;
+    const seen = new Set();
+    for (const u of recips) {
+      const e = u.email.toLowerCase();
+      if (seen.has(e)) continue; seen.add(e);
+      if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // Resend rate limit
+      const r = await sendEmail({ to: u.email, subject, html, text });
+      if (r?.ok || r?.skipped) sent++;
+    }
+    return { ok: true, sent };
+  } catch (e) { console.error(`[email:office] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
 export async function emailProposalReady(accessId) {
   try {
