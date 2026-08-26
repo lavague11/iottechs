@@ -285,6 +285,98 @@ function appointmentWhen(ev) {
   } catch { return ev.date; }
 }
 
+function apptDateParts(dateStr) {
+  try {
+    const dt = new Date(`${dateStr}T00:00:00`);
+    return {
+      mon: dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
+      day: dt.getDate(),
+      weekday: dt.toLocaleDateString("en-US", { weekday: "long" }),
+    };
+  } catch { return { mon: "", day: "", weekday: "" }; }
+}
+function apptTimeRange(time, duration) {
+  try {
+    const [h, m] = String(time || "09:00").split(":").map(Number);
+    const start = new Date(2000, 0, 1, h, m || 0);
+    const end = new Date(start.getTime() + (Number(duration) || 60) * 60000);
+    const f = (d) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return `${f(start)} – ${f(end)}`;
+  } catch { return time || ""; }
+}
+function mapsUrl(address) {
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(address || "");
+}
+// Server-side Google Calendar "add" link (UTC times; server TZ is Eastern so the conversion is right).
+function gcalUrl(ev) {
+  try {
+    const [h, m] = String(ev.time || "09:00").split(":").map(Number);
+    const [y, mo, d] = String(ev.date || "2026-01-01").split("-").map(Number);
+    const start = new Date(y, mo - 1, d, h || 0, m || 0);
+    const end = new Date(start.getTime() + (Number(ev.duration) || 60) * 60000);
+    const fmt = (dt) => dt.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
+    const params = new URLSearchParams({ action: "TEMPLATE", text: ev.title || "IOT TECHS Visit", dates: `${fmt(start)}/${fmt(end)}`, location: ev.location || "", details: ev.notes || "" });
+    return "https://calendar.google.com/calendar/render?" + params.toString();
+  } catch { return ""; }
+}
+
+// A polished, dedicated appointment email: navy header, accent bar, a date-tile hero card, clean
+// labeled rows (address as a maps link), and Add-to-Calendar / Open-Project buttons. Table-based,
+// inline styles, no external assets or emojis — matches the brand and renders everywhere.
+function renderAppointmentEmail({ heading, intro, event, cancel, ctaUrl }) {
+  const accent = cancel ? "#C0392B" : "#C9A96E";
+  const tileBg = cancel ? "#3A1F1C" : "#0B0F1A";
+  const dp = apptDateParts(event.date);
+  const range = apptTimeRange(event.time, event.duration);
+  const gcal = cancel ? "" : gcalUrl(event);
+  const row = (label, valueHtml) => valueHtml
+    ? `<tr><td style="padding:11px 0;border-top:1px solid #eef0f3;">
+         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9aa0ac;margin-bottom:3px;">${esc(label)}</div>
+         <div style="font-size:14.5px;color:#2a2f3a;line-height:1.5;">${valueHtml}</div></td></tr>`
+    : "";
+  const addrHtml = event.location
+    ? `<a href="${esc(mapsUrl(event.location))}" style="color:#3E6FB0;text-decoration:none;">${esc(event.location)}</a> <a href="${esc(mapsUrl(event.location))}" style="color:#8a6d2f;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap;">· Directions</a>`
+    : "";
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f5f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e8ec;">
+        <tr><td style="background:#0B0F1A;padding:20px 28px;"><span style="font-size:16px;font-weight:700;letter-spacing:.14em;color:#C9A96E;">IOT&nbsp;TECHS</span></td></tr>
+        <tr><td style="height:4px;line-height:4px;font-size:0;background:${accent};">&nbsp;</td></tr>
+        <tr><td style="padding:28px 28px 8px;">
+          <h1 style="margin:0 0 10px;font-size:21px;line-height:1.3;color:#0B0F1A;">${esc(heading)}</h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#5a6270;">${esc(intro)}</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e6e8ec;border-radius:12px;background:#fafbfc;">
+            <tr>
+              <td width="72" valign="top" style="padding:16px 0 16px 16px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="width:58px;border-radius:9px;overflow:hidden;background:${tileBg};">
+                  <tr><td align="center" style="padding:6px 0 2px;font-size:11px;font-weight:700;letter-spacing:.08em;color:#C9A96E;">${esc(dp.mon)}</td></tr>
+                  <tr><td align="center" style="padding:0 0 7px;font-size:24px;font-weight:800;color:#ffffff;line-height:1;">${esc(String(dp.day))}</td></tr>
+                </table>
+              </td>
+              <td valign="middle" style="padding:16px 16px 16px 12px;">
+                <div style="font-size:16px;font-weight:700;color:#0B0F1A;line-height:1.3;">${esc(event.title || "Appointment")}</div>
+                <div style="font-size:14px;color:#5a6270;margin-top:4px;">${esc(dp.weekday)}${range ? ` · ${esc(range)}` : ""}</div>
+              </td>
+            </tr>
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
+            ${row("Where", addrHtml)}
+            ${row("Notes", event.notes ? esc(event.notes) : "")}
+          </table>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 6px;"><tr>
+            ${gcal ? `<td style="padding-right:8px;"><a href="${esc(gcal)}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:700;color:#0B0F1A;background:#C9A96E;text-decoration:none;border-radius:8px;">Add to Google Calendar</a></td>` : ""}
+            ${ctaUrl ? `<td><a href="${esc(ctaUrl)}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:600;color:#0B0F1A;background:#ffffff;border:1px solid #d6d9df;text-decoration:none;border-radius:8px;">Open Project</a></td>` : ""}
+          </tr></table>
+          <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#8a909c;">${cancel ? "We'll reach out to reschedule — reply to this email with any questions." : "A calendar invite is attached — open it to add this to your calendar. Reply with any questions."}</p>
+        </td></tr>
+        <tr><td style="padding:18px 28px;background:#fafbfc;border-top:1px solid #eef0f3;"><p style="margin:0;font-size:12px;color:#9aa0ac;">IOT TECHS · Security &amp; automation, professionally installed.</p></td></tr>
+      </table>
+    </td></tr>
+  </table>
+  </body></html>`;
+}
+
 // Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
 // assigned staff) — client-supplied emails are never trusted. Best-effort; never throws.
 export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [] } = {}) {
@@ -320,24 +412,19 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       : reminder ? `Reminder: your ${noun} is tomorrow`
       : updated ? `Updated: your ${noun} was rescheduled`
       : `Your ${noun} is scheduled`;
-    const payload = {
-      heading: cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`,
-      intro: cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
-        : reminder ? "A quick reminder about your upcoming appointment — see you then."
-        : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
-        : "Here are the details — add it to your calendar with the attached invite.",
-      lines: [
-        event.title ? `What: ${event.title}` : null,
-        whenLine ? `When: ${whenLine}` : null,
-        event.location ? `Where: ${event.location}` : null,
-        event.notes ? `Notes: ${event.notes}` : null,
-      ].filter(Boolean),
-      ctaLabel: ctaUrl ? "Open Project" : null,
-      ctaUrl,
-      footNote: "Reply to this email if you have any questions.",
-    };
-    const html = renderEmail(payload);
-    const text = plainText(payload);
+    const heading = cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
+    const intro = cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
+      : reminder ? "A quick reminder about your upcoming appointment — see you then."
+      : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
+      : "Here are the details below. A calendar invite is attached so you can add it in one tap.";
+    const html = renderAppointmentEmail({ heading, intro, event, cancel, ctaUrl });
+    const text = [heading, "", intro, "",
+      event.title ? `What:  ${event.title}` : null,
+      whenLine ? `When:  ${whenLine}` : null,
+      event.location ? `Where: ${event.location}  (${mapsUrl(event.location)})` : null,
+      event.notes ? `Notes: ${event.notes}` : null,
+      ctaUrl ? `\nOpen project: ${ctaUrl}` : null,
+    ].filter((s) => s != null).join("\n");
     let sent = 0, i = 0;
     for (const r of recipients) {
       if (i++ > 0) await new Promise((res) => setTimeout(res, 600));  // stay under Resend's ~2/sec rate limit so no recipient gets dropped
