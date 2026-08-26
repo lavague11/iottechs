@@ -24,6 +24,8 @@ export default async function ApptPage({ params, searchParams }) {
     }
   } catch { /* show a generic prompt if the event can't be read */ }
 
-  const who = (att?.name || "").trim() || p?.contact_name || "";
+  // Only the customer (or a legacy token with no attendee) falls back to the project contact name —
+  // an internal/guest recipient with a blank name is greeted generically, never as the customer.
+  const who = (att?.name || "").trim() || ((!att || att.role === "customer") ? (p?.contact_name || "") : "");
   return <ApptClient token={token} mode={mode} who={who} event={ev ? { title: ev.title, date: ev.date, time: ev.time, confirmed: alreadyConfirmed } : null} />;
 }

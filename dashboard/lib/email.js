@@ -447,13 +447,22 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
 export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [] } = {}) {
   try {
     if (!event?.date) return { ok: false, error: "no-event" };
-    const { getJobByAccessId, getProjectAssignments } = await import("./db.js");
+    const { getJobByAccessId, getProjectAssignments, getUserByEmail } = await import("./db.js");
     const p = getJobByAccessId(accessId);
     if (!p) return { ok: false, error: "no-project" };
     const set = new Map();
     const add = (email, name, role) => {
       const e = String(email || "").trim();
-      if (e && e.includes("@") && !set.has(e.toLowerCase())) set.set(e.toLowerCase(), { email: e, name: name || "", role: role || "" });
+      if (!e || !e.includes("@")) return;
+      const key = e.toLowerCase();
+      if (set.has(key)) return;
+      // A guest with no name we recognize → resolve their real identity from the users table so
+      // their confirm link greets/records THEM, not the customer (empty name used to fall back to
+      // the customer's name on the confirm page).
+      if ((!name || !role || role === "guest")) {
+        try { const u = getUserByEmail(e); if (u) { name = name || u.name || u.username || ""; role = (role && role !== "guest") ? role : (u.role || "team"); } } catch {}
+      }
+      set.set(key, { email: e, name: name || "", role: role || "" });
     };
     add(p.contact_email, p.contact_name || p.customer, "customer");                        // the customer
     try { getProjectAssignments(accessId).forEach((a) => add(a.user_email, a.user_name, a.role || "team")); } catch {}  // assigned team/tech

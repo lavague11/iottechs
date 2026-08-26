@@ -12,8 +12,10 @@ export async function confirmAppointmentAction(token) {
   const p = getJobByAccessId(t.accessId);
   if (!p) return { ok: false, error: "Project not found." };
   const att = t.who;                                   // the specific recipient THIS link was minted for
-  const who = (att?.name || "").trim() || p.contact_name || p.customer || "The customer";
   const role = att?.role || "customer";
+  // Only the customer (or a legacy token) inherits the project contact name — an internal/guest
+  // recipient with a blank name records under a generic label, never as the customer (Mahdi).
+  const who = (att?.name || "").trim() || ((!att || role === "customer") ? (p.contact_name || p.customer || "The customer") : "A team member");
   const roleTag = role && role !== "customer" ? ` (${role})` : "";
 
   try {
@@ -52,8 +54,8 @@ export async function requestAppointmentChangeAction(token, kind, note) {
   const p = getJobByAccessId(t.accessId);
   if (!p) return { ok: false, error: "Project not found." };
   const att = t.who;
-  const who = (att?.name || "").trim() || p.contact_name || p.customer || "The customer";
   const role = att?.role || "customer";
+  const who = (att?.name || "").trim() || ((!att || role === "customer") ? (p.contact_name || p.customer || "The customer") : "A team member");
   const roleTag = role && role !== "customer" ? ` (${role})` : "";
   const clean = String(note || "").trim().slice(0, 500);
 
