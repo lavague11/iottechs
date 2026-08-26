@@ -18,6 +18,9 @@ function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 10) : "—"; }
 
 export default function IdentityClient({ user, alerts, rows = [], stats, staff = [], unauthorized = [] }) {
   const isAdmin = user.role === "admin";
+  // Local copy so Attach/Dismiss remove a card instantly — the server revalidate isn't reliably
+  // reflected through the Hostinger CDN, which made attaching look like it "did nothing."
+  const [unauth, setUnauth] = useState(unauthorized);
   const [assign, setAssign] = useState({});   // captureId → chosen user id (defaults to the closest-match guess)
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -49,7 +52,8 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
     return (r.name || "").toLowerCase().includes(q) || (r.email || "").toLowerCase().includes(q) || (r.role || "").toLowerCase().includes(q);
   }), [rows, q, filter]);
 
-  const run = (fn) => startTx(async () => { const r = await fn(); if (r?.error) alert(r.error); });
+  const run = (fn, onOk) => startTx(async () => { const r = await fn(); if (r?.error) { alert(r.error); return; } onOk?.(r); });
+  const dropCard = (id) => setUnauth((u) => u.filter((x) => x.id !== id));
 
   const counts = {
     all: rows.length,
@@ -101,14 +105,14 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
         {/* Always visible so it's findable — shows an empty state until a capture lands. */}
         <div className="panel idl-unauth">
             <div className="idl-unauth-h">
-              <b>Unauthorized captures <span className="idl-unauth-n">{unauthorized.length}</span></b>
+              <b>Unauthorized captures <span className="idl-unauth-n">{unauth.length}</span></b>
               <span>Faces that failed to match. Identify the person and attach the face to their account — it&rsquo;ll recognize them next time (glasses, hat, mask). Auto-deleted after 30 days.</span>
             </div>
-            {unauthorized.length === 0 ? (
+            {unauth.length === 0 ? (
               <div className="idl-unauth-empty">No unrecognized faces yet. When someone tries <b>Face&nbsp;ID login</b> and isn&rsquo;t matched, their photo is parked here (encrypted) for you to identify and attach to an account. Needs at least one enrolled face first.</div>
             ) : (
             <div className="idl-unauth-grid">
-              {unauthorized.map((c) => (
+              {unauth.map((c) => (
                 <div key={c.id} className="idl-unauth-card">
                   <img className="idl-unauth-img" src={`/api/unauthorized-image?id=${c.id}`} alt="" loading="lazy" />
                   <div className="idl-unauth-meta">
@@ -121,11 +125,11 @@ export default function IdentityClient({ user, alerts, rows = [], stats, staff =
                       {staff.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.role}</option>)}
                     </select>
                     <button className="idl-btn ok" disabled={pending} onClick={() => run(async () => {
-                      const uid = assign[c.id] ?? c.best_user_id;
+                      const uid = assign[c.id] || c.best_user_id;
                       if (!uid) return { error: "Pick a person to attach this face to." };
                       return claimUnauthorizedAction(c.id, Number(uid));
-                    })}>Attach</button>
-                    <button className="idl-btn" disabled={pending} onClick={() => run(() => dismissUnauthorizedAction(c.id))}>Dismiss</button>
+                    }, () => dropCard(c.id))}>Attach</button>
+                    <button className="idl-btn" disabled={pending} onClick={() => run(() => dismissUnauthorizedAction(c.id), () => dropCard(c.id))}>Dismiss</button>
                   </div>
                 </div>
               ))}
