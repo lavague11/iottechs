@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { gradeAssessmentAction, decideRetakeAction } from "../../assessment/[appId]/actions";
+import { QUESTIONS } from "../../../lib/assessment-bank";
 
 const FLAG_LABEL = { integrity: "Integrity", safety: "Safety", process: "Process", communication: "Communication", technical: "Technical" };
 
@@ -9,8 +10,11 @@ export default function AssessmentResult({ appId, assessment }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
+  const [showAnswers, setShowAnswers] = useState(false);
   const a = assessment || null;
   const rt = a?.retake || null;
+  const responses = a?.responses || {};
+  const answeredCount = QUESTIONS.filter((q) => responses[q.n]?.answer).length;
 
   async function grade() {
     setBusy(true); setErr("");
@@ -119,6 +123,51 @@ export default function AssessmentResult({ appId, assessment }) {
           )}
         </>
       )}
+
+      {answeredCount > 0 && (
+        <div className="ar-answers-wrap">
+          <button className="ar-answers-toggle" onClick={() => setShowAnswers((v) => !v)} aria-expanded={showAnswers}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showAnswers ? "rotate(90deg)" : "none", transition: "transform .15s" }}><path d="M9 18l6-6-6-6" /></svg>
+            {showAnswers ? "Hide their answers" : `View their answers (${answeredCount}/${QUESTIONS.length})`}
+          </button>
+          {showAnswers && (
+            <div className="ar-answers">
+              {QUESTIONS.map((q) => {
+                const r = responses[q.n] || {};
+                const scored = q.type === "scored";
+                const gotIt = scored && r.answer === q.answer;
+                return (
+                  <div className="ar-ans" key={q.n}>
+                    <div className="ar-ans-h">
+                      <span className="ar-ans-n">{q.n}</span>
+                      <span className="ar-ans-q">{q.prompt}</span>
+                      {r.flagged && <span className="ar-ans-flag" title="Candidate flagged this for review">⚑</span>}
+                    </div>
+                    <div className="ar-ans-choices">
+                      {Object.entries(q.choices).map(([k, val]) => {
+                        const text = typeof val === "string" ? val : val.t;
+                        const picked = r.answer === k;
+                        const isKey = scored && k === q.answer;
+                        const cls = `ar-ans-c${picked ? " picked" : ""}${isKey ? " key" : ""}${picked && scored && !gotIt ? " wrong" : ""}`;
+                        return (
+                          <div key={k} className={cls}>
+                            <span className="ar-ans-k">{k}</span><span>{text}</span>
+                            {picked && <span className="ar-ans-tag">their pick</span>}
+                            {!scored && picked && q.choices[k]?.score != null && <span className="ar-ans-pts">{q.choices[k].score} pts</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {scored && (
+                      <div className="ar-ans-note">{r.explanation ? `“${r.explanation}”` : <span className="ar-ans-blank">— no note added —</span>}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       <style>{CSS}</style>
     </div>
   );
@@ -180,4 +229,25 @@ const CSS = `
 .ar-iq-h{font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .ar-iq ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
 .ar-iq li{font-size:.87rem;color:var(--ink);line-height:1.4}
+/* per-question answer breakdown */
+.ar-answers-wrap{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.ar-answers-toggle{display:flex;align-items:center;gap:6px;background:none;border:none;padding:0;font:inherit;font-weight:700;font-size:.85rem;color:var(--gold-deep);cursor:pointer}
+.ar-answers{margin-top:12px;display:flex;flex-direction:column;gap:12px}
+.ar-ans{border:1px solid var(--line);border-radius:10px;padding:12px 13px;background:var(--paper)}
+.ar-ans-h{display:flex;gap:9px;align-items:flex-start;margin-bottom:9px}
+.ar-ans-n{flex:none;width:22px;height:22px;border-radius:6px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:.72rem;font-weight:700;color:var(--gold-deep)}
+.ar-ans-q{flex:1;font-size:.85rem;font-weight:600;color:var(--ink);line-height:1.4}
+.ar-ans-flag{flex:none;color:var(--red);font-size:.95rem}
+.ar-ans-choices{display:flex;flex-direction:column;gap:5px}
+.ar-ans-c{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);padding:6px 9px;border-radius:7px;border:1px solid transparent;line-height:1.35}
+.ar-ans-k{flex:none;font-weight:700;font-family:var(--font-mono,ui-monospace,monospace);font-size:.74rem;color:var(--muted)}
+.ar-ans-c.key{background:#EAF3EE;color:var(--ink)}.ar-ans-c.key .ar-ans-k{color:var(--green)}
+.ar-ans-c.picked{border-color:var(--line);background:#fff;color:var(--ink);font-weight:600}
+.ar-ans-c.picked.key{background:#EAF3EE;border-color:#BFE0CD}
+.ar-ans-c.wrong{background:#FBF1EC;border-color:#F0D9CE;color:var(--ink)}.ar-ans-c.wrong .ar-ans-k{color:var(--red)}
+.ar-ans-tag{margin-left:auto;flex:none;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.ar-ans-c.key .ar-ans-tag{color:var(--green)}.ar-ans-c.wrong .ar-ans-tag{color:var(--red)}
+.ar-ans-pts{flex:none;font-size:.72rem;color:var(--gold-deep);font-weight:700}
+.ar-ans-note{margin-top:8px;font-size:.8rem;color:var(--ink);font-style:italic;line-height:1.45}
+.ar-ans-blank{color:var(--muted);font-style:normal}
 `;
