@@ -273,7 +273,7 @@ const icsEsc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\
 
 // Floating local time (no TZID) — the event shows at the hour it was booked in the reader's calendar,
 // matching how the in-app "Add to calendar" .ics behaves.
-export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, attendees = [], sequence = 0 } = {}) {
+export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, attendees = [], sequence = 0, accessId = "" } = {}) {
   const start = icsStamp(ev.date, ev.time);
   const [h, m] = String(ev.time || "09:00").split(":").map(Number);
   const [y, mo, d] = String(ev.date || "2026-01-01").split("-").map(Number);
@@ -288,7 +288,7 @@ export function buildAppointmentIcs(ev, { method = "REQUEST", organizerEmail, at
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//IOT TECHS//Scheduling//EN", "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",
-    `UID:${ev.id || `${ev.date}${ev.time}`}@iottechs`,
+    `UID:${accessId ? `${accessId}-` : ""}${ev.id || `${ev.date}${ev.time}`}@iottechs`,
     `SEQUENCE:${sequence}`,
     organizerEmail ? `ORGANIZER;CN=IOT TECHS:mailto:${organizerEmail}` : null,
     ...attLines,
@@ -482,9 +482,22 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const noun = (event.kind === "install" || /install/i.test(event.title || "")) ? "installation" : "site survey";
     const whenLine = appointmentWhen(event);
     const method = cancel ? "CANCEL" : "REQUEST";
+    // Inbound RSVP scraping (opt-in): when RSVP_INBOUND_DOMAIN is set in the vault, address the
+    // calendar ORGANIZER to a plus-tagged, signed rsvp+<token>@<domain>. Invitees' Yes/No/Maybe
+    // replies land there, where /api/rsvp-inbound decodes the token → the event. Dormant (falls back
+    // to the plain from-address) until the domain is configured, so existing invites are unaffected.
+    let organizerEmail = fromEmailOnly(), icsAccessId = "";
+    try {
+      const rsvpDomain = secretValue("RSVP_INBOUND_DOMAIN");
+      if (rsvpDomain && event.id != null) {
+        const { makeRsvpToken } = await import("./auth.js");
+        organizerEmail = `rsvp+${await makeRsvpToken(accessId, event.id)}@${rsvpDomain}`;
+        icsAccessId = accessId;   // project-scope the UID so the reply we receive maps back to this event
+      }
+    } catch {}
     // Bump SEQUENCE on a reschedule/cancel so calendar apps treat it as an UPDATE to the same event
     // (same UID) rather than a duplicate.
-    const ics = buildAppointmentIcs(event, { method, organizerEmail: fromEmailOnly(), attendees: recipients, sequence: (cancel || updated) ? 1 : 0 });
+    const ics = buildAppointmentIcs(event, { method, organizerEmail, attendees: recipients, sequence: (cancel || updated) ? 1 : 0, accessId: icsAccessId });
     // content_type carries the METHOD so Gmail/Apple render it as an accept/decline invite.
     const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);

@@ -190,3 +190,25 @@ export async function verifyApptToken(token) {
   const expected = await previewHmac(`appt:${accessId}:${eventId}`);
   return sig === expected ? { accessId, eventId, who: null } : null;
 }
+
+// Compact signed token that identifies an appointment (project + event) for the plus-addressed
+// calendar ORGANIZER — e.g. rsvp+<token>@reply.iot-techs.com. When an invitee clicks Yes/No/Maybe,
+// their calendar mails an iMIP REPLY to that address; the inbound webhook decodes this to know which
+// event to record the RSVP against. Base64url is safe in an email local part. No `who` — the person
+// is identified by the reply's From address, matched to the event's invited roster.
+export async function makeRsvpToken(accessId, eventId) {
+  const payload = b64u(JSON.stringify({ a: String(accessId), e: String(eventId) }));
+  const sig = await previewHmac(`rsvp:${payload}`);
+  return `${payload}.${sig}`;
+}
+export async function verifyRsvpToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  if (sig !== await previewHmac(`rsvp:${payload}`)) return null;
+  try {
+    const o = JSON.parse(unb64u(payload));
+    if (!o.a || !o.e) return null;
+    return { accessId: o.a, eventId: o.e };
+  } catch { return null; }
+}

@@ -1824,7 +1824,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const invited = Array.isArray(ev?.invited) ? ev.invited : [];
     if (!invited.length) return "";
     const confs = ev.confirmations && typeof ev.confirmations === "object" ? ev.confirmations : {};
-    const going = invited.filter((r) => confs[String(r.email || "").trim().toLowerCase()] || (r.role === "customer" && ev.confirmed_at)).length;
+    const going = invited.filter((r) => {
+      const rec = confs[String(r.email || "").trim().toLowerCase()];
+      if (rec) return (rec.status || "going") === "going";
+      return r.role === "customer" && !!ev.confirmed_at;
+    }).length;
     return ` · ${going}/${invited.length} confirmed`;
   }
   // Which kind the action-bar "Schedule" button books, based on the phase in view.
@@ -4475,6 +4479,10 @@ const PV_CSS = `
 .pvx .sched-rsvp-chip.going .dot{background:#2E7D5B}
 .pvx .sched-rsvp-chip.reslot{color:#9A6A1B;background:rgba(201,169,110,.12);border-color:rgba(168,132,47,.4)}
 .pvx .sched-rsvp-chip.reslot .dot{background:var(--gold-deep);animation:schedBlink 1.4s ease-in-out infinite}
+.pvx .sched-rsvp-chip.tentative{color:#9A6A1B;background:rgba(201,169,110,.1);border-color:rgba(168,132,47,.32)}
+.pvx .sched-rsvp-chip.tentative .dot{background:var(--gold-deep)}
+.pvx .sched-rsvp-chip.declined{color:#B23B3B;background:rgba(178,59,59,.08);border-color:rgba(178,59,59,.28);text-decoration:line-through;text-decoration-color:rgba(178,59,59,.5)}
+.pvx .sched-rsvp-chip.declined .dot{background:#B23B3B}
 .pvx .sched-rsvp-chip.await .dot{animation:schedBlink 1.4s ease-in-out infinite}
 @keyframes schedBlink{0%,100%{opacity:1}50%{opacity:.28}}
 

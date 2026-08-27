@@ -119,12 +119,18 @@ function rosterOf(ev) {
   const norm = (s) => String(s || "").trim().toLowerCase();
   const rows = invited.map((r) => {
     const key = norm(r.email);
-    const going = !!confs[key] || (r.role === "customer" && !!ev.confirmed_at);
-    const reslot = !going && reqs.some((x) => norm(x.by) === norm(r.name) || (x.role && norm(x.role) === norm(r.role)));
-    return { email: r.email, name: r.name, role: r.role, status: going ? "going" : reslot ? "reslot" : "await" };
+    const rec = confs[key];
+    // A recorded RSVP carries its own status (going / declined / tentative — via the /appt link or a
+    // scraped calendar reply); a bare presence (legacy) or the customer's confirmed_at flag = going.
+    let status;
+    if (rec) status = rec.status || "going";
+    else if (r.role === "customer" && !!ev.confirmed_at) status = "going";
+    else if (reqs.some((x) => norm(x.by) === norm(r.name) || (x.role && norm(x.role) === norm(r.role)))) status = "reslot";
+    else status = "await";
+    return { email: r.email, name: r.name, role: r.role, status };
   });
-  const rank = { await: 0, reslot: 1, going: 2 };
-  return rows.sort((a, b) => rank[a.status] - rank[b.status]);
+  const rank = { await: 0, declined: 1, reslot: 2, tentative: 3, going: 4 };
+  return rows.sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
 }
 
 export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", apptKind = null, onCount, onBooked, onEvents }) {
@@ -473,7 +479,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                         </div>
                         <div className="sched-rsvp-list">
                           {roster.map(r => (
-                            <span key={r.email || r.name} className={`sched-rsvp-chip ${r.status}`} title={r.status === "going" ? "Confirmed" : r.status === "reslot" ? "Asked to reschedule" : "Not confirmed yet"}>
+                            <span key={r.email || r.name} className={`sched-rsvp-chip ${r.status}`} title={r.status === "going" ? "Confirmed" : r.status === "declined" ? "Declined" : r.status === "tentative" ? "Maybe" : r.status === "reslot" ? "Asked to reschedule" : "Not confirmed yet"}>
                               <span className="dot" />{r.name || r.email}{r.role && r.role !== "customer" && <span className="rl">· {r.role}</span>}
                             </span>
                           ))}
