@@ -26,7 +26,19 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   const saveT = useRef(null);
   const touchX = useRef(null);
 
-  useEffect(() => { const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000); return () => clearInterval(t); }, []);
+  // Persist the exam start so the 30-minute countdown is continuous across reloads / navigation
+  // (a fresh mount used to reset it to 30:00). Cleared on submit, so an approved retake starts fresh.
+  useEffect(() => {
+    const KEY = `asx_start_${appId}`;
+    const total = ASSESSMENT_META.timeLimitMin * 60;
+    let start = 0;
+    try { start = Number(localStorage.getItem(KEY)) || 0; } catch {}
+    if (!start) { start = Date.now(); try { localStorage.setItem(KEY, String(start)); } catch {} }
+    const tick = () => setLeft(Math.max(0, total - Math.floor((Date.now() - start) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [appId]);
 
   const answered = QUESTIONS.filter((q) => resp[q.n]?.answer).length;
   const allAnswered = answered === N;
@@ -78,7 +90,8 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     setBusy(true); setErr("");
     try {
       const r = await submitAssessmentAction(appId, resp);
-      if (r?.ok) setLocked(true); else setErr(r?.error === "locked" ? "This assessment was already submitted." : "Could not submit — please try again.");
+      if (r?.ok) { try { localStorage.removeItem(`asx_start_${appId}`); } catch {} setLocked(true); }
+      else setErr(r?.error === "locked" ? "This assessment was already submitted." : "Could not submit — please try again.");
     } catch { setErr("Could not submit — please try again."); }
     setBusy(false);
   }
@@ -221,7 +234,10 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
           <button className="asx-nav" onClick={() => go(-1)} disabled={cur === 0}>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>Back
           </button>
-          <span className="asx-mid">{answered}/{N}<span className={`asx-sv ${saved}`}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}</span></span>
+          <button className="asx-mid" onClick={() => setMode("review")} title="Jump to any question">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+            <span>{answered}/{N}<span className={`asx-sv ${saved}`}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}</span></span>
+          </button>
           {cur < N - 1
             ? <button className="asx-next" onClick={() => go(1)}>Next<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg></button>
             : <button className="asx-next" onClick={() => setMode("review")}>Review<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg></button>}
@@ -327,7 +343,10 @@ const CSS = `
 .asx-next{display:inline-flex;align-items:center;gap:7px;background:var(--gold-deep);color:#fff;border:none;border-radius:10px;
   padding:11px 20px;font:inherit;font-weight:700;font-size:.92rem;cursor:pointer;transition:.15s}
 .asx-next:hover{background:#96742a}
-.asx-mid{display:flex;flex-direction:column;align-items:center;line-height:1.2;font-family:var(--font-mono,ui-monospace);font-size:.8rem;font-weight:700;color:var(--muted)}
+.asx-mid{display:inline-flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font:inherit;
+  font-family:var(--font-mono,ui-monospace);font-size:.8rem;font-weight:700;color:var(--muted);transition:color .12s}
+.asx-mid:hover{color:var(--gold-deep)}
+.asx-mid>span{display:flex;flex-direction:column;align-items:center;line-height:1.2}
 .asx-sv{font-size:.68rem;color:var(--green);font-weight:600}.asx-sv.saving{color:var(--faint)}
 .asx-submit{background:var(--gold-deep);color:#fff;border:none;border-radius:10px;padding:12px 22px;font:inherit;
   font-weight:700;font-size:.95rem;cursor:pointer;transition:.15s}
