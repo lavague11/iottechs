@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { createApplication } from "../../../lib/db";
+import { createApplication, findApplicationByEmail } from "../../../lib/db";
 
 // Applications create real rows from an anonymous endpoint — throttle per IP, same as the
 // service-call intake. In-memory; a restart resets it, which is fine (so does the attacker's run).
@@ -38,6 +38,22 @@ export async function POST(request) {
     // Email is required + must be well-formed: users.email is UNIQUE NOT NULL, so without a real one
     // the hire can't mint a login, and offers/updates go there.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return Response.json({ ok: false, error: "Enter a valid email address." }, { status: 400 });
+
+    // One application per person. If this email already applied, we don't create a second — but if
+    // they prove it's them (same phone AND same address on file), we hand back their existing ID
+    // instead of an error. Otherwise it's a hard block (call us).
+    const existing = findApplicationByEmail(email);
+    if (existing) {
+      const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
+      const normAddr = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const samePhone = onlyDigits(existing.phone).slice(-10) === onlyDigits(phone).slice(-10) && onlyDigits(phone).length >= 10;
+      const eAddr = normAddr(existing.address);
+      const sameAddr = eAddr.length > 0 && eAddr === normAddr(b.address);
+      if (samePhone && sameAddr) {
+        return Response.json({ ok: true, recovered: true, appId: existing.app_id, pin: existing.applicant_pin, name: (existing.name || "").split(" ")[0] || "there" });
+      }
+      return Response.json({ ok: false, error: "duplicate" }, { status: 409 });
+    }
 
     // Optional résumé: a base64 data URL (PDF / Word / image), capped so a row stays sane.
     let resume_name = null, resume_data = null;

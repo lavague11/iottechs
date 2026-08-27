@@ -160,8 +160,12 @@ export default function ApplyClient() {
         }),
       });
       const j = await res.json();
-      if (j.ok) setDone({ appId: j.appId, pin: j.pin, name: j.name });
-      else { setErr(j.error || "Something went wrong."); setBusy(false); }
+      if (j.ok) setDone({ appId: j.appId, pin: j.pin, name: j.name, recovered: !!j.recovered });
+      else if (j.error === "duplicate") {
+        setStep(2);
+        setErr("You&rsquo;ve already applied with this email. If that&rsquo;s you, enter the same phone and address you used before to pull up your Application ID — or give us a call.".replace(/&rsquo;/g, "’"));
+        setBusy(false);
+      } else { setErr(j.error || "Something went wrong."); setBusy(false); }
     } catch (_) { setErr("Connection error. Please try again."); setBusy(false); }
   }
 
@@ -193,8 +197,8 @@ export default function ApplyClient() {
           {done ? (
             <div className="ap-success">
               <div className="ap-check"><Icon><path d="M20 6 9 17l-5-5" /></Icon></div>
-              <h2>Application received{done.name ? `, ${done.name}` : ""}.</h2>
-              <p className="ap-sub">Write down your <b>Application ID</b> — you&rsquo;ll need it, with your PIN, every time you check your status.</p>
+              <h2>{done.recovered ? `You already applied${done.name ? `, ${done.name}` : ""}.` : `Application received${done.name ? `, ${done.name}` : ""}.`}</h2>
+              <p className="ap-sub">{done.recovered ? "Here&rsquo;s the application already on file for you — no need to apply again.".replace(/&rsquo;/g, "’") : "Write down your Application ID — you’ll need it, with your PIN, every time you check your status."}</p>
               <div className="ap-ticket">
                 <div className="ap-ticket-row"><span className="ap-ticket-lbl">Application ID</span><span className="ap-ticket-val mono">{done.appId}</span></div>
                 <div className="ap-ticket-row"><span className="ap-ticket-lbl">Your PIN</span><span className="ap-ticket-val mono">{done.pin || "—"}</span></div>

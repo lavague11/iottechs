@@ -3340,6 +3340,13 @@ export function getApplication(appId) {
   return decorateApp(db.prepare("SELECT * FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId || "").trim()));
 }
 
+// Most recent application for an email — used to block duplicate applications from the same person.
+export function findApplicationByEmail(email) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return null;
+  return decorateApp(db.prepare("SELECT * FROM applications WHERE lower(trim(email)) = ? ORDER BY id DESC LIMIT 1").get(e));
+}
+
 // Full APP id or its last 4 (unambiguous only) — mirrors resolveProjectRef/resolveServiceCallRef.
 export function resolveApplicationRef(ref) {
   const raw = String(ref || "").trim();
