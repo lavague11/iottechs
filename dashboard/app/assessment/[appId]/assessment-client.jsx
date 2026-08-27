@@ -14,6 +14,9 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [left, setLeft] = useState(ASSESSMENT_META.timeLimitMin * 60);
+  // The optional per-question note is hidden behind "Add a note" — but if the candidate already
+  // wrote one (resuming), keep it open so they can see it.
+  const [noteOpen, setNoteOpen] = useState(() => { const o = {}; for (const k in initial) if (initial[k]?.explanation) o[k] = true; return o; });
   const saveT = useRef(null);
 
   useEffect(() => { const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000); return () => clearInterval(t); }, []);
@@ -55,8 +58,11 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     </div><style>{CSS}</style></div>
   );
 
+  // Discourage copying the questions: block copy + right-click everywhere except the note field.
+  const guard = (e) => { if (!e.target.closest?.("textarea")) e.preventDefault(); };
+
   return (
-    <div className="asx">
+    <div className="asx" onCopy={guard} onContextMenu={guard} onCut={guard}>
       <header className="asx-top">
         <a href="/go" aria-label="IOT TECHS home" className="asx-brand"><Wordmark height={22} /></a>
         <div className="asx-timer" title="Recommended time"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>{mm}:{ss}</div>
@@ -66,7 +72,7 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
         <div className="asx-hero">
           <div className="asx-tag">Technician Pre-Hire Assessment</div>
           <h1>{firstName ? `${firstName}, tell us how you work.` : "Technician Assessment"}</h1>
-          <p>25 questions, about {ASSESSMENT_META.timeLimitMin} minutes. Where a question asks, add a sentence on <b>why</b> you chose your answer — we care more about your reasoning than a lucky guess. Your progress saves as you go.</p>
+          <p>{QUESTIONS.length} questions · {ASSESSMENT_META.timeLimitMin} minutes. Answer honestly — your progress saves as you go.</p>
           {staff && <p className="asx-staff">Staff preview — answers you submit here count as a real submission.</p>}
         </div>
 
@@ -92,10 +98,17 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
                     })}
                   </div>
                   {q.type === "scored" && (
-                    <div className="asx-explain">
-                      <label>Why did you pick this? <span>1–2 sentences</span></label>
-                      <textarea rows={2} value={r.explanation || ""} onChange={(e) => explain(q.n, e.target.value)} placeholder="Briefly explain your reasoning…" />
-                    </div>
+                    noteOpen[q.n] ? (
+                      <div className="asx-explain">
+                        <label>Your note <span>optional</span></label>
+                        <textarea rows={2} value={r.explanation || ""} onChange={(e) => explain(q.n, e.target.value)} placeholder="Add anything about your reasoning…" autoFocus />
+                      </div>
+                    ) : (
+                      <button type="button" className="asx-addnote" onClick={() => setNoteOpen((o) => ({ ...o, [q.n]: true }))}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                        Add a note
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -122,7 +135,10 @@ const CSS = `
 .asx{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A6ABB1;--line:#E4E4DF;--line-soft:#EDEDE9;
   --gold:#C9A96E;--gold-deep:#A8842F;--paper:#F4F4F2;--raise:#FBFBFA;--green:#2E7D5B;--red:#C4553D;
   min-height:100vh;background:var(--paper);color:var(--ink);
-  font-family:var(--font-sans,'Instrument Sans',system-ui,sans-serif);padding-bottom:88px}
+  font-family:var(--font-sans,'Instrument Sans',system-ui,sans-serif);padding-bottom:88px;
+  -webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* Candidates may still type/edit their own note — re-enable selection only inside the textarea. */
+.asx-explain textarea{-webkit-user-select:text;-moz-user-select:text;user-select:text}
 .asx-top{position:sticky;top:0;z-index:20;background:rgba(244,244,242,.9);backdrop-filter:blur(8px);
   border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:12px 22px}
 .asx-brand{display:inline-flex;color:var(--ink);text-decoration:none}
@@ -145,8 +161,8 @@ const CSS = `
   display:grid;place-items:center;font-family:var(--font-mono,ui-monospace);font-size:.78rem;font-weight:700;color:var(--gold-deep)}
 .asx-q-p{margin:2px 0 0;font-size:1rem;font-weight:600;line-height:1.45;color:var(--ink)}
 .asx-choices{display:flex;flex-direction:column;gap:7px}
-.asx-choice{display:flex;align-items:flex-start;gap:10px;text-align:left;background:var(--paper);border:1px solid var(--line);
-  border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;color:var(--ink-soft);transition:.12s}
+.asx-choice{display:flex;align-items:center;gap:10px;text-align:left;background:var(--paper);border:1px solid var(--line);
+  border-radius:10px;padding:11px 13px;min-height:48px;box-sizing:border-box;cursor:pointer;font:inherit;color:var(--ink-soft);transition:.12s}
 .asx-choice:hover{border-color:var(--gold);background:#fff}
 .asx-choice.on{border-color:var(--gold-deep);background:#F6F0E2;color:var(--ink)}
 .asx-radio{flex:none;width:17px;height:17px;border-radius:50%;border:2px solid var(--faint);margin-top:1px;display:grid;place-items:center}
@@ -161,6 +177,10 @@ const CSS = `
 .asx-explain textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:9px 11px;
   font:inherit;font-size:.9rem;color:var(--ink);background:var(--paper);outline:none;resize:vertical}
 .asx-explain textarea:focus{border-color:var(--gold)}
+.asx-addnote{margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:2px 0;
+  cursor:pointer;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);transition:color .12s}
+.asx-addnote:hover{color:var(--gold-deep)}
+.asx-addnote svg{color:var(--faint)}.asx-addnote:hover svg{color:var(--gold-deep)}
 .asx-err{margin-top:16px;background:#F6E7E2;color:var(--red);border-radius:10px;padding:11px 14px;font-size:.9rem;font-weight:600}
 .asx-foot{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(251,251,250,.94);backdrop-filter:blur(10px);
   border-top:1px solid var(--line)}

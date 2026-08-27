@@ -4,7 +4,7 @@
 //   Q21–25 type "behavioral": each choice carries its own 0–4 score, no right/wrong
 // Auto-flags fire off the raw answer; explanation-content flags come from the AI pass.
 
-export const ASSESSMENT_META = { total: 25, maxScore: 100, timeLimitMin: 45 };
+export const ASSESSMENT_META = { total: 25, maxScore: 100, timeLimitMin: 30 };
 
 export const CATEGORIES = [
   { key: "tools",      label: "Tools, Materials & Installation",                q: [1, 5],   max: 20 },
