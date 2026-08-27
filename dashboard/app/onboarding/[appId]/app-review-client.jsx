@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
 import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction } from "../actions";
 import AssessmentResult from "./assessment-result";
+import RecruitmentSteps from "./recruitment-steps";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -107,6 +108,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
         </div>
 
         <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
+        {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} canHire={user.role === "admin"} /></div>}
 
         <div className="ob-grid">
           {/* Application */}

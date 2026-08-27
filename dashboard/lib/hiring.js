@@ -68,6 +68,20 @@ export function legacyStageFromStatus(key) {
   return "hired";   // any Portal 2/3 status = hired, in legacy terms
 }
 
+// Portal 1 evaluation steps — each is a scorecard the office fills in. The 25-Q assessment is its
+// own thing (auto + AI graded); these four are human-scored on a shared 1–5 rubric.
+export const STEP_RUBRICS = {
+  phone:      { label: "Phone Interview",      criteria: [["communication", "Communication & professionalism"], ["reliability", "Reliability & availability"], ["experience", "Relevant experience"], ["motivation", "Motivation & fit"]] },
+  in_person:  { label: "In-Person + Skills",   criteria: [["tools", "Tool & material knowledge"], ["handson", "Hands-on skill demonstrated"], ["problem", "Problem-solving"], ["professional", "Professionalism & appearance"]] },
+  sop:        { label: "Dispatch / SOP",       criteria: [["scope", "Scope & authorization"], ["docs", "Documentation discipline"], ["escalation", "Escalation judgment"], ["customer", "Customer handling"]] },
+  ride_along: { label: "Ride-Along / Field",   criteria: [["performance", "Real job performance"], ["process", "Follows process on site"], ["field_comm", "Communication in the field"], ["attitude", "Attitude & coachability"]] },
+};
+export const P1_EVAL_STEPS = ["phone", "in_person", "sop", "ride_along"];
+
+// The full Portal 1 status flow, in order, for "advance to next step".
+export const P1_FLOW = ["applied", "assessment", "phone", "in_person", "sop", "ride_along", "final_review"];
+export function nextP1Status(cur) { const i = P1_FLOW.indexOf(cur); return i >= 0 && i < P1_FLOW.length - 1 ? P1_FLOW[i + 1] : cur; }
+
 // Resolve a row's portal+status, deriving from legacy stage when the columns aren't set yet.
 export function resolveHiring(row) {
   const status = row?.status || statusFromLegacyStage(row?.stage);

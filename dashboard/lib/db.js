@@ -576,6 +576,7 @@ function init() {
       WHERE status IS NULL`);
   }
   if (!hiringCols.includes("assessment")) db.exec("ALTER TABLE applications ADD COLUMN assessment TEXT"); // Portal 1 pre-hire assessment blob (responses + score + flags + profile)
+  if (!hiringCols.includes("steps")) db.exec("ALTER TABLE applications ADD COLUMN steps TEXT");           // Portal 1 evaluation scorecards { phone:{...}, in_person:{...}, sop:{...}, ride_along:{...} }
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3279,7 +3280,7 @@ function decorateApp(r) {
   if (!r) return null;
   const h = resolveHiring(r);   // { status, portal, meta } — derives from legacy stage if columns are unset
   return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position),
-    onboarding: safeJson(r.onboarding, null), assessment: safeJson(r.assessment, null),
+    onboarding: safeJson(r.onboarding, null), assessment: safeJson(r.assessment, null), steps: safeJson(r.steps, {}),
     portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral" };
 }
 
@@ -3371,6 +3372,20 @@ export function saveApplicationAssessment(appId, obj) {
   db.prepare("UPDATE applications SET assessment = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
     .run(JSON.stringify(obj || {}), String(appId));
   return getApplicationAssessment(appId);
+}
+
+// Portal 1 evaluation scorecards, keyed by step (phone|in_person|sop|ride_along).
+export function getApplicationSteps(appId) {
+  const r = db.prepare("SELECT steps FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId));
+  return r ? safeJson(r.steps, {}) : {};
+}
+export function saveApplicationStep(appId, step, data, { actor_role, actor_name } = {}) {
+  const cur = getApplicationSteps(appId);
+  cur[step] = { ...data, by: actor_name || null, at: new Date().toISOString().slice(0, 19).replace("T", " ") };
+  db.prepare("UPDATE applications SET steps = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(cur), String(appId));
+  try { logApplicationEvent(appId, { kind: "note", detail: `Scorecard saved — ${step}${data.score != null ? ` (${data.score}/5)` : ""}`, actor_role, actor_name }); } catch {}
+  return cur;
 }
 
 export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name, interview_at }, { actor_role, actor_name } = {}) {
