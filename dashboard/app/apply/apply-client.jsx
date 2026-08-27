@@ -94,7 +94,9 @@ export default function ApplyClient() {
   const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   // Live US phone formatting, capped at 10 digits → (646) 000-0000.
   const formatPhone = (v) => {
-    const d = String(v || "").replace(/\D/g, "").slice(0, 10);
+    // Drop a leading 1 first — no US area code starts with 1, so a leading 1 is always the
+    // country code autofill injects, and letting it sit here would push out the real 10th digit.
+    const d = String(v || "").replace(/\D/g, "").replace(/^1+/, "").slice(0, 10);
     if (d.length <= 3) return d;
     if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
     return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
@@ -192,13 +194,17 @@ export default function ApplyClient() {
             <div className="ap-success">
               <div className="ap-check"><Icon><path d="M20 6 9 17l-5-5" /></Icon></div>
               <h2>Application received{done.name ? `, ${done.name}` : ""}.</h2>
-              <p className="ap-sub">We review every application. Track yours anytime with the ID and PIN below.</p>
+              <p className="ap-sub">Write down your <b>Application ID</b> — you&rsquo;ll need it, with your PIN, every time you check your status.</p>
               <div className="ap-ticket">
                 <div className="ap-ticket-row"><span className="ap-ticket-lbl">Application ID</span><span className="ap-ticket-val mono">{done.appId}</span></div>
                 <div className="ap-ticket-row"><span className="ap-ticket-lbl">Your PIN</span><span className="ap-ticket-val mono">{done.pin || "—"}</span></div>
               </div>
+              <p className="ap-screenshot">
+                <Icon><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7l1.5-2.5h3L15 7" /><circle cx="12" cy="13.5" r="3.2" /></Icon>
+                Take a screenshot so you don&rsquo;t lose it.
+              </p>
               <div className="ap-actions">
-                <a className="ap-btn ap-btn-gold" href={`/application/${done.appId}`}>Track my application</a>
+                <a className="ap-btn ap-btn-gold" href="/application">Check my application</a>
                 <a className="ap-btn ap-btn-ghost" href="/">Back to home</a>
               </div>
             </div>
@@ -439,6 +445,8 @@ textarea.ap-in{resize:vertical}
 .ap-ticket-row+.ap-ticket-row{border-top:1px dashed var(--line)}
 .ap-ticket-lbl{color:var(--muted);font-weight:600;font-size:.9rem}
 .ap-ticket-val{font-weight:800;font-size:1.2rem}
+.ap-screenshot{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;font-size:.85rem;font-weight:600;color:var(--gold-deep,#A8842F)}
+.ap-screenshot svg{width:17px;height:17px;stroke-width:2;flex:none}
 .ap-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 @media(max-width:840px){
   .ap-shell{grid-template-columns:1fr}

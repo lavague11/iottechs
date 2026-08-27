@@ -61,8 +61,12 @@ export function attachAutocomplete(input, { types = ["address"], onPlace } = {})
       const p = ac.getPlace();
       if (p) onPlace?.({ name: p.name || "", address: p.formatted_address || "" });
     });
-    // Stop the browser autofill dropdown from fighting the Places dropdown.
+    // Stop the browser autofill dropdown from fighting the Places dropdown. `autocomplete="off"`
+    // alone is widely ignored by Chrome for address-looking fields, so also randomize the field
+    // name — Chrome keys its address heuristic on the name, and a random one defeats it (Google's
+    // own recommended workaround). These inputs are controlled by React, so `name` isn't used.
     input.setAttribute("autocomplete", "off");
+    try { input.setAttribute("name", "gm-addr-" + Math.random().toString(36).slice(2, 9)); } catch (_) {}
   }).catch(() => { /* no key / offline — input stays a normal text field */ });
   return () => {
     cancelled = true;
