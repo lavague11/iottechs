@@ -91,6 +91,13 @@ export default function ApplyClient() {
   useEffect(() => { setStartDate((v) => v || nextStartDate()); }, []);
 
   const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  // Live US phone formatting, capped at 10 digits → (646) 000-0000.
+  const formatPhone = (v) => {
+    const d = String(v || "").replace(/\D/g, "").slice(0, 10);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+    return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+  };
   const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
   const pitch = PITCH[position] || PITCH.tech;   // left panel tailors to the chosen position
 
@@ -233,7 +240,7 @@ export default function ApplyClient() {
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
                       <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone</label>
-                      <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" /></div>
+                      <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" maxLength={14} /></div>
                   </div>
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
@@ -440,5 +447,10 @@ textarea.ap-in{resize:vertical}
   .ap-hero-p{margin-bottom:4px}
   .ap-main{padding:32px 22px 52px;min-height:auto;justify-content:flex-start}
 }
-@media(max-width:520px){.ap-grid2,.ap-two{grid-template-columns:1fr}}
+@media(max-width:520px){
+  .ap-grid2,.ap-two{grid-template-columns:1fr}
+  /* Stack the toggle chips full-width so a selection's ✓ never reflows them onto another line. */
+  .ap-chips{flex-direction:column;align-items:stretch}
+  .ap-chip{text-align:left}
+}
 `;

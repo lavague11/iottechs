@@ -72,7 +72,7 @@ const CSS = `
 .tr-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--soft:#f5f6f9;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#b08f4f;
   min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%,#f0f2f7 0%,#eceef3 60%);color:var(--ink);
   font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:26px 18px}
-.tr-home{display:inline-flex}
+.tr-home{display:inline-flex;color:var(--ink)}
 .tr-card{width:100%;max-width:420px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:32px 30px;
   box-shadow:0 40px 90px -44px rgba(14,19,32,.5);text-align:center}
 .tr-ic{width:56px;height:56px;margin:0 auto 16px;border-radius:15px;display:grid;place-items:center;
