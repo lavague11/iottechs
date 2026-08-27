@@ -99,6 +99,16 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           </div>
         </div>
 
+        {!declined && !hired && !["offer"].includes(app.stage) && !["submitted", "graded"].includes(app.assessment_status) && (
+          <a className="aq-cta" href={`/assessment/${app.app_id}`}>
+            <div>
+              <b>{app.assessment_status === "in_progress" ? "Continue your assessment" : "Take your pre-hire assessment"}</b>
+              <span>25 questions, about 45 minutes. This is your next step.</span>
+            </div>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+          </a>
+        )}
+
         {app.interview_at && !declined && (
           <div className="aq-banner">
             <b>Interview scheduled</b> — {app.interview_at}. We&rsquo;ll call you at {app.phone || "the number you gave us"}.

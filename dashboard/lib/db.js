@@ -575,6 +575,7 @@ function init() {
       portal = CASE WHEN stage IN ('offer','hired') THEN 2 ELSE 1 END
       WHERE status IS NULL`);
   }
+  if (!hiringCols.includes("assessment")) db.exec("ALTER TABLE applications ADD COLUMN assessment TEXT"); // Portal 1 pre-hire assessment blob (responses + score + flags + profile)
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3278,7 +3279,7 @@ function decorateApp(r) {
   if (!r) return null;
   const h = resolveHiring(r);   // { status, portal, meta } — derives from legacy stage if columns are unset
   return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position),
-    onboarding: safeJson(r.onboarding, null),
+    onboarding: safeJson(r.onboarding, null), assessment: safeJson(r.assessment, null),
     portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral" };
 }
 
@@ -3359,6 +3360,17 @@ export function setApplicationStatus(appId, status, { actor_role, actor_name, re
     .run(status, portal, stage, status === "declined" ? (String(reason || "").slice(0, 400) || null) : null, String(appId));
   logApplicationEvent(cur.app_id, { kind: "stage", detail: `${statusLabel(cur.status || cur.stage)} → ${statusLabel(status)}`, actor_role, actor_name });
   return getApplication(appId);
+}
+
+// Portal 1 pre-hire assessment blob: { status, responses, score, tier, cats, flags, profile, ... }.
+export function getApplicationAssessment(appId) {
+  const r = db.prepare("SELECT assessment FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId));
+  return r ? safeJson(r.assessment, null) : null;
+}
+export function saveApplicationAssessment(appId, obj) {
+  db.prepare("UPDATE applications SET assessment = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(obj || {}), String(appId));
+  return getApplicationAssessment(appId);
 }
 
 export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name, interview_at }, { actor_role, actor_name } = {}) {
