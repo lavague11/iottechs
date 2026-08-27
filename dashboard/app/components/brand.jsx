@@ -13,8 +13,8 @@ export function Wordmark({ height = 22, twoTone, className = "", style, techsCol
   return (
     <svg viewBox="0 0 1049 135" height={height} className={className} style={{ display: "block", ...style }}
          role="img" aria-label="IOT TECHS" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" d={IOT_PATH} />
-      <g transform="translate(366 0)"><path fill="currentColor" d={TECHS_PATH} /></g>
+      <path fill="currentColor" fillRule="evenodd" d={IOT_PATH} />
+      <g transform="translate(366 0)"><path fill="currentColor" fillRule="evenodd" d={TECHS_PATH} /></g>
     </svg>
   );
 }
