@@ -180,7 +180,6 @@ export default function ApplyClient() {
 
         {/* RIGHT — form or success */}
         <main className="ap-main">
-          <a href="/" className="ap-x" aria-label="Close">✕</a>
           {done ? (
             <div className="ap-success">
               <div className="ap-check"><Icon><path d="M20 6 9 17l-5-5" /></Icon></div>
@@ -312,16 +311,15 @@ const CSS = `
    warm-paper palette, JetBrains mono for codes. No Bricolage/Hanken — the deck uses one sans. */
 .ap-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A1A6AC;--line:#E4E4DF;--line-soft:#EDEDE9;
   --soft:#F4F4F2;--raise:#FBFBFA;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#A8842F;--green:#2E7D5B;
-  min-height:100vh;background:var(--soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55;
-  display:flex;align-items:center;justify-content:center;padding:26px 18px}
-.ap-shell{width:100%;max-width:1060px;display:grid;grid-template-columns:400px 1fr;background:#fff;border-radius:26px;overflow:hidden;
-  box-shadow:0 40px 100px -40px rgba(14,19,32,.5)}
+  min-height:100vh;background:var(--soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55}
+.ap-shell{min-height:100vh;display:grid;grid-template-columns:minmax(380px,460px) 1fr;background:var(--soft)}
 
 /* ---- left brand panel — deck light treatment (warm paper, ink text, soft gold) ---- */
 .ap-aside{position:relative;background:
   radial-gradient(520px 300px at 12% -8%,rgba(201,169,110,.16),transparent 60%),
   linear-gradient(160deg,#FBFBFA 0%,#F1F0EC 100%);
-  color:var(--ink);padding:34px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:28px;overflow:hidden;border-right:1px solid var(--line)}
+  color:var(--ink);padding:48px 42px;display:flex;flex-direction:column;justify-content:space-between;gap:30px;overflow:hidden;border-right:1px solid var(--line);
+  position:sticky;top:0;height:100vh}
 .ap-aside::after{content:"";position:absolute;right:-90px;bottom:-90px;width:260px;height:260px;border-radius:50%;
   background:radial-gradient(circle,rgba(201,169,110,.12),transparent 65%)}
 .ap-aside-top{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
@@ -342,10 +340,9 @@ const CSS = `
 .ap-aside-foot a{color:var(--gold-deep);text-decoration:none;font-weight:600}
 .ap-aside-foot a:hover{text-decoration:underline}
 
-/* ---- right form panel ---- */
-.ap-main{position:relative;padding:34px 38px;max-height:92vh;overflow-y:auto}
-.ap-x{position:absolute;top:20px;right:22px;color:var(--muted);text-decoration:none;font-size:1rem;width:32px;height:32px;display:grid;place-items:center;border-radius:9px;z-index:2}
-.ap-x:hover{background:var(--soft);color:var(--ink)}
+/* ---- right form panel — full-height, content centered like the candidate portals ---- */
+.ap-main{position:relative;padding:56px 48px;min-height:100vh;display:flex;flex-direction:column;justify-content:center}
+.ap-form,.ap-success{width:100%;max-width:560px;margin:0 auto}
 .ap-form-head{margin-bottom:8px}
 .ap-form-head h2,.ap-success h2{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.024em;font-size:1.45rem;margin:0 0 5px}
 .ap-sub{color:var(--muted);margin:0;font-size:.92rem}
@@ -436,13 +433,12 @@ textarea.ap-in{resize:vertical}
 .ap-ticket-val{font-weight:800;font-size:1.2rem}
 .ap-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 @media(max-width:840px){
-  .ap-root{padding:0;background:#fff}
-  .ap-shell{grid-template-columns:1fr;max-width:560px;border-radius:0;box-shadow:none;min-height:100vh}
-  .ap-aside{padding:26px 24px 24px}
+  .ap-shell{grid-template-columns:1fr}
+  .ap-aside{position:static;height:auto;padding:28px 24px 24px;justify-content:flex-start;gap:18px}
   .ap-hero-h{font-size:1.6rem}
   .ap-perks{display:none}
   .ap-hero-p{margin-bottom:4px}
-  .ap-main{padding:26px 22px 44px;max-height:none}
+  .ap-main{padding:32px 22px 52px;min-height:auto;justify-content:flex-start}
 }
 @media(max-width:520px){.ap-grid2,.ap-two{grid-template-columns:1fr}}
 `;
