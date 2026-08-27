@@ -6,6 +6,13 @@
 
 export const ASSESSMENT_META = { total: 25, maxScore: 100, timeLimitMin: 30 };
 
+// The candidate-facing pass line. 70 = Tier C ("manual review") and up — the same bar the tier
+// table already treats as viable. Candidates see only pass/fail; the number/tier stays internal.
+export const PASS_SCORE = 70;
+export function didPass(assessment) {
+  return assessment?.status === "graded" && (assessment.score ?? 0) >= PASS_SCORE;
+}
+
 export const CATEGORIES = [
   { key: "tools",      label: "Tools, Materials & Installation",                q: [1, 5],   max: 20 },
   { key: "trouble",    label: "Troubleshooting & Technical Reasoning",          q: [6, 10],  max: 20 },

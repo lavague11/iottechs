@@ -53,6 +53,52 @@ export async function submitAssessmentAction(appId, responses) {
   return { ok: true };
 }
 
+// ── Retake requests ────────────────────────────────────────────────────────
+// A candidate whose exam is in (submitted/graded) can ask to retake it — with a reason. It does
+// NOT reopen the exam; an admin must approve. Stored inside the assessment blob (no new column).
+export async function requestRetakeAction(appId, reason) {
+  const a = await authApp(appId);
+  if (!a.ok) return { ok: false, error: "not-authorized" };
+  const cur = getApplicationAssessment(a.app.app_id) || {};
+  if (!["submitted", "graded"].includes(cur.status)) return { ok: false, error: "You can only request a retake after submitting." };
+  if (cur.retake?.status === "pending") return { ok: false, error: "You already have a retake request awaiting review." };
+  const why = String(reason || "").trim();
+  if (why.length < 10) return { ok: false, error: "Please tell us why you'd like to retake it (a sentence or two)." };
+  saveApplicationAssessment(a.app.app_id, { ...cur, retake: { status: "pending", reason: why.slice(0, 600), requested_at: new Date().toISOString() } });
+  try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Retake requested by applicant — "${why.slice(0, 120)}"`, actor_role: "applicant", actor_name: a.app.name || "Applicant" }); } catch {}
+  return { ok: true };
+}
+
+// Office decision on a retake request — admin/manager only. Approving archives the current attempt
+// (never destroyed — audit) and reopens the exam for a fresh attempt.
+export async function decideRetakeAction(appId, approve, note) {
+  const user = await getSessionUser();
+  if (!user?.id || !["admin", "manager"].includes(user.role)) return { ok: false, error: "forbidden" };
+  const app = resolveApplicationRef(appId); if (!app) return { ok: false, error: "not-found" };
+  const cur = getApplicationAssessment(app.app_id) || {};
+  if (cur.retake?.status !== "pending") return { ok: false, error: "No pending retake request." };
+  const decided = { by: user.name, at: new Date().toISOString(), note: String(note || "").slice(0, 300) };
+
+  if (!approve) {
+    saveApplicationAssessment(app.app_id, { ...cur, retake: { ...cur.retake, status: "denied", ...decided } });
+    try { logApplicationEvent(app.app_id, { kind: "note", detail: "Retake request declined", actor_role: user.role, actor_name: user.name }); } catch {}
+    return { ok: true, status: "denied" };
+  }
+
+  // Approve: snapshot the finished attempt, then reopen a clean exam. Prior attempts are preserved.
+  const { retake, attempts = [], ...finished } = cur;
+  const snapshot = { ...finished, archived_at: new Date().toISOString() };
+  saveApplicationAssessment(app.app_id, {
+    attempts: [...attempts, snapshot],
+    status: "in_progress", responses: {}, started_at: null,
+    retake: { ...cur.retake, status: "approved", ...decided },
+  });
+  // If the pipeline had moved past Assessment on the strength of the old score, pull it back.
+  if (["applied", "assessment"].includes(app.status || "")) setApplicationStatus(app.app_id, "assessment", { actor_role: user.role, actor_name: user.name });
+  try { logApplicationEvent(app.app_id, { kind: "note", detail: `Retake approved — exam reopened (attempt ${attempts.length + 2})`, actor_role: user.role, actor_name: user.name }); } catch {}
+  return { ok: true, status: "approved" };
+}
+
 // Office-triggered (re)grade — admin/manager only.
 export async function gradeAssessmentAction(appId) {
   const user = await getSessionUser();

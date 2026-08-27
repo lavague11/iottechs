@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { resolveApplicationRef, getApplicationEvents } from "../../../lib/db";
+import { didPass } from "../../../lib/assessment-bank";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import SvcGate from "../../service-call/[svcId]/svc-gate";
@@ -78,6 +79,10 @@ export default async function ApplicationPage({ params }) {
     created_at: app.created_at,
     onboarding: app.onboarding || null,
     assessment_status: app.assessment?.status || null,   // null | in_progress | submitted | graded
+    // Candidate sees only pass/fail once graded — never the number, tier, or profile.
+    assessment_pass: app.assessment?.status === "graded" ? didPass(app.assessment) : null,
+    // Retake request state (they wrote the reason themselves, so it's safe to echo back).
+    retake: app.assessment?.retake ? { status: app.assessment.retake.status, reason: app.assessment.retake.reason, note: app.assessment.retake.note || null } : null,
     portal: app.portal, status: app.status,
   };
 

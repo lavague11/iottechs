@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { gradeAssessmentAction } from "../../assessment/[appId]/actions";
+import { gradeAssessmentAction, decideRetakeAction } from "../../assessment/[appId]/actions";
 
 const FLAG_LABEL = { integrity: "Integrity", safety: "Safety", process: "Process", communication: "Communication", technical: "Technical" };
 
 export default function AssessmentResult({ appId, assessment }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
   const a = assessment || null;
+  const rt = a?.retake || null;
 
   async function grade() {
     setBusy(true); setErr("");
@@ -17,6 +19,16 @@ export default function AssessmentResult({ appId, assessment }) {
       if (r?.ok) location.reload();
       else setErr(r?.error === "no-key" ? "Add ANTHROPIC_API_KEY in Development ▸ API Keys." : r?.error === "no-submission" ? "No submission yet." : "Grading failed — try again.");
     } catch { setErr("Grading failed — try again."); }
+    setBusy(false);
+  }
+
+  async function decideRetake(approve) {
+    setBusy(true); setErr("");
+    try {
+      const r = await decideRetakeAction(appId, approve, note);
+      if (r?.ok) location.reload();
+      else setErr(r?.error || "Could not update the request.");
+    } catch { setErr("Could not update the request."); }
     setBusy(false);
   }
 
@@ -34,15 +46,35 @@ export default function AssessmentResult({ appId, assessment }) {
         <h3>Assessment</h3>
         {graded
           ? <button className="ar-btn ghost" onClick={grade} disabled={busy}>{busy ? "Re-grading…" : "Re-grade"}</button>
-          : <button className="ar-btn" onClick={grade} disabled={busy}>{busy ? "Grading…" : "Run AI grading"}</button>}
+          : a.status === "submitted"
+            ? <button className="ar-btn" onClick={grade} disabled={busy}>{busy ? "Grading…" : "Run AI grading"}</button>
+            : null}
       </div>
       {err && <div className="ar-err">{err}</div>}
 
-      {!graded ? (
-        <div className="ar-pending">
-          <div className="ar-auto"><span className="ar-auto-n">{a.autoScore ?? "—"}</span><span>/80 auto</span></div>
-          <p>Submitted {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : ""}. Explanations &amp; profile aren&rsquo;t graded yet — run AI grading for the full read.</p>
+      {rt?.status === "pending" && (
+        <div className="ar-retake">
+          <div className="ar-retake-h"><b>Retake requested</b><span>awaiting your decision</span></div>
+          <p className="ar-retake-reason">“{rt.reason}”</p>
+          <input className="ar-retake-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note to the candidate…" />
+          <div className="ar-retake-actions">
+            <button className="ar-btn ghost" onClick={() => decideRetake(false)} disabled={busy}>Decline</button>
+            <button className="ar-btn" onClick={() => decideRetake(true)} disabled={busy}>Approve retake</button>
+          </div>
         </div>
+      )}
+      {rt?.status === "approved" && a.status !== "graded" && <div className="ar-retake done">Retake approved{rt.by ? ` by ${rt.by}` : ""} — {(a.attempts?.length || 0)} prior attempt{(a.attempts?.length || 0) === 1 ? "" : "s"} kept. Awaiting the new submission.</div>}
+      {rt?.status === "denied" && a.status === "graded" && <div className="ar-retake done">Retake request declined{rt.by ? ` by ${rt.by}` : ""}.</div>}
+
+      {!graded ? (
+        a.status === "submitted" ? (
+          <div className="ar-pending">
+            <div className="ar-auto"><span className="ar-auto-n">{a.autoScore ?? "—"}</span><span>/80 auto</span></div>
+            <p>Submitted {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : ""}. Explanations &amp; profile aren&rsquo;t graded yet — run AI grading for the full read.</p>
+          </div>
+        ) : (
+          <div className="ar-empty">{rt?.status === "approved" ? "Reopened for a retake — waiting on the candidate's new submission." : "In progress — the candidate is taking the assessment."}</div>
+        )
       ) : (
         <>
           <div className="ar-top">
@@ -102,6 +134,15 @@ const CSS = `
 .ar-btn:disabled{opacity:.5;cursor:default}
 .ar-empty,.ar-pending p{color:var(--muted);font-size:.9rem}
 .ar-err{background:#F6E7E2;color:var(--red);border-radius:8px;padding:9px 12px;font-size:.85rem;font-weight:600;margin-bottom:10px}
+.ar-retake{background:#FBF6EA;border:1px solid #EAD9B4;border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.ar-retake-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.ar-retake-h b{font-size:.9rem;color:var(--amber)}
+.ar-retake-h span{font-size:.74rem;color:var(--muted)}
+.ar-retake-reason{margin:0 0 10px;font-size:.86rem;color:var(--ink);font-style:italic}
+.ar-retake-note{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:.84rem;margin-bottom:10px;outline:none}
+.ar-retake-note:focus{border-color:var(--gold-deep)}
+.ar-retake-actions{display:flex;gap:8px;justify-content:flex-end}
+.ar-retake.done{background:#EFEFEA;border-color:var(--line);color:var(--muted);font-size:.84rem}
 .ar-pending{display:flex;gap:14px;align-items:center}
 .ar-auto{flex:none;text-align:center}.ar-auto-n{font-size:1.7rem;font-weight:800;color:var(--ink)}.ar-auto span:last-child{display:block;font-size:.7rem;color:var(--muted)}
 .ar-top{display:flex;align-items:center;gap:16px;margin-bottom:12px}

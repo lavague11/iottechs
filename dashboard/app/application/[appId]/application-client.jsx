@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Wordmark } from "../../components/brand";
+import { requestRetakeAction } from "../../assessment/[appId]/actions";
 
 // Applicant status page — same shape as the project page the customers see: hero, stage strip,
 // collapsible cards, timeline. This is what "apply, then watch where it stands" looks like.
@@ -41,6 +42,65 @@ function Card({ title, chip, children, open: initial = true }) {
       {open && <div className="aq-card-b">{children}</div>}
     </div>
   );
+}
+
+// Assessment result + retake, from the candidate's side. They see pass/fail only (never the score),
+// and — if they didn't pass — can ask to retake with a reason (an admin approves it).
+function AssessmentOutcome({ app }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [sent, setSent] = useState(false);
+  const rt = app.retake;
+
+  async function send() {
+    if (reason.trim().length < 10) { setErr("Please add a sentence about why."); return; }
+    setBusy(true); setErr("");
+    try {
+      const r = await requestRetakeAction(app.app_id, reason);
+      if (r?.ok) setSent(true); else setErr(r?.error || "Could not send — please try again.");
+    } catch { setErr("Could not send — please try again."); }
+    setBusy(false);
+  }
+
+  if (sent || rt?.status === "pending") return (
+    <div className="aq-outcome pending">
+      <b>Retake requested</b>
+      <p>Thanks — your request is with our team, and we&rsquo;ll update this page once it&rsquo;s reviewed.{rt?.reason ? ` (“${rt.reason}”)` : ""}</p>
+    </div>
+  );
+  if (rt?.status === "approved" && app.assessment_status !== "graded") return (
+    <div className="aq-outcome good"><b>Retake approved</b><p>Your exam is open again — use the button above to take it.</p></div>
+  );
+  if (app.assessment_status === "graded") {
+    if (app.assessment_pass) return (
+      <div className="aq-outcome good"><b>You passed the assessment</b><p>Nice work{app.name ? `, ${String(app.name).split(" ")[0]}` : ""}. Our team will be in touch about the next step.</p></div>
+    );
+    return (
+      <div className="aq-outcome fail">
+        <b>You didn&rsquo;t reach the passing score this time</b>
+        <p>If something got in the way, you can ask to retake it — a quick note on why helps us review.</p>
+        {rt?.status === "denied" && <p className="aq-outcome-note">A previous retake request was declined{rt.note ? `: ${rt.note}` : "."}</p>}
+        {!open ? (
+          <button className="aq-retake-btn" onClick={() => setOpen(true)}>Request a retake</button>
+        ) : (
+          <div className="aq-retake-form">
+            <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why would you like to retake it?" autoFocus />
+            {err && <div className="aq-retake-err">{err}</div>}
+            <div className="aq-retake-actions">
+              <button className="aq-retake-cancel" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+              <button className="aq-retake-send" onClick={send} disabled={busy}>{busy ? "Sending…" : "Send request"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (app.assessment_status === "submitted") return (
+    <div className="aq-outcome"><b>Assessment received</b><p>We&rsquo;re reviewing your answers — check back here for the result.</p></div>
+  );
+  return null;
 }
 
 export default function ApplicationClient({ app, events = [], staff, viewerName }) {
@@ -102,12 +162,14 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
         {!declined && !hired && !["offer"].includes(app.stage) && !["submitted", "graded"].includes(app.assessment_status) && (
           <a className="aq-cta" href={`/assessment/${app.app_id}`}>
             <div>
-              <b>{app.assessment_status === "in_progress" ? "Continue your assessment" : "Take your pre-hire assessment"}</b>
-              <span>25 questions, about 45 minutes. This is your next step.</span>
+              <b>{app.retake?.status === "approved" ? "Retake your assessment" : app.assessment_status === "in_progress" ? "Continue your assessment" : "Take your pre-hire assessment"}</b>
+              <span>25 questions, about 30 minutes. This is your next step.</span>
             </div>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </a>
         )}
+
+        {!declined && !hired && <AssessmentOutcome app={app} />}
 
         {app.interview_at && !declined && (
           <div className="aq-banner">
@@ -236,6 +298,24 @@ const CSS = `
 .aq-cta b{display:block;font-size:1rem;font-family:var(--font-sans),'Instrument Sans',sans-serif}
 .aq-cta span{display:block;font-size:.85rem;opacity:.92;margin-top:2px}
 .aq-cta svg{margin-left:auto;flex-shrink:0}
+/* assessment outcome + retake */
+.aq-outcome{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;background:var(--raise)}
+.aq-outcome b{display:block;font-size:1rem;font-weight:800;font-family:var(--font-sans),'Instrument Sans',sans-serif;margin-bottom:4px;color:var(--ink)}
+.aq-outcome p{margin:0;color:var(--ink-soft);font-size:.92rem;line-height:1.5}
+.aq-outcome.good{background:#EAF3EE;border-color:#BFE0CD}.aq-outcome.good b{color:var(--green)}
+.aq-outcome.fail{background:#FBF1EC;border-color:#F0D9CE}
+.aq-outcome.pending{background:#FBF6EA;border-color:#EAD9B4}
+.aq-outcome-note{margin-top:8px !important;font-size:.82rem !important;color:var(--muted) !important}
+.aq-retake-btn{margin-top:12px;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:10px 18px;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer;transition:.13s}
+.aq-retake-btn:hover{background:#242a31}
+.aq-retake-form{margin-top:12px}
+.aq-retake-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:.9rem;color:var(--ink);background:#fff;outline:none;resize:vertical}
+.aq-retake-form textarea:focus{border-color:var(--gold)}
+.aq-retake-err{margin-top:8px;color:var(--red);font-size:.84rem;font-weight:600}
+.aq-retake-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+.aq-retake-cancel{background:none;border:1px solid var(--line);border-radius:9px;padding:9px 16px;font:inherit;font-weight:600;font-size:.86rem;color:var(--ink-soft);cursor:pointer}
+.aq-retake-send{background:var(--gold-deep);color:#fff;border:none;border-radius:9px;padding:9px 18px;font:inherit;font-weight:700;font-size:.86rem;cursor:pointer}
+.aq-retake-send:disabled,.aq-retake-cancel:disabled{opacity:.5;cursor:default}
 /* details */
 .aq-dl{display:grid;grid-template-columns:110px 1fr;gap:9px 12px;margin:0;font-size:.9rem}
 .aq-dl dt{color:var(--muted);font-weight:600}
