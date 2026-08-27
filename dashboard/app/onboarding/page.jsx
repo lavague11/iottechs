@@ -1,12 +1,9 @@
 import { redirect } from "next/navigation";
-import { listApplications } from "../../lib/db";
-import { getSessionUser, getNotifSummary } from "../../lib/session";
-import OnboardingClient from "./onboarding-client";
 
-// Hiring portal — every application in one place. Admin/manager only (hiring is not a tech function).
+// The flat hiring list moved to the three-portal board at /hiring (Phase 0). The per-candidate
+// detail still lives at /onboarding/[appId]; only this bare list route redirects.
 export default async function OnboardingPage() {
-  const user = await getSessionUser();
-  if (!["admin", "manager"].includes(user.role)) redirect("/dashboard");
+  redirect("/hiring");
 
   const alerts = getNotifSummary(user.id);
   const rows = listApplications().map((a) => ({

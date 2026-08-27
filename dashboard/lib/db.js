@@ -7,6 +7,7 @@ import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint } from "./tool-data.js";
 import { optionTotals } from "./proposal.js";
+import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
 // Legacy accounts were a single unsalted SHA-256; verifyPw still accepts those so existing
@@ -560,6 +561,20 @@ function init() {
       detail     TEXT
     )
   `);
+  // Three-portal hiring engine: `status` is fine-grained (see lib/hiring.js), `portal` (1/2/3) is
+  // derived from it. Added alongside the legacy `stage`, which stays coarsely in sync. One-time
+  // backfill maps existing rows' stage → status/portal so the pipeline board shows them correctly.
+  const hiringCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
+  if (!hiringCols.includes("portal")) db.exec("ALTER TABLE applications ADD COLUMN portal INTEGER DEFAULT 1");
+  if (!hiringCols.includes("status")) {
+    db.exec("ALTER TABLE applications ADD COLUMN status TEXT");
+    db.exec(`UPDATE applications SET
+      status = CASE stage WHEN 'applied' THEN 'applied' WHEN 'reviewing' THEN 'assessment'
+                          WHEN 'interview' THEN 'phone' WHEN 'offer' THEN 'documents_pending'
+                          WHEN 'hired' THEN 'documents_pending' WHEN 'declined' THEN 'declined' ELSE 'applied' END,
+      portal = CASE WHEN stage IN ('offer','hired') THEN 2 ELSE 1 END
+      WHERE status IS NULL`);
+  }
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3261,7 +3276,10 @@ export function makeAppId(counter) { return `APP${Number(counter).toString(36).t
 
 function decorateApp(r) {
   if (!r) return null;
-  return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position), onboarding: safeJson(r.onboarding, null) };
+  const h = resolveHiring(r);   // { status, portal, meta } — derives from legacy stage if columns are unset
+  return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position),
+    onboarding: safeJson(r.onboarding, null),
+    portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral" };
 }
 
 export function logApplicationEvent(appId, { kind, detail, actor_role, actor_name } = {}) {
@@ -3324,6 +3342,22 @@ export function setApplicationStage(appId, stage, { actor_role, actor_name, reas
   db.prepare(`UPDATE applications SET stage = ?, decline_reason = COALESCE(?, decline_reason), updated_at = datetime('now','localtime')${extra} WHERE app_id = ? COLLATE NOCASE`)
     .run(stage, stage === "declined" ? (String(reason || "").slice(0, 400) || null) : null, String(appId));
   logApplicationEvent(cur.app_id, { kind: "stage", detail: `${appStageLabel(cur.stage)} → ${appStageLabel(stage)}`, actor_role, actor_name });
+  return getApplication(appId);
+}
+
+// Set the fine-grained hiring status. Derives the portal, mirrors a coarse legacy `stage` so older
+// screens stay correct, stamps hired_at/declined_at where relevant, and logs the transition.
+export function setApplicationStatus(appId, status, { actor_role, actor_name, reason } = {}) {
+  if (!HIRING_STATUSES.some((s) => s.key === status)) return null;
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const portal = portalOfStatus(status);
+  const stage = legacyStageFromStatus(status);
+  const extra = status === "documents_pending" && cur.stage !== "hired" ? ", hired_at = COALESCE(hired_at, datetime('now','localtime'))"
+              : status === "declined" ? ", declined_at = datetime('now','localtime')" : "";
+  db.prepare(`UPDATE applications SET status = ?, portal = ?, stage = ?, decline_reason = COALESCE(?, decline_reason), updated_at = datetime('now','localtime')${extra} WHERE app_id = ? COLLATE NOCASE`)
+    .run(status, portal, stage, status === "declined" ? (String(reason || "").slice(0, 400) || null) : null, String(appId));
+  logApplicationEvent(cur.app_id, { kind: "stage", detail: `${statusLabel(cur.status || cur.stage)} → ${statusLabel(status)}`, actor_role, actor_name });
   return getApplication(appId);
 }
 
