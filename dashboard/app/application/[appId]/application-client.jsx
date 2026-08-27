@@ -116,11 +116,11 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
         )}
 
         {/* Onboarding opens at offer — this is the "fill out your paperwork" hand-off */}
-        {["offer", "hired"].includes(app.stage) && (
-          <a className="aq-cta" href={`/welcome/${app.app_id}`}>
+        {app.portal === 2 && app.status !== "cleared" && (
+          <a className="aq-cta" href={`/compliance/${app.app_id}`}>
             <div>
-              <b>{onboardingDone ? "Your onboarding is complete" : "Finish your onboarding"}</b>
-              <span>{onboardingDone ? "Details saved and all agreements signed — nothing left to do." : "Your details, emergency contact, and three agreements to sign. About five minutes."}</span>
+              <b>You're hired — complete your requirements</b>
+              <span>Documents, agreements, W-9, and direct deposit. Do this before your first job.</span>
             </div>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </a>

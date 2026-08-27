@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveApplicationRef, getApplicationEvents, getStaffUsers } from "../../../lib/db";
+import { resolveApplicationRef, getApplicationEvents, getStaffUsers, getApplicationCompliance, sanitizeCompliance } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import AppReviewClient from "./app-review-client";
 
@@ -24,5 +24,6 @@ export default async function ApplicationReviewPage({ params }) {
   delete safe.applicant_pin;
   delete safe.resume_data;
 
-  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} />;
+  const compliance = sanitizeCompliance(getApplicationCompliance(app.app_id));
+  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} />;
 }

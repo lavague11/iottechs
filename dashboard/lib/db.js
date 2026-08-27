@@ -577,6 +577,7 @@ function init() {
   }
   if (!hiringCols.includes("assessment")) db.exec("ALTER TABLE applications ADD COLUMN assessment TEXT"); // Portal 1 pre-hire assessment blob (responses + score + flags + profile)
   if (!hiringCols.includes("steps")) db.exec("ALTER TABLE applications ADD COLUMN steps TEXT");           // Portal 1 evaluation scorecards { phone:{...}, in_person:{...}, sop:{...}, ride_along:{...} }
+  if (!hiringCols.includes("compliance")) db.exec("ALTER TABLE applications ADD COLUMN compliance TEXT"); // Portal 2 compliance blob { items:{...}, checks:{...} } — sensitive fields stored *_enc
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3372,6 +3373,36 @@ export function saveApplicationAssessment(appId, obj) {
   db.prepare("UPDATE applications SET assessment = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
     .run(JSON.stringify(obj || {}), String(appId));
   return getApplicationAssessment(appId);
+}
+
+// ── Portal 2 compliance ───────────────────────────────────────────────────
+export function getApplicationCompliance(appId) {
+  const r = db.prepare("SELECT compliance FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId));
+  return r ? safeJson(r.compliance, { items: {}, checks: {} }) : { items: {}, checks: {} };
+}
+function saveCompliance(appId, obj) {
+  db.prepare("UPDATE applications SET compliance = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(obj || { items: {}, checks: {} }), String(appId));
+}
+export function setComplianceItem(appId, key, patch, { actor_role, actor_name } = {}) {
+  const c = getApplicationCompliance(appId); c.items = c.items || {};
+  c.items[key] = { ...(c.items[key] || {}), ...patch, at: new Date().toISOString().slice(0, 19).replace("T", " ") };
+  saveCompliance(appId, c);
+  try { logApplicationEvent(appId, { kind: "note", detail: `Compliance · ${key} → ${patch.status || "updated"}`, actor_role, actor_name }); } catch {}
+  return c;
+}
+export function setComplianceCheck(appId, key, patch, { actor_role, actor_name } = {}) {
+  const c = getApplicationCompliance(appId); c.checks = c.checks || {};
+  c.checks[key] = { ...(c.checks[key] || {}), ...patch, at: new Date().toISOString().slice(0, 19).replace("T", " ") };
+  saveCompliance(appId, c);
+  try { logApplicationEvent(appId, { kind: "note", detail: `Check · ${key} → ${patch.status || "updated"}`, actor_role, actor_name }); } catch {}
+  return c;
+}
+// Strip any *_enc field before compliance data is sent to a browser (office or candidate).
+export function sanitizeCompliance(c) {
+  const clean = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k,
+    v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([kk]) => !kk.endsWith("_enc"))) : v]));
+  return { items: clean(c?.items), checks: clean(c?.checks) };
 }
 
 // Portal 1 evaluation scorecards, keyed by step (phone|in_person|sop|ride_along).

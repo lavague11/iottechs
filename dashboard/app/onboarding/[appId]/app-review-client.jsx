@@ -7,6 +7,7 @@ import AdminShell from "../../components/admin-shell";
 import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction } from "../actions";
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
+import ComplianceReview from "./compliance-review";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -38,7 +39,7 @@ function EventIcon({ kind }) {
 }
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 
-export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [] }) {
+export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -109,6 +110,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
 
         <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
         {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} canHire={user.role === "admin"} /></div>}
+        {app.portal === 2 && <div style={{ marginBottom: 14 }}><ComplianceReview appId={app.app_id} status={app.status} compliance={compliance} /></div>}
 
         <div className="ob-grid">
           {/* Application */}

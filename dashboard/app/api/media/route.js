@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { parseAccessToken } from "../../../lib/auth";
+import { parseAccessToken, parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { insertMedia } from "../../../lib/db";
 
@@ -58,6 +58,9 @@ async function principalName() {
   const acc = jar.get("iot_access")?.value;
   const at = acc ? await parseAccessToken(acc) : null;
   if (at?.role && at.role !== "customer") return at.role;   // tech/staff via PIN
+  const appTok = jar.get("iot_app")?.value;                 // a hiring candidate uploading their own compliance docs
+  const ap = appTok ? await parseSvcToken(appTok) : null;
+  if (ap?.svcId) return `applicant:${ap.svcId}`;
   return null;
 }
 

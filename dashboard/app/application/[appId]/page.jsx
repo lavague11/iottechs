@@ -78,6 +78,7 @@ export default async function ApplicationPage({ params }) {
     created_at: app.created_at,
     onboarding: app.onboarding || null,
     assessment_status: app.assessment?.status || null,   // null | in_progress | submitted | graded
+    portal: app.portal, status: app.status,
   };
 
   // The applicant sees their own milestones — not the office's private notes or ratings.
