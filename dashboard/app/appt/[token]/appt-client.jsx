@@ -44,7 +44,7 @@ export default function ApptClient({ token, event, invalid, mode = "change", who
   return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={S.head}><BrandLink style={{ color: "#C9A96E" }}><Wordmark height={18} twoTone={false} /></BrandLink></div>
+        <div style={S.head}><BrandLink style={{ color: "#F0E7D4" }}><Wordmark height={18} /></BrandLink></div>
         <div style={S.accent} />
         <div style={S.body}>
           {invalid ? (
