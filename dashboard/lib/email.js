@@ -116,7 +116,7 @@ export function renderEmail({ heading, intro, lines = [], ctaLabel, ctaUrl, foot
             ${footNote ? `<p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#8a909c;">${esc(footNote)}</p>` : ""}
           </td></tr>
           <tr><td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eef0f3;">
-            <p style="margin:0;font-size:12px;color:#9aa0ac;">IOT TECHS · Security & automation, professionally installed.</p>
+            <p style="margin:0;font-size:12px;color:#9aa0ac;">IOT TECHS · Make tomorrow safer today.</p>
           </td></tr>
         </table>
       </td></tr>

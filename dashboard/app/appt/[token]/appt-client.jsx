@@ -107,7 +107,7 @@ export default function ApptClient({ token, event, invalid, mode = "change", who
             </>
           )}
         </div>
-        <div style={S.foot}>IOT TECHS · Security &amp; automation, professionally installed.</div>
+        <div style={S.foot}>IOT TECHS · Make tomorrow safer today.</div>
       </div>
     </div>
   );

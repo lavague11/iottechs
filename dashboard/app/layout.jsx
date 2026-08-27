@@ -11,17 +11,17 @@ const fontMono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "70
 export const metadata = {
   metadataBase: new URL(process.env.APP_URL || "https://iot-techs.com"),
   title: "IOT TECHS · Project Dashboard",
-  description: "Security & automation, professionally installed. Track your project from survey to completion.",
+  description: "Make tomorrow safer today. Track your project from survey to completion.",
   openGraph: {
     title: "IOT TECHS",
-    description: "Security & automation, professionally installed.",
+    description: "Make tomorrow safer today.",
     siteName: "IOT TECHS",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "IOT TECHS",
-    description: "Security & automation, professionally installed.",
+    description: "Make tomorrow safer today.",
   },
 };
 
