@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
 import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction } from "../actions";
+import AssessmentResult from "./assessment-result";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -104,6 +105,8 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             <span className="ob-readout-l">{readoutLabel}</span>
           </div>
         </div>
+
+        <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
 
         <div className="ob-grid">
           {/* Application */}

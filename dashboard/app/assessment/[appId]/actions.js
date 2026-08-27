@@ -5,6 +5,7 @@ import { resolveApplicationRef, getApplicationAssessment, saveApplicationAssessm
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { scoreCore } from "../../../lib/assessment-bank";
+import { gradeAssessmentAI } from "../../../lib/assessment-grade";
 
 // The candidate holds an iot_app grant for THIS application; staff (admin/manager) may also act.
 async function authApp(appId) {
@@ -47,5 +48,15 @@ export async function submitAssessmentAction(appId, responses) {
   });
   if (["applied", "assessment"].includes(a.app.status)) setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
   try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 (explanations pending)`, actor_role: "system", actor_name: "Assessment" }); } catch {}
+  // Best-effort AI grading of the explanations + profile — never blocks the candidate's submit.
+  try { await gradeAssessmentAI(a.app.app_id); } catch {}
   return { ok: true };
+}
+
+// Office-triggered (re)grade — admin/manager only.
+export async function gradeAssessmentAction(appId) {
+  const user = await getSessionUser();
+  if (!user?.id || !["admin", "manager"].includes(user.role)) return { ok: false, error: "forbidden" };
+  const r = await gradeAssessmentAI(appId, { actor_role: user.role, actor_name: user.name });
+  return r;
 }
