@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Wordmark, TaglinePill } from "../components/brand";
+import AddressAutocomplete from "../components/address-autocomplete";
 
 // Default earliest-start = tomorrow, but never a Sunday (skip to Monday). Local date parts,
 // not toISOString, so it doesn't slip a day near midnight.
@@ -245,8 +246,8 @@ export default function ApplyClient() {
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
                       <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-zip">ZIP code</label>
-                      <input id="ap-zip" className="ap-in" value={address} onChange={(e) => setAddress(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))} placeholder="07093" inputMode="numeric" autoComplete="postal-code" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-address">Address</label>
+                      <AddressAutocomplete id="ap-address" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your address…" autoComplete="off" /></div>
                   </div>
                   <div className="ap-two">
                     <div className="ap-fld"><label className="ap-label" htmlFor="ap-exp">Experience</label>
