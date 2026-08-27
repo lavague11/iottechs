@@ -106,7 +106,7 @@ export function renderEmail({ heading, intro, lines = [], ctaLabel, ctaUrl, foot
       <tr><td align="center">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e8ec;">
           <tr><td style="background:#0B0F1A;padding:20px 28px;">
-            <span style="font-size:16px;font-weight:700;letter-spacing:.14em;color:#C9A96E;">IOT&nbsp;TECHS</span>
+            <span style="font-size:16px;font-weight:700;letter-spacing:.14em;color:#C9A96E;"><a href="https://iot-techs.com/go" style="color:inherit;text-decoration:none;">IOT&nbsp;TECHS</a></span>
           </td></tr>
           <tr><td style="padding:28px 28px 24px;">
             <h1 style="margin:0 0 14px;font-size:20px;line-height:1.3;color:#0B0F1A;">${esc(heading)}</h1>
@@ -411,7 +411,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#EDE8DE;"><tr><td align="center" style="padding:44px 14px;">
       <table role="presentation" class="container" cellpadding="0" cellspacing="0" width="600" style="width:600px; max-width:600px; background-color:#FBFAF6; border:1px solid #E3DDD0;">
         <tr><td align="center" style="padding:38px 50px 30px 50px;" class="px">
-          <div class="serif" style="font-size:23px; font-weight:600; letter-spacing:8px; color:#161821;">IOT&nbsp;TECHS</div>
+          <div class="serif" style="font-size:23px; font-weight:600; letter-spacing:8px; color:#161821;"><a href="https://iot-techs.com/go" style="color:inherit;text-decoration:none;">IOT&nbsp;TECHS</a></div>
           <div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:4px; color:#A79A80; margin-top:10px; text-transform:uppercase;">Security &amp; Automation</div>
           <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:22px;"><tr><td style="width:70px; height:1px; font-size:0; line-height:0; background-color:#B4945C;">&nbsp;</td></tr></table>
         </td></tr>
@@ -437,7 +437,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
             ? (cancel ? "This assignment was canceled." : "You're assigned to this job — tap <b>Available</b> to confirm you'll be there.<br>Can't make it? Tap Reschedule or reply to this note.")
             : (cancel ? "This appointment has been canceled.<br>Reply to this note or call" : "To reschedule or with any questions, simply reply to this note<br>or call")}${internal ? "" : ` <a href="tel:${SUPPORT_TEL}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">${SUPPORT_PHONE}</a>.`}</div></td></tr>
         <tr><td align="center" style="background-color:#161821; padding:30px 50px;" class="px">
-          <div class="serif" style="font-size:14px; font-weight:500; letter-spacing:5px; color:#FBFAF6;">IOT&nbsp;TECHS</div>
+          <div class="serif" style="font-size:14px; font-weight:500; letter-spacing:5px; color:#FBFAF6;"><a href="https://iot-techs.com/go" style="color:inherit;text-decoration:none;">IOT&nbsp;TECHS</a></div>
           <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 12px auto;"><tr><td style="width:40px; height:1px; background-color:#B4945C; font-size:0; line-height:0;">&nbsp;</td></tr></table>
           <div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; letter-spacing:2px; color:#8A8B95; line-height:1.9; text-transform:uppercase;">Cameras &middot; AV &middot; Networking &middot; Low-Voltage<br>Authorized through ADT &amp; SafeStreets</div>
         </td></tr>
