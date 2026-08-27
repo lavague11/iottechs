@@ -150,6 +150,9 @@ function init() {
   // Per-user PIN override (internal users). Owner rule: an internal user's project PIN is the
   // last 4 of THEIR phone; pin_custom (4 digits) overrides it when set. NULL = follow the phone.
   if (!uCols.includes("pin_custom"))   db.exec("ALTER TABLE users ADD COLUMN pin_custom TEXT");
+  // Technician certification, stamped when a candidate becomes an Approved Technician (Portal 3).
+  // { active, tier, badges:[], approved_at, from_app } — operations gates work-order eligibility on it.
+  if (!uCols.includes("tech_cert"))    db.exec("ALTER TABLE users ADD COLUMN tech_cert TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
 
@@ -2441,7 +2444,24 @@ export function resetUserPassword(userId, plainPassword) {
 }
 
 export function getUserById(id) {
-  return db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE id = ?").get(Number(id));
+  const r = db.prepare("SELECT id, name, username, email, phone, role, disabled, tech_cert FROM users WHERE id = ?").get(Number(id));
+  return r ? { ...r, tech_cert: safeJson(r.tech_cert, null) } : r;
+}
+
+// Technician certification stamped on the user at Approved Technician (Portal 3 hand-off).
+export function getTechCert(userId) {
+  const r = db.prepare("SELECT tech_cert FROM users WHERE id = ?").get(Number(userId));
+  return r ? safeJson(r.tech_cert, null) : null;
+}
+export function setTechCert(userId, cert) {
+  db.prepare("UPDATE users SET tech_cert = ? WHERE id = ?").run(cert ? JSON.stringify(cert) : null, Number(userId));
+  return getTechCert(userId);
+}
+// Does a tech hold every required qualification badge? (operations work-order gate)
+export function techEligible(cert, requiredBadges = []) {
+  if (!requiredBadges || !requiredBadges.length) return true;
+  const have = new Set((cert?.badges) || []);
+  return requiredBadges.every((b) => have.has(b));
 }
 
 // The customer account that owns a project — matched to the project's contact email, then
@@ -5407,7 +5427,7 @@ export function removeProjectAssignment(id) {
 }
 export function getStaffUsers() {
   // Returns all active users (staff + customers) so the project add-member search can find anyone.
-  return db.prepare("SELECT id, name, email, role, phone, username FROM users WHERE (disabled IS NULL OR disabled != 1) ORDER BY role, name").all().map(r=>({...r}));
+  return db.prepare("SELECT id, name, email, role, phone, username, tech_cert FROM users WHERE (disabled IS NULL OR disabled != 1) ORDER BY role, name").all().map(r=>({...r, tech_cert: safeJson(r.tech_cert, null)}));
 }
 
 export function getProjectsForUser(userId) {

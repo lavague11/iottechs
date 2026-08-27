@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { resolveApplicationRef, getApplication, getApplicationTraining, setTrainingModule, setTraining, setApplicationStatus, logApplicationEvent } from "../../../lib/db";
+import { resolveApplicationRef, getApplication, getApplicationTraining, setTrainingModule, setTraining, setApplicationStatus, logApplicationEvent, setTechCert } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { nextP3Status, FIELD_JOBS_REQUIRED, TRAINING_MODULES } from "../../../lib/hiring";
@@ -66,14 +66,20 @@ export async function setCertAction(appId, { tier, badges }) {
   const patch = {};
   if (tier !== undefined) patch.tier = tier || null;
   if (Array.isArray(badges)) patch.badges = badges;
-  setTraining(appId, patch, { actor_role: user.role, actor_name: user.name });
+  const t = setTraining(appId, patch, { actor_role: user.role, actor_name: user.name });
+  // If they're already an Approved Technician, keep the operations-side cert in sync.
+  const app = getApplication(appId);
+  if (app?.status === "approved" && app?.user_id) setTechCert(app.user_id, { active: true, tier: t.tier || "technician", badges: t.badges || [], approved_at: app.hired_at || null, from_app: appId });
   return { ok: true };
 }
-// Final certification → Approved Technician (terminal). Sets the tier and status.
+// Final certification → Approved Technician (terminal). Sets the tier/status AND stamps the staff
+// account with the certification — the hand-off into operations (dispatch/work orders gate on it).
 export async function approveTechnicianAction(appId, tier = "technician") {
   const user = await requireStaff(); if (!user) return { ok: false, error: "forbidden" };
-  setTraining(appId, { tier, certified_at: new Date().toISOString() }, { actor_role: user.role, actor_name: user.name });
+  const t = setTraining(appId, { tier, certified_at: new Date().toISOString() }, { actor_role: user.role, actor_name: user.name });
   setApplicationStatus(appId, "approved", { actor_role: user.role, actor_name: user.name });
-  logApplicationEvent(appId, { kind: "note", detail: `Approved Technician (${tier})`, actor_role: user.role, actor_name: user.name });
-  return { ok: true, status: "approved" };
+  const app = getApplication(appId);
+  if (app?.user_id) setTechCert(app.user_id, { active: true, tier, badges: t.badges || [], approved_at: new Date().toISOString(), from_app: appId });
+  logApplicationEvent(appId, { kind: "note", detail: `Approved Technician (${tier})${app?.user_id ? "" : " — no linked account to activate"}`, actor_role: user.role, actor_name: user.name });
+  return { ok: true, status: "approved", activated: !!app?.user_id };
 }

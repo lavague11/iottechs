@@ -13,6 +13,8 @@ const effectivePin = (u) => (u.pin_custom ? String(u.pin_custom) : phoneLast4(u.
 
 const ALL_ROLES  = ["admin", "manager", "sales", "tech", "customer"];
 const ROLE_LABEL = { admin: "Admin", manager: "Manager", sales: "Sales", tech: "Tech", customer: "Customer" };
+const TIER_LABEL = { apprentice: "Approved Apprentice", technician: "Approved Technician", lead: "Approved Lead" };
+const QUAL_LABEL = { camera: "Camera", access_control: "Access", sound: "Sound", alarm: "Alarm", networking: "Networking", vehicle: "Vehicle" };
 const ROLE_COLOR = USER_ROLE_COLOR;
 
 function capitalize(s) { return String(s || "").trim().split(/\s+/).map(w => w[0]?.toUpperCase() + w.slice(1).toLowerCase()).join(" "); }
@@ -216,6 +218,12 @@ function UserRow({ user: initUser, actorRole, selfId, selected, onToggleSelect }
             <div>
               <div className="un">{user.name}{disabled && <span className="chip" style={{ marginLeft: 8, background: "var(--red-soft)", color: "var(--red)" }}>Disabled</span>}{!isLocked && <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: ".8rem" }}>✎</span>}</div>
               <div className="uh">{user.username || "—"}</div>
+              {user.tech_cert?.active && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, marginTop: 4 }}>
+                  <span style={{ fontSize: ".64rem", fontWeight: 700, letterSpacing: ".03em", textTransform: "uppercase", color: "#2E7355", background: "#E4F0EA", borderRadius: 999, padding: "2px 8px" }}>{TIER_LABEL[user.tech_cert.tier] || "Approved"}</span>
+                  {(user.tech_cert.badges || []).map((b) => <span key={b} style={{ fontSize: ".64rem", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 999, padding: "1px 7px" }}>{QUAL_LABEL[b] || b}</span>)}
+                </div>
+              )}
             </div>
           </div>
         </td>

@@ -1430,6 +1430,9 @@ function PersonSearch({ candidates, value, onSelect, placeholder }) {
   );
 }
 
+// Technician qualification labels — shown when assigning so you can see what a tech is cleared for.
+const TECH_QUAL_LABEL = { camera: "Camera", access_control: "Access", sound: "Sound", alarm: "Alarm", networking: "Networking", vehicle: "Vehicle" };
+
 // Unified add-member search: matches staff by name/email, and lets you invite a new
 // external customer by email. Dropdown only appears after typing.
 function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
@@ -1471,8 +1474,13 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
           {matches.map(u => (
             <button key={u.id} type="button" className="pv-psearch-opt pv-psearch-opt-row"
               onMouseDown={e => { e.preventDefault(); onPickStaff(u); setQ(""); setOpen(false); }}>
-              <span className="pv-psearch-name">{u.name || u.email}</span>
-              {u.role && <span className={`pv-ap-role pv-role-${u.role}`}>{u.role}</span>}
+              <span className="pv-psearch-name">{u.name || u.email}
+                {u.tech_cert?.active && (u.tech_cert.badges || []).length > 0 &&
+                  <span style={{ display: "block", fontSize: ".68rem", color: "var(--muted)", marginTop: 2 }}>{u.tech_cert.badges.map(b => TECH_QUAL_LABEL[b] || b).join(" · ")}</span>}
+              </span>
+              {u.tech_cert?.active
+                ? <span className="pv-ap-role" style={{ background: "#E4F0EA", color: "#2E7355" }}>{u.tech_cert.tier === "lead" ? "lead" : u.tech_cert.tier === "apprentice" ? "apprentice" : "approved"}</span>
+                : u.role && <span className={`pv-ap-role pv-role-${u.role}`}>{u.role}</span>}
             </button>
           ))}
           {showCust && (
