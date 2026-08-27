@@ -2950,12 +2950,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                           return;
                         }
                         setAddSaving(true);
-                        const r = await addAssignmentAction(lp.access_id, {
-                          userId: selStaff?.id??null,
-                          userName: selStaff?.name??null,
-                          userEmail: selStaff ? (selStaff.email??null) : addEmail,
-                          role
-                        });
+                        const payload = { userId: selStaff?.id??null, userName: selStaff?.name??null, userEmail: selStaff ? (selStaff.email??null) : addEmail, role };
+                        let r = await addAssignmentAction(lp.access_id, payload);
+                        if (r?.gate) {
+                          if (window.confirm(`${r.techName} isn't certified for ${r.missing.join(", ")} — the qualification this job needs. Assign anyway?`)) {
+                            r = await addAssignmentAction(lp.access_id, { ...payload, override: true });
+                          } else { setAddSaving(false); return; }
+                        }
                         if (r.ok && !r.existed) {
                           setLocalAssignments(prev=>[...prev, {id:r.id, user_id:selStaff?.id??null, user_name:selStaff?.name??null, user_email:selStaff?(selStaff.email??null):addEmail, role}]);
                         }

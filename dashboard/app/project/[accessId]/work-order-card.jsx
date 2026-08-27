@@ -55,7 +55,12 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
     const u = staffUsers.find((x) => String(x.id) === String(pick));
     if (!u || busy) return;
     setBusy(true); setErr(null);
-    const r = await addAssignmentAction(accessId, { userId: u.id, userName: u.name, userEmail: u.email, role: "tech" });
+    let r = await addAssignmentAction(accessId, { userId: u.id, userName: u.name, userEmail: u.email, role: "tech" });
+    if (r?.gate) {
+      if (window.confirm(`${r.techName} isn't certified for ${r.missing.join(", ")} — the qualification this job needs. Assign anyway?`)) {
+        r = await addAssignmentAction(accessId, { userId: u.id, userName: u.name, userEmail: u.email, role: "tech", override: true });
+      } else { setBusy(false); setPick(""); return; }
+    }
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     onAssignmentsChange?.((prev) => [...prev, { id: r.id, user_id: u.id, user_name: u.name, user_email: u.email, role: "tech" }]);

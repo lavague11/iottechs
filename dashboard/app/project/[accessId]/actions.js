@@ -408,7 +408,7 @@ export async function logAddendumAction(accessId, { verb, title, amount }) {
   return { ok: true };
 }
 
-export async function addAssignmentAction(accessId, { userId, userName, userEmail, role }) {
+export async function addAssignmentAction(accessId, { userId, userName, userEmail, role, override }) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";
   const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
@@ -416,8 +416,21 @@ export async function addAssignmentAction(accessId, { userId, userName, userEmai
   const { parseToken } = await import("../../../lib/auth");
   const tok = await parseToken(raw.trim());
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
-  const { addProjectAssignment } = await import("../../../lib/db");
-  const result = addProjectAssignment(accessId, { userId, userName, userEmail, role, grantedBy: tok.id ?? null });
+  const db = await import("../../../lib/db");
+  // Qualification gate — a CERTIFIED tech must hold the badge this project's service needs. Legacy/
+  // uncertified techs pass through; an admin can override with confirmation.
+  if (role === "tech" && !override) {
+    const { requiredQualsForService, QUALIFICATIONS } = await import("../../../lib/hiring");
+    const project = db.getJobByAccessId(accessId);
+    const required = requiredQualsForService(project?.service_code);
+    const cert = db.getTechCert(userId);
+    if (required.length && cert?.active && !db.techEligible(cert, required)) {
+      const have = new Set(cert.badges || []);
+      const missing = required.filter((b) => !have.has(b)).map((b) => (QUALIFICATIONS.find((q) => q.key === b)?.label || b));
+      return { ok: false, gate: true, missing, techName: userName };
+    }
+  }
+  const result = db.addProjectAssignment(accessId, { userId, userName, userEmail, role, grantedBy: tok.id ?? null });
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, ...result };

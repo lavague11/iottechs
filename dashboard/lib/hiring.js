@@ -153,6 +153,14 @@ export const QUALIFICATIONS = [
   { key: "alarm", label: "Alarm" }, { key: "networking", label: "Networking" }, { key: "vehicle", label: "Vehicle Authorized" },
 ];
 
+// Which qualification badge a project's service type demands of the tech doing it. A certified
+// technician must hold these to be assigned (the office can override). Legacy/uncertified techs
+// aren't gated. Vehicle is a separate authorization, not service-derived.
+export const SERVICE_QUALS = {
+  SC: ["camera"], SS: ["sound"], AS: ["alarm"], AC: ["access_control"], WX: ["networking"], TP: ["networking"], MX: [], CX: [],
+};
+export function requiredQualsForService(code) { return SERVICE_QUALS[String(code || "").toUpperCase()] || []; }
+
 export const P3_FLOW = ["new_hire", "onboarding", "training", "supervised", "final_cert", "approved"];
 export function nextP3Status(cur) { const i = P3_FLOW.indexOf(cur); return i >= 0 && i < P3_FLOW.length - 1 ? P3_FLOW[i + 1] : cur; }
 
