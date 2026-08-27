@@ -1818,6 +1818,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       return `${d}, ${t}`;
     } catch { return fmtDate(ev?.date); }
   }
+  // Staff-only RSVP tally for a booked appointment → " · 2/3 confirmed" suffix on the header chip.
+  // Empty when no invited roster is stamped on the event yet (older bookings / never sent).
+  function apptConfirms(ev) {
+    const invited = Array.isArray(ev?.invited) ? ev.invited : [];
+    if (!invited.length) return "";
+    const confs = ev.confirmations && typeof ev.confirmations === "object" ? ev.confirmations : {};
+    const going = invited.filter((r) => confs[String(r.email || "").trim().toLowerCase()] || (r.role === "customer" && ev.confirmed_at)).length;
+    return ` · ${going}/${invited.length} confirmed`;
+  }
   // Which kind the action-bar "Schedule" button books, based on the phase in view.
   const schedKindNow = masterToPhaseKey(viewingStage) === "ph_install" ? "install" : "survey";
   const openSchedule = (kind) => setSchedModal(kind || schedKindNow);
@@ -1845,7 +1854,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // Consulting: book the site-survey visit from the header before there's anything to submit.
     if (!f.survey_has && !f.survey_submitted && ["inquiry", "site_survey"].includes(custStage)) {
       const a = pickAppt("survey");
-      return a ? { label: `Survey · ${apptLabel(a)}`, schedule: "survey", muted: true }
+      return a ? { label: `Survey · ${apptLabel(a)}${apptConfirms(a)}`, schedule: "survey", muted: true }
                : { label: "Schedule survey", schedule: "survey" };
     }
     if (f.survey_has && !f.survey_submitted)        return { label: "Submit site survey",       target: "site_survey",      spot: "Site Survey" };
@@ -1859,7 +1868,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (f.proposal_status === "accepted" && !f.deposit_recorded) return { label: "Awaiting deposit",   target: "approval_deposit", spot: "Approval & Deposit", muted: true };
     if (f.deposit_recorded && custStage === "schedule") {
       const a = pickAppt("install") || pickUpcomingAny();   // surface any upcoming visit if the install isn't booked yet
-      return a ? { label: `${apptKindOf(a) === "survey" ? "Survey" : "Install"} · ${apptLabel(a)}`, schedule: "install", muted: true }
+      return a ? { label: `${apptKindOf(a) === "survey" ? "Survey" : "Install"} · ${apptLabel(a)}${apptConfirms(a)}`, schedule: "install", muted: true }
                : { label: "Schedule install", schedule: "install" };
     }
     return null;
