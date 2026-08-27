@@ -74,7 +74,7 @@ export default function WelcomeClient({ app, staff }) {
   return (
     <div className="wl-root">
       <header className="wl-top">
-        <a href="/" className="wl-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
+        <a href="/go" className="wl-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <div className="wl-top-right">
           <span className="wl-id mono">{app.app_id}</span>
           <a href={`/application/${app.app_id}`} className="wl-exit">My application</a>

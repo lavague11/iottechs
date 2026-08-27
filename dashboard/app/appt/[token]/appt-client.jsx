@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { requestAppointmentChangeAction, confirmAppointmentAction } from "../actions";
+import { Wordmark, BrandLink } from "../../components/brand";
 
 function whenStr(ev) {
   if (!ev?.date) return "";
@@ -43,7 +44,7 @@ export default function ApptClient({ token, event, invalid, mode = "change", who
   return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={S.head}><span style={S.brand}>IOT&nbsp;TECHS</span></div>
+        <div style={S.head}><BrandLink style={{ color: "#C9A96E" }}><Wordmark height={18} twoTone={false} /></BrandLink></div>
         <div style={S.accent} />
         <div style={S.body}>
           {invalid ? (

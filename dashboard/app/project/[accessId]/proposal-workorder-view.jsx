@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
 import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
-import { TaglinePill } from "../../components/brand";
+import { TaglinePill, Wordmark } from "../../components/brand";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -68,7 +68,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
       <div className="pwo-root">
         <style>{PWO_CSS}</style>
         <div className="pwo-header">
-          <div className="pwo-hd-left"><span className="pwo-brand">IOT TECHS</span><TaglinePill tone="dark" className="pwo-brand-pill" /></div>
+          <div className="pwo-hd-left"><a href="/go" className="pwo-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a><TaglinePill tone="dark" className="pwo-brand-pill" /></div>
           <span className="pwo-doctag">Work Order</span>
         </div>
         <div className="pwo-empty">No active work order yet — it builds out here once the office sends the proposal to the customer.</div>
@@ -129,7 +129,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
 
       <div className="pwo-header">
         <div className="pwo-hd-left">
-          <span className="pwo-brand">IOT TECHS</span>
+          <a href="/go" className="pwo-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
           <TaglinePill tone="dark" className="pwo-brand-pill" />
           <span className="pwo-contact">(646) 396-0775 · support@iot-techs.com</span>
         </div>

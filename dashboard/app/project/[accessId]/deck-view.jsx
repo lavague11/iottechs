@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import AddressAutocomplete from "../../components/address-autocomplete";
+import { Wordmark } from "../../components/brand";
 
 /*
   DeckView — the redesigned project page shell (horizontal stage deck).
@@ -195,7 +196,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     <div className="dv-shell" data-tint={cur.tint || "ink"}>
       {/* top bar */}
       <header className="dv-top">
-        <a className="dv-logo" href={logoHref} title="IOT TECHS">IOT <em>TECHS</em></a>
+        <a className="dv-logo" href="/go" title="IOT TECHS" aria-label="IOT TECHS home"><Wordmark height={16} /></a>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>

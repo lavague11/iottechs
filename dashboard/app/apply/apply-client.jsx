@@ -161,7 +161,7 @@ export default function ApplyClient() {
         {/* LEFT — brand / pitch */}
         <aside className="ap-aside">
           <div className="ap-aside-top">
-            <a href="/" className="ap-brand" aria-label="IOT TECHS home"><Wordmark height={26} techsColor="#A8842F" /></a>
+            <a href="/go" className="ap-brand" aria-label="IOT TECHS home"><Wordmark height={26} techsColor="#A8842F" /></a>
             <TaglinePill tone="light" className="ap-aside-pill" />
           </div>
           <div className="ap-aside-body">

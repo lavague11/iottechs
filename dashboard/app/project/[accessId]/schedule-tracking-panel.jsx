@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getToolDataAction, saveToolDataAction, trackPackageAction } from "./proposal-actions";
 import ReceivingChecklist from "./receiving-checklist";
+import { Wordmark } from "../../components/brand";
 
 // Fulfillment-stage panel. For the customer it's the "what happens next" page right after
 // their deposit: the next appointment, the equipment timeline (1–2 days processing, 3–5 days
@@ -107,8 +108,8 @@ function CinematicTracking({ tracking }) {
     <div className="cin-card">
       {/* header strip */}
       <div className="cin-head">
-        <div className="cin-brandbox">IOT</div>
-        <div className="cin-brandtxt"><b>IOT TECHS</b><span>Tracking Center</span></div>
+        <a href="/go" className="cin-brandbox" aria-label="IOT TECHS home" style={{ textDecoration: "none" }}>IOT</a>
+        <div className="cin-brandtxt"><a href="/go" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={14} /></a><span>Tracking Center</span></div>
         <span className="cin-live">LIVE</span>
       </div>
 

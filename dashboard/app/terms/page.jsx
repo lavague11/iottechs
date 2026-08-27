@@ -85,9 +85,9 @@ export default function TermsPage() {
     <div className="tc-root">
       <style>{TC_CSS}</style>
       <header className="tc-top">
-        <Link href="/" className="tc-brand" aria-label="IOT TECHS home">
+        <a href="/go" className="tc-brand" aria-label="IOT TECHS home">
           <Wordmark height={24} />
-        </Link>
+        </a>
         <Link href="/" className="tc-back">← Home</Link>
       </header>
 

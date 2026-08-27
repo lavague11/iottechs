@@ -60,7 +60,7 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
   return (
     <div className="ri-root">
       <header className="ri-top">
-        <a href="/" className="ri-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
+        <a href="/go" className="ri-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <a href="/" className="ri-x" aria-label="Close">✕</a>
       </header>
 

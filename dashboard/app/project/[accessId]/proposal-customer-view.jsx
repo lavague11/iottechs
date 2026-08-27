@@ -5,7 +5,7 @@ import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction } from "./proposal-actions";
-import { TaglinePill } from "../../components/brand";
+import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -226,7 +226,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         <style>{PCV_CSS}</style>
         <div className="pcv-header">
           <div className="pcv-hd-left">
-            <span className="pcv-brand">IOT TECHS</span>
+            <a href="/go" className="pcv-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
             <TaglinePill tone="dark" className="pcv-pill" />
           </div>
           <span className="pcv-doctag">Proposal</span>
@@ -359,7 +359,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-foldwrap">
       <div className="pcv-header">
         <div className="pcv-hd-left">
-          <span className="pcv-brand">IOT TECHS</span>
+          <a href="/go" className="pcv-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
           <span className="pcv-tagline">Secure Tomorrow. Today.</span>
           <span className="pcv-contact">(646) 396-0775 · support@iot-techs.com · www.iot-techs.com</span>
         </div>

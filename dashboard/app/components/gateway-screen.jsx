@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import FaceScan from "./face-scan";
+import { Wordmark, BrandLink } from "./brand";
 
 // Shared secure-access gateway: animated starfield keypad + Face ID + network diagnostics.
 // Used by the project gate (gateway-client) and the ADT account gate. attemptAccess({pinValue|
@@ -382,7 +383,7 @@ export function GatewayScreen({ onAuthenticated, attemptAccess }) {
               <rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3"/><circle cx="12" cy="15.5" r="1.4"/>
             </svg>
           </div>
-          <h1>IOT&nbsp;TECHS</h1>
+          <h1><BrandLink style={{ justifyContent: "center" }}><Wordmark height={30} techsColor="#C9A96E" /></BrandLink></h1>
           <div className="gw2-subtag">Secure Access</div>
         </div>
 

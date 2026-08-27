@@ -57,6 +57,30 @@ export function Wordmark({ height = 22, twoTone = true, className = "", style, t
   );
 }
 
+// Every IOT TECHS logo is clickable and goes to the SAME smart destination: /go decides home vs.
+// dashboard from the visitor's session (logged-in staff → /dashboard, everyone else → home). Wrap
+// a <Wordmark/> (or a wordmark+tagline lockup) in this so the whole app behaves identically. Plain
+// <a> (not next/link) so it also works from static HTML and never prefetches the redirect route.
+export function BrandLink({ children, className = "", style, title = "IOT TECHS — home" }) {
+  return (
+    <a href="/go" aria-label="IOT TECHS — home" title={title} className={`brand-link ${className}`}
+       style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", color: "inherit", ...style }}>
+      {children}
+    </a>
+  );
+}
+
+// Turn-key logo: the wordmark, optionally with the tagline beneath, already wrapped in the smart
+// link. Use this for any header/masthead so a page gets the mark + click-to-home in one tag.
+export function BrandLogo({ height = 26, twoTone = true, techsColor, tagline = false, taglineTone = "dark", className = "", style, linkStyle }) {
+  return (
+    <BrandLink className={className} style={{ flexDirection: "column", alignItems: "flex-start", gap: 5, ...linkStyle }}>
+      <Wordmark height={height} twoTone={twoTone} techsColor={techsColor} />
+      {tagline && <TaglinePill tone={taglineTone} style={style} />}
+    </BrandLink>
+  );
+}
+
 // The pill-shaped tagline badge ("Make Tomorrow Safer Today" + a small globe glyph) wherever
 // there's room for a tagline. `tone` picks a readable default color for dark vs light surfaces;
 // pass `className`/`style` to fold into a surface's existing typography instead.

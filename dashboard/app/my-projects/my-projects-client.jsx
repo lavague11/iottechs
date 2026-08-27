@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
 import { PHASES, phasesForType, masterToPhaseKey, phaseLabelOf } from "../../lib/spec";
-import { TaglinePill } from "../components/brand";
+import { TaglinePill, Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 
 // Customers see a 5-phase journey (Consulting · Proposal · Install · Closeout · Completion) — the
@@ -692,9 +692,9 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         {/* NAV */}
         <header className="cp-nav">
           <div className="cp-wrap cp-nav-inner">
-            <Link href="/" className="cp-brand">
-              <span className="bname">IOT <b>TECHS</b></span>
-            </Link>
+            <a href="/go" className="cp-brand" aria-label="IOT TECHS home">
+              <span className="bname"><Wordmark height={22} /></span>
+            </a>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div className="cp-notif-wrap" ref={notifRef}>
                 <button className="cp-notif-btn" onClick={e=>{e.stopPropagation();setNotifOpen(o=>!o);}}>
@@ -888,10 +888,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
 
         <footer className="cp-footer">
           <div className="cp-wrap cp-foot-inner">
-            <Link href="/" className="cp-brand" style={{ gap: 12 }}>
-              <span className="bname">IOT <b>TECHS</b></span>
+            <a href="/go" className="cp-brand" style={{ gap: 12 }} aria-label="IOT TECHS home">
+              <span className="bname"><Wordmark height={20} /></span>
               <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)" }} />
-            </Link>
+            </a>
             <div>© 2026 IOT TECHS · La Vague Inc.</div>
             <div><Link href="/">Help</Link> · <Link href="/">Privacy</Link></div>
           </div>

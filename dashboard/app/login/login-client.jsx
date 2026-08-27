@@ -21,6 +21,7 @@ function PwInput({ className = "lg-input", ...props }) {
 }
 import FaceScan from "../components/face-scan";
 import { GW2_LIGHT_CSS } from "../components/gateway-screen";
+import { Wordmark, BrandLink } from "../components/brand";
 
 function speedStatus(mbps) {
   const n = parseFloat(mbps);
@@ -262,7 +263,7 @@ export default function LoginClient({ next }) {
               <rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3"/><circle cx="12" cy="15.5" r="1.4"/>
             </svg>
           </div>
-          <h1><a href="/" aria-label="IOT TECHS home" style={{ color: "inherit", textDecoration: "none" }}>IOT&nbsp;TECHS</a></h1>
+          <h1><BrandLink style={{ justifyContent: "center" }}><Wordmark height={30} techsColor="#C9A96E" /></BrandLink></h1>
           <div className="gw2-subtag">Secure Access</div>
         </div>
 

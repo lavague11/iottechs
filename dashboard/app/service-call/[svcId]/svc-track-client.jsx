@@ -109,7 +109,7 @@ export default function SvcTrackClient({ call, events = [], diagnostics = [], vi
   return (
     <div className="st-root">
       <header className="st-top">
-        <a href="/" className="st-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
+        <a href="/go" className="st-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <div className="st-top-right">
           <span className="st-id mono">{call.svc_id}</span>
           {call.svc_project_id && <a href={`/project/${call.svc_project_id}`} className="st-exit st-exit-gold">Full portal</a>}

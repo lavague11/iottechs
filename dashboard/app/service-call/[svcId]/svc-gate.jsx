@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { startPinCanvas } from "../../project/[accessId]/gateway-pin-canvas";
+import { Wordmark, BrandLink } from "../../components/brand";
 
 // Customer service-call PIN gate — the SAME animated starfield keypad the project gateway uses
 // (gw2-* structural CSS is global; GW2_LIGHT_CSS below is the light-card override, copied from the
@@ -124,7 +125,7 @@ export default function SvcGate({
               <rect x="4" y="10.5" width="16" height="10" rx="2.5" /><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3" /><circle cx="12" cy="15.5" r="1.4" />
             </svg>
           </div>
-          <h1>IOT&nbsp;TECHS</h1>
+          <h1><BrandLink style={{ justifyContent: "center" }}><Wordmark height={30} techsColor="#C9A96E" /></BrandLink></h1>
           <div className="gw2-subtag">{kicker} · {svcId}</div>
         </div>
 

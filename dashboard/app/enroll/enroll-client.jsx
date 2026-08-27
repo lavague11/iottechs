@@ -256,7 +256,7 @@ export default function EnrollClient({ user, alerts, current, invite }) {
   if (invite) {
     return (
       <div className="apx enr-standalone" style={{ minHeight: "100vh" }}>
-        <div className="enr-topbar"><a href="/" aria-label="IOT TECHS"><Wordmark height={24} /></a></div>
+        <div className="enr-topbar"><a href="/go" aria-label="IOT TECHS"><Wordmark height={24} /></a></div>
         {body}
       </div>
     );

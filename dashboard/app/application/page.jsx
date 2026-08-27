@@ -41,7 +41,7 @@ export default function TrackApplicationPage() {
   return (
     <div className="tr-root">
       <style>{CSS}</style>
-      <a href="/" className="tr-home" aria-label="IOT TECHS home"><Wordmark height={26} /></a>
+      <a href="/go" className="tr-home" aria-label="IOT TECHS home"><Wordmark height={26} /></a>
       <div className="tr-card">
         <div className="tr-ic">
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>

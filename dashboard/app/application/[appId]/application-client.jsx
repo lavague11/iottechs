@@ -64,7 +64,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
   return (
     <div className="aq-root">
       <header className="aq-top">
-        <a href="/" className="aq-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
+        <a href="/go" className="aq-brand" aria-label="IOT TECHS home"><Wordmark height={24} /></a>
         <div className="aq-top-right">
           <span className="aq-id mono">{app.app_id}</span>
           <a href="/" className="aq-exit">Home</a>
