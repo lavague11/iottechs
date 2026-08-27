@@ -189,7 +189,7 @@ const CSS = `
   --gold:#C9A96E;--gold-deep:#A8842F;--bg-soft:#F4F4F2;--raise:#FBFBFA;--green:#2E7D5B;--red:#C4553D;
   min-height:100vh;background:var(--bg-soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55}
 .aq-top{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin:0 auto;padding:20px 20px 0}
-.aq-brand{display:inline-flex}
+.aq-brand{display:inline-flex;color:var(--ink)}
 .aq-top-right{display:flex;align-items:center;gap:14px}
 .aq-id{font-size:.8rem;font-weight:800;color:var(--gold-deep);letter-spacing:.5px}
 .aq-exit{color:var(--ink);text-decoration:none;font-size:.84rem;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:8px 16px;background:#fff}
@@ -259,5 +259,9 @@ const CSS = `
 .aq-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .aq-help{text-align:center;color:var(--muted);font-size:.84rem;margin:8px 0 0}
 .mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;font-weight:700}
-@media(max-width:560px){.aq-hero h1{font-size:1.45rem}.aq-dl{grid-template-columns:1fr;gap:2px 0}.aq-dl dd{margin-bottom:8px}}
+@media(max-width:560px){.aq-hero h1{font-size:1.45rem}.aq-dl{grid-template-columns:1fr;gap:2px 0}.aq-dl dd{margin-bottom:8px}
+  /* The four step labels can't fit side-by-side on a phone — they truncate into an unreadable,
+     cramped row. Drop the label row and lean on the bars + the readout, which already names the
+     current step. Give the bars a little more height so they read as the progress indicator. */
+  .aq-rail{gap:14px;padding:16px 18px}.aq-track{gap:7px}.aq-lab{display:none}.aq-bar{height:3px}}
 `;
