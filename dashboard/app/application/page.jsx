@@ -68,26 +68,28 @@ export default function TrackApplicationPage() {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
-.tr-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--soft:#f5f6f9;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#b08f4f;
-  min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%,#f0f2f7 0%,#eceef3 60%);color:var(--ink);
-  font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:26px 18px}
+/* Deck design system: Instrument Sans (--font-sans) + JetBrains Mono (--font-mono), both loaded
+   globally; warm-paper palette, soft gold. Matches /apply and the candidate portals. */
+.tr-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A6ABB1;--line:#E4E4DF;--line-soft:#EDEDE9;
+  --soft:#F4F4F2;--raise:#FBFBFA;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#A8842F;
+  min-height:100vh;background:radial-gradient(900px 460px at 50% -12%,rgba(201,169,110,.12),transparent 62%),var(--soft);color:var(--ink);
+  font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:26px 18px}
 .tr-home{display:inline-flex;color:var(--ink)}
-.tr-card{width:100%;max-width:420px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:32px 30px;
-  box-shadow:0 40px 90px -44px rgba(14,19,32,.5);text-align:center}
+.tr-card{width:100%;max-width:430px;background:var(--raise);border:1px solid var(--line);border-radius:16px;padding:32px 30px;
+  box-shadow:0 1px 2px rgba(16,20,24,.04),0 26px 60px -32px rgba(16,20,24,.3);text-align:center}
 .tr-ic{width:56px;height:56px;margin:0 auto 16px;border-radius:15px;display:grid;place-items:center;
-  background:#fdfaf2;border:1px solid #eeddb9;color:var(--gold-deep)}
-.tr-card h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:1.5rem;margin:0 0 6px}
+  background:#F3ECDD;border:1px solid rgba(201,169,110,.4);color:var(--gold-deep)}
+.tr-card h1{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.024em;font-size:1.5rem;margin:0 0 6px;color:var(--ink)}
 .tr-sub{color:var(--muted);font-size:.92rem;margin:0 0 22px}
-.tr-lbl{display:block;text-align:left;font-weight:700;font-size:.8rem;color:#2a3040;margin:14px 0 7px}
+.tr-lbl{display:block;text-align:left;font-weight:700;font-size:.8rem;color:var(--ink-soft);margin:16px 0 7px}
 .tr-hint{font-weight:500;color:var(--muted)}
-.tr-in{width:100%;padding:13px 15px;border:1.5px solid var(--line);border-radius:12px;font-size:1rem;font-family:inherit;
+.tr-in{width:100%;padding:13px 15px;border:1px solid var(--line);border-radius:11px;font-size:1rem;font-family:inherit;
   background:var(--soft);color:var(--ink);outline:none;transition:border-color .15s,background .15s,box-shadow .15s;letter-spacing:.06em}
 .tr-in:focus{border-color:var(--gold);background:#fff;box-shadow:0 0 0 3px rgba(201,169,110,.14)}
-.tr-in.mono{font-family:Menlo,Consolas,monospace}
-.tr-err{margin-top:14px;text-align:left;color:#c9382b;background:#fdecec;border:1px solid #f2c4c4;border-radius:11px;padding:10px 13px;font-size:.86rem;font-weight:600}
+.tr-in.mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+.tr-err{margin-top:14px;text-align:left;color:#C4553D;background:#F6E7E2;border:1px solid transparent;border-radius:10px;padding:10px 13px;font-size:.86rem;font-weight:600}
 .tr-btn{width:100%;margin-top:20px;padding:15px 22px;border:none;border-radius:12px;font-weight:800;font-size:.96rem;font-family:inherit;cursor:pointer;
-  background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#0e1320;transition:transform .15s,box-shadow .2s}
+  background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--ink);transition:transform .15s,box-shadow .2s}
 .tr-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 16px 30px -12px rgba(176,143,79,.7)}
 .tr-btn:disabled{opacity:.6;cursor:default}
 .tr-foot{margin:20px 0 0;font-size:.86rem;color:var(--muted)}
