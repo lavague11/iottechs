@@ -8,6 +8,7 @@ import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardi
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
+import TrainingPanel from "./training-panel";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -111,6 +112,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
         <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
         {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} canHire={user.role === "admin"} /></div>}
         {app.portal === 2 && <div style={{ marginBottom: 14 }}><ComplianceReview appId={app.app_id} status={app.status} compliance={compliance} /></div>}
+        {(app.portal === 3 || app.status === "cleared") && <div style={{ marginBottom: 14 }}><TrainingPanel appId={app.app_id} status={app.status} training={app.training} /></div>}
 
         <div className="ob-grid">
           {/* Application */}

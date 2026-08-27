@@ -123,6 +123,47 @@ export function complianceProgress(compliance = {}) {
   return { total: req.length, submitted, verified, rejected, allSubmitted: submitted === req.length, allVerified: verified === req.length };
 }
 
+// ── Portal 3 · Training & Certification ──────────────────────────────────
+// Knowledge modules the trainee reads + acknowledges; Field Training is signed off by a lead.
+export const TRAINING_MODULES = [
+  { key: "company_standards", label: "Company Standards", type: "acknowledge", summary: "How we represent IOT TECHS.",
+    points: ["Professional appearance & clean uniform", "Respectful, clear customer interaction", "Site cleanliness — leave it better than you found it", "Escalation procedures for problems", "Confidentiality of customer footage & site info"] },
+  { key: "dispatch_protocol", label: "Dispatch Protocol", type: "acknowledge", summary: "A work order start to finish.",
+    points: ["Accept work orders & check in on arrival", "Review the scope before starting", "Before photos", "Communicate with the customer", "Document problems as they arise", "Completion photos, QC, and checkout"] },
+  { key: "technical_standards", label: "Technical Standards", type: "acknowledge", summary: "How we install to spec.",
+    points: ["Camera placement & mounting standards", "Cat6 termination (T568B) & testing", "Anchors & fasteners matched to the substrate", "NVR setup & networking", "Access control & sound basics", "Systematic troubleshooting"] },
+  { key: "vehicle_training", label: "Vehicle Training", type: "acknowledge", summary: "Company & personal vehicle use.",
+    points: ["Pre-trip inspection", "Fuel & toll procedures", "Accident & ticket reporting", "Equipment storage & security", "Keys & cleanliness"] },
+  { key: "tools_inventory", label: "Tools & Inventory", type: "acknowledge", summary: "Accountability for gear & materials.",
+    points: ["Check equipment out and in", "Report damaged or missing items immediately", "Material tracking per job", "No personal use of company tools"] },
+  { key: "safety", label: "Safety", type: "acknowledge", summary: "Job-site safety fundamentals.",
+    points: ["Ladder & lift safety", "Drilling & cutting precautions", "PPE where required", "Electrical awareness / lockout", "Report unsafe conditions the same day"] },
+  { key: "field_training", label: "Field Training", type: "field", summary: "Supervised real jobs, signed off by a lead.",
+    points: ["Complete supervised installations", "Demonstrate the standards on real sites", "Lead sign-off required to advance"] },
+];
+export const FIELD_JOBS_REQUIRED = 3;
+
+export const CERT_TIERS = [
+  { key: "apprentice", label: "Approved Apprentice", note: "Supervised scope" },
+  { key: "technician", label: "Approved Technician", note: "Solo work orders" },
+  { key: "lead", label: "Approved Lead Technician", note: "Runs crews, signs off" },
+];
+export const QUALIFICATIONS = [
+  { key: "camera", label: "Camera" }, { key: "access_control", label: "Access Control" }, { key: "sound", label: "Sound" },
+  { key: "alarm", label: "Alarm" }, { key: "networking", label: "Networking" }, { key: "vehicle", label: "Vehicle Authorized" },
+];
+
+export const P3_FLOW = ["new_hire", "onboarding", "training", "supervised", "final_cert", "approved"];
+export function nextP3Status(cur) { const i = P3_FLOW.indexOf(cur); return i >= 0 && i < P3_FLOW.length - 1 ? P3_FLOW[i + 1] : cur; }
+
+export function trainingProgress(training = {}) {
+  const m = training?.modules || {};
+  const know = TRAINING_MODULES.filter((x) => x.type !== "field");
+  const done = know.filter((x) => m[x.key]?.status === "done").length;
+  const fieldCount = m.field_training?.count || 0;
+  return { total: know.length, done, allModules: done === know.length, fieldCount, fieldDone: fieldCount >= FIELD_JOBS_REQUIRED };
+}
+
 // Resolve a row's portal+status, deriving from legacy stage when the columns aren't set yet.
 export function resolveHiring(row) {
   const status = row?.status || statusFromLegacyStage(row?.stage);

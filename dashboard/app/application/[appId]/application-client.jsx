@@ -126,6 +126,16 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           </a>
         )}
 
+        {app.portal === 3 && app.status !== "approved" && (
+          <a className="aq-cta" href={`/training/${app.app_id}`}>
+            <div>
+              <b>Your training</b>
+              <span>Work through the modules and your supervised jobs to become an Approved Technician.</span>
+            </div>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+          </a>
+        )}
+
         {hired && (
           <Card title="Onboarding checklist" chip={`${obItems.filter(([k]) => ob[k]).length} of ${obItems.length}`}>
             <ul className="aq-checks">
