@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, setAdtStatus, updateAdtApplication, setAdtDocsNote } from "../../lib/db";
+import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, reviseAdtDeal, setAdtStatus, updateAdtApplication, setAdtDocsNote } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 
 // The ADT project Deck is open to every internal role that has a view — admin/manager (Admin view)
@@ -112,4 +112,16 @@ export async function shareAdtDealAction(adtId, on) {
   shareAdtDeal(adtId, !!on);
   revalidatePath("/adt-applications");
   return { ok: true, shared: !!on };
+}
+
+// Revise an already accepted/signed quote — pulls it back to an editable draft and clears the
+// customer's acceptance + signature (the terms are changing, so the old signature no longer stands).
+// Office-only, since it voids a signed agreement.
+export async function reviseAdtDealAction(adtId) {
+  if (!(await requireOffice())) return { error: "Not authorized." };
+  const app = getAdtApplication(adtId);
+  if (!app) return { error: "Application not found." };
+  reviseAdtDeal(adtId);
+  revalidatePath("/adt-applications");
+  return { ok: true };
 }

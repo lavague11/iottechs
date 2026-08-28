@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { fmtSignStamp } from "../../../lib/proposal";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
@@ -233,6 +233,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
   const accepted = !!app.deal_accepted;
   const signed = !!app.deal_signed;
+  const [reviseArm, setReviseArm] = useState(false);
+  const doRevise = () => startTx(async () => { setShareErr(""); const r = await reviseAdtDealAction(app.adt_id); if (r?.error) setShareErr(r.error); else { setReviseArm(false); setShared(false); router.refresh(); } });
 
   // Submit from inside the ADT Tool → share the quote with the customer (the "send it like the proposal" step).
   const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} onSubmit={() => doShare(true)} />;
@@ -251,9 +253,19 @@ export default function AdtProjectClient({ user, alerts, app }) {
         ? !signed && <div className="adtp-ok">✓ Shared — the customer sees their quote and can sign it on the ADT portal</div>
         : <div className="adtp-muted" style={{ marginBottom: 10 }}>The customer sees no pricing until you share it. They'll get retail, activation, your applied credit, and due-at-install — never cost or commission.</div>}
       {shareErr && <div className="adtp-err">{shareErr}</div>}
-      {shared
-        ? !signed && <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
-        : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
+      {(signed || accepted)
+        ? (office
+            ? (reviseArm
+                ? <div className="adtp-editrow" style={{ gap: 8 }}>
+                    <span className="adtp-muted" style={{ marginRight: "auto" }}>Revising voids the customer&rsquo;s {signed ? "signature" : "acceptance"} — they&rsquo;ll re-sign the new quote.</span>
+                    <button className="adtp-btn ghost" disabled={pending} onClick={() => doRevise()}>Confirm revise</button>
+                    <button className="adtp-chip" onClick={() => setReviseArm(false)}>Cancel</button>
+                  </div>
+                : <button className="adtp-btn ghost" disabled={pending} onClick={() => setReviseArm(true)}>Revise quote</button>)
+            : <div className="adtp-muted">Signed — an admin can revise it if the terms need to change.</div>)
+        : shared
+          ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
+          : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
       {!hasDeal && !shared && <div className="adtp-muted" style={{ marginTop: 8 }}>Price the deal first.</div>}
     </div>
   );

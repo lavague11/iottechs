@@ -3897,6 +3897,18 @@ export function shareAdtDeal(adtId, on) {
     .run(on ? new Date().toISOString() : null, on ? 1 : 0, String(adtId));
   return getAdtApplication(adtId);
 }
+// Revise a shared/accepted/signed quote back to an editable draft. Keeps the priced deal_json (so
+// staff tweak from where it was) but clears the customer agreement — share, acceptance, AND the
+// signature — because the terms are changing and the old signature no longer applies. After this,
+// staff edit the ADT Tool and re-share; the customer signs the revised quote.
+export function reviseAdtDeal(adtId) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  db.prepare(`UPDATE adt_applications SET deal_shared_at = NULL, deal_accepted_at = NULL,
+              deal_signed_name = NULL, deal_signature_data = NULL, deal_signed_at = NULL,
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`).run(String(adtId));
+  return getAdtApplication(adtId);
+}
 // Customer accepts ("picks up") their shared quote — stamps the acceptance time (idempotent).
 export function acceptAdtDeal(adtId) {
   const cur = getAdtApplication(adtId);
