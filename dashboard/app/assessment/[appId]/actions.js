@@ -6,6 +6,7 @@ import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { scoreCore } from "../../../lib/assessment-bank";
 import { gradeAssessmentAI } from "../../../lib/assessment-grade";
+import { P1_FLOW } from "../../../lib/hiring";
 
 // The candidate holds an iot_app grant for THIS application; staff (admin/manager) may also act.
 async function authApp(appId) {
@@ -93,8 +94,10 @@ export async function decideRetakeAction(appId, approve, note) {
     status: "in_progress", responses: {}, started_at: null,
     retake: { ...cur.retake, status: "approved", ...decided },
   });
-  // If the pipeline had moved past Assessment on the strength of the old score, pull it back.
-  if (["applied", "assessment"].includes(app.status || "")) setApplicationStatus(app.app_id, "assessment", { actor_role: user.role, actor_name: user.name });
+  // An approved retake always rewinds a Portal 1 candidate back to Assessment — regardless of how
+  // far they'd advanced (phone/in-person/sop/ride-along/final review). A retake shouldn't un-hire
+  // someone already in Portal 2/3, so those statuses are left alone.
+  if (P1_FLOW.includes(app.status || "")) setApplicationStatus(app.app_id, "assessment", { actor_role: user.role, actor_name: user.name });
   try { logApplicationEvent(app.app_id, { kind: "note", detail: `Retake approved — exam reopened (attempt ${attempts.length + 2})`, actor_role: user.role, actor_name: user.name }); } catch {}
   return { ok: true, status: "approved" };
 }

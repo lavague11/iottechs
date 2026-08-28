@@ -30,7 +30,15 @@ export async function POST(request) {
     if (bump(`ip:${ip}`, 20)) return Response.json({ ok: false, error: "too_many" }, { status: 429 });
 
     const app = resolveApplicationRef(appId);
-    if (!app) return Response.json({ ok: false, error: "no_app" }, { status: 404 });
+    if (!app) {
+      // Cross-IP backstop on FAILED lookups only: the per-IP cap dies to X-Forwarded-For spoofing
+      // on direct-origin hits (verified in QC), so misses also feed a global counter. Enumeration
+      // is entirely a not-found activity, so capping misses at 100 / 10 min across all IPs stops
+      // roster-scraping while a VALID ID lookup (below) is never blocked — real applicants checking
+      // a real ID are unaffected even during an active enumeration attack.
+      if (bump("probe:misses", 100)) return Response.json({ ok: false, error: "too_many" }, { status: 429 });
+      return Response.json({ ok: false, error: "no_app" }, { status: 404 });
+    }
 
     if (!pin) return Response.json({ ok: true, appId: app.app_id });
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { TRAINING_MODULES, P3_FLOW, FIELD_JOBS_REQUIRED, CERT_TIERS, QUALIFICATIONS, statusLabel, nextP3Status, trainingProgress } from "../../../lib/hiring";
-import { startTrainingAction, advanceTrainingAction, signFieldJobAction, setCertAction, approveTechnicianAction } from "../../training/[appId]/actions";
+import { startTrainingAction, advanceTrainingAction, signFieldJobAction, setCertAction, approveTechnicianAction, revokeCertificationAction } from "../../training/[appId]/actions";
 
 export default function TrainingPanel({ appId, status, training }) {
   const [status0, setStatus] = useState(status);
@@ -23,6 +23,14 @@ export default function TrainingPanel({ appId, status, training }) {
   const toggleBadge = (key) => { const has = (t.badges || []).includes(key); const badges = has ? t.badges.filter((b) => b !== key) : [...(t.badges || []), key]; setT((p) => ({ ...p, badges })); call("badge", () => setCertAction(appId, { badges })); };
   const setTier = (tier) => { setT((p) => ({ ...p, tier })); call("tier", () => setCertAction(appId, { tier })); };
   const approve = () => call("approve", () => approveTechnicianAction(appId, t.tier || "technician"), () => location.reload());
+  // Two-step: confirm the intent, then require a reason — mirrors the reject-reason prompt in
+  // compliance-review.jsx. Nothing is ever hard-deleted; this just drops back to Final Certification.
+  const revoke = () => {
+    if (!confirm("Revoke this technician's certification? They lose dispatch eligibility immediately.")) return;
+    const reason = prompt("Reason for revoking (kept in the Job Log)") || "";
+    if (!reason.trim()) return;
+    call("revoke", () => revokeCertificationAction(appId, reason), () => location.reload());
+  };
 
   if (status0 === "cleared") return (
     <div className="tp"><div className="tp-h"><h3>Training</h3></div>
@@ -70,6 +78,7 @@ export default function TrainingPanel({ appId, status, training }) {
         <button className="tp-approve-b" disabled={busy === "approve" || approved || !canApprove} onClick={approve}>
           {approved ? "✓ Approved Technician" : "Approve as Technician"}
         </button>
+        {approved && <button className="tp-revoke-b" disabled={busy === "revoke"} onClick={revoke}>{busy === "revoke" ? "Revoking…" : "Revoke"}</button>}
         {!canApprove && !approved && <span className="tp-approve-n">Finish all modules + {FIELD_JOBS_REQUIRED} field jobs first.</span>}
         {msg && <span className="tp-approve-n err">{msg}</span>}
       </div>
@@ -109,6 +118,8 @@ const CSS = `
 .tp-approve{display:flex;align-items:center;gap:12px}
 .tp-approve-b{background:var(--sage-deep);color:#fff;border:none;border-radius:9px;padding:11px 20px;font:inherit;font-weight:700;font-size:.9rem;cursor:pointer}
 .tp-approve-b:disabled{opacity:.45;cursor:not-allowed}
+.tp-revoke-b{background:#fff;color:var(--red);border:1px solid var(--line);border-radius:9px;padding:11px 16px;font:inherit;font-weight:700;font-size:.85rem;cursor:pointer}
+.tp-revoke-b:disabled{opacity:.5;cursor:default}
 .tp-approve-n{font-size:.8rem;color:var(--muted)}.tp-approve-n.err{color:var(--red)}
 .tp-msg{color:var(--red);font-size:.83rem;margin-top:8px}
 `;

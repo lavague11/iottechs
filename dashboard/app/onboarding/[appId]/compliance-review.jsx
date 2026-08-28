@@ -12,6 +12,7 @@ export default function ComplianceReview({ appId, status, compliance }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const prog = complianceProgress({ items });
+  const checksClear = COMPLIANCE_CHECKS.every((c) => checks[c.key]?.status === "clear");
 
   async function verify(key, ok) {
     let reason = "";
@@ -76,10 +77,10 @@ export default function ComplianceReview({ appId, status, compliance }) {
       </div>
 
       <div className="cr-clear">
-        <button className="cr-clear-b" disabled={busy === "clear" || !prog.allVerified || status === "cleared"} onClick={clear}>
+        <button className="cr-clear-b" disabled={busy === "clear" || !prog.allVerified || !checksClear || status === "cleared"} onClick={clear}>
           {status === "cleared" ? "✓ Cleared for Training" : "Clear for Training"}
         </button>
-        {!prog.allVerified && status !== "cleared" && <span className="cr-clear-n">Verify every required document first.</span>}
+        {(!prog.allVerified || !checksClear) && status !== "cleared" && <span className="cr-clear-n">Verify every document and clear both office checks first.</span>}
         {msg && <span className="cr-clear-n err">{msg}</span>}
       </div>
       <style>{CSS}</style>

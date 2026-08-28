@@ -83,3 +83,15 @@ export async function approveTechnicianAction(appId, tier = "technician") {
   logApplicationEvent(appId, { kind: "note", detail: `Approved Technician (${tier})${app?.user_id ? "" : " — no linked account to activate"}`, actor_role: user.role, actor_name: user.name });
   return { ok: true, status: "approved", activated: !!app?.user_id };
 }
+// Undo a certification (DoD: nothing is irreversible). Drops back to Final Certification and
+// deactivates the operations-side tech cert so the account loses dispatch/work-order eligibility.
+export async function revokeCertificationAction(appId, reason) {
+  const user = await requireStaff(); if (!user) return { ok: false, error: "forbidden" };
+  const app = getApplication(appId);
+  if (app?.status !== "approved") return { ok: false, error: "Not an Approved Technician." };
+  setTraining(appId, { certified_at: null }, { actor_role: user.role, actor_name: user.name });
+  setApplicationStatus(appId, "final_cert", { actor_role: user.role, actor_name: user.name });
+  if (app.user_id) setTechCert(app.user_id, { active: false, tier: null, badges: [], approved_at: null, from_app: appId });
+  logApplicationEvent(appId, { kind: "note", detail: `Certification revoked — ${String(reason || "").slice(0, 300)}`, actor_role: user.role, actor_name: user.name });
+  return { ok: true, status: "final_cert" };
+}

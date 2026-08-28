@@ -7,13 +7,16 @@ import { saveHiringStepAction, advanceHiringAction, hiringDecisionAction } from 
 const STEPPER = [{ key: "assessment", label: "Assessment" }, ...P1_EVAL_STEPS.map((k) => ({ key: k, label: STEP_RUBRICS[k].label })), { key: "final_review", label: "Final Review" }];
 const REC = { advance: "Advance", hold: "Hold", decline: "Decline" };
 
-export default function RecruitmentSteps({ appId, status, steps: stepsInit = {}, canHire = true }) {
+export default function RecruitmentSteps({ appId, status, steps: stepsInit = {}, assessment, canHire = true }) {
   const [status0, setStatus] = useState(status);
   const [steps, setSteps] = useState(stepsInit || {});
+  const declined = status0 === "declined";
   const curIdx = P1_FLOW.indexOf(status0);
   const [sel, setSel] = useState(P1_EVAL_STEPS.includes(status0) ? status0 : "phone");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  // A retake still pending office review, or approved but not yet re-graded — decisions wait for it.
+  const retakeBlocking = !!(assessment?.retake && assessment.status !== "graded");
 
   const rubric = STEP_RUBRICS[sel];
   const saved = steps[sel] || {};
@@ -60,8 +63,10 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
       <div className="rs-stepper">
         {STEPPER.map((s, i) => {
           const idx = P1_FLOW.indexOf(s.key);
-          const state = idx < curIdx ? "done" : idx === curIdx ? "cur" : "todo";
           const scored = steps[s.key]?.score != null;
+          // Declined leaves curIdx at -1 (not on the P1 ladder) — fall back to the saved
+          // scorecards so completed steps still read as done instead of everything going "todo".
+          const state = declined ? (scored ? "done" : "todo") : idx < curIdx ? "done" : idx === curIdx ? "cur" : "todo";
           return (
             <button key={s.key} className={`rs-step ${state}${sel === s.key ? " sel" : ""}`} onClick={() => STEP_RUBRICS[s.key] && selectStep(s.key)} disabled={!STEP_RUBRICS[s.key]}>
               <span className="rs-dot">{state === "done" ? "✓" : i + 1}</span>
@@ -92,7 +97,7 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
           </div>
           <div className="rs-actions">
             <button className="rs-btn" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save scorecard"}</button>
-            {!atFinal && <button className="rs-btn ghost" onClick={advance} disabled={busy}>Advance → {nextLabel}</button>}
+            {!atFinal && !declined && <button className="rs-btn ghost" onClick={advance} disabled={busy}>Advance → {nextLabel}</button>}
             {msg && <span className="rs-msg">{msg}</span>}
           </div>
         </div>
@@ -101,11 +106,12 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
       <div className={`rs-decision${atFinal ? " live" : ""}`}>
         <div className="rs-decision-h">{atFinal ? "Final review — decide" : "Decision (available at Final Review)"}</div>
         <div className="rs-decision-b">
-          <button className="rs-d hire" disabled={busy || !atFinal || !canHire} onClick={() => decide("hire")}>Hire</button>
-          <button className="rs-d cond" disabled={busy || !atFinal || !canHire} onClick={() => decide("conditional")}>Conditional Hire</button>
-          <button className="rs-d decline" disabled={busy} onClick={() => decide("decline")}>Not Selected</button>
+          <button className="rs-d hire" disabled={busy || !atFinal || !canHire || retakeBlocking} onClick={() => decide("hire")}>Hire</button>
+          <button className="rs-d cond" disabled={busy || !atFinal || !canHire || retakeBlocking} onClick={() => decide("conditional")}>Conditional Hire</button>
+          <button className="rs-d decline" disabled={busy || retakeBlocking} onClick={() => decide("decline")}>Not Selected</button>
         </div>
-        {!canHire && <div className="rs-note">Only an admin can create the staff account (Hire / Conditional).</div>}
+        {retakeBlocking && <div className="rs-note">Retake in progress.</div>}
+        {!canHire && !retakeBlocking && <div className="rs-note">Only an admin can create the staff account (Hire / Conditional).</div>}
       </div>
       <style>{CSS}</style>
     </div>

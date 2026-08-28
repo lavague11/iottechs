@@ -67,7 +67,7 @@ export default function AssessmentResult({ appId, assessment }) {
           </div>
         </div>
       )}
-      {rt?.status === "approved" && a.status !== "graded" && <div className="ar-retake done">Retake approved{rt.by ? ` by ${rt.by}` : ""} — {(a.attempts?.length || 0)} prior attempt{(a.attempts?.length || 0) === 1 ? "" : "s"} kept. Awaiting the new submission.</div>}
+      {rt?.status === "approved" && a.status === "in_progress" && <div className="ar-retake done">Retake approved{rt.by ? ` by ${rt.by}` : ""} — {(a.attempts?.length || 0)} prior attempt{(a.attempts?.length || 0) === 1 ? "" : "s"} kept. Awaiting the new submission.</div>}
       {rt?.status === "denied" && a.status === "graded" && <div className="ar-retake done">Retake request declined{rt.by ? ` by ${rt.by}` : ""}.</div>}
 
       {!graded ? (

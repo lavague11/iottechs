@@ -70,7 +70,7 @@ function AssessmentOutcome({ app }) {
       <p>Thanks — your request is with our team, and we&rsquo;ll update this page once it&rsquo;s reviewed.{rt?.reason ? ` (“${rt.reason}”)` : ""}</p>
     </div>
   );
-  if (rt?.status === "approved" && app.assessment_status !== "graded") return (
+  if (rt?.status === "approved" && (app.assessment_status == null || app.assessment_status === "in_progress")) return (
     <div className="aq-outcome good"><b>Retake approved</b><p>Your exam is open again — use the button above to take it.</p></div>
   );
   if (app.assessment_status === "graded") {
@@ -146,7 +146,6 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
   const pct = declined ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);
   const readoutLabel = hired ? "Hired" : declined ? "Closed" : (STEPS[stepIdx]?.label || "Applied");
   const ob = app.onboarding || {};
-  const onboardingDone = !!ob.profile?.submitted_at && ["safety", "handbook", "equipment"].every((k) => ob.signed?.[k]);
   const obItems = [
     ["w9", "W-9 on file"], ["license", "Driver's license copy"], ["insurance", "Insurance / eligibility"],
     ["background", "Background check"], ["gear", "Tools & equipment issued"], ["training", "Safety + systems training"],
@@ -257,7 +256,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
             <dd>{[app.has_license && "License", app.has_vehicle && "Vehicle", app.has_tools && "Tools"].filter(Boolean).join(" · ") || "—"}</dd>
             <dt>Phone</dt><dd>{app.phone ? <a href={`tel:${app.phone}`}>{app.phone}</a> : "—"}</dd>
             {app.email && (<><dt>Email</dt><dd><a href={`mailto:${app.email}`}>{app.email}</a></dd></>)}
-            {app.address && (<><dt>Based in</dt><dd>{app.address}</dd></>)}
+            {app.address && (<><dt>Based in</dt><dd><a href={`https://maps.google.com/?q=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a></dd></>)}
           </dl>
           {app.about && <p className="aq-about">{app.about}</p>}
         </Card>
@@ -273,7 +272,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           </ul>
         </Card>
 
-        <p className="aq-help">Questions? Call us and mention <span className="mono">{app.app_id}</span>.</p>
+        <p className="aq-help">Questions? <a href="tel:6463960775">Call us</a> and mention <span className="mono">{app.app_id}</span>.</p>
       </main>
 
       <style>{CSS}</style>
@@ -290,7 +289,7 @@ const CSS = `
 .aq-brand{display:inline-flex;color:var(--ink)}
 .aq-top-right{display:flex;align-items:center;gap:14px}
 .aq-id{font-size:.8rem;font-weight:800;color:var(--gold-deep);letter-spacing:.5px}
-.aq-exit{color:var(--ink);text-decoration:none;font-size:.84rem;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:8px 16px;background:#fff}
+.aq-exit{color:var(--ink);text-decoration:none;font-size:.84rem;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:8px 16px;background:#fff;min-height:44px;display:inline-flex;align-items:center}
 .aq-exit:hover{border-color:var(--gold);background:#fdfaf2}
 .aq-main{max-width:680px;margin:0 auto;padding:18px 20px 60px}
 .aq-hero{margin:8px 0 18px}
@@ -386,6 +385,7 @@ const CSS = `
 .aq-tl-detail{font-size:.88rem;font-weight:600}
 .aq-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .aq-help{text-align:center;color:var(--muted);font-size:.84rem;margin:8px 0 0}
+.aq-help a{color:var(--gold-deep);font-weight:700;text-decoration:none}
 .mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;font-weight:700}
 @media(max-width:560px){.aq-hero h1{font-size:1.45rem}.aq-dl{grid-template-columns:1fr;gap:2px 0}.aq-dl dd{margin-bottom:8px}
   /* The four step labels can't fit side-by-side on a phone — they truncate into an unreadable,

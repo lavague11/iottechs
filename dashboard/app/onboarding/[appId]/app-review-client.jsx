@@ -110,7 +110,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
         </div>
 
         <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
-        {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} canHire={user.role === "admin"} /></div>}
+        {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} assessment={app.assessment} canHire={user.role === "admin"} /></div>}
         {app.portal === 2 && <div style={{ marginBottom: 14 }}><ComplianceReview appId={app.app_id} status={app.status} compliance={compliance} /></div>}
         {(app.portal === 3 || app.status === "cleared") && <div style={{ marginBottom: 14 }}><TrainingPanel appId={app.app_id} status={app.status} training={app.training} /></div>}
 
@@ -169,8 +169,10 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           </div>
         </div>
 
-        {/* Decision */}
-        {!hired && (
+        {/* Legacy Decision card — writes only the coarse `stage` field, which desyncs the new
+            status engine. Only legacy rows (no app.status yet) still use it; every new-engine
+            candidate decides via RecruitmentSteps' Final Review decision instead. */}
+        {!hired && !app.status && (
           <div className="panel ob-card">
             <div className="ob-card-h">Decision</div>
             <div className="ob-decide">
@@ -206,7 +208,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           <div className="panel ob-card">
             <div className="ob-card-h">New hire submitted
               <span className="ob-count">{prof?.submitted_at ? "Details in" : "Waiting"}</span>
-              <a className="ob-view-btn" href={`/welcome/${app.app_id}`} style={{ marginLeft: "auto" }}>Their onboarding page</a>
+              <a className="ob-view-btn" href={`/compliance/${app.app_id}`} style={{ marginLeft: "auto" }}>Their onboarding page</a>
             </div>
             {prof?.submitted_at ? (
               <dl className="ob-dl">

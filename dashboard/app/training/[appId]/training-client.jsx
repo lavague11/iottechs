@@ -82,7 +82,7 @@ function Module({ appId, m, saved, onDone }) {
             ? <div className="tx-field-note">Your supervising lead signs off each completed job. {fieldCount >= FIELD_JOBS_REQUIRED ? "You've met the requirement." : `${FIELD_JOBS_REQUIRED - fieldCount} to go.`}</div>
             : done
               ? <div className="tx-ackd">Acknowledged{saved.acknowledged_by ? ` by ${saved.acknowledged_by}` : ""}.</div>
-              : <button className="tx-ack" disabled={busy} onClick={ack}>{busy ? "Saving…" : "I've read and understand these standards"}</button>}
+              : <button className="tx-ack" disabled={busy} onClick={ack}>{busy ? "Saving…" : "Acknowledge"}</button>}
         </div>
       )}
     </div>
@@ -128,7 +128,7 @@ const CSS = `
 .tx-mod-b{padding:2px 16px 16px}
 .tx-mod-b ul{margin:0 0 12px;padding-left:18px;display:flex;flex-direction:column;gap:5px}
 .tx-mod-b li{font-size:.88rem;color:var(--ink-soft);line-height:1.4}
-.tx-ack{background:var(--sage);color:#fff;border:none;border-radius:9px;padding:10px 18px;font:inherit;font-weight:700;font-size:.86rem;cursor:pointer}
+.tx-ack{background:var(--sage);color:#fff;border:none;border-radius:9px;padding:10px 18px;min-height:44px;font:inherit;font-weight:700;font-size:.86rem;cursor:pointer}
 .tx-ack:disabled{opacity:.5}
 .tx-ackd{font-size:.85rem;color:var(--sage);font-weight:600}
 .tx-field-note{font-size:.85rem;color:var(--ink-soft);background:var(--paper);border-radius:9px;padding:10px 12px}

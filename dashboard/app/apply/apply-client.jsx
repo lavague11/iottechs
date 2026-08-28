@@ -377,7 +377,7 @@ const CSS = `
 .ap-pick-h{font-size:.75rem;color:var(--muted);line-height:1.25}
 .ap-pick-dot{width:8px;height:8px;border-radius:99px;border:1.5px solid var(--faint);flex-shrink:0;transition:.15s}
 .ap-pick.on .ap-pick-dot{border-color:var(--gold-deep);background:var(--gold)}
-.ap-in{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:11px;font-family:inherit;font-size:.94rem;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+.ap-in{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:11px;font-family:inherit;font-size:16px;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s}
 .ap-in:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,169,110,.14)}
 .ap-in.cap{text-transform:capitalize}
 textarea.ap-in{resize:vertical}

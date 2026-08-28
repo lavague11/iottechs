@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { resolveApplicationRef, getApplication, getApplicationCompliance, setComplianceItem, setComplianceCheck, setApplicationStatus, logApplicationEvent, encBlob } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
-import { complianceProgress } from "../../../lib/hiring";
+import { complianceProgress, COMPLIANCE_CHECKS } from "../../../lib/hiring";
 
 async function authApp(appId) {
   const app = resolveApplicationRef(appId);
@@ -20,10 +20,11 @@ async function authApp(appId) {
 const digits = (s) => String(s || "").replace(/\D/g, "");
 const last4 = (s) => digits(s).slice(-4);
 
-// After a candidate submits/updates any item, bump the pipeline to Compliance Review once everything's in.
+// After a candidate submits/updates any item, bump the pipeline to Background Pending once
+// everything's in — the office checks (COMPLIANCE_STATUS_FLOW) come next, not Compliance Review.
 function maybeAdvance(app, actor) {
   const prog = complianceProgress(getApplicationCompliance(app.app_id));
-  if (prog.allSubmitted && app.status === "documents_pending") setApplicationStatus(app.app_id, "compliance_review", actor);
+  if (prog.allSubmitted && app.status === "documents_pending") setApplicationStatus(app.app_id, "background_pending", actor);
 }
 
 // ── Candidate submissions ────────────────────────────────────────────────
@@ -84,17 +85,22 @@ export async function verifyComplianceAction(appId, key, verified, reason) {
 export async function setComplianceCheckAction(appId, key, status, note) {
   const user = await getSessionUser();
   if (!user?.id || !["admin", "manager"].includes(user.role)) return { ok: false, error: "forbidden" };
-  setComplianceCheck(appId, key, { status, note: String(note || "").slice(0, 300), by: user.name }, { actor_role: user.role, actor_name: user.name });
-  // Move to Background Pending while checks are outstanding.
+  const c = setComplianceCheck(appId, key, { status, note: String(note || "").slice(0, 300), by: user.name }, { actor_role: user.role, actor_name: user.name });
+  // Forward-only: once both office checks come back clear, advance into Compliance Review. Never
+  // demote — an app already cleared or beyond (Portal 3) never moves backward from this action.
   const app = getApplication(appId);
-  if (status === "pending" && app?.status === "compliance_review") setApplicationStatus(appId, "background_pending", { actor_role: user.role, actor_name: user.name });
+  const bothClear = COMPLIANCE_CHECKS.every((chk) => c.checks?.[chk.key]?.status === "clear");
+  if (bothClear && app?.status === "background_pending") setApplicationStatus(appId, "compliance_review", { actor_role: user.role, actor_name: user.name });
   return { ok: true };
 }
 export async function clearForTrainingAction(appId) {
   const user = await getSessionUser();
   if (!user?.id || !["admin", "manager"].includes(user.role)) return { ok: false, error: "forbidden" };
-  const prog = complianceProgress(getApplicationCompliance(appId));
+  const compliance = getApplicationCompliance(appId);
+  const prog = complianceProgress(compliance);
   if (!prog.allVerified) return { ok: false, error: "Verify every document first." };
+  const checksClear = COMPLIANCE_CHECKS.every((chk) => compliance?.checks?.[chk.key]?.status === "clear");
+  if (!checksClear) return { ok: false, error: "Background and MVR checks must be clear first." };
   setApplicationStatus(appId, "cleared", { actor_role: user.role, actor_name: user.name });
   logApplicationEvent(appId, { kind: "note", detail: "Cleared for Training", actor_role: user.role, actor_name: user.name });
   return { ok: true };

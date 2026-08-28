@@ -146,8 +146,24 @@ function SignItem({ appId, item, saved, onSaved }) {
       <div className="cx-agree">{item.agreement}</div>
       <div className="cx-field"><label>Type your full name to sign</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full legal name" /></div>
       {err && <div className="cx-err">{err}</div>}
-      <button className="cx-save" disabled={busy} onClick={async () => (await run(appId, item.key, name)) && onSaved({ status: "submitted", signed_name: name })}>{busy ? "Signing…" : "Sign & agree"}</button>
+      <button className="cx-save" disabled={busy} onClick={async () => (await run(appId, item.key, name)) && onSaved({ status: "submitted", signed_name: name })}>{busy ? "Signing…" : "Sign"}</button>
     </>
+  );
+}
+
+// SSN / bank-account entry: masked on screen (dots) with an eye toggle, so the digits aren't
+// shoulder-surfable while typing. Value is still plain in React state; only the display is hidden.
+function RevealInput({ value, onChange, placeholder }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="cx-reveal">
+      <input type={show ? "text" : "password"} inputMode="numeric" autoComplete="off" value={value} onChange={onChange} placeholder={placeholder} />
+      <button type="button" className="cx-reveal-b" onClick={() => setShow((v) => !v)} aria-label={show ? "Hide" : "Show"} tabIndex={-1}>
+        {show
+          ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22" /></svg>
+          : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></svg>}
+      </button>
+    </div>
   );
 }
 
@@ -167,7 +183,7 @@ function W9Item({ appId, saved, onSaved }) {
           <button className={f.tin_type === "ssn" ? "on" : ""} onClick={() => set("tin_type", "ssn")}>SSN</button>
           <button className={f.tin_type === "ein" ? "on" : ""} onClick={() => set("tin_type", "ein")}>EIN</button>
         </div>
-        <div className="cx-field grow"><label>{f.tin_type === "ein" ? "EIN" : "SSN"} <span>encrypted</span></label><input inputMode="numeric" value={f.tin} onChange={(e) => set("tin", e.target.value)} placeholder={f.tin_type === "ein" ? "12-3456789" : "123-45-6789"} /></div>
+        <div className="cx-field grow"><label>{f.tin_type === "ein" ? "EIN" : "SSN"} <span>encrypted</span></label><RevealInput value={f.tin} onChange={(e) => set("tin", e.target.value)} placeholder={f.tin_type === "ein" ? "12-3456789" : "123-45-6789"} /></div>
       </div>
       <div className="cx-field"><label>Type your name to certify</label><input value={f.signed_name} onChange={(e) => set("signed_name", e.target.value)} /></div>
       {err && <div className="cx-err">{err}</div>}
@@ -187,7 +203,7 @@ function DepositItem({ appId, saved, onSaved }) {
       <div className="cx-field"><label>Bank name</label><input value={f.bank_name} onChange={(e) => set("bank_name", e.target.value)} /></div>
       <div className="cx-row">
         <div className="cx-field"><label>Routing #</label><input inputMode="numeric" value={f.routing} onChange={(e) => set("routing", e.target.value)} /></div>
-        <div className="cx-field grow"><label>Account # <span>encrypted</span></label><input inputMode="numeric" value={f.account} onChange={(e) => set("account", e.target.value)} /></div>
+        <div className="cx-field grow"><label>Account # <span>encrypted</span></label><RevealInput value={f.account} onChange={(e) => set("account", e.target.value)} /></div>
       </div>
       <div className="cx-seg">
         <button className={f.account_type === "checking" ? "on" : ""} onClick={() => set("account_type", "checking")}>Checking</button>
@@ -232,7 +248,11 @@ const CSS = `
 .cx-field.grow{flex:1}
 .cx-field label{font-size:.78rem;font-weight:600;color:var(--ink-soft)}
 .cx-field label span{font-weight:400;color:var(--faint)}
-.cx-field input{border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:.92rem;color:var(--ink);background:var(--paper);outline:none}
+.cx-field input{border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none}
+.cx-reveal{position:relative;display:flex}
+.cx-reveal input{flex:1;width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 40px 10px 12px;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none}
+.cx-reveal-b{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;padding:6px;cursor:pointer;color:var(--muted);display:grid;place-items:center}
+.cx-reveal-b:hover{color:var(--gold-deep)}
 .cx-field input:focus{border-color:var(--gold)}
 .cx-row{display:flex;gap:10px}
 .cx-agree{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:.86rem;line-height:1.5;color:var(--ink-soft)}
@@ -243,10 +263,10 @@ const CSS = `
 .cx-upl-empty{font-size:.8rem;color:var(--muted)}
 .cx-upl-cap{position:absolute;bottom:0;left:0;right:0;background:rgba(16,20,24,.6);color:#fff;font-size:.62rem;text-align:center;padding:2px}
 .cx-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;align-self:flex-start}
-.cx-seg button{border:none;background:#fff;padding:8px 14px;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);cursor:pointer}
+.cx-seg button{border:none;background:#fff;padding:8px 14px;min-height:44px;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);cursor:pointer}
 .cx-seg button.on{background:var(--gold-deep);color:#fff}
 .cx-have{font-size:.82rem;color:var(--green);font-weight:600}
 .cx-err{background:#F6E7E2;color:var(--red);border-radius:8px;padding:8px 11px;font-size:.83rem;font-weight:600}
-.cx-save{align-self:flex-start;background:var(--gold-deep);color:#fff;border:none;border-radius:9px;padding:10px 20px;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
+.cx-save{align-self:flex-start;background:var(--gold-deep);color:#fff;border:none;border-radius:9px;padding:10px 20px;min-height:44px;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
 .cx-save:disabled{opacity:.5;cursor:not-allowed}
 `;
