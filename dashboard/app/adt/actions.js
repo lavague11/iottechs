@@ -116,6 +116,10 @@ export async function submitAdtApplicationAction(form) {
   const phone = String(form?.phone || "").trim();
   if (!name)  return { error: "Please enter your name." };
   if (!phone) return { error: "Please enter a phone number." };
+  const dob = String(form?.dob || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return { error: "Please enter the account holder's date of birth." };
+  const dobYears = (Date.now() - new Date(dob + "T00:00:00").getTime()) / (365.25 * 24 * 3600 * 1000);
+  if (Number.isNaN(dobYears) || dobYears < 0 || dobYears > 120) return { error: "Please check the date of birth." };
   const { points } = adtSummary(form?.equipment || {});
   if (points <= 0 && !Object.values(form?.equipment || {}).some((q) => +q > 0)) {
     return { error: "Add at least one piece of equipment." };
@@ -136,6 +140,7 @@ export async function submitAdtApplicationAction(form) {
     asap:        !!form?.asap,
     contactName: String(form?.contactName || "").trim(),
     verificationDoc: form?.verificationDoc && form.verificationDoc.data ? form.verificationDoc : null,
+    dob,
   });
   return { ok: true, adtId: rec.adt_id, pin: rec.access_pin };
 }

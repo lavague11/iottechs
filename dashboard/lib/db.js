@@ -624,6 +624,7 @@ function init() {
   if (!adtCols.includes("deal_json"))    db.exec("ALTER TABLE adt_applications ADD COLUMN deal_json TEXT");    // ADT Tool deal state (cart + tier + credit) — internal pricing engine
   if (!adtCols.includes("deal_shared_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_shared_at TEXT"); // set when staff Share the quote → customer /adt shows a sanitized Cust view
   if (!adtCols.includes("deal_accepted_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_accepted_at TEXT"); // set when the customer accepts ("picks up") their quote
+  if (!adtCols.includes("dob")) db.exec("ALTER TABLE adt_applications ADD COLUMN dob TEXT"); // account holder's full date of birth (YYYY-MM-DD) — identity verification
   if (!adtCols.includes("deal_signed_name")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signed_name TEXT");       // customer's typed signature name on the quote
   if (!adtCols.includes("deal_signed_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signed_at TEXT");           // Eastern wall-clock (datetime('now','localtime')) they signed — formatted by fmtSignStamp
   if (!adtCols.includes("deal_signature_data")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_signature_data TEXT"); // PNG dataURL of the typed signature
@@ -3748,8 +3749,9 @@ function nextAdtId() {
   const n = row ? (parseInt(String(row.adt_id).replace(/\D/g, ""), 10) || 0) + 1 : 1;
   return "ADT" + String(n).padStart(4, "0");
 }
-export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, contactName, verificationDoc }) {
+export function createAdtApplication({ name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, contactName, verificationDoc, dob }) {
   const adtId = nextAdtId();
+  const dobVal = /^\d{4}-\d{2}-\d{2}$/.test(String(dob || "")) ? String(dob) : null;
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
   const ptype = propertyType === "commercial" ? "commercial" : "residential";
@@ -3764,16 +3766,18 @@ export function createAdtApplication({ name, email, phone, address, equipment, p
   const pWins = JSON.stringify(Array.isArray(prefWindows) ? prefWindows.slice(0, 3) : []); // preferred windows
   const vdoc = verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null;
   const contact = ptype === "commercial" ? (String(contactName || "").slice(0, 80).trim() || null) : null;
-  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows, asap, contact_name, verification_doc)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, contact, vdoc);
+  db.prepare(`INSERT INTO adt_applications (adt_id, name, email, phone, address, equipment, points, notes, access_pin, property_type, tax_id, emergency_contacts, verbal_password, pref_days, pref_windows, asap, contact_name, verification_doc, dob)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(adtId, name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, contact, vdoc, dobVal);
   return getAdtApplication(adtId);
 }
 // Admin edit of a submitted application — same field handling as create (re-encrypt SSN/verbal,
 // recompute the access PIN from the phone). Stage/status/deal are untouched.
-export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, contactName, verificationDoc }) {
+export function updateAdtApplication(adtId, { name, email, phone, address, equipment, points, notes, propertyType, taxId, emergency, verbalPassword, prefDays, prefWindows, asap, contactName, verificationDoc, dob }) {
   const cur = getAdtApplication(adtId);
   if (!cur) return null;
+  // undefined = leave DOB as-is; a valid date replaces it.
+  const dobVal = dob === undefined ? (cur.dob || null) : (/^\d{4}-\d{2}-\d{2}$/.test(String(dob || "")) ? String(dob) : null);
   const pin = String(phone || "").replace(/\D/g, "").slice(-4) || null;
   const equip = JSON.stringify(equipment || {});
   const ptype = propertyType === "commercial" ? "commercial" : "residential";
@@ -3791,9 +3795,9 @@ export function updateAdtApplication(adtId, { name, email, phone, address, equip
              : (verificationDoc && verificationDoc.data ? JSON.stringify(verificationDoc) : null);
   const contact = ptype === "commercial" ? (String(contactName || "").slice(0, 80).trim() || null) : null;
   db.prepare(`UPDATE adt_applications SET name=?, email=?, phone=?, address=?, equipment=?, points=?, notes=?,
-              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?, asap=?, contact_name=?, verification_doc=?,
+              access_pin=?, property_type=?, tax_id=?, emergency_contacts=?, verbal_password=?, pref_days=?, pref_windows=?, asap=?, contact_name=?, verification_doc=?, dob=?,
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
-    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, contact, vdoc || null, String(adtId));
+    .run(name || null, email || null, phone || null, address || null, equip, +points || 0, notes || null, pin, ptype, taxEnc, emergJson, vpEnc, pDays, pWins, asap ? 1 : 0, contact, vdoc || null, dobVal, String(adtId));
   return getAdtApplication(adtId);
 }
 export function getAdtApplication(adtId) {

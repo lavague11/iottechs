@@ -65,6 +65,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       notes: ex ? (ex.notes || "") : "",
       taxId: ex ? (ex.tax_id || "") : "",
       verbalPassword: ex ? (ex.verbal_password || "") : "",
+      dob: ex ? (ex.dob || "") : "",
     };
   });
   const [emg, setEmg] = useState(ex ? padEmg(ex.emergency) : [{ name: "", phone: "" }, { name: "", phone: "" }]);
@@ -121,6 +122,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
     } else if (f.name.trim().split(/\s+/).filter(Boolean).length < 2) {
       setErr("Enter your first and last name."); return;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.dob || ""))) { setErr("Enter the account holder's date of birth."); return; }
     if (!emg.some((c) => c.name.trim() && c.phone.replace(/\D/g, "").length >= 10)) { setErr("Add at least one emergency contact — a name and phone number."); return; }
     if (!f.verbalPassword.trim()) { setErr("Please set a verbal password."); return; }
     startTx(async () => {
@@ -173,6 +175,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         )}
         <label className="ai-fld"><span>Phone</span><input value={f.phone} onChange={set("phone")} placeholder="(555) 123-4567" inputMode="tel" autoComplete="tel" /></label>
         <label className="ai-fld"><span>Email</span><input value={f.email} onChange={set("email")} placeholder="you@email.com" type="email" autoComplete="email" /></label>
+        <label className="ai-fld"><span>Date of birth <em>· account holder</em></span><input value={f.dob} onChange={set("dob")} type="date" autoComplete="bday" /></label>
         <label className="ai-fld"><span>{isComm ? "EIN" : "SSN"} <em>· for the ADT account</em></span>
           <div className="ai-secret">
             <input type={showTax ? "text" : "password"} value={f.taxId} onChange={set("taxId")} placeholder={isComm ? "12-3456789" : "•••-••-••••"} inputMode="numeric" autoComplete="off" />
