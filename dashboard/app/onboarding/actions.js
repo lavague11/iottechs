@@ -5,7 +5,7 @@ import { getSessionUser } from "../../lib/session";
 import {
   getApplication, setApplicationStage, setApplicationReview, setApplicationOnboarding,
   hireApplicant, logApplicationEvent, verifyEmergencyContact,
-  setApplicationStatus, saveApplicationStep,
+  setApplicationStatus, saveApplicationStep, setApplicationArchived,
 } from "../../lib/db";
 import { nextP1Status, STEP_RUBRICS } from "../../lib/hiring";
 
@@ -26,6 +26,17 @@ export async function setAppStageAction(appId, stage, reason) {
   const { user, error } = await requireHiring();
   if (error) return { ok: false, error };
   const r = setApplicationStage(appId, stage, { actor_role: user.role, actor_name: user.name, reason });
+  if (!r) return { ok: false, error: "Could not update." };
+  touch(appId);
+  return { ok: true, app: r };
+}
+
+// Void / restore an application. Admin-only (stronger than a stage change) and non-destructive —
+// the row + its event history are kept; it's just hidden from the board.
+export async function setAppArchivedAction(appId, archived) {
+  const user = await getSessionUser();
+  if (user.role !== "admin") return { ok: false, error: "Only an admin can void an application." };
+  const r = setApplicationArchived(appId, !!archived, { actor_role: user.role, actor_name: user.name });
   if (!r) return { ok: false, error: "Could not update." };
   touch(appId);
   return { ok: true, app: r };

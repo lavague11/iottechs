@@ -583,6 +583,9 @@ function init() {
   if (!hiringCols.includes("compliance")) db.exec("ALTER TABLE applications ADD COLUMN compliance TEXT"); // Portal 2 compliance blob { items:{...}, checks:{...} } — sensitive fields stored *_enc
   if (!hiringCols.includes("training")) db.exec("ALTER TABLE applications ADD COLUMN training TEXT");     // Portal 3 training blob { modules:{...}, tier, badges:[] }
   if (!hiringCols.includes("dob")) db.exec("ALTER TABLE applications ADD COLUMN dob TEXT");               // date of birth (YYYY-MM-DD) — collected at apply, 18+ required
+  if (!hiringCols.includes("archived")) db.exec("ALTER TABLE applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: void, never hard-delete (kept for audit)
+  if (!hiringCols.includes("archived_at")) db.exec("ALTER TABLE applications ADD COLUMN archived_at TEXT");
+  if (!hiringCols.includes("archived_by")) db.exec("ALTER TABLE applications ADD COLUMN archived_by TEXT");
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3346,7 +3349,8 @@ export function getApplication(appId) {
 export function findApplicationByEmail(email) {
   const e = String(email || "").trim().toLowerCase();
   if (!e) return null;
-  return decorateApp(db.prepare("SELECT * FROM applications WHERE lower(trim(email)) = ? ORDER BY id DESC LIMIT 1").get(e));
+  // Ignore voided applications — a re-apply after a void should create a fresh row, not recover one.
+  return decorateApp(db.prepare("SELECT * FROM applications WHERE lower(trim(email)) = ? AND COALESCE(archived,0) = 0 ORDER BY id DESC LIMIT 1").get(e));
 }
 
 // Full APP id or its last 4 (unambiguous only) — mirrors resolveProjectRef/resolveServiceCallRef.
@@ -3361,9 +3365,24 @@ export function resolveApplicationRef(ref) {
   return rows.length === 1 ? decorateApp(rows[0]) : null;
 }
 
-export function listApplications({ stage } = {}) {
-  const sql = "SELECT * FROM applications" + (stage ? " WHERE stage = ?" : "") + " ORDER BY id DESC";
+export function listApplications({ stage, includeArchived = false } = {}) {
+  // Voided (archived) applications are hidden from the board/roster by default; pass
+  // includeArchived to see them (e.g. an admin "Archived" view).
+  const where = [];
+  if (stage) where.push("stage = ?");
+  if (!includeArchived) where.push("COALESCE(archived,0) = 0");
+  const sql = "SELECT * FROM applications" + (where.length ? " WHERE " + where.join(" AND ") : "") + " ORDER BY id DESC";
   return (stage ? db.prepare(sql).all(stage) : db.prepare(sql).all()).map(decorateApp);
+}
+
+// Void / restore an application. Non-destructive — the row and its events are kept for audit.
+export function setApplicationArchived(appId, archived, { actor_role, actor_name } = {}) {
+  const app = getApplication(appId);
+  if (!app) return null;
+  db.prepare("UPDATE applications SET archived = ?, archived_at = " + (archived ? "datetime('now','localtime')" : "NULL") + ", archived_by = ? WHERE app_id = ? COLLATE NOCASE")
+    .run(archived ? 1 : 0, archived ? (actor_name || null) : null, app.app_id);
+  logApplicationEvent(app.app_id, { kind: "note", detail: archived ? "Application voided (archived)" : "Application restored from archive", actor_role, actor_name });
+  return getApplication(app.app_id);
 }
 
 export function setApplicationStage(appId, stage, { actor_role, actor_name, reason } = {}) {

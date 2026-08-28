@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction } from "../actions";
+import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction } from "../actions";
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
@@ -49,8 +49,10 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const [declineWhy, setDeclineWhy] = useState("");
   const [hireRole, setHireRole] = useState(app.position === "sales" ? "sales" : app.position === "office" ? "manager" : "tech");
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const [voidArm, setVoidArm] = useState(false);
 
   const isAdmin = user.role === "admin";
+  const archived = !!app.archived;
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
   // Only technician applicants run the assessment/Portal pipeline; every other position uses the
@@ -83,11 +85,21 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             <p className="ob-hero-sub">{app.position_label} · {app.experience || "experience not given"}{app.address ? ` · ${app.address}` : ""}</p>
           </div>
           <div className="ob-hero-chips">
+            {archived && <span className="ob-badge bad">Voided</span>}
             {hired && <span className="ob-badge good">Hired</span>}
             {declined && <span className="ob-badge bad">Declined</span>}
             <Link href={`/application/${app.app_id}`} className="ob-view-btn">Applicant view</Link>
+            {isAdmin && (archived
+              ? <button className="ob-view-btn" disabled={pending} onClick={() => run(() => setAppArchivedAction(app.app_id, false))}>Restore</button>
+              : voidArm
+                ? <span className="ob-void-arm">
+                    <button className="ob-btn bad" disabled={pending} onClick={() => { setVoidArm(false); run(() => setAppArchivedAction(app.app_id, true)); }}>Confirm void</button>
+                    <button className="ob-btn ghost" onClick={() => setVoidArm(false)}>Cancel</button>
+                  </span>
+                : <button className="ob-view-btn ob-void-btn" onClick={() => setVoidArm(true)}>Void</button>)}
           </div>
         </div>
+        {archived && <div className="ob-void-note">This application is voided — hidden from the hiring board and re-apply recovery. The record is kept for audit{app.archived_by ? ` (voided by ${app.archived_by})` : ""}.</div>}
 
         {/* Deck beacon rail — click a segment to advance the stage; % readout on the right */}
         <div className="panel ob-rail">
@@ -316,7 +328,12 @@ const CSS = `
 .apx .ob-badge{font-size:.72rem;font-weight:800;text-transform:uppercase;padding:4px 12px;border-radius:20px}
 .apx .ob-badge.good{color:#1c8a45;background:#e7f6ec}
 .apx .ob-badge.bad{color:#c9382b;background:#fdecec}
-.apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none}
+.apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none;border:none;cursor:pointer}
+.apx .ob-view-btn:disabled{opacity:.5;cursor:default}
+.apx .ob-void-btn{background:#fff;color:#c9382b;border:1.5px solid #f0d3d0}
+.apx .ob-void-btn:hover{background:#fdecec}
+.apx .ob-void-arm{display:inline-flex;gap:8px;align-items:center}
+.apx .ob-void-note{background:#fdecec;border:1px solid #f4d0cc;color:#a23028;border-radius:10px;padding:10px 14px;font-size:.85rem;font-weight:600;margin-bottom:16px}
 .apx .ob-rail{display:flex;align-items:center;gap:18px;padding:16px 20px;margin-bottom:16px}
 .apx .ob-track{flex:1;display:flex;gap:6px;min-width:0}
 .apx .ob-seg{flex:1;min-width:0;display:flex;flex-direction:column;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-align:left}
