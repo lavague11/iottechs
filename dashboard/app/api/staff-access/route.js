@@ -40,6 +40,7 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "wrong" }, { status: 401 });
     }
     if (!passphrase || !safeEqual(String(passphrase), String(secret))) {
+      console.warn(`[staff-access] failed attempt from ${ip}${appId ? ` on ${String(appId).slice(0, 12)}` : ""}`);
       return Response.json({ ok: false, error: "wrong" }, { status: 401 });
     }
 
@@ -50,13 +51,14 @@ export async function POST(request) {
 
     const jar = await cookies();
     jar.set("iot_session", await makeToken({ id: admin.id, role: admin.role, email: admin.email }), {
-      httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8,
+      httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8, secure: process.env.NODE_ENV === "production",
     });
 
     // Land on the admin view of that application when one was in play; else the hiring board.
     const app = appId ? resolveApplicationRef(appId) : null;
+    console.log(`[staff-access] granted to ${ip}${app ? ` for ${app.app_id}` : ""}`);
     if (app) {
-      try { logApplicationEvent(app.app_id, { kind: "note", detail: "Staff access via pass-phrase (application gate)", actor_role: "admin", actor_name: admin.name }); } catch {}
+      try { logApplicationEvent(app.app_id, { kind: "note", detail: `Staff access via pass-phrase (application gate, IP ${ip})`, actor_role: "admin", actor_name: admin.name }); } catch {}
     }
     return Response.json({ ok: true, redirect: app ? `/onboarding/${app.app_id}` : "/hiring" });
   } catch (e) {

@@ -2,18 +2,18 @@ import { cookies, headers } from "next/headers";
 import { resolveApplicationRef } from "../../../lib/db";
 import { makeSvcToken, SVC_ACCESS_TTL_MS } from "../../../lib/auth";
 
-// A 4-digit PIN dies to an unthrottled guesser — cap attempts per IP+application (same backstop
-// as the service-call gate; the client also locks after 3 misses).
+// A 4-digit PIN dies to an unthrottled guesser — cap attempts per IP+application, PLUS a global
+// per-application cap so rotating IPs can't grind one target, PLUS a per-IP cap on lookups so
+// sequential APP ids can't be enumerated (security audit findings #2/#3).
 const ATTEMPTS = new Map();
 const WINDOW_MS = 10 * 60 * 1000;
-const MAX_TRIES = 8;
-function throttled(key) {
+function bump(key, max) {
   const now = Date.now();
   const rec = ATTEMPTS.get(key);
   if (!rec || now > rec.resetAt) { ATTEMPTS.set(key, { n: 1, resetAt: now + WINDOW_MS }); return false; }
   rec.n += 1;
-  if (ATTEMPTS.size > 5000) ATTEMPTS.clear();
-  return rec.n > MAX_TRIES;
+  if (ATTEMPTS.size > 10000) ATTEMPTS.clear();
+  return rec.n > max;
 }
 
 // Applicant gate. Reuses the signed scoped-token helper (the payload is just an id + timestamp),
@@ -23,14 +23,20 @@ export async function POST(request) {
     const { appId, pin } = await request.json();
     if (!appId) return Response.json({ ok: false, error: "Enter an Application ID." }, { status: 400 });
 
+    // Throttle BEFORE any lookup — existence probing counts as an attempt too (IDs are sequential,
+    // so an unthrottled "does APPxxxx exist" oracle would enumerate the whole roster).
+    const hdrs = await headers();
+    const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "local";
+    if (bump(`ip:${ip}`, 20)) return Response.json({ ok: false, error: "too_many" }, { status: 429 });
+
     const app = resolveApplicationRef(appId);
     if (!app) return Response.json({ ok: false, error: "no_app" }, { status: 404 });
 
     if (!pin) return Response.json({ ok: true, appId: app.app_id });
 
-    const hdrs = await headers();
-    const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "local";
-    if (throttled(`${ip}:${app.app_id}`)) return Response.json({ ok: false, error: "too_many" }, { status: 429 });
+    // PIN guesses: 5 per IP+app, and 15 per app across ALL IPs (defeats IP rotation).
+    if (bump(`${ip}:${app.app_id}`, 5) || bump(`app:${app.app_id}`, 15))
+      return Response.json({ ok: false, error: "too_many" }, { status: 429 });
 
     if (!app.applicant_pin || !String(app.applicant_pin).trim())
       return Response.json({ ok: false, error: "no_pin" }, { status: 401 });
@@ -39,7 +45,7 @@ export async function POST(request) {
 
     const jar = await cookies();
     jar.set("iot_app", await makeSvcToken(app.app_id), {
-      httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.floor(SVC_ACCESS_TTL_MS / 1000),
+      httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.floor(SVC_ACCESS_TTL_MS / 1000), secure: process.env.NODE_ENV === "production",
     });
     return Response.json({ ok: true, appId: app.app_id });
   } catch (e) {

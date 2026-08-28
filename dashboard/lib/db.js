@@ -582,6 +582,7 @@ function init() {
   if (!hiringCols.includes("steps")) db.exec("ALTER TABLE applications ADD COLUMN steps TEXT");           // Portal 1 evaluation scorecards { phone:{...}, in_person:{...}, sop:{...}, ride_along:{...} }
   if (!hiringCols.includes("compliance")) db.exec("ALTER TABLE applications ADD COLUMN compliance TEXT"); // Portal 2 compliance blob { items:{...}, checks:{...} } — sensitive fields stored *_enc
   if (!hiringCols.includes("training")) db.exec("ALTER TABLE applications ADD COLUMN training TEXT");     // Portal 3 training blob { modules:{...}, tier, badges:[] }
+  if (!hiringCols.includes("dob")) db.exec("ALTER TABLE applications ADD COLUMN dob TEXT");               // date of birth (YYYY-MM-DD) — collected at apply, 18+ required
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3314,10 +3315,10 @@ export function getApplicationEvents(appId) {
   return db.prepare("SELECT * FROM application_events WHERE app_id = ? COLLATE NOCASE ORDER BY id ASC").all(String(appId)).map((r) => ({ ...r }));
 }
 
-export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data }) {
+export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data, dob }) {
   const info = db.prepare(`
-    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin, resume_name, resume_data)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin, resume_name, resume_data, dob)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     String(name || "").trim() || null, String(email || "").trim() || null, String(phone || "").trim() || null,
     String(address || "").trim() || null, position || "other",
@@ -3327,7 +3328,8 @@ export function createApplication({ name, email, phone, address, position, exper
     String(about || "").slice(0, 2000) || null,
     phonePin(phone),
     resume_name ? String(resume_name).slice(0, 200) : null,
-    resume_data || null
+    resume_data || null,
+    String(dob || "").slice(0, 10) || null
   );
   const id = Number(info.lastInsertRowid);
   const appId = makeAppId(id);

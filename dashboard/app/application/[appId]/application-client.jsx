@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Wordmark } from "../../components/brand";
 import { requestRetakeAction } from "../../assessment/[appId]/actions";
 
@@ -103,6 +103,41 @@ function AssessmentOutcome({ app }) {
   return null;
 }
 
+// One-time welcome toast after applying: /apply drops { appId, pin, recovered } in sessionStorage
+// (never the URL) and redirects here. Shown once, dismiss-only — their ID + PIN with a
+// screenshot nudge, layered over the page instead of interrupting the flow with its own screen.
+function WelcomeToast({ appId }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("iot_app_welcome");
+      if (!raw) return;
+      sessionStorage.removeItem("iot_app_welcome");
+      const j = JSON.parse(raw);
+      if (j?.appId === appId) setData(j);
+    } catch {}
+  }, [appId]);
+  if (!data) return null;
+  return (
+    <div className="aq-toast" role="status">
+      <div className="aq-toast-hd">
+        <b>{data.recovered ? "You already applied — here's your application" : "Application received"}</b>
+        <button className="aq-toast-x" onClick={() => setData(null)} aria-label="Dismiss">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div className="aq-toast-ids">
+        <span><i>Application ID</i><b className="mono">{data.appId}</b></span>
+        {data.pin && <span><i>PIN</i><b className="mono">{data.pin}</b></span>}
+      </div>
+      <p className="aq-toast-p">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7l1.5-2.5h3L15 7" /><circle cx="12" cy="13.5" r="3.2" /></svg>
+        Screenshot this — you&rsquo;ll need both to check back in.
+      </p>
+    </div>
+  );
+}
+
 export default function ApplicationClient({ app, events = [], staff, viewerName }) {
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(app.stage)));
   const first = (viewerName || app.name || "").trim().split(/\s+/)[0];
@@ -132,6 +167,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
       </header>
 
       <main className="aq-main">
+        <WelcomeToast appId={app.app_id} />
         <div className="aq-hero">
           <div className="aq-hero-tag">{app.position_label}</div>
           <h1>{headline}</h1>
@@ -298,6 +334,18 @@ const CSS = `
 .aq-cta b{display:block;font-size:1rem;font-family:var(--font-sans),'Instrument Sans',sans-serif}
 .aq-cta span{display:block;font-size:.85rem;opacity:.92;margin-top:2px}
 .aq-cta svg{margin-left:auto;flex-shrink:0}
+/* welcome toast (post-apply ID+PIN) */
+.aq-toast{background:#16391F0d;background:#EAF3EE;border:1px solid #BFE0CD;border-radius:14px;padding:14px 16px;margin-bottom:14px;
+  box-shadow:0 18px 44px -30px rgba(16,20,24,.35);animation:aqToastIn .35s cubic-bezier(.16,1,.3,1)}
+@keyframes aqToastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.aq-toast-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.aq-toast-hd b{font-size:.95rem;color:var(--green);font-family:var(--font-sans),'Instrument Sans',sans-serif}
+.aq-toast-x{background:none;border:none;padding:4px;cursor:pointer;color:var(--muted);display:grid;place-items:center}
+.aq-toast-ids{display:flex;gap:22px;margin:10px 0 8px}
+.aq-toast-ids span{display:flex;flex-direction:column;gap:1px}
+.aq-toast-ids i{font-style:normal;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.aq-toast-ids b{font-size:1.15rem;color:var(--ink)}
+.aq-toast-p{display:flex;align-items:center;gap:7px;margin:0;font-size:.84rem;font-weight:600;color:#2E7D5B}
 /* assessment outcome + retake */
 .aq-outcome{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;background:var(--raise)}
 .aq-outcome b{display:block;font-size:1rem;font-weight:800;font-family:var(--font-sans),'Instrument Sans',sans-serif;margin-bottom:4px;color:var(--ink)}

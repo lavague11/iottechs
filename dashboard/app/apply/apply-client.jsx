@@ -77,9 +77,9 @@ export default function ApplyClient() {
   const [startDate, setStartDate] = useState("");
   const [about, setAbout] = useState("");
   const [resume, setResume] = useState(null);   // { name, data, size }
+  const [dob, setDob] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [done, setDone] = useState(null);
   const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = resume
 
   const STEPS = [
@@ -125,11 +125,16 @@ export default function ApplyClient() {
     const rawName = domVal("ap-name", name);
     const rawPhone = domVal("ap-phone", phone);
     const rawEmail = domVal("ap-email", email);
+    const rawDob = domVal("ap-dob", dob);
     const cleanName = titleCase(rawName.trim());
     if (!cleanName) return "Tell us your name.";
     if (rawPhone.replace(/\D/g, "").length < 10) return "Enter a valid phone number (at least 10 digits).";
     if (!emailOk(rawEmail)) return "Enter a valid email address.";
-    setName(cleanName); setPhone(rawPhone); setEmail(rawEmail);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDob)) return "Enter your date of birth.";
+    const age = (Date.now() - new Date(rawDob + "T00:00:00").getTime()) / (365.25 * 24 * 3600 * 1000);
+    if (Number.isNaN(age) || age > 100) return "Check your date of birth.";
+    if (age < 18) return "You must be at least 18 to apply.";
+    setName(cleanName); setPhone(rawPhone); setEmail(rawEmail); setDob(rawDob);
     return null;
   }
 
@@ -153,14 +158,21 @@ export default function ApplyClient() {
       const res = await fetch("/api/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: cleanName, phone, email, address, position, experience, skills,
+          name: cleanName, phone, email, address, position, experience, skills, dob,
           has_license: hasLicense, has_vehicle: hasVehicle, has_tools: hasTools,
           availability, start_date: startDate, about,
           resume_name: resume?.name || "", resume_data: resume?.data || "",
         }),
       });
       const j = await res.json();
-      if (j.ok) setDone({ appId: j.appId, pin: j.pin, name: j.name, recovered: !!j.recovered });
+      if (j.ok) {
+        // The API minted their iot_app grant, so land them straight on their application — the
+        // status page shows a one-time toast with the ID + PIN (payload via sessionStorage, never
+        // the URL). No interstitial "success page" interrupting the flow.
+        try { sessionStorage.setItem("iot_app_welcome", JSON.stringify({ appId: j.appId, pin: j.pin, recovered: !!j.recovered })); } catch {}
+        window.location.assign(`/application/${j.appId}`);
+        return;
+      }
       else if (j.error === "duplicate") {
         setStep(2);
         setErr("You&rsquo;ve already applied with this email. If that&rsquo;s you, enter the same phone and address you used before to pull up your Application ID — or give us a call.".replace(/&rsquo;/g, "’"));
@@ -192,28 +204,10 @@ export default function ApplyClient() {
           <div className="ap-aside-foot">Applied before? <a href="/application">Track your application →</a></div>
         </aside>
 
-        {/* RIGHT — form or success */}
+        {/* RIGHT — the form. On success we redirect straight to /application/[id] (the API minted
+            their grant); the status page shows the one-time ID+PIN toast, so no success page here. */}
         <main className="ap-main">
-          {done ? (
-            <div className="ap-success">
-              <div className="ap-check"><Icon><path d="M20 6 9 17l-5-5" /></Icon></div>
-              <h2>{done.recovered ? `You already applied${done.name ? `, ${done.name}` : ""}.` : `Application received${done.name ? `, ${done.name}` : ""}.`}</h2>
-              <p className="ap-sub">{done.recovered ? "Here&rsquo;s the application already on file for you — no need to apply again.".replace(/&rsquo;/g, "’") : "Write down your Application ID — you’ll need it, with your PIN, every time you check your status."}</p>
-              <div className="ap-ticket">
-                <div className="ap-ticket-row"><span className="ap-ticket-lbl">Application ID</span><span className="ap-ticket-val mono">{done.appId}</span></div>
-                <div className="ap-ticket-row"><span className="ap-ticket-lbl">Your PIN</span><span className="ap-ticket-val mono">{done.pin || "—"}</span></div>
-              </div>
-              <p className="ap-screenshot">
-                <Icon><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7l1.5-2.5h3L15 7" /><circle cx="12" cy="13.5" r="3.2" /></Icon>
-                Take a screenshot so you don&rsquo;t lose it.
-              </p>
-              <div className="ap-actions">
-                <a className="ap-btn ap-btn-gold" href="/application">Check my application</a>
-                <a className="ap-btn ap-btn-ghost" href="/">Back to home</a>
-              </div>
-            </div>
-          ) : (
-            <form className="ap-form" onSubmit={submit}>
+          <form className="ap-form" onSubmit={submit}>
               {/* deck-style beacon rail */}
               <div className="ap-rail">
                 {STEPS.map((s) => {
@@ -275,9 +269,15 @@ export default function ApplyClient() {
                     <button type="button" className={`ap-chip check${hasVehicle ? " on" : ""}`} onClick={() => setHasVehicle((v) => !v)}>Own vehicle</button>
                     <button type="button" className={`ap-chip check${hasTools ? " on" : ""}`} onClick={() => setHasTools((v) => !v)}>Own tools</button>
                   </div>
-                  <div className="ap-fld">
-                    <label className="ap-label" htmlFor="ap-start">Earliest start</label>
-                    <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <div className="ap-two">
+                    <div className="ap-fld">
+                      <label className="ap-label" htmlFor="ap-dob">Date of birth</label>
+                      <input id="ap-dob" className="ap-in" type="date" value={dob} onChange={(e) => setDob(e.target.value)} autoComplete="bday" />
+                    </div>
+                    <div className="ap-fld">
+                      <label className="ap-label" htmlFor="ap-start">Earliest start</label>
+                      <input id="ap-start" className="ap-in" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -315,8 +315,7 @@ export default function ApplyClient() {
                   ? <button type="button" className="ap-btn ap-btn-gold" onClick={next}>Continue →</button>
                   : <button type="submit" className="ap-btn ap-btn-gold" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>}
               </div>
-            </form>
-          )}
+          </form>
         </main>
       </div>
       <style>{CSS}</style>
@@ -440,18 +439,7 @@ textarea.ap-in{resize:vertical}
 .ap-recap-k{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.12em}
 .ap-recap-v{font-weight:600;font-size:.92rem}
 .mono{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px}
-/* success */
-.ap-success{text-align:center;padding:26px 4px}
-.ap-check{width:64px;height:64px;border-radius:50%;background:#e7f6ec;display:grid;place-items:center;margin:0 auto 16px}
-.ap-check svg{width:30px;height:30px;color:#1c8a45;stroke-width:2.6}
-.ap-ticket{background:var(--raise);border:1px solid var(--line);border-radius:12px;padding:6px 18px;margin:22px 0;text-align:left}
-.ap-ticket-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0}
-.ap-ticket-row+.ap-ticket-row{border-top:1px dashed var(--line)}
-.ap-ticket-lbl{color:var(--muted);font-weight:600;font-size:.9rem}
-.ap-ticket-val{font-weight:800;font-size:1.2rem}
-.ap-screenshot{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;font-size:.85rem;font-weight:600;color:var(--gold-deep,#A8842F)}
-.ap-screenshot svg{width:17px;height:17px;stroke-width:2;flex:none}
-.ap-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+/* (the old post-submit success screen was replaced by a redirect to /application/[id] + toast) */
 @media(max-width:840px){
   .ap-shell{grid-template-columns:1fr}
   .ap-aside{position:static;height:auto;padding:28px 24px 24px;justify-content:flex-start;gap:18px}
