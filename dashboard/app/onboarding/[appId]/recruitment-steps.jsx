@@ -15,8 +15,11 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
   const [sel, setSel] = useState(P1_EVAL_STEPS.includes(status0) ? status0 : "phone");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  // A retake still pending office review, or approved but not yet re-graded — decisions wait for it.
-  const retakeBlocking = !!(assessment?.retake && assessment.status !== "graded");
+  // A retake still pending office review, or approved but not yet re-submitted — decisions wait for
+  // it. Key off retake.status directly: a PENDING retake sits at assessment.status 'graded' (that's
+  // where the candidate requests one from), so the old `status !== "graded"` test missed it.
+  const retakeBlocking = assessment?.retake?.status === "pending"
+    || (assessment?.retake?.status === "approved" && assessment.status !== "graded");
 
   const rubric = STEP_RUBRICS[sel];
   const saved = steps[sel] || {};

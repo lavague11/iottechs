@@ -53,6 +53,9 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const isAdmin = user.role === "admin";
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
+  // Only technician applicants run the assessment/Portal pipeline; every other position uses the
+  // direct role-hire Decision card.
+  const isTechTrack = (app.position || "tech") === "tech";
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.key === app.stage));
   const pct = (hired || declined) ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);
   const readoutLabel = hired ? "Hired" : declined ? "Closed" : (STEPS[stepIdx]?.label || "Applied");
@@ -109,8 +112,11 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           </div>
         </div>
 
-        <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>
-        {app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} assessment={app.assessment} canHire={user.role === "admin"} /></div>}
+        {/* The assessment + Portal-1 pipeline is the TECHNICIAN track (25-Q tech assessment,
+            skills scorecards). Sales / PM / Subcontractor applicants don't take it — they get the
+            direct role-hire Decision card below instead. */}
+        {isTechTrack && <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>}
+        {isTechTrack && app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} assessment={app.assessment} canHire={user.role === "admin"} /></div>}
         {app.portal === 2 && <div style={{ marginBottom: 14 }}><ComplianceReview appId={app.app_id} status={app.status} compliance={compliance} /></div>}
         {(app.portal === 3 || app.status === "cleared") && <div style={{ marginBottom: 14 }}><TrainingPanel appId={app.app_id} status={app.status} training={app.training} /></div>}
 
@@ -169,10 +175,12 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           </div>
         </div>
 
-        {/* Legacy Decision card — writes only the coarse `stage` field, which desyncs the new
-            status engine. Only legacy rows (no app.status yet) still use it; every new-engine
-            candidate decides via RecruitmentSteps' Final Review decision instead. */}
-        {!hired && !app.status && (
+        {/* Direct role-hire Decision card (Hire as Sales/Manager/Admin + create account). This is
+            the hire path for NON-technician applicants, who skip the tech assessment pipeline.
+            Technicians decide via RecruitmentSteps' Final Review instead (which moves stage+status+
+            portal together), so this card — which writes only `stage` — is hidden for them to avoid
+            the two-writer desync. */}
+        {!hired && !isTechTrack && (
           <div className="panel ob-card">
             <div className="ob-card-h">Decision</div>
             <div className="ob-decide">
