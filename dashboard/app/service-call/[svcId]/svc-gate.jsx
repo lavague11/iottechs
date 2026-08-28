@@ -27,6 +27,13 @@ export default function SvcGate({
   const [cardWarp, setCardWarp]   = useState(false);
   const [granted, setGranted]     = useState(false);
   const [needsClear, setNeedsClear] = useState(false);
+  // Staff pass-phrase access — application gates only. A long vault pass-phrase (not the 4-digit
+  // pad) mints a real admin session and opens this application in the hiring portal.
+  const staffMode = idField === "appId";
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [staffPass, setStaffPass] = useState("");
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffErr, setStaffErr] = useState("");
   const canvasRef = useRef(null);
   const canvasCtrl = useRef(null);
   const pinRef = useRef(""), needsClearRef = useRef(false), lockedRef = useRef(false), busyRef = useRef(false);
@@ -91,12 +98,30 @@ export default function SvcGate({
 
   useEffect(() => {
     function onKey(e) {
+      // Don't hijack keys while typing in a real field (e.g. the staff pass-phrase input).
+      if (e.target?.tagName === "INPUT" || e.target?.tagName === "TEXTAREA") return;
       if (e.key >= "0" && e.key <= "9") addDigit(e.key);
       else if (e.key === "Backspace") { e.preventDefault(); delDigit(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  async function submitStaff(e) {
+    e?.preventDefault?.();
+    if (!staffPass.trim() || staffBusy) return;
+    setStaffBusy(true); setStaffErr("");
+    try {
+      const res = await fetch("/api/staff-access", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appId: svcId, passphrase: staffPass }),
+      });
+      const j = await res.json();
+      if (j.ok && j.redirect) { window.location.assign(j.redirect); return; }
+      setStaffErr(res.status === 429 ? "Too many attempts — wait a few minutes." : "That pass-phrase isn't right.");
+    } catch (_) { setStaffErr("Connection error — try again."); }
+    setStaffBusy(false);
+  }
 
   const displayPin = needsClear ? "" : pin;
 
@@ -154,8 +179,34 @@ export default function SvcGate({
         <div className="gw2-actions">
           <a className="gw2-lbtn" href={altHref}>{altLabel}</a>
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>Need help?</button>
+          {staffMode && <button className="gw2-lbtn gw2-staff-btn" onClick={() => { setStaffOpen(true); setStaffErr(""); }}>Staff</button>}
         </div>
       </div>
+
+      {staffOpen && (
+        <div className="gw2-overlay" onClick={(e) => { if (e.target === e.currentTarget && !staffBusy) setStaffOpen(false); }}>
+          <div className="gw2-modal">
+            <div className="gw2-mhd">
+              <span>Staff access</span>
+              <button className="gw2-mclose" onClick={() => setStaffOpen(false)} disabled={staffBusy}>✕</button>
+            </div>
+            <div className="gw2-mbd">
+              <p>Enter the staff pass-phrase to open this application in the hiring portal.</p>
+              <form onSubmit={submitStaff}>
+                <input
+                  className="gw2-staff-in" type="password" value={staffPass} autoFocus
+                  onChange={(e) => setStaffPass(e.target.value)} placeholder="Pass-phrase"
+                  autoComplete="current-password" disabled={staffBusy}
+                />
+                {staffErr && <div className="gw2-staff-err">{staffErr}</div>}
+                <button className="gw2-staff-go" type="submit" disabled={staffBusy || !staffPass.trim()}>
+                  {staffBusy ? "Checking…" : "Open admin view"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showHelp && (
         <div className="gw2-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowHelp(false); }}>
@@ -202,4 +253,13 @@ const GW2_LIGHT_CSS = `
 .gw2-light .gw2-lbtn{background:#f4f5f7;border:1px solid #e6e8ee;color:#2C3347;text-decoration:none;}
 .gw2-light .gw2-lbtn:hover{border-color:rgba(201,169,110,.55);background:#faf4e8;}
 .gw2-light .gw2-help-btn{color:#b08f4f;}
+.gw2-staff-btn{opacity:.55}
+.gw2-staff-btn:hover{opacity:1}
+.gw2-staff-in{width:100%;box-sizing:border-box;border:1px solid #e6e8ee;border-radius:10px;padding:12px 14px;
+  font:inherit;font-size:1rem;color:#0e1320;background:#f4f5f7;outline:none;margin-top:4px}
+.gw2-staff-in:focus{border-color:rgba(201,169,110,.6);background:#fff}
+.gw2-staff-err{margin-top:10px;color:#c0392b;font-size:.85rem;font-weight:600}
+.gw2-staff-go{width:100%;margin-top:12px;border:none;border-radius:10px;padding:12px 16px;font:inherit;
+  font-weight:700;font-size:.95rem;cursor:pointer;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0e1320}
+.gw2-staff-go:disabled{opacity:.5;cursor:default}
 `;
