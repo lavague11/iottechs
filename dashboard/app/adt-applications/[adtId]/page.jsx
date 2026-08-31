@@ -49,7 +49,7 @@ export default async function AdtProjectPage({ params }) {
 
   const alerts = getNotifSummary(user.id);
   const a = {
-    adt_id: app.adt_id, name: app.name, email: app.email, phone: app.phone, address: app.address,
+    adt_id: app.adt_id, name: app.name, email: app.email, phone: app.phone, address: app.address, dob: app.dob || "",
     equipment: app.equipment || {}, points: app.points, notes: app.notes, stage: app.stage,
     property_type: app.property_type || "residential", contact_name: app.contact_name || "", asap: !!app.asap,
     status: app.status || "submitted", docs_note: app.docs_note || "", customer_docs: app.customer_docs || [],

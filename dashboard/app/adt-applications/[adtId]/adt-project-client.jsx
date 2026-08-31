@@ -178,6 +178,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
         <div className="adtp-cd-f"><span className="adtp-copy-sp" /><div className="adtp-cd-v"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div></div>
         {app.phone && <div className="adtp-cd-f"><CopyBtn text={fmtPhone(app.phone)} /><div className="adtp-cd-v"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div></div>}
         {app.email && <div className="adtp-cd-f"><CopyBtn text={app.email} /><div className="adtp-cd-v"><span>Email</span><b>{app.email}</b></div></div>}
+        {app.dob && <div className="adtp-cd-f"><CopyBtn text={app.dob} /><div className="adtp-cd-v"><span>Date of birth</span><b>{fmtDay(app.dob)}</b></div></div>}
         {app.address && <div className="adtp-cd-f full"><CopyBtn text={app.address} /><div className="adtp-cd-v"><span>Install address</span><b>{app.address}</b></div></div>}
         {app.tax_id && <div className="adtp-cd-f"><CopyBtn text={fmtTax(app.tax_id, isComm)} /><div className="adtp-cd-v"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div></div>}
         {app.access_pin && <div className="adtp-cd-f"><CopyBtn text={app.access_pin} /><div className="adtp-cd-v"><span>Access PIN</span><b>{app.access_pin}</b></div></div>}
@@ -299,6 +300,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.address && { k: "Address", v: app.address },
       app.phone && { k: "Phone", v: fmtPhone(app.phone) },
       app.email && { k: "Email", v: app.email },
+      app.dob && { k: "Date of birth", v: fmtDay(app.dob) },
       app.tax_id && { k: isComm ? "EIN" : "SSN", v: <RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /> },
       app.access_pin && { k: "Access PIN", v: app.access_pin },
       app.verbal_password && { k: "Verbal password", v: <RevealField value={app.verbal_password} /> },
