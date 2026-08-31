@@ -56,6 +56,13 @@ const PITCH = {
     pay: "$250–$400 / day · per diem",
     perks: ["$250–$400 per diem", "Take the jobs you want", "Fast, reliable pay", "Steady volume year-round"],
   },
+  // Neutral panel shown until a position is picked — no role-specific pay implied.
+  none: {
+    h: "Build a career keeping people safe.",
+    p: "Install, sell, or run security systems across NYC & NJ. Pick the role that fits you.",
+    pay: "",
+    perks: ["Paid hands-on training", "Weekly pay, real growth path", "Steady work across NYC & NJ", "Company van, tools & gear"],
+  },
 };
 const CHECK = <path d="M20 6 9 17l-5-5" />;
 const Icon = ({ children }) => (
@@ -63,7 +70,7 @@ const Icon = ({ children }) => (
 );
 
 export default function ApplyClient() {
-  const [position, setPosition] = useState("tech");
+  const [position, setPosition] = useState("");   // no position pre-selected — the applicant picks
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -102,7 +109,7 @@ export default function ApplyClient() {
     return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   };
   const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
-  const pitch = PITCH[position] || PITCH.tech;   // left panel tailors to the chosen position
+  const pitch = PITCH[position] || PITCH.none;   // left panel tailors to the chosen position
 
   const RESUME_TYPES = /\.(pdf|docx?|png|jpe?g|heic)$/i;
   function onResume(e) {
@@ -140,6 +147,7 @@ export default function ApplyClient() {
 
   function next() {
     setErr("");
+    if (step === 1 && !position) { setErr("Please pick a position to continue."); return; }
     if (step === 2) { const e = captureInfo(); if (e) { setErr(e); return; } }
     setStep((s) => Math.min(3, s + 1));
   }
@@ -194,7 +202,7 @@ export default function ApplyClient() {
             <div className="ap-tag">Careers · Now hiring</div>
             <h1 className="ap-hero-h">{pitch.h}</h1>
             <p className="ap-hero-p">{pitch.p}</p>
-            <div className="ap-pay"><span className="ap-pay-lbl">{POSITIONS.find((p) => p.key === position)?.label}</span>{pitch.pay}</div>
+            {position && <div className="ap-pay"><span className="ap-pay-lbl">{POSITIONS.find((p) => p.key === position)?.label}</span>{pitch.pay}</div>}
             <ul className="ap-perks">
               {pitch.perks.map((t) => (
                 <li key={t}><span className="ap-perk-ic"><Icon>{CHECK}</Icon></span>{t}</li>
@@ -227,7 +235,7 @@ export default function ApplyClient() {
                   <div className="ap-form-head"><h2>What are you applying for?</h2></div>
                   <div className="ap-grid2">
                     {POSITIONS.map((p) => (
-                      <button type="button" key={p.key} className={`ap-pick${position === p.key ? " on" : ""}`} onClick={() => setPosition(p.key)}>
+                      <button type="button" key={p.key} className={`ap-pick${position === p.key ? " on" : ""}`} onClick={() => { setPosition(p.key); setErr(""); }}>
                         <span className="ap-pick-ic"><Icon>{p.icon}</Icon></span>
                         <span className="ap-pick-tx"><span className="ap-pick-t">{p.label}</span><span className="ap-pick-h">{p.hint}</span></span>
                         <span className="ap-pick-dot" aria-hidden="true" />
