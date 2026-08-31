@@ -87,6 +87,18 @@ function RevealField({ value, mask }) {
   );
 }
 
+// A faint em-dash for empty fields — so staff see the complete record, blanks included.
+const DASH = <span className="adtp-f-empty">—</span>;
+// One label/value cell in the Customer-details grid. Copy button is subtle and appears on hover.
+function Field({ label, children, copy, full }) {
+  return (
+    <div className={"adtp-f" + (full ? " full" : "")}>
+      <span className="adtp-f-l">{label}</span>
+      <div className="adtp-f-v"><span className="adtp-f-t">{children}</span>{copy ? <CopyBtn text={copy} /> : null}</div>
+    </div>
+  );
+}
+
 // The ADT account rendered on the SAME Deck as a project — Apply → Deal → Complete as swipeable
 // stages (scheduling folded into Complete). Reuses DeckView so the chrome matches 1:1.
 export default function AdtProjectClient({ user, alerts, app }) {
@@ -171,22 +183,42 @@ export default function AdtProjectClient({ user, alerts, app }) {
           </div>
         </div>
       )}
-      <div className="adtp-cd-sec">Customer details</div>
+      <div className="adtp-cd-sec">Account</div>
       <div className="adtp-cd">
-        <div className="adtp-cd-f"><CopyBtn text={app.name} /><div className="adtp-cd-v"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div></div>
-        {isComm && app.contact_name && <div className="adtp-cd-f"><CopyBtn text={app.contact_name} /><div className="adtp-cd-v"><span>Contact</span><b>{app.contact_name}</b></div></div>}
-        <div className="adtp-cd-f"><span className="adtp-copy-sp" /><div className="adtp-cd-v"><span>Property</span><b>{isComm ? "Commercial" : "Residential"}</b></div></div>
-        {app.phone && <div className="adtp-cd-f"><CopyBtn text={fmtPhone(app.phone)} /><div className="adtp-cd-v"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div></div>}
-        {app.email && <div className="adtp-cd-f"><CopyBtn text={app.email} /><div className="adtp-cd-v"><span>Email</span><b>{app.email}</b></div></div>}
-        {app.dob && <div className="adtp-cd-f"><CopyBtn text={app.dob} /><div className="adtp-cd-v"><span>Date of birth</span><b>{fmtDay(app.dob)}</b></div></div>}
-        {app.address && <div className="adtp-cd-f full"><CopyBtn text={app.address} /><div className="adtp-cd-v"><span>Install address</span><b>{app.address}</b></div></div>}
-        {app.tax_id && <div className="adtp-cd-f"><CopyBtn text={fmtTax(app.tax_id, isComm)} /><div className="adtp-cd-v"><span>{isComm ? "EIN" : "SSN"}</span><b><RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /></b></div></div>}
-        {app.access_pin && <div className="adtp-cd-f"><CopyBtn text={app.access_pin} /><div className="adtp-cd-v"><span>Access PIN</span><b>{app.access_pin}</b></div></div>}
-        {app.verbal_password && <div className="adtp-cd-f"><CopyBtn text={app.verbal_password} /><div className="adtp-cd-v"><span>Verbal password</span><b><RevealField value={app.verbal_password} /></b></div></div>}
-        {emerg.flatMap((c, i) => [
-          c.name && <div key={`en${i}`} className="adtp-cd-f"><CopyBtn text={c.name} /><div className="adtp-cd-v"><span>Emergency {i + 1} name</span><b>{c.name}</b></div></div>,
-          c.phone && <div key={`ep${i}`} className="adtp-cd-f"><CopyBtn text={fmtPhone(c.phone)} /><div className="adtp-cd-v"><span>Emergency {i + 1} phone</span><b>{fmtPhone(c.phone)}</b></div></div>,
-        ]).filter(Boolean)}
+        <Field label={isComm ? "Business" : "Name"} copy={app.name}>{app.name || DASH}</Field>
+        {isComm && <Field label="Contact name" copy={app.contact_name}>{app.contact_name || DASH}</Field>}
+        <Field label="Property">{isComm ? "Commercial" : "Residential"}</Field>
+        <Field label="Applied">{app.created_at ? fmtDay(app.created_at) : DASH}</Field>
+      </div>
+
+      <div className="adtp-cd-sec">Contact</div>
+      <div className="adtp-cd">
+        <Field label="Phone" copy={app.phone ? fmtPhone(app.phone) : ""}>{app.phone ? <a href={`tel:${app.phone}`}>{fmtPhone(app.phone)}</a> : DASH}</Field>
+        <Field label="Email" copy={app.email}>{app.email ? <a href={`mailto:${app.email}`}>{app.email}</a> : DASH}</Field>
+        <Field label="Date of birth" copy={app.dob}>{app.dob ? fmtDay(app.dob) : DASH}</Field>
+        <Field label="Install address" full copy={app.address}>{app.address ? <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(app.address)}`} target="_blank" rel="noreferrer">{app.address}</a> : DASH}</Field>
+      </div>
+
+      <div className="adtp-cd-sec">Security &amp; identity</div>
+      <div className="adtp-cd">
+        <Field label={isComm ? "EIN" : "SSN"} copy={app.tax_id ? fmtTax(app.tax_id, isComm) : ""}>{app.tax_id ? <RevealField value={fmtTax(app.tax_id, isComm)} mask={maskTax(fmtTax(app.tax_id, isComm))} /> : DASH}</Field>
+        <Field label="Access PIN" copy={app.access_pin}>{app.access_pin || DASH}</Field>
+        <Field label="Verbal password" copy={app.verbal_password}>{app.verbal_password ? <RevealField value={app.verbal_password} /> : DASH}</Field>
+      </div>
+
+      <div className="adtp-cd-sec">Emergency contacts</div>
+      <div className="adtp-cd">
+        {[0, 1].map((i) => { const c = emerg[i] || {}; return (
+          <Field key={i} label={`Contact ${i + 1}`} copy={c.phone ? fmtPhone(c.phone) : ""}>
+            {c.name || c.phone ? <>{c.name || DASH}{c.phone ? <span className="adtp-f-sub"> · {fmtPhone(c.phone)}</span> : null}</> : DASH}
+          </Field>
+        ); })}
+      </div>
+
+      <div className="adtp-cd-sec">Install preferences</div>
+      <div className="adtp-cd">
+        <Field label="Preferred days" full>{app.asap ? <b className="adtp-asap">ASAP</b> : (prefDays.length ? prefDays.join(", ") : "Any day")}</Field>
+        <Field label="Preferred windows" full>{prefWins.length ? prefWins.join(", ") : DASH}</Field>
       </div>
 
       {app.verification_doc?.data && (<>
@@ -197,16 +229,10 @@ export default function AdtProjectClient({ user, alerts, app }) {
         </a>
       </>)}
 
-      {(prefDays.length || prefWins.length || app.asap) ? (
-        <div className="adtp-pref">
-          <span>Preferred install times</span>
-          {app.asap ? <b className="adtp-asap">ASAP</b> : null}
-          {app.asap && (prefDays.length || prefWins.length) ? " · " : null}
-          {prefDays.length ? <b>{prefDays.join(", ")}</b> : (app.asap ? null : <b>Any day</b>)}
-          {prefWins.length ? <> · <b>{prefWins.join(", ")}</b></> : null}
-        </div>
-      ) : null}
-      {app.notes && <div className="adtp-notes"><span>Notes</span>{app.notes}</div>}
+      {app.notes && (<>
+        <div className="adtp-cd-sec">Notes</div>
+        <div className="adtp-notes">{app.notes}</div>
+      </>)}
     </div>
   );
 
@@ -350,18 +376,24 @@ const CSS = `
 .adtp-q{font-weight:800;color:var(--dv-ink,#101418);min-width:32px}
 .adtp-n{flex:1}
 .adtp-p{color:var(--dv-ink,#101418);font-weight:700}
-.adtp-cd-sec{font-size:.64rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:16px 0 9px}
-.adtp-cd-sec em{font-style:normal;font-weight:700;color:var(--dv-ink,#101418);letter-spacing:0;margin-left:6px}
-.adtp-cd{display:grid;grid-template-columns:1fr 1fr;gap:11px 20px;margin-bottom:4px}
-.adtp-cd-f{min-width:0;display:flex;align-items:flex-start;gap:8px}
-.adtp-cd-f.full{grid-column:1/-1}
-.adtp-cd-v{min-width:0;flex:1}
-.adtp-cd-v span{display:block;font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
-.adtp-cd-v b{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
-.adtp-copy{flex:none;width:24px;height:24px;margin-top:1px;display:grid;place-items:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer;transition:.12s}
-.adtp-copy:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
-.adtp-copy.ok{border-color:var(--dv-green,#2E7D5B);color:var(--dv-green,#2E7D5B)}
-.adtp-copy-sp{flex:none;width:24px}
+.adtp-cd-sec{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:22px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.adtp-cd-sec:first-of-type{margin-top:2px}
+.adtp-cd{display:grid;grid-template-columns:1fr 1fr;gap:15px 28px;margin-bottom:2px}
+.adtp-f{min-width:0;display:flex;flex-direction:column;gap:4px}
+.adtp-f.full{grid-column:1/-1}
+.adtp-f-l{font-size:.58rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.adtp-f-v{display:flex;align-items:center;gap:7px;min-height:20px}
+.adtp-f-t{font-size:.92rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word;line-height:1.35}
+.adtp-f-t a{color:var(--dv-ink,#101418);text-decoration:none;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.adtp-f-t a:hover{border-color:var(--dv-gold,#C9A96E)}
+.adtp-f-sub{color:var(--dv-meta,#787D84);font-weight:500}
+.adtp-f-empty{color:var(--dv-faint,#A6ABB1)}
+.adtp-asap{color:var(--dv-gold-deep,#A8842F);font-weight:700}
+.adtp-copy{flex:none;width:20px;height:20px;display:grid;place-items:center;border:none;background:none;color:var(--dv-faint,#A6ABB1);cursor:pointer;opacity:0;transition:.12s}
+.adtp-f:hover .adtp-copy{opacity:1}
+.adtp-copy:hover{color:var(--dv-gold-deep,#A8842F)}
+.adtp-copy.ok{color:var(--dv-green,#2E7D5B);opacity:1}
+.adtp-copy-sp{display:none}
 .adtp-chip.amber{border-color:#f0d9bf;color:#c46a1a}
 .adtp-status-sel{height:33px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;font-size:.8rem;font-weight:700;padding:0 12px;cursor:pointer;font-family:inherit;outline:none}
 .adtp-status-sel:hover{border-color:var(--dv-gold,#C9A96E)}
