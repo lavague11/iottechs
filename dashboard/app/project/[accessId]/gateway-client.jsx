@@ -2439,7 +2439,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
-        menu={canToggleDeck ? [{ label: "Classic view", onClick: toggleDeck }] : []}
+        menu={cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}
         previewRole={previewRole}
@@ -3551,11 +3551,11 @@ export default function GatewayClient({ project, initialView = null, currentUser
   // In-place preview role (admin/manager viewing as customer/tech) — lifted here so BOTH the
   // masthead pill and the subheader eye drive the same state and the page snaps in one tab.
   const [previewRole, setPreviewRole]   = useState(null);
-  // ?deck=1 renders the redesigned full-bleed stage deck. Read after mount (avoids a hydration
-  // mismatch) — mirrored inside ResolvedView, which swaps its body for the deck. Here it also
-  // suppresses the legacy masthead + centred .wrap so the deck owns the whole viewport.
-  const [deckMode, setDeckMode] = useState(false);
-  useEffect(() => { setDeckMode(new URLSearchParams(window.location.search).get("deck") === "1"); }, []);
+  // The deck IS the project view now — ResolvedView always renders the full-bleed stage deck, which
+  // carries its own top bar (logo + role menu). The legacy ProjectHeader masthead would just stack a
+  // second "IOT TECHS" bar on top of it, so it's suppressed here (deckMode true) and the deck owns
+  // the whole viewport — same single-header format as the ADT deck.
+  const [deckMode] = useState(true);
 
   async function attemptAccess({ loginRole, pinValue, emailOrPhone, password }) {
     return resolveAccess(project.access_id, { loginRole, pin: pinValue, emailOrPhone, password });
