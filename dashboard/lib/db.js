@@ -3897,6 +3897,19 @@ export function shareAdtDeal(adtId, on) {
     .run(on ? new Date().toISOString() : null, on ? 1 : 0, String(adtId));
   return getAdtApplication(adtId);
 }
+// Lightweight patch of just the contact fields (name/phone/email/address) — the header's inline
+// edit. Deliberately touches nothing else, so the encrypted SSN/verbal password and the equipment
+// are never disturbed. Recomputes the access PIN from the phone (unless the phone is unchanged).
+export function updateAdtContact(adtId, { name, phone, email, address } = {}) {
+  const cur = getAdtApplication(adtId);
+  if (!cur) return null;
+  const newPhone = phone != null ? phone : cur.phone;
+  db.prepare(`UPDATE adt_applications SET name = ?, phone = ?, email = ?, address = ?, access_pin = ?,
+              updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
+    .run(name != null ? name : cur.name, newPhone, email != null ? email : cur.email, address != null ? address : cur.address,
+         phonePin(newPhone) || cur.access_pin, String(adtId));
+  return getAdtApplication(adtId);
+}
 // Revise a shared/accepted/signed quote back to an editable draft. Keeps the priced deal_json (so
 // staff tweak from where it was) but clears the customer agreement — share, acceptance, AND the
 // signature — because the terms are changing and the old signature no longer applies. After this,

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, reviseAdtDeal, setAdtStatus, updateAdtApplication, setAdtDocsNote } from "../../lib/db";
+import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, reviseAdtDeal, setAdtStatus, updateAdtApplication, updateAdtContact, setAdtDocsNote } from "../../lib/db";
 import { renderEmail, sendEmail, emailEnabled } from "../../lib/email";
 import { adtSummary } from "../../lib/adt";
 
@@ -133,6 +133,17 @@ export async function shareAdtDealAction(adtId, on) {
   shareAdtDeal(adtId, !!on);
   revalidatePath("/adt-applications");
   return { ok: true, shared: !!on };
+}
+
+// Quick inline edit of the contact fields from the header (name/phone/email/address). Office-only,
+// like the full Revise. Leaves the encrypted fields + equipment untouched.
+export async function updateAdtContactAction(adtId, patch) {
+  if (!(await requireOffice())) return { error: "Not authorized." };
+  const p = patch || {};
+  const r = updateAdtContact(adtId, { name: p.contact_name, phone: p.contact_phone, email: p.contact_email, address: p.address });
+  if (!r) return { error: "Application not found." };
+  revalidatePath("/adt-applications");
+  return { ok: true };
 }
 
 // Revise an already accepted/signed quote — pulls it back to an editable draft and clears the

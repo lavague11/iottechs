@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { fmtSignStamp } from "../../../lib/proposal";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
+import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, updateAdtContactAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
@@ -51,7 +51,21 @@ const DVI = {
   call: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
   mail: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
+  card: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
+  cal: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
 };
+// Download the customer as a .vcf contact — matches the project header's "Add to contact".
+function downloadVCard(app) {
+  const esc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1");
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `FN:${esc(app.name)}`, `N:${esc(app.name)};;;;`, "ORG:IOT TECHS · ADT"];
+  if (app.phone) lines.push(`TEL;TYPE=CELL:${esc(app.phone)}`);
+  if (app.email) lines.push(`EMAIL;TYPE=INTERNET:${esc(app.email)}`);
+  if (app.address) lines.push(`ADR;TYPE=HOME:;;${esc(app.address)};;;;`);
+  lines.push(`NOTE:ADT ${esc(app.adt_id)}`, "END:VCARD");
+  const url = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/vcard" }));
+  const a = document.createElement("a"); a.href = url; a.download = `${(app.name || "contact").replace(/\s+/g, "_")}.vcf`; a.click();
+  URL.revokeObjectURL(url);
+}
 // Parse a date-only string ("2026-08-20") as LOCAL midnight, not UTC — otherwise it renders a day early
 // in Eastern (UTC-parsed midnight is the previous evening here). Datetimes keep their time.
 const fmtDay = (d) => { if (!d) return ""; try { const s = String(d).trim(); const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"); return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
@@ -354,7 +368,14 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
       app.email && { label: "Email", icon: DVI.mail, href: `mailto:${app.email}` },
       app.address && { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}` },
+      { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setIdx(2); } },
+      { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(app); } },
     ].filter(Boolean),
+    // Inline quick-edit of the contact fields, mirroring the project header (the full form is still
+    // "Revise application" on the Apply step). Office-only; leaves SSN/verbal/equipment untouched.
+    contact: { contact_name: app.name || "", contact_phone: app.phone || "", contact_email: app.email || "", address: app.address || "" },
+    canEdit: office,
+    onSave: async (vals) => { const r = await updateAdtContactAction(app.adt_id, vals); if (r?.ok) router.refresh(); return r; },
   };
 
   // Lock → clear this browser's access (server), then hard-reload to the account gate (page.jsx). A
