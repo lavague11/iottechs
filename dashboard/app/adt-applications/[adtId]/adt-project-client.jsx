@@ -265,35 +265,33 @@ export default function AdtProjectClient({ user, alerts, app }) {
 
   // Submit from inside the ADT Tool → share the quote with the customer (the "send it like the proposal" step).
   const dealNode = <DealFrame adtId={app.adt_id} view={dealView} locked={dealLocked} rep={user?.name || ""} cust={app.name || ""} deal={dealObj} seed={adtQuoteSeed(app.equipment)} onSubmit={() => doShare(true)} />;
-  const shareNode = (
-    <div style={pad} className="adtp">
-      {signed ? (
-        <div className="adtp-signrec">
-          <div className="adtp-signrec-h">✓ Signed by customer</div>
-          {app.deal_signature_data
-            ? <img src={app.deal_signature_data} alt="Customer signature" className="adtp-signrec-img" />
-            : <span className="adtp-signrec-typed">{app.deal_signed_name}</span>}
-          <div className="adtp-signrec-meta">{app.deal_signed_name}{app.deal_signed_at ? ` · Signed ${fmtSignStamp(app.deal_signed_at)}` : ""}</div>
-        </div>
-      ) : accepted ? <div className="adtp-ok">✓ Customer accepted the quote</div> : null}
-      {shared
-        ? !signed && <div className="adtp-ok">✓ Shared — the customer sees their quote and can sign it on the ADT portal</div>
-        : <div className="adtp-muted" style={{ marginBottom: 10 }}>The customer sees no pricing until you share it. They'll get retail, activation, your applied credit, and due-at-install — never cost or commission.</div>}
-      {shareErr && <div className="adtp-err">{shareErr}</div>}
-      {(signed || accepted)
-        ? (office
-            ? (reviseArm
-                ? <div className="adtp-editrow" style={{ gap: 8 }}>
-                    <span className="adtp-muted" style={{ marginRight: "auto" }}>Revising voids the customer&rsquo;s {signed ? "signature" : "acceptance"} — they&rsquo;ll re-sign the new quote.</span>
-                    <button className="adtp-btn ghost" disabled={pending} onClick={() => doRevise()}>Confirm revise</button>
-                    <button className="adtp-chip" onClick={() => setReviseArm(false)}>Cancel</button>
-                  </div>
-                : <button className="adtp-btn ghost" disabled={pending} onClick={() => setReviseArm(true)}>Revise quote</button>)
-            : <div className="adtp-muted">Signed — an admin can revise it if the terms need to change.</div>)
-        : shared
-          ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
-          : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
-      {!hasDeal && !shared && <div className="adtp-muted" style={{ marginTop: 8 }}>Price the deal first.</div>}
+  // One consolidated status + action bar that sits on the ADT Tool itself — no separate "Customer
+  // quote" dropdown. Shows where the quote stands and the one relevant control (Share / Unshare /
+  // Revise). Pricing + the primary Submit-to-share live inside the tool.
+  const dealBar = (
+    <div className={"adtp-dealbar" + ((signed || accepted) ? " ok" : shared ? " shared" : "")}>
+      <div className="adtp-dealbar-row">
+        <span className="adtp-dealbar-st">
+          {signed ? <><b>Signed</b><em>{app.deal_signed_name}{app.deal_signed_at ? ` · ${fmtSignStamp(app.deal_signed_at)}` : ""}</em></>
+            : accepted ? <b>Accepted by the customer</b>
+            : shared ? <><b>Shared</b><em>The customer can review &amp; sign it on their portal</em></>
+            : hasDeal ? <><b>Priced</b><em>Submit in the tool to share it with the customer</em></>
+            : <><b>Draft</b><em>Price the deal, then Submit to share it</em></>}
+        </span>
+        <span className="adtp-dealbar-act">
+          {(signed || accepted)
+            ? (office
+                ? (reviseArm
+                    ? <><button className="adtp-btn ghost" disabled={pending} onClick={() => doRevise()}>Confirm revise</button><button className="adtp-chip" onClick={() => setReviseArm(false)}>Cancel</button></>
+                    : <button className="adtp-btn ghost" disabled={pending} onClick={() => setReviseArm(true)}>Revise quote</button>)
+                : <span className="adtp-muted">An admin can revise it</span>)
+            : shared
+              ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
+              : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
+        </span>
+      </div>
+      {reviseArm && <div className="adtp-dealbar-warn">Revising voids the customer&rsquo;s {signed ? "signature" : "acceptance"} — they&rsquo;ll re-sign the revised quote.</div>}
+      {shareErr && <div className="adtp-err" style={{ marginTop: 8 }}>{shareErr}</div>}
     </div>
   );
 
@@ -306,8 +304,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       // priced-not-shared = done (solid yellow); shared-not-signed = the customer owes a signature (blink red); signed = complete.
       mark: signed ? "complete" : shared ? "attention" : hasDeal ? "done" : "active",
       tools: [
-        { name: "ADT Tool", label: hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: dealNode },
-        { name: "Customer quote", label: signed ? "Signed by customer" : shared ? "Shared with customer" : "Not shared", state: shared ? "done" : "active", node: shareNode },
+        { name: "ADT Tool", label: signed ? "Signed" : shared ? "Shared" : hasDeal ? (dealView === "rep" ? "Your commission" : "Priced") : "Price the deal", state: hasDeal ? "done" : "active", heavy: true, node: <div className="adtp-dealwrap">{dealBar}{dealNode}</div> },
       ] },
     { name: "Complete", pill: done ? "Complete" : scheduled ? "Scheduled" : "Pending", pct: done ? 100 : scheduled ? 60 : 0, tint: "green",
       turn: done ? "idle" : "mine", need: "Schedule + complete the install",
@@ -394,6 +391,18 @@ const CSS = `
 .adtp-copy:hover{color:var(--dv-gold-deep,#A8842F)}
 .adtp-copy.ok{color:var(--dv-green,#2E7D5B);opacity:1}
 .adtp-copy-sp{display:none}
+.adtp-dealwrap{display:flex;flex-direction:column;height:100%;min-height:0}
+.adtp-dealwrap>.adtp-dealbar{flex:0 0 auto;margin:12px 14px 0}
+.adtp-dealwrap>iframe{flex:1 1 auto;min-height:0;width:100%}
+.adtp-dealbar{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-raise,#FBFBFA);padding:12px 15px;margin:0 0 12px}
+.adtp-dealbar.shared{background:#fbf6ea;border-color:#eadcb8}
+.adtp-dealbar.ok{background:#eef5f0;border-color:#c4e0cf}
+.adtp-dealbar-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.adtp-dealbar-st{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.adtp-dealbar-st b{font-size:.9rem;font-weight:800;color:var(--dv-ink,#101418)}
+.adtp-dealbar-st em{font-style:normal;font-size:.78rem;color:var(--dv-meta,#787D84)}
+.adtp-dealbar-act{display:flex;align-items:center;gap:8px;flex:none}
+.adtp-dealbar-warn{margin-top:10px;font-size:.8rem;color:var(--dv-meta,#787D84);line-height:1.45}
 .adtp-chip.amber{border-color:#f0d9bf;color:#c46a1a}
 .adtp-status-sel{height:33px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;font-size:.8rem;font-weight:700;padding:0 12px;cursor:pointer;font-family:inherit;outline:none}
 .adtp-status-sel:hover{border-color:var(--dv-gold,#C9A96E)}
