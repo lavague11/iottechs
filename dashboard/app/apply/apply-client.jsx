@@ -35,32 +35,27 @@ const PITCH = {
   tech: {
     h: "Build a career keeping people safe.",
     p: "Install and service security systems across NYC & NJ. Paid training — no experience needed.",
-    pay: "$15–$40 / hour + bonuses",
     perks: ["Paid hands-on training", "Company van, tools & gear", "Weekly pay, real growth path", "Steady work across NYC & NJ"],
   },
   sales: {
     h: "Sell security. Earn with no ceiling.",
     p: "Run walkthroughs, build proposals, and close across NYC & NJ.",
-    pay: "Base + commission",
     perks: ["Uncapped commission", "Residual, recurring pay", "Flexible, hybrid work", "Warm leads & real support"],
   },
   pm: {
     h: "Run the jobs. Grow the team.",
     p: "Coordinate crews, schedules, and clients across NYC & NJ.",
-    pay: "$60,000–$90,000 + bonuses",
-    perks: ["Salary $60k–$90k plus bonuses", "Own the schedule & crews", "Clear path to leadership", "Weekly pay, real growth"],
+    perks: ["Own the schedule & crews", "Clear path to leadership", "Weekly pay, real growth", "Steady work across NYC & NJ"],
   },
   sub: {
     h: "Run installs on your own terms.",
     p: "Take on CCTV & low-voltage installs across NYC & NJ as a subcontractor.",
-    pay: "$250–$400 / day · per diem",
-    perks: ["$250–$400 per diem", "Take the jobs you want", "Fast, reliable pay", "Steady volume year-round"],
+    perks: ["Take the jobs you want", "Fast, reliable pay", "Steady volume year-round", "Flexible, hybrid work"],
   },
-  // Neutral panel shown until a position is picked — no role-specific pay implied.
+  // Neutral panel shown until a position is picked.
   none: {
     h: "Build a career keeping people safe.",
     p: "Install, sell, or run security systems across NYC & NJ. Pick the role that fits you.",
-    pay: "",
     perks: ["Paid hands-on training", "Weekly pay, real growth path", "Steady work across NYC & NJ", "Company van, tools & gear"],
   },
 };
@@ -202,7 +197,6 @@ export default function ApplyClient() {
             <div className="ap-tag">Careers · Now hiring</div>
             <h1 className="ap-hero-h">{pitch.h}</h1>
             <p className="ap-hero-p">{pitch.p}</p>
-            {position && <div className="ap-pay"><span className="ap-pay-lbl">{POSITIONS.find((p) => p.key === position)?.label}</span>{pitch.pay}</div>}
             <ul className="ap-perks">
               {pitch.perks.map((t) => (
                 <li key={t}><span className="ap-perk-ic"><Icon>{CHECK}</Icon></span>{t}</li>
