@@ -50,6 +50,11 @@ function FreshDeck({ prefill, dashboardHref, isStaff = false }) {
 
 // Date-only ("2026-08-20") → LOCAL midnight so it doesn't render a day early in Eastern; datetimes keep their time.
 const DAY_FMT = (d) => { try { const s = String(d).trim(); const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"); return new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
+// Short date (no weekday) for a date-of-birth.
+const DOB_FMT = (d) => { try { return new Date(String(d) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return d; } };
+// A faint em-dash for empty fields, and one label/value cell — so the customer's record reads clean.
+const DASH = <em className="adtc-empty">—</em>;
+const CF = ({ label, children, full }) => <div className={"adtc-app-f" + (full ? " full" : "")}><span>{label}</span><b>{children}</b></div>;
 // Drawer action icons — same set the staff project Deck uses, so the customer drawer matches 1:1.
 const DVI = {
   call: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
@@ -182,16 +187,26 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
           <div className="adtc-app-hg r"><span>Equipment estimate</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
         </div>
 
-        <div className="adtc-app-sec">Customer details</div>
+        <div className="adtc-app-sec">Account</div>
         <div className="adtc-app-grid">
-          <div className="adtc-app-f"><span>{isComm ? "Business" : "Name"}</span><b>{app.name || "—"}</b></div>
-          {isComm && app.contact_name && <div className="adtc-app-f"><span>Contact</span><b>{app.contact_name}</b></div>}
-          {app.phone && <div className="adtc-app-f"><span>Phone</span><b>{fmtPhone(app.phone)}</b></div>}
-          {app.email && <div className="adtc-app-f"><span>Email</span><b>{app.email}</b></div>}
-          {app.address && <div className="adtc-app-f full"><span>Install address</span><b>{app.address}</b></div>}
-          {app.tax_masked && <div className="adtc-app-f"><span>{isComm ? "EIN" : "SSN"}</span><b>{app.tax_masked}</b></div>}
-          {app.access_pin && <div className="adtc-app-f"><span>Access PIN</span><b>{app.access_pin}</b></div>}
-          {app.has_verbal && <div className="adtc-app-f"><span>Verbal password</span><b>•••••• <em>on file</em></b></div>}
+          <CF label={isComm ? "Business" : "Name"}>{app.name || DASH}</CF>
+          {isComm && <CF label="Contact">{app.contact_name || DASH}</CF>}
+          <CF label="Property">{isComm ? "Commercial" : "Residential"}</CF>
+        </div>
+
+        <div className="adtc-app-sec">Contact</div>
+        <div className="adtc-app-grid">
+          <CF label="Phone">{app.phone ? fmtPhone(app.phone) : DASH}</CF>
+          <CF label="Email">{app.email || DASH}</CF>
+          <CF label="Date of birth">{app.dob ? DOB_FMT(app.dob) : DASH}</CF>
+          <CF label="Install address" full>{app.address || DASH}</CF>
+        </div>
+
+        <div className="adtc-app-sec">Security</div>
+        <div className="adtc-app-grid">
+          <CF label={isComm ? "EIN" : "SSN"}>{app.tax_masked || DASH}</CF>
+          <CF label="Access PIN">{app.access_pin || DASH}</CF>
+          <CF label="Verbal password">{app.has_verbal ? <>•••••• <em>on file</em></> : DASH}</CF>
         </div>
 
         <div className="adtc-app-sec">Equipment</div>
@@ -323,19 +338,20 @@ const CUSTCSS = `
 .adtc-steps{margin-top:14px}
 .adtc-ul{margin:6px 0 0;padding-left:18px;color:var(--dv-ink,#101418);font-size:.88rem;line-height:1.7}
 .adtc-ul b{color:var(--dv-gold-deep,#A8842F)}
-.adtc-app{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;overflow:hidden;background:#fff}
+.adtc-app{border:none;border-radius:0;background:transparent}
 .adtc-app-hero{display:flex;align-items:stretch;border-bottom:1px solid var(--dv-line,#E4E4DF)}
 .adtc-app-hg{flex:1;padding:14px 18px}
 .adtc-app-hg.r{text-align:right;border-left:1px solid var(--dv-line-soft,#EDEDE9)}
 .adtc-app-hg span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtc-app-hg b{font-size:1.15rem;font-weight:800;color:var(--dv-ink,#101418)}
 .adtc-app-hg i{display:block;font-style:normal;font-size:.72rem;color:var(--dv-meta,#787D84);margin-top:2px}
-.adtc-app-sec{font-size:.64rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:14px 18px 0}
-.adtc-app-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 22px;padding:10px 18px 4px}
-.adtc-app-f{min-width:0}
+.adtc-app-sec{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:20px 18px 0;padding:0 0 8px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.adtc-app-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px 28px;padding:14px 18px 2px}
+.adtc-app-f{min-width:0;display:flex;flex-direction:column;gap:3px}
+.adtc-empty{color:var(--dv-faint,#A6ABB1);font-style:normal;font-weight:600}
 .adtc-app-f.full{grid-column:1/-1}
 .adtc-app-f span{display:block;font-size:.64rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:2px}
-.adtc-app-f b{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word}
+.adtc-app-f b{font-size:.92rem;font-weight:600;color:var(--dv-ink,#101418);word-break:break-word;line-height:1.35}
 .adtc-app-f b em{font-style:normal;font-weight:600;color:var(--dv-meta,#787D84);font-size:.78rem}
 .adtc-app-eqp{padding:8px 18px 4px}
 .adtc-app-eqrow{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.88rem}
@@ -346,8 +362,6 @@ const CUSTCSS = `
 .adtc-app-line{padding:4px 18px 8px;font-size:.88rem;color:var(--dv-ink,#101418);line-height:1.5}
 .adtc-app-eqrow{transition:background .12s;border-radius:7px}
 .adtc-app-eqrow:hover{background:rgba(201,169,110,.08)}
-.adtc-app-f{border-radius:8px;transition:background .12s}
-.adtc-app-f:hover{background:rgba(201,169,110,.07)}
 .adtc-app-foot{display:flex;align-items:center;gap:10px;margin:8px 18px 0;padding:14px 0 16px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adtc-app-foot span{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .adtc-app-foot b{font-size:1.2rem;font-weight:800;color:var(--dv-ink,#101418)}
