@@ -12,7 +12,9 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
   const [steps, setSteps] = useState(stepsInit || {});
   const declined = status0 === "declined";
   const curIdx = P1_FLOW.indexOf(status0);
-  const [sel, setSel] = useState(P1_EVAL_STEPS.includes(status0) ? status0 : "phone");
+  // Default the selected panel to the stage the candidate is ACTUALLY at — so at the Assessment stage
+  // we open on Assessment (review it first), not jump ahead to the Phone Interview scorecard.
+  const [sel, setSel] = useState(STEPPER.some((s) => s.key === status0) ? status0 : "assessment");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   // A retake still pending office review, or approved but not yet re-submitted — decisions wait for
@@ -27,8 +29,10 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
   const [notes, setNotes] = useState(saved.notes || "");
   const [rec, setRec] = useState(saved.recommendation || "");
 
+  // Any step is selectable — the eval steps show a scorecard; Assessment / Final Review show their
+  // own panel (no rubric). Guard only against unknown keys.
   function selectStep(k) {
-    if (!STEP_RUBRICS[k]) return;
+    if (!STEPPER.some((s) => s.key === k)) return;
     setSel(k); const s = steps[k] || {};
     setRatings(s.ratings || {}); setNotes(s.notes || ""); setRec(s.recommendation || ""); setMsg("");
   }
@@ -71,7 +75,7 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
           // scorecards so completed steps still read as done instead of everything going "todo".
           const state = declined ? (scored ? "done" : "todo") : idx < curIdx ? "done" : idx === curIdx ? "cur" : "todo";
           return (
-            <button key={s.key} className={`rs-step ${state}${sel === s.key ? " sel" : ""}`} onClick={() => STEP_RUBRICS[s.key] && selectStep(s.key)} disabled={!STEP_RUBRICS[s.key]}>
+            <button key={s.key} className={`rs-step ${state}${sel === s.key ? " sel" : ""}`} onClick={() => selectStep(s.key)}>
               <span className="rs-dot">{state === "done" ? "✓" : i + 1}</span>
               <span className="rs-slabel">{s.label}</span>
               {scored && <span className="rs-sscore">{steps[s.key].score}/5</span>}
@@ -106,6 +110,27 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
         </div>
       )}
 
+      {sel === "assessment" && (
+        <div className="rs-card">
+          <div className="rs-card-h">Assessment</div>
+          <p className="rs-panel-note">Review the candidate&rsquo;s assessment score, timing, and answers in the card above. When you&rsquo;re ready, advance to the phone interview.</p>
+          <div className="rs-actions">
+            {status0 === "assessment" && !declined && (
+              <button className="rs-btn ghost" onClick={advance} disabled={busy || retakeBlocking}>{busy ? "Advancing…" : `Advance → ${statusLabel(nextP1Status("assessment"))}`}</button>
+            )}
+            {status0 !== "assessment" && curIdx > P1_FLOW.indexOf("assessment") && <span className="rs-msg">Assessment stage complete.</span>}
+            {msg && <span className="rs-msg">{msg}</span>}
+          </div>
+          {retakeBlocking && <div className="rs-note">Resolve the retake request before advancing.</div>}
+        </div>
+      )}
+      {sel === "final_review" && (
+        <div className="rs-card">
+          <div className="rs-card-h">Final review</div>
+          <p className="rs-panel-note">{atFinal ? "All steps complete — record the outcome in the decision panel below." : "Work through the earlier steps first; the hire decision unlocks once the candidate reaches Final Review."}</p>
+        </div>
+      )}
+
       <div className={`rs-decision${atFinal ? " live" : ""}`}>
         <div className="rs-decision-h">{atFinal ? "Final review — decide" : "Decision (available at Final Review)"}</div>
         <div className="rs-decision-b">
@@ -137,6 +162,7 @@ const CSS = `
 .rs-slabel{font-size:.7rem;font-weight:600;color:var(--ink);text-align:center;line-height:1.15}
 .rs-sscore{font-size:.64rem;color:var(--gold-deep);font-family:var(--font-mono,ui-monospace)}
 .rs-card{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:var(--paper);margin-bottom:12px}
+.rs-panel-note{margin:0 0 4px;font-size:.86rem;color:var(--muted);line-height:1.5}
 .rs-card-h{font-size:.9rem;font-weight:700;color:var(--ink);margin-bottom:11px;display:flex;justify-content:space-between}
 .rs-by{font-size:.72rem;color:var(--muted);font-weight:500}
 .rs-crit{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}

@@ -25,6 +25,26 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   const [noteOpen, setNoteOpen] = useState(() => { const o = {}; for (const k in initial) if (initial[k]?.explanation) o[k] = true; return o; });
   const saveT = useRef(null);
   const touchX = useRef(null);
+  // Per-question timing: accrue seconds spent on the question currently on screen. qEnter marks when
+  // it appeared; stampCurrent() folds the elapsed time into secsRef and resets. Persisted to
+  // localStorage so a reload doesn't lose it. Folded into the submit payload as responses[n].secs.
+  const qEnter = useRef(Date.now());
+  const secsRef = useRef({});
+  const timedOut = useRef(false);
+  const autoSubmitted = useRef(false);
+  useEffect(() => {
+    try { const s = JSON.parse(localStorage.getItem(`asx_secs_${appId}`) || "{}"); if (s && typeof s === "object") secsRef.current = s; } catch {}
+    qEnter.current = Date.now();
+  }, [appId]);
+  function stampCurrent() {
+    const n = QUESTIONS[cur]?.n;
+    const dt = Math.min((Date.now() - qEnter.current) / 1000, 1800);   // cap a left-open tab
+    qEnter.current = Date.now();
+    if (n != null && dt > 0.4) {
+      secsRef.current[n] = (secsRef.current[n] || 0) + dt;
+      try { localStorage.setItem(`asx_secs_${appId}`, JSON.stringify(secsRef.current)); } catch {}
+    }
+  }
 
   // Persist the exam start so the 30-minute countdown is continuous across reloads / navigation
   // (a fresh mount used to reset it to 30:00). Cleared on submit, so an approved retake starts fresh.
@@ -62,8 +82,8 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   function explain(n, explanation) { dirty.current = true; setResp((p) => ({ ...p, [n]: { ...p[n], explanation } })); }
   function toggleFlag(n) { dirty.current = true; setResp((p) => ({ ...p, [n]: { ...p[n], flagged: !p[n]?.flagged } })); }
 
-  function go(delta) { setErr(""); setCur((c) => Math.min(N - 1, Math.max(0, c + delta))); }
-  function jumpTo(i) { setErr(""); setCur(i); setMode("quiz"); }
+  function go(delta) { setErr(""); stampCurrent(); setCur((c) => Math.min(N - 1, Math.max(0, c + delta))); }
+  function jumpTo(i) { setErr(""); stampCurrent(); setCur(i); setMode("quiz"); }
 
   // Arrow-key navigation while taking the quiz (ignored when typing a note).
   useEffect(() => {
@@ -85,16 +105,33 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     if (dx < 0) go(1); else go(-1);        // swipe left → next, swipe right → previous
   };
 
-  async function submit() {
-    if (!allAnswered) { setErr(`${N - answered} question${N - answered === 1 ? "" : "s"} still need an answer.`); setMode("review"); return; }
+  async function submit(force = false) {
+    stampCurrent();
+    // A manual submit still requires every question answered; a timeout submit (force) sends whatever
+    // is there so "ran out of time" is a real, recorded outcome instead of the exam hanging at 0:00.
+    if (!force && !allAnswered) { setErr(`${N - answered} question${N - answered === 1 ? "" : "s"} still need an answer.`); setMode("review"); return; }
     setBusy(true); setErr("");
+    // Fold per-question seconds into the payload, and attach the real open time + whether the clock ran out.
+    const payload = {};
+    for (const q of QUESTIONS) {
+      const rr = resp[q.n]; const secs = Math.round(secsRef.current[q.n] || 0);
+      if (rr || secs) payload[q.n] = { ...(rr || {}), ...(secs ? { secs } : {}) };
+    }
+    let openedAt = null;
+    try { const s = Number(localStorage.getItem(`asx_start_${appId}`)); if (s) openedAt = new Date(s).toISOString(); } catch {}
     try {
-      const r = await submitAssessmentAction(appId, resp);
-      if (r?.ok) { try { localStorage.removeItem(`asx_start_${appId}`); } catch {} setLocked(true); }
+      const r = await submitAssessmentAction(appId, payload, { openedAt, timedOut: force || timedOut.current });
+      if (r?.ok) { try { localStorage.removeItem(`asx_start_${appId}`); localStorage.removeItem(`asx_secs_${appId}`); } catch {} setLocked(true); }
       else setErr(r?.error === "locked" ? "This assessment was already submitted." : "Could not submit — please try again.");
     } catch { setErr("Could not submit — please try again."); }
     setBusy(false);
   }
+  // Timer hit zero → auto-submit once with whatever's answered, flagged as timed out.
+  useEffect(() => {
+    if (left === 0 && !locked && mode !== "intro" && !autoSubmitted.current) {
+      autoSubmitted.current = true; timedOut.current = true; submit(true);
+    }
+  }, [left, locked, mode]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const mm = String(Math.floor(left / 60)).padStart(2, "0"), ss = String(left % 60).padStart(2, "0");
   const guard = (e) => { if (!e.target.closest?.("textarea")) e.preventDefault(); };
@@ -130,7 +167,7 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
           <li>You&rsquo;ll review everything on one screen before sending.</li>
         </ul>
         {staff && <p className="asx-staff">Staff preview — answers you submit here count as a real submission.</p>}
-        <button className="asx-start" onClick={() => { setMode("quiz"); setCur(0); }}>Start</button>
+        <button className="asx-start" onClick={() => { qEnter.current = Date.now(); setMode("quiz"); setCur(0); }}>Start</button>
       </main>
       <style>{CSS}</style>
     </div>
@@ -169,7 +206,7 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
         <div className="asx-foot-in">
           <button className="asx-nav" onClick={() => setMode("quiz")}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>Questions</button>
           <span className={`asx-sv ${saved}`}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}</span>
-          <button className="asx-submit" disabled={busy || !allAnswered} onClick={submit}>{busy ? "Submitting…" : allAnswered ? "Submit assessment" : `${N - answered} left`}</button>
+          <button className="asx-submit" disabled={busy || !allAnswered} onClick={() => submit()}>{busy ? "Submitting…" : allAnswered ? "Submit assessment" : `${N - answered} left`}</button>
         </div>
       </footer>
       <style>{CSS}</style>

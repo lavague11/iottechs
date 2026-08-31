@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { gradeAssessmentAction, decideRetakeAction } from "../../assessment/[appId]/actions";
-import { QUESTIONS } from "../../../lib/assessment-bank";
+import { QUESTIONS, ASSESSMENT_META } from "../../../lib/assessment-bank";
 
 const FLAG_LABEL = { integrity: "Integrity", safety: "Safety", process: "Process", communication: "Communication", technical: "Technical" };
+const fmtDur = (s) => s == null ? "—" : s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 
 export default function AssessmentResult({ appId, assessment }) {
   const [busy, setBusy] = useState(false);
@@ -15,6 +16,19 @@ export default function AssessmentResult({ appId, assessment }) {
   const rt = a?.retake || null;
   const responses = a?.responses || {};
   const answeredCount = QUESTIONS.filter((q) => responses[q.n]?.answer).length;
+
+  // ── Score + timing summary (works from the raw responses, no AI grading needed) ──
+  const scoredQs = QUESTIONS.filter((q) => q.type === "scored");   // Q1–20, right/wrong
+  const correctScored = scoredQs.filter((q) => responses[q.n]?.answer === q.answer).length;
+  const unanswered = QUESTIONS.length - answeredCount;
+  const submitted = !!a?.submitted_at;
+  const openMs = a?.opened_at ? Date.parse(a.opened_at) : (a?.started_at ? Date.parse(a.started_at) : NaN);
+  const endMs = a?.submitted_at ? Date.parse(a.submitted_at) : NaN;
+  const durSec = (Number.isFinite(openMs) && Number.isFinite(endMs) && endMs >= openMs) ? Math.round((endMs - openMs) / 1000) : null;
+  const limitSec = (ASSESSMENT_META.timeLimitMin || 30) * 60;
+  const ranOut = a?.timed_out === true || (durSec != null && durSec >= limitSec - 3);
+  const avgPerQ = (durSec != null && answeredCount > 0) ? Math.round(durSec / answeredCount) : null;
+  const showStats = answeredCount > 0 || submitted;
 
   async function grade() {
     setBusy(true); setErr("");
@@ -55,6 +69,23 @@ export default function AssessmentResult({ appId, assessment }) {
             : null}
       </div>
       {err && <div className="ar-err">{err}</div>}
+
+      {showStats && (
+        <div className="ar-stats-wrap">
+          <div className="ar-stats">
+            <div className="ar-stat"><b>{correctScored}<i>/{scoredQs.length}</i></b><span>Correct · technical</span></div>
+            <div className="ar-stat"><b>{answeredCount}<i>/{QUESTIONS.length}</i></b><span>Answered</span></div>
+            <div className="ar-stat"><b>{fmtDur(durSec)}</b><span>Total time</span></div>
+            <div className="ar-stat"><b>{avgPerQ != null ? fmtDur(avgPerQ) : "—"}</b><span>Avg / question</span></div>
+          </div>
+          <div className="ar-badges">
+            {!submitted && <span className="ar-badge amber">In progress — not submitted</span>}
+            {submitted && unanswered > 0 && <span className="ar-badge red">{unanswered} left unanswered</span>}
+            {ranOut && <span className="ar-badge red">Ran out of time — auto-submitted</span>}
+            {submitted && !ranOut && unanswered === 0 && <span className="ar-badge green">Completed in time</span>}
+          </div>
+        </div>
+      )}
 
       {rt?.status === "pending" && (
         <div className="ar-retake">
@@ -124,7 +155,7 @@ export default function AssessmentResult({ appId, assessment }) {
         </>
       )}
 
-      {answeredCount > 0 && (
+      {(answeredCount > 0 || submitted) && (
         <div className="ar-answers-wrap">
           <button className="ar-answers-toggle" onClick={() => setShowAnswers((v) => !v)} aria-expanded={showAnswers}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showAnswers ? "rotate(90deg)" : "none", transition: "transform .15s" }}><path d="M9 18l6-6-6-6" /></svg>
@@ -142,6 +173,8 @@ export default function AssessmentResult({ appId, assessment }) {
                       <span className="ar-ans-n">{q.n}</span>
                       <span className="ar-ans-q">{q.prompt}</span>
                       {r.flagged && <span className="ar-ans-flag" title="Candidate flagged this for review">⚑</span>}
+                      {!r.answer && <span className="ar-ans-unans">Unanswered</span>}
+                      {r.secs != null && <span className="ar-ans-time" title="Time spent on this question">{fmtDur(Math.round(r.secs))}</span>}
                     </div>
                     <div className="ar-ans-choices">
                       {Object.entries(q.choices).map(([k, val]) => {
@@ -182,6 +215,18 @@ const CSS = `
 .ar-btn.ghost{background:#fff;color:var(--gold-deep);border:1px solid var(--line)}
 .ar-btn:disabled{opacity:.5;cursor:default}
 .ar-empty,.ar-pending p{color:var(--muted);font-size:.9rem}
+.ar-stats-wrap{margin-bottom:14px}
+.ar-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ar-stat{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:9px 11px;text-align:center}
+.ar-stat b{display:block;font-size:1.25rem;font-weight:800;color:var(--ink);line-height:1.1;font-variant-numeric:tabular-nums}
+.ar-stat b i{font-style:normal;font-size:.8rem;font-weight:700;color:var(--muted)}
+.ar-stat span{display:block;margin-top:3px;font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.ar-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ar-badge{font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:999px}
+.ar-badge.amber{background:#F6EEDC;color:var(--amber)}
+.ar-badge.red{background:#F6E7E2;color:var(--red)}
+.ar-badge.green{background:#E6F0EA;color:var(--green)}
+@media(max-width:560px){.ar-stats{grid-template-columns:repeat(2,1fr)}}
 .ar-err{background:#F6E7E2;color:var(--red);border-radius:8px;padding:9px 12px;font-size:.85rem;font-weight:600;margin-bottom:10px}
 .ar-retake{background:#FBF6EA;border:1px solid #EAD9B4;border-radius:10px;padding:12px 14px;margin-bottom:12px}
 .ar-retake-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
@@ -238,6 +283,8 @@ const CSS = `
 .ar-ans-n{flex:none;width:22px;height:22px;border-radius:6px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:.72rem;font-weight:700;color:var(--gold-deep)}
 .ar-ans-q{flex:1;font-size:.85rem;font-weight:600;color:var(--ink);line-height:1.4}
 .ar-ans-flag{flex:none;color:var(--red);font-size:.95rem}
+.ar-ans-unans{flex:none;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--red);background:#F6E7E2;border-radius:999px;padding:2px 8px}
+.ar-ans-time{flex:none;margin-left:auto;font-size:.72rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;font-family:var(--font-mono,ui-monospace,monospace)}
 .ar-ans-choices{display:flex;flex-direction:column;gap:5px}
 .ar-ans-c{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);padding:6px 9px;border-radius:7px;border:1px solid transparent;line-height:1.35}
 .ar-ans-k{flex:none;font-weight:700;font-family:var(--font-mono,ui-monospace,monospace);font-size:.74rem;color:var(--muted)}

@@ -35,17 +35,23 @@ export async function saveAssessmentProgressAction(appId, responses) {
 
 // Submit + auto-score (answer selection + behavioral + auto-flags). Explanation points and
 // explanation-content flags are added by the separate AI grading pass.
-export async function submitAssessmentAction(appId, responses) {
+export async function submitAssessmentAction(appId, responses, meta = {}) {
   const a = await authApp(appId);
   if (!a.ok) return { ok: false, error: "not-authorized" };
   const cur = getApplicationAssessment(a.app.app_id) || {};
   if (cur.status === "submitted" || cur.status === "graded") return { ok: false, error: "locked" };
   const core = scoreCore(responses || {});
+  const submittedAt = new Date().toISOString();
+  // opened_at = when the candidate actually opened the exam (client localStorage clock), so total
+  // time reflects the full sitting, not just first-answer → submit. timed_out = the 30-min clock ran
+  // out and it auto-submitted (vs a deliberate submit).
   saveApplicationAssessment(a.app.app_id, {
     ...cur, status: "submitted", responses: responses || {},
     answerPoints: core.answerPoints, behavioralPoints: core.behavioralPoints, autoScore: core.autoScore,
     cats: core.cats, autoFlags: core.autoFlags,
-    submitted_at: new Date().toISOString(), started_at: cur.started_at || new Date().toISOString(),
+    submitted_at: submittedAt, started_at: cur.started_at || submittedAt,
+    opened_at: meta.openedAt || cur.opened_at || cur.started_at || submittedAt,
+    timed_out: !!meta.timedOut,
   });
   if (["applied", "assessment"].includes(a.app.status)) setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
   try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 (explanations pending)`, actor_role: "system", actor_name: "Assessment" }); } catch {}
