@@ -332,7 +332,15 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                 <div className="dv-scroll">{s.completion}</div>
               ) : (
                   <div className="dv-scroll">
-                    {(s.tools || []).map((t, ti) => {
+                    {(() => {
+                      const _tools = s.tools || [];
+                      // A stage with a single inline tool shows its content directly, full-width —
+                      // no pointless expand/collapse on the only thing there. (Heavy tools still
+                      // launch full-screen on tap.)
+                      if (_tools.length === 1 && _tools[0].node && !_tools[0].heavy) {
+                        return <div className="dv-solo" data-stop>{_tools[0].node}</div>;
+                      }
+                      return _tools.map((t, ti) => {
                       const open = openTool[i] === ti;
                       // The row IS the trigger — no intermediate "Open" step. Heavy tools launch
                       // full-screen; light tools expand their content inline right here.
@@ -357,7 +365,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                           )}
                         </div>
                       );
-                    })}
+                      });
+                    })()}
                   </div>
               )}
               {/* Footer — present on every stage. Job Log on the left; advance controls on the right. */}
@@ -536,6 +545,7 @@ const CSS = `
 .dv-tdetail{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--dv-eo)}.dv-tool.open .dv-tdetail{grid-template-rows:1fr}
 .dv-tdetail>div{overflow:hidden}
 .dv-tinline{margin:0 6px 16px 28px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
+.dv-solo{margin:0}
 /* Legacy tool-card chrome (e.g. Details & Notes) mounted inside a light tool — flatten it to
    the deck's minimal look: no card border / gold rail / icon chip, title in the deck font. */
 .pvx-deck .dv-tinline .pv-tool-panel{border:none;border-radius:0;background:transparent;overflow:visible}
