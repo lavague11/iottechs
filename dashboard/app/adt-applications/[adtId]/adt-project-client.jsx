@@ -125,7 +125,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const [pending, startTx] = useTransition();
   const today = new Date().toISOString().slice(0, 10);
 
-  const doSchedule = () => startTx(async () => { setErr(""); const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); else router.refresh(); });
+  const [schedMsg, setSchedMsg] = useState("");
+  const doSchedule = () => startTx(async () => { setErr(""); setSchedMsg(""); const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); else { setSchedMsg(r.emailed ? "Install confirmation emailed to the customer." : "Scheduled. (Email is off — turn on RESEND_API_KEY to notify the customer.)"); router.refresh(); } });
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
   const setStatus = (s) => startTx(async () => { setErr(""); const r = await setAdtStatusAction(app.adt_id, s); if (r?.error) setErr(r.error); else router.refresh(); });
 
@@ -133,6 +134,22 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [];
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
   const office = ["admin", "manager"].includes(user?.role);   // edit is office-only
+  // Copy the whole submission as a clean text block — the office pastes it into ADT's own system.
+  const [copiedAll, setCopiedAll] = useState(false);
+  const copyAll = () => {
+    const L = [`${isComm ? "Business" : "Name"}: ${app.name || ""}`];
+    if (isComm && app.contact_name) L.push(`Contact: ${app.contact_name}`);
+    L.push(`Property: ${isComm ? "Commercial" : "Residential"}`);
+    if (app.phone) L.push(`Phone: ${fmtPhone(app.phone)}`);
+    if (app.email) L.push(`Email: ${app.email}`);
+    if (app.dob) L.push(`Date of birth: ${app.dob}`);
+    if (app.address) L.push(`Address: ${app.address}`);
+    if (app.tax_id) L.push(`${isComm ? "EIN" : "SSN"}: ${fmtTax(app.tax_id, isComm)}`);
+    if (app.access_pin) L.push(`Access PIN: ${app.access_pin}`);
+    if (app.verbal_password) L.push(`Verbal password: ${app.verbal_password}`);
+    emerg.forEach((c, i) => { if (c.name || c.phone) L.push(`Emergency ${i + 1}: ${c.name || ""}${c.phone ? ` ${fmtPhone(c.phone)}` : ""}`); });
+    try { navigator.clipboard.writeText(L.join("\n")); setCopiedAll(true); setTimeout(() => setCopiedAll(false), 1500); } catch {}
+  };
   const [editing, setEditing] = useState(false);
   const [docsNote, setDocsNote] = useState(app.docs_note || "");
   const [docsSaved, setDocsSaved] = useState(false);
@@ -152,7 +169,10 @@ export default function AdtProjectClient({ user, alerts, app }) {
     </div>
   ) : (
     <div style={pad} className="adtp">
-      {office && <div className="adtp-editrow"><button type="button" className="adtp-chip" onClick={() => setEditing(true)}>Revise application</button></div>}
+      {office && <div className="adtp-editrow">
+        <button type="button" className="adtp-chip" onClick={copyAll}>{copiedAll ? "Copied ✓" : "Copy details"}</button>
+        <button type="button" className="adtp-chip" onClick={() => setEditing(true)}>Revise application</button>
+      </div>}
       <div className="adtp-statusrow">
         <div className="adtp-statusrow-l"><span className="adtp-sub" style={{ margin: 0 }}>Credit status</span>
           <span className="adtp-status-badge" style={{ color: sm.color, background: sm.color + "1a", border: `1px solid ${sm.color}33` }}>{sm.label}</span></div>
@@ -247,6 +267,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
           <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
         </div>
         <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{scheduled ? "Update date" : "Schedule install"}</button>
+        {schedMsg && <div className="adtp-ok" style={{ marginTop: 10 }}>{schedMsg}</div>}
         {err && <div className="adtp-err" style={{ marginTop: 10 }}>{err}</div>}
         <div className="adtp-sub" style={{ marginTop: 16 }}>Once the technician finishes on site</div>
         <button className="adtp-btn green" disabled={pending || !scheduled} onClick={doComplete}>Mark complete</button>
@@ -443,7 +464,7 @@ const CSS = `
 .adtp-chip.green{border-color:#bfe3cb;color:#1c8a45}
 .adtp-chip.red{border-color:#f0cfca;color:#c0392b}
 .adtp-chip:disabled{opacity:.5;cursor:default}
-.adtp-editrow{display:flex;justify-content:flex-end;margin-bottom:12px}
+.adtp-editrow{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}
 .adtp-editbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 4px;font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .adtp-ok{font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);margin-bottom:12px}
 .adtp-ok b{color:var(--dv-ink,#101418)}
