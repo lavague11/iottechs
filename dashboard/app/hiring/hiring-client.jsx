@@ -12,17 +12,28 @@ function fmtDate(s) { try { return new Date(String(s).replace(" ", "T")).toLocal
 
 export default function HiringBoard({ user, alerts, rows = [] }) {
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");   // all | mine | overdue
   const q = query.trim().toLowerCase();
 
+  const mineCount = useMemo(() => rows.filter((r) => r.owner_id === user.id).length, [rows, user.id]);
+  const overdueCount = useMemo(() => rows.filter((r) => r.overdue).length, [rows]);
+
   const byPortal = useMemo(() => {
-    const filtered = rows.filter((r) => !q || (r.name || "").toLowerCase().includes(q) || (r.app_id || "").toLowerCase().includes(q));
+    const filtered = rows.filter((r) => {
+      if (q && !((r.name || "").toLowerCase().includes(q) || (r.app_id || "").toLowerCase().includes(q))) return false;
+      if (filter === "mine" && r.owner_id !== user.id) return false;
+      if (filter === "overdue" && !r.overdue) return false;
+      return true;
+    });
     const map = { 1: [], 2: [], 3: [] };
     for (const r of filtered) (map[r.portal] || map[1]).push(r);
-    for (const n of [1, 2, 3]) map[n].sort((a, b) => (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99) || String(b.created_at).localeCompare(String(a.created_at)));
+    // Overdue first, then by pipeline order, then newest.
+    for (const n of [1, 2, 3]) map[n].sort((a, b) => (b.overdue - a.overdue) || (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99) || String(b.created_at).localeCompare(String(a.created_at)));
     return map;
-  }, [rows, q]);
+  }, [rows, q, filter, user.id]);
 
   const activeCount = (n) => byPortal[n].filter((r) => r.status !== "declined").length;
+  const FILTERS = [["all", "All", rows.length], ["mine", "Mine", mineCount], ["overdue", "Overdue", overdueCount]];
 
   return (
     <AdminShell user={user} alerts={alerts} active="onboarding">
@@ -36,6 +47,14 @@ export default function HiringBoard({ user, alerts, rows = [] }) {
             <input className="hb-search" placeholder="Search name or ID…" value={query} onChange={(e) => setQuery(e.target.value)} />
             <Link href="/apply" className="hb-new" target="_blank">Application form ↗</Link>
           </div>
+        </div>
+
+        <div className="hb-filters">
+          {FILTERS.map(([k, label, count]) => (
+            <button key={k} className={`hb-filter${filter === k ? " on" : ""}${k === "overdue" && count ? " has-over" : ""}`} onClick={() => setFilter(k)}>
+              {label}<span className="hb-filter-n">{count}</span>
+            </button>
+          ))}
         </div>
 
         <div className="hb-cols">
@@ -52,18 +71,23 @@ export default function HiringBoard({ user, alerts, rows = [] }) {
               <div className="hb-list">
                 {byPortal[p.n].length === 0 && <div className="hb-empty">No candidates here.</div>}
                 {byPortal[p.n].map((r) => (
-                  <Link href={`/onboarding/${r.app_id}`} key={r.app_id} className={`hb-card${r.status === "declined" ? " dim" : ""}`}>
+                  <Link href={`/onboarding/${r.app_id}`} key={r.app_id} className={`hb-card${r.status === "declined" ? " dim" : ""}${r.overdue ? " over" : ""}`}>
                     <span className="hb-av">{initials(r.name)}</span>
                     <div className="hb-card-b">
                       <div className="hb-card-top">
                         <span className="hb-name">{r.name || "—"}</span>
                         {r.rating ? <span className="hb-rate">{"★".repeat(r.rating)}<span className="hb-rate-off">{"★".repeat(5 - r.rating)}</span></span> : null}
+                        {r.owner_name && <span className="hb-owner" title={`Owner · ${r.owner_name}`}>{initials(r.owner_name)}</span>}
                       </div>
                       <div className="hb-card-meta">
                         <span className={`hb-pill ${TONE[r.status_tone] || "t-neutral"}`}>{r.status_label}</span>
-                        <span className="hb-pos">{r.position_label}</span>
+                        {r.disp_key !== "active" && r.disp_key !== "hired" && r.disp_key !== "not_selected" && <span className={`hb-chip d-${r.disp_tone}`}>{r.disp_label}</span>}
+                        {r.overdue && <span className="hb-chip d-over">Overdue {r.days_in_stage}d</span>}
                         <span className="hb-date">{fmtDate(r.created_at)}</span>
                       </div>
+                      {r.next_label && r.status !== "declined" && (
+                        <div className="hb-next"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>{r.next_label}</div>
+                      )}
                     </div>
                   </Link>
                 ))}
@@ -87,6 +111,21 @@ const CSS = `
 .hb-search{border:1px solid var(--line,#E4E4DF);border-radius:9px;padding:9px 13px;font:inherit;font-size:.9rem;background:#fff;min-width:210px;outline:none}
 .hb-search:focus{border-color:var(--gold)}
 .hb-new{font-size:.82rem;font-weight:600;color:var(--gold-deep);text-decoration:none;white-space:nowrap}
+.hb-filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.hb-filter{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line,#E4E4DF);background:#fff;border-radius:999px;padding:6px 14px;font:inherit;font-size:.83rem;font-weight:600;color:var(--muted,#787D84);cursor:pointer}
+.hb-filter:hover{border-color:var(--gold)}
+.hb-filter.on{background:var(--ink,#101418);color:#fff;border-color:var(--ink,#101418)}
+.hb-filter-n{font-family:var(--font-mono,ui-monospace);font-size:.72rem;opacity:.7}
+.hb-filter.has-over:not(.on){color:var(--red);border-color:#E7C6BC}
+.hb-filter.has-over:not(.on) .hb-filter-n{opacity:1;font-weight:700}
+.hb-owner{margin-left:auto;flex:none;width:22px;height:22px;border-radius:50%;background:#F6F0E2;color:var(--gold-deep,#A8842F);display:grid;place-items:center;font-size:.62rem;font-weight:800;border:1px solid #E7D4A6}
+.hb-chip{font-size:.62rem;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px}
+.hb-chip.d-warn{color:#B0801F;background:#F6EEDC}
+.hb-chip.d-muted{color:var(--muted,#787D84);background:#EEEEEA}
+.hb-chip.d-over{color:var(--red);background:#F6E7E2}
+.hb-card.over{border-color:#E7C6BC}
+.hb-next{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:.78rem;font-weight:600;color:var(--gold-deep,#A8842F)}
+.hb-next svg{flex:none;opacity:.85}
 .hb-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media(max-width:900px){.hb-cols{grid-template-columns:1fr}}
 .hb-col{background:var(--bg-soft,#F4F4F2);border:1px solid var(--line,#E4E4DF);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:120px}

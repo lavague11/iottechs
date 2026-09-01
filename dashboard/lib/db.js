@@ -3329,6 +3329,14 @@ export function logApplicationEvent(appId, { kind, detail, actor_role, actor_nam
 export function getApplicationEvents(appId) {
   return db.prepare("SELECT * FROM application_events WHERE app_id = ? COLLATE NOCASE ORDER BY id ASC").all(String(appId)).map((r) => ({ ...r }));
 }
+// Board helper: app_id → when it entered its current stage (latest transition/applied event), in ONE
+// query so the hiring board can show days-in-stage without an N+1.
+export function stageEnteredMap() {
+  const rows = db.prepare("SELECT app_id, MAX(at) AS at FROM application_events WHERE kind IN ('stage','applied','declined') GROUP BY app_id COLLATE NOCASE").all();
+  const m = {};
+  for (const r of rows) if (r.app_id) m[String(r.app_id).toUpperCase()] = r.at;
+  return m;
+}
 
 export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data, dob }) {
   const info = db.prepare(`
