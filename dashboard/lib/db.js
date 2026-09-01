@@ -3381,6 +3381,31 @@ export function lookupEmailOwner(email) {
   return null;
 }
 
+// SOFT duplicate detection for the review page: other (non-archived) applications that look like the
+// same person — same phone (last 10 digits) or same name + DOB — even with a different email (the
+// email path is a hard block at apply). Returns [{app_id, name, match}]; never merges anything.
+export function findApplicationDuplicates(app) {
+  if (!app?.app_id) return [];
+  const selfId = String(app.app_id).toUpperCase();
+  const phone10 = String(app.phone || "").replace(/\D/g, "").slice(-10);
+  const nameNorm = String(app.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const dob = String(app.dob || "").slice(0, 10);
+  if (phone10.length < 10 && !(nameNorm && dob)) return [];
+  const rows = db.prepare("SELECT app_id, name, phone, dob FROM applications WHERE COALESCE(archived,0) = 0").all();
+  const out = [];
+  for (const r of rows) {
+    if (String(r.app_id).toUpperCase() === selfId) continue;
+    const rPhone = String(r.phone || "").replace(/\D/g, "").slice(-10);
+    const rName = String(r.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const rDob = String(r.dob || "").slice(0, 10);
+    let match = null;
+    if (phone10.length === 10 && rPhone === phone10) match = "phone";
+    else if (nameNorm && dob && rName === nameNorm && rDob === dob) match = "name+dob";
+    if (match) out.push({ app_id: r.app_id, name: r.name, match });
+  }
+  return out;
+}
+
 // Most recent application for an email — used to block duplicate applications from the same person.
 export function findApplicationByEmail(email) {
   const e = String(email || "").trim().toLowerCase();

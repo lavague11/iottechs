@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveApplicationRef, getApplicationEvents, getStaffUsers, getApplicationCompliance, sanitizeCompliance, lookupEmailOwner } from "../../../lib/db";
+import { resolveApplicationRef, getApplicationEvents, getStaffUsers, getApplicationCompliance, sanitizeCompliance, lookupEmailOwner, findApplicationDuplicates } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import AppReviewClient from "./app-review-client";
 
@@ -33,5 +33,7 @@ export default async function ApplicationReviewPage({ params }) {
   // at apply.) Surfaced as a non-blocking "Also a customer" chip so the office has the context.
   const eo = lookupEmailOwner(app.email);
   const customerMatch = eo?.kind === "customer" ? (eo.name || true) : null;
-  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} statusSince={statusSince} customerMatch={customerMatch} />;
+  // Soft duplicates (same phone or name+DOB, different email) — surfaced for a human to judge.
+  const duplicates = findApplicationDuplicates(app);
+  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} statusSince={statusSince} customerMatch={customerMatch} duplicates={duplicates} />;
 }
