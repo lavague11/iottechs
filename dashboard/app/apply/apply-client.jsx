@@ -83,6 +83,22 @@ export default function ApplyClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = resume
+  const [googleEmail, setGoogleEmail] = useState("");   // set when they arrived via Continue with Google
+
+  // Prefill name + email if they came back from "Continue with Google" (?g_email / ?g_name), then
+  // scrub those params from the URL. Google is only a shortcut here — the real /api/apply checks still run.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const ge = (p.get("g_email") || "").trim();
+      const gn = (p.get("g_name") || "").trim();
+      if (ge || gn) {
+        if (ge) { setEmail(ge); setGoogleEmail(ge); }
+        if (gn) setName(gn);
+        const u = new URL(window.location.href); u.searchParams.delete("g_email"); u.searchParams.delete("g_name"); window.history.replaceState({}, "", u);
+      }
+    } catch {}
+  }, []);
 
   const STEPS = [
     { n: 1, label: "Position" },
@@ -230,6 +246,20 @@ export default function ApplyClient() {
               {/* STEP 1 — job */}
               {step === 1 && (
                 <div className="ap-pane">
+                  {googleEmail ? (
+                    <div className="ap-google-done">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                      Using <b>{googleEmail}</b> from Google — pick a role and finish below.
+                    </div>
+                  ) : (
+                    <>
+                      <a className="ap-google" href="/api/auth/google?ctx=apply">
+                        <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                        Continue with Google
+                      </a>
+                      <div className="ap-google-or"><span>or fill it in yourself</span></div>
+                    </>
+                  )}
                   <div className="ap-form-head"><h2>What are you applying for?</h2></div>
                   <div className="ap-grid2">
                     {POSITIONS.map((p) => (
@@ -367,6 +397,13 @@ const CSS = `
 .ap-main{position:relative;padding:56px 48px;min-height:100vh;display:flex;flex-direction:column;justify-content:center}
 .ap-form,.ap-success{width:100%;max-width:560px;margin:0 auto}
 .ap-form-head{margin-bottom:8px}
+.ap-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;font:inherit;font-size:.92rem;font-weight:700;color:var(--ink);text-decoration:none;transition:border-color .14s,box-shadow .14s}
+.ap-google:hover{border-color:var(--gold-deep);box-shadow:0 5px 16px -9px rgba(16,20,24,.3)}
+.ap-google svg{flex:none}
+.ap-google-or{display:flex;align-items:center;gap:12px;margin:14px 0;color:var(--meta);font-size:.78rem}
+.ap-google-or::before,.ap-google-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.ap-google-done{display:flex;align-items:center;gap:8px;background:#EAF3EE;border:1px solid #BFE0CD;color:#1c6b45;border-radius:11px;padding:10px 13px;font-size:.86rem;margin-bottom:16px;line-height:1.4}
+.ap-google-done svg{flex:none;color:#2E7D5B}
 .ap-form-head h2,.ap-success h2{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.024em;font-size:1.45rem;margin:0 0 5px}
 .ap-sub{color:var(--muted);margin:0;font-size:.92rem}
 .ap-label{display:block;font-weight:700;font-size:.82rem;margin:20px 0 9px;color:#2a3040}

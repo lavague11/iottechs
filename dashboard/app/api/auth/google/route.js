@@ -1,0 +1,27 @@
+import { cookies } from "next/headers";
+import { secretValue } from "../../../../lib/db";
+
+// Start the Google OAuth flow. Dormant until GOOGLE_OAUTH_CLIENT_ID is set in the vault. `ctx` carries
+// where the user came from (login | apply) so the callback can create the right kind of account.
+export async function GET(request) {
+  const url = new URL(request.url);
+  const base = (process.env.APP_URL || url.origin).replace(/\/$/, "");
+  const ctx = url.searchParams.get("ctx") === "apply" ? "apply" : "login";
+  const clientId = secretValue("GOOGLE_OAUTH_CLIENT_ID");
+  if (!clientId) return Response.redirect(`${base}/login?err=google_off`, 302);
+
+  // CSRF: a random nonce (+ the ctx) stashed in a short-lived cookie, echoed back as `state`.
+  const nonce = crypto.randomUUID();
+  const jar = await cookies();
+  jar.set("g_oauth", `${nonce}:${ctx}`, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 600, secure: process.env.NODE_ENV === "production" });
+
+  const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  auth.searchParams.set("client_id", clientId);
+  auth.searchParams.set("redirect_uri", `${base}/api/auth/google/callback`);
+  auth.searchParams.set("response_type", "code");
+  auth.searchParams.set("scope", "openid email profile");
+  auth.searchParams.set("state", nonce);
+  auth.searchParams.set("access_type", "online");
+  auth.searchParams.set("prompt", "select_account");
+  return Response.redirect(auth.toString(), 302);
+}

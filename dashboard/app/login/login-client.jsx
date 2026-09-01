@@ -72,6 +72,25 @@ export default function LoginClient({ next }) {
     return ctrl.cleanup;
   }, []);
 
+  // Surface a Google sign-in error passed back in ?err= (then clean it out of the URL).
+  useEffect(() => {
+    try {
+      const err = new URLSearchParams(window.location.search).get("err");
+      const MSG = {
+        google_off: "Google sign-in isn’t turned on yet.",
+        google_denied: "Google sign-in was cancelled.",
+        google_state: "That sign-in expired — please try again.",
+        google_email: "Your Google email isn’t verified.",
+        disabled: "That account is disabled — contact an admin.",
+        google: "Google sign-in failed — please try again.",
+      };
+      if (err && MSG[err]) {
+        setMode("password"); setError(MSG[err]);
+        const u = new URL(window.location.href); u.searchParams.delete("err"); window.history.replaceState({}, "", u);
+      }
+    } catch {}
+  }, []);
+
   // prefetch location + speed
   useEffect(() => {
     let cancelled = false;
@@ -292,6 +311,7 @@ export default function LoginClient({ next }) {
           </form>
           )
         ) : mode === "password" ? (
+        <>
         <form className="gw2-lf" onSubmit={handleSubmit}>
           <input type="hidden" name="next" value={next} />
           <div className="gw2-prompt">Sign in</div>
@@ -311,6 +331,12 @@ export default function LoginClient({ next }) {
             {pending ? "Signing in…" : "Sign In →"}
           </button>
         </form>
+        <div className="gw2-or"><span>or</span></div>
+        <a className="gw2-google" href="/api/auth/google?ctx=login">
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Continue with Google
+        </a>
+        </>
         ) : mode === "face" ? (
         <div className="lgf">
           <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
@@ -458,4 +484,9 @@ const CSS = `
 .gw2-light .lg-err{background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.28);color:#c0392b}
 .gw2-light .lg-err-link{color:#8f2018}
 .gw2-light .lg-err-link:hover{color:#c0392b}
+.gw2-light .gw2-or{display:flex;align-items:center;gap:12px;margin:16px 0;color:#9aa0ab;font-size:.78rem;letter-spacing:.02em}
+.gw2-light .gw2-or::before,.gw2-light .gw2-or::after{content:"";flex:1;height:1px;background:#e6e8ee}
+.gw2-light .gw2-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:#fff;border:1px solid #e0e3ea;border-radius:12px;padding:12px 16px;font:inherit;font-size:.92rem;font-weight:600;color:#2C3347;text-decoration:none;transition:border-color .14s,box-shadow .14s}
+.gw2-light .gw2-google:hover{border-color:#C9A96E;box-shadow:0 5px 16px -9px rgba(14,19,32,.3)}
+.gw2-light .gw2-google svg{flex:none}
 `;

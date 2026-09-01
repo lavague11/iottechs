@@ -2505,7 +2505,7 @@ export function userHasPassword(userId) {
 }
 
 export function getUserByEmail(email) {
-  return db.prepare("SELECT id, name, username, email, phone, role FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
+  return db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
 }
 
 export function getUserByPhone(phone) {
