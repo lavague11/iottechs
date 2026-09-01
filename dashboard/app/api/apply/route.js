@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { createApplication, findApplicationByEmail, logApplicationEvent } from "../../../lib/db";
+import { createApplication, findApplicationByEmail, logApplicationEvent, lookupEmailOwner } from "../../../lib/db";
 import { makeSvcToken, SVC_ACCESS_TTL_MS } from "../../../lib/auth";
 
 // Applying IS proving who you are (they just typed all their own details), so mint the same
@@ -65,6 +65,14 @@ export async function POST(request) {
     const dobErr = dobError(b.dob);
     if (dobErr) return Response.json({ ok: false, error: dobErr }, { status: 400 });
 
+    // Is this email already ours? An existing STAFF member shouldn't apply as a new candidate — hard
+    // block. A customer MAY apply (people wear many hats) — we let them through but flag it for the
+    // office (handled after the row is created). See lookupEmailOwner.
+    const emailOwner = lookupEmailOwner(email);
+    if (emailOwner?.kind === "staff") {
+      return Response.json({ ok: false, error: "staff" }, { status: 409 });
+    }
+
     // One application per person. If this email already applied, we don't create a second — but if
     // they prove it's them (same phone AND same address on file), we hand back their existing ID
     // instead of an error. Otherwise it's a hard block (call us).
@@ -105,6 +113,11 @@ export async function POST(request) {
       availability: b.availability, start_date: b.start_date, about: b.about,
       resume_name, resume_data, dob: b.dob,
     });
+
+    // Customer overlap → flag for the office (non-blocking). Surfaced as a header chip in the review.
+    if (emailOwner?.kind === "customer") {
+      try { logApplicationEvent(app.app_id, { kind: "note", detail: `Heads up — this applicant's email is on file as a customer${emailOwner.name ? ` (${emailOwner.name})` : ""}.`, actor_role: "system", actor_name: "Apply" }); } catch {}
+    }
 
     await grantApp(app.app_id);
     revalidatePath("/onboarding");

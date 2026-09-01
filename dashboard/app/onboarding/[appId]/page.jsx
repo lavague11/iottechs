@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveApplicationRef, getApplicationEvents, getStaffUsers, getApplicationCompliance, sanitizeCompliance } from "../../../lib/db";
+import { resolveApplicationRef, getApplicationEvents, getStaffUsers, getApplicationCompliance, sanitizeCompliance, lookupEmailOwner } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import AppReviewClient from "./app-review-client";
 
@@ -29,5 +29,9 @@ export default async function ApplicationReviewPage({ params }) {
   delete safe.resume_data;
 
   const compliance = sanitizeCompliance(getApplicationCompliance(app.app_id));
-  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} statusSince={statusSince} />;
+  // Does this applicant's email also belong to a customer on file? (Staff never reach here — blocked
+  // at apply.) Surfaced as a non-blocking "Also a customer" chip so the office has the context.
+  const eo = lookupEmailOwner(app.email);
+  const customerMatch = eo?.kind === "customer" ? (eo.name || true) : null;
+  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} statusSince={statusSince} customerMatch={customerMatch} />;
 }

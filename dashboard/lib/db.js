@@ -3357,6 +3357,22 @@ export function getApplication(appId) {
   return decorateApp(db.prepare("SELECT * FROM applications WHERE app_id = ? COLLATE NOCASE").get(String(appId || "").trim()));
 }
 
+// For /apply gating: is this email already one of ours? Staff (existing employee → block the
+// application) vs customer (a contact on a project or a customer-role account → let them apply but
+// flag it for the office). Returns { kind: 'staff'|'customer', name, role? } or null.
+export function lookupEmailOwner(email) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return null;
+  const u = db.prepare("SELECT name, role FROM users WHERE LOWER(email) = ?").get(e);
+  if (u) {
+    if (["admin", "manager", "sales", "tech"].includes(u.role)) return { kind: "staff", name: u.name || null, role: u.role };
+    return { kind: "customer", name: u.name || null };   // role='customer' account
+  }
+  const p = db.prepare("SELECT customer, contact_name FROM projects WHERE LOWER(contact_email) = ? ORDER BY id DESC LIMIT 1").get(e);
+  if (p) return { kind: "customer", name: p.contact_name || p.customer || null };
+  return null;
+}
+
 // Most recent application for an email — used to block duplicate applications from the same person.
 export function findApplicationByEmail(email) {
   const e = String(email || "").trim().toLowerCase();

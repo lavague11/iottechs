@@ -180,6 +180,10 @@ export default function ApplyClient() {
         setStep(2);
         setErr("You&rsquo;ve already applied with this email. If that&rsquo;s you, enter the same phone and address you used before to pull up your Application ID — or give us a call.".replace(/&rsquo;/g, "’"));
         setBusy(false);
+      } else if (j.error === "staff") {
+        setStep(2);
+        setErr("That email is already registered to an IOT TECHS team member. If you're on the team and need something, reach out to your manager. To apply, use a personal email.");
+        setBusy(false);
       } else { setErr(j.error || "Something went wrong."); setBusy(false); }
     } catch (_) { setErr("Connection error. Please try again."); setBusy(false); }
   }

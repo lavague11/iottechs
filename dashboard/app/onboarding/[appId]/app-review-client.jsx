@@ -59,7 +59,7 @@ function fmtDur(ms) {
   return `${Math.round(h / 24)}d`;
 }
 
-export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null, statusSince = null }) {
+export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null, statusSince = null, customerMatch = null }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -171,6 +171,12 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
                 </>
               )}
             </div>
+            {customerMatch && (
+              <span className="ob-badge cust-flag" title={`This email is on file as a customer${typeof customerMatch === "string" ? ` (${customerMatch})` : ""}`}>
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ marginRight: 4 }}><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5" /></svg>
+                Also a customer
+              </span>
+            )}
             <Link href={`/application/${app.app_id}`} className="ob-view-btn">Applicant view</Link>
             {isAdmin && (archived
               ? <button className="ob-view-btn" disabled={pending} onClick={() => run(() => setAppArchivedAction(app.app_id, false))}>Restore</button>
@@ -450,6 +456,7 @@ const CSS = `
 .apx .ob-badge.disp.t-active{color:#1c8a45;background:#e7f6ec}
 .apx .ob-badge.disp.t-warn{color:#B0801F;background:#F6EEDC}
 .apx .ob-badge.disp.t-muted{color:#787D84;background:#EFEFEA}
+.apx .ob-badge.cust-flag{display:inline-flex;align-items:center;text-transform:none;letter-spacing:0;font-weight:700;color:#B0801F;background:#F6EEDC;border:1px solid #E7D4A6}
 .apx .ob-owner{position:relative;display:inline-flex}
 .apx .ob-owner-btn{display:inline-flex;align-items:center;gap:5px;border:1px dashed var(--line);background:#fff;color:var(--muted);cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
 .apx .ob-owner-btn.set{border-style:solid;color:var(--ink);background:#F6F0E2;border-color:#E4D6B4}
