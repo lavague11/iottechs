@@ -21,8 +21,10 @@ export async function GET(request) {
     if (url.searchParams.get("error")) return fail("google_denied");
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    const [nonce, ctxRaw] = stored.split(":");
-    const ctx = ctxRaw === "apply" ? "apply" : "login";
+    let parsed = {}; try { parsed = JSON.parse(stored || "{}"); } catch {}
+    const nonce = parsed.n;
+    const ctx = parsed.c === "apply" ? "apply" : "login";
+    const next = (typeof parsed.x === "string" && /^\/[^/]/.test(parsed.x)) ? parsed.x : "";
     if (!code || !state || !nonce || nonce !== state) return fail("google_state");
 
     const clientId = secretValue("GOOGLE_OAUTH_CLIENT_ID");
@@ -65,7 +67,8 @@ export async function GET(request) {
 
     const token = await makeToken({ id: user.id, role: user.role, email: user.email });
     jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8, secure: process.env.NODE_ENV === "production" });
-    const dest = ROLE_HOME[user.role] || "/dashboard";
+    // Return to where they started (e.g. the project page) when given a safe same-site path; else home.
+    const dest = next || ROLE_HOME[user.role] || "/dashboard";
     return Response.redirect(`${base}${dest}`, 302);
   } catch {
     return fail("google");

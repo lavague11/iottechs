@@ -8,13 +8,17 @@ export async function GET(request) {
   const url = new URL(request.url);
   const base = publicBase(request, url);
   const ctx = url.searchParams.get("ctx") === "apply" ? "apply" : "login";
+  // Optional return-to path (e.g. the project page the login gate is on). Same-site only: must be a
+  // relative path starting with a single "/", never a scheme or protocol-relative URL.
+  const nextRaw = url.searchParams.get("next") || "";
+  const next = /^\/[^/]/.test(nextRaw) ? nextRaw.slice(0, 300) : "";
   const clientId = secretValue("GOOGLE_OAUTH_CLIENT_ID");
   if (!clientId) return Response.redirect(`${base}/login?err=google_off`, 302);
 
-  // CSRF: a random nonce (+ the ctx) stashed in a short-lived cookie, echoed back as `state`.
+  // CSRF: a random nonce (+ ctx + return path) stashed in a short-lived cookie, echoed back as `state`.
   const nonce = crypto.randomUUID();
   const jar = await cookies();
-  jar.set("g_oauth", `${nonce}:${ctx}`, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 600, secure: process.env.NODE_ENV === "production" });
+  jar.set("g_oauth", JSON.stringify({ n: nonce, c: ctx, x: next }), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 600, secure: process.env.NODE_ENV === "production" });
 
   const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   auth.searchParams.set("client_id", clientId);
