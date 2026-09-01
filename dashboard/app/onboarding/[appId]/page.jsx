@@ -14,6 +14,10 @@ export default async function ApplicationReviewPage({ params }) {
 
   const alerts = getNotifSummary(user.id);
   const events = getApplicationEvents(app.app_id).map((e) => ({ ...e }));
+  // When the candidate ENTERED the current stage — the latest stage transition (or "applied").
+  // Drives the Days-in-stage chip, computed off the event log rather than the application date.
+  const transitions = events.filter((e) => ["stage", "applied", "declined"].includes(e.kind));
+  const statusSince = transitions.length ? transitions[transitions.length - 1].at : (app.created_at || null);
   const reviewers = getStaffUsers()
     .filter((u) => ["admin", "manager"].includes(u.role))
     .map((u) => ({ id: u.id, name: u.name }));
@@ -25,5 +29,5 @@ export default async function ApplicationReviewPage({ params }) {
   delete safe.resume_data;
 
   const compliance = sanitizeCompliance(getApplicationCompliance(app.app_id));
-  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} />;
+  return <AppReviewClient user={user} alerts={alerts} app={safe} events={events} reviewers={reviewers} compliance={compliance} statusSince={statusSince} />;
 }

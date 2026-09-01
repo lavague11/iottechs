@@ -5,9 +5,9 @@ import { getSessionUser } from "../../lib/session";
 import {
   getApplication, setApplicationStage, setApplicationReview, setApplicationOnboarding,
   hireApplicant, logApplicationEvent, verifyEmergencyContact,
-  setApplicationStatus, saveApplicationStep, setApplicationArchived,
+  setApplicationStatus, saveApplicationStep, setApplicationArchived, setApplicationDisposition,
 } from "../../lib/db";
-import { nextP1Status, STEP_RUBRICS } from "../../lib/hiring";
+import { nextP1Status, STEP_RUBRICS, stageComplete, stageRequirements, dispositionLabel } from "../../lib/hiring";
 
 // Hiring is an admin/manager function — a tech must never review or advance applications.
 async function requireHiring() {
@@ -107,16 +107,40 @@ export async function saveHiringStepAction(appId, step, { ratings = {}, notes = 
 }
 
 // Advance the candidate to the next Portal 1 status (assessment → phone → … → final_review).
-export async function advanceHiringAction(appId) {
+export async function advanceHiringAction(appId, { override = false, reason = "" } = {}) {
   const { user, error } = await requireHiring();
   if (error) return { ok: false, error };
   const app = getApplication(appId);
   if (!app) return { ok: false, error: "Not found." };
-  const next = nextP1Status(app.status || "applied");
-  if (next === app.status) return { ok: false, error: "Already at final review." };
+  // A paused/withdrawn candidate can't advance — set them back to Active first.
+  if ((app.disposition || "active") !== "active") return { ok: false, error: `Candidate is ${dispositionLabel(app.disposition)} — set them Active to continue.` };
+  const cur = app.status || "applied";
+  const next = nextP1Status(cur);
+  if (next === cur) return { ok: false, error: "Already at final review." };
+  // Gate on the current stage's completion criteria. Incomplete → the UI asks for an override reason.
+  const ctx = { assessment: app.assessment, steps: app.steps };
+  if (!stageComplete(cur, ctx)) {
+    if (!override) {
+      const missing = stageRequirements(cur, ctx).filter((r) => !r.optional && !r.done).map((r) => r.label);
+      return { ok: false, error: "incomplete", missing };
+    }
+    const why = String(reason || "").trim();
+    if (why.length < 3) return { ok: false, error: "A reason is required to advance past an incomplete stage." };
+    logApplicationEvent(appId, { kind: "override", detail: `Advanced past incomplete ${cur} — override: ${why.slice(0, 200)}`, actor_role: user.role, actor_name: user.name });
+  }
   setApplicationStatus(appId, next, { actor_role: user.role, actor_name: user.name });
   touch(appId);
   return { ok: true, status: next };
+}
+
+// Set candidate disposition (active | on_hold | withdrawn) — preserves the pipeline stage.
+export async function setDispositionAction(appId, disposition, reason) {
+  const { user, error } = await requireHiring();
+  if (error) return { ok: false, error };
+  const r = setApplicationDisposition(appId, disposition, { actor_role: user.role, actor_name: user.name, reason });
+  if (!r) return { ok: false, error: "Could not update disposition." };
+  touch(appId);
+  return { ok: true, disposition };
 }
 
 // Final-review decision: hire | conditional | decline.

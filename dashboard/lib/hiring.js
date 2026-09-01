@@ -97,6 +97,51 @@ export function positionKey(position) {
 }
 export const isTechPosition = (position) => positionKey(position) === "tech";
 
+// ── Candidate disposition (an axis ORTHOGONAL to the pipeline stage) ──────────
+// active | on_hold | withdrawn are set explicitly; declined / hired / archived keep their own
+// mechanisms. effectiveDisposition() blends them so the header badge always tells the true story.
+export const DISPOSITIONS = [
+  { key: "active",    label: "Active",    tone: "active" },
+  { key: "on_hold",   label: "On Hold",   tone: "warn" },
+  { key: "withdrawn", label: "Withdrawn", tone: "muted" },
+];
+export const dispositionLabel = (k) => DISPOSITIONS.find((d) => d.key === k)?.label || "Active";
+export function effectiveDisposition(app) {
+  if (!app) return { key: "active", label: "Active", tone: "active" };
+  if (app.archived) return { key: "archived", label: "Archived", tone: "muted" };
+  if (app.status === "declined" || app.stage === "declined") return { key: "not_selected", label: "Not Selected", tone: "bad" };
+  if ((app.portal || 1) >= 2 || app.stage === "hired") return { key: "hired", label: "Hired", tone: "good" };
+  return { ...(DISPOSITIONS.find((x) => x.key === (app.disposition || "active")) || DISPOSITIONS[0]) };
+}
+export const isActiveDisposition = (app) => effectiveDisposition(app).key === "active";
+
+// ── Per-stage completion criteria (Portal 1) — drives the GATED Advance ──────
+// Each item {label, done, optional}. stageComplete = every NON-optional item is done. An admin can
+// still advance past an incomplete stage, but only via an explicit, reason-logged override.
+export function stageRequirements(status, { assessment, steps } = {}) {
+  if (status === "assessment") {
+    const submitted = assessment?.status === "submitted" || assessment?.status === "graded";
+    return [
+      { key: "submitted", label: "Assessment submitted", done: !!submitted },
+      { key: "graded",    label: "AI-graded / reviewed", done: assessment?.status === "graded", optional: true },
+    ];
+  }
+  if (P1_EVAL_STEPS.includes(status)) {
+    const s = steps?.[status] || {};
+    return [
+      { key: "scored", label: "Scorecard rated", done: !!(s.ratings && Object.keys(s.ratings).length > 0) },
+      { key: "rec",    label: "Recommendation recorded", done: !!s.recommendation },
+    ];
+  }
+  return [];   // applied / final_review — not gated here
+}
+export function stageComplete(status, ctx) {
+  return stageRequirements(status, ctx).filter((r) => !r.optional).every((r) => r.done);
+}
+
+// Days-in-stage SLA — soft targets; past this the stage chip reads "Overdue".
+export const STAGE_SLA_DAYS = { applied: 3, assessment: 7, phone: 5, in_person: 7, sop: 7, ride_along: 7, final_review: 3 };
+
 // ── Portal 2 · Compliance (1099 contractor) ──────────────────────────────
 // Each item the new hire completes. type drives the candidate UI: upload | form | sign | w9 | deposit.
 // Every item tracks a status: not_started → submitted → verified (or rejected, back to the candidate).

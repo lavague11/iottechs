@@ -586,6 +586,9 @@ function init() {
   if (!hiringCols.includes("archived")) db.exec("ALTER TABLE applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: void, never hard-delete (kept for audit)
   if (!hiringCols.includes("archived_at")) db.exec("ALTER TABLE applications ADD COLUMN archived_at TEXT");
   if (!hiringCols.includes("archived_by")) db.exec("ALTER TABLE applications ADD COLUMN archived_by TEXT");
+  // Candidate DISPOSITION — an axis orthogonal to the pipeline stage: active | on_hold | withdrawn.
+  // (declined / hired / archived stay their own mechanisms.) Lets someone be "Phone Screen · On Hold".
+  if (!hiringCols.includes("disposition")) db.exec("ALTER TABLE applications ADD COLUMN disposition TEXT DEFAULT 'active'");
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3308,7 +3311,8 @@ function decorateApp(r) {
   const h = resolveHiring(r);   // { status, portal, meta } — derives from legacy stage if columns are unset
   return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position),
     onboarding: safeJson(r.onboarding, null), assessment: safeJson(r.assessment, null), steps: safeJson(r.steps, {}), training: safeJson(r.training, { modules: {}, tier: null, badges: [] }),
-    portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral" };
+    portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral",
+    disposition: r.disposition || "active" };
 }
 
 export function logApplicationEvent(appId, { kind, detail, actor_role, actor_name } = {}) {
@@ -3384,6 +3388,19 @@ export function setApplicationArchived(appId, archived, { actor_role, actor_name
     .run(archived ? 1 : 0, archived ? (actor_name || null) : null, app.app_id);
   logApplicationEvent(app.app_id, { kind: "note", detail: archived ? "Application voided (archived)" : "Application restored from archive", actor_role, actor_name });
   return getApplication(app.app_id);
+}
+
+// Set the candidate disposition (active | on_hold | withdrawn) — independent of the pipeline stage,
+// which is preserved. Logs the change so the timeline shows who paused/withdrew the candidate and why.
+export function setApplicationDisposition(appId, disposition, { actor_role, actor_name, reason } = {}) {
+  if (!["active", "on_hold", "withdrawn"].includes(disposition)) return null;
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const from = cur.disposition || "active";
+  db.prepare("UPDATE applications SET disposition = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE").run(disposition, cur.app_id);
+  const LBL = { active: "Active", on_hold: "On Hold", withdrawn: "Withdrawn" };
+  logApplicationEvent(cur.app_id, { kind: "disposition", detail: `${LBL[from] || from} → ${LBL[disposition]}${reason ? ` — ${String(reason).slice(0, 200)}` : ""}`, actor_role, actor_name });
+  return getApplication(cur.app_id);
 }
 
 export function setApplicationStage(appId, stage, { actor_role, actor_name, reason } = {}) {

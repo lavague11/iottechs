@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { STEP_RUBRICS, P1_EVAL_STEPS, P1_FLOW, statusLabel, nextP1Status } from "../../../lib/hiring";
+import { STEP_RUBRICS, P1_EVAL_STEPS, P1_FLOW, statusLabel, nextP1Status, stageRequirements, stageComplete } from "../../../lib/hiring";
 import { saveHiringStepAction, advanceHiringAction, hiringDecisionAction } from "../actions";
 
 const STEPPER = [{ key: "assessment", label: "Assessment" }, ...P1_EVAL_STEPS.map((k) => ({ key: k, label: STEP_RUBRICS[k].label })), { key: "final_review", label: "Final Review" }];
@@ -17,6 +17,12 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
   const [sel, setSel] = useState(STEPPER.some((s) => s.key === status0) ? status0 : "assessment");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [override, setOverride] = useState(null);        // {missing:[…]} when a gated advance was blocked
+  const [overrideReason, setOverrideReason] = useState("");
+  // Completion criteria for the stage the candidate is CURRENTLY at (what "Advance" moves them from).
+  const stageCtx = { assessment, steps };
+  const curReqs = stageRequirements(status0, stageCtx);
+  const curComplete = stageComplete(status0, stageCtx);
   // A retake still pending office review, or approved but not yet re-submitted — decisions wait for
   // it. Key off retake.status directly: a PENDING retake sits at assessment.status 'graded' (that's
   // where the candidate requests one from), so the old `status !== "graded"` test missed it.
@@ -44,10 +50,11 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
     else setMsg(r?.error || "Could not save");
     setBusy(false);
   }
-  async function advance() {
+  async function advance(force = false) {
     setBusy(true); setMsg("");
-    const r = await advanceHiringAction(appId);
-    if (r?.ok) { setStatus(r.status); selectStep(P1_EVAL_STEPS.includes(r.status) ? r.status : sel); }
+    const r = await advanceHiringAction(appId, force ? { override: true, reason: overrideReason } : {});
+    if (r?.ok) { setOverride(null); setOverrideReason(""); setStatus(r.status); selectStep(P1_EVAL_STEPS.includes(r.status) ? r.status : sel); }
+    else if (r?.error === "incomplete") { setOverride({ missing: r.missing || [] }); }
     else setMsg(r?.error || "Could not advance");
     setBusy(false);
   }
@@ -84,6 +91,29 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
         })}
       </div>
 
+      {curReqs.length > 0 && !atFinal && !declined && (
+        <div className={`rs-reqs${curComplete ? " ok" : ""}`}>
+          <div className="rs-reqs-h">To advance from {statusLabel(status0)}{curComplete ? " — ready" : ""}:</div>
+          <ul>
+            {curReqs.map((r) => (
+              <li key={r.key} className={r.done ? "done" : r.optional ? "opt" : "todo"}>
+                <span className="rs-req-mk">{r.done ? "✓" : "•"}</span>{r.label}{r.optional && !r.done ? " · optional" : ""}
+              </li>
+            ))}
+          </ul>
+          {override && (
+            <div className="rs-override">
+              <div className="rs-override-h">{override.missing.length ? `Incomplete: ${override.missing.join(", ")}. ` : ""}Advance anyway?</div>
+              <input className="rs-override-in" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Reason for the override (required, logged)…" />
+              <div className="rs-override-actions">
+                <button className="rs-btn ghost" onClick={() => { setOverride(null); setOverrideReason(""); }} disabled={busy}>Cancel</button>
+                <button className="rs-btn" onClick={() => advance(true)} disabled={busy || overrideReason.trim().length < 3}>{busy ? "Advancing…" : "Continue anyway"}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {rubric && (
         <div className="rs-card">
           <div className="rs-card-h">{rubric.label} scorecard{saved.by && <span className="rs-by">last by {saved.by}</span>}</div>
@@ -104,7 +134,7 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
           </div>
           <div className="rs-actions">
             <button className="rs-btn" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save scorecard"}</button>
-            {!atFinal && !declined && <button className="rs-btn ghost" onClick={advance} disabled={busy}>Advance → {nextLabel}</button>}
+            {!atFinal && !declined && <button className="rs-btn ghost" onClick={() => advance()} disabled={busy}>Advance → {nextLabel}</button>}
             {msg && <span className="rs-msg">{msg}</span>}
           </div>
         </div>
@@ -116,7 +146,7 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
           <p className="rs-panel-note">Review the candidate&rsquo;s assessment score, timing, and answers in the card above. When you&rsquo;re ready, advance to the phone interview.</p>
           <div className="rs-actions">
             {status0 === "assessment" && !declined && (
-              <button className="rs-btn ghost" onClick={advance} disabled={busy || retakeBlocking}>{busy ? "Advancing…" : `Advance → ${statusLabel(nextP1Status("assessment"))}`}</button>
+              <button className="rs-btn ghost" onClick={() => advance()} disabled={busy || retakeBlocking}>{busy ? "Advancing…" : `Advance → ${statusLabel(nextP1Status("assessment"))}`}</button>
             )}
             {status0 !== "assessment" && curIdx > P1_FLOW.indexOf("assessment") && <span className="rs-msg">Assessment stage complete.</span>}
             {msg && <span className="rs-msg">{msg}</span>}
@@ -163,6 +193,20 @@ const CSS = `
 .rs-sscore{font-size:.64rem;color:var(--gold-deep);font-family:var(--font-mono,ui-monospace)}
 .rs-card{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:var(--paper);margin-bottom:12px}
 .rs-panel-note{margin:0 0 4px;font-size:.86rem;color:var(--muted);line-height:1.5}
+.rs-reqs{border:1px solid var(--line);border-radius:11px;padding:11px 14px;background:#fff;margin-bottom:12px}
+.rs-reqs.ok{background:#F3F8F4;border-color:#CFE6D8}
+.rs-reqs-h{font-size:.74rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.rs-reqs ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rs-reqs li{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink)}
+.rs-reqs li.todo{color:var(--muted)}
+.rs-reqs li.opt{color:var(--faint,#A6ABB1)}
+.rs-req-mk{flex:none;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:.7rem;font-weight:800;background:#EFEFEA;color:var(--muted)}
+.rs-reqs li.done .rs-req-mk{background:var(--green);color:#fff}
+.rs-override{margin-top:11px;border-top:1px solid var(--line);padding-top:11px}
+.rs-override-h{font-size:.82rem;font-weight:700;color:var(--red);margin-bottom:7px}
+.rs-override-in{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:.84rem;outline:none}
+.rs-override-in:focus{border-color:var(--gold-deep)}
+.rs-override-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:9px}
 .rs-card-h{font-size:.9rem;font-weight:700;color:var(--ink);margin-bottom:11px;display:flex;justify-content:space-between}
 .rs-by{font-size:.72rem;color:var(--muted);font-weight:500}
 .rs-crit{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}

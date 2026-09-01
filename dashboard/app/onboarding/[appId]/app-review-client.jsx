@@ -4,12 +4,12 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction } from "../actions";
+import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction, setDispositionAction } from "../actions";
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
 import TrainingPanel from "./training-panel";
-import { positionKey } from "../../../lib/hiring";
+import { positionKey, effectiveDisposition, DISPOSITIONS, STAGE_SLA_DAYS } from "../../../lib/hiring";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -31,6 +31,8 @@ const EVENT_PATHS = {
   declined:  <><circle cx="12" cy="12" r="8" /><path d="M8 12h8" /></>,
   onboarding:<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12 3 3 5-6" /></>,
   note:      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />,
+  disposition:<><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></>,
+  override:  <><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></>,
 };
 function EventIcon({ kind }) {
   return (
@@ -41,7 +43,7 @@ function EventIcon({ kind }) {
 }
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 
-export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null }) {
+export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null, statusSince = null }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -52,6 +54,15 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const [hireRole, setHireRole] = useState(posKey === "sales" ? "sales" : posKey === "office" ? "manager" : "tech");
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [voidArm, setVoidArm] = useState(false);
+  const [dispOpen, setDispOpen] = useState(false);
+
+  // Candidate disposition (Active / On Hold / Withdrawn — or a terminal Hired/Not-Selected/Archived).
+  const disp = effectiveDisposition(app);
+  const dispSettable = ["active", "on_hold", "withdrawn"].includes(disp.key);   // terminal states aren't hand-set here
+  // Days in the CURRENT stage, from the last transition — not the application date.
+  const daysInStage = statusSince ? Math.floor((Date.now() - Date.parse(String(statusSince).replace(" ", "T"))) / 86400000) : null;
+  const slaDays = STAGE_SLA_DAYS[app.status] ?? null;
+  const overdue = daysInStage != null && slaDays != null && daysInStage > slaDays;
 
   const isAdmin = user.role === "admin";
   const archived = !!app.archived;
@@ -87,9 +98,32 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             <p className="ob-hero-sub">{app.position_label} · {app.experience || "experience not given"}{app.address ? ` · ${app.address}` : ""}</p>
           </div>
           <div className="ob-hero-chips">
-            {archived && <span className="ob-badge bad">Voided</span>}
-            {hired && <span className="ob-badge good">Hired</span>}
-            {declined && <span className="ob-badge bad">Declined</span>}
+            {/* Unified disposition badge — covers Active/On Hold/Withdrawn plus the terminal states.
+                For the three settable states it opens a small menu (an axis separate from stage). */}
+            <div className="ob-disp">
+              <button className={`ob-badge disp t-${disp.tone}${dispSettable ? " ob-disp-btn" : ""}`}
+                disabled={!dispSettable || pending} onClick={() => dispSettable && setDispOpen((o) => !o)}
+                aria-haspopup="true" aria-expanded={dispOpen}>
+                {disp.label}
+                {dispSettable && <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.6" style={{ marginLeft: 4 }}><path d="m6 9 6 6 6-6" /></svg>}
+              </button>
+              {dispOpen && dispSettable && (
+                <>
+                  <div className="ob-disp-back" onClick={() => setDispOpen(false)} />
+                  <div className="ob-disp-menu">
+                    {DISPOSITIONS.map((d) => (
+                      <button key={d.key} className={d.key === (app.disposition || "active") ? "on" : ""} disabled={pending}
+                        onClick={() => {
+                          setDispOpen(false);
+                          if (d.key === (app.disposition || "active")) return;
+                          if (d.key === "withdrawn" && !confirm(`Mark ${app.name || "this candidate"} as Withdrawn? Their pipeline stage is kept.`)) return;
+                          run(() => setDispositionAction(app.app_id, d.key));
+                        }}>{d.label}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <Link href={`/application/${app.app_id}`} className="ob-view-btn">Applicant view</Link>
             {isAdmin && (archived
               ? <button className="ob-view-btn" disabled={pending} onClick={() => run(() => setAppArchivedAction(app.app_id, false))}>Restore</button>
@@ -123,6 +157,9 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
           <div className={`ob-readout${declined ? " bad" : ""}`}>
             <span className="ob-pct mono">{pct}%</span>
             <span className="ob-readout-l">{readoutLabel}</span>
+            {daysInStage != null && !hired && !declined && (
+              <span className={`ob-days${overdue ? " over" : ""}`}>In stage: {daysInStage}d{overdue ? " · Overdue" : ""}</span>
+            )}
           </div>
         </div>
 
@@ -328,8 +365,21 @@ const CSS = `
 .apx .ob-hero-sub{margin:0;color:var(--muted)}
 .apx .ob-hero-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .apx .ob-badge{font-size:.72rem;font-weight:800;text-transform:uppercase;padding:4px 12px;border-radius:20px}
-.apx .ob-badge.good{color:#1c8a45;background:#e7f6ec}
-.apx .ob-badge.bad{color:#c9382b;background:#fdecec}
+.apx .ob-badge.good,.apx .ob-badge.disp.t-good{color:#1c8a45;background:#e7f6ec}
+.apx .ob-badge.bad,.apx .ob-badge.disp.t-bad{color:#c9382b;background:#fdecec}
+.apx .ob-badge.disp.t-active{color:#1c8a45;background:#e7f6ec}
+.apx .ob-badge.disp.t-warn{color:#B0801F;background:#F6EEDC}
+.apx .ob-badge.disp.t-muted{color:#787D84;background:#EFEFEA}
+.apx .ob-disp{position:relative;display:inline-flex}
+.apx .ob-disp-btn{display:inline-flex;align-items:center;border:none;cursor:pointer;font-family:inherit}
+.apx .ob-disp-btn:disabled{cursor:default}
+.apx .ob-disp-back{position:fixed;inset:0;z-index:20}
+.apx .ob-disp-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:21;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px -12px rgba(14,19,32,.3);padding:5px;min-width:150px;display:flex;flex-direction:column;gap:2px}
+.apx .ob-disp-menu button{text-align:left;background:none;border:none;border-radius:7px;padding:8px 11px;font:inherit;font-size:.84rem;font-weight:600;color:var(--ink);cursor:pointer}
+.apx .ob-disp-menu button:hover{background:var(--bg-soft,#F4F4F2)}
+.apx .ob-disp-menu button.on{color:var(--gold-deep,#A8842F);background:#F6F0E2}
+.apx .ob-days{margin-top:5px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.04em;color:var(--muted)}
+.apx .ob-days.over{color:#c9382b;font-weight:700}
 .apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none;border:none;cursor:pointer}
 .apx .ob-view-btn:disabled{opacity:.5;cursor:default}
 .apx .ob-void-btn{background:#fff;color:#c9382b;border:1.5px solid #f0d3d0}
