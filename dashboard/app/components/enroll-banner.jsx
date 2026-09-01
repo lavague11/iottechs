@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 
 // "Set up Face ID" nudge for internal users who haven't verified yet. Fetches
-// the user's own status on mount; shows only for internal + not-verified, and
-// only until dismissed for the session. Links to /enroll.
+// the user's own status on mount; shows only for internal + not-verified. Dismissing
+// it SNOOZES the nudge for ~3 weeks (persisted), so it doesn't nag every session. Links to /enroll.
+const SNOOZE_MS = 21 * 24 * 60 * 60 * 1000;   // ~3 weeks — between the "two weeks or a month" ask
+
 export default function EnrollBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (sessionStorage.getItem("iot_faceid_dismissed") === "1") return;
+    try {
+      const at = Number(localStorage.getItem("iot_faceid_snoozed_at") || 0);
+      if (at && Date.now() - at < SNOOZE_MS) return;   // still within the snooze window
+    } catch {}
     let alive = true;
     fetch("/api/my-identity")
       .then((r) => r.json())
@@ -37,7 +42,7 @@ export default function EnrollBanner() {
         <span>Verify your identity once with your ID and a face scan — then sign in with your face.</span>
       </div>
       <a className="efb-cta" href="/enroll">Set up →</a>
-      <button className="efb-x" aria-label="Dismiss" onClick={() => { sessionStorage.setItem("iot_faceid_dismissed", "1"); setShow(false); }}>
+      <button className="efb-x" aria-label="Dismiss for now" title="Not now — ask me again in a few weeks" onClick={() => { try { localStorage.setItem("iot_faceid_snoozed_at", String(Date.now())); } catch {} setShow(false); }}>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
       </button>
       </div>
