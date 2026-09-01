@@ -10,7 +10,7 @@ import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
 import TrainingPanel from "./training-panel";
-import { positionKey, effectiveDisposition, DISPOSITIONS, STAGE_SLA_DAYS, nextAction } from "../../../lib/hiring";
+import { positionKey, effectiveDisposition, DISPOSITIONS, STAGE_SLA_DAYS, nextAction, stageHistory } from "../../../lib/hiring";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -43,6 +43,20 @@ function EventIcon({ kind }) {
   );
 }
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
+function fmtWhen(t) {
+  if (!t) return null;
+  const d = new Date(String(t).replace(" ", "T"));
+  if (isNaN(d)) return null;
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).replace(",", " ·");
+}
+function fmtDur(ms) {
+  if (ms == null) return null;
+  const s = Math.round(ms / 1000);
+  if (s < 90) return `${s}s`;
+  const m = Math.round(s / 60); if (m < 90) return `${m}m`;
+  const h = Math.round(m / 60); if (h < 36) return `${h}h`;
+  return `${Math.round(h / 24)}d`;
+}
 
 export default function AppReviewClient({ user, alerts, app, events = [], reviewers = [], compliance = null, statusSince = null }) {
   const router = useRouter();
@@ -89,6 +103,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
 
   // Deterministic next action for the header card (tech track only). CTA kinds map to real actions.
   const na = isTechTrack ? nextAction(app) : null;
+  const history = isTechTrack ? stageHistory(events, app.status) : null;
   function doNextAction(kind) {
     if (kind === "advance") run(() => advanceHiringAction(app.app_id));
     else if (kind === "activate") run(() => setDispositionAction(app.app_id, "active"));
@@ -191,6 +206,29 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             direct role-hire Decision card below instead. */}
         {isTechTrack && <div style={{ marginBottom: 14 }}><AssessmentResult appId={app.app_id} assessment={app.assessment} /></div>}
         {isTechTrack && app.portal === 1 && <div style={{ marginBottom: 14 }}><RecruitmentSteps appId={app.app_id} status={app.status} steps={app.steps} assessment={app.assessment} canHire={user.role === "admin"} /></div>}
+
+        {history && history.some((h) => h.reached) && (
+          <div className="panel ob-hist">
+            <div className="ob-hist-h">Stage history</div>
+            <ol className="ob-hist-list">
+              {history.map((h) => {
+                const when = fmtWhen(h.at);
+                const dur = fmtDur(h.durationMs);
+                const state = h.isCurrent ? "cur" : h.reached ? "done" : "todo";
+                return (
+                  <li key={h.key} className={`ob-hist-row ${state}`}>
+                    <span className="ob-hist-dot" />
+                    <span className="ob-hist-label">{h.label}</span>
+                    <span className="ob-hist-meta">
+                      {h.reached ? (when || (h.isCurrent ? "current" : "reached")) : "Not reached"}
+                      {dur && <span className="ob-hist-dur">{h.isCurrent ? `${dur} so far` : dur}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        )}
         {app.portal === 2 && <div style={{ marginBottom: 14 }}><ComplianceReview appId={app.app_id} status={app.status} compliance={compliance} /></div>}
         {(app.portal === 3 || app.status === "cleared") && <div style={{ marginBottom: 14 }}><TrainingPanel appId={app.app_id} status={app.status} training={app.training} /></div>}
 
@@ -415,6 +453,21 @@ const CSS = `
 .apx .ob-next-cta{flex:none;font-size:.85rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;border-radius:10px;padding:10px 18px;text-decoration:none;cursor:pointer;white-space:nowrap}
 .apx .ob-next-cta:disabled{opacity:.55;cursor:default}
 .apx .ob-next.t-warn .ob-next-cta{background:linear-gradient(135deg,#C9A24E,#B0801F)}
+.apx .ob-hist{padding:15px 18px}
+.apx .ob-hist-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;color:var(--ink);margin-bottom:12px}
+.apx .ob-hist-list{list-style:none;margin:0;padding:0}
+.apx .ob-hist-row{display:flex;align-items:center;gap:11px;padding:7px 0 7px 4px;position:relative}
+.apx .ob-hist-row:not(:last-child)::before{content:"";position:absolute;left:9px;top:22px;bottom:-7px;width:2px;background:var(--line)}
+.apx .ob-hist-row.done:not(:last-child)::before{background:#2E7D5B}
+.apx .ob-hist-dot{flex:none;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1}
+.apx .ob-hist-row.done .ob-hist-dot{background:#2E7D5B;border-color:#2E7D5B}
+.apx .ob-hist-row.cur .ob-hist-dot{background:#C9A96E;border-color:#C9A96E;box-shadow:0 0 0 3px rgba(201,169,110,.25)}
+.apx .ob-hist-label{font-size:.9rem;font-weight:600;color:var(--ink)}
+.apx .ob-hist-row.todo .ob-hist-label{color:var(--faint,#A6ABB1);font-weight:500}
+.apx .ob-hist-meta{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.apx .ob-hist-row.todo .ob-hist-meta{color:var(--faint,#A6ABB1)}
+.apx .ob-hist-dur{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.68rem;color:var(--gold-deep,#A8842F);background:#F6F0E2;border-radius:20px;padding:2px 9px}
+.apx .ob-hist-row.cur .ob-hist-dur{color:#A8842F}
 .apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none;border:none;cursor:pointer}
 .apx .ob-view-btn:disabled{opacity:.5;cursor:default}
 .apx .ob-void-btn{background:#fff;color:#c9382b;border:1.5px solid #f0d3d0}

@@ -186,6 +186,38 @@ export function nextAction(app) {
   return null;
 }
 
+// ── Stage history (funnel) ───────────────────────────────────────────────────
+// Reconstructs when the candidate ENTERED each Portal-1 stage, and how long they sat in it, from the
+// event log — separate from the freeform timeline. The "applied" event marks the applied entry; fine
+// status transitions log "… → {statusLabel(to)}", so we match the right-hand label back to a key.
+const _ms = (t) => (t ? Date.parse(String(t).replace(" ", "T")) : NaN);
+export function stageHistory(events = [], currentStatus = null, nowMs = Date.now()) {
+  const entered = {};
+  const applied = events.find((e) => e.kind === "applied");
+  if (applied) entered.applied = applied.at;
+  for (const key of P1_FLOW) {
+    if (key === "applied") continue;
+    const target = statusLabel(key);
+    const ev = events
+      .filter((e) => e.kind === "stage" && typeof e.detail === "string" && e.detail.split("→").pop().trim() === target)
+      .sort((a, b) => String(a.at).localeCompare(String(b.at)))[0];
+    if (ev) entered[key] = ev.at;
+  }
+  const curIdx = P1_FLOW.indexOf(currentStatus);
+  return P1_FLOW.map((key, i) => {
+    const at = entered[key] || null;
+    const nextAt = P1_FLOW.slice(i + 1).map((k) => entered[k]).find(Boolean) || null;
+    const isCurrent = key === currentStatus;
+    const reached = at != null || (curIdx >= 0 && i <= curIdx) || (curIdx < 0 && !!at);
+    let durationMs = null;
+    if (at) {
+      const end = nextAt ? _ms(nextAt) : isCurrent ? nowMs : null;
+      if (end != null && Number.isFinite(_ms(at))) durationMs = Math.max(0, end - _ms(at));
+    }
+    return { key, label: statusLabel(key), at, reached, isCurrent, durationMs };
+  });
+}
+
 // ── Portal 2 · Compliance (1099 contractor) ──────────────────────────────
 // Each item the new hire completes. type drives the candidate UI: upload | form | sign | w9 | deposit.
 // Every item tracks a status: not_started → submitted → verified (or rejected, back to the candidate).
