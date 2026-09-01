@@ -116,6 +116,7 @@ function KeyRow({ row, onFlash, onDismiss }) {
   const [reveal, setReveal] = useState(false);
   const [busy, startTx] = useTransition();
   const [rows, setRows] = useState(row);
+  const [armDel, setArmDel] = useState(false);
   const badge = SRC_BADGE[rows.source] || SRC_BADGE.none;
 
   function save() {
@@ -155,7 +156,15 @@ function KeyRow({ row, onFlash, onDismiss }) {
         {rows.docs && <a className="kv-doc" href={rows.docs} target="_blank" rel="noreferrer">Get key ↗</a>}
         <button className="kv-edit" onClick={() => setOpen(v => !v)}>{open ? "Cancel" : rows.source === "none" ? "+ Add" : "Replace"}</button>
         {rows.source === "stored" && <button className="kv-clear" disabled={busy} onClick={clear} title="Remove stored value (falls back to env)">Clear</button>}
-        {onDismiss && <button className="kv-del" disabled={busy} onClick={onDismiss} title="Hide this key from the list (restorable)">Delete</button>}
+        {onDismiss && (armDel ? (
+          <span className="kv-armdel">
+            <span className="kv-armdel-q">Delete?</span>
+            <button className="kv-del-yes" disabled={busy} onClick={() => { setArmDel(false); onDismiss(); }}>Yes</button>
+            <button className="kv-del-no" onClick={() => setArmDel(false)}>Cancel</button>
+          </span>
+        ) : (
+          <button className="kv-del" disabled={busy} onClick={() => setArmDel(true)} title="Delete this key (kept in Deleted — restorable)">Delete</button>
+        ))}
       </div>
       {open && (
         <div className="kv-edit-row">
@@ -192,7 +201,7 @@ function ApiKeysCard({ secrets, onFlash }) {
       const r = await dismissSecretAction(key);
       if (r?.error) { onFlash(r.error); return; }
       setDismissed(s => new Set([...s, key]));
-      onFlash(`${key} hidden`);
+      onFlash(`${key} deleted — kept in Deleted, restorable`);
     });
   }
   function restore(key) {
@@ -241,7 +250,7 @@ function ApiKeysCard({ secrets, onFlash }) {
       {hidden.length > 0 && (
         <div className="kv-hidden">
           <button className="kv-hidden-toggle" onClick={() => setShowHidden(v => !v)}>
-            {showHidden ? "▾" : "▸"} {hidden.length} hidden
+            {showHidden ? "▾" : "▸"} {hidden.length} deleted
           </button>
           {showHidden && (
             <div className="kv-hidden-list">
@@ -666,6 +675,11 @@ const DV_CSS = `
 .apx .kv-del{background:none;border:1.5px solid transparent;color:var(--muted);border-radius:8px;padding:5px 8px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer}
 .apx .kv-del:hover{color:#c0392b;background:rgba(192,57,43,.08)}
 .apx .kv-del:disabled{opacity:.5;cursor:default}
+.apx .kv-armdel{display:inline-flex;align-items:center;gap:6px}
+.apx .kv-armdel-q{font-size:.76rem;font-weight:700;color:#c0392b}
+.apx .kv-del-yes{background:#c0392b;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.76rem;font-weight:700;font-family:inherit;cursor:pointer}
+.apx .kv-del-yes:disabled{opacity:.5;cursor:default}
+.apx .kv-del-no{background:none;border:1.5px solid var(--line);border-radius:8px;padding:5px 10px;font-size:.76rem;font-weight:600;font-family:inherit;cursor:pointer;color:var(--muted)}
 .apx .kv-hidden{border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
 .apx .kv-hidden-toggle{background:none;border:none;color:var(--muted);font-size:.8rem;font-weight:600;font-family:inherit;cursor:pointer;padding:2px 0}
 .apx .kv-hidden-toggle:hover{color:var(--ink)}

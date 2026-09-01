@@ -4733,24 +4733,41 @@ function maskSecret(v) {
 // returning display-safe metadata only (masked value, source, timestamp).
 // Keys the owner hid from the API-Keys list ("delete") — a JSON array in a reserved app_secrets row.
 // Non-destructive: registry entries are declared in code, so hiding is restorable, not a real delete.
-const DISMISSED_KEYS_ROW = "_DISMISSED_KEYS";
-export function getDismissedKeys() {
-  try { const r = db.prepare("SELECT value FROM app_secrets WHERE key=?").get(DISMISSED_KEYS_ROW); return r?.value ? (JSON.parse(r.value) || []) : []; } catch { return []; }
+const DISMISSED_KEYS_ROW = "_DISMISSED_KEYS";   // JSON array: which keys are hidden/deleted
+const DELETED_SECRETS_ROW = "_DELETED_SECRETS"; // JSON object {key: value}: archived values, so delete is recoverable
+const RESERVED_SECRET_ROWS = new Set([DISMISSED_KEYS_ROW, DELETED_SECRETS_ROW]);
+function _readJson(rowKey, fallback) {
+  try { const r = db.prepare("SELECT value FROM app_secrets WHERE key=?").get(rowKey); return r?.value ? (JSON.parse(r.value) ?? fallback) : fallback; } catch { return fallback; }
 }
-function saveDismissedKeys(list) {
+function _writeJson(rowKey, obj) {
   db.prepare("INSERT INTO app_secrets (key, value, updated_at, updated_by) VALUES (?,?,datetime('now','localtime'),'system') ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
-    .run(DISMISSED_KEYS_ROW, JSON.stringify([...new Set(list)]));
+    .run(rowKey, JSON.stringify(obj));
 }
+export function getDismissedKeys() { const l = _readJson(DISMISSED_KEYS_ROW, []); return Array.isArray(l) ? l : []; }
+function getDeletedSecrets() { const o = _readJson(DELETED_SECRETS_ROW, {}); return (o && typeof o === "object") ? o : {}; }
+
+// "Delete" a key: archive its live value (recoverable) and remove it from the live vault so the app
+// stops using it. Registry keys are code-declared, so this is a reversible hide, not a real delete.
 export function dismissKey(key) {
   const k = String(key || "").trim();
-  if (!k || k === DISMISSED_KEYS_ROW) return { ok: false };
-  saveDismissedKeys([...getDismissedKeys(), k]);
-  db.prepare("DELETE FROM app_secrets WHERE key=?").run(k);   // also drop any stored value
+  if (!k || RESERVED_SECRET_ROWS.has(k)) return { ok: false };
+  const cur = db.prepare("SELECT value FROM app_secrets WHERE key=?").get(k);
+  if (cur?.value != null) {
+    const arch = getDeletedSecrets(); arch[k] = cur.value; _writeJson(DELETED_SECRETS_ROW, arch);
+    db.prepare("DELETE FROM app_secrets WHERE key=?").run(k);
+  }
+  _writeJson(DISMISSED_KEYS_ROW, [...new Set([...getDismissedKeys(), k])]);
   return { ok: true };
 }
+// Restore a deleted key: re-store its archived value (if any) and un-hide it.
 export function restoreKey(key) {
   const k = String(key || "").trim();
-  saveDismissedKeys(getDismissedKeys().filter(x => x !== k));
+  const arch = getDeletedSecrets();
+  if (arch[k] != null) {
+    db.prepare("INSERT INTO app_secrets (key, value, updated_at, updated_by) VALUES (?,?,datetime('now','localtime'),'system') ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").run(k, String(arch[k]));
+    delete arch[k]; _writeJson(DELETED_SECRETS_ROW, arch);
+  }
+  _writeJson(DISMISSED_KEYS_ROW, getDismissedKeys().filter(x => x !== k));
   return { ok: true };
 }
 
@@ -4763,7 +4780,7 @@ export function listSecretsMeta(registry = []) {
   const seen = new Set();
   const rows = [];
   const push = (key, meta) => {
-    if (key === DISMISSED_KEYS_ROW) return;   // internal row, never a user-facing key
+    if (RESERVED_SECRET_ROWS.has(key)) return;   // internal bookkeeping rows, never user-facing keys
     const s = storedMap.get(key);
     const envVal = process.env[key] || "";
     const source = s ? "stored" : (envVal ? "env" : "none");
@@ -4786,6 +4803,8 @@ export function listSecretsMeta(registry = []) {
   for (const item of registry) push(item.key, item);
   // Any stored key that isn't in the registry (custom keys the user added)
   for (const r of stored) if (!seen.has(r.key)) push(r.key, null);
+  // Deleted keys whose live value is gone still need a row so they show in the hidden section (restorable).
+  for (const k of dismissed) if (!seen.has(k) && !RESERVED_SECRET_ROWS.has(k)) push(k, null);
   // Stored first, then env, then missing — each group A→Z by key.
   rows.sort((a, b) => (_SRC_RANK[a.source] - _SRC_RANK[b.source]) || a.key.localeCompare(b.key));
   return rows;
