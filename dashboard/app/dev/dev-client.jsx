@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
-import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction } from "./actions";
+import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction, dismissSecretAction, restoreSecretAction } from "./actions";
 import { setLoginTwoFactorAction } from "../login/actions";
 
 const ROUTE_BADGE = {
@@ -110,7 +110,7 @@ const SRC_BADGE = {
   none:   { label: "Missing",  cls: "kv-none" },
 };
 
-function KeyRow({ row, onFlash }) {
+function KeyRow({ row, onFlash, onDismiss }) {
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -155,6 +155,7 @@ function KeyRow({ row, onFlash }) {
         {rows.docs && <a className="kv-doc" href={rows.docs} target="_blank" rel="noreferrer">Get key ↗</a>}
         <button className="kv-edit" onClick={() => setOpen(v => !v)}>{open ? "Cancel" : rows.source === "none" ? "+ Add" : "Replace"}</button>
         {rows.source === "stored" && <button className="kv-clear" disabled={busy} onClick={clear} title="Remove stored value (falls back to env)">Clear</button>}
+        {onDismiss && <button className="kv-del" disabled={busy} onClick={onDismiss} title="Hide this key from the list (restorable)">Delete</button>}
       </div>
       {open && (
         <div className="kv-edit-row">
@@ -180,7 +181,28 @@ function ApiKeysCard({ secrets, onFlash }) {
   const [nk, setNk] = useState(""); const [nv, setNv] = useState("");
   const [busy, startTx] = useTransition();
   const [extra, setExtra] = useState([]);   // custom keys added this session
+  const [dismissed, setDismissed] = useState(() => new Set(secrets.filter(r => r.dismissed).map(r => r.key)));
+  const [showHidden, setShowHidden] = useState(false);
   const rows = [...secrets, ...extra];
+  const visible = rows.filter(r => !dismissed.has(r.key));
+  const hidden = rows.filter(r => dismissed.has(r.key));
+
+  function dismiss(key) {
+    startTx(async () => {
+      const r = await dismissSecretAction(key);
+      if (r?.error) { onFlash(r.error); return; }
+      setDismissed(s => new Set([...s, key]));
+      onFlash(`${key} hidden`);
+    });
+  }
+  function restore(key) {
+    startTx(async () => {
+      const r = await restoreSecretAction(key);
+      if (r?.error) { onFlash(r.error); return; }
+      setDismissed(s => { const n = new Set(s); n.delete(key); return n; });
+      onFlash(`${key} restored`);
+    });
+  }
 
   function addCustom() {
     const key = nk.trim().toUpperCase().replace(/\s+/g, "_");
@@ -214,8 +236,26 @@ function ApiKeysCard({ secrets, onFlash }) {
         </div>
       )}
       <div className="kv-list">
-        {rows.map(r => <KeyRow key={r.key} row={r} onFlash={onFlash} />)}
+        {visible.map(r => <KeyRow key={r.key} row={r} onFlash={onFlash} onDismiss={() => dismiss(r.key)} />)}
       </div>
+      {hidden.length > 0 && (
+        <div className="kv-hidden">
+          <button className="kv-hidden-toggle" onClick={() => setShowHidden(v => !v)}>
+            {showHidden ? "▾" : "▸"} {hidden.length} hidden
+          </button>
+          {showHidden && (
+            <div className="kv-hidden-list">
+              {hidden.map(r => (
+                <div className="kv-hidden-row" key={r.key}>
+                  <code className="kv-key">{r.key}</code>
+                  <span className="kv-hidden-name">{r.name}</span>
+                  <button className="kv-restore" disabled={busy} onClick={() => restore(r.key)}>Restore</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -623,6 +663,19 @@ const DV_CSS = `
 .apx .kv-edit:hover{border-color:var(--accent-primary,#C9A96E)}
 .apx .kv-clear{background:none;border:1.5px solid transparent;color:var(--muted);border-radius:8px;padding:5px 8px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer}
 .apx .kv-clear:hover{color:#e74c3c;background:rgba(231,76,60,.08)}
+.apx .kv-del{background:none;border:1.5px solid transparent;color:var(--muted);border-radius:8px;padding:5px 8px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer}
+.apx .kv-del:hover{color:#c0392b;background:rgba(192,57,43,.08)}
+.apx .kv-del:disabled{opacity:.5;cursor:default}
+.apx .kv-hidden{border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+.apx .kv-hidden-toggle{background:none;border:none;color:var(--muted);font-size:.8rem;font-weight:600;font-family:inherit;cursor:pointer;padding:2px 0}
+.apx .kv-hidden-toggle:hover{color:var(--ink)}
+.apx .kv-hidden-list{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.apx .kv-hidden-row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;background:var(--bg-soft,#F4F4F2)}
+.apx .kv-hidden-row .kv-key{margin:0}
+.apx .kv-hidden-name{font-size:.8rem;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apx .kv-restore{background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:4px 12px;font-size:.76rem;font-weight:600;font-family:inherit;cursor:pointer;color:var(--ink)}
+.apx .kv-restore:hover{border-color:var(--accent-primary,#C9A96E)}
+.apx .kv-restore:disabled{opacity:.5;cursor:default}
 .apx .kv-edit-row{grid-column:1 / -1;display:flex;gap:8px;margin-top:4px}
 .apx .kv-input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.84rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);background:#fff}
 .apx .kv-input:focus{outline:none;border-color:var(--accent-primary,#C9A96E)}

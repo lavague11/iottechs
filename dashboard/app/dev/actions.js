@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseToken } from "../../lib/auth";
-import { toggleDevTask, addDevTask, archiveAndDelete, setSecret, deleteSecret } from "../../lib/db";
+import { toggleDevTask, addDevTask, archiveAndDelete, setSecret, deleteSecret, dismissKey, restoreKey } from "../../lib/db";
 
 async function requireAdmin() {
   const jar   = await cookies();
@@ -49,6 +49,22 @@ export async function saveSecretAction(key, value) {
 export async function clearSecretAction(key) {
   if (!(await requireAdmin())) return { error: "Unauthorized." };
   deleteSecret(key);
+  revalidatePath("/dev");
+  return { ok: true };
+}
+
+// Hide a key from the vault list (also drops any stored value). Restorable — registry keys are
+// declared in code, so "delete" here means hide, not a permanent removal.
+export async function dismissSecretAction(key) {
+  if (!(await requireAdmin())) return { error: "Unauthorized." };
+  dismissKey(key);
+  revalidatePath("/dev");
+  return { ok: true };
+}
+
+export async function restoreSecretAction(key) {
+  if (!(await requireAdmin())) return { error: "Unauthorized." };
+  restoreKey(key);
   revalidatePath("/dev");
   return { ok: true };
 }

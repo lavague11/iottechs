@@ -4731,13 +4731,39 @@ function maskSecret(v) {
 }
 // Merge the known-integration registry with what's actually stored / in env,
 // returning display-safe metadata only (masked value, source, timestamp).
+// Keys the owner hid from the API-Keys list ("delete") — a JSON array in a reserved app_secrets row.
+// Non-destructive: registry entries are declared in code, so hiding is restorable, not a real delete.
+const DISMISSED_KEYS_ROW = "_DISMISSED_KEYS";
+export function getDismissedKeys() {
+  try { const r = db.prepare("SELECT value FROM app_secrets WHERE key=?").get(DISMISSED_KEYS_ROW); return r?.value ? (JSON.parse(r.value) || []) : []; } catch { return []; }
+}
+function saveDismissedKeys(list) {
+  db.prepare("INSERT INTO app_secrets (key, value, updated_at, updated_by) VALUES (?,?,datetime('now','localtime'),'system') ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
+    .run(DISMISSED_KEYS_ROW, JSON.stringify([...new Set(list)]));
+}
+export function dismissKey(key) {
+  const k = String(key || "").trim();
+  if (!k || k === DISMISSED_KEYS_ROW) return { ok: false };
+  saveDismissedKeys([...getDismissedKeys(), k]);
+  db.prepare("DELETE FROM app_secrets WHERE key=?").run(k);   // also drop any stored value
+  return { ok: true };
+}
+export function restoreKey(key) {
+  const k = String(key || "").trim();
+  saveDismissedKeys(getDismissedKeys().filter(x => x !== k));
+  return { ok: true };
+}
+
+const _SRC_RANK = { stored: 0, env: 1, none: 2 };
 export function listSecretsMeta(registry = []) {
   let stored = [];
   try { stored = db.prepare("SELECT key, value, updated_at, updated_by FROM app_secrets").all(); } catch { stored = []; }
   const storedMap = new Map(stored.map(r => [r.key, r]));
+  const dismissed = new Set(getDismissedKeys());
   const seen = new Set();
   const rows = [];
   const push = (key, meta) => {
+    if (key === DISMISSED_KEYS_ROW) return;   // internal row, never a user-facing key
     const s = storedMap.get(key);
     const envVal = process.env[key] || "";
     const source = s ? "stored" : (envVal ? "env" : "none");
@@ -4753,12 +4779,15 @@ export function listSecretsMeta(registry = []) {
       masked: val ? maskSecret(val) : "",
       updated_at: s?.updated_at || null,
       updated_by: s?.updated_by || null,
+      dismissed: dismissed.has(key),
     });
     seen.add(key);
   };
   for (const item of registry) push(item.key, item);
   // Any stored key that isn't in the registry (custom keys the user added)
   for (const r of stored) if (!seen.has(r.key)) push(r.key, null);
+  // Stored first, then env, then missing — each group A→Z by key.
+  rows.sort((a, b) => (_SRC_RANK[a.source] - _SRC_RANK[b.source]) || a.key.localeCompare(b.key));
   return rows;
 }
 
