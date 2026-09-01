@@ -112,4 +112,18 @@ export const INTEGRATIONS = [
     docs: "https://console.aws.amazon.com/iam/home#/security_credentials",
     clientExposed: false,
   },
+  {
+    key: "GOOGLE_OAUTH_CLIENT_ID",
+    name: "Google Sign-In — Client ID",
+    powers: "\"Continue with Google\" on /login & /apply (OAuth). Needs the paired secret below + the redirect URI /api/auth/google/callback registered on the client.",
+    docs: "https://console.cloud.google.com/apis/credentials",
+    clientExposed: false,
+  },
+  {
+    key: "GOOGLE_OAUTH_CLIENT_SECRET",
+    name: "Google Sign-In — Client Secret",
+    powers: "Paired secret for the Google OAuth client above — server-side only",
+    docs: "https://console.cloud.google.com/apis/credentials",
+    clientExposed: false,
+  },
 ];
