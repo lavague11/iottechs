@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
@@ -125,6 +126,20 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
+
+  // A logged-in user with NO access to THIS specific project shouldn't be dumped on the PIN gate —
+  // that's a confusing loop (e.g. after a Google sign-in on a project they don't own). Send them to
+  // their own dashboard instead. Pure PIN visitors (no session) still see the gate so they can enter
+  // the project PIN. Staff always resolve to a view, so this only ever catches customers/leads.
+  if (!initialView && !previewRole) {
+    const jar = await cookies();
+    const tok = jar.get("iot_session")?.value;
+    const su  = tok ? await parseToken(tok) : null;
+    if (su?.role) {
+      const HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
+      redirect(HOME[su.role] || "/my-projects");
+    }
+  }
 
   // A project closed BEFORE approval (still in inquiry / survey / proposal — the customer never
   // accepted an option), seen by the customer → the "missed your train" reopen screen. Projects
