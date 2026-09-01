@@ -82,6 +82,21 @@ export const P1_EVAL_STEPS = ["phone", "in_person", "sop", "ride_along"];
 export const P1_FLOW = ["applied", "assessment", "phone", "in_person", "sop", "ride_along", "final_review"];
 export function nextP1Status(cur) { const i = P1_FLOW.indexOf(cur); return i >= 0 && i < P1_FLOW.length - 1 ? P1_FLOW[i + 1] : cur; }
 
+// Applications SHOULD store the position as one of the /apply keys (tech · sales · pm · sub · office),
+// but older / manually-created rows carry the human label instead ("Technician", "Project Manager").
+// Normalize any form to the canonical key so track decisions never hinge on the exact string — the
+// bug where a "Technician"-labelled row silently skipped the whole tech assessment/recruitment track.
+// Unknown/blank falls back to "tech": better to run the assessment than to hide it.
+export function positionKey(position) {
+  const p = String(position || "").trim().toLowerCase();
+  if (p.startsWith("sale")) return "sales";
+  if (p.includes("subcontract") || p === "sub") return "sub";
+  if (p.includes("project manager") || p === "pm") return "pm";
+  if (p.includes("office")) return "office";
+  return "tech";   // tech / technician / helper / installer / blank / anything else
+}
+export const isTechPosition = (position) => positionKey(position) === "tech";
+
 // ── Portal 2 · Compliance (1099 contractor) ──────────────────────────────
 // Each item the new hire completes. type drives the candidate UI: upload | form | sign | w9 | deposit.
 // Every item tracks a status: not_started → submitted → verified (or rejected, back to the candidate).

@@ -9,6 +9,7 @@ import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
 import TrainingPanel from "./training-panel";
+import { positionKey } from "../../../lib/hiring";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -47,7 +48,8 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const [interviewAt, setInterviewAt] = useState(app.interview_at || "");
   const [declineArm, setDeclineArm] = useState(false);
   const [declineWhy, setDeclineWhy] = useState("");
-  const [hireRole, setHireRole] = useState(app.position === "sales" ? "sales" : app.position === "office" ? "manager" : "tech");
+  const posKey = positionKey(app.position);
+  const [hireRole, setHireRole] = useState(posKey === "sales" ? "sales" : posKey === "office" ? "manager" : "tech");
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [voidArm, setVoidArm] = useState(false);
 
@@ -57,7 +59,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const declined = app.stage === "declined";
   // Only technician applicants run the assessment/Portal pipeline; every other position uses the
   // direct role-hire Decision card.
-  const isTechTrack = (app.position || "tech") === "tech";
+  const isTechTrack = posKey === "tech";
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.key === app.stage));
   const pct = (hired || declined) ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);
   const readoutLabel = hired ? "Hired" : declined ? "Closed" : (STEPS[stepIdx]?.label || "Applied");
