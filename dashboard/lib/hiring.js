@@ -142,6 +142,50 @@ export function stageComplete(status, ctx) {
 // Days-in-stage SLA — soft targets; past this the stage chip reads "Overdue".
 export const STAGE_SLA_DAYS = { applied: 3, assessment: 7, phone: 5, in_person: 7, sop: 7, ride_along: 7, final_review: 3 };
 
+// ── Deterministic NEXT ACTION ────────────────────────────────────────────────
+// One rule-driven answer to "what's the single next thing to do for this candidate?", derived purely
+// from state (status + assessment/steps + disposition) — never hand-typed. cta.kind maps to a handler
+// in the UI ('advance' | 'activate' | 'grade' | 'applicant_view' | null). The dashboard can reuse this.
+const ASSESSMENT_TOTAL = 25;
+export function nextAction(app) {
+  if (!app) return null;
+  const eff = effectiveDisposition(app);
+  if (eff.key === "archived")     return { tone: "muted", label: "Voided", detail: "Restore this application to act on it.", cta: null };
+  if (eff.key === "not_selected") return { tone: "bad",   label: "Not selected", detail: "This candidate was declined — no further action.", cta: null };
+  if (eff.key === "hired")        return { tone: "good",  label: (app.portal || 1) >= 3 ? "In training" : "In compliance", detail: `Continue in the ${(app.portal || 1) >= 3 ? "training" : "compliance"} portal below.`, cta: null };
+  if (app.disposition === "on_hold" || app.disposition === "withdrawn")
+    return { tone: "warn", label: app.disposition === "on_hold" ? "On hold" : "Withdrawn", detail: "Set the candidate back to Active to resume the pipeline.", cta: { label: "Set Active", kind: "activate" } };
+
+  const status = app.status || "applied";
+  const a = app.assessment || null;
+  const answered = a?.responses ? Object.values(a.responses).filter((r) => r?.answer).length : 0;
+
+  if (status === "applied")
+    return { tone: "active", label: "Send the assessment", detail: "Move the candidate into the assessment stage.", cta: { label: "Advance", kind: "advance" } };
+
+  if (status === "assessment") {
+    if (!a || !a.status || (a.status === "in_progress" && answered === 0))
+      return { tone: "active", label: "Awaiting assessment", detail: "The candidate hasn't started the 25-question assessment.", cta: { label: "Applicant view", kind: "applicant_view" } };
+    if (a.status === "in_progress")
+      return { tone: "active", label: "Assessment in progress", detail: `${answered} of ${ASSESSMENT_TOTAL} answered — waiting on the candidate to submit.`, cta: null };
+    if (a.status === "submitted")
+      return { tone: "active", label: "Review the assessment", detail: "Submitted — run AI grading, then advance.", cta: { label: "Run AI grading", kind: "grade" } };
+    return { tone: "active", label: "Advance to Phone Interview", detail: "Assessment graded — ready for the phone screen.", cta: { label: "Advance", kind: "advance" } };
+  }
+
+  if (P1_EVAL_STEPS.includes(status)) {
+    const label = STEP_RUBRICS[status]?.label || status;
+    if (!stageComplete(status, { assessment: a, steps: app.steps }))
+      return { tone: "active", label: `Score the ${label}`, detail: "Rate the scorecard and record a recommendation.", cta: null };
+    return { tone: "active", label: `Advance to ${statusLabel(nextP1Status(status))}`, detail: `${label} complete — ready to move on.`, cta: { label: "Advance", kind: "advance" } };
+  }
+
+  if (status === "final_review")
+    return { tone: "active", label: "Make the hire decision", detail: "All steps complete — Hire, Conditional, or Not Selected below.", cta: null };
+
+  return null;
+}
+
 // ── Portal 2 · Compliance (1099 contractor) ──────────────────────────────
 // Each item the new hire completes. type drives the candidate UI: upload | form | sign | w9 | deposit.
 // Every item tracks a status: not_started → submitted → verified (or rejected, back to the candidate).

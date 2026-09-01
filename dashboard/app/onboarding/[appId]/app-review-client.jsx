@@ -4,12 +4,13 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction, setDispositionAction } from "../actions";
+import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction, setDispositionAction, advanceHiringAction } from "../actions";
+import { gradeAssessmentAction } from "../../assessment/[appId]/actions";
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
 import ComplianceReview from "./compliance-review";
 import TrainingPanel from "./training-panel";
-import { positionKey, effectiveDisposition, DISPOSITIONS, STAGE_SLA_DAYS } from "../../../lib/hiring";
+import { positionKey, effectiveDisposition, DISPOSITIONS, STAGE_SLA_DAYS, nextAction } from "../../../lib/hiring";
 
 const STEPS = [
   { key: "applied",   label: "Applied",   set: "applied" },
@@ -83,8 +84,16 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const run = (fn) => startTx(async () => {
     const r = await fn();
     if (r?.ok) { if (r.warning) alert(r.warning); router.refresh(); }
-    else if (r?.error) alert(r.error);
+    else if (r?.error) alert(r.error === "incomplete" ? "Finish the current stage first (see the Recruitment card)." : r.error);
   });
+
+  // Deterministic next action for the header card (tech track only). CTA kinds map to real actions.
+  const na = isTechTrack ? nextAction(app) : null;
+  function doNextAction(kind) {
+    if (kind === "advance") run(() => advanceHiringAction(app.app_id));
+    else if (kind === "activate") run(() => setDispositionAction(app.app_id, "active"));
+    else if (kind === "grade") run(() => gradeAssessmentAction(app.app_id));
+  }
 
   return (
     <AdminShell user={user} alerts={alerts} active="onboarding">
@@ -162,6 +171,20 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             )}
           </div>
         </div>
+
+        {/* Deterministic next action — the single thing to do now, derived from candidate state. */}
+        {na && (
+          <div className={`panel ob-next t-${na.tone}`}>
+            <div className="ob-next-in">
+              <span className="ob-next-eyebrow">Next action</span>
+              <span className="ob-next-label">{na.label}</span>
+              {na.detail && <span className="ob-next-detail">{na.detail}</span>}
+            </div>
+            {na.cta && (na.cta.kind === "applicant_view"
+              ? <Link href={`/application/${app.app_id}`} className="ob-next-cta">{na.cta.label}</Link>
+              : <button className="ob-next-cta" disabled={pending} onClick={() => doNextAction(na.cta.kind)}>{pending ? "Working…" : na.cta.label}</button>)}
+          </div>
+        )}
 
         {/* The assessment + Portal-1 pipeline is the TECHNICIAN track (25-Q tech assessment,
             skills scorecards). Sales / PM / Subcontractor applicants don't take it — they get the
@@ -380,6 +403,18 @@ const CSS = `
 .apx .ob-disp-menu button.on{color:var(--gold-deep,#A8842F);background:#F6F0E2}
 .apx .ob-days{margin-top:5px;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.04em;color:var(--muted)}
 .apx .ob-days.over{color:#c9382b;font-weight:700}
+.apx .ob-next{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 18px;margin-bottom:16px;border-left:4px solid #C9A96E}
+.apx .ob-next.t-warn{border-left-color:#B0801F;background:#FBF6EA}
+.apx .ob-next.t-good{border-left-color:#2E7D5B;background:#F1F8F3}
+.apx .ob-next.t-bad{border-left-color:#c9382b;background:#FBF1EF}
+.apx .ob-next.t-muted{border-left-color:#A6ABB1}
+.apx .ob-next-in{display:flex;flex-direction:column;gap:2px;min-width:0}
+.apx .ob-next-eyebrow{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.apx .ob-next-label{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.02rem;color:var(--ink);line-height:1.2}
+.apx .ob-next-detail{font-size:.83rem;color:var(--muted);line-height:1.4}
+.apx .ob-next-cta{flex:none;font-size:.85rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;border-radius:10px;padding:10px 18px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.apx .ob-next-cta:disabled{opacity:.55;cursor:default}
+.apx .ob-next.t-warn .ob-next-cta{background:linear-gradient(135deg,#C9A24E,#B0801F)}
 .apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none;border:none;cursor:pointer}
 .apx .ob-view-btn:disabled{opacity:.5;cursor:default}
 .apx .ob-void-btn{background:#fff;color:#c9382b;border:1.5px solid #f0d3d0}
