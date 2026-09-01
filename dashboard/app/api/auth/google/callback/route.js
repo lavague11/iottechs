@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { secretValue, getUserByEmail, createCustomerUser } from "../../../../../lib/db";
-import { makeToken } from "../../../../../lib/auth";
+import { makeToken, publicBase } from "../../../../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
 
@@ -10,7 +10,7 @@ const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", t
 //   • unknown from /apply → send them into the application, prefilled, to finish it (a real applicant)
 export async function GET(request) {
   const url = new URL(request.url);
-  const base = (process.env.APP_URL || url.origin).replace(/\/$/, "");
+  const base = publicBase(request, url);
   const jar = await cookies();
   const fail = (code) => Response.redirect(`${base}/login?err=${code}`, 302);
 

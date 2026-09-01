@@ -1,11 +1,12 @@
 import { cookies } from "next/headers";
 import { secretValue } from "../../../../lib/db";
+import { publicBase } from "../../../../lib/auth";
 
 // Start the Google OAuth flow. Dormant until GOOGLE_OAUTH_CLIENT_ID is set in the vault. `ctx` carries
 // where the user came from (login | apply) so the callback can create the right kind of account.
 export async function GET(request) {
   const url = new URL(request.url);
-  const base = (process.env.APP_URL || url.origin).replace(/\/$/, "");
+  const base = publicBase(request, url);
   const ctx = url.searchParams.get("ctx") === "apply" ? "apply" : "login";
   const clientId = secretValue("GOOGLE_OAUTH_CLIENT_ID");
   if (!clientId) return Response.redirect(`${base}/login?err=google_off`, 302);

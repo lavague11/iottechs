@@ -7,6 +7,21 @@
 const SECRET = process.env.SESSION_SECRET || "iot_techs_session_secret_2026";
 const PREVIEW_SECRET = process.env.PREVIEW_SECRET || "iot_preview_2026";
 
+// The public origin the BROWSER actually used. Behind Hostinger's proxy, request.url is the internal
+// 0.0.0.0:3000 bind, so we can't trust url.origin for redirect_uri / redirects. Prefer APP_URL, then
+// the forwarded host headers, then the raw origin. Works for prod (iot-techs.com) and local (3100).
+export function publicBase(request, url) {
+  const env = (process.env.APP_URL || "").trim().replace(/\/$/, "");
+  if (env) return env;
+  const h = request?.headers;
+  const host = h?.get?.("x-forwarded-host") || h?.get?.("host");
+  if (host) {
+    const proto = h.get("x-forwarded-proto") || (/^(localhost|127\.|0\.0\.0\.0)/.test(host) ? "http" : "https");
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+  return String(url?.origin || "").replace(/\/$/, "");
+}
+
 async function hmac(payload) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
