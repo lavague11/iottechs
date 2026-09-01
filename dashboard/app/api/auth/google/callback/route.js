@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { secretValue, getUserByEmail, createCustomerUser } from "../../../../../lib/db";
-import { makeToken, publicBase } from "../../../../../lib/auth";
+import { secretValue, getUserByEmail, createCustomerUser, findApplicationByEmail } from "../../../../../lib/db";
+import { makeToken, makeSvcToken, SVC_ACCESS_TTL_MS, publicBase } from "../../../../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
 
@@ -48,10 +48,16 @@ export async function GET(request) {
     if (!email || profile.email_verified === false) return fail("google_email");
     const name = (profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(" ") || "").trim();
 
-    // From /apply, Google is only a fast prefill — never a sign-in or a new account. The real
-    // application still goes through /api/apply, which runs the staff-block / customer-flag / dup
-    // checks. So just bounce back into the form with the name + email filled in.
+    // From /apply (or the Track page): if this email ALREADY has an application, don't let them
+    // reapply — grant the applicant cookie and open their existing application. Otherwise Google is
+    // just a fast prefill and the real application still goes through /api/apply (staff-block /
+    // customer-flag / dup checks) with the name + email filled in.
     if (ctx === "apply") {
+      const existing = findApplicationByEmail(email);
+      if (existing) {
+        jar.set("iot_app", await makeSvcToken(existing.app_id), { httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.floor(SVC_ACCESS_TTL_MS / 1000), secure: process.env.NODE_ENV === "production" });
+        return Response.redirect(`${base}/application/${existing.app_id}`, 302);
+      }
       const p = new URLSearchParams({ g_email: email, ...(name ? { g_name: name } : {}) });
       return Response.redirect(`${base}/apply?${p.toString()}`, 302);
     }

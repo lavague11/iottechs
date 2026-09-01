@@ -6,13 +6,15 @@ import { Wordmark } from "../components/brand";
 // "Track your application" landing. Collects the Application ID + PIN (last 4 of phone), verifies
 // via /api/app-pin-check (which mints the iot_app grant cookie), then routes to the status page.
 export default function TrackApplicationPage() {
+  const [mode, setMode] = useState("id");   // id = Application ID · email = email address
   const [appId, setAppId] = useState("");
+  const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const ERRORS = {
-    no_app: "We couldn't find that Application ID. Check it and try again.",
+    no_app: mode === "email" ? "No application found for that email + PIN. Check them, or start a new application." : "We couldn't find that Application ID. Check it and try again.",
     wrong_pin: "That PIN doesn't match. It's the last 4 digits of your phone.",
     no_pin: "No PIN is set on this application — give us a call and we'll help.",
     too_many: "Too many tries. Please wait a few minutes and try again.",
@@ -21,21 +23,34 @@ export default function TrackApplicationPage() {
   async function submit(e) {
     e.preventDefault();
     setErr("");
-    const id = document.getElementById("tr-id")?.value?.trim().toUpperCase() || appId.trim().toUpperCase();
-    const p = document.getElementById("tr-pin")?.value?.trim() || pin.trim();
-    if (!id) { setErr("Enter your Application ID."); return; }
+    const p = pin.trim();
     if (!/^\d{4}$/.test(p)) { setErr("Enter your 4-digit PIN."); return; }
+    let body;
+    if (mode === "email") {
+      const em = email.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { setErr("Enter a valid email."); return; }
+      body = { email: em, pin: p };
+    } else {
+      const id = appId.trim().toUpperCase();
+      if (!id) { setErr("Enter your Application ID."); return; }
+      body = { appId: id, pin: p };
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/app-pin-check", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appId: id, pin: p }),
+        body: JSON.stringify(body),
       });
       const j = await res.json();
       if (j.ok) { window.location.assign(`/application/${j.appId}`); return; }
       setErr(ERRORS[j.error] || j.error || "Couldn't look that up. Try again.");
       setBusy(false);
     } catch (_) { setErr("Connection error. Please try again."); setBusy(false); }
+  }
+
+  function google(e) {
+    e.preventDefault();
+    window.location.href = "/api/auth/google?ctx=apply";
   }
 
   return (
@@ -49,9 +64,25 @@ export default function TrackApplicationPage() {
         <h1>Track your application</h1>
 
         <form onSubmit={submit}>
-          <label className="tr-lbl" htmlFor="tr-id">Application ID</label>
-          <input id="tr-id" className="tr-in mono" value={appId} onChange={(e) => setAppId(e.target.value.toUpperCase())}
-            placeholder="APP0000" autoCapitalize="characters" autoComplete="off" spellCheck={false} />
+          {mode === "email" ? (
+            <>
+              <div className="tr-lblrow">
+                <label className="tr-lbl" htmlFor="tr-email">Email</label>
+                <button type="button" className="tr-swap" onClick={() => { setMode("id"); setErr(""); }}>Use Application ID</button>
+              </div>
+              <input id="tr-email" className="tr-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@email.com" autoComplete="email" spellCheck={false} />
+            </>
+          ) : (
+            <>
+              <div className="tr-lblrow">
+                <label className="tr-lbl" htmlFor="tr-id">Application ID</label>
+                <button type="button" className="tr-swap" onClick={() => { setMode("email"); setErr(""); }}>Use email instead</button>
+              </div>
+              <input id="tr-id" className="tr-in mono" value={appId} onChange={(e) => setAppId(e.target.value.toUpperCase())}
+                placeholder="APP0000" autoCapitalize="characters" autoComplete="off" spellCheck={false} />
+            </>
+          )}
 
           <label className="tr-lbl" htmlFor="tr-pin">PIN <span className="tr-hint">(last 4 digits of your phone)</span></label>
           <input id="tr-pin" className="tr-in mono" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -60,6 +91,12 @@ export default function TrackApplicationPage() {
           {err && <div className="tr-err">{err}</div>}
           <button className="tr-btn" type="submit" disabled={busy}>{busy ? "Looking…" : "View my application →"}</button>
         </form>
+
+        <div className="tr-or"><span>or</span></div>
+        <a className="tr-google" href="/api/auth/google?ctx=apply" onClick={google}>
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Continue with Google
+        </a>
 
         <p className="tr-foot">Haven&rsquo;t applied yet? <a href="/apply">Start an application →</a></p>
       </div>
@@ -82,7 +119,15 @@ const CSS = `
 .tr-card h1{font-family:var(--font-sans),'Instrument Sans',sans-serif;font-weight:800;letter-spacing:-.024em;font-size:1.5rem;margin:0 0 6px;color:var(--ink)}
 .tr-sub{color:var(--muted);font-size:.92rem;margin:0 0 22px}
 .tr-lbl{display:block;text-align:left;font-weight:700;font-size:.8rem;color:var(--ink-soft);margin:16px 0 7px}
+.tr-lblrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.tr-swap{background:none;border:none;padding:0;font:inherit;font-size:.76rem;font-weight:700;color:var(--gold-deep);cursor:pointer}
+.tr-swap:hover{text-decoration:underline}
 .tr-hint{font-weight:500;color:var(--muted)}
+.tr-or{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--faint);font-size:.78rem}
+.tr-or::before,.tr-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.tr-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;font:inherit;font-size:.92rem;font-weight:700;color:var(--ink);text-decoration:none;transition:border-color .14s,box-shadow .14s}
+.tr-google:hover{border-color:var(--gold-deep);box-shadow:0 5px 16px -9px rgba(16,20,24,.3)}
+.tr-google svg{flex:none}
 .tr-in{width:100%;padding:13px 15px;border:1px solid var(--line);border-radius:11px;font-size:1rem;font-family:inherit;
   background:var(--soft);color:var(--ink);outline:none;transition:border-color .15s,background .15s,box-shadow .15s;letter-spacing:.06em}
 .tr-in:focus{border-color:var(--gold);background:#fff;box-shadow:0 0 0 3px rgba(201,169,110,.14)}

@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { resolveApplicationRef } from "../../../lib/db";
+import { resolveApplicationRef, findApplicationByEmail } from "../../../lib/db";
 import { makeSvcToken, SVC_ACCESS_TTL_MS } from "../../../lib/auth";
 
 // A 4-digit PIN dies to an unthrottled guesser — cap attempts per IP+application, PLUS a global
@@ -20,8 +20,11 @@ function bump(key, max) {
 // stored in its own iot_app cookie so it can't be confused with a service-call grant.
 export async function POST(request) {
   try {
-    const { appId, pin } = await request.json();
-    if (!appId) return Response.json({ ok: false, error: "Enter an Application ID." }, { status: 400 });
+    const { appId, email, pin } = await request.json();
+    const byEmail = !appId && !!email;
+    if (!appId && !email) return Response.json({ ok: false, error: "Enter an Application ID or email." }, { status: 400 });
+    // Email lookup ALWAYS requires the PIN (last 4 of phone) — no email-only existence probe.
+    if (byEmail && !pin) return Response.json({ ok: false, error: "wrong_pin" }, { status: 400 });
 
     // Throttle BEFORE any lookup — existence probing counts as an attempt too (IDs are sequential,
     // so an unthrottled "does APPxxxx exist" oracle would enumerate the whole roster).
@@ -29,7 +32,7 @@ export async function POST(request) {
     const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "local";
     if (bump(`ip:${ip}`, 20)) return Response.json({ ok: false, error: "too_many" }, { status: 429 });
 
-    const app = resolveApplicationRef(appId);
+    const app = byEmail ? findApplicationByEmail(email) : resolveApplicationRef(appId);
     if (!app) {
       // Cross-IP backstop on FAILED lookups only: the per-IP cap dies to X-Forwarded-For spoofing
       // on direct-origin hits (verified in QC), so misses also feed a global counter. Enumeration
