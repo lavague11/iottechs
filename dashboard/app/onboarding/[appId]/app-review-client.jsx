@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
-import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction, setDispositionAction, advanceHiringAction } from "../actions";
+import { setAppStageAction, setAppReviewAction, addAppNoteAction, setAppOnboardingAction, hireApplicantAction, verifyEmergencyAction, setAppArchivedAction, setDispositionAction, advanceHiringAction, setOwnerAction } from "../actions";
 import { gradeAssessmentAction } from "../../assessment/[appId]/actions";
 import AssessmentResult from "./assessment-result";
 import RecruitmentSteps from "./recruitment-steps";
@@ -34,6 +34,7 @@ const EVENT_PATHS = {
   note:      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />,
   disposition:<><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></>,
   override:  <><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></>,
+  owner:     <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
 };
 function EventIcon({ kind }) {
   return (
@@ -70,6 +71,7 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [voidArm, setVoidArm] = useState(false);
   const [dispOpen, setDispOpen] = useState(false);
+  const [ownerOpen, setOwnerOpen] = useState(false);
 
   // Candidate disposition (Active / On Hold / Withdrawn — or a terminal Hired/Not-Selected/Archived).
   const disp = effectiveDisposition(app);
@@ -122,6 +124,27 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             <p className="ob-hero-sub">{app.position_label} · {app.experience || "experience not given"}{app.address ? ` · ${app.address}` : ""}</p>
           </div>
           <div className="ob-hero-chips">
+            {/* Owner — the recruiter who owns this candidate operationally (≠ per-step reviewers). */}
+            <div className="ob-owner">
+              <button className={`ob-badge ob-owner-btn${app.owner_id ? " set" : ""}`} disabled={pending}
+                onClick={() => setOwnerOpen((o) => !o)} aria-haspopup="true" aria-expanded={ownerOpen}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
+                {app.owner_name || "Assign owner"}
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.6" style={{ marginLeft: 2 }}><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              {ownerOpen && (
+                <>
+                  <div className="ob-disp-back" onClick={() => setOwnerOpen(false)} />
+                  <div className="ob-disp-menu ob-owner-menu">
+                    <button className={!app.owner_id ? "on" : ""} onClick={() => { setOwnerOpen(false); if (app.owner_id) run(() => setOwnerAction(app.app_id, null)); }}>Unassigned</button>
+                    {reviewers.map((r) => (
+                      <button key={r.id} className={String(r.id) === String(app.owner_id) ? "on" : ""}
+                        onClick={() => { setOwnerOpen(false); if (String(r.id) !== String(app.owner_id)) run(() => setOwnerAction(app.app_id, { id: r.id, name: r.name })); }}>{r.name}{r.id === user.id ? " (me)" : ""}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             {/* Unified disposition badge — covers Active/On Hold/Withdrawn plus the terminal states.
                 For the three settable states it opens a small menu (an axis separate from stage). */}
             <div className="ob-disp">
@@ -270,12 +293,8 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
               {app.rating ? <span className="ob-star-n">{app.rating}/5</span> : <span className="ob-star-n dim">not rated</span>}
             </div>
 
-            <label className="ob-l">Reviewer</label>
-            <select className="apx-input ob-sel" value={app.reviewer_id || ""} disabled={pending}
-              onChange={(e) => { const r = reviewers.find((x) => String(x.id) === e.target.value); run(() => setAppReviewAction(app.app_id, { reviewer_id: r?.id || null, reviewer_name: r?.name || null })); }}>
-              <option value="">Unassigned</option>
-              {reviewers.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
+            <label className="ob-l">Owner</label>
+            <div className="ob-owner-inline">{app.owner_name || "Unassigned"}<span className="ob-owner-hint">— set in the header</span></div>
 
             <label className="ob-l">Interview</label>
             <div className="ob-row">
@@ -431,6 +450,13 @@ const CSS = `
 .apx .ob-badge.disp.t-active{color:#1c8a45;background:#e7f6ec}
 .apx .ob-badge.disp.t-warn{color:#B0801F;background:#F6EEDC}
 .apx .ob-badge.disp.t-muted{color:#787D84;background:#EFEFEA}
+.apx .ob-owner{position:relative;display:inline-flex}
+.apx .ob-owner-btn{display:inline-flex;align-items:center;gap:5px;border:1px dashed var(--line);background:#fff;color:var(--muted);cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
+.apx .ob-owner-btn.set{border-style:solid;color:var(--ink);background:#F6F0E2;border-color:#E4D6B4}
+.apx .ob-owner-btn:disabled{cursor:default;opacity:.6}
+.apx .ob-owner-menu{min-width:170px;max-height:280px;overflow:auto}
+.apx .ob-owner-inline{font-size:.86rem;color:var(--ink);font-weight:600;display:flex;align-items:baseline;gap:7px}
+.apx .ob-owner-hint{font-size:.72rem;color:var(--faint,#A6ABB1);font-weight:500}
 .apx .ob-disp{position:relative;display:inline-flex}
 .apx .ob-disp-btn{display:inline-flex;align-items:center;border:none;cursor:pointer;font-family:inherit}
 .apx .ob-disp-btn:disabled{cursor:default}

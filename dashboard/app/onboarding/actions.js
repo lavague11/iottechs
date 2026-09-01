@@ -5,7 +5,7 @@ import { getSessionUser } from "../../lib/session";
 import {
   getApplication, setApplicationStage, setApplicationReview, setApplicationOnboarding,
   hireApplicant, logApplicationEvent, verifyEmergencyContact,
-  setApplicationStatus, saveApplicationStep, setApplicationArchived, setApplicationDisposition,
+  setApplicationStatus, saveApplicationStep, setApplicationArchived, setApplicationDisposition, setApplicationOwner,
 } from "../../lib/db";
 import { nextP1Status, STEP_RUBRICS, stageComplete, stageRequirements, dispositionLabel } from "../../lib/hiring";
 
@@ -131,6 +131,16 @@ export async function advanceHiringAction(appId, { override = false, reason = ""
   setApplicationStatus(appId, next, { actor_role: user.role, actor_name: user.name });
   touch(appId);
   return { ok: true, status: next };
+}
+
+// Assign the operational owner (recruiter) of a candidate. owner: {id, name} or null to unassign.
+export async function setOwnerAction(appId, owner) {
+  const { user, error } = await requireHiring();
+  if (error) return { ok: false, error };
+  const r = setApplicationOwner(appId, { owner_id: owner?.id || null, owner_name: owner?.name || null }, { actor_role: user.role, actor_name: user.name });
+  if (!r) return { ok: false, error: "Could not set owner." };
+  touch(appId);
+  return { ok: true };
 }
 
 // Set candidate disposition (active | on_hold | withdrawn) — preserves the pipeline stage.

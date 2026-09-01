@@ -589,6 +589,13 @@ function init() {
   // Candidate DISPOSITION — an axis orthogonal to the pipeline stage: active | on_hold | withdrawn.
   // (declined / hired / archived stay their own mechanisms.) Lets someone be "Phone Screen · On Hold".
   if (!hiringCols.includes("disposition")) db.exec("ALTER TABLE applications ADD COLUMN disposition TEXT DEFAULT 'active'");
+  // OWNER — the recruiter who owns this candidate operationally (distinct from the per-step reviewers
+  // recorded on each scorecard). Reframes the old app-level reviewer_* assignment; backfill from it.
+  if (!hiringCols.includes("owner_id")) {
+    db.exec("ALTER TABLE applications ADD COLUMN owner_id INTEGER");
+    db.exec("ALTER TABLE applications ADD COLUMN owner_name TEXT");
+    try { db.exec("UPDATE applications SET owner_id = reviewer_id, owner_name = reviewer_name WHERE owner_id IS NULL AND reviewer_id IS NOT NULL"); } catch {}
+  }
   // ADT project portal — a lightweight 3-step flow (Apply → Schedule → Complete) separate from the
   // main install lifecycle. `equipment` is the JSON selection {itemId: qty}; `points` is the ADT
   // point total at submit; `stage` walks applied → scheduled → completed.
@@ -3400,6 +3407,19 @@ export function setApplicationDisposition(appId, disposition, { actor_role, acto
   db.prepare("UPDATE applications SET disposition = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE").run(disposition, cur.app_id);
   const LBL = { active: "Active", on_hold: "On Hold", withdrawn: "Withdrawn" };
   logApplicationEvent(cur.app_id, { kind: "disposition", detail: `${LBL[from] || from} → ${LBL[disposition]}${reason ? ` — ${String(reason).slice(0, 200)}` : ""}`, actor_role, actor_name });
+  return getApplication(cur.app_id);
+}
+
+// Assign / reassign the operational OWNER of a candidate (a recruiter). Logged so the timeline shows
+// hand-offs. Separate from per-step reviewers (scorecard `by`).
+export function setApplicationOwner(appId, { owner_id, owner_name }, { actor_role, actor_name } = {}) {
+  const cur = getApplication(appId);
+  if (!cur) return null;
+  const from = cur.owner_name || "Unassigned";
+  const to = owner_name || "Unassigned";
+  db.prepare("UPDATE applications SET owner_id = ?, owner_name = ?, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE")
+    .run(owner_id || null, owner_name || null, cur.app_id);
+  if (from !== to) logApplicationEvent(cur.app_id, { kind: "owner", detail: `Owner ${from} → ${to}`, actor_role, actor_name });
   return getApplication(cur.app_id);
 }
 
