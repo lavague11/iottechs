@@ -6,7 +6,7 @@ import { Wordmark } from "../components/brand";
 // "Track your application" landing. Collects the Application ID + PIN (last 4 of phone), verifies
 // via /api/app-pin-check (which mints the iot_app grant cookie), then routes to the status page.
 export default function TrackApplicationPage() {
-  const [mode, setMode] = useState("id");   // id = Application ID · email = email address
+  const [mode, setMode] = useState("email");   // email = email address (default) · id = Application ID
   const [appId, setAppId] = useState("");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
