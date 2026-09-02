@@ -133,7 +133,12 @@ function rosterOf(ev) {
   return rows.sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
 }
 
-export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", apptKind = null, onCount, onBooked, onEvents }) {
+export default function SchedulingWidget({ accessId, assignments = [], staffUsers = [], currentUser = null, project, view, customerView, defaultTitle = "IOT TECHS — Site Survey", apptKind = null, onCount, onBooked, onEvents,
+  // Side-effect handlers are injectable so a non-project host (e.g. the ADT deck) can reuse this exact
+  // widget with its own persistence + invite email. Default to the project-scoped server actions.
+  logAppointment = logAppointmentAction, sendInvite = sendAppointmentEmailAction,
+  // autoOpen: land straight on the booking form (used when the widget is the whole point of a modal).
+  autoOpen = false }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -172,6 +177,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     setForm(f => f.date ? f : { ...f, date: tomorrowISO() });
   }, []);
 
+  // When the widget IS the modal (autoOpen), open the booking form on mount so the office lands
+  // straight on it instead of an intermediate "Schedule Event" button.
+  useEffect(() => { if (autoOpen && !isReadOnly) setShowForm(true); }, [autoOpen]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // Report how many events are scheduled so the caller can gate a step's "done" on a real booking.
   useEffect(() => { onCount?.(data.events.length); }, [data.events.length, onCount]);
   // Report the full event list so a caller (the deck header chip) can show the actual day + time.
@@ -199,7 +208,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
       const ev = { ...existing, ...form, id: editingId };
       update(d => { const e = d.events.find(x => x.id === editingId); if (e) Object.assign(e, form); });
       onBooked?.(ev.date);
-      logAppointmentAction(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
+      logAppointment(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
       closeForm();
       setSaving(false);
       return;
@@ -207,7 +216,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
-    logAppointmentAction(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + email invite
+    logAppointment(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + email invite
     closeForm();
     setSaving(false);
   }
@@ -225,7 +234,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   function deleteEvent(id) {
     const ev = data.events.find(e => e.id === id);
     update(d => { d.events = d.events.filter(e => e.id !== id); });
-    if (ev) logAppointmentAction(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + cancellation email
+    if (ev) logAppointment(accessId, { verb: "canceled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + cancellation email
     if (editingId === id) closeForm();
   }
 
@@ -242,7 +251,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const k = `${ev.id}:${verb}`;
     setSendState(s => ({ ...s, [k]: "busy" }));
     let ok = false;
-    try { const r = await sendAppointmentEmailAction(accessId, { verb, event: ev, inviteeEmails: emailsFor(ev) }); ok = !!r?.ok; } catch {}
+    try { const r = await sendInvite(accessId, { verb, event: ev, inviteeEmails: emailsFor(ev) }); ok = !!r?.ok; } catch {}
     setSendState(s => ({ ...s, [k]: ok ? "sent" : "err" }));
     setTimeout(() => setSendState(s => { const n = { ...s }; delete n[k]; return n; }), 2600);
   }

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { fmtSignStamp } from "../../../lib/proposal";
-import { adminScheduleAdtAction, adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, updateAdtContactAction, setAdtDocsNoteAction, lockAdtStaffAction } from "../actions";
+import { adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, updateAdtContactAction, setAdtDocsNoteAction, lockAdtStaffAction, logAdtAppointmentAction, sendAdtAppointmentEmailAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
+import SchedulingWidget from "../../project/[accessId]/scheduling-widget";
 
 // The ADT Tool (commission calculator) embedded as a heavy Deck tool. The iframe carries its own
 // vault-dark chrome; we only pass role + prefill and bridge its autosave back to the record so a
@@ -73,7 +74,6 @@ const fmtTax = (t, comm) => { const d = String(t || "").replace(/\D/g, ""); if (
 const fmtPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (d.length < 10) return s || ""; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 // Mask everything but the last 4 digits of a formatted tax id ("123-45-6789" → "•••-••-6789").
 const maskTax = (formatted) => { const total = (String(formatted).match(/\d/g) || []).length; let seen = 0; return String(formatted).replace(/\d/g, (d) => (++seen <= total - 4 ? "•" : d)); };
-const WINDOWS = ["Morning (8am–12pm)", "Afternoon (12pm–4pm)", "Evening (4pm–7pm)"];
 
 // Copy a value to the clipboard — the office fills ADT's own credit app from these fields.
 function CopyBtn({ text }) {
@@ -133,14 +133,10 @@ export default function AdtProjectClient({ user, alerts, app }) {
   // Stages: Apply(0) → Deal(1) → Complete(2). Land on the earliest open staff action.
   const [idx, setIdx] = useState(done ? 2 : hasDeal ? 2 : 1);
 
-  const [date, setDate] = useState(app.schedule_date || "");
-  const [win, setWin]   = useState(app.schedule_window || WINDOWS[0]);
   const [err, setErr]   = useState("");
   const [pending, startTx] = useTransition();
-  const today = new Date().toISOString().slice(0, 10);
+  const [schedOpen, setSchedOpen] = useState(false);   // the shared "Schedule installation" modal (same as CCTV)
 
-  const [schedMsg, setSchedMsg] = useState("");
-  const doSchedule = () => startTx(async () => { setErr(""); setSchedMsg(""); const r = await adminScheduleAdtAction(app.adt_id, { date, window: win }); if (r?.error) setErr(r.error); else { setSchedMsg(r.emailed ? "Install confirmation emailed to the customer." : "Scheduled. (Email is off — turn on RESEND_API_KEY to notify the customer.)"); router.refresh(); } });
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
   const setStatus = (s) => startTx(async () => { setErr(""); const r = await setAdtStatusAction(app.adt_id, s); if (r?.error) setErr(r.error); else router.refresh(); });
 
@@ -274,18 +270,16 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const completeNode = (
     <div style={pad} className="adtp">
       {done ? <div className="adtp-ok">✓ Completed {fmtDay(app.completed_at)}</div> : (<>
-        {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
-        <div className="adtp-sub">{scheduled ? "Update the date" : "Set the install date"}</div>
-        <div className="adtp-form">
-          <input id="adtp-schedule-date" type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
-          <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
-        </div>
-        <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{scheduled ? "Update date" : "Schedule install"}</button>
-        {schedMsg && <div className="adtp-ok" style={{ marginTop: 10 }}>{schedMsg}</div>}
-        {err && <div className="adtp-err" style={{ marginTop: 10 }}>{err}</div>}
+        {scheduled
+          ? <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>
+          : <div className="adtp-sub">No install scheduled yet.</div>}
+        {office && (
+          <button className="adtp-btn gold" style={{ marginTop: 10 }} onClick={() => setSchedOpen(true)}>{scheduled ? "Reschedule" : "Schedule install"}</button>
+        )}
         <div className="adtp-sub" style={{ marginTop: 16 }}>Once the technician finishes on site</div>
         <button className="adtp-btn green" disabled={pending || !scheduled} onClick={doComplete}>Mark complete</button>
         {!scheduled && <div className="adtp-muted" style={{ marginTop: 8 }}>Set the install date first.</div>}
+        {err && <div className="adtp-err" style={{ marginTop: 10 }}>{err}</div>}
       </>)}
     </div>
   );
@@ -368,7 +362,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
       app.email && { label: "Email", icon: DVI.mail, href: `mailto:${app.email}` },
       app.address && { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}` },
-      { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setIdx(2); setTimeout(() => { const el = document.getElementById("adtp-schedule-date"); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); } }, 140); } },
+      office && { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setSchedOpen(true); } },
       { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(app); } },
     ].filter(Boolean),
     // Inline quick-edit of the contact fields, mirroring the project header (the full form is still
@@ -400,6 +394,38 @@ export default function AdtProjectClient({ user, alerts, app }) {
         ]}
         menu={[{ label: "All ADT applications", onClick: () => router.push("/adt-applications") }]}
       />
+
+      {/* "Schedule installation" — the SAME shared SchedulingWidget the CCTV project uses, in the same
+          modal chrome. Wrapped in .pvx so the project widget's tokens + styles resolve here, with an
+          ADT-scoped save/email handler that mirrors the booking onto the record and sends the invite. */}
+      {schedOpen && office && (
+        <div className="pvx">
+          <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) { setSchedOpen(false); router.refresh(); } }}>
+            <div className="pv-modal pv-sched-modal">
+              <button className="pv-modal-x" aria-label="Close" onClick={() => { setSchedOpen(false); router.refresh(); }}>✕</button>
+              <h2 className="pv-modal-title">Schedule installation</h2>
+              <div className="pv-sched-body">
+                <SchedulingWidget
+                  accessId={app.adt_id}
+                  assignments={app.email ? [{ user_name: app.name, user_email: app.email, role: "customer" }] : []}
+                  staffUsers={[]}
+                  currentUser={user}
+                  project={{ access_id: app.adt_id, address: app.address, contact_name: app.name, contact_email: app.email, customer: app.name }}
+                  view={user?.role}
+                  apptKind="install"
+                  defaultTitle="IOT TECHS — Installation"
+                  autoOpen
+                  logAppointment={logAdtAppointmentAction}
+                  sendInvite={sendAdtAppointmentEmailAction}
+                  onBooked={() => setTimeout(() => router.refresh(), 600)}
+                />
+              </div>
+            </div>
+          </div>
+          <style>{SCHED_MODAL_CSS}</style>
+        </div>
+      )}
+
       <style>{CSS}</style>
     </>
   );
@@ -508,4 +534,116 @@ const CSS = `
 .adtp-reveal-v{font-variant-numeric:tabular-nums}
 .adtp-reveal-btn{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-gold-deep,#A8842F);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px 9px;cursor:pointer}
 .adtp-reveal-btn:hover{border-color:var(--dv-gold,#C9A96E)}
+`;
+
+// Styles for the shared SchedulingWidget + its modal chrome, copied verbatim (re-scoped under .pvx)
+// from the project page's stylesheet so the ADT deck can host the exact same widget without pulling
+// in — or altering — the CCTV project page. Kept in sync with gateway-client.jsx's ".sched-"/".pv-modal" block.
+const SCHED_MODAL_CSS = `
+.pvx{--bg-soft:#f6f7f9;--bg-tint:#f0f2f7;--bg-paper:#FAF8F4;--bg:#ffffff;--ink:#0B0F1A;--slate:#2C3347;--muted:#5b6275;--line:#e6e8ee;--line-warm:#d9d4ca;--gold:#C9A96E;--gold-deep:#b08f4f;--gold-hi:#E8CB94;--accent:#3257ff;--accent-soft:#eef1ff;--green:#2f7d5a;--green-soft:#e7f6ec;--red:#a8442f;--red-soft:#fdeaea;--amber:#b45309;--amber-soft:#fef3c7;--purple:#7c3aed;--purple-soft:#f3eeff;--font:'Hanken Grotesk',sans-serif;--font-title:'Bricolage Grotesque',sans-serif;font-family:var(--font);color:var(--ink)}
+.pvx .pv-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.pvx .pv-modal{background:#fff;border-radius:16px;padding:30px 28px 24px;max-width:420px;width:100%;position:relative;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.pvx .pv-modal-x{position:absolute;top:14px;right:14px;width:28px;height:28px;background:var(--bg-soft);border:none;border-radius:7px;cursor:pointer;font-size:1rem;color:var(--muted);display:flex;align-items:center;justify-content:center;line-height:1}
+.pvx .pv-modal-x:hover{background:var(--line)}
+.pvx .pv-sched-modal{max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;padding:24px 24px 20px}
+.pvx .pv-sched-modal .pv-modal-title{margin-bottom:14px}
+.pvx .pv-sched-body{overflow-y:auto;flex:1;min-height:0;margin:0 -6px;padding:0 6px}
+.pvx .pv-modal-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.18rem;margin:0 0 4px}
+.pvx .sched-tool{display:flex;flex-direction:column;gap:12px}
+.pvx .sched-sec-label{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.pvx .sched-add-btn{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer;align-self:flex-start;transition:background .12s}
+.pvx .sched-add-btn:hover{background:var(--slate)}
+.pvx .sched-form{background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.pvx .sched-row{display:flex;flex-direction:column;gap:4px}
+.pvx .sched-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.pvx .sched-lbl{font-size:.76rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pvx .sched-input{border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:.84rem;background:#fff;color:var(--ink);font-family:inherit;width:100%}
+.pvx .sched-input:focus{outline:none;border-color:var(--accent)}
+.pvx select.sched-input{height:38px;padding:0 10px}
+.pvx .sched-ta{resize:vertical;min-height:60px}
+.pvx .sched-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.pvx .sched-chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;color:var(--ink);padding:4px 6px 4px 11px;border:1px solid var(--line);border-radius:100px;background:var(--bg-tint)}
+.pvx .sched-chip.cust{background:#F3E9D3;border-color:#d9c48f;color:#7a5f1f}
+.pvx .sched-chip-role{font-size:.64rem;font-weight:700;color:var(--muted);text-transform:capitalize}
+.pvx .sched-chip-role.cust{color:#8a6d2f}
+.pvx .sched-chip-auto{font-size:.58rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#3a4a72;background:#e6eaf3;border-radius:100px;padding:1px 6px}
+.pvx .sched-chip-x{border:none;background:none;color:var(--muted);cursor:pointer;font-size:.72rem;line-height:1;padding:2px 3px;border-radius:50%}
+.pvx .sched-chip-x:hover{background:rgba(0,0,0,.06);color:#a8442f}
+.pvx .sched-invsearch{position:relative}
+.pvx .sched-invdd{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 14px 40px rgba(11,15,26,.16);overflow:hidden;max-height:240px;overflow-y:auto}
+.pvx .sched-invopt{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:none;background:#fff;padding:9px 12px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--line)}
+.pvx .sched-invopt:last-child{border-bottom:none}
+.pvx .sched-invopt:hover{background:var(--bg-tint)}
+.pvx .sched-invopt-name{font-size:.84rem;font-weight:600;color:var(--ink);flex-shrink:0}
+.pvx .sched-invopt-email{font-size:.74rem;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .sched-invadd{color:var(--gold-deep,#8a6d2f)}
+.pvx .sched-invadd .sched-invopt-name{color:var(--gold-deep,#8a6d2f);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .sched-invadd svg{color:var(--gold-deep,#8a6d2f);flex-shrink:0}
+.pvx .sched-form-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pvx .sched-cancel-btn{background:none;border:none;color:var(--muted);font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer;padding:8px 4px}
+.pvx .sched-cancel-btn:hover{color:var(--ink)}
+.pvx .sched-cal-group{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+.pvx .sched-cal-lbl{font-size:.72rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
+.pvx .sched-cal-ico{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer;transition:.12s;text-decoration:none}
+.pvx .sched-cal-ico:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-cal-ico svg{width:16px;height:16px}
+.pvx .sched-save-btn{background:var(--ink);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer}
+.pvx .sched-save-btn:hover{background:var(--slate)}
+.pvx .sched-save-btn:disabled{opacity:.4;cursor:not-allowed}
+.pvx .sched-events{display:flex;flex-direction:column;gap:10px}
+.pvx .sched-event{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;gap:14px;align-items:flex-start;box-shadow:0 1px 2px rgba(14,19,32,.03)}
+.pvx .sched-ev-tile{flex-shrink:0;width:50px;height:54px;border-radius:9px;border:1px solid var(--line);background:var(--bg-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.pvx .sched-ev-mon{font-size:.62rem;font-weight:700;letter-spacing:.08em;color:var(--gold-deep);background:#faf4e8;width:100%;text-align:center;padding:2px 0;line-height:1.2}
+.pvx .sched-ev-day{font-family:'Bricolage Grotesque',sans-serif;font-size:1.3rem;font-weight:800;color:var(--ink);line-height:1;margin-top:5px}
+.pvx .sched-ev-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.pvx .sched-ev-row{display:flex;align-items:flex-start;gap:8px}
+.pvx .sched-ev-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:.95rem;color:var(--ink);flex:1;line-height:1.3}
+.pvx .sched-ev-confirmed{display:inline-block;margin-left:8px;font-family:var(--font-sans);font-size:.66rem;font-weight:700;letter-spacing:.03em;color:#2E7D5B;background:rgba(46,125,91,.1);border:1px solid rgba(46,125,91,.28);border-radius:999px;padding:2px 8px;vertical-align:middle;white-space:nowrap}
+.pvx .sched-ev-acts{display:flex;gap:4px;flex-shrink:0}
+.pvx .sched-ev-ico{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer;font-family:inherit;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.12s}
+.pvx .sched-ev-ico:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-ev-addr{color:var(--accent);text-decoration:none}
+.pvx .sched-ev-addr:hover{text-decoration:underline}
+.pvx .sched-send-wrap{position:relative;display:inline-flex}
+.pvx .sched-send-menu{position:absolute;z-index:40;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 14px 40px rgba(11,15,26,.16);overflow:hidden;min-width:150px;display:flex;flex-direction:column}
+.pvx .sched-send-menu button{text-align:left;border:none;background:#fff;padding:9px 13px;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:600;color:var(--ink);white-space:nowrap;border-bottom:1px solid var(--line)}
+.pvx .sched-send-menu button:last-child{border-bottom:none}
+.pvx .sched-send-menu button:hover{background:var(--bg-tint)}
+.pvx .sched-types{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pvx .sched-type{border:1px solid var(--line);border-radius:100px;background:#fff;padding:4px 11px;font-size:.74rem;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:.12s}
+.pvx .sched-type:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .sched-type.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.pvx .sched-cancel-appt{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--red);font-size:.78rem;font-weight:600;padding:8px 12px;cursor:pointer;font-family:inherit}
+.pvx .sched-cancel-appt:hover{border-color:var(--red);background:var(--red-soft)}
+.pvx .sched-cancel-confirm{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pvx .sched-cancel-q{font-size:.78rem;font-weight:600;color:var(--ink)}
+.pvx .sched-cancel-yes{border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;font-size:.76rem;font-weight:700;padding:7px 12px;cursor:pointer;font-family:inherit}
+.pvx .sched-cancel-no{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);font-size:.76rem;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+.pvx .sched-ev-line{display:flex;align-items:center;gap:7px;font-size:.8rem;color:var(--muted)}
+.pvx .sched-ev-line svg{flex-shrink:0;color:var(--gold-deep)}
+.pvx .sched-ev-line span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pvx .sched-ev-notes{font-size:.79rem;color:var(--slate);background:var(--bg-soft);border-left:2px solid var(--gold);padding:6px 10px;border-radius:0 6px 6px 0;margin-top:2px}
+.pvx .sched-empty{font-size:.84rem;color:var(--muted);padding:8px 0}
+.pvx .sched-rsvp{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.pvx .sched-rsvp-head{display:flex;align-items:center;gap:7px;font-size:.76rem;font-weight:700;letter-spacing:.02em;color:var(--slate);margin-bottom:6px}
+.pvx .sched-rsvp-head svg{flex-shrink:0;color:var(--gold-deep)}
+.pvx .sched-rsvp-head .sched-rsvp-none{color:var(--gold-deep)}
+.pvx .sched-rsvp-list{display:flex;flex-wrap:wrap;gap:6px}
+.pvx .sched-rsvp-chip{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;color:var(--slate);background:var(--bg-soft);border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 8px}
+.pvx .sched-rsvp-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.pvx .sched-rsvp-chip .rl{color:var(--muted);font-weight:500}
+.pvx .sched-rsvp-chip.going{color:#2E7D5B;background:rgba(46,125,91,.08);border-color:rgba(46,125,91,.28)}
+.pvx .sched-rsvp-chip.going .dot{background:#2E7D5B}
+.pvx .sched-rsvp-chip.await .dot{animation:schedBlink 1.4s ease-in-out infinite}
+.pvx .sched-row-3 .sched-input[type=date],.pvx .sched-row-3 .sched-input[type=time]{min-width:0}
+@keyframes schedBlink{0%,100%{opacity:1}50%{opacity:.28}}
+@media (max-width:560px){
+  .pvx .pv-sched-modal{padding:18px 15px 15px;max-height:92vh}
+  .pvx .sched-row-3{grid-template-columns:1fr 1fr}
+  .pvx .sched-event{padding:12px;gap:10px}
+  .pvx .sched-ev-tile{width:44px;height:48px}
+  .pvx .sched-ev-row{flex-wrap:wrap}
+  .pvx .sched-ev-title{flex:1 1 100%}
+  .pvx .sched-ev-acts{margin-left:auto}
+}
 `;

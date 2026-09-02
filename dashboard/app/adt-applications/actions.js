@@ -86,6 +86,50 @@ export async function adminScheduleAdtAction(adtId, { date, window } = {}) {
   return { ok: true, emailed };
 }
 
+// Map an appointment start time (HH:MM) to one of ADT's three arrival windows, so the record's
+// schedule_window (and the customer /adt view) stays meaningful while the invite carries the exact time.
+function adtWindowFromTime(time) {
+  const h = parseInt(String(time || "").split(":")[0], 10);
+  if (Number.isNaN(h)) return "Morning (8am–12pm)";
+  if (h < 12) return "Morning (8am–12pm)";
+  if (h < 16) return "Afternoon (12pm–4pm)";
+  return "Evening (4pm–7pm)";
+}
+
+// Scheduling-widget parity for ADT. The shared SchedulingWidget (same one the CCTV project uses) calls
+// this on every save/reschedule/cancel. We mirror the booked install onto the adt_applications row
+// (so the Complete stage pill + the customer /adt view stay correct) and email the customer a real
+// calendar invite (.ics) — reusing the ADT invite builder. Office-only. Best-effort email.
+export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
+  if (!(await requireOffice())) return { ok: false };
+  const app = getAdtApplication(adtId);
+  if (!app) return { ok: false };
+  try {
+    // Cancel is a no-op on the record (scheduleAdtApplication always forces stage='scheduled', so it
+    // can't cleanly "unschedule"); the office reschedules or marks complete. Only bookings touch the row.
+    if (verb !== "canceled" && event?.date) {
+      const window = adtWindowFromTime(event.time);
+      const rescheduling = !!app.schedule_date && app.schedule_date !== event.date;
+      scheduleAdtApplication(adtId, { date: event.date, window });
+      try { await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling }); } catch {}
+    }
+    revalidatePath("/adt-applications");
+  } catch {}
+  return { ok: true };
+}
+
+// Manual (re)send of the ADT invite — powers the widget's per-event "Send invitation" / "Send reminder".
+export async function sendAdtAppointmentEmailAction(adtId, { verb, event } = {}) {
+  if (!(await requireOffice())) return { ok: false, error: "forbidden" };
+  const app = getAdtApplication(adtId);
+  if (!app || !event?.date) return { ok: false, error: "no-event" };
+  try {
+    const window = adtWindowFromTime(event.time);
+    const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling: verb === "reminder" || !!app.schedule_date });
+    return { ok: !!r?.emailed, sent: r?.emailed ? 1 : 0 };
+  } catch { return { ok: false, error: "send-failed" }; }
+}
+
 // Office marks the install complete.
 export async function adminCompleteAdtAction(adtId) {
   if (!(await requireOffice())) return { error: "Not authorized." };
