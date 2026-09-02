@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getAdtApplication, getUserById, decBlob } from "../../../lib/db";
+import { getAdtApplication, getUserById, decBlob, getStaffUsers } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
 import AdtProjectClient from "./adt-project-client";
@@ -65,5 +65,8 @@ export default async function AdtProjectPage({ params }) {
     deal_signed_at: app.deal_signed_at || null, deal_signature_data: app.deal_signature_data || null,
     created_at: app.created_at, scheduled_at: app.scheduled_at, completed_at: app.completed_at,
   };
-  return <AdtProjectClient user={user} alerts={alerts} app={a} />;
+  // Directory for the "Invite members" search in the Schedule modal — everyone, searchable by
+  // name / email / phone (same source the project scheduler uses).
+  const staffUsers = getStaffUsers().map(r => ({ id: r.id, name: r.name, email: r.email, role: r.role, phone: r.phone }));
+  return <AdtProjectClient user={user} alerts={alerts} app={a} staffUsers={staffUsers} />;
 }

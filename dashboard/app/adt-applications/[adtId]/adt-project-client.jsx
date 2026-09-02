@@ -115,7 +115,7 @@ function Field({ label, children, copy, full }) {
 
 // The ADT account rendered on the SAME Deck as a project — Apply → Deal → Complete as swipeable
 // stages (scheduling folded into Complete). Reuses DeckView so the chrome matches 1:1.
-export default function AdtProjectClient({ user, alerts, app }) {
+export default function AdtProjectClient({ user, alerts, app, staffUsers = [] }) {
   const router = useRouter();
   const summary = adtSummary(app.equipment || {});
   const isComm = app.property_type === "commercial";
@@ -416,8 +416,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
               <div className="pv-sched-body">
                 <SchedulingWidget
                   accessId={app.adt_id}
-                  assignments={app.email ? [{ user_name: app.name, user_email: app.email, role: "customer" }] : []}
-                  staffUsers={[]}
+                  assignments={app.email ? [{ user_name: app.name, user_email: app.email, role: "customer", user_phone: app.phone }] : []}
+                  staffUsers={staffUsers}
                   currentUser={user}
                   project={{ access_id: app.adt_id, address: app.address, contact_name: app.name, contact_email: app.email, customer: app.name }}
                   view={user?.role}

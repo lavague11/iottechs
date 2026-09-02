@@ -263,20 +263,20 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   // Deduped by lowercased email (or name when no email). Each: {name, email, role, kind}.
   const people = (() => {
     const byKey = new Map();
-    const add = (name, email, role, kind) => {
+    const add = (name, email, role, kind, phone) => {
       const nm = (name || email || "").trim();
       if (!nm) return;
       const key = (email || nm).toLowerCase();
-      if (!byKey.has(key)) byKey.set(key, { name: nm, email: email || "", role: role || "", kind });
+      if (!byKey.has(key)) byKey.set(key, { name: nm, email: email || "", role: role || "", kind, phone: phone || "" });
     };
     // Project's customer — always invitable and auto-invited.
-    add(project?.contact_name || project?.customer, project?.contact_email, "customer", "customer");
+    add(project?.contact_name || project?.customer, project?.contact_email, "customer", "customer", project?.contact_phone || project?.phone);
     // Project's granted members (assignments) — auto-invited.
-    assignments.forEach(a => add(a.user_name, a.user_email, a.role, a.role === "customer" ? "customer" : "staff"));
-    // Every internal staff user — searchable, invite on demand.
-    staffUsers.forEach(u => add(u.name, u.email, u.role, u.role === "customer" ? "customer" : "staff"));
+    assignments.forEach(a => add(a.user_name, a.user_email, a.role, a.role === "customer" ? "customer" : "staff", a.user_phone || a.phone));
+    // Every user in the directory — searchable by name / email / phone, invite on demand.
+    staffUsers.forEach(u => add(u.name, u.email, u.role, u.role === "customer" ? "customer" : "staff", u.phone));
     // Whoever is logged in — so they can always add themselves.
-    if (currentUser) add(currentUser.name, currentUser.email, currentUser.role, currentUser.role === "customer" ? "customer" : "staff");
+    if (currentUser) add(currentUser.name, currentUser.email, currentUser.role, currentUser.role === "customer" ? "customer" : "staff", currentUser.phone);
     return [...byKey.values()];
   })();
   const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
@@ -297,9 +297,17 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   const autoKey = autoNames.join("|");
 
   const [invSearch, setInvSearch] = useState("");
-  const invMatches = invSearch.trim()
-    ? people.filter(p => !form.invitees.includes(p.name) &&
-        `${p.name} ${p.email} ${p.role}`.toLowerCase().includes(invSearch.trim().toLowerCase())).slice(0, 8)
+  // Match on name / email / role, and also on phone digits — typing a phone number (formatted or not)
+  // finds the person, then picking them registers their email for the invite.
+  const invQ = invSearch.trim().toLowerCase();
+  const invQDigits = invQ.replace(/\D/g, "");
+  const invMatches = invQ
+    ? people.filter(p => {
+        if (form.invitees.includes(p.name)) return false;
+        if (`${p.name} ${p.email} ${p.role}`.toLowerCase().includes(invQ)) return true;
+        const pd = String(p.phone || "").replace(/\D/g, "");
+        return invQDigits.length >= 3 && pd.length >= 3 && pd.includes(invQDigits);
+      }).slice(0, 8)
     : [];
   // Invite by email: when the box holds a valid email that isn't already invited and isn't one of
   // the known people, offer to add it as-is (external guest).
@@ -379,7 +387,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
                     <button key={(p.email || p.name)} type="button" className="sched-invopt"
                             onMouseDown={e => { e.preventDefault(); addInvitee(p.name); }}>
                       <span className="sched-invopt-name">{p.name}</span>
-                      {p.email && <span className="sched-invopt-email">{p.email}</span>}
+                      {(p.email || p.phone) && <span className="sched-invopt-email">{p.email || p.phone}</span>}
                       <span className={`sched-chip-role${p.role === "customer" ? " cust" : ""}`}>{p.role || "member"}</span>
                     </button>
                   ))}
