@@ -351,7 +351,7 @@ function gcalUrl(ev) {
 // conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
 // Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
 const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
-export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "" }) {
+export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "" }) {
   const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
   const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
   const service = (event.title && event.title.includes("—")) ? event.title.split("—").pop().trim() : cap(noun || "Appointment");
@@ -371,6 +371,14 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   const cityLine = ci > 0 ? loc.slice(ci + 1).replace(/,?\s*USA\s*$/i, "").trim() : "";
   const maps = loc ? mapsUrl(loc) : "";
   const techName = (tech && String(tech).trim()) || "To be assigned";
+  // Personal greeting — each recipient is addressed by their own first name, with a role-appropriate
+  // one-liner (customer: "your appointment is confirmed"; internal: "you're assigned / confirmed on it").
+  const firstName = String(recipientName || "").trim().split(/\s+/)[0] || "";
+  const greetLine = cancel
+    ? (internal ? "This assignment has been canceled." : "Your appointment has been canceled — we'll be in touch to rebook.")
+    : reminder ? (internal ? "A reminder — you're on this job tomorrow." : "A quick reminder — your appointment is tomorrow.")
+    : updated ? (internal ? "Your assignment was rescheduled — the new details are below." : "Your appointment was rescheduled — the new details are below.")
+    : (internal ? "You're assigned to this appointment — details below." : "Your appointment is confirmed. Here are the details.");
   const detail = (label, valueHtml) => valueHtml
     ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
          <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(label)}</td></tr>
@@ -420,6 +428,10 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
           <div class="serif date-serif" style="font-size:34px; font-weight:500; color:#161821; line-height:1.25;">${esc(bigDate)}</div>
           ${range ? `<div class="serif" style="font-size:19px; font-weight:400; font-style:italic; color:#161821; margin-top:8px;">${esc(range)}</div>` : ""}
         </td></tr>
+        ${firstName ? `<tr><td align="center" style="padding:26px 62px 0 62px;" class="px">
+          <div class="serif" style="font-size:20px; font-weight:500; color:#161821;">Hi ${esc(firstName)},</div>
+          <div style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; color:#8A8069; line-height:1.6; margin-top:8px;">${esc(greetLine)}</div>
+        </td></tr>` : ""}
         <tr><td style="padding:34px 62px 6px 62px;" class="px">
           ${detail("Project", ctaUrl ? `<a href="${esc(ctaUrl)}" style="color:#161821; text-decoration:none; border-bottom:1px solid #D8CFBB;">&#8470;&nbsp;${esc(projectNo || "")}</a>` : `&#8470;&nbsp;${esc(projectNo || "")}`)}
           ${internal && customerName ? detail("Customer", esc(customerName)) : ""}
@@ -544,7 +556,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       // Each recipient gets THEIR OWN confirm/reschedule token, so their Confirm records THEIR status.
       let changeUrl = "";
       try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
-      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName });
+      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name });
       const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments });
       if (res?.ok || res?.skipped) sent++;
     }
@@ -562,16 +574,31 @@ const ADT_WINDOWS = {
   "Afternoon (12pm–4pm)": { time: "12:00", duration: 240 },
   "Evening (4pm–7pm)":    { time: "16:00", duration: 180 },
 };
-export async function sendAdtAppointmentEmail(app, { rescheduling = false } = {}) {
+export async function sendAdtAppointmentEmail(app, { rescheduling = false, inviteeEmails = [] } = {}) {
   try {
     if (!emailEnabled()) return { ok: false, error: "email-off" };
     if (!app?.email || !app?.schedule_date) return { ok: false, error: "no-target" };
+    const { getUserByEmail } = await import("./db.js");
     const w = ADT_WINDOWS[app.schedule_window] || { time: "09:00", duration: 180 };
     const event = {
       id: app.adt_id, date: app.schedule_date, time: w.time, duration: w.duration, kind: "install",
       title: "ADT Security Installation", location: app.address || "",
       notes: `Your ADT security system installation with IOT TECHS.${app.schedule_window ? ` Arrival window: ${app.schedule_window}.` : ""}`,
     };
+    // Recipients: the customer (always) + every invited internal member / guest. Each gets THEIR OWN
+    // copy — the customer a customer-facing "your appointment is confirmed", internal staff/techs the
+    // "you're assigned" version — addressed to them by name. Roles are resolved server-side by email.
+    const set = new Map();
+    const add = (email, name, role) => {
+      const key = String(email || "").trim().toLowerCase();
+      if (!key || !key.includes("@") || set.has(key)) return;
+      if (!name || !role) { try { const u = getUserByEmail(key); if (u) { name = name || u.name || u.username || ""; role = role || u.role || ""; } } catch {} }
+      set.set(key, { email: String(email).trim(), name: name || "", role: role || "" });
+    };
+    add(app.email, app.name, "customer");
+    (Array.isArray(inviteeEmails) ? inviteeEmails : []).forEach((e) => add(e));
+    const recipients = [...set.values()];
+
     const method = "REQUEST";
     // Opt-in RSVP scraping (dormant unless RSVP_INBOUND_DOMAIN is set): route the organizer to a
     // signed rsvp+<token>@domain so a Yes/No/Maybe reply maps back to this ADT install.
@@ -584,16 +611,28 @@ export async function sendAdtAppointmentEmail(app, { rescheduling = false } = {}
         icsScope = `adt-${app.adt_id}`;
       }
     } catch {}
-    const ics = buildAppointmentIcs(event, { method, organizerEmail, attendees: [{ email: app.email, name: app.name || "" }], sequence: rescheduling ? 1 : 0, accessId: icsScope });
+    const ics = buildAppointmentIcs(event, { method, organizerEmail, attendees: recipients.map((r) => ({ email: r.email, name: r.name })), sequence: rescheduling ? 1 : 0, accessId: icsScope });
     const attachments = [{ filename: "invite.ics", content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
-    const html = renderAppointmentEmail({
-      verb: rescheduling ? "updated" : "scheduled", event, noun: "installation",
-      projectNo: app.adt_id, tech: "", ctaUrl: `${appUrl()}/adt?id=${encodeURIComponent(app.adt_id)}`,
-      changeUrl: null, customerName: app.name || "",
-    });
-    const subject = rescheduling ? "Updated: your ADT installation was rescheduled" : "Your ADT installation is scheduled";
-    const res = await sendEmail({ to: app.email, subject, html, attachments });
-    return { ok: !!(res?.ok || res?.skipped), emailed: !!res?.ok };
+    const ctaUrl = `${appUrl()}/adt?id=${encodeURIComponent(app.adt_id)}`;
+
+    let customerEmailed = false, sent = 0, i = 0;
+    for (const r of recipients) {
+      if (i++ > 0) await new Promise((res) => setTimeout(res, 600));   // stay under Resend's ~2/sec rate limit
+      const isStaff = !!(r.role && r.role !== "customer");
+      const html = renderAppointmentEmail({
+        verb: rescheduling ? "updated" : "scheduled", event, noun: "installation",
+        projectNo: app.adt_id, tech: "", ctaUrl, changeUrl: null,
+        internal: isStaff, customerName: app.name || "", recipientName: r.name || "",
+      });
+      const subject = isStaff
+        ? (rescheduling ? `Assignment rescheduled — ADT install (${app.adt_id})` : `You're assigned — ADT install (${app.adt_id})`)
+        : (rescheduling ? "Updated: your ADT installation was rescheduled" : "Your ADT installation is confirmed");
+      const res = await sendEmail({ to: r.email, subject, html, attachments });
+      if (res?.ok || res?.skipped) sent++;
+      if (r.role === "customer") customerEmailed = !!res?.ok;
+    }
+    // `emailed` reflects the CUSTOMER's send specifically (that's what the "emailed to the customer" note means).
+    return { ok: sent > 0, emailed: customerEmailed, sent };
   } catch (e) {
     console.error(`[email:adt-appt] ${e?.message || e}`);
     return { ok: false, error: "exception" };

@@ -100,7 +100,7 @@ function adtWindowFromTime(time) {
 // this on every save/reschedule/cancel. We mirror the booked install onto the adt_applications row
 // (so the Complete stage pill + the customer /adt view stay correct) and email the customer a real
 // calendar invite (.ics) — reusing the ADT invite builder. Office-only. Best-effort email.
-export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
+export async function logAdtAppointmentAction(adtId, { verb, event, inviteeEmails } = {}) {
   if (!(await requireOffice())) return { ok: false };
   const app = getAdtApplication(adtId);
   if (!app) return { ok: false };
@@ -112,7 +112,8 @@ export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
       const window = adtWindowFromTime(event.time);
       const rescheduling = !!app.schedule_date && app.schedule_date !== event.date;
       scheduleAdtApplication(adtId, { date: event.date, window });
-      try { const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling }); emailed = !!r?.emailed; } catch {}
+      // Email everyone invited — customer gets the customer-facing copy, internal members their own.
+      try { const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling, inviteeEmails }); emailed = !!r?.emailed; } catch {}
     }
     revalidatePath("/adt-applications");
   } catch {}
@@ -120,13 +121,13 @@ export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
 }
 
 // Manual (re)send of the ADT invite — powers the widget's per-event "Send invitation" / "Send reminder".
-export async function sendAdtAppointmentEmailAction(adtId, { verb, event } = {}) {
+export async function sendAdtAppointmentEmailAction(adtId, { verb, event, inviteeEmails } = {}) {
   if (!(await requireOffice())) return { ok: false, error: "forbidden" };
   const app = getAdtApplication(adtId);
   if (!app || !event?.date) return { ok: false, error: "no-event" };
   try {
     const window = adtWindowFromTime(event.time);
-    const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling: verb === "reminder" || !!app.schedule_date });
+    const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling: verb === "reminder" || !!app.schedule_date, inviteeEmails });
     return { ok: !!r?.emailed, sent: r?.emailed ? 1 : 0 };
   } catch { return { ok: false, error: "send-failed" }; }
 }
