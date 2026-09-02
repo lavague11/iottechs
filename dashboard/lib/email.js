@@ -554,3 +554,48 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     return { ok: false, error: "exception" };
   }
 }
+
+// ADT install confirmation → a real calendar INVITE (RSVP) to the customer, reusing the shared
+// appointment template + .ics builder. Standalone from the project scheduler (ADT has no project row).
+const ADT_WINDOWS = {
+  "Morning (8am–12pm)":   { time: "08:00", duration: 240 },
+  "Afternoon (12pm–4pm)": { time: "12:00", duration: 240 },
+  "Evening (4pm–7pm)":    { time: "16:00", duration: 180 },
+};
+export async function sendAdtAppointmentEmail(app, { rescheduling = false } = {}) {
+  try {
+    if (!emailEnabled()) return { ok: false, error: "email-off" };
+    if (!app?.email || !app?.schedule_date) return { ok: false, error: "no-target" };
+    const w = ADT_WINDOWS[app.schedule_window] || { time: "09:00", duration: 180 };
+    const event = {
+      id: app.adt_id, date: app.schedule_date, time: w.time, duration: w.duration, kind: "install",
+      title: "ADT Security Installation", location: app.address || "",
+      notes: `Your ADT security system installation with IOT TECHS.${app.schedule_window ? ` Arrival window: ${app.schedule_window}.` : ""}`,
+    };
+    const method = "REQUEST";
+    // Opt-in RSVP scraping (dormant unless RSVP_INBOUND_DOMAIN is set): route the organizer to a
+    // signed rsvp+<token>@domain so a Yes/No/Maybe reply maps back to this ADT install.
+    let organizerEmail = fromEmailOnly(), icsScope = "";
+    try {
+      const rsvpDomain = secretValue("RSVP_INBOUND_DOMAIN");
+      if (rsvpDomain && app.adt_id) {
+        const { makeRsvpToken } = await import("./auth.js");
+        organizerEmail = `rsvp+${await makeRsvpToken(`adt:${app.adt_id}`, app.adt_id)}@${rsvpDomain}`;
+        icsScope = `adt-${app.adt_id}`;
+      }
+    } catch {}
+    const ics = buildAppointmentIcs(event, { method, organizerEmail, attendees: [{ email: app.email, name: app.name || "" }], sequence: rescheduling ? 1 : 0, accessId: icsScope });
+    const attachments = [{ filename: "invite.ics", content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
+    const html = renderAppointmentEmail({
+      verb: rescheduling ? "updated" : "scheduled", event, noun: "installation",
+      projectNo: app.adt_id, tech: "", ctaUrl: `${appUrl()}/adt?id=${encodeURIComponent(app.adt_id)}`,
+      changeUrl: null, customerName: app.name || "",
+    });
+    const subject = rescheduling ? "Updated: your ADT installation was rescheduled" : "Your ADT installation is scheduled";
+    const res = await sendEmail({ to: app.email, subject, html, attachments });
+    return { ok: !!(res?.ok || res?.skipped), emailed: !!res?.ok };
+  } catch (e) {
+    console.error(`[email:adt-appt] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}

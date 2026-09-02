@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
 import { scheduleAdtApplication, completeAdtApplication, getAdtApplication, saveAdtDeal, shareAdtDeal, reviseAdtDeal, setAdtStatus, updateAdtApplication, updateAdtContact, setAdtDocsNote } from "../../lib/db";
-import { renderEmail, sendEmail, emailEnabled } from "../../lib/email";
+import { sendAdtAppointmentEmail } from "../../lib/email";
 import { adtSummary } from "../../lib/adt";
 
 // The ADT project Deck is open to every internal role that has a view — admin/manager (Admin view)
@@ -76,23 +76,12 @@ export async function adminScheduleAdtAction(adtId, { date, window } = {}) {
   const rescheduling = !!app.schedule_date;
   scheduleAdtApplication(adtId, { date, window });
   revalidatePath("/adt-applications");
-  // Push the confirmation to the customer — best-effort, never blocks the schedule.
+  // Push a real calendar INVITE (branded appointment email + RSVP .ics) to the customer — best-effort,
+  // never blocks the schedule. Uses the NEW date/window we just saved.
   let emailed = false;
   try {
-    if (app.email && emailEnabled()) {
-      const nice = (() => { try { return new Date(String(date) + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }); } catch { return date; } })();
-      const first = String(app.name || "").trim().split(/\s+/)[0] || "there";
-      const base = process.env.APP_URL || "https://iot-techs.com";
-      const html = renderEmail({
-        heading: rescheduling ? "Your install has been rescheduled" : "Your ADT install is scheduled",
-        intro: `Hi ${first}, your ADT security installation is ${rescheduling ? "now booked for a new time" : "booked"}. Here are the details:`,
-        lines: [`Date — ${nice}`, window ? `Arrival window — ${window}` : null, app.address ? `Address — ${app.address}` : null].filter(Boolean),
-        ctaLabel: "View your project", ctaUrl: `${base}/adt?id=${encodeURIComponent(app.adt_id)}`,
-        footNote: "Need to change it? Reply to this email or call 646-396-0775 — we're here 24/7.",
-      });
-      const r = await sendEmail({ to: app.email, subject: rescheduling ? "Your IOT TECHS install was rescheduled" : "Your IOT TECHS install is scheduled", html });
-      emailed = !!r?.ok;
-    }
+    const r = await sendAdtAppointmentEmail({ ...app, schedule_date: date, schedule_window: window }, { rescheduling });
+    emailed = !!r?.emailed;
   } catch {}
   return { ok: true, emailed };
 }
