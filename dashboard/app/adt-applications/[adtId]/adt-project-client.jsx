@@ -277,7 +277,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
         {scheduled && <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>}
         <div className="adtp-sub">{scheduled ? "Update the date" : "Set the install date"}</div>
         <div className="adtp-form">
-          <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
+          <input id="adtp-schedule-date" type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
           <select value={win} onChange={(e) => setWin(e.target.value)}>{WINDOWS.map((w) => <option key={w}>{w}</option>)}</select>
         </div>
         <button className="adtp-btn gold" disabled={pending || !date} onClick={doSchedule}>{scheduled ? "Update date" : "Schedule install"}</button>
@@ -368,7 +368,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
       app.email && { label: "Email", icon: DVI.mail, href: `mailto:${app.email}` },
       app.address && { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}` },
-      { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setIdx(2); } },
+      { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setIdx(2); setTimeout(() => { const el = document.getElementById("adtp-schedule-date"); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); } }, 140); } },
       { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(app); } },
     ].filter(Boolean),
     // Inline quick-edit of the contact fields, mirroring the project header (the full form is still
