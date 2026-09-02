@@ -136,6 +136,8 @@ export default function AdtProjectClient({ user, alerts, app }) {
   const [err, setErr]   = useState("");
   const [pending, startTx] = useTransition();
   const [schedOpen, setSchedOpen] = useState(false);   // the shared "Schedule installation" modal (same as CCTV)
+  const [emailMsg, setEmailMsg] = useState(null);      // "ok" | "fail" — did the invite email go out on save
+  const openSched = () => { setEmailMsg(null); setSchedOpen(true); };
 
   const doComplete = () => startTx(async () => { setErr(""); const r = await adminCompleteAdtAction(app.adt_id); if (r?.error) setErr(r.error); else router.refresh(); });
   const setStatus = (s) => startTx(async () => { setErr(""); const r = await setAdtStatusAction(app.adt_id, s); if (r?.error) setErr(r.error); else router.refresh(); });
@@ -274,7 +276,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
           ? <div className="adtp-ok">Scheduled for <b>{fmtDay(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>
           : <div className="adtp-sub">No install scheduled yet.</div>}
         {office && (
-          <button className="adtp-btn gold" style={{ marginTop: 10 }} onClick={() => setSchedOpen(true)}>{scheduled ? "Reschedule" : "Schedule install"}</button>
+          <button className="adtp-btn gold" style={{ marginTop: 10 }} onClick={openSched}>{scheduled ? "Reschedule" : "Schedule install"}</button>
         )}
         <div className="adtp-sub" style={{ marginTop: 16 }}>Once the technician finishes on site</div>
         <button className="adtp-btn green" disabled={pending || !scheduled} onClick={doComplete}>Mark complete</button>
@@ -362,7 +364,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
       app.email && { label: "Email", icon: DVI.mail, href: `mailto:${app.email}` },
       app.address && { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}` },
-      office && { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); setSchedOpen(true); } },
+      office && { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSched(); } },
       { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(app); } },
     ].filter(Boolean),
     // Inline quick-edit of the contact fields, mirroring the project header (the full form is still
@@ -404,6 +406,13 @@ export default function AdtProjectClient({ user, alerts, app }) {
             <div className="pv-modal pv-sched-modal">
               <button className="pv-modal-x" aria-label="Close" onClick={() => { setSchedOpen(false); router.refresh(); }}>✕</button>
               <h2 className="pv-modal-title">Schedule installation</h2>
+              {emailMsg && (
+                <div className={"adtp-schednote " + (emailMsg === "ok" ? "ok" : "warn")}>
+                  {emailMsg === "ok"
+                    ? "Invite emailed to the customer."
+                    : "Saved — but the invite email didn’t send. Check RESEND_API_KEY."}
+                </div>
+              )}
               <div className="pv-sched-body">
                 <SchedulingWidget
                   accessId={app.adt_id}
@@ -417,6 +426,7 @@ export default function AdtProjectClient({ user, alerts, app }) {
                   autoOpen
                   logAppointment={logAdtAppointmentAction}
                   sendInvite={sendAdtAppointmentEmailAction}
+                  onLogResult={(r) => setEmailMsg(r?.emailed ? "ok" : "fail")}
                   onBooked={() => setTimeout(() => router.refresh(), 600)}
                 />
               </div>
@@ -549,6 +559,9 @@ const SCHED_MODAL_CSS = `
 .pvx .pv-sched-modal .pv-modal-title{margin-bottom:14px}
 .pvx .pv-sched-body{overflow-y:auto;flex:1;min-height:0;margin:0 -6px;padding:0 6px}
 .pvx .pv-modal-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.18rem;margin:0 0 4px}
+.pvx .adtp-schednote{font-size:.84rem;font-weight:600;border-radius:9px;padding:9px 12px;margin:0 0 12px}
+.pvx .adtp-schednote.ok{color:#2E7D5B;background:rgba(46,125,91,.1);border:1px solid rgba(46,125,91,.28)}
+.pvx .adtp-schednote.warn{color:#9A6A1B;background:rgba(201,169,110,.14);border:1px solid rgba(168,132,47,.4)}
 .pvx .sched-tool{display:flex;flex-direction:column;gap:12px}
 .pvx .sched-sec-label{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
 .pvx .sched-add-btn{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.84rem;font-weight:600;font-family:inherit;cursor:pointer;align-self:flex-start;transition:background .12s}

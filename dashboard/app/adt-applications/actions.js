@@ -104,6 +104,7 @@ export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
   if (!(await requireOffice())) return { ok: false };
   const app = getAdtApplication(adtId);
   if (!app) return { ok: false };
+  let emailed = false;
   try {
     // Cancel is a no-op on the record (scheduleAdtApplication always forces stage='scheduled', so it
     // can't cleanly "unschedule"); the office reschedules or marks complete. Only bookings touch the row.
@@ -111,11 +112,11 @@ export async function logAdtAppointmentAction(adtId, { verb, event } = {}) {
       const window = adtWindowFromTime(event.time);
       const rescheduling = !!app.schedule_date && app.schedule_date !== event.date;
       scheduleAdtApplication(adtId, { date: event.date, window });
-      try { await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling }); } catch {}
+      try { const r = await sendAdtAppointmentEmail({ ...app, schedule_date: event.date, schedule_window: window }, { rescheduling }); emailed = !!r?.emailed; } catch {}
     }
     revalidatePath("/adt-applications");
   } catch {}
-  return { ok: true };
+  return { ok: true, emailed };
 }
 
 // Manual (re)send of the ADT invite — powers the widget's per-event "Send invitation" / "Send reminder".

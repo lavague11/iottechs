@@ -138,7 +138,10 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
   // widget with its own persistence + invite email. Default to the project-scoped server actions.
   logAppointment = logAppointmentAction, sendInvite = sendAppointmentEmailAction,
   // autoOpen: land straight on the booking form (used when the widget is the whole point of a modal).
-  autoOpen = false }) {
+  autoOpen = false,
+  // onLogResult: receives logAppointment's resolved result ({ok, emailed?}) so a host can show whether
+  // the invite email actually went out. Optional — default hosts (the CCTV project) ignore it.
+  onLogResult }) {
   const [data, setData]         = useState({ events: [] });
   // Seed from the server backup if this browser has no local draft, then keep the server copy
   // in sync with every local change (see tool-sync.js).
@@ -208,7 +211,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
       const ev = { ...existing, ...form, id: editingId };
       update(d => { const e = d.events.find(x => x.id === editingId); if (e) Object.assign(e, form); });
       onBooked?.(ev.date);
-      logAppointment(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});
+      logAppointment(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).then(r => onLogResult?.(r)).catch(() => {});
       closeForm();
       setSaving(false);
       return;
@@ -216,7 +219,7 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
     const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
-    logAppointment(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).catch(() => {});   // Job Log + email invite
+    logAppointment(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).then(r => onLogResult?.(r)).catch(() => {});   // Job Log + email invite
     closeForm();
     setSaving(false);
   }
