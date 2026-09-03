@@ -76,13 +76,31 @@ export const PROPOSAL_CATALOG = {
     { name: "Volume Control",    price: 75,  cost: 0 },
     { name: "Tuning & Setup",    price: 120, cost: 0 },
   ],
+  // Toast POS — aligned to the Toast Equipment Cable Guide (docs/toast). Network core auto-seeds
+  // (ISP + Pronto/Meraki + PoE switch); each WIRED device carries a Line Drop labor line (a new
+  // Cat6 run $150, or $50 via the "Existing" toggle to test & map a cable already there); wall/
+  // ceiling items (Access Points, displays) also carry a $50 Device Mounting line.
   toast: [
-    { name: "Toast Terminal",        price: 0,   cost: 0 },
+    // Network core (baseline)
+    { name: "ISP Router",            price: 0,   cost: 0 },
+    { name: "Pronto / Meraki",       price: 0,   cost: 0 },
+    { name: "24-Port PoE Switch",    price: 140, cost: 0 },
+    // Wired devices — each needs a Line Drop
+    { name: "Access Point",          price: 140, cost: 0 },
+    { name: "POS Terminal",          price: 0,   cost: 0 },
+    { name: "Kitchen Printer",       price: 0,   cost: 0 },
     { name: "Kitchen Display (KDS)", price: 0,   cost: 0 },
-    { name: "Cat6 Drop",             price: 150, cost: 0 },
-    { name: "Network Switch",        price: 140, cost: 0 },
-    { name: "Router / Firewall",     price: 220, cost: 0 },
-    { name: "Cabling & Setup",       price: 120, cost: 0 },
+    { name: "Self-Service Kiosk",    price: 0,   cost: 0 },
+    // Peripherals — connect THROUGH the POS terminal (no drop of their own)
+    { name: "Handheld POS",          price: 0,   cost: 0 },
+    { name: "Cash Drawer",           price: 0,   cost: 0 },
+    { name: "Customer Display",      price: 0,   cost: 0 },
+    { name: "Receipt Printer",       price: 0,   cost: 0 },
+    { name: "Barcode Scanner",       price: 0,   cost: 0 },
+    // Labor — Line Drop toggles between a new run ($150) and an existing cable ($50, test & map)
+    { name: "Line Drop",             price: 150, cost: 0 },
+    { name: "Line Drop — Existing",  price: 50,  cost: 0 },
+    { name: "Device Mounting",       price: 50,  cost: 0 },
   ],
   alarm: [
     { name: "Control Panel",       price: 320, cost: 0 },
@@ -135,6 +153,14 @@ export const DEFAULT_PRESETS = [
       { name: "Camera Waterproofing", qty: 1 },
     ],
   },
+  // Toast device blocks (per the Cable Guide) — one click drops the device + its Line Drop, plus a
+  // $50 Device Mounting for wall/ceiling items (Access Point, KDS). Each drop can be toggled to
+  // "Existing" ($50) in the builder when the cable is already run.
+  { id: "toast-ap",     name: "Access Point",         service: "toast", items: [{ name: "Access Point", qty: 1 }, { name: "Line Drop", qty: 1 }, { name: "Device Mounting", qty: 1 }] },
+  { id: "toast-pos",    name: "POS Terminal",         service: "toast", items: [{ name: "POS Terminal", qty: 1 }, { name: "Line Drop", qty: 1 }] },
+  { id: "toast-kprint", name: "Kitchen Printer",      service: "toast", items: [{ name: "Kitchen Printer", qty: 1 }, { name: "Line Drop", qty: 1 }] },
+  { id: "toast-kds",    name: "Kitchen Display (KDS)",service: "toast", items: [{ name: "Kitchen Display (KDS)", qty: 1 }, { name: "Line Drop", qty: 1 }, { name: "Device Mounting", qty: 1 }] },
+  { id: "toast-kiosk",  name: "Self-Service Kiosk",   service: "toast", items: [{ name: "Self-Service Kiosk", qty: 1 }, { name: "Line Drop", qty: 1 }] },
 ];
 
 // Once an admin has saved presets, that list is authoritative (edits/deletes stick). The seed
@@ -285,13 +311,13 @@ const SURVEY_KIND_MAP = {
   // provided (no cable charge); every other Toast device is hardwired and gets a Cat6 Drop
   // line ($150) plus its own numbered block, same as camera.
   pronto: { service: "toast",  name: "Pronto / Meraki",      price: 0 },
-  tap:    { service: "toast",  name: "Access Point",         price: 140, locate: true, needsLine: true },
-  tpoe:   { service: "toast",  name: "Network Switch",       price: 140, locate: true, needsLine: true },
-  pos:    { service: "toast",  name: "Toast Terminal",       price: 0, locate: true, needsLine: true },
+  tap:    { service: "toast",  name: "Access Point",         price: 140, locate: true, needsLine: true, mount: true },
+  tpoe:   { service: "toast",  name: "24-Port PoE Switch",   price: 140, locate: true, needsLine: true },
+  pos:    { service: "toast",  name: "POS Terminal",         price: 0, locate: true, needsLine: true },
   kprint: { service: "toast",  name: "Kitchen Printer",      price: 0, locate: true, needsLine: true },
-  kds:    { service: "toast",  name: "Kitchen Display (KDS)",price: 0, locate: true, needsLine: true },
+  kds:    { service: "toast",  name: "Kitchen Display (KDS)",price: 0, locate: true, needsLine: true, mount: true },
   ssk:    { service: "toast",  name: "Self-Service Kiosk",   price: 0, locate: true, needsLine: true },
-  tisp:   { service: "toast",  name: "ISP",                  price: 0 },
+  tisp:   { service: "toast",  name: "ISP Router",           price: 0 },
   door:   { service: "alarm",  name: "Door/Window Sensor",   price: 45,  locate: true },
   motion: { service: "alarm",  name: "Motion Sensor",        price: 65,  locate: true },
   glass:  { service: "alarm",  name: "Glass-Break Sensor",   price: 70,  locate: true },
@@ -392,13 +418,13 @@ function withLocSuffix(base, floor, io) {
 // Skipped per-kind when the survey already placed a real one (so nothing doubles up).
 const TOAST_BASELINE_KINDS = ["tisp", "pronto", "tpoe"];
 const TOAST_BASELINE_BUILDERS = {
-  tisp: (px, dn) => ({ id: newItemId(), name: dn("ISP"), qty: 1, price: px("ISP"), cost: 0 }),
+  tisp: (px, dn) => ({ id: newItemId(), name: dn("ISP Router"), qty: 1, price: px("ISP Router"), cost: 0 }),
   pronto: (px, dn) => ({ id: newItemId(), name: dn("Pronto / Meraki"), qty: 1, price: px("Pronto / Meraki"), cost: 0 }),
   tpoe: (px, dn) => ({
-    id: newItemId(), name: dn("Network Switch"), qty: 1, price: 0, cost: 0,
+    id: newItemId(), name: dn("24-Port PoE Switch"), qty: 1, price: 0, cost: 0,
     sub: [
-      { id: newItemId(), name: dn("Network Switch"), qty: 1, price: px("Network Switch", 140), cost: 0 },
-      { id: newItemId(), name: dn("Cat6 Drop"), qty: 1, price: px("Cat6 Drop", 150), cost: 0 },
+      { id: newItemId(), name: dn("24-Port PoE Switch"), qty: 1, price: px("24-Port PoE Switch", 140), cost: 0 },
+      { id: newItemId(), name: dn("Line Drop"), qty: 1, price: px("Line Drop", 150), cost: 0 },
     ],
   }),
 };
@@ -476,10 +502,12 @@ export function surveyToImport(survey, floorIndex) {
     // not shown for alarm/sound/access blocks even though they're also individually-placed.
     const isToastOrCam = map.service === "toast";
     const label = withLocSuffix(base, dev.floor, isToastOrCam ? dev.io : null);
-    // Toast devices that need a hardwired line (per the Cable Guide) get a Cat6 Drop
-    // sub-item at $150, same convention as the camera bundle.
+    // Toast devices that need a hardwired line (per the Cable Guide) get a Line Drop labor line
+    // ($150 new run; toggle to Existing $50 in the builder). Wall/ceiling items (AP, KDS) also get
+    // a $50 Device Mounting line. Same block convention as the camera bundle.
     const sub = [{ id: newItemId(), name: dn(map.name), qty: 1, price: px(map.name, map.price), cost: 0 }];
-    if (map.needsLine) sub.push({ id: newItemId(), name: dn("Cat6 Drop"), qty: 1, price: px("Cat6 Drop", 150), cost: 0 });
+    if (map.needsLine) sub.push({ id: newItemId(), name: dn("Line Drop"), qty: 1, price: px("Line Drop", 150), cost: 0 });
+    if (map.mount) sub.push({ id: newItemId(), name: dn("Device Mounting"), qty: 1, price: px("Device Mounting", 50), cost: 0 });
     svc.items.push({
       id: newItemId(), name: label, qty: 1, price: 0, cost: 0, outdoor: isToastOrCam && dev.io === "O",
       sub,

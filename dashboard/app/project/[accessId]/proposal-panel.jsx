@@ -203,6 +203,11 @@ const PROP_CSS = `
 .pvx .prop-line-total{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);text-align:right}
 .pvx .prop-item-x{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;font-size:.85rem;padding:0}
 .pvx .prop-item-x:hover{color:var(--dv-red,#C4553D)}
+/* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
+.pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
+.pvx .prop-exist-tog:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-ink,#101418)}
+.pvx .prop-exist-tog.on{background:#eaf5ee;border-color:#bfe0cc;color:#2E7D5B}
+.pvx .prop-exist-tag{flex:0 0 auto;margin-left:8px;padding:2px 9px;border-radius:100px;background:#eaf5ee;color:#2E7D5B;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
 .pvx .prop-cols{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;padding:6px 12px 2px;font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-cols.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-cols span.r{text-align:right}

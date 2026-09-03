@@ -1,0 +1,91 @@
+IOT TECHS                                                                               CUSTOMER GUIDE
+
+Security · Audio · Low-Voltage · Structured Cabling                                                                    TOAST POS
+                                                                            Restaurant Equipment & Network Reference
+646-396-0775 · support@iot-techs.com · www.iot-techs.com
+Serving the NY / NJ Metro Area
+
+TOAST SYSTEM -- CONNECTION ORDER                                                             INTERNET  DEVICES
+                                                                                                       Network Cable
+# Equipment              Purpose                                            Typical
+                                                                            Location                 Customer Provided
+1 ISP Router             Brings internet service into the building.
+                                                                            Network
+                                                                            closet
+
+2 Pronto / Meraki        Toast's private managed network -- a               Network          Toast Managed
+                         dedicated, isolated network for all Toast          closet
+                         equipment.
+
+3 Access Point           Its own extender that broadens the Toast           Wall or ceiling          Yes
+                         network's wireless coverage for handhelds.         mounted          Wi-Fi / Cellular
+
+ Handheld POS Device     Lets servers take orders and payments at the       Dining area              Yes
+                         table. Connects over the access point or cellular                           Yes
+                         -- no cable needed.
+                                                                                                      No
+4 24-Port PoE Switch     Connects and powers all wired devices. No PoE      Network                   No
+                         injector needed.                                   closet                    No
+                                                                                                      No
+5 POS Terminal           Takes orders, processes payments, manages          Host stand,
+                         operations. The devices below connect through      cashier, bar
+      Cash Drawer        it.
+      Customer Display
+      Receipt Printer    Opens during transactions; connects to the         Under POS
+                         terminal.                                          terminal
+
+                         Shows totals, payment prompts, and tips to         Checkout
+                         guests.                                            counter
+
+                         Prints customer receipts.                          POS station
+
+ Barcode Scanner         Scans products and inventory items.                POS station
+
+6 Kitchen Printer        Prints food tickets for kitchen staff.             Kitchen          Yes
+
+7 Kitchen Display (KDS)  Screen that shows kitchen orders digitally         Kitchen / expo   Yes
+
+                         instead of paper tickets.                          station
+WI-FI ACCESS POINT COVERAGE                                                                      PLANNING GUIDE
+
+         ~30­50 ft radius                             How far one access point reaches
+
+                                                      A single indoor access point typically covers a 30­50 ft radius, or
+                                                      roughly 1,500­2,500 sq ft of open space. Walls, kitchen equipment,
+                                                      walk-in coolers, and metal shelving shorten that range, so real-world
+                                                      coverage in a busy restaurant sits at the lower end. We plan slight
+                                                      overlap between APs so handhelds stay connected as servers move
+                                                      between the dining room, bar, and kitchen.
+
+                                                      30­50 ft                  ~2,000 sq ft
+
+                                                      EFFECTIVE RADIUS          COVERAGE PER AP
+
+                                                      15­20%
+
+                                                      OVERLAP PLANNED
+
+OUR CABLING                                                                                                    BUILT TO LAST
+
+                                        CAT6 outdoor jacket                     
+                                        Heavy-duty outdoor-rated jacketing,
+   Handmade, defect-free                waterproof and sealed against           Gold-plated connectors
+    Every cable is hand-terminated and  moisture.                               Corrosion-resistant gold contacts for
+    tested -- no mass-produced                                                  a clean, reliable connection over the
+    manufacturer defects.                                                       long haul.
+
+                                                                                
+
+Heat-resistant                          10­15 year lifespan                     Terminated & certified
+Built to withstand the heat and         Engineered to last 10 to 15 years with  Each run is labeled, tested, and
+humidity of a working kitchen without   no maintenance once installed.          certified at handover, with
+degrading.                                                                      documentation provided.
+
+The IOT TECHS standard -- handmade CAT6 with waterproof outdoor jackets and gold-plated connectors, made to
+survive the heat of your kitchen and last 10­15 years maintenance-free.
+
+Good to know -- Router and PoE switch installation charges are typically waived when the equipment is located within 6 feet
+of the ISP modem or an existing network rack.
+
+IOT TECHS / La Vague Inc. · Customer Reference Guide  Questions about your build? 646-396-0775 · support@iot-techs.com
+

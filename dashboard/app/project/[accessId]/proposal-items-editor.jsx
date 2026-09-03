@@ -217,6 +217,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   function removeSub(pid, sid) {
     patchItems(svc.items.map((it) => (it.id === pid ? { ...it, sub: it.sub.filter((x) => x.id !== sid) } : it)));
   }
+  // Toast "Existing" toggle on a Line Drop line: flip between a new Cat6 run ("Line Drop", $150)
+  // and an existing cable ("Line Drop — Existing", $50 test & map). Swaps the line's name + price
+  // from the price book; the office can still hand-edit the price after.
+  function toggleExisting(parent, it) {
+    const book = loadPriceBook();
+    const isExisting = /existing/i.test(it.name || "");
+    const baseName = isExisting ? "Line Drop" : "Line Drop — Existing";
+    const nextPrice = priceOf(baseName, book) || (isExisting ? 150 : 50);
+    patchSub(parent.id, it.id, { name: displayNameOf(baseName, book), price: nextPrice });
+  }
   function addSub(pid) {
     patchItems(svc.items.map((it) => it.id === pid
       ? { ...it, sub: [...(it.sub || []), { id: newItemId(), name: "", qty: 1, price: 0, cost: 0 }] }
@@ -337,6 +347,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             onChange={(v) => (parent ? patchSub(parent.id, it.id, { name: v }) : patchItem(it.id, { name: v }))}
             onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
           />
+        )}
+        {parent && /^line drop/i.test(it.name || "") && (
+          readOnly
+            ? (/existing/i.test(it.name || "") && <span className="prop-exist-tag" title="Existing cable — test &amp; map">Existing</span>)
+            : <button type="button" className={`prop-exist-tog${/existing/i.test(it.name || "") ? " on" : ""}`}
+                      title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)"
+                      onClick={() => toggleExisting(parent, it)}>Existing</button>
         )}
         {!parent && flags[it.id] && (
           <span className="prop-cflag-wrap">
