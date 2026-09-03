@@ -2801,6 +2801,59 @@ export function createFieldProject({ name, address, createdByName }) {
   return { ok: true, accessId: res.accessId };
 }
 
+// ---- Legacy / pre-software client backfill --------------------------------------------------------
+// Map a free-typed system description ("cctv", "ADT alarm", "cat6", "door access"…) to one of the
+// project service labels createLeadProject understands. Defaults to CCTV when nothing matches.
+const _SYSTEM_TO_SERVICE = [
+  [/access|door|entry|intercom|keypad|\bfob\b/i, "Access Control / Door Entry"],
+  [/audio|speaker|sound|sonos/i,                 "Commercial Audio"],
+  [/network|cat\s?6|cat\s?5|wi-?fi|ethernet|wiring|\bap\b/i, "Networking & Cat6"],
+  [/cctv|camera|\bcam\b|surveil|nvr|dvr|adt|alarm|security|sensor/i, "Security Cameras / CCTV"],
+];
+function serviceFromSystem(s) {
+  const t = String(s || "");
+  for (const [re, label] of _SYSTEM_TO_SERVICE) if (re.test(t)) return label;
+  return "Security Cameras / CCTV";
+}
+
+// Create the customer + a COMPLETED install record for a job done BEFORE the software existed. Reuses
+// createLeadProject (upserts the customer/login, PIN = last-4 phone) then stamps the project closed:
+//   stage=completion (terminal), internal_job=1 (no sale gate), source='legacy',
+//   ar_archived_at set (kept OUT of the receivables portal — these are past, paid jobs),
+// so the record shows up in Customers / search / service & warranty history WITHOUT entering the
+// active sales pipeline or showing a phantom balance. needs_details flags rows with no phone.
+export function createLegacyProject({ name, phone, email, address, system, installDate, value, notes, createdByName } = {}) {
+  const cleanName = String(name || "").trim();
+  if (!cleanName) return { error: "Name is required." };
+  const service = serviceFromSystem(system);
+  const res = createLeadProject(cleanName, email || null, phone || null, address || null, service, null);
+  if (!res?.accessId) return { error: "Could not create the record." };
+  const isoDate = (d) => { const s = String(d || "").trim(); if (!s) return null; const dt = new Date(s); return Number.isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10); };
+  const instDate = isoDate(installDate);
+  const val = Math.max(0, Math.round(Number(String(value ?? "").replace(/[^0-9.]/g, "")) || 0));
+  const noDetails = String(phone || "").trim() ? 0 : 1;   // no phone → PIN can't be last-4; flag for follow-up
+  db.prepare(`UPDATE projects SET
+      stage='completion', status='Complete', source='legacy', internal_job=1,
+      install_date=?, completed_at=COALESCE(?, datetime('now','localtime')), value=?,
+      contact_message=?, ar_archived_at=datetime('now','localtime'), needs_details=?,
+      created_by_name=COALESCE(?, created_by_name)
+      WHERE access_id=? COLLATE NOCASE`)
+    .run(instDate, instDate ? `${instDate} 12:00:00` : null, val, String(notes || "").trim() || null, noDetails, createdByName || null, res.accessId);
+  return { ok: true, accessId: res.accessId, customerPin: res.customerPin, name: cleanName };
+}
+
+// Bulk backfill from a pasted/CSV list. rows: [{name,phone,email,address,system,installDate,value,notes}].
+// Returns counts + per-row results so the UI can report imported vs skipped (a row with no name is skipped).
+export function importLegacyClients(rows, createdByName) {
+  const out = { ok: true, created: 0, skipped: 0, results: [] };
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    const res = createLegacyProject({ ...r, createdByName });
+    if (res?.ok) { out.created++; out.results.push({ ok: true, name: res.name, accessId: res.accessId }); }
+    else { out.skipped++; out.results.push({ ok: false, name: (r && r.name) || "", error: res?.error || "skipped" }); }
+  }
+  return out;
+}
+
 // Admin/manager toggle: mark a project internal (no customer sale) so its work order can be created
 // without a customer signature + deposit. Works on any project, not just field-created ones.
 export function setInternalJob(accessId, on) {
