@@ -1,8 +1,8 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen } from "../../../lib/db";
-import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType } from "../../../lib/spec";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService } from "../../../lib/db";
+import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
@@ -285,6 +285,24 @@ export async function updateProjectInfoAction(accessId, fields) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };
+}
+
+// Admin/manager: correct a project's service line (fixes a job mis-filed at intake). Re-points the
+// row icon and any NEW proposal's default service; existing links/PIN (access_id) are unchanged.
+export async function setProjectServiceAction(accessId, code) {
+  const hdrs   = await headers();
+  const cookie = hdrs.get("cookie") || "";
+  const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
+  if (!raw) return { error: "Not authenticated." };
+  const { parseToken } = await import("../../../lib/auth");
+  const tok = await parseToken(raw.trim());
+  if (!tok?.role || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can change the service." };
+  const res = setProjectService(accessId, code);
+  if (!res.ok) return res;
+  logProjectEvent(accessId, { kind: "change", label: `Service changed to ${serviceCodeLabel(res.code)}`, actor: tok.name || tok.email || tok.role });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, code: res.code };
 }
 
 // `viewRole` is display-only legacy — the role that authorizes the move comes from the

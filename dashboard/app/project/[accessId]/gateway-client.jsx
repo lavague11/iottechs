@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -2520,9 +2520,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                         </div>
                       </div>
                     )}
+                    {["admin","manager"].includes(cView) && (
+                      <div className="pv-efield pv-efield-full">
+                        <label className="pv-hfl">Service</label>
+                        <select className="pv-einput" value={hVals.service_code||""} onChange={e=>setHVals(v=>({...v,service_code:e.target.value}))}>
+                          {SERVICE_CATALOG.map(s=> <option key={s.code} value={s.code}>{s.label}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div className="pv-hactions">
-                    <button className="pv-hact primary" disabled={hSaving} onClick={async()=>{setHSaving(true);const r=await updateProjectInfoAction(lp.access_id,hVals);setHSaving(false);if(r.ok){setLocalProj(p=>({...p,...hVals}));setHEditing(false);}else alert(r.error||"Save failed.");}}>
+                    <button className="pv-hact primary" disabled={hSaving} onClick={async()=>{setHSaving(true);const {service_code:svc,...contact}=hVals;const r=await updateProjectInfoAction(lp.access_id,contact);let svcOk=true;if(svc&&svc!==lp.service_code){const rs=await setProjectServiceAction(lp.access_id,svc);svcOk=!!rs?.ok;if(!svcOk)alert(rs?.error||"Couldn't change the service.");}setHSaving(false);if(r.ok&&svcOk){setLocalProj(p=>({...p,...contact,service_code:svc||p.service_code,service:serviceCodeLabel(svc||p.service_code)}));setHEditing(false);}else if(!r.ok)alert(r.error||"Save failed.");}}>
                       {hSaving?"Saving…":"Save Changes"}
                     </button>
                     <button className="pv-hact" onClick={()=>setHEditing(false)}>Cancel</button>
@@ -2566,7 +2574,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   </a>
                   <div className="pv-hactions">
                     {["admin","manager","sales","tech","customer"].includes(view) && (
-                      <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||""});setPinVal(lp.customer_pin||"");setPinCustom(!!lp.pin_custom);setHEditing(true);}}>
+                      <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||"",service_code:lp.service_code||""});setPinVal(lp.customer_pin||"");setPinCustom(!!lp.pin_custom);setHEditing(true);}}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Edit info
                       </button>

@@ -2842,6 +2842,18 @@ export function createLegacyProject({ name, phone, email, address, system, insta
   return { ok: true, accessId: res.accessId, customerPin: res.customerPin, name: cleanName };
 }
 
+// Admin/manager correction: change a project's service line after creation (e.g. a job mis-filed as
+// cameras when it was Toast). Only the service_code changes — the access_id (URL/PIN identity) is left
+// alone so existing links keep working; the icon + proposal derive from service_code, so they update.
+export function setProjectService(accessId, code) {
+  const c = String(code || "").toUpperCase();
+  if (!SERVICE_CODES[c]) return { error: "Unknown service." };
+  const proj = db.prepare("SELECT id, service_code FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId));
+  if (!proj) return { error: "Project not found." };
+  db.prepare("UPDATE projects SET service_code = ? WHERE access_id = ? COLLATE NOCASE").run(c, String(accessId));
+  return { ok: true, code: c, from: proj.service_code };
+}
+
 // Bulk backfill from a pasted/CSV list. rows: [{name,phone,email,address,system,installDate,value,notes}].
 // Returns counts + per-row results so the UI can report imported vs skipped (a row with no name is skipped).
 export function importLegacyClients(rows, createdByName) {
