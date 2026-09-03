@@ -85,7 +85,7 @@ export const PROPOSAL_CATALOG = {
     // the labor (Line Drop + Mounting) below, never the equipment.
     { name: "ISP Router",            price: 0,   cost: 0 },
     { name: "Pronto / Meraki",       price: 0,   cost: 0 },
-    { name: "24-Port PoE Switch",    price: 0,   cost: 0 },
+    { name: "24-Port Switch",    price: 0,   cost: 0 },
     // Wired devices — each needs a Line Drop (equipment itself is provided → $0)
     { name: "Access Point",          price: 0,   cost: 0 },
     { name: "POS Terminal",          price: 0,   cost: 0 },
@@ -316,7 +316,7 @@ const SURVEY_KIND_MAP = {
   // line ($150) plus its own numbered block, same as camera.
   pronto: { service: "toast",  name: "Pronto / Meraki",      price: 0 },
   tap:    { service: "toast",  name: "Access Point",         price: 140, locate: true, needsLine: true, mount: true },
-  tpoe:   { service: "toast",  name: "24-Port PoE Switch",   price: 140, locate: true, needsLine: true },
+  tpoe:   { service: "toast",  name: "24-Port Switch",   price: 140, locate: true, needsLine: true },
   pos:    { service: "toast",  name: "POS Terminal",         price: 0, locate: true, needsLine: true },
   kprint: { service: "toast",  name: "Kitchen Printer",      price: 0, locate: true, needsLine: true },
   kds:    { service: "toast",  name: "Kitchen Display (KDS)",price: 0, locate: true, needsLine: true, mount: true },
@@ -421,16 +421,19 @@ function withLocSuffix(base, floor, io) {
 // actually marked on the floor plan — per the owner, always present, in this fixed order.
 // Skipped per-kind when the survey already placed a real one (so nothing doubles up).
 const TOAST_BASELINE_KINDS = ["tisp", "pronto", "tpoe"];
+// The network core — ISP Router, Pronto/Meraki, and the 24-Port Switch — each carries a $150 Line
+// Drop, but every one is WAIVED by default: these sit in the network closet on short runs (per the
+// Cable Guide, router/switch installs are typically waived within ~6 ft of the modem/rack). Waiving
+// shows the customer the $150 value struck through while billing $0. Uncheck a drop in "Waive items"
+// if a particular run is long enough to charge for.
+const toastCoreBlock = (px, dn, device) => ({
+  id: newItemId(), name: dn(device), qty: 1, price: 0, cost: 0, waived: true,
+  sub: [{ id: newItemId(), name: dn("Line Drop"), qty: 1, price: px("Line Drop", 150), cost: 0 }],
+});
 const TOAST_BASELINE_BUILDERS = {
-  tisp: (px, dn) => ({ id: newItemId(), name: dn("ISP Router"), qty: 1, price: px("ISP Router"), cost: 0 }),
-  pronto: (px, dn) => ({ id: newItemId(), name: dn("Pronto / Meraki"), qty: 1, price: px("Pronto / Meraki"), cost: 0 }),
-  // The switch hardware is provided (no equipment charge) — the block bills only its Line Drop.
-  tpoe: (px, dn) => ({
-    id: newItemId(), name: dn("24-Port PoE Switch"), qty: 1, price: 0, cost: 0,
-    sub: [
-      { id: newItemId(), name: dn("Line Drop"), qty: 1, price: px("Line Drop", 150), cost: 0 },
-    ],
-  }),
+  tisp:   (px, dn) => toastCoreBlock(px, dn, "ISP Router"),
+  pronto: (px, dn) => toastCoreBlock(px, dn, "Pronto / Meraki"),
+  tpoe:   (px, dn) => toastCoreBlock(px, dn, "24-Port Switch"),
 };
 export function toastBaselineItems(book, seenKinds = new Set()) {
   const px = (name, fallback) => priceOf(name, book) || (fallback ?? 0);
