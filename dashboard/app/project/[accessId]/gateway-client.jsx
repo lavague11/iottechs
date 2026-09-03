@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
@@ -2186,6 +2186,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {cView === "tech" && <TechProjectBoard project={lp} />}
                 <ProposalPanel embedded accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                  defaultService={proposalServiceForCode(lp.service_code)}
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
@@ -3180,6 +3181,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             view={view}
             cView={cView}
             custView={!!previewRole}
+            defaultService={proposalServiceForCode(lp.service_code)}
             proposal={proposalData}
             onProposalChange={setProposalData}
             onAdvance={(stageKey) => browse(stageKey)}

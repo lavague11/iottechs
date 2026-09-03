@@ -99,16 +99,61 @@ export const LOGIN_VIEW = {
 export const COST_SAFE_VIEWS = new Set(["admin", "manager"]);
 
 // ---- Service lines and their 2-letter codes (for the Access Portal ID) ----
+// Kept in sync with the actual stored codes: SC/AU/NW/AC were minted by the intake before this catalog
+// existed, so they stay; ST/TP/AS/etc. are added so every service resolves to a real label + icon.
 export const SERVICE_CODES = {
   SC: "Security Cameras",
+  AU: "Commercial Audio",
   SS: "Sound System",
-  TP: "Toast POS",
-  AS: "Alarm Systems",
+  NW: "Networking",
+  ST: "NVR & Storage",
+  TP: "Toast / POS",
+  AS: "Alarm System",
   AC: "Access Control",
   WX: "Wiring",
   CX: "Custom",
   MX: "Mixed",
 };
+
+// ---- ONE canonical service catalog -------------------------------------------------------------
+// Bridges the three taxonomies that had drifted apart: the intake labels (New Project / Customers /
+// Import forms), the stored 2-letter service_code, the proposal-builder service key, and the row icon.
+// `match` recognizes a free-typed / label service so intake never mis-files a job (e.g. Toast → cameras).
+export const SERVICE_CATALOG = [
+  { code: "SC", label: "Security Cameras / CCTV",     proposal: "camera", icon: "cam",    match: /camera|cctv|surveil|\bcam\b/i },
+  { code: "AU", label: "Commercial Audio",            proposal: "sound",  icon: "audio",  match: /audio|sound|speaker|sonos/i },
+  { code: "NW", label: "Networking & Cat6",           proposal: "wiring", icon: "net",    match: /network|cat\s?6|cat\s?5|ethernet|wi-?fi|wiring|low-?volt/i },
+  { code: "AC", label: "Access Control / Door Entry", proposal: "access", icon: "lock",   match: /access|door|entry|intercom|keypad|\bfob\b/i },
+  { code: "ST", label: "NVR & Storage",               proposal: "camera", icon: "hdd",    match: /\bnvr\b|storage|\bdvr\b|record/i },
+  { code: "TP", label: "Toast / POS Cabling",         proposal: "toast",  icon: "pos",    match: /toast|\bpos\b|point of sale/i },
+  { code: "AS", label: "Alarm / Security System",     proposal: "alarm",  icon: "shield", match: /alarm|\badt\b|sensor|security system/i },
+  { code: "MX", label: "Other",                       proposal: "custom", icon: "box",    match: /./ },
+];
+// Aliases so the older stored codes / other-form keys still resolve to a catalog entry.
+const _CODE_ALIAS = { SS: "AU", WX: "NW", CX: "MX" };
+function _catalogByCode(code) {
+  const c = String(code || "").toUpperCase();
+  return SERVICE_CATALOG.find((s) => s.code === c) || SERVICE_CATALOG.find((s) => s.code === _CODE_ALIAS[c]) || null;
+}
+// Free text / an intake label → the right stored service_code. Unknown falls to "MX" (Other) — never
+// silently to cameras, which was the bug (Toast, Storage, Other all became Security Cameras).
+export function serviceCodeFromText(text) {
+  const t = String(text || "");
+  if (!t.trim()) return "MX";
+  return (SERVICE_CATALOG.find((s) => s.match.test(t)) || SERVICE_CATALOG[SERVICE_CATALOG.length - 1]).code;
+}
+// A project's stored service_code → the proposal-builder service key it should open on.
+export function proposalServiceForCode(code) {
+  return (_catalogByCode(code) || SERVICE_CATALOG[0]).proposal;
+}
+// A project's stored service_code → the row-icon key (cam/audio/net/lock/hdd/pos/shield/box).
+export function serviceIconForCode(code) {
+  return (_catalogByCode(code) || SERVICE_CATALOG[0]).icon;
+}
+// service_code → its full display label (falls back through SERVICE_CODES, then the raw code).
+export function serviceCodeLabel(code) {
+  return _catalogByCode(code)?.label || SERVICE_CODES[String(code || "").toUpperCase()] || code || "Service";
+}
 
 // ---- Project types ----
 export const PROJECT_TYPES = {

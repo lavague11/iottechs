@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
-  OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankOption,
+  OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
   toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS,
 } from "../../../lib/proposal";
@@ -36,12 +36,14 @@ function loadSurveyForImport(accessId) {
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
-export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false }) {
+export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
   const [dlBusy, setDlBusy] = useState(false);                // building the proposal PDF
   const [copied, setCopied] = useState(false);                // "Copied" flash after Share
   const [meta, setMeta] = useState(initial || null);          // server row (status, version, sent_at…)
-  const [payload, setPayload] = useState(() => initial?.payload || blankPayload());
+  // A brand-new proposal opens scoped to the project's service (Toast job → Toast tab), so it always
+  // reflects what the customer inquired about instead of defaulting to an empty/camera proposal.
+  const [payload, setPayload] = useState(() => initial?.payload || blankPayloadForService(defaultService));
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
   const [depositPct, setDepositPct] = useState(initial?.deposit_pct ?? 50);
   const [activeOpt, setActiveOpt] = useState(initial?.payload?.options?.[0]?.id || "A");

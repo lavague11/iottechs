@@ -1,6 +1,8 @@
 // Project-type → icon + color. A colored glyph on each project row so you can tell at a glance
 // what kind of job it is (cameras vs ADT vs networking …). Shared by the dashboard Projects panel
-// and the /projects board. Detection is by the `kind` flag (ADT) then the service/category text.
+// and the /projects board. Detection: `kind` flag (ADT) → the stored service_code via the canonical
+// catalog → finally any free service/category text.
+import { serviceIconForCode } from "../../lib/spec";
 const IC = {
   cam:   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>,
   shield:<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
@@ -12,17 +14,33 @@ const IC = {
   box:   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="m3.3 7 8.7 5 8.7-5"/></svg>,
 };
 
+// icon-key → { icon, color, label }. Distinct colors reused across the app palette.
+const ICON_META = {
+  cam:    { icon: IC.cam,    color: "#3257ff", label: "Cameras" },
+  audio:  { icon: IC.audio,  color: "#e84393", label: "Audio" },
+  net:    { icon: IC.net,    color: "#16a085", label: "Networking" },
+  lock:   { icon: IC.lock,   color: "#9b59b6", label: "Access" },
+  hdd:    { icon: IC.hdd,    color: "#5b6470", label: "Storage" },
+  pos:    { icon: IC.pos,    color: "#e67e22", label: "POS" },
+  shield: { icon: IC.shield, color: "#C9A96E", label: "Alarm" },
+  box:    { icon: IC.box,    color: "#8a8578", label: "Other" },
+};
+
 // Returns { label, color, icon }. Colors are distinct and reused elsewhere in the app palette.
 export function projectTypeMeta(p) {
   if (p?.kind === "adt") return { label: "ADT Monitoring", color: "#C9A96E", icon: IC.shield };
-  const s = String(p?.service || p?.category || p?.service_code || "").toLowerCase();
-  if (/camera|cctv|surveil/.test(s))        return { label: "Cameras",   color: "#3257ff", icon: IC.cam };
-  if (/network|cat\s?6|ethernet|wi-?fi/.test(s)) return { label: "Networking", color: "#16a085", icon: IC.net };
-  if (/access|door|entry|intercom/.test(s)) return { label: "Access",    color: "#9b59b6", icon: IC.lock };
-  if (/nvr|storage|record/.test(s))         return { label: "Storage",   color: "#5b6470", icon: IC.hdd };
-  if (/pos|toast/.test(s))                  return { label: "POS",       color: "#e67e22", icon: IC.pos };
-  if (/audio|sound|speaker/.test(s))        return { label: "Audio",     color: "#e84393", icon: IC.audio };
-  return { label: "Other", color: "#8a8578", icon: IC.box };
+  // Stored service_code is the source of truth (so AU→Audio, NW→Networking, TP→POS, ST→Storage all
+  // get their own icon instead of the generic box).
+  if (p?.service_code) { const m = ICON_META[serviceIconForCode(p.service_code)]; if (m) return { ...m }; }
+  // Fallback: match a free service/category label (rows that carry text but no code).
+  const s = String(p?.service || p?.category || "").toLowerCase();
+  if (/camera|cctv|surveil/.test(s))        return { ...ICON_META.cam };
+  if (/network|cat\s?6|ethernet|wi-?fi/.test(s)) return { ...ICON_META.net };
+  if (/access|door|entry|intercom/.test(s)) return { ...ICON_META.lock };
+  if (/nvr|storage|record/.test(s))         return { ...ICON_META.hdd };
+  if (/pos|toast/.test(s))                  return { ...ICON_META.pos };
+  if (/audio|sound|speaker/.test(s))        return { ...ICON_META.audio };
+  return { ...ICON_META.box };
 }
 
 // The colored type glyph. Size is the square box in px.

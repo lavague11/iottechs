@@ -7,7 +7,9 @@ import { archiveCustomerAction, wipeAllCustomersAction, addLegacyClientAction, i
 import AddressAutocomplete from "../components/address-autocomplete";
 
 const money = (n) => "$" + (n || 0).toLocaleString();
-const SERVICES = ["Security Cameras / CCTV", "Commercial Audio", "Networking & Cat6", "Access Control / Door Entry", "NVR & Storage", "Other"];
+// Same service list as the New Project intake (admin-shell NP_SERVICES) so new + existing customer
+// intake stay in lockstep — every label maps to a real service_code via the canonical catalog.
+const SERVICES = ["Security Cameras / CCTV", "Commercial Audio", "Networking & Cat6", "Access Control / Door Entry", "NVR & Storage", "Toast / POS Cabling", "Other"];
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
 function AddCustomerModal({ onClose, onAdded }) {

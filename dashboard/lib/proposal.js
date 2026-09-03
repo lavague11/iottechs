@@ -310,6 +310,15 @@ export function blankOption(i) {
 export function blankPayload() {
   return { options: [blankOption(0)], discount: { type: "flat", value: 0 }, pcp_credit: { type: "flat", value: 0 }, payment_plan: "50_50" };
 }
+// A blank proposal already scoped to the project's service line — so a new proposal opens ON the
+// service the customer inquired about (Toast job → Toast POS tab), not an empty/camera default.
+// Items stay empty (the builder / survey import fills them); this just pre-selects the right service.
+export function blankPayloadForService(serviceKey) {
+  const p = blankPayload();
+  const key = PROPOSAL_SERVICES.some((s) => s.key === serviceKey) ? serviceKey : null;
+  if (key) p.options[0].services = [{ key, label: serviceLabel(key), items: [], note: "" }];
+  return p;
+}
 
 // Deposit / payment schedules the office picks as presets. `terms` prints on the proposal.
 export const PAYMENT_PLANS = {

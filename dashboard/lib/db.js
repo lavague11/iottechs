@@ -3,7 +3,7 @@ import { mkdirSync, copyFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
-import { makeAccessId, stageLabel, SERVICE_CODES } from "./spec.js";
+import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint } from "./tool-data.js";
 import { optionTotals } from "./proposal.js";
@@ -2755,10 +2755,10 @@ export function createLeadProject(name, email, phone, address, service, company)
   // Final safety net so a project can always be created.
   if (!user) user = { id: null };
 
-  // Generate unique access_id (type=A, svc=SC for "Security Camera" as default)
-  const svcMap = { "Security Cameras / CCTV": "SC", "Commercial Audio": "AU", "Networking & Cat6": "NW",
-    "Access Control / Door Entry": "AC", "Full System — not sure yet": "SC" };
-  const svc = svcMap[service] || "SC";
+  // Generate unique access_id (type=A). The 2-letter service code comes from the canonical catalog,
+  // which recognizes ANY intake label (Toast → TP, Audio → AU, Storage → ST…) instead of defaulting
+  // everything it doesn't know to cameras (the old bug). Blank/unknown → MX (Other), never SC.
+  const svc = serviceCodeFromText(service);
   const count = (db.prepare("SELECT COUNT(*) as n FROM projects").get()?.n || 0) + 1;
   let accessId = `A${svc}${String(count).toString(36).toUpperCase().padStart(4, "0")}`;
   // Ensure uniqueness

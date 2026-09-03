@@ -8,13 +8,13 @@ import ProposalWorkOrderView from "./proposal-workorder-view";
 // (tech prices only); customer (and staff previewing as customer) get the review surface.
 // Data arrives server-sanitized per role from page.jsx (lib/proposal.js sanitizeProposal) —
 // cost/margin never reach non-staff, and the customer price never reaches a tech.
-export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, viewCount = 0, onShowViews, embedded = false }) {
+export default function ProposalPanel({ accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, viewCount = 0, onShowViews, embedded = false, defaultService }) {
   const staffBuilder = ["admin", "manager", "sales"].includes(cView);
   return (
     <div className="prop-wrap">
       <style>{PROP_CSS}</style>
       {staffBuilder ? (
-        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} customerName={customerName} customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail} embedded={embedded} />
+        <ProposalBuilder accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} customerName={customerName} customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail} embedded={embedded} defaultService={defaultService} />
       ) : cView === "tech" ? (
         <ProposalWorkOrderView accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
