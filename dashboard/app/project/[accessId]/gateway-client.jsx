@@ -2414,6 +2414,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },
       canEdit: ["admin", "manager", "sales", "tech", "customer"].includes(cView) && !previewRole,
       onSave: async (vals) => { const r = await updateProjectInfoAction(lp.access_id, vals); if (r?.ok) setLocalProj((p) => ({ ...p, ...vals })); return r; },
+      // Service line — admin/manager can correct a mis-filed job right from the contact edit.
+      service_code: lp.service_code || "",
+      serviceOptions: ["admin", "manager"].includes(cView) && !previewRole ? SERVICE_CATALOG.map((s) => ({ code: s.code, label: s.label })) : null,
+      onServiceChange: async (code) => { const r = await setProjectServiceAction(lp.access_id, code); if (r?.ok) setLocalProj((p) => ({ ...p, service_code: r.code, service: serviceCodeLabel(r.code) })); return r; },
     };
     // Job Log entries derived from the proposal's own state (not stage_acceptances / project_events),
     // so the proposal signature and each relocation/removal request show up — including ones made
