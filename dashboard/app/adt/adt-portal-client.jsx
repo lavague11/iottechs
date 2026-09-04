@@ -42,7 +42,7 @@ function FreshDeck({ prefill, dashboardHref, isStaff = false }) {
   return (
     <>
       <DeckView stages={stages} idx={idx} onIdx={setIdx} canAdvance={false} customer={null}
-        statusChip={{ label: "New application", color: "#8a8578" }} roleLabel="ADT Monitoring"
+        statusChip={{ label: "New application", color: "var(--dv-meta,#787D84)" }} roleLabel="ADT Monitoring"
         logoHref={dashboardHref || "/"} initialOpenTool={{ 0: 0 }} menu={menu} />
       <style>{CUSTCSS}</style>
     </>
@@ -138,7 +138,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   // Deep link (?open=<stage>) jumps a shared link straight to Apply/Quote/Complete, then gets
   // stripped from the URL so it doesn't stick on refresh (matches the project deck's behaviour).
   const OPEN_MAP = { apply: 0, application: 0, quote: 1, sign: 1, deposit: 1, complete: 2, completion: 2, install: 2 };
-  const openIdxRef = useRef((() => { if (typeof window === "undefined") return null; const o = new URLSearchParams(window.location.search).get("open"); return o != null ? (OPEN_MAP[o.toLowerCase()] ?? null) : null; })());
+  const openIdxRef = useRef((() => { if (typeof window === "undefined") return null; const sp = new URLSearchParams(window.location.search); const o = sp.get("open") || sp.get("stage"); return o != null ? (OPEN_MAP[o.toLowerCase()] ?? null) : null; })());
   const [idx, setIdx] = useState(openIdxRef.current != null ? openIdxRef.current : (done ? 2 : quote ? 1 : 0));
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -364,7 +364,7 @@ const CUSTCSS = `
 .adtc-pref span{display:block;font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:3px}
 .adtc-pref b{color:var(--dv-gold-deep,#A8842F)}
 .adtc-sec-t{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:11px}
-.adtc-btn{height:44px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
+.adtc-btn{height:44px;padding:0 22px;border:none;border-radius:11px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:var(--dv-ink,#101418);font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
 .adtc-btn:disabled{opacity:.55;cursor:default}
 .adtc-signrec{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-raise,#FBFBFA);padding:14px 16px}
 .adtc-signrec-h{font-size:.62rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-bottom:8px}
@@ -404,18 +404,18 @@ const CUSTCSS = `
 .adtc-app-foot i{font-style:normal;font-size:.8rem;color:var(--dv-meta,#787D84);margin-left:auto}
 .adtc-docsbanner{margin-bottom:16px;padding:14px 16px;border-radius:12px;background:#fdf1e3;border:1px solid #f0d0a8;color:#8a4b12}
 .adtc-docsbanner b{display:block;font-size:.95rem;color:#8a4b12}
-.adtc-docsbanner span{display:block;font-size:.9rem;color:#0B0F1A;margin-top:5px}
+.adtc-docsbanner span{display:block;font-size:.9rem;color:var(--dv-ink,#101418);margin-top:5px}
 .adtc-docsbanner em{display:block;font-style:normal;font-size:.82rem;margin-top:7px;color:#8a4b12}
 .adtc-docsbanner a{color:#8a4b12;font-weight:800;text-decoration:none}
 .adtc-docup{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .adtc-docrow{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid #f0d0a8;border-radius:9px;padding:7px 8px 7px 11px;color:#8a4b12;max-width:100%}
-.adtc-docn{font-size:.82rem;font-weight:700;color:#0B0F1A !important;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adtc-docn{font-size:.82rem;font-weight:700;color:var(--dv-ink,#101418) !important;text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .adtc-docx{display:grid;place-items:center;width:22px;height:22px;border:none;background:transparent;color:#8a4b12;cursor:pointer;border-radius:6px}
 .adtc-docx:hover:not(:disabled){background:#f8e3cd}
 .adtc-docadd{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1.5px dashed #e0b483;border-radius:9px;padding:8px 13px;color:#8a4b12;font-size:.82rem;font-weight:800;cursor:pointer}
 .adtc-docadd:hover{border-color:#C9A96E;background:#fffaf2}
 .adtc-docadd.busy{opacity:.6;cursor:default}
-.adtc-docerr{font-size:.8rem;color:#c0392b;font-weight:700;margin-top:7px}
+.adtc-docerr{font-size:.8rem;color:var(--dv-red,#C4553D);font-weight:700;margin-top:7px}
 .adtc-support{margin-top:16px;font-size:.88rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:11px 13px}
 .adtc-support a{color:var(--dv-gold-deep,#A8842F);font-weight:800;text-decoration:none}
 .adtc-muted a{color:var(--dv-gold-deep,#A8842F);font-weight:700;text-decoration:none}
@@ -471,17 +471,17 @@ function PointsRecap({ app }) {
 }
 
 const CSS = `
-.adt-err{margin-top:16px;font-size:.85rem;color:#c0392b;background:#fdecec;border:1px solid #f0c9c9;border-radius:9px;padding:9px 12px}
-.adt-recap{border:1px solid #e4e0d8;border-radius:12px;margin-top:20px;overflow:hidden}
-.adt-recap-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:#faf6ee;font-size:.78rem;font-weight:800;color:#0B0F1A}
-.adt-recap-pts{color:#a3812f}
+.adt-err{margin-top:16px;font-size:.85rem;color:var(--dv-red,#C4553D);background:#fdecec;border:1px solid #f0c9c9;border-radius:9px;padding:9px 12px}
+.adt-recap{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;margin-top:20px;overflow:hidden}
+.adt-recap-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:#faf6ee;font-size:.78rem;font-weight:800;color:var(--dv-ink,#101418)}
+.adt-recap-pts{color:var(--dv-gold-deep,#A8842F)}
 .adt-recap-list{padding:4px 0}
 .adt-recap-row{display:flex;align-items:center;gap:10px;padding:6px 14px;font-size:.86rem}
-.adt-recap-q{font-weight:800;color:#a3812f;min-width:28px}
-.adt-recap-n{flex:1;color:#0B0F1A}
-.adt-recap-p{color:#8a8578;font-weight:600}
-.adt-quote{margin-top:18px;border:1px solid #e4e0d8;border-radius:16px;overflow:hidden;background:#fff}
-.adt-quote-h{padding:13px 16px;background:#0B0F1A;color:#fff;font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-bottom:3px solid #C9A96E}
+.adt-recap-q{font-weight:800;color:var(--dv-gold-deep,#A8842F);min-width:28px}
+.adt-recap-n{flex:1;color:var(--dv-ink,#101418)}
+.adt-recap-p{color:var(--dv-meta,#787D84);font-weight:600}
+.adt-quote{margin-top:18px;border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;overflow:hidden;background:#fff}
+.adt-quote-h{padding:13px 16px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-bottom:3px solid #C9A96E}
 .adt-quote-h span{color:#C9A96E}
 .adt-quote-frame{width:100%;height:640px;border:none;display:block;background:#FAF8F4}
 `

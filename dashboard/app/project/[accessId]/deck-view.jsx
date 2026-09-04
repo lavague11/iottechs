@@ -308,7 +308,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                 ))}
                 {(customer.actions?.length > 0 || customer.canEdit) && (
                   <div className="dv-cust-actions">
-                    {(customer.actions || []).map((a, i) => <a className="dv-mini dv-ico" key={i} href={a.href || undefined} onClick={a.onClick} title={a.label} aria-label={a.label}>{a.icon || a.label}</a>)}
+                    {(customer.actions || []).map((a, i) => a.href
+                      ? <a className="dv-mini dv-ico" key={i} href={a.href} onClick={a.onClick} title={a.label} aria-label={a.label}>{a.icon || a.label}</a>
+                      : <button type="button" className="dv-mini dv-ico" key={i} data-stop onClick={a.onClick} title={a.label} aria-label={a.label}>{a.icon || a.label}</button>)}
                     {customer.canEdit && (
                       <button className="dv-mini dv-ico" data-stop title="Edit" aria-label="Edit" onClick={() => { setCf({ contact_name: customer.contact?.contact_name || "", contact_phone: customer.contact?.contact_phone || "", contact_email: customer.contact?.contact_email || "", address: customer.contact?.address || "", service_code: customer.service_code || "" }); setCustEdit(true); }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>

@@ -641,6 +641,7 @@ function init() {
   if (!adtCols.includes("archived")) db.exec("ALTER TABLE adt_applications ADD COLUMN archived INTEGER DEFAULT 0"); // soft-delete: hidden from lists, kept for audit
   if (!adtCols.includes("verification_doc")) db.exec("ALTER TABLE adt_applications ADD COLUMN verification_doc TEXT"); // commercial business-verification file: JSON {name,type,data(dataURL)}
   if (!adtCols.includes("docs_note")) db.exec("ALTER TABLE adt_applications ADD COLUMN docs_note TEXT"); // when status=needs_docs, which documents the office needs
+  if (!adtCols.includes("deal_quote_emailed_at")) db.exec("ALTER TABLE adt_applications ADD COLUMN deal_quote_emailed_at TEXT"); // set once the "your quote is ready" email goes out, so re-sharing never re-emails
   if (!adtCols.includes("status")) {   // credit/approval lifecycle: submitted → in_review → approved | declined → installed
     db.exec("ALTER TABLE adt_applications ADD COLUMN status TEXT DEFAULT 'submitted'");
     db.exec("UPDATE adt_applications SET status = CASE WHEN stage = 'completed' THEN 'installed' ELSE 'submitted' END WHERE status IS NULL");
@@ -4047,6 +4048,11 @@ export function shareAdtDeal(adtId, on) {
               updated_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE`)
     .run(on ? new Date().toISOString() : null, on ? 1 : 0, String(adtId));
   return getAdtApplication(adtId);
+}
+// Stamp that the "your quote is ready" email has been sent, so a later unshare→re-share never
+// re-emails the customer (deal_shared_at resets on unshare; this flag is permanent).
+export function markAdtQuoteEmailed(adtId) {
+  db.prepare("UPDATE adt_applications SET deal_quote_emailed_at = datetime('now','localtime') WHERE adt_id = ? COLLATE NOCASE").run(String(adtId));
 }
 // Lightweight patch of just the contact fields (name/phone/email/address) — the header's inline
 // edit. Deliberately touches nothing else, so the encrypted SSN/verbal password and the equipment
