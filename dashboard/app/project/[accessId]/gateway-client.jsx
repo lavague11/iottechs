@@ -2384,15 +2384,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "System QR", label: "Activation QR",
             node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
-        // Customer: MERGE Closeout into one full-width page — Final Payment (framed) then the Activation
-        // QR handover (flows) once it exists.
+        // Customer: MERGE Closeout into one full-width page — Final Payment then the Activation QR
+        // handover (once it exists). Both flow FULL LENGTH (documents, not maps): one page scroll,
+        // single card edge — no fixed-height frame with its own inner scrollbar.
         if (cView === "customer") {
           const pay = tools.find((t) => t.name === "Final Payment");
           const qr = tools.find((t) => t.name === "System QR");
           const secs = [];
-          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div><div className="cx-sec-frame"><ScrollActivate>{pay.node}</ScrollActivate></div></section>);
+          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div>{pay.node}</section>);
           if (qr) secs.push(<section className="cx-sec" key="qr"><div className="cx-sec-h">Activation QR</div>{qr.node}</section>);
-          if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged">{secs}</div> }];
+          if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged cx-merged--flow">{secs}</div> }];
         }
         if (["admin", "manager"].includes(cView)) return mergedPage("Closeout", tools) || tools;
         return tools;
