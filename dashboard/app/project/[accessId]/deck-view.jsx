@@ -132,6 +132,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     function onDoc(e) { if (!e.target.closest?.(".dv-cluster")) setMenuOpen(false); }
     document.addEventListener("click", onDoc); return () => document.removeEventListener("click", onDoc);
   }, []);
+  // Switching stages should land you at the TOP of the new stage — not wherever it was last scrolled.
+  useEffect(() => {
+    const active = deckRef.current?.querySelector('.dv-slide:not([aria-hidden="true"]) .dv-scroll');
+    if (active) active.scrollTop = 0;
+  }, [idx]);
 
   const slideStyle = (i) => {
     const d = i - idx;                                  // clamp: no wrap
@@ -537,7 +542,10 @@ const CSS = `
 .dv-readout .pct{font-size:20px;font-weight:700;letter-spacing:-.03em}
 .dv-readout .cap{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-top:5px}
 
-.dv-deck{flex:1 1 auto;position:relative;overflow:hidden;touch-action:pan-y;cursor:default}
+.dv-deck{flex:1 1 auto;position:relative;overflow:hidden;touch-action:pan-y;cursor:default;-webkit-user-select:none;user-select:none}
+/* Dragging to switch stages shouldn't highlight the stage title / stepper letters. Text stays
+   selectable only where you'd actually want it — form fields you type into. */
+.dv-deck input,.dv-deck textarea,.dv-deck [contenteditable]{-webkit-user-select:text;user-select:text}
 .dv-slide{position:absolute;top:0;left:0;height:100%;width:100%;will-change:transform,opacity}
 .dv-pane{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
