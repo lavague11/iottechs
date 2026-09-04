@@ -144,9 +144,12 @@ async function customerContact(accessId) {
   };
 }
 
-function projectLink(accessId) {
+// `open` deep-links the CTA straight to a tool (e.g. "proposal" → opens the proposal document). The
+// project page consumes ?open= on first load then strips it, so the link never sticks on refresh.
+function projectLink(accessId, open) {
   const base = appUrl();
-  return base ? `${base}/project/${accessId}` : null;
+  if (!base) return null;
+  return `${base}/project/${accessId}${open ? `?open=${encodeURIComponent(open)}` : ""}`;
 }
 
 // Send a customer email for a project. content = {heading, intro, lines, ctaLabel}.
@@ -154,7 +157,7 @@ function projectLink(accessId) {
 export async function sendCustomerEmail(accessId, content) {
   const c = await customerContact(accessId);
   if (!c || !c.email) return { ok: false, error: "no-customer-email" };
-  const ctaUrl = projectLink(accessId);
+  const ctaUrl = projectLink(accessId, content.open);
   const payload = {
     heading: content.heading,
     intro: content.intro,
@@ -181,6 +184,7 @@ export const STAGE_EMAIL = {
     intro: "We’ve completed the walkthrough of your property.",
     lines: ["Take a look at the proposed camera placements and let us know they look right — one click to approve."],
     ctaLabel: "Review Survey",
+    open: "survey",
   },
   proposal: {
     subject: "Your proposal is ready",
@@ -188,6 +192,7 @@ export const STAGE_EMAIL = {
     intro: "We’ve put together your system and pricing.",
     lines: ["Review the equipment and total, then approve when you’re ready to move forward."],
     ctaLabel: "Review Proposal",
+    open: "proposal",
   },
   approval_deposit: {
     subject: "Approve & secure your install date",
@@ -195,6 +200,7 @@ export const STAGE_EMAIL = {
     intro: "Your proposal is approved — the last step is signing and your deposit.",
     lines: ["Sign your agreement and submit the deposit to reserve your installation slot."],
     ctaLabel: "Sign & Pay Deposit",
+    open: "deposit",
   },
   payment: {
     subject: "Final balance is ready",
@@ -202,6 +208,7 @@ export const STAGE_EMAIL = {
     intro: "The work is done and your system is live.",
     lines: ["Your final balance is ready to settle whenever you are."],
     ctaLabel: "View Balance",
+    open: "payment",
   },
   completion: {
     subject: "You’re all set — welcome to IOT TECHS",
