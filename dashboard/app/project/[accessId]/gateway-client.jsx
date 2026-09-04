@@ -40,6 +40,25 @@ import { getAcceptancesAction, getLiveSnapshotAction, logCallAction } from "./pr
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
 
+// Click-to-activate guard for a framed iframe tool on the merged stage page. An iframe (survey /
+// mockup) swallows the mouse wheel, so the page can't scroll past it to the next tool. A transparent
+// overlay sits on the iframe: the wheel bubbles to the page (you scroll on through), and a click
+// steps the overlay aside so you can interact. Moving the cursor out re-arms it. The bottom strip is
+// left uncovered so an Approve bar underneath stays one-click.
+function ScrollActivate({ children }) {
+  const [live, setLive] = useState(false);
+  return (
+    <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}
+         onMouseLeave={() => setLive(false)}>
+      {children}
+      {!live && (
+        <button type="button" aria-label="Click to interact" title="Click to interact" onMouseDown={() => setLive(true)}
+                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 52, zIndex: 6, cursor: "pointer", background: "transparent", border: "none", padding: 0 }} />
+      )}
+    </div>
+  );
+}
+
 const money = (n) => "$" + (n || 0).toLocaleString();
 
 // Deck drawer action icons (kept small + inline so the actions read as a clean icon row).
@@ -2134,7 +2153,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {t.map((x, k) => (
             <section className="cx-sec" key={x.name || k}>
               <div className="cx-sec-h">{x.name}</div>
-              {x.heavy ? <div className="cx-sec-frame">{x.node}</div> : x.node}
+              {x.heavy ? <div className="cx-sec-frame"><ScrollActivate>{x.node}</ScrollActivate></div> : x.node}
             </section>
           ))}
         </div>
@@ -2193,8 +2212,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           }
           const merged = (
             <div className="cx-merged">
-              {showSurvey && <section className="cx-sec"><div className="cx-sec-h">Site Survey</div><div className="cx-sec-frame">{all[0].node}</div></section>}
-              {showMockup && <section className="cx-sec"><div className="cx-sec-h">Mockups</div><div className="cx-sec-frame">{all[1].node}</div></section>}
+              {showSurvey && <section className="cx-sec"><div className="cx-sec-h">Site Survey</div><div className="cx-sec-frame"><ScrollActivate>{all[0].node}</ScrollActivate></div></section>}
+              {showMockup && <section className="cx-sec"><div className="cx-sec-h">Mockups</div><div className="cx-sec-frame"><ScrollActivate>{all[1].node}</ScrollActivate></div></section>}
             </div>
           );
           return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
@@ -2252,8 +2271,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           if (propTool || apprTool) {
             const merged = (
               <div className="cx-merged">
-                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div><div className="cx-sec-frame">{propTool.node}</div></section>}
-                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div><div className="cx-sec-frame">{apprTool.node}</div></section>}
+                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div><div className="cx-sec-frame"><ScrollActivate>{propTool.node}</ScrollActivate></div></section>}
+                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div><div className="cx-sec-frame"><ScrollActivate>{apprTool.node}</ScrollActivate></div></section>}
               </div>
             );
             return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
@@ -2368,7 +2387,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const pay = tools.find((t) => t.name === "Final Payment");
           const qr = tools.find((t) => t.name === "System QR");
           const secs = [];
-          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div><div className="cx-sec-frame">{pay.node}</div></section>);
+          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div><div className="cx-sec-frame"><ScrollActivate>{pay.node}</ScrollActivate></div></section>);
           if (qr) secs.push(<section className="cx-sec" key="qr"><div className="cx-sec-h">Activation QR</div>{qr.node}</section>);
           if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged">{secs}</div> }];
         }
