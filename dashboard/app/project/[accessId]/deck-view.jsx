@@ -560,11 +560,17 @@ const CSS = `
 .cx-merged .cx-sec-frame .ss-embed{height:100%;gap:0;padding:0}
 .cx-merged .cx-sec-frame .ss-embed-bar{flex:0 0 auto;padding:13px 18px;border-bottom:1px solid var(--dv-line,#E4E4DF);margin:0;background:var(--dv-raise,#FBFBFA)}
 .cx-merged .cx-sec-frame .ss-embed-frame{flex:1 1 0;min-height:0;height:auto;border-radius:0;background:#fff}
-/* Full-length flow (proposal, approval): no frame, and the tool's own fill wrapper
-   (height:100%;overflow:auto) must grow to content so the PAGE scrolls once — not a second inner
-   scrollbar stacked under the first. Only the tool's outer wrapper is touched (direct child), so its
-   internal menus/dropdowns keep their own overflow. */
+/* Full-length flow (proposal, approval, payment) = ONE seamless page. No section gap, no inner
+   scrollbar, no outer card edge — the tools read as continuous content and the page is the only
+   scroll. The tool's own fill wrapper (height:100%;overflow:auto) grows to content; only that direct
+   wrapper is touched, so internal menus/dropdowns keep their overflow. */
+.cx-merged--flow{gap:0}
 .cx-merged--flow>.cx-sec>div{height:auto!important;overflow:visible!important}
+/* The outer tool card melts into the page — drop its border/radius/shadow/ground so sections flow
+   into one another. Inner content boxes (info rows, payment form) keep their own styling. */
+.cx-merged--flow .prop-wrap{margin:0!important}
+.cx-merged--flow .prop-wrap>.pcv-root,
+.cx-merged--flow .prop-wrap>.prop-card{border:none!important;border-radius:0!important;box-shadow:none!important;background:transparent!important}
 .dv-pane-head{padding:26px 30px 18px;display:flex;align-items:flex-start;gap:14px}
 .dv-stage-name{font-size:24px;font-weight:600;letter-spacing:-.03em}
 .dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:var(--font-mono),"JetBrains Mono",monospace}

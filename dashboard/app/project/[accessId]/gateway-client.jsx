@@ -2145,15 +2145,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // Merge a stage's tools into ONE full-width, always-open page: heavy (full-height) tools get a
     // 74vh framed panel with inner scroll; compact cards flow at natural height. Nothing to click to
     // expand — used for the customer and the admin/manager build view.
+    // Only MAPS (survey/mockup iframes) need a bounded, inner-scrolling frame. Everything else is a
+    // document and flows FULL LENGTH so the whole page scrolls once — no frame, no inner scrollbar,
+    // no card-in-a-card border. A page with no maps gets the seamless flow treatment.
+    const MAP_TOOLS = ["Site Survey", "Mockups"];
     const mergedPage = (name, list) => {
       const t = (list || []).filter((x) => x && x.node);
       if (!t.length) return null;
+      const allDocs = t.every((x) => !MAP_TOOLS.includes(x.name));
       return [{ name, label: name, wide: true, node: (
-        <div className="cx-merged">
+        <div className={`cx-merged${allDocs ? " cx-merged--flow" : ""}`}>
           {t.map((x, k) => (
             <section className="cx-sec" key={x.name || k}>
               <div className="cx-sec-h">{x.name}</div>
-              {x.heavy ? <div className="cx-sec-frame"><ScrollActivate>{x.node}</ScrollActivate></div> : x.node}
+              {MAP_TOOLS.includes(x.name) ? <div className="cx-sec-frame"><ScrollActivate>{x.node}</ScrollActivate></div> : x.node}
             </section>
           ))}
         </div>
