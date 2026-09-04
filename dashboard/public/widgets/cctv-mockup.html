@@ -197,6 +197,7 @@
   <button class="lbnav next" id="lbNext">›</button>
   <div class="lbcap" id="lbCap"></div>
   <button class="lbrm" id="lbRemove">Remove photo</button>
+  <button class="lbrm" id="lbComment" style="display:none">Leave a comment</button>
 </div>
 
 <div class="cvoverlay" id="cvOverlay">
@@ -406,10 +407,11 @@ let lastTile={p:null,i:null};   // tile currently under the cursor — the targe
 function bindCanvas(canvas,page){
   canvas.addEventListener('click',e=>{if(nameEdit.style.display==='block')return;
     const h=tileAt(e,canvas,page);
-    // Read-only (customer): a single tap ANYWHERE on the mockup → leave a comment (tagged to the
-    // camera they hit, or a general note if between tiles). Delayed so a double-tap (→ fullscreen)
-    // cancels it. A comment is the customer's only write.
-    if(IOT_RO){ clearTimeout(clickTimer); clickTimer=setTimeout(()=>postComment(h?h.i:-1),240); return; }
+    // Read-only (customer): a single tap opens the VIEW first — the enlarged camera photo — and the
+    // lightbox carries a "Leave a comment" button so they see what they're commenting on before
+    // typing. A tap on an empty camera (or between tiles) has nothing to view, so it goes straight to
+    // the comment. Delayed so a double-tap (→ fullscreen) cancels it.
+    if(IOT_RO){ clearTimeout(clickTimer); clickTimer=setTimeout(()=>{ if(h&&S.slots[h.i]) openLightbox(h.i); else postComment(h?h.i:-1); },240); return; }
     if(!h)return;
     // Editing: single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A
     // FILLED tile does nothing on single-click — double-click fills the whole phone (1×1 view).
@@ -607,7 +609,11 @@ document.getElementById('count').onchange=e=>{S.count=Math.max(1,Math.min(64,+e.
 let lbIndex=null;
 function filledIndices(){const a=[];for(let i=0;i<S.count;i++)if(S.slots[i])a.push(i);return a;}
 const lightbox=document.getElementById('lightbox'),lbcanvas=document.getElementById('lbcanvas');
-function openLightbox(i){lbIndex=i;lightbox.style.display='flex';renderLightbox();}
+function openLightbox(i){lbIndex=i;lightbox.style.display='flex';
+  // Read-only customers view + comment; only the builder can remove a photo.
+  document.getElementById('lbRemove').style.display=IOT_RO?'none':'';
+  document.getElementById('lbComment').style.display=IOT_RO?'':'none';
+  renderLightbox();}
 function closeLightbox(){lightbox.style.display='none';lbIndex=null;}
 function renderLightbox(){if(lbIndex==null)return;lbcanvas.width=1280;lbcanvas.height=720;
   drawCell(lbcanvas.getContext('2d'),0,0,1280,720,lbIndex,{});
@@ -621,6 +627,8 @@ document.getElementById('lbClose').onclick=closeLightbox;
 document.getElementById('lbPrev').onclick=()=>lbNav(-1);
 document.getElementById('lbNext').onclick=()=>lbNav(1);
 document.getElementById('lbRemove').onclick=()=>{if(lbIndex!=null){S.slots[lbIndex]=undefined;closeLightbox();refreshAll();}};
+// Read-only: comment on the camera you're viewing → hand the anchor to the host, close the view.
+document.getElementById('lbComment').onclick=()=>{const i=lbIndex;closeLightbox();postComment(i);};
 lightbox.addEventListener('click',e=>{if(e.target===lightbox)closeLightbox();});
 document.addEventListener('keydown',e=>{if(lightbox.style.display==='flex'){
   if(e.key==='Escape')closeLightbox();else if(e.key==='ArrowLeft')lbNav(-1);else if(e.key==='ArrowRight')lbNav(1);}});
