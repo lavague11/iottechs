@@ -2252,7 +2252,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Job-site add-ons: staff/tech always; the customer only sees it once an actual change order exists.
         if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!staff || !!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked || cView === "tech"} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in.
