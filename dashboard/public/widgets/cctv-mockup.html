@@ -265,8 +265,12 @@ function drawCell(c,x,y,w,h,i,o){o=o||{};
     osd(c,'No Photos Available',x+w/2,y+h/2+h*0.2,Math.max(11,h*0.068),'#1a1a1a','center','bold','rgba(255,255,255,.55)');
     if(o.interactive)osd(c,'+  tap · drop · paste',x+w/2,y+h-h*0.10,Math.max(9,h*0.05),'rgba(150,124,62,.9)','center','normal','rgba(255,255,255,.45)');}
   const cf=Math.max(11,Math.min(h*0.08,32)),pad=Math.max(7,h*0.05);
-  dot(c,x+pad+cf*0.32,y+pad+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
-  osd(c,nameOf(i),x+pad+cf*0.95,y+pad+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
+  // A cell whose top-left sits on the phone screen's rounded corner would clip its status dot + name —
+  // push the label in past the arc so the green dot and "Camera N" always read in full.
+  let lx=x+pad,ly=y+pad;
+  if(o.frameCorner&&Math.abs(x-o.frameCorner.x)<2&&Math.abs(y-o.frameCorner.y)<2){const cl=o.frameCorner.r*0.62;lx=x+Math.max(pad,cl);ly=y+Math.max(pad,cl);}
+  dot(c,lx+cf*0.32,ly+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
+  osd(c,nameOf(i),lx+cf*0.95,ly+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
   c.restore();
   if(!ph){c.strokeStyle='#c4c9d2';c.lineWidth=1;c.strokeRect(x+.5,y+.5,w-1,h-1);}   // hairline only on empty tiles; real photos stay seamless
   if(o.hover===i){c.save();c.fillStyle='rgba(201,169,110,.2)';c.fillRect(x,y,w,h);
@@ -293,7 +297,8 @@ function renderTo(c,W,H,page,o){
   const g=phoneGeom(W,H);
   roundRect(c,g.px,g.py,g.phW,g.phH,g.rr);c.fillStyle='#0a0a0c';c.fill();c.lineWidth=2;c.strokeStyle='#000';c.stroke();
   roundRect(c,g.sx,g.sy,g.sw,g.sh,g.rr*0.72);c.save();c.clip();c.fillStyle='#FFFFFF';c.fillRect(g.sx,g.sy,g.sw,g.sh);
-  drawGrid(c,g.sx,g.sy,g.sw,g.sh,page,o);c.restore();
+  o.frameCorner={x:g.sx,y:g.sy,r:g.rr*0.72};   // the screen's rounded top-left — labels there must clear the arc
+  drawGrid(c,g.sx,g.sy,g.sw,g.sh,page,o);c.restore();o.frameCorner=null;
   const isW=g.phH*0.038,isH=g.phH*0.34;roundRect(c,g.px+g.bz*0.5,g.py+g.phH/2-isH/2,isW,isH,isW/2);c.fillStyle='#26282d';c.fill();
   const hiW=g.phH*0.038,hiH=g.phH*0.30;roundRect(c,g.px+g.phW-g.bz*0.5-hiW,g.py+g.phH/2-hiH/2,hiW,hiH,hiW/2);c.fillStyle='#26282d';c.fill();}
 
