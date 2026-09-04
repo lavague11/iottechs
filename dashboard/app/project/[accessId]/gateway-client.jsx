@@ -2295,6 +2295,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) });
         }
+        // Customer: MERGE the Install tools into one full-width page — Set Up Your Phone first, then
+        // Job-Site Add-ons (owner order), with shipment tracking on top. These are compact cards, so
+        // they flow at natural height (page scrolls), no fixed frame.
+        if (cView === "customer") {
+          const pick = (n) => tools.find((t) => t.name === n);
+          const secs = [
+            ["Shipment Tracking", pick("Shipment Tracking")],
+            ["Set Up Your Phone", pick("Set Up Your Phone")],
+            ["Job-Site Add-ons", pick("Job-Site Add-ons")],
+          ].filter(([, t]) => t);
+          if (secs.length) {
+            const merged = (
+              <div className="cx-merged">
+                {secs.map(([h, t], k) => <section className="cx-sec" key={k}><div className="cx-sec-h">{h}</div>{t.node}</section>)}
+              </div>
+            );
+            return [{ name: "Install", label: "Install", wide: true, node: merged }];
+          }
+        }
         return tools;
       }
       if (pk === "ph_wrap") {
@@ -2322,6 +2341,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           // Customer only sees the Activation QR once it actually exists — no empty stub.
           tools.push({ name: "System QR", label: "Activation QR",
             node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
+        }
+        // Customer: MERGE Closeout into one full-width page — Final Payment (framed) then the Activation
+        // QR handover (flows) once it exists.
+        if (cView === "customer") {
+          const pay = tools.find((t) => t.name === "Final Payment");
+          const qr = tools.find((t) => t.name === "System QR");
+          const secs = [];
+          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div><div className="cx-sec-frame">{pay.node}</div></section>);
+          if (qr) secs.push(<section className="cx-sec" key="qr"><div className="cx-sec-h">Activation QR</div>{qr.node}</section>);
+          if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged">{secs}</div> }];
         }
         return tools;
       }
