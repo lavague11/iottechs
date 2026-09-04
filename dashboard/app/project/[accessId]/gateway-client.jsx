@@ -69,7 +69,20 @@ const DVI = {
   card: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
   edit: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
   cal: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  share: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
 };
+// Share the project link — native share sheet on mobile, clipboard copy on desktop. The link is the
+// clean project URL (no ?open=/?stage= deep-link params, so it lands on the current stage).
+async function shareProjectLink(accessId, customerName, onCopied) {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.origin}/project/${accessId}`;
+  const data = { title: `IOT TECHS — ${customerName || "Project"} ${accessId}`, text: "View your IOT TECHS project", url };
+  try {
+    if (navigator.share && navigator.canShare?.(data)) { await navigator.share(data); return; }
+  } catch { /* user dismissed the share sheet — fall through to copy */ }
+  try { await navigator.clipboard.writeText(url); onCopied?.(); }
+  catch { window.prompt("Copy this project link:", url); }
+}
 // Build + download a .vcf with the customer's full contact card (name · phone · email · address).
 function downloadVCard(p) {
   const esc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1");
@@ -1526,7 +1539,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
   // ?open=<tool> (share links) → auto-open that tool on the deck once it's loaded (e.g. open the
   // actual proposal document, not just land on the proposal step). Mapped to the deck tool name.
-  const openToolParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("open") : null;
+  // Captured in a ref so it survives the URL strip below — otherwise re-reading window.location after
+  // we clean the URL would null it before DeckView gets a chance to open the tool.
+  const openToolParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("open") : null);
+  const openToolParam = openToolParamRef.current;
   const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment" };
   const openToolOnMount = openToolParam ? (OPEN_TOOL_NAMES[openToolParam.toLowerCase()] || null) : null;
   // Imperative "open this deck tool now" signal (e.g. a "Review & Approve" link that jumps to the
@@ -1534,6 +1550,18 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [deckOpenSignal, setDeckOpenSignal] = useState(null);
   const openDeckTool = (name) => setDeckOpenSignal((s) => ({ name, n: (s?.n || 0) + 1 }));
   const [viewingStage, setViewingStage] = useState(() => stageParamRef.current || projectStage);
+  // Deep links (?stage= / ?open=) position the deck on FIRST load only — the initial state above and
+  // openToolOnMount have already captured them. Strip them from the URL right after so the link does
+  // NOT stick: a refresh then lands on the project's current stage, not permanently back on the
+  // shared one. (Sharing a link opens the target once; navigating away + refresh stays put.)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("open") || u.searchParams.has("stage")) {
+      u.searchParams.delete("open"); u.searchParams.delete("stage");
+      window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+    }
+  }, []);
   // The deck is the ONLY project view now — the classic layout is retired. Render it ALWAYS: as a
   // constant (not post-mount state) so there's no flash of the old view before it swaps in, and no
   // toggle back to classic. (The classic JSX further down is unreachable dead code, left in place.)
@@ -2531,6 +2559,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
         { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSchedule(schedKindNow); } },
         { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
+        { label: "Share", icon: DVI.share, onClick: (e) => { e.preventDefault(); shareProjectLink(lp.access_id, lp.customer, () => showLiveToast("Project link copied")); } },
       ].filter(Boolean),
       // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
       contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },
