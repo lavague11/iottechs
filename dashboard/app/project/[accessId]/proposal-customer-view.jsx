@@ -344,7 +344,8 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           <span className="pcv-fold-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           </span>
-          <span className="pcv-fold-title">System Proposal</span>
+          {/* Title dropped — the "Proposal" stage heading right above already names it. Keep the
+              icon + status chip + actions (the tool-card language). */}
           <span className={`pcv-fold-chip${locked ? " done" : acceptedSet.size > 0 ? " ok" : ""}`}>
             {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
           </span>
