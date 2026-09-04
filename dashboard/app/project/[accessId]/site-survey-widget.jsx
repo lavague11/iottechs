@@ -27,7 +27,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // The redesigned Site Survey tool (chooser → Satellite/Upload/Draw → Place → Angles → Submit).
   // Staff edit; customers get ?ro=1. It persists to its own store (survey2) so the swap doesn't
   // disturb existing "survey" data / downstream consumers while the redesign is wired up.
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}`;
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.

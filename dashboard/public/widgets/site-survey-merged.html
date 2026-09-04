@@ -12,6 +12,7 @@
        color:var(--ink);background:var(--soft);display:flex;flex-direction:column;overflow:hidden}
 
   .top{flex:none;background:#fff;border-bottom:1px solid var(--line);padding:7px 16px;display:flex;align-items:center;gap:14px}
+  body.embed .top{display:none}
   .brand{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
   .ident{display:flex;align-items:baseline;min-width:0}
   .top .job{font-size:14px;font-weight:600}
@@ -500,6 +501,10 @@
     var PID = new URLSearchParams(location.search).get("project") || "";
     var RO = new URLSearchParams(location.search).get("ro")==="1";   // customer read-only view
     if(RO) document.body.classList.add("ro");
+    // Embedded in the project deck: the deck already shows the brand, job, address + status, so the
+    // widget's own top bar is pure redundancy — hide it (and tell the satellite tool to drop its logo).
+    var EMB = new URLSearchParams(location.search).get("embed")==="1";
+    if(EMB) document.body.classList.add("embed");
     var projectAddress = "";
     function cityState(a){ var p=String(a||"").split(",").map(function(s){return s.trim();});
       if(p.length>=3){ var st=(p[2]||"").split(" ")[0]; return p[1]+(st?", "+st:""); } return a||""; }
@@ -511,7 +516,7 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"");
+    var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
     var DRAW_SRC="draw-floorplan.html"+(PID?"?project="+encodeURIComponent(PID):"");
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
