@@ -11,7 +11,7 @@ import { addToolNoteAction, getToolNotesAction } from "./proposal-actions";
 // Props: accessId, scope ("survey"|"mockup"|"portal"), role, preview, anchor (the tapped item or
 // null), onClose. When `anchor` is set the add-toast pops; the grouped thread list always renders
 // (only when there ARE comments) so staff can act on them.
-export default function ToolComments({ accessId, scope, role, preview, anchor, onClose, hideGeneral = false }) {
+export default function ToolComments({ accessId, scope, role, preview, anchor, onClose, hideGeneral = false, addAction = addToolNoteAction, getAction = getToolNotesAction }) {
   const [notes, setNotes] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,8 +23,8 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
   const showGeneral = isCustomer && !preview && !hideGeneral;
 
   const load = useCallback(() => {
-    getToolNotesAction(accessId, scope).then((r) => { if (r?.notes) setNotes(r.notes); }).catch(() => {});
-  }, [accessId, scope]);
+    getAction(accessId, scope).then((r) => { if (r?.notes) setNotes(r.notes); }).catch(() => {});
+  }, [accessId, scope, getAction]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setText(""); }, [anchor]);
 
@@ -32,7 +32,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
     const t = text.trim();
     if (!t || busy || preview) return;
     setBusy(true);
-    const r = await addToolNoteAction(accessId, scope, anchor != null ? String(anchor) : null, t);
+    const r = await addAction(accessId, scope, anchor != null ? String(anchor) : null, t);
     setBusy(false);
     if (r?.ok) { setNotes(r.notes); setText(""); }
   }
@@ -42,7 +42,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
     const t = genText.trim();
     if (!t || genBusy || preview) return;
     setGenBusy(true);
-    const r = await addToolNoteAction(accessId, scope, null, t);
+    const r = await addAction(accessId, scope, null, t);
     setGenBusy(false);
     if (r?.ok) { setNotes(r.notes); setGenText(""); }
   }

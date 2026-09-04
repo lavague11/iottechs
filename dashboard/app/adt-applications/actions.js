@@ -165,7 +165,13 @@ export async function shareAdtDealAction(adtId, on) {
   const app = getAdtApplication(adtId);
   if (!app) return { error: "Application not found." };
   if (on && !app.deal_json) return { error: "Price the deal before sharing it." };
+  const wasShared = !!app.deal_shared_at;
   shareAdtDeal(adtId, !!on);
+  // First time the quote is shared → email the customer "your quote is ready" with a deep link to the
+  // Quote stage. Fire-and-forget; never block or fail the share on an email hiccup.
+  if (on && !wasShared) {
+    try { const { emailAdtQuoteReady } = await import("../../lib/email"); emailAdtQuoteReady(getAdtApplication(adtId)).catch(() => {}); } catch {}
+  }
   revalidatePath("/adt-applications");
   return { ok: true, shared: !!on };
 }

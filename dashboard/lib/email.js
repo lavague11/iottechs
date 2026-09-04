@@ -581,6 +581,26 @@ const ADT_WINDOWS = {
   "Afternoon (12pm–4pm)": { time: "12:00", duration: 240 },
   "Evening (4pm–7pm)":    { time: "16:00", duration: 180 },
 };
+// ADT quote shared with the customer → a "your quote is ready" email that deep-links straight to the
+// Quote stage of their ADT portal (parity with the project-side proposal-ready email). Gated on
+// RESEND_API_KEY like every other send.
+export async function emailAdtQuoteReady(app) {
+  try {
+    if (!emailEnabled()) return { ok: false, error: "email-off" };
+    if (!app?.email || !app?.adt_id) return { ok: false, error: "no-target" };
+    const ctaUrl = `${appUrl()}/adt?id=${encodeURIComponent(app.adt_id)}&open=quote`;
+    const payload = {
+      heading: "Your ADT quote is ready to review",
+      intro: "We’ve put together your monitoring plan and equipment pricing.",
+      lines: ["Review your quote, then sign to approve it and we’ll schedule your installation."],
+      ctaLabel: "Review Quote",
+      ctaUrl,
+      footNote: "Reply to this email if you have any questions.",
+    };
+    return await sendEmail({ to: app.email, subject: "Your ADT quote is ready", html: renderEmail(payload), text: plainText(payload) });
+  } catch (e) { return { ok: false, error: e?.message || String(e) }; }
+}
+
 export async function sendAdtAppointmentEmail(app, { rescheduling = false, inviteeEmails = [] } = {}) {
   try {
     if (!emailEnabled()) return { ok: false, error: "email-off" };

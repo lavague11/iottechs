@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { createAdtApplication, acceptAdtDeal, signAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc, setAdtStatus } from "../../lib/db";
+import { createAdtApplication, acceptAdtDeal, signAdtDeal, getAdtApplication, verifyUserByCredential, getPrimaryAdmin, getUserById, addAdtCustomerDoc, removeAdtCustomerDoc, setAdtStatus, addProjectNote, getScopedNotes } from "../../lib/db";
 import { adtSummary } from "../../lib/adt";
 import { makeAccessToken, accessTtlFor, makeToken, parseToken, parseAccessToken } from "../../lib/auth";
 
@@ -166,4 +166,42 @@ export async function signAdtQuoteAction(adtId, sig) {
   if (!sig?.data) return { error: "A signature is required." };
   signAdtDeal(adtId, { name, data: sig.data });
   return { ok: true };
+}
+
+// Who's acting on this ADT account (role + display name) — mirrors canAccessAdt but returns the actor
+// so a comment can be attributed. Null when the visitor isn't authorized.
+async function adtActor(rec) {
+  const jar = await cookies();
+  const sess = jar.get("iot_session")?.value ? await parseToken(jar.get("iot_session").value) : null;
+  if (sess && STAFF.has(sess.role)) return { role: sess.role, name: sess.name || sess.email || "Staff" };
+  const accessRaw = jar.get("iot_access")?.value;
+  const access = accessRaw ? await parseAccessToken(accessRaw) : null;
+  if (access && String(access.accessId) === String(rec.adt_id)) return { role: access.role || "customer", name: rec.name || "Customer" };
+  if (sess?.role === "customer") {
+    const u = sess.id ? getUserById(sess.id) : null;
+    const emailOwns = sess.email && rec.email && sess.email.trim().toLowerCase() === rec.email.trim().toLowerCase();
+    const phoneOwns = digits(u?.phone).length >= 7 && digits(u?.phone) === digits(rec.phone);
+    if (emailOwns || phoneOwns) return { role: "customer", name: sess.name || rec.name || "Customer" };
+  }
+  return null;
+}
+
+// Customer comment thread on the ADT portal (parity with the project deck's tap-to-comment). Signature
+// matches addToolNoteAction/getToolNotesAction so <ToolComments> can use these via its action props.
+// `scope`/`anchor` are accepted for signature compatibility; ADT notes always store under scope "adt".
+export async function addAdtNoteAction(adtId, _scope, anchor, body) {
+  const rec = getAdtApplication(adtId);
+  if (!rec) return { error: "Application not found." };
+  const actor = await adtActor(rec);
+  if (!actor) return { error: "Not authorized." };
+  const text = String(body || "").trim();
+  if (!text) return { error: "Write a comment first." };
+  const notes = addProjectNote(adtId, { role: actor.role, name: actor.name, body: text, scope: "adt", anchor: anchor || null });
+  return { ok: true, notes };
+}
+export async function getAdtNotesAction(adtId) {
+  const rec = getAdtApplication(adtId);
+  if (!rec) return { notes: [] };
+  if (!(await canAccessAdt(rec))) return { notes: [] };
+  return { notes: getScopedNotes(adtId, "adt") };
 }

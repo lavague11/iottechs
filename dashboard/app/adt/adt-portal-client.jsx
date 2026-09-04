@@ -4,9 +4,10 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adtSummary, adtStatusMeta } from "../../lib/adt";
 import { fmtSignStamp } from "../../lib/proposal";
-import { signAdtQuoteAction, lockAdtAction, uploadAdtDocAction, removeAdtDocAction } from "./actions";
+import { signAdtQuoteAction, lockAdtAction, uploadAdtDocAction, removeAdtDocAction, addAdtNoteAction, getAdtNotesAction } from "./actions";
 import DeckView from "../project/[accessId]/deck-view";
 import ProposalSignModal from "../project/[accessId]/proposal-sign-modal";
+import ToolComments from "../project/[accessId]/tool-comments";
 import AdtIntake from "./adt-intake";
 import AdtGate from "./adt-gate";
 
@@ -60,7 +61,19 @@ const DVI = {
   call: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
   mail: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>,
   dir: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
+  share: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
 };
+
+// Share the ADT project link — native share sheet on mobile, clipboard copy on desktop. Uses the
+// clean /adt?id= URL (matches the deck's shareProjectLink behaviour on the project side).
+async function shareAdtLink(adtId, name, onCopied) {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.origin}/adt?id=${encodeURIComponent(adtId)}`;
+  const data = { title: `IOT TECHS — ${name || "ADT"} ${adtId}`, text: "View your ADT monitoring project", url };
+  try { if (navigator.share && navigator.canShare?.(data)) { await navigator.share(data); return; } } catch { /* dismissed → copy */ }
+  try { await navigator.clipboard.writeText(url); onCopied?.(); }
+  catch { window.prompt("Copy this link:", url); }
+}
 
 // Customer SIGNS the quote staff shared with them — the required step before we schedule. Same
 // signature tool as the proposal (typed name → cursive PNG), same Eastern-time stamp on the record.
@@ -122,8 +135,22 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   const prefDays = app.pref_days || [], prefWins = app.pref_windows || [], asap = !!app.asap;
   const hasPrefs = prefDays.length > 0 || prefWins.length > 0 || asap;
   const emerg = (app.emergency || []).filter((c) => c && (c.name || c.phone));
-  const [idx, setIdx] = useState(done ? 2 : quote ? 1 : 0);
+  // Deep link (?open=<stage>) jumps a shared link straight to Apply/Quote/Complete, then gets
+  // stripped from the URL so it doesn't stick on refresh (matches the project deck's behaviour).
+  const OPEN_MAP = { apply: 0, application: 0, quote: 1, sign: 1, deposit: 1, complete: 2, completion: 2, install: 2 };
+  const openIdxRef = useRef((() => { if (typeof window === "undefined") return null; const o = new URLSearchParams(window.location.search).get("open"); return o != null ? (OPEN_MAP[o.toLowerCase()] ?? null) : null; })());
+  const [idx, setIdx] = useState(openIdxRef.current != null ? openIdxRef.current : (done ? 2 : quote ? 1 : 0));
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("open") || u.searchParams.has("stage")) {
+      u.searchParams.delete("open"); u.searchParams.delete("stage");
+      window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+    }
+  }, []);
   const [locked, setLocked] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { if (!copied) return; const t = setTimeout(() => setCopied(false), 1800); return () => clearTimeout(t); }, [copied]);
   const telHref = `tel:${SUPPORT_PHONE.replace(/\D/g, "")}`;
 
   // Needs-docs uploads — the customer sends the requested documents right here.
@@ -229,6 +256,13 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
 
         <div className="adtc-app-foot"><span>Estimated total</span><b>${summary.price.toLocaleString()}</b><i>{summary.points} pt{summary.points === 1 ? "" : "s"} · {summary.count} item{summary.count === 1 ? "" : "s"}</i></div>
       </div>
+      {/* Customer comment thread — parity with the project deck. Their only write here: leave a note /
+          question for the office, who see the thread on the staff side. */}
+      <div className="adtc-comments">
+        <div className="adtc-sec-t">Questions or comments</div>
+        <ToolComments accessId={app.adt_id} scope="adt" role="customer" preview={false} anchor={null}
+          addAction={addAdtNoteAction} getAction={getAdtNotesAction} />
+      </div>
     </div>
   );
   const quoteNode = quote
@@ -287,6 +321,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
       app.phone && { label: "Call", icon: DVI.call, href: `tel:${app.phone}` },
       app.email && { label: "Message", icon: DVI.mail, href: `mailto:${app.email}` },
       app.address && { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}` },
+      { label: "Share", icon: DVI.share, onClick: (e) => { e.preventDefault(); shareAdtLink(app.adt_id, app.name, () => setCopied(true)); } },
     ].filter(Boolean),
   };
 
@@ -311,6 +346,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
           { label: "Start another application", onClick: () => router.push("/adt") },
         ]}
       />
+      {copied && <div className="adtc-toast">Link copied</div>}
       <style>{CSS}</style>
       <style>{CUSTCSS}</style>
     </>
@@ -383,6 +419,10 @@ const CUSTCSS = `
 .adtc-support{margin-top:16px;font-size:.88rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:11px 13px}
 .adtc-support a{color:var(--dv-gold-deep,#A8842F);font-weight:800;text-decoration:none}
 .adtc-muted a{color:var(--dv-gold-deep,#A8842F);font-weight:700;text-decoration:none}
+.adtc-comments{margin:20px 18px 4px;padding-top:16px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.adtc-comments .adtc-sec-t{margin-bottom:10px}
+.adtc-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:11000;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;padding:11px 20px;border-radius:100px;box-shadow:0 12px 34px rgba(16,20,24,.28);animation:adtcToastIn .22s ease}
+@keyframes adtcToastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 `;
 
 // The customer's shared quote — the ADT Tool in locked, read-only Cust view. Sanitized upstream so
