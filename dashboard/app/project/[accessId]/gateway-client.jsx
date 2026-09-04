@@ -2123,6 +2123,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Wired stage-by-stage: Consulting is real; the other phases scaffold in as we port.
   // ─────────────────────────────────────────────────────────────────────────────
   if (deckMode) {
+    // Merge a stage's tools into ONE full-width, always-open page: heavy (full-height) tools get a
+    // 74vh framed panel with inner scroll; compact cards flow at natural height. Nothing to click to
+    // expand — used for the customer and the admin/manager build view.
+    const mergedPage = (name, list) => {
+      const t = (list || []).filter((x) => x && x.node);
+      if (!t.length) return null;
+      return [{ name, label: name, wide: true, node: (
+        <div className="cx-merged">
+          {t.map((x, k) => (
+            <section className="cx-sec" key={x.name || k}>
+              <div className="cx-sec-h">{x.name}</div>
+              {x.heavy ? <div className="cx-sec-frame">{x.node}</div> : x.node}
+            </section>
+          ))}
+        </div>
+      ) }];
+    };
     const deckToolsFor = (pk) => {
       if (pk === "ph_survey") {
         // Server tool-meta + the widget's live "has data" signal → drives the Submit/Approve bar.
@@ -2182,6 +2199,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           );
           return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
         }
+        if (["admin", "manager"].includes(cView)) return mergedPage("Consulting", all) || all;
         return all;
       }
       if (pk === "ph_proposal") {
@@ -2241,6 +2259,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
           }
         }
+        if (["admin", "manager"].includes(cView) && tools.length) return mergedPage("Proposal", tools) || tools;
         return tools.length ? tools : [{ name: "Proposal", label: "—" }];
       }
       if (pk === "ph_install") {
@@ -2314,6 +2333,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return [{ name: "Install", label: "Install", wide: true, node: merged }];
           }
         }
+        if (["admin", "manager"].includes(cView)) return mergedPage("Install", tools) || tools;
         return tools;
       }
       if (pk === "ph_wrap") {
@@ -2352,6 +2372,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           if (qr) secs.push(<section className="cx-sec" key="qr"><div className="cx-sec-h">Activation QR</div>{qr.node}</section>);
           if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged">{secs}</div> }];
         }
+        if (["admin", "manager"].includes(cView)) return mergedPage("Closeout", tools) || tools;
         return tools;
       }
       return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
