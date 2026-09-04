@@ -2269,10 +2269,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const propTool = tools.find((t) => t.name === "Proposal");
           const apprTool = tools.find((t) => t.name === "Approval & Deposit");
           if (propTool || apprTool) {
+            // Proposal + Approval are documents, not maps — render them FULL LENGTH (natural height),
+            // so the whole page scrolls once. No fixed-height frame (that gave each its own inner
+            // scrollbar, two stacked) and no extra border (the tool is already its own card).
             const merged = (
-              <div className="cx-merged">
-                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div><div className="cx-sec-frame"><ScrollActivate>{propTool.node}</ScrollActivate></div></section>}
-                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div><div className="cx-sec-frame"><ScrollActivate>{apprTool.node}</ScrollActivate></div></section>}
+              <div className="cx-merged cx-merged--flow">
+                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div>{propTool.node}</section>}
+                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div>{apprTool.node}</section>}
               </div>
             );
             return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
