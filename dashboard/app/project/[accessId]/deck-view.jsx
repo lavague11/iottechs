@@ -348,14 +348,14 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
               {s.completion ? (
                 <div className="dv-scroll">{s.completion}</div>
               ) : (
-                  <div className="dv-scroll">
+                  <div className={`dv-scroll${(s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide) ? " dv-scroll--wide" : ""}`}>
                     {(() => {
                       const _tools = s.tools || [];
                       // A stage with a single inline tool shows its content directly, full-width —
                       // no pointless expand/collapse on the only thing there. (Heavy tools still
-                      // launch full-screen on tap.)
+                      // launch full-screen on tap.) `wide` lets a merged stage page span the page.
                       if (_tools.length === 1 && _tools[0].node && !_tools[0].heavy) {
-                        return <div className="dv-solo" data-stop>{_tools[0].node}</div>;
+                        return <div className={`dv-solo${_tools[0].wide ? " dv-solo--wide" : ""}`} data-stop>{_tools[0].node}</div>;
                       }
                       return _tools.map((t, ti) => {
                       const open = openTool[i] === ti;
@@ -542,6 +542,16 @@ const CSS = `
 .dv-slide{position:absolute;top:0;left:0;height:100%;width:100%;will-change:transform,opacity}
 .dv-pane{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
+/* A merged stage page (wide) uses the full deck width instead of the 840px reading column. */
+.dv-scroll.dv-scroll--wide{max-width:1180px}
+.dv-solo--wide{margin:0}
+/* Stacked merged sections: each tool sits in its own full-width framed panel, always open. */
+.cx-merged{display:flex;flex-direction:column;gap:22px}
+.cx-sec{display:flex;flex-direction:column}
+.cx-sec-h{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 2px 10px}
+.cx-sec-frame{position:relative;height:74vh;min-height:420px;border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;overflow:hidden;background:var(--dv-raise,#FBFBFA);display:flex;flex-direction:column}
+.cx-sec-frame>*{flex:1;min-height:0}
+@media (max-width:760px){.cx-sec-frame{height:70vh;border-radius:12px}}
 .dv-pane-head{padding:26px 30px 18px;display:flex;align-items:flex-start;gap:14px}
 .dv-stage-name{font-size:24px;font-weight:600;letter-spacing:-.03em}
 .dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:var(--font-mono),"JetBrains Mono",monospace}

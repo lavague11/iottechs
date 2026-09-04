@@ -2166,14 +2166,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) },
         ];
-        // Customers see the consulting tools — a survey/mockup with nothing to review yet renders as
-        // a grayed, non-clickable stub (node dropped) instead of disappearing.
+        // Customer: MERGE the consulting tools into one full-width page — Site Survey and Mockups
+        // stacked and always open, no click-to-expand. Each keeps its own inline Approve bar. Nothing
+        // to review yet → fall back to the grayed, non-clickable stub rows.
         if (cView === "customer") {
-          return all
-            .map((t) =>
-              ((t.name === "Site Survey" && !svMetaEff.has) || (t.name === "Mockups" && !mkMetaEff.has))
-                ? { ...t, node: null }
-                : t);
+          const showSurvey = svMetaEff.has, showMockup = mkMetaEff.has;
+          if (!showSurvey && !showMockup) {
+            return all.map((t) => ({ ...t, node: null }));
+          }
+          const merged = (
+            <div className="cx-merged">
+              {showSurvey && <section className="cx-sec"><div className="cx-sec-h">Site Survey</div><div className="cx-sec-frame">{all[0].node}</div></section>}
+              {showMockup && <section className="cx-sec"><div className="cx-sec-h">Mockups</div><div className="cx-sec-frame">{all[1].node}</div></section>}
+            </div>
+          );
+          return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
         }
         return all;
       }
