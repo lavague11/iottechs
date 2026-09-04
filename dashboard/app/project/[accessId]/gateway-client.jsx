@@ -2227,6 +2227,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) });
         }
+        // Customer: MERGE Proposal + Approval & Deposit into one full-width page, both always open.
+        if (cView === "customer") {
+          const propTool = tools.find((t) => t.name === "Proposal");
+          const apprTool = tools.find((t) => t.name === "Approval & Deposit");
+          if (propTool || apprTool) {
+            const merged = (
+              <div className="cx-merged">
+                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div><div className="cx-sec-frame">{propTool.node}</div></section>}
+                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div><div className="cx-sec-frame">{apprTool.node}</div></section>}
+              </div>
+            );
+            return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
+          }
+        }
         return tools.length ? tools : [{ name: "Proposal", label: "—" }];
       }
       if (pk === "ph_install") {
