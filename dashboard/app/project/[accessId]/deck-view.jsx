@@ -340,15 +340,15 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
         {stages.map((s, i) => (
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
-            <div className={`dv-pane${(s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide) ? " dv-wide" : ""}`}>
+            <div className={`dv-pane${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-wide" : ""}`}>
               <div className="dv-pane-head">
                 <div className="dv-stage-name">{s.name}</div>
                 <span className={`dv-flag f-${(s.pill || "").toLowerCase()}`}>{s.pill}</span>
               </div>
               {s.completion ? (
-                <div className="dv-scroll">{s.completion}</div>
+                <div className={`dv-scroll${s.wide ? " dv-scroll--wide" : ""}`}>{s.completion}</div>
               ) : (
-                  <div className={`dv-scroll${(s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide) ? " dv-scroll--wide" : ""}`}>
+                  <div className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
                     {(() => {
                       const _tools = s.tools || [];
                       // A stage with a single inline tool shows its content directly, full-width —

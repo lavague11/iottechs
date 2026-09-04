@@ -10,14 +10,19 @@ import UnlockPatternReveal from "./unlock-pattern-reveal";
 export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, loggedIn = false, onUnlock, onClose }) {
   // Which extra screens this guide uses. A plain how-to guide turns them all off and is just steps.
   const askPlatform = !!flow.askPlatform;
-  const needsSystem = !!flow.needsSystem;
+  const needsSystemFlag = !!flow.needsSystem;
+  // Opened FROM a project page (?project=) with the QR already resolved server-side → we know their
+  // system. Don't ask for Project ID + PIN; pre-select it and jump straight to the steps/QR. The
+  // Project-ID/PIN lookup is only for the standalone/support entry, where we have no project context.
+  const preResolved = (needsSystemFlag && projectRef && (projects || []).find((p) => p.system_qr)) || null;
+  const needsSystem = needsSystemFlag && !preResolved;
   const wantConsent = !!flow.consent;
   const wantAddMore = !!flow.addMore;
   const hasIntro    = askPlatform || needsSystem;
   const [phase, setPhase]     = useState(hasIntro ? "ask" : "steps");
   const [qi, setQi]           = useState(askPlatform ? 0 : 1);  // 0 = phone, 1 = which system
   const [platform, setPlatform] = useState(null);  // 'ios' | 'android'
-  const [system, setSystem]   = useState(null);     // the system they picked (drives the password)
+  const [system, setSystem]   = useState(preResolved || null);   // the system they picked (drives the password)
   const [i, setI]             = useState(0);        // step index
   const [dir, setDir]         = useState(1);        // slide direction for entry animation
   const [orient, setOrient]   = useState("portrait"); // portrait | landscape (global view toggle)

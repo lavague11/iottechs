@@ -2157,7 +2157,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className={`cx-merged${allDocs ? " cx-merged--flow" : ""}`}>
           {t.map((x, k) => (
             <section className="cx-sec" key={x.name || k}>
-              <div className="cx-sec-h">{x.name}</div>
+              {/* The FIRST section's label just echoes the stage title above it — drop it. Later
+                  sections keep their label so they read as distinct panels. */}
+              {k > 0 && <div className="cx-sec-h">{x.name}</div>}
               {MAP_TOOLS.includes(x.name) ? <div className="cx-sec-frame"><ScrollActivate>{x.node}</ScrollActivate></div> : x.node}
             </section>
           ))}
@@ -2215,10 +2217,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           if (!showSurvey && !showMockup) {
             return all.map((t) => ({ ...t, node: null }));
           }
+          const csecs = [];
+          if (showSurvey) csecs.push(["Site Survey", all[0].node]);
+          if (showMockup) csecs.push(["Mockups", all[1].node]);
           const merged = (
             <div className="cx-merged">
-              {showSurvey && <section className="cx-sec"><div className="cx-sec-h">Site Survey</div><div className="cx-sec-frame"><ScrollActivate>{all[0].node}</ScrollActivate></div></section>}
-              {showMockup && <section className="cx-sec"><div className="cx-sec-h">Mockups</div><div className="cx-sec-frame"><ScrollActivate>{all[1].node}</ScrollActivate></div></section>}
+              {csecs.map(([h, node], k) => (
+                <section className="cx-sec" key={k}>
+                  {k > 0 && <div className="cx-sec-h">{h}</div>}
+                  <div className="cx-sec-frame"><ScrollActivate>{node}</ScrollActivate></div>
+                </section>
+              ))}
             </div>
           );
           return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
@@ -2277,10 +2286,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             // Proposal + Approval are documents, not maps — render them FULL LENGTH (natural height),
             // so the whole page scrolls once. No fixed-height frame (that gave each its own inner
             // scrollbar, two stacked) and no extra border (the tool is already its own card).
+            const psecs = [];
+            if (propTool) psecs.push(["Proposal", propTool.node]);
+            if (apprTool) psecs.push(["Approval & Deposit", apprTool.node]);
             const merged = (
               <div className="cx-merged cx-merged--flow">
-                {propTool && <section className="cx-sec"><div className="cx-sec-h">Proposal</div>{propTool.node}</section>}
-                {apprTool && <section className="cx-sec"><div className="cx-sec-h">Approval &amp; Deposit</div>{apprTool.node}</section>}
+                {psecs.map(([h, node], k) => (
+                  <section className="cx-sec" key={k}>{k > 0 && <div className="cx-sec-h">{h}</div>}{node}</section>
+                ))}
               </div>
             );
             return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
@@ -2296,8 +2309,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
         // Install scheduling moved to the contact action bar + the header chip (openSchedule) — no tool card.
         if (staff || cView === "customer") {
-          // Tracking only appears once the office actually posts a shipment — no empty stub for the customer.
-          const hasTracking = staff || toolMeta?.tracking?.count > 0;
+          // Shipment Tracking ARCHIVED (owner, 2026-09-04) — no business need to collect tracking for now.
+          // Kept in code for later; just not surfaced as a deck tool. Flip the flag to bring it back.
+          const SHIPMENT_TRACKING_ARCHIVED = true;
+          const hasTracking = !SHIPMENT_TRACKING_ARCHIVED && (staff || toolMeta?.tracking?.count > 0);
           if (hasTracking) {
             tools.push({ name: "Shipment Tracking", label: "Tracking",
               node: <div style={pad}><ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} /></div> });
@@ -2333,7 +2348,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   </span>
                   <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--dv-ink,#101418)" }}>Set up your cameras on your phone</div>
                   <div style={{ fontSize: ".9rem", color: "var(--dv-meta,#787D84)", maxWidth: 360, lineHeight: 1.5 }}>A quick guided walkthrough — install the app, scan your activation code, and see your cameras live. Takes about 5 minutes.</div>
-                  <a href="/guide/mobile-setup"
+                  <a href={`/guide/mobile-setup?project=${encodeURIComponent(lp.access_id)}`}
                      style={{ marginTop: 4, textDecoration: "none", height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", borderRadius: 10, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontWeight: 800, fontSize: ".92rem" }}>
                     Start setup guide →
                   </a>
@@ -2354,7 +2369,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           if (secs.length) {
             const merged = (
               <div className="cx-merged">
-                {secs.map(([h, t], k) => <section className="cx-sec" key={k}><div className="cx-sec-h">{h}</div>{t.node}</section>)}
+                {secs.map(([h, t], k) => <section className="cx-sec" key={k}>{k > 0 && <div className="cx-sec-h">{h}</div>}{t.node}</section>)}
               </div>
             );
             return [{ name: "Install", label: "Install", wide: true, node: merged }];
@@ -2395,10 +2410,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (cView === "customer") {
           const pay = tools.find((t) => t.name === "Final Payment");
           const qr = tools.find((t) => t.name === "System QR");
-          const secs = [];
-          if (pay) secs.push(<section className="cx-sec" key="pay"><div className="cx-sec-h">Final Payment</div>{pay.node}</section>);
-          if (qr) secs.push(<section className="cx-sec" key="qr"><div className="cx-sec-h">Activation QR</div>{qr.node}</section>);
-          if (secs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: <div className="cx-merged cx-merged--flow">{secs}</div> }];
+          const wsecs = [];
+          if (pay) wsecs.push(["Final Payment", pay.node]);
+          if (qr) wsecs.push(["Activation QR", qr.node]);
+          if (wsecs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: (
+            <div className="cx-merged cx-merged--flow">
+              {wsecs.map(([h, node], k) => <section className="cx-sec" key={k}>{k > 0 && <div className="cx-sec-h">{h}</div>}{node}</section>)}
+            </div>
+          ) }];
         }
         if (["admin", "manager"].includes(cView)) return mergedPage("Closeout", tools) || tools;
         return tools;
@@ -2464,11 +2483,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const mark = markForState(phaseState(p.key, i));
       return {
         name: p.label,
-        pill: phaseStatusWord(p.key),
+        // Completion reads "Complete" once the project is actually done — not the perpetual "Finalizing".
+        pill: (isComplete && projCompleted) ? "Complete" : phaseStatusWord(p.key),
         pct,
         mark,
         tint: isComplete ? "green" : p.key === "ph_survey" ? "blue" : "gold",
-        // Completion is a read-only wrap-up — render the panel inline, no tool rows / advance.
+        // Completion is a full-width, read-only wrap-up page — no tool rows / advance.
+        wide: isComplete || undefined,
         completion: isComplete ? (
           <div style={{ padding: "4px 2px 20px" }}>
             <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={!!previewRole || cView === "tech"}
