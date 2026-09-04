@@ -34,6 +34,12 @@ export async function POST(req) {
   // floor-plan mode may append a short, sanitized label list to name each space.
   const mode = inForm.get("mode") === "floorplan" ? "floorplan" : "aerial";
   let prompt = promptFor(mode), labels = "";
+  // Hard guardrail appended to EVERY aerial enhance — even an admin override that forgot it — so the
+  // model can never invent a pool/water feature that isn't in the original (a recurring failure was
+  // pools appearing in the yard or a neighbour's).
+  if (mode === "aerial") {
+    prompt += " ABSOLUTE RULE, overrides everything above if in conflict: NEVER add, paint, draw or imagine a pool, hot tub, pond, fountain or any water feature anywhere in the image — including neighbouring yards — unless one is clearly, unmistakably already present in this exact original photo. When unsure, do NOT add it. Do not invent any structure, building or feature that is not in the original.";
+  }
   if (mode === "floorplan") {
     labels = String(inForm.get("labels") || "").replace(/[\r\n]+/g, " ").trim().slice(0, 400);
     if (labels) prompt += ` The labels are: ${labels}.`;
