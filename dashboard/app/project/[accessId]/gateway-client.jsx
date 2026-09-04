@@ -2444,7 +2444,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
-        menu={cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []}
+        menu={[
+          ...(cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []),
+          ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
+        ]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
         log={deckLog}
         previewRole={previewRole}

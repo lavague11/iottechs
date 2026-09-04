@@ -38,7 +38,7 @@ const fmtPhone = (v) => {
   return v;
 };
 
-export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false }) {
+export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false, embedded = false }) {
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
   const [dlBusy, setDlBusy] = useState(false);             // building the PDF (survey rasterize can take a moment)
@@ -276,8 +276,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // Document body is open by default until the proposal is locked (accepted+signed), then it
   // auto-collapses to a summary the customer can re-expand. The accordion (one tool open at a time)
   // drives it when present; otherwise fall back to the local override / lock default.
-  const docOpen = acc ? acc.open : (docOverride == null ? !locked : docOverride);
-  const toggleDoc = () => { if (acc) acc.toggle(); else setDocOverride(!docOpen); };
+  // In the deck's full-screen tool overlay (embedded) the proposal IS the whole screen, so there's
+  // nothing to make room for — the document stays expanded even once signed, instead of auto-folding
+  // to the acceptance summary. The chevron still lets the viewer collapse it by hand.
+  const docOpen = embedded
+    ? (docOverride == null ? true : docOverride)
+    : (acc ? acc.open : (docOverride == null ? !locked : docOverride));
+  const toggleDoc = () => { if (!embedded && acc) acc.toggle(); else setDocOverride(!docOpen); };
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.

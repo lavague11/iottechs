@@ -22,6 +22,7 @@ export default function ProposalPanel({ accessId, view, cView, custView, proposa
           accessId={accessId} proposal={proposal} preview={custView} customerName={customerName}
           customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail}
           onAdvance={onAdvance} onStageSync={onStageSync} canVoid={["admin", "manager"].includes(view)}
+          embedded={embedded}
         />
       )}
     </div>
