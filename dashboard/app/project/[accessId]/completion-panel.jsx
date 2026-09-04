@@ -171,10 +171,9 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           </div>
           <span className="cmp-cert-kicker">Certificate of Completion</span>
         </div>
+        {/* Client / Project / Job Site are already in the deck header right above — no need to repeat
+            them here. The downloadable PDF certificate keeps the full set (it stands alone). */}
         <div className="cmp-cert-grid">
-          <div className="cmp-cert-f"><span>Client</span><b>{project.company_name || project.contact_name || project.customer}</b></div>
-          <div className="cmp-cert-f"><span>Project</span><b>{project.access_id}</b></div>
-          {project.address && <div className="cmp-cert-f cmp-wide"><span>Job Site</span><b>{project.address}</b></div>}
           <div className="cmp-cert-f"><span>Devices Installed</span><b>{deviceCount}</b></div>
           <div className="cmp-cert-f"><span>Completed</span><b>{completedAt ? fmtDate(completedAt) : "Pending sign-off"}</b></div>
         </div>
