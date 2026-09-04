@@ -82,6 +82,8 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
       }
       // A read-only customer tapped a camera → open the anchored comment toast.
       if (e.data?.type === "iotMockupComment" && e.data.project === accessId) setCommentAnchor(e.data.anchor || null);
+      // Read-only customer double-tapped the mockup → toggle the host's fullscreen.
+      if (e.data?.type === "iotMockupFullscreen" && e.data.project === accessId) setFs((v) => !v);
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -165,28 +167,30 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
                 )
               )}
 
-              {/* Layout — one button that expands to the grid options */}
-              <div className="mk-layout">
-                <button className="mk-btn" aria-expanded={layoutOpen} title="Layout"
-                  onClick={(e) => { e.stopPropagation(); setLayoutOpen((o) => !o); }}>
-                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7">{(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).icon}</svg>
-                  {(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).label}
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ opacity: 0.55 }}><path d="M6 9l6 6 6-6" /></svg>
-                </button>
-                {layoutOpen && (
-                  <div className="mk-layoutmenu" onClick={(e) => e.stopPropagation()}>
-                    {LAYOUTS.map((l) => (
-                      <button key={l.v} className={`mk-layoutopt${curView === l.v ? " on" : ""}`}
-                        onClick={() => { cmd({ cmd: "setView", v: l.v }); setLayoutOpen(false); }}>
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7">{l.icon}</svg>
-                        <span>{l.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </>
           )}
+
+          {/* Layout — EVERYONE gets the view-grid switcher; customers navigate the views (Single/2×2/
+              3×3/4×4), staff also build. Only the photo-editing controls above stay staff-only. */}
+          <div className="mk-layout">
+            <button className="mk-btn" aria-expanded={layoutOpen} title="Layout"
+              onClick={(e) => { e.stopPropagation(); setLayoutOpen((o) => !o); }}>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7">{(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).icon}</svg>
+              {(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).label}
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ opacity: 0.55 }}><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {layoutOpen && (
+              <div className="mk-layoutmenu" onClick={(e) => e.stopPropagation()}>
+                {LAYOUTS.map((l) => (
+                  <button key={l.v} className={`mk-layoutopt${curView === l.v ? " on" : ""}`}
+                    onClick={() => { cmd({ cmd: "setView", v: l.v }); setLayoutOpen(false); }}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7">{l.icon}</svg>
+                    <span>{l.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {fs ? (
             <button className="ss-embed-open ss-embed-close" onClick={() => setFs(false)}>✕ Exit</button>
