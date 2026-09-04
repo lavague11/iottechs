@@ -341,15 +341,14 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         {stages.map((s, i) => (
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
             <div className={`dv-pane${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-wide" : ""}`}>
-              <div className="dv-pane-head">
-                <div className="dv-stage-name">{s.name}</div>
-                <span className={`dv-flag f-${(s.pill || "").toLowerCase()}`}>{s.pill}</span>
-              </div>
-              {s.completion ? (
-                <div className={`dv-scroll${s.wide ? " dv-scroll--wide" : ""}`}>{s.completion}</div>
-              ) : (
-                  <div className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
-                    {(() => {
+              <div className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
+                {/* The stage header scrolls WITH the content — not a frozen bar covering the page. */}
+                <div className="dv-pane-head">
+                  <div className="dv-stage-name">{s.name}</div>
+                  <span className={`dv-flag f-${(s.pill || "").toLowerCase()}`}>{s.pill}</span>
+                </div>
+                {s.completion ? s.completion : (
+                  (() => {
                       const _tools = s.tools || [];
                       // A stage with a single inline tool shows its content directly, full-width —
                       // no pointless expand/collapse on the only thing there. (Heavy tools still
@@ -383,9 +382,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                         </div>
                       );
                       });
-                    })()}
-                  </div>
-              )}
+                    })()
+                )}
+              </div>
               {/* Footer — present on every stage. Job Log on the left; advance controls on the right. */}
               {(() => { const pg = stageProgress(s); return (
               <div className={`dv-advance${s.advance ? (pg.allDone ? " ready" : " gated") : ""}`}>
