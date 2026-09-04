@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -148,6 +148,14 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   const PRE_APPROVAL_STAGES = new Set(["inquiry", "site_survey", "proposal"]);
   if (p.lost_at && initialView === "customer" && !previewRole && PRE_APPROVAL_STAGES.has(p.stage)) {
     return <ClosedProject accessId={p.access_id} />;
+  }
+
+  // Backfill the display phone from the customer's ACCOUNT when the project itself never captured one
+  // (e.g. a customer who signed up via Google — email only, no phone at intake). Their account holds
+  // the number; surface it so the office isn't left with a blank Phone. The tech strip below still
+  // removes it for techs, and the customer already knows their own number.
+  if (!project.contact_phone) {
+    try { const cu = getCustomerUserForProject(p); if (cu?.phone) project.contact_phone = cu.phone; } catch {}
   }
 
   // Techs coordinate through the office, never the customer directly — so they must NEVER receive
