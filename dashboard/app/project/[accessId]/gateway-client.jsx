@@ -2483,8 +2483,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const mark = markForState(phaseState(p.key, i));
       return {
         name: p.label,
-        // Completion reads "Complete" once the project is actually done — not the perpetual "Finalizing".
-        pill: (isComplete && projCompleted) ? "Complete" : phaseStatusWord(p.key),
+        // Completion reads "Complete" only when the project is TRULY done — stamped complete AND the
+        // final balance paid. Stamped-but-unpaid still shows "Finalizing" (matching the panel's
+        // "settle your final balance" gate), so the chip never contradicts the page.
+        pill: (isComplete && projCompleted && custFacts.final_balance_paid) ? "Complete" : phaseStatusWord(p.key),
         pct,
         mark,
         tint: isComplete ? "green" : p.key === "ph_survey" ? "blue" : "gold",
