@@ -140,6 +140,18 @@ export async function sendProposalAction(accessId) {
   return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
 }
 
+// Manually (re)send the "your proposal is ready" email to the customer — the Email button on the
+// proposal builder. Only for an already-sent proposal; while it's a draft there's nothing to email.
+export async function emailProposalAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status === "draft") return { error: "Send the proposal first." };
+  const r = await emailProposalReady(accessId).catch(() => null);
+  const sent = !!(r && (r.ok || r.id));
+  return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
 export async function reviseProposalAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };

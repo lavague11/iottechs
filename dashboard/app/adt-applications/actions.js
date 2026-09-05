@@ -180,6 +180,22 @@ export async function shareAdtDealAction(adtId, on) {
   return { ok: true, shared: !!on };
 }
 
+// Manually (re)send the "your ADT quote is ready" email — the Email button on the staff quote bar.
+// Only once the quote is shared (nothing to email otherwise). Stamps the one-time flag so the
+// auto-send on a later share can't double up.
+export async function emailAdtQuoteAction(adtId) {
+  if (!(await requireStaff())) return { error: "Not authorized." };
+  const app = getAdtApplication(adtId);
+  if (!app) return { error: "Application not found." };
+  if (!app.deal_shared_at) return { error: "Share the quote with the customer first." };
+  const { emailAdtQuoteReady } = await import("../../lib/email");
+  const { markAdtQuoteEmailed } = await import("../../lib/db");
+  const r = await emailAdtQuoteReady(app).catch(() => null);
+  const sent = !!(r && (r.ok || r.id));
+  if (sent) markAdtQuoteEmailed(adtId);
+  return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
 // Quick inline edit of the contact fields from the header (name/phone/email/address). Office-only,
 // like the full Revise. Leaves the encrypted fields + equipment untouched.
 export async function updateAdtContactAction(adtId, patch) {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DeckView from "../../project/[accessId]/deck-view";
 import { adtSummary, adtStatusMeta, adtQuoteSeed } from "../../../lib/adt";
 import { fmtSignStamp } from "../../../lib/proposal";
-import { adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, setAdtStatusAction, updateAdtApplicationAction, updateAdtContactAction, setAdtDocsNoteAction, lockAdtStaffAction, logAdtAppointmentAction, sendAdtAppointmentEmailAction } from "../actions";
+import { adminCompleteAdtAction, saveAdtDealAction, shareAdtDealAction, reviseAdtDealAction, emailAdtQuoteAction, setAdtStatusAction, updateAdtApplicationAction, updateAdtContactAction, setAdtDocsNoteAction, lockAdtStaffAction, logAdtAppointmentAction, sendAdtAppointmentEmailAction } from "../actions";
 import AdtIntake from "../../adt/adt-intake";
 import SchedulingWidget from "../../project/[accessId]/scheduling-widget";
 
@@ -288,7 +288,9 @@ export default function AdtProjectClient({ user, alerts, app, staffUsers = [] })
 
   const [shared, setShared] = useState(!!app.deal_shared);
   const [shareErr, setShareErr] = useState("");
+  const [emailFlash, setEmailFlash] = useState("");
   const doShare = (on) => startTx(async () => { setShareErr(""); const r = await shareAdtDealAction(app.adt_id, on); if (r?.error) setShareErr(r.error); else { setShared(on); router.refresh(); } });
+  const doEmailQuote = () => startTx(async () => { setShareErr(""); setEmailFlash(""); const r = await emailAdtQuoteAction(app.adt_id); if (r?.error) setShareErr(r.error); else setEmailFlash(r.sent ? "Quote emailed to customer" : (r.note || "Email isn’t configured yet")); });
   const accepted = !!app.deal_accepted;
   const signed = !!app.deal_signed;
   const [reviseArm, setReviseArm] = useState(false);
@@ -317,12 +319,13 @@ export default function AdtProjectClient({ user, alerts, app, staffUsers = [] })
                     : <button className="adtp-btn ghost" disabled={pending} onClick={() => setReviseArm(true)}>Revise quote</button>)
                 : <span className="adtp-muted">An admin can revise it</span>)
             : shared
-              ? <button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button>
+              ? <><button className="adtp-btn" disabled={pending} onClick={doEmailQuote} title="Email the customer a link to their quote">Email quote</button><button className="adtp-btn ghost" disabled={pending} onClick={() => doShare(false)}>Unshare</button></>
               : <button className="adtp-btn gold" disabled={pending || !hasDeal} onClick={() => doShare(true)}>Share with customer</button>}
         </span>
       </div>
       {reviseArm && <div className="adtp-dealbar-warn">Revising voids the customer&rsquo;s {signed ? "signature" : "acceptance"} — they&rsquo;ll re-sign the revised quote.</div>}
       {shareErr && <div className="adtp-err" style={{ marginTop: 8 }}>{shareErr}</div>}
+      {emailFlash && <div className="adtp-muted" style={{ marginTop: 8 }}>{emailFlash}</div>}
     </div>
   );
 

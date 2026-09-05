@@ -7,7 +7,7 @@ import {
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction } from "./proposal-actions";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
@@ -239,6 +239,15 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
+  }
+  // Manually email the customer their proposal link (in addition to the auto-send on Submit) — lets
+  // staff re-send it any time so the customer can view it easier.
+  async function emailToCustomer() {
+    setBusy(true); setErr(null);
+    const r = await emailProposalAction(accessId);
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    showToast(r.sent ? "Proposal emailed to customer" : (r.note || "Email isn’t configured yet"));
   }
   // Download the same brand PDF the customer gets — built from the CURRENT edits (payload + tax +
   // deposit merged onto the server row), with the mockup photos and survey floor plans appended.
@@ -533,7 +542,13 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             )}
           </>
         ) : (
-          <button className="prop-mini gold" disabled={busy} onClick={revise} style={{ marginLeft: "auto" }}>Revise</button>
+          <>
+            <button type="button" className="prop-mini" disabled={busy} onClick={emailToCustomer} title="Email the customer a link to their proposal" style={{ marginLeft: "auto" }}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: "-2px" }}><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
+              Email
+            </button>
+            <button className="prop-mini gold" disabled={busy} onClick={revise}>Revise</button>
+          </>
         )}
       </div>
 
