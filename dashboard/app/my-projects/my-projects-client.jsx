@@ -77,6 +77,10 @@ function IntakeForm({ user, label, service: defaultService, onDone }) {
   async function submit(e){
     e.preventDefault(); setErr("");
     if(!f.service){ setErr("Please choose a service type."); return; }
+    // ADT Monitoring is its own portal (Apply → Quote → Complete on the /adt deck) with a dedicated
+    // equipment intake — NOT a generic alarm project. Route the customer there (it prefills from their
+    // session) instead of filing a mis-typed project that would leave them lost between two flows.
+    if(/\badt\b/i.test(f.service)){ window.location.href = "/adt"; return; }
     if(!addrPicked || !/\b\d{5}\b/.test(f.address)){ setErr("Pick your service address from the suggestions — a full address including ZIP code."); return; }
     setBusy(true);
     try {
