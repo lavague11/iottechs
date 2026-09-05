@@ -391,9 +391,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                       });
                     })()
                 )}
-              </div>
-              {/* Footer — present on every stage. Job Log on the left; advance controls on the right. */}
-              {(() => { const pg = stageProgress(s); return (
+                {/* Footer — now INSIDE the scroll, so it sits at the very bottom of the page content
+                    and scrolls with it (was a frozen bar pinned to the pane). Job Log left, advance right. */}
+                {(() => { const pg = stageProgress(s); return (
               <div className={`dv-advance${s.advance ? (pg.allDone ? " ready" : " gated") : ""}`}>
                 {log && (
                   <button className="dv-log-btn" data-stop onClick={() => setOverlay({ name: "Job Log", node: log })}>
@@ -415,6 +415,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                 ))}
               </div>
               ); })()}
+              </div>
             </div>
           </div>
         ))}
@@ -553,7 +554,7 @@ const CSS = `
 .dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
 /* A merged stage page (wide) uses the FULL deck width, not the 840px reading column — the stage
    title and the content both span edge-to-edge (with page padding). */
-.dv-pane.dv-wide .dv-pane-head,.dv-pane.dv-wide .dv-scroll,.dv-scroll.dv-scroll--wide{max-width:100%}
+.dv-pane.dv-wide .dv-pane-head,.dv-pane.dv-wide .dv-scroll,.dv-pane.dv-wide .dv-advance,.dv-scroll.dv-scroll--wide{max-width:100%}
 .dv-solo--wide{margin:0}
 /* Stacked merged sections: each tool is a full-width, near-full-height panel — the whole tool, not a
    little card. You scroll the page from one to the next. */

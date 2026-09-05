@@ -2600,7 +2600,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
         ]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
-        log={deckLog}
+        log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}
         onPreviewRole={onPreviewRole}
         previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales"] : []}
