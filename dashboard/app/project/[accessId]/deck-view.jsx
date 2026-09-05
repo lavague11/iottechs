@@ -462,10 +462,10 @@ const CSS = `
 .dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft);font-weight:600}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s}
+.dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s;min-width:0;flex:0 1 auto}
 .dv-identity:hover{background:rgba(16,20,24,.04)}
 .dv-code{font-size:11px;letter-spacing:.09em;color:var(--dv-meta);padding:5px 8px;border:1px solid var(--dv-line);border-radius:7px}
-.dv-title{font-size:23px;font-weight:600;letter-spacing:-.028em;margin:0}
+.dv-title{font-size:23px;font-weight:600;letter-spacing:-.028em;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-chev{color:var(--dv-faint);transition:transform .34s var(--dv-e)}.dv-chev.up{transform:rotate(180deg);color:var(--dv-ink)}
 .dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
 .dv-chip.live{background:#E9F3ED;color:var(--dv-green)}

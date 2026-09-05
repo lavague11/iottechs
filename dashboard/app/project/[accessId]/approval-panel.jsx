@@ -592,34 +592,34 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
               <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
             </label>
           </div>
-          {(() => {
-            // Quick-fill presets — one tap sets the amount (still fully editable). Deposit portal
-            // offers the deposit due, half, and the full balance; the final portal just the balance.
-            const presets = isFinal
-              ? [["Full balance", balance, "final"]]
-              : [
-                  [`Deposit (${depositPct}%)`, depositDue, "deposit"],
-                  ["Full balance", balance, "final"],
-                ];
-            const seen = new Set();
-            const shown = presets.filter(([, amt]) => amt > 0.005 && !seen.has(amt.toFixed(2)) && seen.add(amt.toFixed(2)));
-            return shown.length ? (
-              <div className="apv-chip-row">
-                {shown.map(([lbl, amt, kind]) => {
-                  const on = +pay.amount > 0 && Math.abs(+pay.amount - amt) < 0.005;
-                  return (
-                    <button key={lbl} type="button" className={`apv-chip-btn${on ? " on" : ""}`}
-                      onClick={() => setPay((v) => ({ ...v, amount: amt.toFixed(2), kind }))}>
-                      {lbl} · {money(amt)}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null;
-          })()}
-          <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
-            {isCustomer ? "I Paid This" : "Record Payment"}
-          </button>
+          {/* One action row: the quick-fill preset(s) and the submit button share a line, same height
+              and shape, so they line up (and stack cleanly, full-width, on a phone). */}
+          <div className="apv-payact">
+            {(() => {
+              // Quick-fill presets — one tap sets the amount (still fully editable). Deposit portal
+              // offers the deposit due + full balance; the final portal just the balance.
+              const presets = isFinal
+                ? [["Full balance", balance, "final"]]
+                : [
+                    [`Deposit (${depositPct}%)`, depositDue, "deposit"],
+                    ["Full balance", balance, "final"],
+                  ];
+              const seen = new Set();
+              const shown = presets.filter(([, amt]) => amt > 0.005 && !seen.has(amt.toFixed(2)) && seen.add(amt.toFixed(2)));
+              return shown.map(([lbl, amt, kind]) => {
+                const on = +pay.amount > 0 && Math.abs(+pay.amount - amt) < 0.005;
+                return (
+                  <button key={lbl} type="button" className={`apv-chip-btn${on ? " on" : ""}`}
+                    onClick={() => setPay((v) => ({ ...v, amount: amt.toFixed(2), kind }))}>
+                    {lbl} · {money(amt)}
+                  </button>
+                );
+              });
+            })()}
+            <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
+              {isCustomer ? "I Paid This" : "Record Payment"}
+            </button>
+          </div>
           </div>)}
         </div>
         )}
@@ -733,10 +733,13 @@ select.apv-input{cursor:pointer}
 .apv-btn:hover{filter:brightness(1.12)}
 .apv-btn.gold.sign:hover{background:#F2D45A;filter:none}
 .apv-btn:disabled{opacity:.45;cursor:default}
-.apv-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
-.apv-chip-btn{height:30px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);
-  font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+/* Payment action row — quick-fill preset(s) + the submit button on one line, same 42px height and
+   shape so they align; each is flex:1 so on a phone they wrap into equal full-width stacked buttons. */
+.apv-payact{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin-top:6px}
+.apv-chip-btn{flex:1 1 auto;min-width:130px;height:42px;padding:0 16px;border-radius:9px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);
+  font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
 .apv-chip-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.apv-chip-btn.on{border-color:var(--dv-gold,#C9A96E);background:#fbf6ec;color:var(--dv-gold-deep,#A8842F)}
 .apv-chip-btn.on{border-color:var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff}
 
 .apv-pay-list{display:flex;flex-direction:column;gap:6px}
@@ -815,7 +818,7 @@ select.apv-input{cursor:pointer}
 .apv-fld>span em{font-style:normal;font-weight:500;text-transform:none;color:var(--dv-faint,#A1A6AC)}
 .apv-fld .apv-input{width:100%;height:40px}
 .apv-fld-wide{grid-column:1 / -1}
-.apv-payform-btn{align-self:flex-start;height:42px;padding:0 26px}
+.apv-payform-btn{flex:1 1 auto;min-width:150px;align-self:stretch;height:42px;padding:0 26px}
 @media(max-width:560px){.apv-payform-grid{grid-template-columns:1fr}}
 
 .apv-wo{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}

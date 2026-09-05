@@ -2439,8 +2439,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const pay = tools.find((t) => t.name === "Final Payment");
           const qr = tools.find((t) => t.name === "System QR");
           const wsecs = [];
-          if (pay) wsecs.push(["Final Payment", pay.node]);
+          // Activation QR at the TOP of Closeout (owner) — it's what the customer scans to set up, so
+          // it leads; the final-payment panel follows.
           if (qr) wsecs.push(["Activation QR", qr.node]);
+          if (pay) wsecs.push(["Final Payment", pay.node]);
           if (wsecs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: (
             <div className="cx-merged cx-merged--flow">
               {wsecs.map(([h, node], k) => <section className="cx-sec" key={k}>{k > 0 && <div className="cx-sec-h">{h}</div>}{node}</section>)}
@@ -4444,6 +4446,16 @@ const PV_CSS = `
 .pvx .mk-layout{position:relative}
 .pvx .mk-layoutmenu{position:absolute;top:calc(100% + 4px);left:0;z-index:40;display:flex;flex-direction:column;gap:2px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--bg-soft,#faf8f4);box-shadow:0 12px 30px rgba(16,17,18,.16);min-width:134px}
 .pvx .mk-layoutopt{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:7px;background:transparent;color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;white-space:nowrap}
+/* Phone: the survey/mockup toolbar stacks — the tag on its own line, then the controls as
+   equal-width, comfortably-tappable buttons that fill the row instead of cramming. */
+@media (max-width:600px){
+  .pvx .ss-embed-bar{flex-direction:column;align-items:stretch;gap:8px}
+  .pvx .mk-controls{width:100%;gap:7px}
+  .pvx .mk-controls>*{flex:1 1 auto}
+  .pvx .mk-controls .mk-btn,.pvx .mk-controls .ss-embed-open,.pvx .mk-controls .mk-layout>.mk-btn{justify-content:center;height:38px;min-width:0}
+  .pvx .mk-count{justify-content:space-between}
+  .pvx .mk-pagenav{width:100%}
+}
 .pvx .mk-layoutopt:hover{background:rgba(201,169,110,.12)}
 .pvx .mk-layoutopt.on,.pvx .mk-layoutopt.on svg{color:var(--gold-deep,#8a6d2f)}
 .pvx .mk-pagenav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:2px}
