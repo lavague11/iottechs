@@ -103,7 +103,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
   // ---- Office: Submit for review (and re-submit when edited after submitting) ----
   if (isOffice) {
     return (
-      <div className={`tab-root${current ? " ok" : submittedCurrent ? " ok" : ""}`}>
+      <div className={`tab-root${current ? " ok" : submittedCurrent ? " slim" : ""}`}>
         {current ? (
           <div className="tab-row">
             <span className="tab-check">✓</span>
@@ -248,6 +248,12 @@ const TAB_CSS = `
 .tab-root{margin-top:10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);padding:12px 14px}
 .tab-root.ok{background:rgba(46,125,91,.06);border-color:rgba(46,125,91,.30)}
 .tab-root.void{background:rgba(201,169,110,.08);border-color:rgba(201,169,110,.42)}
+/* Awaiting-approval: a slim inline line, not a full card/button */
+.tab-root.slim{border:none;background:transparent;border-radius:0;padding:5px 2px;margin-top:6px}
+.tab-root.slim .tab-check{width:15px;height:15px;font-size:.58rem}
+.tab-root.slim .tab-msg{flex:1;min-width:0;font-size:.8rem;color:var(--dv-meta,#787D84)}
+.tab-root.slim .tab-btn.ghost{height:auto;padding:0;border:none;background:transparent;color:var(--dv-meta,#787D84);font-weight:500;font-size:.78rem;text-decoration:underline;text-underline-offset:2px}
+.tab-root.slim .tab-btn.ghost:hover{transform:none;color:var(--dv-red,#C4553D)}
 .tab-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
 .tab-check{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-green,#2E7D5B);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
 .tab-warn{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-gold,#C9A96E);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
