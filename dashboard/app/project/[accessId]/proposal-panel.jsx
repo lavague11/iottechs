@@ -35,7 +35,11 @@ const PROP_CSS = `
    edge-to-edge and the body is a divided, padded section below. Flat deck surface, no accent rail. */
 .pvx .prop-card{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;overflow:hidden}
 .pvx .prop-body{border-top:1px solid var(--dv-line,#E4E4DF);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
-.pvx .prop-head-slim{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-head-slim{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+/* Top action row: status chip + icon controls sit on one baseline; icon-only buttons are square like
+   the gear, the views/share badges expand only as far as their content needs. */
+.pvx .prop-head-slim .prop-status{display:inline-flex;align-items:center;line-height:1.3;flex-shrink:1;min-width:0}
+.pvx .prop-head-slim .prop-eye,.pvx .prop-head-slim .prop-gear{flex-shrink:0;min-width:30px;justify-content:center}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
@@ -89,7 +93,7 @@ const PROP_CSS = `
 .pvx .prop-svc-name{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
-.pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-sysrow{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
 .pvx .prop-sysrow + .prop-sysrow{padding-top:12px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-sys-field{display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
@@ -201,7 +205,14 @@ const PROP_CSS = `
 .pvx .prop-subadd{padding:4px 12px 8px 30px;background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-savestat{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B)}
 .pvx .prop-savestat.saving{color:var(--dv-meta,#787D84)}
-.pvx .prop-line-total{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);text-align:right}
+.pvx .prop-line-total{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);text-align:right;font-variant-numeric:tabular-nums}
+/* Price = the breakdown toggle. Reads as the price (no button chrome), with a subtle chevron that
+   flips when expanded, and a comfortable tap area around it. */
+.pvx button.prop-price-toggle{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;background:none;border:none;font:inherit;font-weight:600;color:var(--dv-ink,#101418);cursor:pointer;padding:4px 0 4px 10px;margin:-4px 0;min-height:30px;border-radius:8px}
+.pvx button.prop-price-toggle:hover{color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-price-chev{opacity:.42;transition:transform .18s,opacity .15s;flex-shrink:0}
+.pvx button.prop-price-toggle:hover .prop-price-chev{opacity:.85}
+.pvx button.prop-price-toggle.open .prop-price-chev{transform:rotate(180deg);opacity:.7}
 .pvx .prop-item-x{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;font-size:.85rem;padding:0}
 .pvx .prop-item-x:hover{color:var(--dv-red,#C4553D)}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
@@ -242,9 +253,10 @@ const PROP_CSS = `
 .pvx .prop-waiver-svc{font-size:.68rem;font-weight:600;color:var(--dv-meta,#787D84);text-transform:uppercase;letter-spacing:.03em}
 .pvx .prop-waiver-amt{font-weight:600;white-space:nowrap;color:var(--dv-ink,#101418)}
 .pvx .prop-waiver-row.on .prop-waiver-amt{color:var(--dv-gold-deep,#A8842F);text-decoration:none}
-.pvx .prop-totals{display:flex;flex-direction:column;gap:9px;width:100%;margin-top:16px;border-top:1px solid var(--dv-line,#E4E4DF);padding-top:16px}
+.pvx .prop-totals{display:flex;flex-direction:column;gap:9px;width:100%;margin-top:10px;border-top:1px solid var(--dv-line,#E4E4DF);padding-top:12px}
 .pvx .prop-trow{display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;min-height:28px}
-.pvx .prop-trow b{color:var(--dv-ink,#101418)}
+.pvx .prop-trow b{color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pvx .prop-total-big b{font-variant-numeric:tabular-nums}
 .pvx .prop-adj{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pvx .prop-minus{color:var(--dv-green,#2E7D5B);white-space:nowrap}
 .pvx .prop-trow-addon span{color:var(--dv-gold-deep,#A8842F)}

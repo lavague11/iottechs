@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms, projectFinancials,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms, projectFinancials, fmtSignStamp,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -404,7 +404,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         const statusChip = (
           <span className={`prop-status ${status === "changes_requested" ? "changes" : status}`}>
             {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
-            {status === "sent" && `Sent ${meta?.sent_at ? meta.sent_at.slice(0, 16) : ""}${meta?.sent_by_name ? ` by ${String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name}` : ""}`}
+            {status === "sent" && (() => {
+              const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
+              return <>Sent {meta?.sent_at ? fmtSignStamp(meta.sent_at) : ""}{by && <><br />by {by}</>}</>;
+            })()}
             {status === "changes_requested" && "Changes requested"}
             {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
           </span>

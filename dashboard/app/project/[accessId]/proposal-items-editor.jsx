@@ -321,11 +321,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     return (
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}>
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        {expandable && (
-          <button className="prop-chev" style={{ color: svcColor }} title={open[it.id] ? "Collapse" : "Expand breakdown"} onClick={() => toggle(it.id)}>
-            {open[it.id] ? "▾" : "▸"}
-          </button>
-        )}
+        {/* The breakdown toggle now lives on the PRICE (see .prop-price-toggle below) — one affordance,
+            not a separate left chevron. */}
         {!parent && blockNumOf[it.id] && <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span>}
         {hasSub ? (
           editingId === it.id ? (
@@ -382,11 +379,21 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                title="Internal cost — never shown to sales or customers"
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { cost: e.target.value }) : patchItem(it.id, { cost: e.target.value }))} />
       ))}
-      <span className="prop-line-total">
-        {!parent && it.waived
+      {(() => {
+        const priceEl = (!parent && it.waived)
           ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s>
-          : hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it))}
-      </span>
+          : hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it));
+        // Top-level items: the price itself opens/closes the line's price breakdown (chevron flips).
+        return expandable ? (
+          <button type="button" className={`prop-line-total prop-price-toggle${open[it.id] ? " open" : ""}`}
+                  title={open[it.id] ? "Hide price breakdown" : "Show price breakdown"} onClick={() => toggle(it.id)}>
+            {priceEl}
+            <svg className="prop-price-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+        ) : (
+          <span className="prop-line-total">{priceEl}</span>
+        );
+      })()}
       {!readOnly ? (
         <button className="prop-item-x" title="Remove"
                 onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
