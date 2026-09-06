@@ -132,7 +132,7 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
                   </span>
                 ))}
               </div>
-            ) : <div className="woc-none">No technician assigned yet.</div>}
+            ) : created ? <div className="woc-none">No technician assigned.</div> : null}
             {!created && (
               <div className="woc-assign">
                 <select className="woc-select" value={pick} onChange={(e) => setPick(e.target.value)}>
@@ -216,7 +216,7 @@ const WOC_CSS = `
 .woc-tech-x:hover{color:var(--dv-red,#C4553D)}
 .woc-none{font-size:.82rem;color:var(--dv-meta,#787D84);margin-bottom:9px}
 .woc-assign{display:flex;gap:8px;flex-wrap:wrap}
-.woc-select{flex:1;min-width:180px;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
+.woc-select{flex:1 1 auto;min-width:0;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
 .woc-select:focus{border-color:var(--dv-gold,#C9A96E)}
 .woc-add{height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .woc-add:hover{filter:brightness(1.12)}
@@ -226,9 +226,22 @@ const WOC_CSS = `
 .woc-create-btn{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .woc-create-btn:hover{filter:brightness(1.12)}
 .woc-create-btn:disabled{opacity:.45;cursor:default}
-.woc-intern{display:flex;align-items:flex-start;gap:9px;margin-bottom:10px;padding:10px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;cursor:pointer;font-size:.8rem;color:var(--dv-meta,#787D84)}
-.woc-intern input{margin-top:2px;width:15px;height:15px;accent-color:var(--dv-ink,#101418);cursor:pointer;flex-shrink:0}
+.woc-intern{display:flex;align-items:center;gap:9px;margin-bottom:10px;padding:9px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;cursor:pointer;font-size:.8rem;color:var(--dv-meta,#787D84)}
+.woc-intern input{width:15px;height:15px;accent-color:var(--dv-ink,#101418);cursor:pointer;flex-shrink:0}
 .woc-intern b{color:var(--dv-ink,#101418);font-weight:600}
+/* Mobile: tighter rhythm — smaller gaps/padding, action rows stack cleanly instead of wrapping mid-row */
+@media (max-width:600px){
+  .woc-body{gap:11px;padding:6px 13px 14px}
+  .woc-sec-h{margin-bottom:6px}
+  .woc-none{margin-bottom:8px;font-size:.8rem}
+  .woc-assign{gap:8px;flex-wrap:nowrap}
+  .woc-add{padding:0 13px}
+  .woc-create,.woc-final{flex-direction:column;align-items:stretch;gap:9px;padding:11px 12px}
+  .woc-gate,.woc-final-msg{min-width:0;flex:none}
+  .woc-create-btn,.woc-final-btn{width:100%}
+  .woc-final.done{flex-direction:row;align-items:center}
+  .woc-intern{margin-bottom:9px;padding:9px 11px}
+}
 .woc-final{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:13px 15px;background:var(--dv-paper,#F4F4F2)}
 .woc-final.done{border-color:#cfe6d8;background:#eef7f1}
 .woc-final-msg{margin:0;font-size:.8rem;color:var(--dv-meta,#787D84);flex:1;min-width:200px}

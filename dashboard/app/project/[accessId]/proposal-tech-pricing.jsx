@@ -150,9 +150,16 @@ const TPX_CSS = `
 .tpx-head{width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--dv-raise,#FBFBFA);border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .tpx-head:hover{background:var(--dv-paper,#F4F4F2)}
 .tpx-icon{width:30px;height:30px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dv-green,#2E7D5B);background:#e9f3ed;border:1px solid #cfe6d8}
-.tpx-title{font-family:inherit;font-weight:600;font-size:14.5px;color:var(--dv-ink,#101418)}
-.tpx-sub{font-size:.72rem;font-weight:600;letter-spacing:.02em;color:var(--dv-green,#2E7D5B);margin-left:auto;padding:4px 11px;border-radius:100px;background:#e9f3ed;white-space:nowrap}
-.tpx-chev{margin-left:8px;font-size:.7rem;color:var(--dv-faint,#A1A6AC)}
+.tpx-title{flex:1 1 auto;min-width:0;font-family:inherit;font-weight:600;font-size:14.5px;line-height:1.25;color:var(--dv-ink,#101418)}
+.tpx-sub{flex-shrink:0;font-size:.72rem;font-weight:600;letter-spacing:.02em;color:var(--dv-green,#2E7D5B);padding:4px 10px;border-radius:100px;background:#e9f3ed;white-space:nowrap}
+.tpx-chev{flex-shrink:0;margin-left:4px;font-size:.7rem;color:var(--dv-faint,#A1A6AC)}
+@media (max-width:600px){
+  .tpx-head{gap:8px;padding:11px 12px}
+  .tpx-title{font-size:13.5px}
+  .tpx-sub{padding:3px 9px;font-size:.7rem}
+  .tpx-body{padding:12px 13px}
+  .tpx-note-row{gap:10px;margin-bottom:10px}
+}
 .tpx-body{padding:14px 16px}
 .tpx-note-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
 .tpx-note{font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.45;flex:1}
