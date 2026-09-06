@@ -446,14 +446,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         const reviseBtn = readOnly && (
           <button type="button" className="prop-head-cta" disabled={busy} onClick={revise} title="Revise — reopen an editable version of this proposal">Revise</button>
         );
-        const submitBtn = !readOnly && (confirmSend ? (
-          <span className="prop-head-cta-grp">
-            <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title="Confirm — submit this proposal to the customer">Confirm</button>
-            <button type="button" className="prop-head-cta ghost" disabled={busy} onClick={() => setConfirmSend(false)} title="Cancel">Cancel</button>
-          </span>
-        ) : (
-          <button type="button" className="prop-head-cta" disabled={busy} onClick={() => setConfirmSend(true)} title="Submit this proposal to the customer">Submit</button>
-        ));
+        const submitBtn = !readOnly && (
+          <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title="Submit this proposal to the customer">Submit</button>
+        );
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {

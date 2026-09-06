@@ -40,12 +40,9 @@ const PROP_CSS = `
    the gear, the views/share badges expand only as far as their content needs. */
 .pvx .prop-head-slim .prop-status{display:inline-flex;align-items:center;line-height:1.3;flex-shrink:1;min-width:0}
 .pvx .prop-head-slim .prop-eye,.pvx .prop-head-slim .prop-gear{flex-shrink:0;min-width:30px;justify-content:center}
-.pvx .prop-head-cta-grp{display:inline-flex;gap:6px;flex-shrink:0}
 .pvx .prop-head-cta{flex-shrink:0;height:30px;padding:0 12px;border:1px solid var(--dv-ink,#101418);border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-head-cta:hover{filter:brightness(1.12)}
 .pvx .prop-head-cta:disabled{opacity:.45;cursor:default}
-.pvx .prop-head-cta.ghost{background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);border-color:var(--dv-line,#E4E4DF)}
-.pvx .prop-head-cta.ghost:hover{filter:none;border-color:var(--dv-meta,#787D84)}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
