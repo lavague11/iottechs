@@ -2353,6 +2353,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const iDate = lp.install_date || lp.date || null;
         const dOpen = iDate ? (new Date(iDate + "T00:00:00") <= new Date(new Date().setHours(0, 0, 0, 0))) : false;
         const techLocked = cView === "tech" && !(woAccepted && dOpen);
+        // Job-site add-ons on top — a job-site change order is the thing staff/tech reach for first when
+        // something on site differs from the proposal. Staff/tech always; customer only once one exists.
+        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
+          tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked || cView === "tech"} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
+        }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {
           tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
@@ -2360,11 +2366,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
               : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
-        }
-        // Job-site add-ons: staff/tech always; the customer only sees it once an actual change order exists.
-        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
-          tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked || cView === "tech"} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in.
