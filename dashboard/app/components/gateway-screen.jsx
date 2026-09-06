@@ -44,8 +44,7 @@ function LoginForm({ busy, onSubmit }) {
 
   return (
     <>
-      <form className="gw2-lf" onSubmit={handleSubmit}>
-        <div className="gw2-prompt">Sign in</div>
+      <form className="gw2-lf gw2-lf--top" onSubmit={handleSubmit}>
         <div className="gw2-lf-fields">
           <input
             className="gw2-lf-input"

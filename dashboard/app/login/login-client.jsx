@@ -346,8 +346,7 @@ export default function LoginClient({ next }) {
         ) : mode === "password" ? (
         authStep === "lookup" ? (
         <div className="gw2-step" key="lookup">
-          <form className="gw2-lf" onSubmit={handleLookup}>
-            <div className="gw2-prompt">Sign in</div>
+          <form className="gw2-lf gw2-lf--top" onSubmit={handleLookup}>
             <div className="gw2-lf-fields">
               <input name="identifier" type="text" className="gw2-lf-input" placeholder="Email or phone number" autoComplete="username" inputMode="email" value={ident} onChange={(e) => setIdent(e.target.value)} autoFocus required disabled={pending || granted} />
             </div>

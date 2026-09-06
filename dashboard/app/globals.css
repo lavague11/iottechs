@@ -688,6 +688,9 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 
 /* ── Gateway inline login form ───────────────────────────── */
 .gw2-lf { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+/* Login step with no "Sign in" label above the fields — a small intentional gap under SECURE ACCESS
+   (the removed prompt used to supply this breathing room) so the field isn't cramped to the brand. */
+.gw2-lf--top { margin-top: 6px; }
 .gw2-lf-fields { display: flex; flex-direction: column; gap: 8px; }
 .gw2-lf-input { background: rgba(255,255,255,.05); border: 1px solid rgba(201,169,110,.22); border-radius: 9px; padding: 11px 14px; color: #FAF8F4; font-size: 14px; font-family: inherit; width: 100%; transition: border-color .18s; }
 .gw2-lf-input:focus { outline: none; border-color: #C9A96E; }
