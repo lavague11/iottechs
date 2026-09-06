@@ -170,4 +170,18 @@ export const ICL_CSS = `
 .icl-add-cancel{height:38px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink-soft,#3A4048);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .icl-empty{padding:20px;text-align:center;color:var(--dv-meta,#787D84);font-size:.86rem}
 .icl-ro{margin-top:12px;font-size:.74rem;color:var(--dv-meta,#787D84);font-style:italic}
+/* Phone: compact the work-order header — Rates / Undo / Show pay as three equal buttons on one line,
+   the progress bar full-width below; tighten the crew + summary cards so there aren't big empty gaps. */
+@media (max-width:600px){
+  .icl-head{gap:8px;margin-bottom:8px}
+  .icl-head-r{gap:6px;width:100%}
+  .icl-undoall,.icl-pricebtn{flex:1 1 0;min-width:0;height:32px;padding:0 8px;font-size:.72rem;display:inline-flex;align-items:center;justify-content:center}
+  .icl-progress{width:100%;min-width:0;order:9;margin-top:2px}
+  .icl-bar{flex:1 1 auto;width:auto}
+  .icl-crew{padding:7px 10px;margin-bottom:8px;gap:8px}
+  .icl-crew-add{width:100%;margin-left:0}
+  .icl-crew-in{flex:1;width:auto}
+  .icl-summary{gap:8px;margin-bottom:8px}
+  .icl-sum-cell{min-width:0;padding:8px 12px}
+}
 `;

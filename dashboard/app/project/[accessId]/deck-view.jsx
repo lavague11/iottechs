@@ -92,7 +92,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   // Never start a drag from an interactive control — on touch, finger jitter on a button tap would
   // otherwise trip the capture and steal the click (the tool would never open on mobile).
   function onPointerDown(e) {
-    if (e.target.closest("[data-stop], button, a, input, textarea, select, label")) return;
+    // Start a swipe from ANYWHERE that isn't an actual control or an embedded tool surface — the page
+    // gaps, edges, headings and card whitespace all page the deck. Only real interactive controls
+    // (buttons/links/fields) and iframes (survey/mockup, which handle their own gestures) opt out. A
+    // swipe still only captures on a clearly-horizontal move, so vertical scrolls and taps pass through.
+    if (e.target.closest("button, a, input, textarea, select, label, iframe, [contenteditable=true]")) return;
     startX.current = e.clientX; startY.current = e.clientY; capturing.current = false;
   }
   function onPointerMove(e) {
@@ -664,7 +668,14 @@ const CSS = `
 .dv-slide[aria-hidden="false"] .dv-tool:nth-child(2){animation-delay:.06s}.dv-slide[aria-hidden="false"] .dv-tool:nth-child(3){animation-delay:.12s}
 @keyframes dvrise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-@media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-pane-head{padding:20px 16px 14px}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}}
+@media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0;flex-wrap:nowrap;gap:8px}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-pane-head{padding:20px 16px 14px}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
+  /* Phone: the status chip rides on the SAME line as the name (was wrapping to its own line, too
+     big). Hide the redundant project-code pill (it's in the drawer) to free the room, and shrink the
+     chip so it fits snugly next to a truncating name. */
+  .dv-code{display:none}
+  .dv-identity{gap:8px}
+  .dv-chip{height:21px;padding:0 8px;font-size:9px;letter-spacing:.05em;gap:5px;flex:0 1 auto;min-width:0}
+  .dv-chip .dv-chip-arw{width:11px;height:11px}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){
   .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
