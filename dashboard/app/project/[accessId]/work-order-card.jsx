@@ -236,9 +236,9 @@ const WOC_CSS = `
   .woc-none{margin-bottom:8px;font-size:.8rem}
   .woc-assign{gap:8px;flex-wrap:nowrap}
   .woc-add{padding:0 13px}
-  .woc-create,.woc-final{flex-direction:column;align-items:stretch;gap:9px;padding:11px 12px}
-  .woc-gate,.woc-final-msg{min-width:0;flex:none}
-  .woc-create-btn,.woc-final-btn{width:100%}
+  .woc-create,.woc-final{flex-direction:column;align-items:stretch;gap:7px;padding:10px 12px}
+  .woc-gate,.woc-final-msg{min-width:0;flex:none;margin:0}
+  .woc-create-btn,.woc-final-btn{width:100%;height:38px}
   .woc-final.done{flex-direction:row;align-items:center}
   .woc-intern{margin-bottom:9px;padding:9px 11px}
 }

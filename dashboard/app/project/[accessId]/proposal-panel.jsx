@@ -335,11 +335,13 @@ const PROP_CSS = `
   .pvx .prop-item input.num{flex:0 0 60px;width:60px}
   .pvx .prop-item .prop-line-total{margin-left:auto;font-size:.84rem;white-space:nowrap}
   .pvx .prop-item .prop-item-x{flex:0 0 auto}
-  /* Camera / block header rows: name flexes and may wrap to 2 lines, but the price + ✕ always stay
-     inline on the right (flex-basis:0 lets the name shrink so the ✕ never drops to its own line). */
+  /* Camera / block header rows: the name is the priority column (flex:1, basis 0 so it takes all the
+     leftover width); the empty qty/price/cost placeholder spans are hidden so they don't waste flex
+     gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
   .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0}
+  .pvx .prop-item.prop-parent>span:not(:first-child):empty{display:none}
   .pvx .prop-item.prop-parent .prop-item-nametext{white-space:normal;overflow:visible;line-height:1.25;height:auto;min-height:26px}
-  .pvx .prop-item.prop-parent .prop-line-total{margin-left:6px}
+  .pvx .prop-item.prop-parent .prop-line-total{margin-left:auto}
   .pvx .prop-cols{display:none}
   /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
      price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
