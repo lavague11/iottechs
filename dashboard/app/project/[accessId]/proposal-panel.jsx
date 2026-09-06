@@ -311,14 +311,30 @@ const PROP_CSS = `
 @media(max-width:640px){
   /* The dense multi-column pricing grid doesn't fit a phone — the fixed qty/price/cost/total
      columns eat the width and collapse the item NAME to nothing. On mobile, stack each line:
-     the name gets its own full-width row, then a compact qty · price · total row underneath. */
-  .pvx .prop-item,.pvx .prop-item.nocost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+     an editable row gives the name its own full-width row, then a compact qty · price · total row
+     underneath; but a camera/parent BLOCK row (no qty/price inputs, just a total) keeps its name,
+     total and ✕ together on ONE tight line so the price never drops below the name. */
+  .pvx .prop-item,.pvx .prop-item.nocost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 11px}
   .pvx .prop-item>span:first-child{flex:1 1 100%;min-width:0}
   .pvx .prop-item>span:first-child input{width:100%}
   .pvx .prop-item .prop-name-ac{flex:1;min-width:0}
   .pvx .prop-item input.num{flex:0 0 60px;width:60px}
-  .pvx .prop-item .prop-line-total{margin-left:auto;font-size:.82rem}
+  .pvx .prop-item .prop-line-total{margin-left:auto;font-size:.84rem;white-space:nowrap}
   .pvx .prop-item .prop-item-x{flex:0 0 auto}
+  /* Camera / block header rows: name flexes and may wrap to 2 lines, but the price + ✕ always stay
+     inline on the right (flex-basis:0 lets the name shrink so the ✕ never drops to its own line). */
+  .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0}
+  .pvx .prop-item.prop-parent .prop-item-nametext{white-space:normal;overflow:visible;line-height:1.25;height:auto;min-height:26px}
+  .pvx .prop-item.prop-parent .prop-line-total{margin-left:6px}
   .pvx .prop-cols{display:none}
+  /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
+     price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
+  .pvx .prop-sysline{flex-wrap:wrap;gap:4px 8px;padding:10px 11px}
+  .pvx .prop-sysline-name{white-space:nowrap;flex-shrink:0}
+  .pvx .prop-sysline-total{margin-left:auto}
+  .pvx .prop-sysline-sub{flex:1 1 100%;order:9;margin-left:39px;margin-top:-2px}
+  /* Tighter service header + section rhythm on mobile */
+  .pvx .prop-svc-head{padding:8px 11px}
+  .pvx .prop-item.sub input.num{flex:0 0 56px;width:56px}
 }
 `;
