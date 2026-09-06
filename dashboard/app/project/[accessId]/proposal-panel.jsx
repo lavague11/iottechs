@@ -280,17 +280,17 @@ const PROP_CSS = `
 .pvx .prop-cplan-cadmenu button{text-align:left;height:30px;padding:0 10px;border:none;background:transparent;border-radius:6px;color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;cursor:pointer;font-family:inherit}
 .pvx .prop-cplan-cadmenu button:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-deep,#A8842F);font-weight:700}
-.pvx .prop-cplan-row{display:flex;align-items:center;gap:8px}
+.pvx .prop-cplan-row{display:flex;align-items:center;gap:6px}
 .pvx .prop-cplan-n{width:18px;height:18px;flex-shrink:0;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center}
-.pvx .prop-cplan-row .tin{width:56px}
-.pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.76rem;margin-left:-3px}
-.pvx .prop-cplan-date{position:relative;flex:1;min-width:0;height:30px;display:flex;align-items:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.76rem;font-weight:600;color:var(--dv-ink,#101418);background:#fff;cursor:pointer}
+.pvx .prop-cplan-row .tin{width:44px;flex-shrink:0;padding:0 5px}
+.pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.72rem;margin-left:-2px;flex-shrink:0}
+.pvx .prop-cplan-date{position:relative;flex:1 1 auto;min-width:66px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 6px;font-size:.72rem;font-weight:600;color:var(--dv-ink,#101418);background:#fff;cursor:pointer;white-space:nowrap}
 .pvx .prop-cplan-date:hover{border-color:var(--dv-gold,#C9A96E)}
 .pvx .prop-cplan-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
-.pvx .prop-cplan-amt{margin-left:auto;display:inline-flex;align-items:center;gap:1px;height:30px;padding:0 8px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;white-space:nowrap}
+.pvx .prop-cplan-amt{flex-shrink:0;display:inline-flex;align-items:center;gap:1px;height:30px;padding:0 7px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;white-space:nowrap}
 .pvx .prop-cplan-amt:focus-within{border-color:var(--dv-gold,#C9A96E)}
-.pvx .prop-cplan-amt-s{color:var(--dv-meta,#787D84);font-size:.76rem}
-.pvx .prop-cplan-amtin{width:64px;border:none;outline:none;background:transparent;text-align:right;font-size:.8rem;font-weight:600;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;font-family:inherit;padding:0}
+.pvx .prop-cplan-amt-s{color:var(--dv-meta,#787D84);font-size:.74rem}
+.pvx .prop-cplan-amtin{width:52px;border:none;outline:none;background:transparent;text-align:right;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;font-family:inherit;padding:0}
 .pvx .prop-cplan-amtin::-webkit-outer-spin-button,.pvx .prop-cplan-amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .pvx .prop-cplan-sum{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B);text-align:right}
 .pvx .prop-cplan-sum.bad{color:var(--dv-red,#C4553D)}

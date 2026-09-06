@@ -300,34 +300,35 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // Cascade FORWARD: edits prioritize the earlier payments. Pinning row `editedIdx` to `value` keeps
   // every earlier row fixed and re-splits only the LATER rows evenly so the whole schedule still sums
   // to 100%. (e.g. 50 · [30] · _ · _  →  50 · 30 · 10 · 10). Editing the last row just closes the gap.
+  const r2 = (x) => Math.round((+x || 0) * 100) / 100;   // 2-decimal precision so exact dollar amounts survive round-trips
   function cascadePct(rows, editedIdx, value) {
     const n = rows.length;
-    const pcts = rows.map((r) => Math.max(0, Math.round(+r.pct || 0)));
-    const before = pcts.slice(0, editedIdx).reduce((a, b) => a + b, 0);
-    const v = Math.max(0, Math.min(100 - before, Math.round(+value || 0)));   // never let the total exceed 100
+    const pcts = rows.map((r) => Math.max(0, r2(r.pct)));
+    const before = r2(pcts.slice(0, editedIdx).reduce((a, b) => a + b, 0));
+    const v = Math.max(0, Math.min(100 - before, r2(value)));   // never let the total exceed 100
     pcts[editedIdx] = v;
     const after = n - 1 - editedIdx;
     if (after > 0) {
-      const rem = Math.max(0, 100 - before - v); const each = Math.floor(rem / after);
+      const each = r2(Math.max(0, 100 - before - v) / after);
       for (let j = editedIdx + 1; j < n; j++) pcts[j] = each;
-      const sum = pcts.reduce((a, b) => a + b, 0);
-      if (sum !== 100) pcts[n - 1] = Math.max(0, pcts[n - 1] + (100 - sum));   // last row absorbs rounding
+      const sum = r2(pcts.reduce((a, b) => a + b, 0));
+      if (sum !== 100) pcts[n - 1] = Math.max(0, r2(pcts[n - 1] + (100 - sum)));   // last row absorbs rounding drift
     } else {
-      pcts[editedIdx] = Math.max(0, 100 - before);   // last row is whatever closes the schedule
+      pcts[editedIdx] = Math.max(0, r2(100 - before));   // last row is whatever closes the schedule
     }
     return pcts;
   }
   // Default split: first payment 50%, the rest cascade evenly across the remaining rows.
   const defaultPcts = (n) => cascadePct(Array.from({ length: n }, () => ({ pct: 0 })), 0, 50);
-  const dueDatesFor = (n, cadence, start) => { const base = start || fmtISO(new Date()); return Array.from({ length: n }, (_, i) => cadence === "monthly" ? addMonthsISO(base, i) : addDaysISO(base, i * 14)); };
+  const dueDatesFor = (n, cadence, start) => { const base = start || fmtISO(new Date()); return Array.from({ length: n }, (_, i) => cadence === "biweekly" ? addDaysISO(base, i * 14) : addMonthsISO(base, i)); };
   function buildSchedule(n, cadence, start, pcts) {
     const p = pcts || defaultPcts(n); const dates = dueDatesFor(n, cadence, start);
     return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
   }
-  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "biweekly");
+  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "monthly");
   const custRows = custPlan.rows;
-  const custCadence = custPlan.cadence || "biweekly";
-  const custSumPct = custRows.reduce((s, r) => s + (+r.pct || 0), 0);
+  const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
+  const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
   function commitPlan(next) {
     patchPayload({ ...payload, payment_plan: "custom", custom_plan: next });
     setDepositPct(+next.rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
@@ -341,7 +342,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
   function setPlan(key) {
     const patch = { ...payload, payment_plan: key };
-    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "biweekly");
+    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "monthly");
     patchPayload(patch);
     if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
     const pp = PAYMENT_PLANS[key];
