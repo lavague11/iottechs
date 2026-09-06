@@ -32,6 +32,7 @@ import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
+import { projectStatusDetail, phaseHeadline } from "../../../lib/project-status";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -2585,6 +2586,27 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       if (parts.length) jobExtra.push({ verb: `Change requested — ${parts.join(", ")}`, kind: "request", at: proposalData.updated_at || proposalData.signed_at || lp.date, by: lp.contact_name || lp.customer });
     }
     const deckLog = <JobLog accessId={lp.access_id} role={cView} acceptances={acceptances} project={lp} preview={!!previewRole} staffUsers={staffUsers} extraEvents={jobExtra} />;
+    // Smart status pill: the ladder's next action (label + navigation) enriched with popover CONTEXT
+    // (phase headline + ✓/○ milestone checklist) from the shared selector, so tapping it explains
+    // where the project is and what's next before navigating — never a blind jump (esp. on mobile).
+    const officeRole = ["admin", "manager", "sales"].includes(cView);
+    const statusChip = headerAction
+      ? {
+          label: headerAction.label,
+          color: headerAction.muted ? "#2E7D5B" : "#C9A96E",
+          muted: !!headerAction.muted,
+          openTool: headerAction.schedule ? null : headerAction.spot,
+          onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target),
+          detail: projectStatusDetail(custStage, custFacts, headerAction),
+        }
+      : (officeRole && custStage)
+        ? {   // Fallback (§13): no single owed action → a neutral status control, never a fake CTA.
+            label: `${phaseHeadline(custStage).label} · ${phaseHeadline(custStage).statusWord}`,
+            color: "#3E6C9E", muted: true, openTool: null,
+            onClick: () => browse(custStage),
+            detail: projectStatusDetail(custStage, custFacts, null),
+          }
+        : null;
     return (
       <>
       <DeckView
@@ -2593,7 +2615,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onIdx={(i) => browse(phaseList[i]?.primary)}
         canAdvance={canAdv}
         customer={deckCustomer}
-        statusChip={headerAction ? { label: headerAction.label, color: headerAction.muted ? "#2E7D5B" : "#C9A96E", muted: !!headerAction.muted, openTool: headerAction.schedule ? null : headerAction.spot, onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target) } : null}
+        statusChip={statusChip}
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}

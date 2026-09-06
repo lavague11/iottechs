@@ -37,6 +37,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [cf, setCf] = useState(null);                 // edit form values
   const [savingCust, setSavingCust] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);   // smart status pill popover
   const [moved, setMoved] = useState(false);
   // "Complete but unread" markers blink green until the viewer has actually looked at the finished
   // stage; once seen they go solid green. Seen-state is per viewer (this browser), remembered across
@@ -244,17 +245,45 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
         )}
-        {statusChip && (statusChip.onClick
-          ? <button className={`dv-chip dv-chip-act${statusChip.muted ? " muted" : ""}`} style={{ background: statusChip.color + "1f", color: statusChip.color }}
-              onClick={(e) => { e.stopPropagation(); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); }}>
-              <i className="dv-dot" style={{ background: statusChip.color }} /><span className="dv-chip-lbl">{statusChip.label}</span>
-              <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-            </button>
-          : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} /><span className="dv-chip-lbl">{statusChip.label}</span></span>)}
+        {statusChip && (() => {
+          const chip = statusChip, d = chip.detail;
+          const canGo = !!(chip.onClick || chip.openTool);
+          // Tapping the pill opens the status popover (context first — never a blind jump, which is the
+          // mobile hazard). The popover's primary button performs the actual navigation.
+          const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
+          return (
+            <div className="dv-chipwrap">
+              <button className={`dv-chip dv-chip-act${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
+                aria-expanded={statusOpen} aria-haspopup="dialog"
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? setStatusOpen((o) => !o) : goNext(); }}>
+                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
+                <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              {d && statusOpen && (<>
+                <div className="dv-statback" onClick={() => setStatusOpen(false)} />
+                <div className="dv-statpop" role="dialog" style={{ "--stat-c": chip.color }}>
+                  <div className="dv-statpop-kick">Project status</div>
+                  <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
+                  <ul className="dv-statlist">
+                    {d.milestones.map((m, i) => (
+                      <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
+                        <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
+                        <span className="dv-statml">{m.label}</span>
+                        {m.active && <span className="dv-statms">Now</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
+                  {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
+                </div>
+              </>)}
+            </div>
+          );
+        })()}
 
         <div className="dv-cluster">
           {menu.length > 0 && (
-            <button className="dv-act" onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-haspopup="true" aria-expanded={menuOpen}>
+            <button className="dv-act" onClick={(e) => { e.stopPropagation(); setStatusOpen(false); setMenuOpen((o) => !o); }} aria-haspopup="true" aria-expanded={menuOpen}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
             </button>
           )}
@@ -479,8 +508,34 @@ const CSS = `
 .dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
 .dv-chip-act:hover{filter:brightness(.96)}
 .dv-chip-act.muted{animation:none}   /* a "waiting on the customer" status, not an action — no pulse */
-.dv-chip-act .dv-chip-arw{margin-left:1px;opacity:.85}
+.dv-chip-act .dv-chip-caret{margin-left:1px;opacity:.7;transition:transform .2s var(--dv-e)}
+.dv-chip-act.on .dv-chip-caret{transform:rotate(180deg)}
+.dv-chip-act.on{filter:brightness(.96)}
 .dv-chip-act .dv-dot{animation:none}
+/* Smart status popover — tap the pill for where the project is + the next step (mobile-first: tap,
+   backdrop-dismiss, no hover dependency). */
+.dv-chipwrap{position:relative;display:inline-flex;min-width:0;max-width:100%}
+.dv-statback{position:fixed;inset:0;z-index:65;background:transparent}
+.dv-statpop{position:absolute;top:calc(100% + 8px);right:0;left:auto;z-index:66;width:258px;max-width:86vw;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:14px;padding:14px 15px;box-shadow:0 24px 60px -24px rgba(16,20,24,.42);animation:dvStatIn .16s var(--dv-eo)}
+@keyframes dvStatIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.dv-statpop-kick{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);font-weight:700}
+.dv-statpop-head{display:flex;align-items:baseline;gap:8px;margin:5px 0 13px;flex-wrap:wrap}
+.dv-statpop-head b{font-size:16px;font-weight:650;color:var(--dv-ink);letter-spacing:-.015em}
+.dv-statpop-head span{font-size:11.5px;color:var(--stat-c,#787D84);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.dv-statlist{list-style:none;margin:0 0 13px;padding:0;display:flex;flex-direction:column;gap:9px}
+.dv-statlist li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dv-meta)}
+.dv-statlist li.done,.dv-statlist li.active{color:var(--dv-ink)}
+.dv-statlist li.active{font-weight:600}
+.dv-statmk{flex:0 0 auto;width:16px;height:16px;border-radius:99px;display:grid;place-items:center;border:1.5px solid var(--dv-line);color:#fff}
+.dv-statlist li.done .dv-statmk{background:var(--dv-green);border-color:var(--dv-green)}
+.dv-statlist li.active .dv-statmk{border-color:var(--stat-c,#C9A96E);border-width:2.5px}
+.dv-statml{flex:1 1 auto;min-width:0}
+.dv-statms{flex:0 0 auto;font-size:10px;color:var(--stat-c,#A8842F);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.dv-statnext{display:flex;flex-direction:column;gap:1px;margin-bottom:11px;padding-top:11px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
+.dv-statnext-k{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dv-faint);font-weight:700}
+.dv-statnext-v{font-size:13.5px;color:var(--dv-ink);font-weight:600}
+.dv-statgo{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;height:38px;border-radius:10px;background:var(--dv-ink);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:none}
+.dv-statgo:hover{filter:brightness(1.14)}
 @keyframes dvChipPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.4)}50%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
 @media (prefers-reduced-motion:reduce){.dv-chip-act{animation:none}}
 .dv-dot{width:5px;height:5px;border-radius:99px;background:currentColor;animation:dvpulse 2.4s var(--dv-e) infinite}
@@ -677,7 +732,7 @@ const CSS = `
   .dv-code{display:none}
   .dv-identity{gap:8px;flex:1 1 auto}
   .dv-chip{height:20px;padding:0 7px;font-size:8.5px;letter-spacing:.03em;gap:4px;flex:0 1 auto;min-width:0;max-width:62%}
-  .dv-chip .dv-chip-arw{width:10px;height:10px;flex:0 0 auto}}
+  .dv-chip .dv-chip-caret{width:10px;height:10px;flex:0 0 auto}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){
   .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
