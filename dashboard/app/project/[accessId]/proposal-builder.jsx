@@ -406,9 +406,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
             {status === "sent" && (() => {
               const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
-              // Compact one line: drop the year, name after a middot instead of a stacked "by" row.
-              const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "") : "";
-              return <>Sent{when && ` ${when}`}{by && ` · ${by}`}</>;
+              // Compact document metadata — not a pill/alert. Drop the year AND the timezone abbrev from
+              // the display; date/time/sender wrap only as whole segments (never fragment-by-fragment).
+              const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "").replace(/\s*\bET\b/, "").trim() : "";
+              return <><i className="prop-sent-dot" /><b className="prop-sent-lbl">Sent</b>{when && <span className="prop-sent-seg">· {when}</span>}{by && <span className="prop-sent-seg">· {by}</span>}</>;
             })()}
             {status === "changes_requested" && "Changes requested"}
             {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}

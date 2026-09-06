@@ -77,7 +77,12 @@ const PROP_CSS = `
 .pvx .prop-cflag-btn.discard:hover{color:var(--dv-red,#C4553D);border-color:var(--dv-red,#C4553D)}
 .pvx .prop-status{font-size:.74rem;font-weight:600;padding:4px 11px;border-radius:100px}
 .pvx .prop-status.draft{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84)}
-.pvx .prop-status.sent{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
+/* Sent stamp = compact document metadata, NOT a pill: green dot + green "Sent", neutral date/time/
+   sender. Segments wrap as whole units (never fragment-by-fragment). */
+.pvx .prop-status.sent{background:none;padding:0;border-radius:0;flex-wrap:wrap;align-items:baseline;gap:0 6px;column-gap:6px;color:var(--dv-green,#2E7D5B)}
+.pvx .prop-sent-dot{width:7px;height:7px;border-radius:50%;background:var(--dv-green,#2E7D5B);flex:0 0 auto;align-self:center}
+.pvx .prop-sent-lbl{color:var(--dv-green,#2E7D5B);font-weight:700}
+.pvx .prop-sent-seg{color:var(--dv-meta,#787D84);font-weight:500;white-space:nowrap}
 .pvx .prop-status.changes{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-deep,#A8842F)}
 .pvx .prop-status.accepted{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
 .pvx .prop-note-strip{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink-soft,#3A4048);font-size:.78rem;font-weight:500;padding:9px 12px;border-radius:9px}
@@ -331,6 +336,11 @@ const PROP_CSS = `
 .pvx .prop-mcell .v.ok{color:var(--dv-green,#2E7D5B)}
 .pvx .prop-empty{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;padding:6px 0}
 @media(max-width:640px){
+  /* The "Sent · Sep 6 · 11:29 AM · La Vague" stamp is too long to share the action row on a phone — it
+     was cramming into a narrow pill and stacking. Let the row wrap so the stamp takes its own line
+     (one line at 360-430px; segments wrap whole at narrower); the icon buttons drop to a tidy row. */
+  .pvx .prop-head-slim{flex-wrap:wrap;row-gap:10px}
+  .pvx .prop-head-slim .prop-status.sent{flex:1 1 100%}
   /* The dense multi-column pricing grid doesn't fit a phone — the fixed qty/price/cost/total
      columns eat the width and collapse the item NAME to nothing. On mobile, stack each line:
      an editable row gives the name its own full-width row, then a compact qty · price · total row
