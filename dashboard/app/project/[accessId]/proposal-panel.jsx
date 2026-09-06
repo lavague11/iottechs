@@ -346,9 +346,22 @@ const PROP_CSS = `
   /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
      price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
   .pvx .prop-sysline{flex-wrap:wrap;gap:4px 8px;padding:10px 11px}
-  .pvx .prop-sysline-name{white-space:nowrap;flex-shrink:0}
-  .pvx .prop-sysline-total{margin-left:auto}
-  .pvx .prop-sysline-sub{flex:1 1 100%;order:9;margin-left:39px;margin-top:-2px}
+  /* Name takes the free space so the total + Edit sit together on the right (NOT margin-left:auto on
+     the total, which would pin it to the edge and force Edit to wrap to its own line). */
+  .pvx .prop-sysline-name{white-space:nowrap;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .pvx .prop-sysline-total{margin-left:0;flex-shrink:0}
+  .pvx .prop-sysline-sub{flex:1 1 100%;order:9;margin-left:37px;margin-top:-2px}
+  /* Title-first: trim the decorative slots so the name column wins the most width — compact number
+     badge, tighter price padding, a slimmer drag handle and smaller gaps (no font shrink). */
+  .pvx .prop-block-num{min-width:18px;margin-right:5px}
+  .pvx .prop-item.prop-parent{gap:6px 6px}
+  .pvx button.prop-price-toggle{padding-left:6px}
+  .pvx .prop-block.has-drag{padding-left:15px}
+  .pvx .prop-drag-handle{width:15px}
+  /* NVR / lead row: keep name · total · Edit on ONE line (No drives on its own line) — tighter gaps
+     + a compact Edit button so the action never wraps to a standalone row. */
+  .pvx .prop-sysline{gap:4px 6px}
+  .pvx .prop-sysline .prop-mini{padding:0 10px;height:28px}
   /* Tighter service header + section rhythm on mobile */
   .pvx .prop-svc-head{padding:8px 11px}
   .pvx .prop-item.sub input.num{flex:0 0 56px;width:56px}
