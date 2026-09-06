@@ -2,8 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
+import { lookupAccountAction } from "../login/actions";
 import FaceScan from "./face-scan";
 import { Wordmark, BrandLink } from "./brand";
+
+// Mask the identifier for Step 2's "welcome back" line — client-side only. a••••@company.com · (•••) •••-1234
+function maskIdent(v) {
+  const s = String(v || "").trim();
+  if (s.includes("@")) { const [a, d] = s.split("@"); return (a.slice(0, 1) || "") + "••••@" + (d || ""); }
+  const dg = s.replace(/\D/g, "").slice(-4);
+  return dg.length === 4 ? `(•••) •••-${dg}` : "your account";
+}
 
 // Shared secure-access gateway: animated starfield keypad + Face ID + network diagnostics.
 // Used by the project gate (gateway-client) and the ADT account gate. attemptAccess({pinValue|
@@ -18,63 +27,84 @@ function speedStatus(mbps) {
   return              { label: "Excellent", color: "#5BC4D8" };
 }
 
-// ---- Email / phone + password login form (inside gateway) ----
+// ---- Two-step email/phone → password login (inside gateway) ----
+// Matches the home /login flow: Step 1 identifies the account (email/phone → Continue, or Google);
+// Step 2 authenticates with the password. `onSubmit(cred, pass)` runs the existing project auth.
 function LoginForm({ busy, onSubmit }) {
-  const [cred, setCred]   = useState("");
-  const [pass, setPass]   = useState("");
-  const [err,  setErr]    = useState(null);
-  const [sub,  setSub]    = useState(false);
+  const [step, setStep] = useState("lookup");   // lookup → auth
+  const [cred, setCred] = useState("");
+  const [pass, setPass] = useState("");
+  const [err,  setErr]  = useState(null);
+  const [sub,  setSub]  = useState(false);
+  const [mask, setMask] = useState("");
 
-  async function handleSubmit(e) {
+  // Step 1 — confirm an account exists (non-enumerating), then reveal the password step.
+  async function handleLookup(e) {
     e.preventDefault();
-    if (!cred.trim() || !pass) return;
+    const v = cred.trim();
+    if (!v) { setErr("Enter your email or phone number."); return; }
+    setErr(null); setSub(true);
+    const r = await lookupAccountAction(v).catch(() => ({ error: "Something went wrong — please try again." }));
+    setSub(false);
+    if (r?.error) { setErr(r.error); return; }
+    setMask(maskIdent(v)); setErr(null); setStep("auth");
+  }
+  // Step 2 — password → existing project auth.
+  async function handleAuth(e) {
+    e.preventDefault();
+    if (!pass) return;
     setErr(null); setSub(true);
     const res = await onSubmit(cred.trim(), pass);
     setSub(false);
-    if (!res.ok) setErr(res.error || "Invalid credentials.");
+    if (!res.ok) setErr(res.error || "Incorrect password.");
   }
 
-  // "Continue with Google" carries the current path so a successful sign-in returns to THIS page
-  // (e.g. the project) instead of the generic portal. Dormant → the route bounces to /login?err=…
+  // "Continue with Google" carries the current path so a successful sign-in returns to THIS page.
   function google(e) {
     e.preventDefault();
     const next = window.location.pathname + window.location.search;
     window.location.href = `/api/auth/google?ctx=login&next=${encodeURIComponent(next)}`;
   }
+  const googleBtn = (
+    <a className="gw2-google" href="/api/auth/google?ctx=login" onClick={google}>
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continue with Google
+    </a>
+  );
 
-  return (
-    <>
-      <form className="gw2-lf gw2-lf--top" onSubmit={handleSubmit}>
+  return step === "lookup" ? (
+    <div className="gw2-step" key="lookup">
+      <form className="gw2-lf gw2-lf--top" onSubmit={handleLookup}>
         <div className="gw2-lf-fields">
-          <input
-            className="gw2-lf-input"
-            type="text"
-            autoComplete="username"
-            value={cred}
-            onChange={(e) => setCred(e.target.value)}
-            disabled={busy || sub}
-          />
-          <input
-            className="gw2-lf-input"
-            type="password"
-            placeholder="Password"
-            autoComplete="current-password"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            disabled={busy || sub}
-          />
+          <input className="gw2-lf-input" type="text" placeholder="Email or phone number" autoComplete="username" inputMode="email"
+                 value={cred} onChange={(e) => setCred(e.target.value)} disabled={busy || sub} autoFocus />
         </div>
         {err && <div className="gw2-lf-err">{err}</div>}
-        <button className="gw2-lf-btn" type="submit" disabled={busy || sub || !cred.trim() || !pass}>
-          {sub ? "Signing in…" : "Sign In →"}
+        <button className="gw2-lf-btn" type="submit" disabled={busy || sub || !cred.trim()}>
+          {sub ? "Checking…" : "Continue →"}
         </button>
       </form>
       <div className="gw2-or"><span>or</span></div>
-      <a className="gw2-google" href="/api/auth/google?ctx=login" onClick={google}>
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        Continue with Google
-      </a>
-    </>
+      {googleBtn}
+    </div>
+  ) : (
+    <div className="gw2-step" key="auth">
+      <form className="gw2-lf" onSubmit={handleAuth}>
+        <div className="gw2-prompt">Welcome back</div>
+        <div className="gw2-acct" title={cred}>{mask}</div>
+        <div className="gw2-lf-fields">
+          <input className="gw2-lf-input" type="password" placeholder="Password" autoComplete="current-password"
+                 value={pass} onChange={(e) => setPass(e.target.value)} disabled={busy || sub} autoFocus />
+        </div>
+        {err && <div className="gw2-lf-err">{err}</div>}
+        <button className="gw2-lf-btn" type="submit" disabled={busy || sub || !pass}>
+          {sub ? "Signing in…" : "Sign In →"}
+        </button>
+      </form>
+      <button type="button" className="gw2-diff" onClick={() => { setStep("lookup"); setErr(null); setPass(""); }}>Use a different account</button>
+      <div className="gw2-or"><span>or</span></div>
+      {googleBtn}
+    </div>
   );
 }
 
@@ -122,6 +152,13 @@ export const GW2_LIGHT_CSS = `
 .gw2-light .gw2-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:#fff;border:1px solid #e0e3ea;border-radius:12px;padding:12px 16px;font:inherit;font-size:.92rem;font-weight:600;color:#2C3347;text-decoration:none;transition:border-color .14s,box-shadow .14s;}
 .gw2-light .gw2-google:hover{border-color:#C9A96E;box-shadow:0 5px 16px -9px rgba(14,19,32,.3);}
 .gw2-light .gw2-google svg{flex:none;}
+/* Two-step login: subtle fade+slide between the lookup and password steps; masked account line. */
+.gw2-step{animation:gw2StepIn .22s cubic-bezier(.16,1,.3,1);}
+@keyframes gw2StepIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){.gw2-step{animation:none;}}
+.gw2-light .gw2-acct{text-align:center;font-size:.86rem;font-weight:600;color:#5b6275;margin:-4px 0 14px;letter-spacing:.01em;word-break:break-all;}
+.gw2-light .gw2-diff{display:block;width:100%;margin-top:10px;background:none;border:none;font:inherit;font-size:.85rem;font-weight:500;color:#6b7280;cursor:pointer;text-align:center;padding:2px;}
+.gw2-light .gw2-diff:hover{color:#0e1320;}
 `;
 
 // ---- PIN gateway screen (light card on the animated starfield) ----
