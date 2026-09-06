@@ -321,12 +321,17 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // Default split: first payment 50%, the rest cascade evenly across the remaining rows.
   const defaultPcts = (n) => cascadePct(Array.from({ length: n }, () => ({ pct: 0 })), 0, 50);
   const dueDatesFor = (n, cadence, start) => { const base = start || fmtISO(new Date()); return Array.from({ length: n }, (_, i) => cadence === "biweekly" ? addDaysISO(base, i * 14) : addMonthsISO(base, i)); };
+  // Dates must run in order — a later payment can never fall before an earlier one. A forward pass
+  // pushes any date that precedes its predecessor up to match (earlier payments stay fixed).
+  const enforceDateOrder = (dates) => { const d = dates.slice(); for (let j = 1; j < d.length; j++) if (d[j] && d[j - 1] && d[j] < d[j - 1]) d[j] = d[j - 1]; return d; };
   function buildSchedule(n, cadence, start, pcts) {
     const p = pcts || defaultPcts(n); const dates = dueDatesFor(n, cadence, start);
     return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
   }
   const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "monthly");
-  const custRows = custPlan.rows;
+  // Normalize whatever is stored so the schedule always displays in chronological order (older saved
+  // plans may have out-of-order dates from before this rule existed).
+  const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, due: ordered[i] })); })();
   const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
   const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
   function commitPlan(next) {
@@ -338,10 +343,19 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const setCustPct = (i, v) => { const pcts = cascadePct(custRows, i, v); commitPlan({ rows: custRows.map((r, j) => ({ ...r, pct: pcts[j] })), cadence: custCadence }); };
   // Editing the dollar amount drives the percentage (amount ÷ grand total), then cascades forward like a % edit.
   const setCustAmt = (i, dollars) => { const g = totals.grand || 0; if (!g) return; setCustPct(i, (Math.max(0, +dollars || 0) / g) * 100); };
-  // Dates must run in order — a later payment can never fall before an earlier one. Editing a date
-  // keeps the earlier payments fixed and pushes any later date that would precede it forward to match.
-  const enforceDateOrder = (dates) => { const d = dates.slice(); for (let j = 1; j < d.length; j++) if (d[j] && d[j - 1] && d[j] < d[j - 1]) d[j] = d[j - 1]; return d; };
   const setCustDue = (i, v) => { const ordered = enforceDateOrder(custRows.map((r, j) => j === i ? v : r.due)); commitPlan({ rows: custRows.map((r, j) => ({ ...r, due: ordered[j] })), cadence: custCadence }); };
+  // If a stored plan has out-of-order dates (from before the ordering rule), persist the corrected
+  // order once so save/PDF/customer view all agree — not just the on-screen builder.
+  useEffect(() => {
+    if (plan !== "custom") return;
+    const rows = payload.custom_plan?.rows;
+    if (!rows?.length) return;
+    const ordered = enforceDateOrder(rows.map((r) => r.due));
+    if (ordered.some((d, i) => d !== rows[i].due)) {
+      patchPayload({ ...payload, custom_plan: { ...payload.custom_plan, rows: rows.map((r, i) => ({ ...r, due: ordered[i] })) } });
+      setDirty(true);
+    }
+  }, [plan, payload.custom_plan]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   function setPlan(key) {
     const patch = { ...payload, payment_plan: key };
