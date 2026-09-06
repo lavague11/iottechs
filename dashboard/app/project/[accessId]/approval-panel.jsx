@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { optionTotals, fmtSignStamp, displayOptionName } from "../../../lib/proposal";
+import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
@@ -282,17 +282,20 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
   const optLabel = shown.map((o) => `Option ${o.id} (${o.name})`).join(" + ");
   const depositPct = +p.deposit_pct || 50;
   const payments = data.payments || [];
-  const depositTarget = t.grand * depositPct / 100;
   // Only CONFIRMED money counts — a customer submission sits pending until staff confirm receipt.
   const confirmed = payments.filter((x) => x.status !== "pending");
   const pendingTotal = payments.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
   const depositPaid = confirmed.filter((x) => x.kind === "deposit").reduce((s, x) => s + (+x.amount || 0), 0);
   const paidTotal = confirmed.reduce((s, x) => s + (+x.amount || 0), 0);
-  const depositDue = Math.max(0, depositTarget - depositPaid);
-  // Approved job-site add-ons add to what's owed (deposit stays based on the original proposal).
+  // Approved job-site add-ons amend the contract — canonical selector every stage shares. The CURRENT
+  // total and BALANCE are add-on inclusive; the deposit stays anchored to the ORIGINAL base and is
+  // measured against deposit-kind payments (a later add-on folds into the remaining balance, not the deposit).
   const addons = data.addons || { total: 0, list: [] };
-  const grandWithAddons = t.grand + (+addons.total || 0);
-  const balance = Math.max(0, grandWithAddons - paidTotal);
+  const fin = projectFinancials(t.grand, addons.total, paidTotal, depositPct);
+  const depositTarget = fin.depositTarget;
+  const depositDue = Math.max(0, depositTarget - depositPaid);
+  const grandWithAddons = fin.current;
+  const balance = fin.balance;
   const signed = !!p.signed_name;
   const depositOk = depositPaid > 0;
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);

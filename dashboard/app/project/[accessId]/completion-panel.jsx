@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { completeProjectAction, setCommissionAction, setPayoutAction, setWarrantyAction } from "./actions";
 import { getApprovalDataAction } from "./proposal-actions";
-import { optionTotals } from "../../../lib/proposal";
+import { optionTotals, projectFinancials } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
 import SystemQrModal from "./system-qr-modal";
 import { TaglinePill, Wordmark } from "../../components/brand";
@@ -56,12 +56,14 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
   const grand = acceptedOpt
     ? optionTotals(acceptedOpt, proposal.tax_rate, proposal.payload.discount, proposal.deposit_pct, proposal.payload.pcp_credit).grand
     : 0;
-  const addonsTotal = +payData?.addons?.total || 0;
-  const owed = grand + addonsTotal;
   const paidTotal = (payData?.payments || []).filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
-  const balance = Math.max(0, owed - paidTotal);
+  // Canonical contract math — same selector every stage uses (base proposal + approved add-ons).
+  const fin = projectFinancials(grand, payData?.addons?.total, paidTotal, proposal?.deposit_pct);
+  const addonsTotal = fin.addons;
+  const owed = fin.current;
+  const balance = fin.balance;
   const payLoaded = payData !== null;
-  const paidInFull = owed <= 0 || (payLoaded && balance <= 0.01);
+  const paidInFull = owed <= 0 || (payLoaded && fin.paidInFull);
   // Gate the customer until we've loaded payments AND they're paid in full. While loading we hold
   // the deliverables back (safer than flashing them, then hiding).
   const gated = isCustomer && !paidInFull;

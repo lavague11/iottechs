@@ -3,11 +3,11 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms, projectFinancials,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
@@ -47,6 +47,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
   const [depositPct, setDepositPct] = useState(initial?.deposit_pct ?? 50);
   const [cadOpen, setCadOpen] = useState(false);   // custom-plan cadence gear menu
+  const [addons, setAddons] = useState({ total: 0, list: [] });   // approved job-site add-ons (amend the contract)
   const [activeOpt, setActiveOpt] = useState(initial?.payload?.options?.[0]?.id || "A");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,6 +96,16 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       }));
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessId]);
+
+  // Approved job-site add-ons — poll so an addendum approved/voided at the Install stage flows into the
+  // proposal's current-contract total without a manual reload (same feed the deposit/closeout use).
+  useEffect(() => {
+    let live = true;
+    const load = () => getProjectAddonsAction(accessId).then((a) => { if (live && a) setAddons({ total: +a.total || 0, list: a.list || [] }); }).catch(() => {});
+    load();
+    const id = setInterval(load, 15000);
+    return () => { live = false; clearInterval(id); };
   }, [accessId]);
 
   // Auto-save: debounce edits into the DB (like the survey tools' autosave, but server-side).
@@ -283,6 +294,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   }
 
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
+  // Canonical contract math: base proposal (this doc) + approved add-ons = current contract total.
+  // The base proposal is never rewritten — add-ons show as a separate amendment line.
+  const fin = projectFinancials(totals.grand, addons.total, 0, depositPct);
   const disc = payload.discount || { type: "flat", value: 0 };
   const pcp = (payload.pcp_credit && typeof payload.pcp_credit === "object") ? payload.pcp_credit : { type: "flat", value: +payload.pcp_credit || 0 };
   const plan = payload.payment_plan || "custom";
@@ -577,7 +591,17 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
           )}
         </div>
 
-        <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
+        {/* An approved add-on amends the contract: keep the original proposal total visible and show the
+            current contract total below it — never silently rewrite the signed proposal. */}
+        {fin.hasAddons ? (
+          <>
+            <div className="prop-trow"><span>Original proposal</span><b>{money(fin.base)}</b></div>
+            <div className="prop-trow prop-trow-addon"><span>Approved addendums{addons.list?.length > 1 ? ` (${addons.list.length})` : ""}</span><b className="prop-plus">+{money(fin.addons)}</b></div>
+            <div className="prop-total-big"><span>Current total</span><b>{money(fin.current)}</b></div>
+          </>
+        ) : (
+          <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
+        )}
 
         <div className="prop-plan-row2">
           <span className="prop-plan-lbl">Payment plan</span>

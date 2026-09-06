@@ -569,6 +569,33 @@ export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value:
   const grand = taxable + tax;
   return { sub: r2(sub), discount: r2(disc), pcpCredit: r2(credit), tax: r2(tax), grand: r2(grand), deposit: r2(grand * (+depositPct || 0) / 100) };
 }
+
+// ---- Canonical project financial summary (ONE source of truth) --------------------------------
+// Every stage (Proposal, Approval/Deposit, Record-a-Payment, Closeout, invoices) must derive its
+// money from THIS so a project can never show two different totals. An addendum is an AMENDMENT, so
+// the base proposal total is preserved untouched; the CURRENT contract total = base + approved
+// add-ons. The scheduled deposit stays anchored to the ORIGINAL base (a signed 50% deposit isn't
+// retroactively rewritten by a later add-on); the add-on folds into the remaining/final balance.
+//   baseGrand    — accepted-option grand from optionTotals(...).grand
+//   addonsTotal  — getApprovedAddons(accessId).total (approved add-ons only; voided/pending excluded)
+//   paid         — confirmed (non-pending) payments received
+//   depositPct   — the plan's first-installment %
+export function projectFinancials(baseGrand, addonsTotal = 0, paid = 0, depositPct = 50) {
+  const base    = r2(Math.max(0, +baseGrand || 0));           // ORIGINAL proposal (history preserved)
+  const addons  = r2(Math.max(0, +addonsTotal || 0));         // approved add-ons only
+  const current = r2(base + addons);                          // CURRENT contract total
+  const paidN   = r2(Math.max(0, +paid || 0));                // payments received
+  const depositTarget = r2(base * (+depositPct || 0) / 100);  // deposit % of the ORIGINAL base
+  return {
+    base, addons, current,
+    hasAddons: addons > 0.005,
+    depositTarget,
+    depositDue: r2(Math.max(0, depositTarget - paidN)),       // deposit still owed
+    paid: paidN,
+    balance: r2(Math.max(0, current - paidN)),                // CURRENT balance due (add-on inclusive)
+    paidInFull: current > 0 ? (current - paidN) <= 0.01 : true,
+  };
+}
 const itemCost = (it) => (+it.qty || 0) * (+it.cost || 0) + (it.sub || []).reduce((s, x) => s + (+x.qty || 0) * (+x.cost || 0), 0);
 export const optionCost = (opt) =>
   r2((opt.services || []).reduce((s, svc) => s + (svc.items || []).reduce((a, it) => a + itemCost(it), 0), 0));

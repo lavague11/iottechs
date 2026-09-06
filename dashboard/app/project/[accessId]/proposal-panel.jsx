@@ -247,6 +247,8 @@ const PROP_CSS = `
 .pvx .prop-trow b{color:var(--dv-ink,#101418)}
 .pvx .prop-adj{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pvx .prop-minus{color:var(--dv-green,#2E7D5B);white-space:nowrap}
+.pvx .prop-trow-addon span{color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-plus{color:var(--dv-gold-deep,#A8842F);font-weight:700;white-space:nowrap}
 .pvx .prop-total-big{display:flex;justify-content:space-between;align-items:baseline;gap:18px;margin:6px 0;padding:14px 16px;border-radius:12px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-total-big span{font-size:.9rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-total-big b{font-size:1.7rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);letter-spacing:-.01em}

@@ -320,6 +320,13 @@ export async function getApprovalDataAction(accessId) {
   };
 }
 
+// Approved job-site add-ons for a project (amendment to the contract). The proposal builder shows
+// these as a separate line so the base proposal stays intact while the current contract total reflects
+// them — same source (getApprovedAddons) the deposit/closeout/balance already use.
+export async function getProjectAddonsAction(accessId) {
+  return getApprovedAddons(accessId);   // { total, list }
+}
+
 // Customer (or staff previewing) signs the accepted proposal.
 export async function signProposalAction(accessId, name, signatureData) {
   const tok = await getSessionRole();
