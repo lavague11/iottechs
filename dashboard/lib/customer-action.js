@@ -33,17 +33,17 @@ export function customerAnnouncement(f = {}) {
   if (f.survey_published && f.survey_has && !f.survey_done)
     return { key: "survey", icon: "survey",
       title: "Your site survey is ready",
-      body: "We've mapped out where every device goes. Take a look and approve it to keep things moving.",
+      body: "Review the device placement and approve.",
       cta: "Review survey", target: "site_survey" };
   if (f.mockup_published && f.mockup_has && !f.mockup_done)
     return { key: "mockup", icon: "mockup",
       title: "Your system mockup is ready",
-      body: "See the design we put together for your space, then approve it.",
+      body: "Review the design and approve.",
       cta: "Review mockup", target: "site_survey" };
   if (f.proposal_status === "sent")
     return { key: f.proposal_version ? `proposal:v${f.proposal_version}` : "proposal", icon: "proposal",
       title: "Your proposal is ready",
-      body: "Your options and pricing are in. Review them and accept the one you want.",
+      body: "Review and accept your option.",
       cta: "View proposal", target: "proposal" };
   return null;
 }
@@ -73,46 +73,46 @@ export function customerAction(stage, f = {}) {
   switch (stage) {
     case "inquiry":
       return f.appt_date
-        ? S("Your site survey is being scheduled", "We'll confirm the appointment with you shortly.")
-        : S("We've received your request", "Our team will reach out to schedule your site survey.");
+        ? S("Your site survey is being scheduled", "We'll confirm shortly.")
+        : S("We've received your request", "We'll reach out to schedule.");
 
     case "site_survey":
-      if (f.survey_accepted) return S("Site survey approved", "We're preparing your proposal now.");
-      if (f.survey_submitted) return A("Review and approve your site survey", "Check the device placement, then approve to continue.", "Review survey", "site_survey");
-      return S("Your site survey is being prepared", "We'll let you know the moment it's ready to review.");
+      if (f.survey_accepted) return S("Site survey approved", "Proposal coming next.");
+      if (f.survey_submitted) return A("Review and approve your site survey", "Approve the device placement.", "Review survey", "site_survey");
+      return S("Your site survey is being prepared", "We'll notify you when it's ready.");
 
     case "proposal":
-      if (f.proposal_status === "accepted") return S("Proposal accepted", "Next you'll sign the agreement and place your deposit.");
-      if (f.proposal_status === "changes_requested") return S("We're revising your proposal", "We'll send you the updated version shortly.");
+      if (f.proposal_status === "accepted") return S("Proposal accepted", "Sign + deposit next.");
+      if (f.proposal_status === "changes_requested") return S("We're revising your proposal", "Updated version coming shortly.");
       if (f.proposal_status === "sent" || f.proposal_status === "declined")
-        return A("Review your proposal", "See your options and pricing, then accept the one you want.", "Review proposal", "proposal");
-      return S("Your proposal is being prepared", "We're putting together your options and pricing.");
+        return A("Review your proposal", "Accept the option you want.", "Review proposal", "proposal");
+      return S("Your proposal is being prepared", "Putting together your pricing.");
 
     case "approval_deposit":
       // Same requirement order the flow matrix gates on: accept → sign → deposit → confirm.
       if (f.proposal_status !== "accepted")
-        return A("Review and accept your proposal", "Choose your option to continue to signing and deposit.", "Review proposal", "proposal");
-      if (!f.proposal_signed)   return A("Sign your agreement", "Add your signature to lock in your proposal.", "Sign agreement", "approval_deposit");
-      if (!f.deposit_submitted) return A("Pay your deposit to get started", "Your deposit reserves your crew and equipment.", "Pay deposit", "approval_deposit");
-      if (!f.deposit_recorded)  return S("Confirming your deposit", "We're verifying your payment — this only takes a moment.");
-      return S("You're all set", "We're moving your project into scheduling.");
+        return A("Review and accept your proposal", "Choose your option to continue.", "Review proposal", "proposal");
+      if (!f.proposal_signed)   return A("Sign your agreement", "Locks in your proposal.", "Sign agreement", "approval_deposit");
+      if (!f.deposit_submitted) return A("Pay your deposit to get started", "Reserves your crew + gear.", "Pay deposit", "approval_deposit");
+      if (!f.deposit_recorded)  return S("Confirming your deposit", "Verifying your payment.");
+      return S("You're all set", "Moving to scheduling.");
 
     case "schedule":
       return f.install_date
-        ? S(`Your install is scheduled${f.install_date_fmt ? ` — ${f.install_date_fmt}` : ""}`, "We'll text you before your technician arrives.")
-        : S("We're scheduling your install", "We're lining up your crew and equipment — your date is coming.");
+        ? S(`Your install is scheduled${f.install_date_fmt ? ` — ${f.install_date_fmt}` : ""}`, "We'll text before arrival.")
+        : S("We're scheduling your install", "Your date is coming.");
 
     case "install":
-      return S("Your install is underway", "Your technician is on site setting up your system.");
+      return S("Your install is underway", "Technician on site.");
 
     case "qc":
-      return S("Final quality check in progress", "We're testing every device before we hand it over.");
+      return S("Final quality check in progress", "Testing every device.");
 
     case "payment":
-      return A("Pay your final balance", "One last step and your project is complete.", "Pay balance", "approval_deposit");
+      return A("Pay your final balance", "One last step.", "Pay balance", "approval_deposit");
 
     case "completion":
-      return D("Your system is live", "Your completion certificate and warranty are ready in your project.");
+      return D("Your system is live", "Certificate + warranty ready.");
 
     default:
       return null;

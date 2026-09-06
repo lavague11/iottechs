@@ -46,6 +46,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [payload, setPayload] = useState(() => initial?.payload || blankPayloadForService(defaultService));
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
   const [depositPct, setDepositPct] = useState(initial?.deposit_pct ?? 50);
+  const [cadOpen, setCadOpen] = useState(false);   // custom-plan cadence gear menu
   const [activeOpt, setActiveOpt] = useState(initial?.payload?.options?.[0]?.id || "A");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -288,30 +289,44 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   function setDiscount(patch) { patchPayload({ ...payload, discount: { ...disc, ...patch } }); }
   function setPcp(patch) { patchPayload({ ...payload, pcp_credit: { ...pcp, ...patch } }); }
 
-  // ---- Custom multi-payment schedule (# payments · due dates auto-spaced 2 weeks apart) ----
+  // ---- Custom multi-payment schedule ----
+  // First payment defaults to 50%; the rest split the remainder evenly. Editing any row re-splits the
+  // OTHER rows so the total always lands on 100%. Due dates follow a cadence (biweekly / monthly) or
+  // are entered by hand (custom). A gear switches the cadence.
   const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const addDaysISO = (iso, days) => { const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(); d.setDate(d.getDate() + days); return fmtISO(d); };
-  // Even split into c payments, dates spaced 14 days from `start` (defaults to today).
-  function genSchedule(c, start) {
-    const n = Math.max(2, Math.min(12, c | 0)); const base = start || fmtISO(new Date());
-    const even = Math.floor(100 / n); const rows = [];
-    for (let i = 0; i < n; i++) rows.push({ pct: i === n - 1 ? 100 - even * (n - 1) : even, due: addDaysISO(base, i * 14) });
-    return rows;
+  const addMonthsISO = (iso, n) => { const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(); d.setMonth(d.getMonth() + n); return fmtISO(d); };
+  const fmtShortDate = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); if (!m) return ""; const d = new Date(+m[1], +m[2] - 1, +m[3]); return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} '${String(m[1]).slice(2)}`; };
+  // Pin row `editedIdx` to `value`; distribute the remaining % evenly across the rest (last absorbs rounding).
+  function distributePct(n, editedIdx, value) {
+    const v = Math.max(0, Math.min(100, Math.round(+value || 0))); const others = n - 1;
+    const each = others > 0 ? Math.floor((100 - v) / others) : 0;
+    const pcts = Array.from({ length: n }, (_, i) => i === editedIdx ? v : each);
+    const sum = pcts.reduce((a, b) => a + b, 0);
+    if (sum !== 100) for (let i = n - 1; i >= 0; i--) if (i !== editedIdx) { pcts[i] = Math.max(0, pcts[i] + (100 - sum)); break; }
+    return pcts;
   }
-  const custRows = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length)
-    ? payload.custom_plan.rows : genSchedule(3);
+  const dueDatesFor = (n, cadence, start) => { const base = start || fmtISO(new Date()); return Array.from({ length: n }, (_, i) => cadence === "monthly" ? addMonthsISO(base, i) : addDaysISO(base, i * 14)); };
+  function buildSchedule(n, cadence, start, pcts) {
+    const p = pcts || distributePct(n, 0, 50); const dates = dueDatesFor(n, cadence, start);
+    return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
+  }
+  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "biweekly");
+  const custRows = custPlan.rows;
+  const custCadence = custPlan.cadence || "biweekly";
   const custSumPct = custRows.reduce((s, r) => s + (+r.pct || 0), 0);
-  function commitCustom(rows) {
-    patchPayload({ ...payload, payment_plan: "custom", custom_plan: { rows } });
-    setDepositPct(+rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
+  function commitPlan(next) {
+    patchPayload({ ...payload, payment_plan: "custom", custom_plan: next });
+    setDepositPct(+next.rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
   }
-  const setCustCount = (n) => commitCustom(genSchedule(n, custRows[0]?.due));            // re-even-split + re-space
-  const setCustPct = (i, v) => commitCustom(custRows.map((r, j) => j === i ? { ...r, pct: v === "" ? "" : Math.max(0, Math.min(100, +v)) } : r));
-  const setCustDue = (i, v) => commitCustom(custRows.map((r, j) => j === i ? { ...r, due: v } : r));
+  const setCustCount = (n) => { const c = Math.max(2, Math.min(12, n | 0)); commitPlan(buildSchedule(c, custCadence, custRows[0]?.due)); };
+  const setCadence = (cad) => { setCadOpen(false); if (cad === "custom") { commitPlan({ rows: custRows, cadence: "custom" }); return; } const dates = dueDatesFor(custRows.length, cad, custRows[0]?.due); commitPlan({ rows: custRows.map((r, i) => ({ ...r, due: dates[i] })), cadence: cad }); };
+  const setCustPct = (i, v) => { const pcts = distributePct(custRows.length, i, v); commitPlan({ rows: custRows.map((r, j) => ({ ...r, pct: pcts[j] })), cadence: custCadence }); };
+  const setCustDue = (i, v) => commitPlan({ rows: custRows.map((r, j) => j === i ? { ...r, due: v } : r), cadence: "custom" });  // hand-editing a date switches to custom cadence
 
   function setPlan(key) {
     const patch = { ...payload, payment_plan: key };
-    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = { rows: genSchedule(3) };
+    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "biweekly");
     patchPayload(patch);
     if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
     const pp = PAYMENT_PLANS[key];
@@ -551,13 +566,25 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
                 <b>{custRows.length}</b>
                 <button type="button" onClick={() => setCustCount(custRows.length + 1)} disabled={custRows.length >= 12}>+</button>
               </div>
-              <span className="prop-cplan-hint">auto-spaced 2 weeks apart</span>
+              <div className="prop-cplan-cad">
+                <button type="button" className="prop-cplan-gear" onClick={() => setCadOpen((o) => !o)} title="Payment cadence">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+                  {custCadence === "monthly" ? "Monthly" : custCadence === "custom" ? "Custom" : "Biweekly"}
+                </button>
+                {cadOpen && (
+                  <div className="prop-cplan-cadmenu">
+                    <button type="button" className={custCadence === "biweekly" ? "on" : ""} onClick={() => setCadence("biweekly")}>Biweekly</button>
+                    <button type="button" className={custCadence === "monthly" ? "on" : ""} onClick={() => setCadence("monthly")}>Monthly</button>
+                    <button type="button" className={custCadence === "custom" ? "on" : ""} onClick={() => setCadence("custom")}>Custom dates</button>
+                  </div>
+                )}
+              </div>
             </div>
             {custRows.map((r, i) => (
               <div className="prop-cplan-row" key={i}>
                 <span className="prop-cplan-n">{i + 1}</span>
                 <input className="tin" type="number" min="0" max="100" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
-                <input className="prop-cplan-date" type="date" value={r.due} onChange={(e) => setCustDue(i, e.target.value)} />
+                <label className="prop-cplan-date"><span>{fmtShortDate(r.due) || "Set date"}</span><input type="date" value={r.due} onChange={(e) => setCustDue(i, e.target.value)} /></label>
                 <b className="prop-cplan-amt">{money(totals.grand * (+r.pct || 0) / 100)}</b>
               </div>
             ))}

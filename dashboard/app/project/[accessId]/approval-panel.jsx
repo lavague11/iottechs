@@ -231,12 +231,12 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                         <div className="apv-hrow-top">
                           <span className="apv-hrow-amt">{money(x.amount)}</span>
                           <span className="apv-hrow-kind">{x.kind}</span>
+                          {x.status === "pending" ? <span className="apv-pay-pending">Pending</span> : <span className="apv-hrow-ok">✓ Received</span>}
                         </div>
                         <span className="apv-hrow-meta">{[payerName(x), x.method, (x.paid_at || x.created_at) && fmtDay(x.paid_at || x.created_at)].filter(Boolean).join(" · ")}</span>
                         {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                       </div>
                       <div className="apv-hrow-acts">
-                        {x.status === "pending" ? <span className="apv-pay-pending">Pending</span> : <span className="apv-hrow-ok">✓ Received</span>}
                         {x.status === "pending" && <button className="apv-pay-ok" disabled={busy} onClick={() => confirmPayment(x.id)}>Confirm</button>}
                         <button className="apv-pay-x" title="Remove" onClick={() => delPayment(x.id)}>✕</button>
                       </div>
@@ -513,15 +513,13 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                   <div className="apv-hrow-top">
                     <span className="apv-hrow-amt">{money(x.amount)}</span>
                     <span className="apv-hrow-kind">{x.kind}</span>
+                    {x.status === "pending" ? <span className="apv-pay-pending">Pending</span> : <span className="apv-hrow-ok">✓ Received</span>}
                   </div>
                   {/* One clean meta line: who paid (staff see every name; a customer sees only their own) · method · date */}
                   <span className="apv-hrow-meta">{[(isStaff || x.source === "customer") && payerName(x), x.method, (x.paid_at || x.created_at) && fmtDay(x.paid_at || x.created_at)].filter(Boolean).join(" · ")}</span>
                   {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                 </div>
                 <div className="apv-hrow-acts">
-                  {x.status === "pending"
-                    ? <span className="apv-pay-pending">Pending</span>
-                    : <span className="apv-hrow-ok">✓ Received</span>}
                   {isStaff && x.status === "pending" && delPayId !== x.id && (
                     <button className="apv-pay-ok" title="Confirm received" disabled={busy} onClick={() => confirmPayment(x.id)}>Confirm</button>
                   )}
@@ -750,7 +748,7 @@ select.apv-input{cursor:pointer}
 .apv-void-yes{height:24px;padding:0 10px;border-radius:100px;border:none;background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
 .apv-void-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:500;cursor:pointer;font-family:inherit}
 .apv-pay-row.pending{background:rgba(201,169,110,.08);border-radius:8px;padding-left:8px;padding-right:8px}
-.apv-pay-pending{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:100px;background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-deep,#A8842F);font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.apv-pay-pending{display:inline-block;padding:1px 8px;border-radius:100px;background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-deep,#A8842F);font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
 .apv-pay-ok{height:26px;padding:0 11px;border-radius:100px;border:none;background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:transform .12s}
 .apv-pay-ok:hover{transform:translateY(-1px)}
 .apv-pay-total{display:flex;justify-content:space-between;font-size:.86rem;font-weight:700;color:var(--ink);padding-top:8px}
@@ -782,10 +780,10 @@ select.apv-input{cursor:pointer}
 .apv-hrow:last-child{border-bottom:none}
 .apv-hrow.pending{background:#fbf6ec}
 .apv-hrow-main{display:flex;flex-direction:column;gap:3px;min-width:0}
-.apv-hrow-top{display:flex;align-items:center;gap:8px}
+.apv-hrow-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .apv-hrow-amt{font-size:1.02rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.apv-hrow-meta{display:block;font-size:.76rem;color:var(--dv-meta,#787D84);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.apv-hrow-kind{text-transform:capitalize;font-weight:600;font-size:.64rem;letter-spacing:.03em;color:var(--dv-meta,#787D84);background:var(--dv-line-soft,#EDEDE9);border-radius:100px;padding:2px 8px}
+.apv-hrow-meta{display:block;font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.35;margin-top:2px}
+.apv-hrow-kind{text-transform:capitalize;font-weight:600;font-size:.64rem;letter-spacing:.03em;color:var(--dv-meta,#787D84);background:var(--dv-line-soft,#EDEDE9);border-radius:100px;padding:2px 8px;white-space:nowrap}
 .apv-hrow-note{font-style:italic;color:var(--dv-meta,#787D84);font-size:.76rem;margin-top:1px}
 .apv-hrow-when{color:var(--dv-faint,#A1A6AC)}
 .apv-hrow-by{color:var(--dv-meta,#787D84);font-weight:600}

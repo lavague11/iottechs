@@ -231,7 +231,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           </div>
           <span className="pcv-doctag">Proposal</span>
         </div>
-        <div className="pcv-empty">Our team is preparing your proposal — mockups and pricing are on the way.</div>
+        <div className="pcv-empty">Preparing your proposal…</div>
       </div>
     );
   }
@@ -456,11 +456,11 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           read first, act at the end. See the acceptance box below the totals. */}
 
       {optDeclined && !declineOpen && (
-        <div className="pcv-note-strip">You declined {optName(opt.id)}{declinedMap[opt.id] ? `: “${declinedMap[opt.id]}”` : ""}. Changed your mind? Accept it below.</div>
+        <div className="pcv-note-strip">Declined {optName(opt.id)}{declinedMap[opt.id] ? `: “${declinedMap[opt.id]}”` : ""} — accept below to change.</div>
       )}
       {reviseMode && (
         <div className="pcv-revise-hint">
-          <b>Revise mode</b> — tap any line item to request a change or removal. Nothing is deleted; our team reviews each request.
+          <b>Revise mode</b> — tap a line to request a change.
         </div>
       )}
       {!reviseMode && flagCount > 0 && p.status === "changes_requested" && (
@@ -558,7 +558,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                           <button type="button" className="pcv-lm-btn change" onClick={() => applyFlag(it.id, "change")}>Request Relocation</button>
                           {flags[it.id] && <button type="button" className="pcv-lm-btn clear" onClick={() => clearFlag(it.id)}>Withdraw</button>}
                         </div>
-                        <div className="pcv-linemenu-foot">Nothing is deleted — our team reviews and updates the proposal.</div>
+                        <div className="pcv-linemenu-foot">Our team reviews each request.</div>
                       </div>
                     )}
 
@@ -623,14 +623,14 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             <div className="pcv-pcp-head">
               <div>
                 <div className="pcv-pcp-title">Pending Performance Credit{pcpPct ? ` · ${pcpPct}%` : ""} <span className="pcv-pcp-amt">−{money(t.pcpCredit)}</span></div>
-                <div className="pcv-pcp-sub">A discretionary job‑performance credit of 2–10% on the labor subtotal, rewarding jobs that run efficiently — fewer visits, prompt payment, easy access, added value to IOT TECHS.</div>
+                <div className="pcv-pcp-sub">2–10% labor credit for jobs that run efficiently.</div>
               </div>
               <span className={`pcv-pcp-badge ${pcpAgreed ? "ok" : "pending"}`}>{pcpAgreed ? "✓ Agreement approved" : "Pending your approval"}</span>
             </div>
             <ul className="pcv-pcp-terms">
               <li>Shown as a <b>transparent line‑item deduction</b> — never baked into pricing.</li>
               <li>Must be agreed <b>before work begins</b>; it is not applied retroactively.</li>
-              <li>The credit is <b>pending and discretionary</b> — the final amount is confirmed at completion and may be adjusted if job performance, payment timing, or site conditions differ from what was committed. You'll be notified of any change before final invoicing.</li>
+              <li>The credit is <b>pending and discretionary</b> — confirmed at completion.</li>
               <li>Applies to the labor subtotal only. Deposit due before work; balance due on completion.</li>
             </ul>
             {pcpAgreed ? (
@@ -642,7 +642,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                 ) : (
                   <>✓ Approved{p.pcp_agreement_no ? ` · ${p.pcp_agreement_no}` : ""}{p.pcp_agreed_at ? ` · ${new Date(p.pcp_agreed_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}</>
                 )}
-                <span className="pcv-pcp-agreed-note">{pcpApproved ? "Credit confirmed by IOT TECHS." : "Credit remains pending final confirmation at completion."}</span>
+                <span className="pcv-pcp-agreed-note">{pcpApproved ? "Credit confirmed." : "Pending confirmation at completion."}</span>
                 {canVoid && voidPcpOpen && (
                   <span className="pcv-void-confirm">
                     Are you sure you want to void this signature?
@@ -664,7 +664,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       <div className="pcv-accept-box">
         {reviseMode ? (
           <div className="pcv-send-bar">
-            <span className="pcv-send-count">{flagCount ? `${flagCount} item${flagCount !== 1 ? "s" : ""} requested — our team is reviewing.` : "Tap ✕ on any line to request its removal or relocation."}</span>
+            <span className="pcv-send-count">{flagCount ? `${flagCount} item${flagCount !== 1 ? "s" : ""} requested` : "Tap ✕ to request a change"}</span>
             <button className="pcv-select" onClick={() => { setReviseMode(false); setMenuFor(null); }}>Done</button>
           </div>
         ) : (
@@ -687,7 +687,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             )}
             {canAct && (
               <>
-                <p>Accept the option{p.payload.options.length > 1 ? "(s)" : ""} you want{p.payload.options.length > 1 ? " — you can pick more than one" : ""}, request a change, or decline.</p>
+                <p>Accept, request a change, or decline.</p>
                 <div className="pcv-accept-actions">
                   <button className={`pcv-select${optAccepted ? " outline" : ""}`} disabled={busy} onClick={() => choose(opt.id)}>
                     {optAccepted ? `Remove Option ${opt.id}` : (
@@ -719,7 +719,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
             )}
             {/* No premature "next step" button here — once accepted, the deposit tool below is the
                 next action, and advancement happens after the deposit is recorded (not on accept). */}
-            {!canAct && acceptedSet.size === 0 && <p>This proposal isn’t open for action right now.</p>}
+            {!canAct && acceptedSet.size === 0 && <p>Not open for action.</p>}
           </>
         )}
         {/* Share (deep-link straight to this proposal, still PIN-gated) + Download, at the bottom. */}

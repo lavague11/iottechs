@@ -366,7 +366,7 @@ export function customPlanTerms(rows) {
     const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return "";
     const d = new Date(+m[1], +m[2] - 1, +m[3]);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} '${String(m[1]).slice(2)}`;
   };
   return rows.map((r) => `${+r.pct || 0}%${r.due ? ` ${fmt(r.due)}` : ""}`).join(" · ");
 }

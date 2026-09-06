@@ -272,13 +272,21 @@ const PROP_CSS = `
 .pvx .prop-cplan-step button{width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:1rem;line-height:1;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center}
 .pvx .prop-cplan-step button:disabled{opacity:.4;cursor:default}
 .pvx .prop-cplan-step b{min-width:14px;text-align:center;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.pvx .prop-cplan-hint{margin-left:auto;font-weight:500;font-style:italic;color:var(--dv-faint,#A1A6AC);font-size:.72rem}
+.pvx .prop-cplan-cad{margin-left:auto;position:relative}
+.pvx .prop-cplan-gear{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink-soft,#3A4048);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-cplan-gear:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-cplan-gear svg{opacity:.7}
+.pvx .prop-cplan-cadmenu{position:absolute;top:30px;right:0;z-index:20;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;box-shadow:0 10px 28px rgba(16,20,24,.14);padding:4px;display:flex;flex-direction:column;min-width:130px}
+.pvx .prop-cplan-cadmenu button{text-align:left;height:30px;padding:0 10px;border:none;background:transparent;border-radius:6px;color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;cursor:pointer;font-family:inherit}
+.pvx .prop-cplan-cadmenu button:hover{background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-deep,#A8842F);font-weight:700}
 .pvx .prop-cplan-row{display:flex;align-items:center;gap:8px}
 .pvx .prop-cplan-n{width:18px;height:18px;flex-shrink:0;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center}
 .pvx .prop-cplan-row .tin{width:56px}
 .pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.76rem;margin-left:-3px}
-.pvx .prop-cplan-date{flex:1;min-width:0;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 8px;font-size:.76rem;font-family:inherit;color:var(--dv-ink,#101418);background:#fff;outline:none}
-.pvx .prop-cplan-date:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-date{position:relative;flex:1;min-width:0;height:30px;display:flex;align-items:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.76rem;font-weight:600;color:var(--dv-ink,#101418);background:#fff;cursor:pointer}
+.pvx .prop-cplan-date:hover{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
 .pvx .prop-cplan-amt{margin-left:auto;font-size:.8rem;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pvx .prop-cplan-sum{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B);text-align:right}
 .pvx .prop-cplan-sum.bad{color:var(--dv-red,#C4553D)}
