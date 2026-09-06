@@ -16,6 +16,8 @@ const newId = () => `a${Date.now().toString(36)}${_aid++}`;
 const blankItem = () => ({ id: newId(), name: "", type: "camera", qty: 1, price: "", techPay: "" });
 
 const fmtStamp = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } };
+// Prefill the addendum title so the office has a sensible starting point: "Add-on · <today>".
+const defaultTitle = () => `Add-on · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
 export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false }) {
   const isCustomer = role === "customer";
@@ -173,31 +175,71 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
 
       {canBuild && (building ? (
         <div className="adn-builder">
-          <input className="adn-b-title" placeholder="Addendum title (e.g. Added 3 back-lot cameras)" value={draft.title} autoFocus onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} />
+          <label className="adn-fld">
+            <span className="adn-flbl">Addendum title</span>
+            <input className="adn-b-title" placeholder="Added 3 rear cameras" value={draft.title} autoFocus onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} />
+          </label>
           <div className="adn-b-items">
             {draft.items.map((it, i) => (
-              <div key={it.id} className="adn-b-row">
-                <input className="adn-b-name" placeholder="Item (e.g. Dome Camera)" value={it.name} onChange={(e) => dItem(i, { name: e.target.value })} />
-                <select className="adn-b-type" value={it.type} onChange={(e) => dItem(i, { type: e.target.value })}>
-                  {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                <input className="adn-b-qty" type="number" min="1" step="1" title="Qty" value={it.qty} onChange={(e) => dItem(i, { qty: e.target.value })} />
-                <span className="adn-b-money">$<input type="number" min="0" step="1" placeholder="Customer" title="Customer price (each)" value={it.price} onChange={(e) => dItem(i, { price: e.target.value })} /></span>
-                <span className="adn-b-money tech">$<input type="number" min="0" step="1" placeholder="Tech" title="Tech payout (each)" value={it.techPay} onChange={(e) => dItem(i, { techPay: e.target.value })} /></span>
-                {draft.items.length > 1 && <button type="button" className="adn-b-x" onClick={() => delRow(i)}>✕</button>}
+              <div key={it.id} className="adn-lineitem">
+                {draft.items.length > 1 && (
+                  <div className="adn-li-hd"><span className="adn-li-n">Item {i + 1}</span>
+                    <button type="button" className="adn-b-x" onClick={() => delRow(i)} aria-label="Remove item">✕</button></div>
+                )}
+                <label className="adn-fld">
+                  <span className="adn-flbl">Item</span>
+                  <input className="adn-b-name" placeholder="Dome Camera" value={it.name} onChange={(e) => dItem(i, { name: e.target.value })} />
+                </label>
+                <div className="adn-frow">
+                  <label className="adn-fld adn-fld-type">
+                    <span className="adn-flbl">Type</span>
+                    <select className="adn-b-type" value={it.type} onChange={(e) => dItem(i, { type: e.target.value })}>
+                      {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </label>
+                  <label className="adn-fld adn-fld-qty">
+                    <span className="adn-flbl">Qty</span>
+                    <input className="adn-b-qty" type="number" min="1" step="1" value={it.qty} onChange={(e) => dItem(i, { qty: e.target.value })} />
+                  </label>
+                </div>
+                <div className="adn-frow">
+                  {showRetail && (
+                    <label className="adn-fld adn-fld-price">
+                      <span className="adn-flbl">Customer price</span>
+                      <span className="adn-money"><span className="adn-cur">$</span>
+                        <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => dItem(i, { price: e.target.value })} /></span>
+                    </label>
+                  )}
+                  {showPayout && (
+                    <label className="adn-fld adn-fld-price">
+                      <span className="adn-flbl adn-flbl-tech">Tech pay</span>
+                      <span className="adn-money tech"><span className="adn-cur">$</span>
+                        <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.techPay} onChange={(e) => dItem(i, { techPay: e.target.value })} /></span>
+                    </label>
+                  )}
+                </div>
               </div>
             ))}
           </div>
           <div className="adn-b-act">
-            <button type="button" className="adn-b-additem" onClick={addRow}>+ Item</button>
-            <label className="adn-b-disc">Discount $<input type="number" min="0" step="1" placeholder="0" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} /></label>
-            <span className="adn-b-total">Total {money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</span>
+            <button type="button" className="adn-b-additem" onClick={addRow}>+ Add item</button>
+            <label className="adn-fld adn-b-disc">
+              <span className="adn-flbl">Discount</span>
+              <span className="adn-money"><span className="adn-cur">$</span>
+                <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} /></span>
+            </label>
+          </div>
+          <div className="adn-b-final">
+            <div className="adn-b-totalblock">
+              <span className="adn-flbl">Total</span>
+              <b className="adn-b-tval">{money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</b>
+            </div>
             <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>Create addendum</button>
             <button type="button" className="adn-b-cancel" onClick={() => { setBuilding(false); setDraft({ title: "", items: [blankItem()], discount: "" }); }}>Cancel</button>
           </div>
         </div>
       ) : (
-        <button type="button" className="adn-newbtn" onClick={() => setBuilding(true)}>+ New addendum</button>
+        <button type="button" className="adn-newbtn" onClick={() => { setDraft((d) => ({ ...d, title: d.title || defaultTitle() })); setBuilding(true); }}>+ New addendum</button>
       ))}
 
       <ProposalSignModal
@@ -235,9 +277,6 @@ const ADN_CSS = `
 .adn-disc-row{display:flex;justify-content:space-between;gap:10px;font-size:.82rem;color:var(--dv-red,#C4553D);padding:2px 0 6px}
 .adn-disc-row b{font-weight:600}
 .adn-void-note{font-size:.74rem;color:var(--dv-faint,#A1A6AC);font-style:italic}
-.adn-b-disc{display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--dv-meta,#787D84);font-weight:500}
-.adn-b-disc input{width:74px;height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 8px;font-size:.82rem;font-family:inherit;text-align:right;outline:none;background:#fff;color:var(--dv-ink,#101418)}
-.adn-b-disc input:focus{border-color:var(--dv-gold,#C9A96E)}
 .adn-items{display:flex;flex-direction:column;gap:5px;padding:2px 0 8px}
 .adn-item{display:flex;justify-content:space-between;gap:10px;font-size:.84rem;color:var(--dv-ink-soft,#3A4048)}
 .adn-item-name{font-weight:600;color:var(--dv-ink,#101418)}
@@ -247,41 +286,61 @@ const ADN_CSS = `
 .adn-ct{font-size:.86rem;color:var(--dv-ink-soft,#3A4048)}
 .adn-ct b{font-size:.98rem;color:var(--dv-ink,#101418);font-weight:600}
 .adn-tt{color:var(--dv-gold-deep,#A8842F)}
-.adn-sign{display:flex;align-items:center;gap:8px}
+.adn-sign{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .adn-sign img{height:34px;max-width:150px;object-fit:contain}
 .adn-sign em{font-size:.74rem;color:var(--dv-meta,#787D84);font-style:normal}
-.adn-approve{height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-root .adn-approve{height:36px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-approve:hover{filter:brightness(1.12)}
 .adn-del{height:32px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-red,#C4553D);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-unvoid{height:32px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-green,#2E7D5B);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-confirm{display:inline-flex;gap:8px;align-items:center;font-size:.76rem;color:var(--dv-meta,#787D84);font-weight:500}
-.adn-c-yes{height:30px;padding:0 12px;border:none;border-radius:8px;background:var(--dv-red,#C4553D);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-root .adn-c-yes{height:30px;padding:0 12px;border:none;border-radius:8px;background:var(--dv-red,#C4553D);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-c-no{height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-newbtn{margin-top:6px;height:42px;width:100%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);border-radius:10px;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-newbtn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
-.adn-builder{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2);padding:12px;margin-top:6px}
-.adn-b-title{width:100%;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;margin-bottom:9px;font-weight:600;background:#fff;color:var(--dv-ink,#101418)}
-.adn-b-title:focus{border-color:var(--dv-gold,#C9A96E)}
-.adn-b-items{display:flex;flex-direction:column;gap:7px}
-.adn-b-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.adn-b-name{flex:2;min-width:130px;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.82rem;font-family:inherit;outline:none;background:#fff;color:var(--dv-ink,#101418)}
-.adn-b-name:focus{border-color:var(--dv-gold,#C9A96E)}
-.adn-b-type{height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 8px;font-size:.78rem;font-family:inherit;background:#fff;outline:none;color:var(--dv-ink,#101418)}
-.adn-b-type:focus{border-color:var(--dv-gold,#C9A96E)}
-.adn-b-qty{width:52px;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 7px;font-size:.82rem;font-family:inherit;text-align:center;outline:none;background:#fff;color:var(--dv-ink,#101418)}
-.adn-b-qty:focus{border-color:var(--dv-gold,#C9A96E)}
-.adn-b-money{display:flex;align-items:center;gap:1px;color:var(--dv-meta,#787D84);font-weight:600;font-size:.82rem}
-.adn-b-money.tech{color:var(--dv-gold-deep,#A8842F)}
-.adn-b-money input{width:74px;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 7px;font-size:.82rem;font-family:inherit;text-align:right;outline:none;background:#fff;color:var(--dv-ink,#101418)}
-.adn-b-money input:focus{border-color:var(--dv-gold,#C9A96E)}
-.adn-b-x{width:30px;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-red,#C4553D);cursor:pointer;font-size:.8rem}
-.adn-b-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:11px}
-.adn-b-additem{height:34px;padding:0 13px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-b-additem:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
-.adn-b-total{font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418);margin-left:auto}
-.adn-b-create{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-b-create:hover{filter:brightness(1.12)}
-.adn-b-create:disabled{opacity:.5;cursor:default}
-.adn-b-cancel{height:38px;padding:0 13px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-builder{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2);padding:14px;margin-top:6px;display:flex;flex-direction:column;gap:12px}
+/* One deliberate form: every control is a labeled field so the workflow reads top to bottom
+   (title → item → type/qty → customer/tech price → add item/discount → total → create). */
+.adn-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.adn-flbl{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.adn-flbl-tech{color:var(--dv-gold-deep,#A8842F)}
+.adn-b-title,.adn-b-name,.adn-b-type,.adn-b-qty{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;background:#fff;color:var(--dv-ink,#101418);width:100%}
+.adn-b-title{font-weight:600}
+.adn-b-title:focus,.adn-b-name:focus,.adn-b-type:focus,.adn-b-qty:focus{border-color:var(--dv-gold,#C9A96E)}
+.adn-b-qty{text-align:center;padding:0 6px}
+.adn-b-items{display:flex;flex-direction:column;gap:14px}
+.adn-lineitem{display:flex;flex-direction:column;gap:10px}
+.adn-lineitem + .adn-lineitem{border-top:1px solid var(--dv-line,#E4E4DF);padding-top:14px}
+.adn-li-hd{display:flex;align-items:center;justify-content:space-between}
+.adn-li-n{font-size:.72rem;font-weight:700;color:var(--dv-ink-soft,#3A4048)}
+.adn-frow{display:flex;gap:8px}
+.adn-frow .adn-fld{flex:1 1 0}
+.adn-frow .adn-fld-type{flex:1 1 auto}
+.adn-frow .adn-fld-qty{flex:0 0 72px}
+.adn-frow .adn-fld-price{flex:1 1 0}
+/* Currency belongs to the input: one bordered box, $ inside, number right-aligned. No loose $. */
+.adn-money{display:flex;align-items:center;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;padding-left:10px;gap:1px}
+.adn-money:focus-within{border-color:var(--dv-gold,#C9A96E)}
+.adn-money.tech:focus-within{border-color:var(--dv-gold-deep,#A8842F)}
+.adn-cur{color:var(--dv-meta,#787D84);font-weight:600;font-size:.86rem;flex:0 0 auto}
+.adn-money input{flex:1 1 0;min-width:0;height:100%;border:none;background:transparent;text-align:right;padding:0 10px 0 2px;font-size:.9rem;font-family:inherit;color:var(--dv-ink,#101418);outline:none;font-variant-numeric:tabular-nums}
+.adn-money.tech .adn-cur{color:var(--dv-gold-deep,#A8842F)}
+.adn-b-x{width:26px;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-red,#C4553D);cursor:pointer;font-size:.72rem;flex:0 0 auto}
+.adn-b-act{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.adn-b-additem{height:38px;padding:0 15px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-b-additem:hover{border-color:var(--dv-gold,#C9A96E);border-style:solid;color:var(--dv-gold-deep,#A8842F)}
+.adn-b-disc{flex:0 0 auto}
+.adn-b-disc .adn-money{width:118px}
+/* Final action area: Total leads, Create is the clear primary, Cancel is quiet. */
+.adn-b-final{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:13px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.adn-b-totalblock{display:flex;flex-direction:column;gap:2px;margin-right:auto}
+.adn-b-tval{font-size:1.15rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;line-height:1}
+/* .adn-root prefix beats the deck's ".dv-shell button" background reset so the primary button
+   actually reads as a filled button, not plain text. */
+.adn-root .adn-b-create{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-root .adn-b-create:hover{filter:brightness(1.12)}
+.adn-root .adn-b-create:disabled{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-faint,#A1A6AC);cursor:not-allowed;filter:none}
+.adn-b-cancel{height:40px;padding:0 12px;border:none;border-radius:9px;background:transparent;color:var(--dv-meta,#787D84);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-b-cancel:hover{color:var(--dv-ink,#101418)}
 .adn-cust-note{margin-top:10px;font-size:.8rem;color:var(--dv-ink-soft,#3A4048);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;font-weight:500}
 `;
