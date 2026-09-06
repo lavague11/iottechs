@@ -440,15 +440,24 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         );
-        // Revise up top too — same handler + same (readOnly = already-sent) condition as the bottom Revise,
-        // so staff can reopen an editable version without scrolling to the footer.
+        // Primary action up top too, same handlers/conditions as the footer — so staff never have to
+        // scroll to act. Revise on a sent (readOnly) proposal; Submit on an editable draft. Revising a
+        // sent proposal flips it to a draft, so the button naturally becomes Submit for the re-send.
         const reviseBtn = readOnly && (
-          <button type="button" className="prop-head-revise" disabled={busy} onClick={revise} title="Revise — reopen an editable version of this proposal">Revise</button>
+          <button type="button" className="prop-head-cta" disabled={busy} onClick={revise} title="Revise — reopen an editable version of this proposal">Revise</button>
         );
+        const submitBtn = !readOnly && (confirmSend ? (
+          <span className="prop-head-cta-grp">
+            <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title="Confirm — submit this proposal to the customer">Confirm</button>
+            <button type="button" className="prop-head-cta ghost" disabled={busy} onClick={() => setConfirmSend(false)} title="Cancel">Cancel</button>
+          </span>
+        ) : (
+          <button type="button" className="prop-head-cta" disabled={busy} onClick={() => setConfirmSend(true)} title="Submit this proposal to the customer">Submit</button>
+        ));
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}{reviseBtn}</div>;
+          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}{reviseBtn}{submitBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -464,6 +473,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             {eye}
             {gear}
             {reviseBtn}
+            {submitBtn}
             <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
           </div>
         );
