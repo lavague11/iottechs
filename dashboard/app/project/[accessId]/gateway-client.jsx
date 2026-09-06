@@ -3808,6 +3808,11 @@ const PV_CSS = `
   /* elevation */ --shadow-card:0 10px 30px rgba(11,15,26,.07);--shadow-modal:0 24px 70px rgba(11,15,26,.30);
   /* fonts */ --font:'Hanken Grotesk',sans-serif;--font-title:'Bricolage Grotesque',sans-serif;
   background:var(--bg-soft);min-height:100vh;font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;padding-bottom:50px}
+/* Deck mode: the deck (.dv-shell) is its own self-contained 100dvh layout that scrolls INTERNALLY.
+   The classic-page wrapper defaults (min-height:100vh + padding-bottom:50px) don't apply here — on
+   iOS Safari 100vh (large viewport) overshoots 100dvh (visible) and, with the 50px pad, leaves an
+   empty grey band pinned above the browser toolbar. Pin the wrapper to the visible viewport exactly. */
+.pvx.pvx-deck{min-height:0;height:100dvh;padding-bottom:0;overflow:hidden}
 .pvx .wrap{max-width:1180px;margin:0 auto;padding:0 26px 60px}
 .pvx .mono{font-family:Menlo,Consolas,monospace;letter-spacing:.3px}
 /* Google Places autocomplete — new web component (PlaceAutocompleteElement) */
