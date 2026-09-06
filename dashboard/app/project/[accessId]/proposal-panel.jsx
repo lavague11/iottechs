@@ -287,7 +287,11 @@ const PROP_CSS = `
 .pvx .prop-cplan-date{position:relative;flex:1;min-width:0;height:30px;display:flex;align-items:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.76rem;font-weight:600;color:var(--dv-ink,#101418);background:#fff;cursor:pointer}
 .pvx .prop-cplan-date:hover{border-color:var(--dv-gold,#C9A96E)}
 .pvx .prop-cplan-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
-.pvx .prop-cplan-amt{margin-left:auto;font-size:.8rem;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pvx .prop-cplan-amt{margin-left:auto;display:inline-flex;align-items:center;gap:1px;height:30px;padding:0 8px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;white-space:nowrap}
+.pvx .prop-cplan-amt:focus-within{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-amt-s{color:var(--dv-meta,#787D84);font-size:.76rem}
+.pvx .prop-cplan-amtin{width:64px;border:none;outline:none;background:transparent;text-align:right;font-size:.8rem;font-weight:600;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;font-family:inherit;padding:0}
+.pvx .prop-cplan-amtin::-webkit-outer-spin-button,.pvx .prop-cplan-amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .pvx .prop-cplan-sum{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B);text-align:right}
 .pvx .prop-cplan-sum.bad{color:var(--dv-red,#C4553D)}
 .pvx .prop-minus{margin-right:2px}
