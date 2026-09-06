@@ -2172,10 +2172,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // Merge a stage's tools into ONE full-width, always-open page: heavy (full-height) tools get a
     // 74vh framed panel with inner scroll; compact cards flow at natural height. Nothing to click to
     // expand — used for the customer and the admin/manager build view.
-    // Only MAPS (survey/mockup iframes) need a bounded, inner-scrolling frame. Everything else is a
-    // document and flows FULL LENGTH so the whole page scrolls once — no frame, no inner scrollbar,
-    // no card-in-a-card border. A page with no maps gets the seamless flow treatment.
-    const MAP_TOOLS = ["Site Survey", "Mockups"];
+    // Only the SURVEY map needs a bounded, inner-scrolling frame (it's a pannable full-viewport
+    // satellite image). The Mockup is a short phone-preview that must size to its OWN content — a
+    // fixed frame left ~300px of dead grey below it — so it flows like a document. Everything else
+    // (documents) also flows full length so the whole page scrolls once.
+    const MAP_TOOLS = ["Site Survey"];
     const mergedPage = (name, list) => {
       const t = (list || []).filter((x) => x && x.node);
       if (!t.length) return null;
@@ -2223,14 +2224,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 )}
               </div>
             ) },
-          { name: "Mockups", label: "Mockup generator", heavy: true,
+          { name: "Mockups", label: "Mockup generator", heavy: false,
             state: toolAccepted(mkMetaEff, acceptances.mockup) ? "done" : (mkMetaEff.has ? "active" : undefined),
             node: (
-              <div style={heavyCol}>
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                    customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} />
-                </div>
+              // Flows at content height (no fixed frame) — the phone preview sizes itself, then the
+              // Approve bar sits directly beneath it. No dead grey space under the preview.
+              <div>
+                <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} />
                 <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                   acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
               </div>
@@ -2252,7 +2253,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               {csecs.map(([h, node], k) => (
                 <section className="cx-sec" key={k}>
                   {k > 0 && <div className="cx-sec-h">{h}</div>}
-                  <div className="cx-sec-frame"><ScrollActivate>{node}</ScrollActivate></div>
+                  {h === "Site Survey" ? <div className="cx-sec-frame"><ScrollActivate>{node}</ScrollActivate></div> : node}
                 </section>
               ))}
             </div>
@@ -4429,7 +4430,10 @@ const PV_CSS = `
 .pvx .ss-embed-tag{font-size:.78rem;color:var(--muted);font-weight:600}
 .pvx .ss-embed-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none}
 .pvx .ss-embed-open:hover{border-color:var(--gold);color:var(--gold-deep)}
-.pvx .ss-embed-frame{width:100%;height:660px;border:none;border-radius:12px;background:var(--bg-soft);display:block}
+/* Default height is only a pre-measure fallback — the mockup iframe posts its real content height and
+   the host applies it inline (Math.max(200, stat.height)); keep the fallback modest so a short phone
+   preview never leaves a tall grey gap before the content-fit lands. The framed survey uses flex:1. */
+.pvx .ss-embed-frame{width:100%;height:340px;border:none;border-radius:12px;background:var(--bg-soft);display:block}
 .pvx .ss-embed-fs{position:fixed;inset:0;z-index:9999;margin:0;background:var(--bg-soft);padding:10px 14px;display:flex;flex-direction:column;gap:8px}
 .pvx .ss-embed-fs .ss-embed-frame{flex:1;height:auto;border-radius:10px}
 .pvx .ss-embed-close{color:var(--red)!important;font-weight:700}
