@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
-import { loginAction, signupAction, start2faAction, verify2faAction, resend2faAction } from "./actions";
+import { loginAction, signupAction, start2faAction, verify2faAction, resend2faAction, lookupAccountAction } from "./actions";
 import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 
 // Password field with a show/hide eye toggle on the right. Passes every input prop straight through,
@@ -51,6 +51,11 @@ export default function LoginClient({ next }) {
   const canvasRef  = useRef(null);
   const canvasCtrl = useRef(null);
   const [mode, setMode]           = useState("password"); // password | phone | face | pin | signup — default is the white Sign-In card
+  // Two-step password flow: "lookup" (identify the account by email/phone) → "auth" (enter password).
+  // Modular on purpose — a future SMS ("Text me a code") or VIO method slots in as another Step-2 option.
+  const [authStep, setAuthStep]   = useState("lookup");
+  const [ident, setIdent]         = useState("");
+  const [acctMask, setAcctMask]   = useState("");
   const [faceState, setFaceState] = useState("idle");
   const [faceMsg, setFaceMsg]     = useState("");
   const [pinId, setPinId]         = useState("");
@@ -151,6 +156,26 @@ export default function LoginClient({ next }) {
       const result = await loginAction(fd);
       if (result?.error) setError(result.error);
       else grantAndGo(result?.dest);
+    });
+  }
+
+  // Mask the identifier the user typed for the Step-2 "welcome back" line — purely client-side, so
+  // no extra account data crosses the wire. a••••@company.com  ·  (•••) •••-1234
+  function maskIdent(v) {
+    const s = String(v || "").trim();
+    if (s.includes("@")) { const [a, d] = s.split("@"); return (a.slice(0, 1) || "") + "••••@" + (d || ""); }
+    const dg = s.replace(/\D/g, "").slice(-4);
+    return dg.length === 4 ? `(•••) •••-${dg}` : "your account";
+  }
+  // Step 1 → verify an account exists, then advance to the password step (no page nav).
+  function handleLookup(e) {
+    e.preventDefault(); setError(null);
+    const v = ident.trim();
+    if (!v) { setError("Enter your email or phone number."); return; }
+    startTransition(async () => {
+      const r = await lookupAccountAction(v).catch(() => ({ error: "Something went wrong — please try again." }));
+      if (r?.error) { setError(r.error); return; }
+      setAcctMask(maskIdent(v)); setAuthStep("auth");
     });
   }
 
@@ -255,6 +280,14 @@ export default function LoginClient({ next }) {
     }
   }
 
+  // Google is the one live alternate method — shared by both password steps.
+  const googleBtn = (
+    <a className="gw2-google" href="/api/auth/google?ctx=login">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continue with Google
+    </a>
+  );
+
   return (
     <div className="gw2-root gw2-light">
       <style>{CSS + GW2_LIGHT_CSS}</style>
@@ -311,32 +344,49 @@ export default function LoginClient({ next }) {
           </form>
           )
         ) : mode === "password" ? (
-        <>
-        <form className="gw2-lf" onSubmit={handleSubmit}>
-          <input type="hidden" name="next" value={next} />
-          <div className="gw2-prompt">Sign in</div>
-          <div className="gw2-lf-fields">
-            <input name="identifier" type="text" className="gw2-lf-input" placeholder="Email, phone, or username" autoComplete="username" defaultValue={phone} autoFocus required disabled={pending || granted} />
-            <PwInput name="password" className="gw2-lf-input" placeholder="Password" autoComplete="current-password" required disabled={pending || granted} />
-          </div>
-          {error && (
-            <div className="gw2-lf-err">
-              {error}
-              {error.toLowerCase().includes("invalid") && (
-                <> — <a href="/forgot" className="lg-err-link">Reset password</a></>
-              )}
+        authStep === "lookup" ? (
+        <div className="gw2-step" key="lookup">
+          <form className="gw2-lf" onSubmit={handleLookup}>
+            <div className="gw2-prompt">Sign in</div>
+            <div className="gw2-lf-fields">
+              <input name="identifier" type="text" className="gw2-lf-input" placeholder="Email or phone number" autoComplete="username" inputMode="email" value={ident} onChange={(e) => setIdent(e.target.value)} autoFocus required disabled={pending || granted} />
             </div>
-          )}
-          <button className="gw2-lf-btn" type="submit" disabled={pending || granted}>
-            {pending ? "Signing in…" : "Sign In →"}
-          </button>
-        </form>
-        <div className="gw2-or"><span>or</span></div>
-        <a className="gw2-google" href="/api/auth/google?ctx=login">
-          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          Continue with Google
-        </a>
-        </>
+            {error && <div className="gw2-lf-err">{error}</div>}
+            <button className="gw2-lf-btn" type="submit" disabled={pending || granted}>
+              {pending ? "Checking…" : "Continue →"}
+            </button>
+          </form>
+          <div className="gw2-or"><span>or</span></div>
+          {googleBtn}
+          <button type="button" className="gw2-trouble" onClick={() => setShowHelp(true)}>Having trouble signing in?</button>
+        </div>
+        ) : (
+        <div className="gw2-step" key="auth">
+          <form className="gw2-lf" onSubmit={handleSubmit}>
+            <input type="hidden" name="next" value={next} />
+            <input type="hidden" name="identifier" value={ident} />
+            <div className="gw2-prompt">Welcome back</div>
+            <div className="gw2-acct" title={ident}>{acctMask}</div>
+            <div className="gw2-lf-fields">
+              <PwInput name="password" className="gw2-lf-input" placeholder="Password" autoComplete="current-password" required autoFocus disabled={pending || granted} />
+            </div>
+            {error && (
+              <div className="gw2-lf-err">
+                {error}
+                {error.toLowerCase().includes("invalid") && (
+                  <> — <a href="/forgot" className="lg-err-link">Reset password</a></>
+                )}
+              </div>
+            )}
+            <button className="gw2-lf-btn" type="submit" disabled={pending || granted}>
+              {pending ? "Signing in…" : "Sign In →"}
+            </button>
+          </form>
+          <button type="button" className="gw2-diff" onClick={() => { setAuthStep("lookup"); setError(null); }}>Use a different account</button>
+          <div className="gw2-or"><span>or</span></div>
+          {googleBtn}
+        </div>
+        )
         ) : mode === "face" ? (
         <div className="lgf">
           <div className={`lgf-prompt${faceState === "ok" ? " ok" : faceState === "fail" ? " err" : ""}`}>
@@ -375,24 +425,22 @@ export default function LoginClient({ next }) {
         </div>
         )}
 
+        {/* Secondary methods (Phone/Face/PIN) are intentionally NOT shown in the two-step password flow —
+            it exposes only what's live (password + Google). Signup/forgot live in the help modal. */}
+        {mode !== "password" && (
         <div className="gw2-actions">
           {mode === "phone" ? (
             <>
-              <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); }}>Password</button>
-              <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
-              <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
-            </>
-          ) : mode === "password" ? (
-            <>
-              <button className="gw2-lbtn" onClick={() => { setMode("phone"); setError(null); }}>Phone</button>
+              <button className="gw2-lbtn" onClick={() => { setMode("password"); setError(null); setAuthStep("lookup"); }}>Password</button>
               <button className="gw2-lbtn" onClick={() => { setMode("face"); setFaceState("idle"); setFaceMsg(""); warmFace(); }}>Face ID</button>
               <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
             </>
           ) : (
-            <button className="gw2-lbtn" onClick={() => { setMode("phone"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Back"}</button>
+            <button className="gw2-lbtn" onClick={() => { setMode("password"); setAuthStep("lookup"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Back"}</button>
           )}
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>help</button>
         </div>
+        )}
       </div>
 
       {showLoc && (
@@ -489,4 +537,14 @@ const CSS = `
 .gw2-light .gw2-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:#fff;border:1px solid #e0e3ea;border-radius:12px;padding:12px 16px;font:inherit;font-size:.92rem;font-weight:600;color:#2C3347;text-decoration:none;transition:border-color .14s,box-shadow .14s}
 .gw2-light .gw2-google:hover{border-color:#C9A96E;box-shadow:0 5px 16px -9px rgba(14,19,32,.3)}
 .gw2-light .gw2-google svg{flex:none}
+/* Two-step password flow: subtle fade+slide between lookup and auth (respects reduced motion) */
+.gw2-step{animation:gw2StepIn .22s cubic-bezier(.16,1,.3,1)}
+@keyframes gw2StepIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){.gw2-step{animation:none}}
+/* Step 2 — the identified account, shown masked and secondary under "Welcome back" */
+.gw2-acct{text-align:center;font-size:.86rem;font-weight:600;color:#5b6275;margin:-4px 0 14px;letter-spacing:.01em;word-break:break-all}
+/* Step 1 tertiary + Step 2 "use a different account" — quiet text links, not competing buttons */
+.gw2-trouble,.gw2-diff{display:block;width:100%;margin-top:14px;background:none;border:none;font:inherit;font-size:.85rem;font-weight:500;color:#6b7280;cursor:pointer;text-align:center;padding:2px}
+.gw2-trouble:hover,.gw2-diff:hover{color:#0e1320}
+.gw2-diff{margin-top:10px}
 `;

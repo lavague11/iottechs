@@ -82,6 +82,28 @@ export async function signupAction(formData) {
   return { ok: true, dest };   // client navigates (see loginAction note) — dodges the CDN redirect drop
 }
 
+// ---- Step 1: account lookup (identify, don't authenticate) -----------------
+// Confirms an account exists for an email/phone so the UI can advance to the password step. Returns
+// ONLY ok/error — never any profile data — and uses a single non-enumerating message so it doesn't
+// advertise exactly which emails/phones are on file. `toE164` normalizes the phone; email is matched
+// case-insensitively by the existing getUserByEmail.
+const LOOKUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export async function lookupAccountAction(identifierRaw) {
+  const id = String(identifierRaw || "").trim();
+  if (!id) return { error: "Enter your email or phone number." };
+  let user = null;
+  if (id.includes("@")) {
+    if (!LOOKUP_EMAIL_RE.test(id)) return { error: "Enter a valid email or phone number." };
+    user = getUserByEmail(id);
+  } else {
+    const e164 = toE164(id);
+    if (!e164) return { error: "Enter a valid email or phone number." };
+    user = getUserByPhone(e164.slice(-10));
+  }
+  if (!user || user.disabled) return { error: "We couldn’t continue with those details. Check the email or phone number and try again." };
+  return { ok: true };
+}
+
 // ---- Phone + SMS 2FA login (the default) ----------------------------------
 // Step 1: look up the account by phone; if 2FA is on AND Twilio is configured, text a code. When 2FA
 // is off / unconfigured / the send fails, we hand back a `fallback` flag so the UI drops to password.
