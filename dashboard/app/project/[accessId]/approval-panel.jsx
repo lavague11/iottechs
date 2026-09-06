@@ -230,13 +230,9 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                       <div className="apv-hrow-main">
                         <div className="apv-hrow-top">
                           <span className="apv-hrow-amt">{money(x.amount)}</span>
-                          <span className="apv-hrow-who">{payerName(x)}</span>
-                        </div>
-                        <span className="apv-hrow-meta">
                           <span className="apv-hrow-kind">{x.kind}</span>
-                          {x.method && <span>· {x.method}</span>}
-                          {(x.paid_at || x.created_at) && <span>· {fmtDay(x.paid_at || x.created_at)}</span>}
-                        </span>
+                        </div>
+                        <span className="apv-hrow-meta">{[payerName(x), x.method, (x.paid_at || x.created_at) && fmtDay(x.paid_at || x.created_at)].filter(Boolean).join(" · ")}</span>
                         {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                       </div>
                       <div className="apv-hrow-acts">
@@ -516,15 +512,10 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                 <div className="apv-hrow-main">
                   <div className="apv-hrow-top">
                     <span className="apv-hrow-amt">{money(x.amount)}</span>
-                    {/* Who paid — the actual person's name, not "Customer"/"Staff" (a project can have
-                        several people). Staff see every name; a customer sees only their own entry. */}
-                    {(isStaff || x.source === "customer") && <span className="apv-hrow-who">{payerName(x)}</span>}
-                  </div>
-                  <span className="apv-hrow-meta">
                     <span className="apv-hrow-kind">{x.kind}</span>
-                    {x.method && <span>· {x.method}</span>}
-                    {(x.paid_at || x.created_at) && <span>· {fmtDay(x.paid_at || x.created_at)}</span>}
-                  </span>
+                  </div>
+                  {/* One clean meta line: who paid (staff see every name; a customer sees only their own) · method · date */}
+                  <span className="apv-hrow-meta">{[(isStaff || x.source === "customer") && payerName(x), x.method, (x.paid_at || x.created_at) && fmtDay(x.paid_at || x.created_at)].filter(Boolean).join(" · ")}</span>
                   {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
                 </div>
                 <div className="apv-hrow-acts">
@@ -791,11 +782,10 @@ select.apv-input{cursor:pointer}
 .apv-hrow:last-child{border-bottom:none}
 .apv-hrow.pending{background:#fbf6ec}
 .apv-hrow-main{display:flex;flex-direction:column;gap:3px;min-width:0}
-.apv-hrow-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.apv-hrow-top{display:flex;align-items:center;gap:8px}
 .apv-hrow-amt{font-size:1.02rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.apv-hrow-who{font-size:.82rem;font-weight:600;color:var(--dv-ink-soft,#3A4048)}
-.apv-hrow-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.76rem;color:var(--dv-meta,#787D84)}
-.apv-hrow-kind{text-transform:capitalize;font-weight:600;color:var(--dv-ink-soft,#3A4048)}
+.apv-hrow-meta{display:block;font-size:.76rem;color:var(--dv-meta,#787D84);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apv-hrow-kind{text-transform:capitalize;font-weight:600;font-size:.64rem;letter-spacing:.03em;color:var(--dv-meta,#787D84);background:var(--dv-line-soft,#EDEDE9);border-radius:100px;padding:2px 8px}
 .apv-hrow-note{font-style:italic;color:var(--dv-meta,#787D84);font-size:.76rem;margin-top:1px}
 .apv-hrow-when{color:var(--dv-faint,#A1A6AC)}
 .apv-hrow-by{color:var(--dv-meta,#787D84);font-weight:600}

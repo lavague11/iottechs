@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -287,8 +287,33 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const plan = payload.payment_plan || "custom";
   function setDiscount(patch) { patchPayload({ ...payload, discount: { ...disc, ...patch } }); }
   function setPcp(patch) { patchPayload({ ...payload, pcp_credit: { ...pcp, ...patch } }); }
+
+  // ---- Custom multi-payment schedule (# payments · due dates auto-spaced 2 weeks apart) ----
+  const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const addDaysISO = (iso, days) => { const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(); d.setDate(d.getDate() + days); return fmtISO(d); };
+  // Even split into c payments, dates spaced 14 days from `start` (defaults to today).
+  function genSchedule(c, start) {
+    const n = Math.max(2, Math.min(12, c | 0)); const base = start || fmtISO(new Date());
+    const even = Math.floor(100 / n); const rows = [];
+    for (let i = 0; i < n; i++) rows.push({ pct: i === n - 1 ? 100 - even * (n - 1) : even, due: addDaysISO(base, i * 14) });
+    return rows;
+  }
+  const custRows = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length)
+    ? payload.custom_plan.rows : genSchedule(3);
+  const custSumPct = custRows.reduce((s, r) => s + (+r.pct || 0), 0);
+  function commitCustom(rows) {
+    patchPayload({ ...payload, payment_plan: "custom", custom_plan: { rows } });
+    setDepositPct(+rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
+  }
+  const setCustCount = (n) => commitCustom(genSchedule(n, custRows[0]?.due));            // re-even-split + re-space
+  const setCustPct = (i, v) => commitCustom(custRows.map((r, j) => j === i ? { ...r, pct: v === "" ? "" : Math.max(0, Math.min(100, +v)) } : r));
+  const setCustDue = (i, v) => commitCustom(custRows.map((r, j) => j === i ? { ...r, due: v } : r));
+
   function setPlan(key) {
-    patchPayload({ ...payload, payment_plan: key });
+    const patch = { ...payload, payment_plan: key };
+    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = { rows: genSchedule(3) };
+    patchPayload(patch);
+    if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
     const pp = PAYMENT_PLANS[key];
     if (pp && pp.depositPct != null) { setDepositPct(pp.depositPct); setDirty(true); }
   }
@@ -506,19 +531,41 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
         <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
 
-        <div className="prop-trow prop-plan-row">
-          <span>Payment plan</span>
-          {readOnly ? <b>{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b> : (
-            <span className="prop-adj">
+        <div className="prop-plan-row2">
+          <span className="prop-plan-lbl">Payment plan</span>
+          {readOnly ? <b className="prop-plan-ro">{plan === "custom" ? customPlanTerms(custRows) : (PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`)}</b> : (
+            <div className="prop-plan-opts">
+              <button type="button" className={`prop-plan-btn${plan === "100" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
               <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
               <button type="button" className={`prop-plan-btn${plan === "50_30_20" ? " on" : ""}`} onClick={() => setPlan("50_30_20")}>50 / 30 / 20</button>
               <button type="button" className={`prop-plan-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
-              {plan === "custom" && <input className="tin" type="number" min="0" max="100" value={depositPct} title="Deposit %" onChange={(e) => { setDepositPct(e.target.value); setDirty(true); }} />}
-            </span>
+            </div>
           )}
         </div>
-        {PAYMENT_PLANS[plan]?.terms && <div className="prop-plan-terms">{PAYMENT_PLANS[plan].terms}</div>}
-        <div className="prop-trow"><span>Deposit due</span><b>{money(totals.deposit)}</b></div>
+        {plan === "custom" && !readOnly && (
+          <div className="prop-cplan">
+            <div className="prop-cplan-head">
+              <span>Payments</span>
+              <div className="prop-cplan-step">
+                <button type="button" onClick={() => setCustCount(custRows.length - 1)} disabled={custRows.length <= 2}>−</button>
+                <b>{custRows.length}</b>
+                <button type="button" onClick={() => setCustCount(custRows.length + 1)} disabled={custRows.length >= 12}>+</button>
+              </div>
+              <span className="prop-cplan-hint">auto-spaced 2 weeks apart</span>
+            </div>
+            {custRows.map((r, i) => (
+              <div className="prop-cplan-row" key={i}>
+                <span className="prop-cplan-n">{i + 1}</span>
+                <input className="tin" type="number" min="0" max="100" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
+                <input className="prop-cplan-date" type="date" value={r.due} onChange={(e) => setCustDue(i, e.target.value)} />
+                <b className="prop-cplan-amt">{money(totals.grand * (+r.pct || 0) / 100)}</b>
+              </div>
+            ))}
+            <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
+          </div>
+        )}
+        {plan !== "custom" && PAYMENT_PLANS[plan]?.terms && <div className="prop-plan-terms">{PAYMENT_PLANS[plan].terms}</div>}
+        <div className="prop-trow"><span>{plan === "100" ? "Due before we begin" : "Deposit due"}</span><b>{money(totals.deposit)}</b></div>
       </div>
 
       {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save */}

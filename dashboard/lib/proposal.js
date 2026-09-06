@@ -352,10 +352,24 @@ export function blankPayloadForService(serviceKey) {
 
 // Deposit / payment schedules the office picks as presets. `terms` prints on the proposal.
 export const PAYMENT_PLANS = {
+  "100":      { label: "100",          depositPct: 100, terms: "Paid in full before we begin." },
   "50_50":    { label: "50 / 50",      depositPct: 50, terms: "50% due before we begin · 50% upon completion." },
   "50_30_20": { label: "50 / 30 / 20", depositPct: 50, terms: "50% to begin · 30% at project midpoint · 20% upon completion (or Net 30)." },
   "custom":   { label: "Custom",       depositPct: null, terms: "" },
 };
+
+// Build the human-readable terms line for a custom multi-payment schedule.
+// rows: [{ pct, due }] — due is a "YYYY-MM-DD" string. → "40% Sep 6 · 30% Sep 20 · 30% Oct 4"
+export function customPlanTerms(rows) {
+  if (!Array.isArray(rows) || !rows.length) return "";
+  const fmt = (iso) => {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return "";
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+  return rows.map((r) => `${+r.pct || 0}%${r.due ? ` ${fmt(r.due)}` : ""}`).join(" · ");
+}
 // Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.
 function amountOf(v, base) {
   if (v && typeof v === "object") return v.type === "pct" ? base * (+v.value || 0) / 100 : Math.max(0, +v.value || 0);

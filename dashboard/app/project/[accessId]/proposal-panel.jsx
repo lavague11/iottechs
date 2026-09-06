@@ -259,6 +259,29 @@ const PROP_CSS = `
 .pvx .prop-tax-btn.on,.pvx .prop-plan-btn.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-trow .tin{width:72px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;text-align:right;padding:0 8px;font-size:.76rem;font-weight:600;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
 .pvx .prop-trow .tin:focus{border-color:var(--dv-gold,#C9A96E)}
+/* Payment plan: label above, the four presets on ONE line (each flexes to fit) */
+.pvx .prop-plan-row2{display:flex;flex-direction:column;gap:8px;min-height:28px;margin-bottom:2px}
+.pvx .prop-plan-lbl{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500}
+.pvx .prop-plan-ro{font-size:.8rem;color:var(--dv-ink,#101418)}
+.pvx .prop-plan-opts{display:flex;gap:6px;width:100%}
+.pvx .prop-plan-opts .prop-plan-btn{flex:1 1 0;min-width:0;padding:0 6px}
+/* Custom schedule: # payments stepper + one compact row per payment */
+.pvx .prop-cplan{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 12px;margin:2px 0;display:flex;flex-direction:column;gap:8px}
+.pvx .prop-cplan-head{display:flex;align-items:center;gap:10px;font-size:.78rem;color:var(--dv-meta,#787D84);font-weight:600}
+.pvx .prop-cplan-step{display:inline-flex;align-items:center;gap:9px}
+.pvx .prop-cplan-step button{width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:1rem;line-height:1;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center}
+.pvx .prop-cplan-step button:disabled{opacity:.4;cursor:default}
+.pvx .prop-cplan-step b{min-width:14px;text-align:center;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pvx .prop-cplan-hint{margin-left:auto;font-weight:500;font-style:italic;color:var(--dv-faint,#A1A6AC);font-size:.72rem}
+.pvx .prop-cplan-row{display:flex;align-items:center;gap:8px}
+.pvx .prop-cplan-n{width:18px;height:18px;flex-shrink:0;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pvx .prop-cplan-row .tin{width:56px}
+.pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.76rem;margin-left:-3px}
+.pvx .prop-cplan-date{flex:1;min-width:0;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 8px;font-size:.76rem;font-family:inherit;color:var(--dv-ink,#101418);background:#fff;outline:none}
+.pvx .prop-cplan-date:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-amt{margin-left:auto;font-size:.8rem;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pvx .prop-cplan-sum{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B);text-align:right}
+.pvx .prop-cplan-sum.bad{color:var(--dv-red,#C4553D)}
 .pvx .prop-minus{margin-right:2px}
 .pvx .prop-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--dv-line,#E4E4DF);padding-top:13px}
 .pvx .prop-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:11000;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;padding:11px 20px;border-radius:100px;box-shadow:0 12px 34px rgba(16,20,24,.28);display:flex;align-items:center;gap:8px}
