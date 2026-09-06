@@ -338,7 +338,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const setCustPct = (i, v) => { const pcts = cascadePct(custRows, i, v); commitPlan({ rows: custRows.map((r, j) => ({ ...r, pct: pcts[j] })), cadence: custCadence }); };
   // Editing the dollar amount drives the percentage (amount ÷ grand total), then cascades forward like a % edit.
   const setCustAmt = (i, dollars) => { const g = totals.grand || 0; if (!g) return; setCustPct(i, (Math.max(0, +dollars || 0) / g) * 100); };
-  const setCustDue = (i, v) => commitPlan({ rows: custRows.map((r, j) => j === i ? { ...r, due: v } : r), cadence: custCadence });   // dates stay editable in any cadence
+  // Dates must run in order — a later payment can never fall before an earlier one. Editing a date
+  // keeps the earlier payments fixed and pushes any later date that would precede it forward to match.
+  const enforceDateOrder = (dates) => { const d = dates.slice(); for (let j = 1; j < d.length; j++) if (d[j] && d[j - 1] && d[j] < d[j - 1]) d[j] = d[j - 1]; return d; };
+  const setCustDue = (i, v) => { const ordered = enforceDateOrder(custRows.map((r, j) => j === i ? v : r.due)); commitPlan({ rows: custRows.map((r, j) => ({ ...r, due: ordered[j] })), cadence: custCadence }); };
 
   function setPlan(key) {
     const patch = { ...payload, payment_plan: key };
@@ -601,7 +604,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
                 <input className="tin" type="number" min="0" max="100" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
                 <label className="prop-cplan-date" onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
                   <span>{fmtShortDate(r.due) || "Set date"}</span>
-                  <input type="date" value={r.due || ""} onChange={(e) => setCustDue(i, e.target.value)} />
+                  <input type="date" value={r.due || ""} min={i > 0 ? (custRows[i - 1]?.due || undefined) : undefined} onChange={(e) => setCustDue(i, e.target.value)} />
                 </label>
                 <span className="prop-cplan-amt"><span className="prop-cplan-amt-s">$</span><input className="prop-cplan-amtin" type="number" min="0" step="1" value={Math.round(totals.grand * (+r.pct || 0) / 100)} onChange={(e) => setCustAmt(i, e.target.value)} /></span>
               </div>
