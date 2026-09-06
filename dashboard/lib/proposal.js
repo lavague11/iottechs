@@ -358,17 +358,56 @@ export const PAYMENT_PLANS = {
   "custom":   { label: "Custom",       depositPct: null, terms: "" },
 };
 
-// Build the human-readable terms line for a custom multi-payment schedule.
-// rows: [{ pct, due }] — due is a "YYYY-MM-DD" string. → "40% Sep 6 · 30% Sep 20 · 30% Oct 4"
-export function customPlanTerms(rows) {
-  if (!Array.isArray(rows) || !rows.length) return "";
-  const fmt = (iso) => {
-    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!m) return "";
-    const d = new Date(+m[1], +m[2] - 1, +m[3]);
-    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} '${String(m[1]).slice(2)}`;
-  };
-  return rows.map((r) => `${+r.pct || 0}%${r.due ? ` ${fmt(r.due)}` : ""}`).join(" · ");
+// Milestone breakdown for the preset plans — [pct, when] pairs used to render a compact schedule.
+const PLAN_MILESTONES = {
+  "100":      [[100, "before we begin"]],
+  "50_50":    [[50, "to begin"], [50, "upon completion"]],
+  "50_30_20": [[50, "to begin"], [30, "at midpoint"], [20, "upon completion"]],
+};
+
+// Format a percentage for display — 2-decimal cap, trailing zeros stripped. Kills float garbage:
+// 12.959999999999994 → "12.96", 50 → "50", 37.04 → "37.04". Never exposes raw floating-point.
+export const fmtPct = (n) => String(Math.round((+n || 0) * 100) / 100);
+const fmtDueShort = (iso) => {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return "";
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} '${String(m[1]).slice(2)}`;
+};
+// Structured custom-schedule rows for a compact, scannable display. Percentages are cleanly rounded,
+// zero-value installments are dropped, and amounts derive from the CURRENT contract total (so the
+// schedule reflects an approved addendum). Any rounding residual lands on the last shown installment
+// so the shown percentages total exactly 100%.
+export function customPlanRows(rows, currentTotal = 0) {
+  if (!Array.isArray(rows)) return [];
+  const shown = rows
+    .map((r) => ({ pct: r2(+r.pct || 0), due: r.due }))
+    .filter((r) => r.pct > 0.005);              // omit 0% installments
+  if (!shown.length) return [];
+  const sum = r2(shown.reduce((s, r) => s + r.pct, 0));
+  if (sum !== 100) shown[shown.length - 1].pct = r2(Math.max(0, shown[shown.length - 1].pct + (100 - sum)));  // residual → last row, total = 100
+  const g = Math.max(0, +currentTotal || 0);
+  return shown.map((r) => ({
+    pct: r.pct, pctLabel: `${fmtPct(r.pct)}%`,
+    amount: g ? r2(g * r.pct / 100) : null,
+    due: r.due, dueLabel: fmtDueShort(r.due),
+  }));
+}
+// One-line human-readable terms (fallback / PDF). Same clean formatting, zero-installments dropped.
+export function customPlanTerms(rows, currentTotal = 0) {
+  return customPlanRows(rows, currentTotal).map((r) => `${r.pctLabel}${r.dueLabel ? ` ${r.dueLabel}` : ""}`).join(" · ");
+}
+// Unified compact schedule for ANY plan → [{ pctLabel, amount, when }]. Preset plans use their
+// milestone labels ("to begin"), custom uses formatted due dates. Amounts derive from the CURRENT
+// contract total so an approved addendum is reflected. Zero installments never appear.
+export function planScheduleRows(plan, custRows, currentTotal = 0) {
+  if (plan === "custom") {
+    return customPlanRows(custRows, currentTotal).map((r) => ({ pctLabel: r.pctLabel, amount: r.amount, when: r.dueLabel }));
+  }
+  const ms = PLAN_MILESTONES[plan];
+  if (!ms) return [];
+  const g = Math.max(0, +currentTotal || 0);
+  return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when }));
 }
 // Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.
 function amountOf(v, base) {

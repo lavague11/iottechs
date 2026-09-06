@@ -199,6 +199,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nvrItem?.name]);
 
+  // Default Display 1 to "Customer Provided" ($0) once an NVR is chosen — most jobs reuse the
+  // customer's own screen, so an empty slot is the wrong default. Only seeds when NO display slot
+  // is configured at all, so a deliberate Monitor/Mount pick (or an explicitly emptied slot within
+  // an already-touched display config) is never overwritten.
+  useEffect(() => {
+    if (readOnly || svc.key !== "camera" || !nvrItem) return;
+    if (svc.items.some((it) => it.displaySlot != null)) return;   // displays already touched — leave them
+    const cp = displayOptions.find((x) => x.baseName === "Customer Provided") || displayOptions[0];
+    onChange({ ...svc, items: [...svc.items, { id: newItemId(), name: cp.name, baseName: cp.baseName, qty: 1, price: 0, cost: 0, displaySlot: 1 }] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [svc.key, nvrItem?.name]);
+
   function patchItems(items) { onChange({ ...svc, items }); }
   function patchItem(id, patch) {
     patchItems(svc.items.map((it) => (it.id === id ? { ...it, ...patch } : it)));

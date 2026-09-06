@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, customPlanTerms, projectFinancials, fmtSignStamp,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, fmtSignStamp,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -343,9 +343,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
   }
   const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "monthly");
-  // Normalize whatever is stored so the schedule always displays in chronological order (older saved
-  // plans may have out-of-order dates from before this rule existed).
-  const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, due: ordered[i] })); })();
+  // Normalize whatever is stored: chronological dates (older plans may have out-of-order dates) and
+  // clean 2-decimal percentages (older plans may hold float garbage like 12.959999999999994).
+  const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, pct: r2(+r.pct || 0), due: ordered[i] })); })();
   const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
   const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
   function commitPlan(next) {
@@ -406,7 +406,9 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
             {status === "sent" && (() => {
               const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
-              return <>Sent {meta?.sent_at ? fmtSignStamp(meta.sent_at) : ""}{by && <><br />by {by}</>}</>;
+              // Compact one line: drop the year, name after a middot instead of a stacked "by" row.
+              const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "") : "";
+              return <>Sent{when && ` ${when}`}{by && ` · ${by}`}</>;
             })()}
             {status === "changes_requested" && "Changes requested"}
             {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
@@ -438,10 +440,15 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         );
+        // Revise up top too — same handler + same (readOnly = already-sent) condition as the bottom Revise,
+        // so staff can reopen an editable version without scrolling to the footer.
+        const reviseBtn = readOnly && (
+          <button type="button" className="prop-head-revise" disabled={busy} onClick={revise} title="Revise — reopen an editable version of this proposal">Revise</button>
+        );
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}</div>;
+          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}{reviseBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -456,6 +463,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             {download}
             {eye}
             {gear}
+            {reviseBtn}
             <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
           </div>
         );
@@ -608,7 +616,21 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
         <div className="prop-plan-row2">
           <span className="prop-plan-lbl">Payment plan</span>
-          {readOnly ? <b className="prop-plan-ro">{plan === "custom" ? customPlanTerms(custRows) : (PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`)}</b> : (
+          {readOnly ? (() => {
+            const sched = planScheduleRows(plan, custRows, fin.current);
+            if (sched.length) return (
+              <div className="prop-plan-sched">
+                {sched.map((r, i) => (
+                  <div className="prop-sched-row" key={i}>
+                    <b className="prop-sched-pct">{r.pctLabel}</b>
+                    {r.amount != null && <span className="prop-sched-amt">{money(r.amount)}</span>}
+                    {r.when && <span className="prop-sched-when">{r.when}</span>}
+                  </div>
+                ))}
+              </div>
+            );
+            return <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>;
+          })() : (
             <div className="prop-plan-opts">
               <button type="button" className={`prop-plan-btn${plan === "100" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
               <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>

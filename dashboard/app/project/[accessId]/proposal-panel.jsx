@@ -40,6 +40,9 @@ const PROP_CSS = `
    the gear, the views/share badges expand only as far as their content needs. */
 .pvx .prop-head-slim .prop-status{display:inline-flex;align-items:center;line-height:1.3;flex-shrink:1;min-width:0}
 .pvx .prop-head-slim .prop-eye,.pvx .prop-head-slim .prop-gear{flex-shrink:0;min-width:30px;justify-content:center}
+.pvx .prop-head-revise{flex-shrink:0;height:30px;padding:0 12px;border:1px solid var(--dv-ink,#101418);border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-head-revise:hover{filter:brightness(1.12)}
+.pvx .prop-head-revise:disabled{opacity:.45;cursor:default}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
@@ -277,6 +280,11 @@ const PROP_CSS = `
 .pvx .prop-plan-row2{display:flex;flex-direction:column;gap:8px;min-height:28px;margin-bottom:2px}
 .pvx .prop-plan-lbl{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500}
 .pvx .prop-plan-ro{font-size:.8rem;color:var(--dv-ink,#101418)}
+.pvx .prop-plan-sched{display:flex;flex-direction:column;gap:4px;width:100%}
+.pvx .prop-sched-row{display:flex;align-items:baseline;gap:8px;font-size:.82rem;line-height:1.3}
+.pvx .prop-sched-pct{flex:0 0 auto;color:var(--dv-ink,#101418);font-weight:700;font-variant-numeric:tabular-nums;min-width:44px}
+.pvx .prop-sched-amt{flex:0 0 auto;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pvx .prop-sched-when{flex:1 1 auto;text-align:right;color:var(--dv-meta,#787D84);font-size:.76rem;text-transform:capitalize}
 .pvx .prop-plan-opts{display:flex;gap:6px;width:100%}
 .pvx .prop-plan-opts .prop-plan-btn{flex:1 1 0;min-width:0;padding:0 6px}
 /* Custom schedule: # payments stepper + one compact row per payment */
