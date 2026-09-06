@@ -7,6 +7,29 @@
 // new state and no new checklist items: every milestone maps to a real fact the flow already gates on.
 
 import { PHASES, masterToPhaseKey } from "./spec";
+import { MASTER_ORDER } from "./stage-flow";
+
+// A project's stage is only reached by satisfying every earlier stage's requirements (advancement is
+// fact-gated), so a later stage is proof the earlier milestones are done — even when the granular
+// fact record is sparse (legacy/seed rows). This floors the facts to the project's real position so
+// the pill + checklist never regress to "Build proposal" on a completed job. It never floors the
+// CURRENT stage's own owed items (those stay fact-driven), so a live action is never hidden.
+export function stageFloorFacts(f = {}, stageKey) {
+  const i = MASTER_ORDER.indexOf(stageKey);
+  if (i < 0) return f;
+  const past = (key) => i >= MASTER_ORDER.indexOf(key);
+  const out = { ...f };
+  if (past("proposal")) {                    // reached proposal ⇒ survey (and any mockup) approved
+    out.survey_ok = out.survey_done = out.survey_accepted = out.survey_submitted = true;
+    if (out.mockup_has || out.mockup_submitted || out.mockup_done) out.mockup_done = out.mockup_submitted = true;
+  }
+  if (past("approval_deposit")) out.proposal_status = "accepted";   // reached approval ⇒ a proposal was accepted
+  if (past("schedule")) {                    // past approval ⇒ signed + deposit cleared
+    out.proposal_status = "accepted";
+    out.proposal_signed = out.deposit_submitted = out.deposit_recorded = true;
+  }
+  return out;
+}
 
 // The phase headline for a master stage key → { label, statusWord } (e.g. "Proposal" / "Reviewing").
 export function phaseHeadline(stageKey) {

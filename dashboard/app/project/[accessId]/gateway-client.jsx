@@ -32,7 +32,7 @@ import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
-import { projectStatusDetail, phaseHeadline } from "../../../lib/project-status";
+import { projectStatusDetail, phaseHeadline, stageFloorFacts } from "../../../lib/project-status";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -1893,8 +1893,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // The customer's ONE next action, shown as a chip next to their name (replaces the generic "Active").
   // Walks survey → mockup → proposal → sign → deposit → final payment; tapping it browses to the step
   // and spotlights the exact tool card. Shown in the customer view AND the staff "customer view" preview.
-  function customerNextAction() {
-    const f = custFacts;
+  function customerNextAction(f = custFacts) {
     // A booked site-survey visit they don't have results for yet — tell them when the tech is coming.
     if (!f.survey_has && !f.survey_done) { const a = pickAppt("survey"); if (a) return { label: `Survey · ${apptLabel(a)}`, schedule: "survey", muted: true }; }
     if (f.survey_has && !f.survey_done)   return { label: "Approve site survey", target: "site_survey",      spot: "Site Survey" };
@@ -1908,8 +1907,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   }
   // The office's view of the SAME current step, so internal roles stay on the same page as the customer:
   // an action they still owe (Submit / Build / Revise) or a "waiting on the customer" status (muted).
-  function officeNextAction() {
-    const f = custFacts;
+  function officeNextAction(f = custFacts) {
     // Consulting: book the site-survey visit from the header before there's anything to submit.
     if (!f.survey_has && !f.survey_submitted && ["inquiry", "site_survey"].includes(custStage)) {
       const a = pickAppt("survey");
@@ -1932,9 +1930,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     }
     return null;
   }
+  // Floor the facts to the project's real stage so a late/completed project can't regress to an early
+  // action just because its granular fact records are sparse (see stageFloorFacts).
+  const floorFacts = stageFloorFacts(custFacts, custStage);
   const headerAction = !acceptLoaded ? null
-    : cView === "customer" ? customerNextAction()
-    : ["admin", "manager", "sales"].includes(cView) ? officeNextAction()
+    : cView === "customer" ? customerNextAction(floorFacts)
+    : ["admin", "manager", "sales"].includes(cView) ? officeNextAction(floorFacts)
     : null;
 
   // "It's been published!" pop-up — the current office-published review item (one at a time). Only for
@@ -2597,14 +2598,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           muted: !!headerAction.muted,
           openTool: headerAction.schedule ? null : headerAction.spot,
           onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target),
-          detail: projectStatusDetail(custStage, custFacts, headerAction),
+          detail: projectStatusDetail(custStage, floorFacts, headerAction),
         }
       : (officeRole && custStage)
         ? {   // Fallback (§13): no single owed action → a neutral status control, never a fake CTA.
             label: `${phaseHeadline(custStage).label} · ${phaseHeadline(custStage).statusWord}`,
             color: "#3E6C9E", muted: true, openTool: null,
             onClick: () => browse(custStage),
-            detail: projectStatusDetail(custStage, custFacts, null),
+            detail: projectStatusDetail(custStage, floorFacts, null),
           }
         : null;
     return (
