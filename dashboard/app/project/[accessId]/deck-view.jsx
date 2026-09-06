@@ -676,7 +676,7 @@ const CSS = `
      chip so it fits snugly next to a truncating name. */
   .dv-code{display:none}
   .dv-identity{gap:8px;flex:1 1 auto}
-  .dv-chip{height:20px;padding:0 7px;font-size:8.5px;letter-spacing:.03em;gap:4px;flex:0 1 auto;min-width:0;max-width:44%}
+  .dv-chip{height:20px;padding:0 7px;font-size:8.5px;letter-spacing:.03em;gap:4px;flex:0 1 auto;min-width:0;max-width:62%}
   .dv-chip .dv-chip-arw{width:10px;height:10px;flex:0 0 auto}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){

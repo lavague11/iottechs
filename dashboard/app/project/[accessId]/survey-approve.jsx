@@ -112,7 +112,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
         ) : submittedCurrent ? (
           <div className="tab-row">
             <span className="tab-check">✓</span>
-            <span className="tab-msg">Awaiting customer approval.</span>
+            <span className="tab-msg">Awaiting approval.</span>
             <button className="tab-btn ghost" disabled={busy || preview} onClick={() => submit(false)}>Unsubmit</button>
           </div>
         ) : submittedStale ? (
@@ -252,7 +252,7 @@ const TAB_CSS = `
 .tab-check{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-green,#2E7D5B);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
 .tab-warn{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-gold,#C9A96E);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
 .tab-dot{width:9px;height:9px;flex-shrink:0;border-radius:50%;border:2px solid var(--dv-gold,#C9A96E)}
-.tab-msg{flex:1;min-width:180px;font-size:.84rem;color:var(--dv-ink,#101418)}
+.tab-msg{flex:1;min-width:120px;font-size:.84rem;color:var(--dv-ink,#101418)}
 .tab-msg b{font-weight:600}
 .tab-btn{height:36px;padding:0 16px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:transform .12s}
 .tab-btn:hover{transform:translateY(-1px)}

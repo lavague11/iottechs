@@ -463,8 +463,6 @@
         <button class="ftab on">Floor 1</button>
       </div>
       <div class="hint" id="wizHint"></div>
-      <button class="b lite" id="addFloorBtn" style="display:none">+ Add a new floor</button>
-      <button class="b lite" id="backBtn" style="display:none">Back</button>
       <span class="awaitTag" id="awaitTag" style="display:none"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span id="awaitTxt">Awaiting approval</span></span>
       <button class="b lite" id="unsubmitBtn" style="display:none">Unsubmit</button>
       <button class="b" id="nextBtn">Next</button>
@@ -1266,8 +1264,6 @@
 
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
-    var addFloorBtn=document.getElementById("addFloorBtn");
-    var backBtn=document.getElementById("backBtn");
     var nextBtn=document.getElementById("nextBtn");
     var awaitTag=document.getElementById("awaitTag"), awaitTxt=document.getElementById("awaitTxt"), unsubmitBtn=document.getElementById("unsubmitBtn");
     function goStep(idx){
@@ -1306,8 +1302,6 @@
       document.querySelector(".ctxbar").style.display = (idx===1) ? "" : "none";
       var sc=document.getElementById("showCtl"); if(sc) sc.style.display = (!chooser && !RO) ? "flex" : "none";
       var onSubmit=(idx===2);
-      addFloorBtn.style.display = onSubmit ? "" : "none";
-      backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
       nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
       // Submit step: show the Submit button only while it's a draft; once submitted the status lives
       // right here in the nav (a small "Awaiting approval" / "Customer approved" tag + Unsubmit) — no
@@ -1323,9 +1317,6 @@
     // Next walks the wizard; on the Submit step it submits the whole survey for approval.
     nextBtn.addEventListener("click", function(){ save();   // commit the current placements/angles as-is before moving on
       if(curStep<2) goStep(curStep+1); else submit(); });
-    backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
-    // "+ Add a new floor" — snapshot the current floor, start a fresh one at the chooser.
-    addFloorBtn.addEventListener("click", addFloor);
     if(unsubmitBtn) unsubmitBtn.addEventListener("click", unsubmit);
 
     restore();   // reopen the saved survey (all floors) for this project (if any)

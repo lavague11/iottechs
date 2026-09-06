@@ -209,7 +209,7 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           title="CCTV Mockup"
           allow="clipboard-write"
           // Fit the frame to the mockup content so there's no dead gap — both builder and read-only. Fullscreen keeps the default height.
-          style={!fs && stat?.height ? { height: Math.max(320, stat.height) } : undefined}
+          style={!fs && stat?.height ? { height: Math.max(200, stat.height) } : undefined}
         />
       ) : (
         <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>

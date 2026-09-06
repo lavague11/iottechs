@@ -779,6 +779,10 @@ rebuildCards();
     // mockup canvas (.mapwrap) stays visible in both, read-only just disables edits (see IOT_RO above).
     +'.iot-embed .topbar{display:none!important}'
     +'.iot-embed .pagenav{display:none!important}'
+    // Landscape phone is short & wide — kill the tall stage padding so the iframe fits it snugly (no dead gap).
+    +'.iot-embed .stage{padding:4px 0 2px}'
+    +'.iot-embed .caplabel{margin-top:7px}'
+    +'.iot-embed .dots{margin-top:11px}'
     +'.iot-ro #cvOverlay{display:none!important}';
   document.head.appendChild(st);
 })();
