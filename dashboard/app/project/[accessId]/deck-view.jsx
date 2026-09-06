@@ -247,10 +247,10 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         {statusChip && (statusChip.onClick
           ? <button className={`dv-chip dv-chip-act${statusChip.muted ? " muted" : ""}`} style={{ background: statusChip.color + "1f", color: statusChip.color }}
               onClick={(e) => { e.stopPropagation(); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); }}>
-              <i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}
+              <i className="dv-dot" style={{ background: statusChip.color }} /><span className="dv-chip-lbl">{statusChip.label}</span>
               <svg className="dv-chip-arw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             </button>
-          : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} />{statusChip.label}</span>)}
+          : <span className="dv-chip" style={{ background: statusChip.color + "1f", color: statusChip.color }}><i className="dv-dot" style={{ background: statusChip.color }} /><span className="dv-chip-lbl">{statusChip.label}</span></span>)}
 
         <div className="dv-cluster">
           {menu.length > 0 && (
@@ -471,7 +471,9 @@ const CSS = `
 .dv-code{font-size:11px;letter-spacing:.09em;color:var(--dv-meta);padding:5px 8px;border:1px solid var(--dv-line);border-radius:7px}
 .dv-title{font-size:23px;font-weight:600;letter-spacing:-.028em;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-chev{color:var(--dv-faint);transition:transform .34s var(--dv-e)}.dv-chev.up{transform:rotate(180deg);color:var(--dv-ink)}
-.dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.dv-chip{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;min-width:0}
+.dv-chip-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dv-dot{flex:0 0 auto}
 .dv-chip.live{background:#E9F3ED;color:var(--dv-green)}
 /* Clickable "your next step" chip — draws a gentle pulse so the customer notices the one action owed. */
 .dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
@@ -673,9 +675,9 @@ const CSS = `
      big). Hide the redundant project-code pill (it's in the drawer) to free the room, and shrink the
      chip so it fits snugly next to a truncating name. */
   .dv-code{display:none}
-  .dv-identity{gap:8px}
-  .dv-chip{height:21px;padding:0 8px;font-size:9px;letter-spacing:.05em;gap:5px;flex:0 1 auto;min-width:0}
-  .dv-chip .dv-chip-arw{width:11px;height:11px}}
+  .dv-identity{gap:8px;flex:1 1 auto}
+  .dv-chip{height:20px;padding:0 7px;font-size:8.5px;letter-spacing:.03em;gap:4px;flex:0 1 auto;min-width:0;max-width:44%}
+  .dv-chip .dv-chip-arw{width:10px;height:10px;flex:0 0 auto}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){
   .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
