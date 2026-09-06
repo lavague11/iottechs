@@ -543,12 +543,18 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
           {canEdit && (
             <div className="icl-bulk">
               <span className="icl-bulk-lbl">Quick fill:</span>
-              {dropItems.length > 0 && CAMERA_BULK.map((b) => (
-                <button key={b.label} type="button" className="icl-bulk-btn" onClick={() => bulkCameras(b.to)} title={`Mark all cameras & POS: ${b.label}`}>{b.label}</button>
-              ))}
+              {dropItems.length > 0 && (
+                <div className="icl-bulk-chips">
+                  {CAMERA_BULK.map((b) => (
+                    <button key={b.label} type="button" className="icl-bulk-btn" onClick={() => bulkCameras(b.to)} title={`Mark all cameras & POS: ${b.label}`}>{b.label}</button>
+                  ))}
+                </div>
+              )}
               <span className="icl-bulk-sep" />
-              <button type="button" className="icl-bulk-btn all" onClick={completeAll} title="Mark every line item complete">Complete all</button>
-              <button type="button" className="icl-bulk-btn reset" onClick={resetAll} title="Reset every line item back to the start">Reset</button>
+              <div className="icl-bulk-actions">
+                <button type="button" className="icl-bulk-btn all" onClick={completeAll} title="Mark every line item complete">Complete all</button>
+                <button type="button" className="icl-bulk-btn reset" onClick={resetAll} title="Reset every line item back to the start">Reset</button>
+              </div>
             </div>
           )}
           {equipment.length > 0 && <div className="icl-sec">Equipment &amp; Recorders <span className="icl-sec-n">{equipment.length}</span></div>}

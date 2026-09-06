@@ -83,6 +83,9 @@ export const ICL_CSS = `
 .icl-pay-in{width:58px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.82rem;font-weight:700;text-align:right;padding:0 6px;font-family:inherit;outline:none;font-variant-numeric:tabular-nums}
 .icl-pay-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .icl-bulk{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:2px 0 4px}
+/* Desktop keeps the flat single-row layout: the group wrappers are transparent to flex here, so the
+   label, chips, divider and actions flow exactly as before. Mobile turns them into real groups. */
+.icl-bulk-chips,.icl-bulk-actions{display:contents}
 .icl-bulk-lbl{font-size:.72rem;font-weight:600;color:var(--dv-meta,#787D84);letter-spacing:.03em}
 .icl-bulk-btn{height:28px;padding:0 12px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink-soft,#3A4048);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .icl-bulk-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
@@ -184,5 +187,16 @@ export const ICL_CSS = `
   .icl-crew-in{flex:1;width:auto}
   .icl-summary{gap:8px;margin-bottom:8px}
   .icl-sum-cell{min-width:0;padding:8px 12px}
+  /* Quick fill = one intentional control group on mobile: label on its own line, the four state chips
+     in a balanced 2-col grid (no orphan, no awkward wrap), then Complete all + Reset on their own row.
+     The stray vertical divider is dropped — the grouping conveys the separation. */
+  .icl-bulk{gap:8px}
+  .icl-bulk-lbl{flex:1 1 100%;margin-bottom:-2px}
+  .icl-bulk-chips{display:grid;grid-template-columns:repeat(2,minmax(0,150px));justify-content:start;gap:8px;flex:1 1 100%;min-width:0}
+  .icl-bulk-chips .icl-bulk-btn{width:100%;height:34px;padding:0 10px}
+  .icl-bulk-sep{display:none}
+  .icl-bulk-actions{display:flex;align-items:center;gap:12px;flex:1 1 100%;margin-top:2px}
+  .icl-bulk-actions .icl-bulk-btn.all{height:34px;padding:0 16px}
+  .icl-bulk-actions .icl-bulk-btn.reset{height:34px}
 }
 `;
