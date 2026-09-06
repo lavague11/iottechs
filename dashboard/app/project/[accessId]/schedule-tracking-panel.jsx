@@ -435,7 +435,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal, on
         })() : (
           <div className="stp-track-wait">
             <span className="stp-track-ph">— — — —  — — — —  — — — —</span>
-            <span>Paste a tracking number above and we'll pull the live status here.</span>
+            <span>Paste a tracking number above.</span>
           </div>
         )}
 

@@ -205,7 +205,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
         </div>
         {actQ != null && <input className="jl-search" autoFocus value={actQ} onChange={(e) => setActQ(e.target.value)} placeholder="Search activity…" />}
         {timeline.length === 0 ? (
-          <div className="jl-empty">No activity yet. The inquiry, calls, and every signed or reviewed milestone appear here.</div>
+          <div className="jl-empty">No activity yet.</div>
         ) : (
           <ol className="jl-time">
             {timeline.map((e, i) => (

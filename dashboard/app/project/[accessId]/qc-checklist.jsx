@@ -96,7 +96,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
   }
 
   if (!items.length) {
-    return <div className="qc-root"><style>{QC_CSS}</style><div className="qc-empty">Nothing to QC yet — the installed equipment appears here once a proposal is accepted.</div></div>;
+    return <div className="qc-root"><style>{QC_CSS}</style><div className="qc-empty">Nothing to QC yet.</div></div>;
   }
 
   return (

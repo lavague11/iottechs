@@ -134,7 +134,7 @@ export default function PricingDefaults({ onClose, onSaved, scopeKey }) {
           <span className="prc-title">{title}</span>
           <button className="prc-x" onClick={onClose}>✕</button>
         </div>
-        <div className="prc-sub">Company-wide, shared across your team. Changing a price or name only affects new imports and items added after this — not what's already placed.</div>
+        <div className="prc-sub">Company-wide · affects new items only.</div>
         {err && <div className="prc-err">{err}</div>}
 
         <div className="prc-body">

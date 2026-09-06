@@ -93,7 +93,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
       <style>{ADN_CSS}</style>
       {!embedded && (
         <div className="adn-head">
-          <div><span className="adn-title">Job-Site Add-ons</span><span className="adn-sub">Signed change order, separate from the proposal</span></div>
+          <div><span className="adn-title">Job-Site Add-ons</span></div>
           {approvedTotal > 0 && <span className="adn-total-badge">Approved add-ons {money(approvedTotal)}</span>}
         </div>
       )}

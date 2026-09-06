@@ -118,7 +118,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
         ) : submittedStale ? (
           <div className="tab-row">
             <span className="tab-warn">!</span>
-            <span className="tab-msg"><b>Edited since submitting.</b> {externalSubmit ? "Re-submit from the tool above." : "Re-submit so the customer sees the latest."}</span>
+            <span className="tab-msg"><b>Edited</b> — re-submit.</span>
             {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>}
           </div>
         ) : (
@@ -126,7 +126,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
             {externalSubmit ? (
               <>
                 <span className="tab-dot" />
-                <span className="tab-msg">When this {label} is ready, submit it with the button in the tool above.</span>
+                <span className="tab-msg">Submit from the tool above.</span>
               </>
             ) : (
               <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>
@@ -151,18 +151,18 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
       ) : !submittedCurrent ? (
         <div className="tab-row">
           <span className="tab-dot" />
-          <span className="tab-msg">Your {label} is being prepared — we'll let you know the moment it's ready to review.</span>
+          <span className="tab-msg">Being prepared — we'll notify you.</span>
         </div>
       ) : voided ? (
         <div className="tab-row">
           <span className="tab-warn">!</span>
-          <span className="tab-msg"><b>This {label} was updated</b> since you approved it — please review the changes and approve again.</span>
+          <span className="tab-msg"><b>Updated</b> — please re-approve.</span>
           {isCustomer && <button className="tab-btn" disabled={busy || preview} onClick={approve}>Re-approve {label}</button>}
         </div>
       ) : (
         <div className="tab-row">
           <span className="tab-dot" />
-          <span className="tab-msg">Reviewed everything? Approve this {label} to continue.</span>
+          <span className="tab-msg">Approve to continue.</span>
           {isCustomer && <button className="tab-btn" disabled={busy || preview} onClick={approve}>{busy ? "Saving…" : `Approve ${label}`}</button>}
         </div>
       )}
@@ -241,7 +241,7 @@ export function SmoothSailing({ onContinue, preview }) {
         </svg>
       </div>
       <h3 className="ssl-title">No survey — smooth sailing from here</h3>
-      <p className="ssl-sub">There's nothing to review on this step. You're all set to move ahead.</p>
+      <p className="ssl-sub">Nothing to review here.</p>
       <button className="ssl-btn" disabled={preview} onClick={() => onContinue?.()}>Go on to the Next Step →</button>
       {preview && <div className="ssl-preview">Navigation is disabled in preview.</div>}
       <style>{SSL_CSS}</style>

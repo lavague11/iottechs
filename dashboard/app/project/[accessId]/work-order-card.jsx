@@ -92,12 +92,12 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
 
   const statusTxt = created ? (techSigned ? "Accepted" : "Created") : "Not created";
   const gateNote = created
-    ? (techSigned ? `Work order accepted by ${p.tech_signed_name}.` : "Work order created — project is in scheduling.")
+    ? (techSigned ? `Work order accepted by ${p.tech_signed_name}.` : "Created — now scheduling.")
     : intern
-      ? "Internal job — no customer sign-off needed. Assign a technician, set their payout, then create the work order."
+      ? "Assign a tech, set payout, then create."
       : depositOk
-        ? "Deposit on file — assign a technician, set their payout, then create the work order."
-        : "Needs a deposit before the work order can go out — or mark it an internal job below.";
+        ? "Deposit on file — assign a tech, then create."
+        : "Needs a deposit first — or mark internal below.";
 
   return (
     <div className="woc-card">
@@ -157,13 +157,13 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
               {finalizedAt ? (
                 <div className="woc-final done">
                   <span className="woc-final-msg">
-                    <b>✓ Finalized{finalizedBy ? ` by ${finalizedBy}` : ""}</b> — technicians can now accept this work order.
+                    <b>✓ Finalized{finalizedBy ? ` by ${finalizedBy}` : ""}</b> — techs can accept.
                   </span>
                   {!created && <button type="button" className="woc-reopen" disabled={finBusy} onClick={() => toggleFinalize(false)}>Re-open</button>}
                 </div>
               ) : (
                 <div className="woc-final">
-                  <p className="woc-final-msg">Payout auto-filled from your standard rates. Review it above, then finalize so a technician can accept.</p>
+                  <p className="woc-final-msg">Review payout, then finalize.</p>
                   <button type="button" className="woc-final-btn" disabled={finBusy} onClick={() => toggleFinalize(true)}>{finBusy ? "Finalizing…" : "Finalize Work Order"}</button>
                 </div>
               )}
@@ -176,7 +176,7 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
               <label className="woc-intern">
                 <input type="checkbox" checked={intern} disabled={busy} onChange={(e) => toggleInternal(e.target.checked)} />
                 <span>
-                  <b>Internal job</b> — no customer sale. Skip the signature + deposit gate.
+                  <b>Internal job</b> — no customer sale.
                 </span>
               </label>
             )}

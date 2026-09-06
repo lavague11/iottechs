@@ -71,7 +71,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
           <div className="pwo-hd-left"><a href="/go" className="pwo-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a><TaglinePill tone="dark" className="pwo-brand-pill" /></div>
           <span className="pwo-doctag">Work Order</span>
         </div>
-        <div className="pwo-empty">No active work order yet — it builds out here once the office sends the proposal to the customer.</div>
+        <div className="pwo-empty">No active work order yet.</div>
       </div>
     );
   }
@@ -174,7 +174,7 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
           <div className="pwo-loc-total">Total locations: {locations.length}</div>
         </div>
       ) : (
-        <div className="pwo-empty-sec">No placed locations on this job — see the equipment list below.</div>
+        <div className="pwo-empty-sec">No placed locations.</div>
       )}
       {svcNotes.length > 0 && <div className="pwo-svc-note" style={{ margin: "6px 22px 0" }}>{svcNotes.join("\n")}</div>}
 
@@ -218,8 +218,8 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
       <div className="pwo-grand"><span>Work Order Total</span><span>{ratesPending ? "TBD" : money(total)}</span></div>
       <div className="pwo-fineprint">
         {ratesPending
-          ? "Payout rates pending — they're set by the office before install and will appear here."
-          : "Technician payout figures. Confirm scope on site before starting. Report discrepancies to dispatch."}
+          ? "Payout rates pending."
+          : "Confirm scope on site."}
       </div>
 
       {/* Acceptance / assignment — the tech signs to accept, which assigns them the job */}
@@ -255,11 +255,11 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
         </div>
       ) : !p.wo_finalized_at ? (
         <div className="pwo-accept-box">
-          <p>This work order is being finalized by the office. You&apos;ll be able to accept it here once the payout is confirmed.</p>
+          <p>Being finalized — accept when ready.</p>
         </div>
       ) : (
         <div className="pwo-accept-box">
-          <p>Review the scope above, then accept this work order to be assigned the job.</p>
+          <p>Accept to be assigned.</p>
           {err && <div className="pwo-err">{err}</div>}
           <button type="button" className="pwo-accept-btn" disabled={busy || preview} onClick={() => setSignOpen(true)}>
             ✍ Accept Work Order

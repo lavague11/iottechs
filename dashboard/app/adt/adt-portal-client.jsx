@@ -267,7 +267,7 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
   );
   const quoteNode = quote
     ? <QuotePanel adtId={app.adt_id} quote={quote} bare />
-    : <div className="adtc-pad"><div className="adtc-muted">Your installer will build your quote here. We'll email you when it's ready to review.</div></div>;
+    : <div className="adtc-pad"><div className="adtc-muted">We'll email your quote when it's ready.</div></div>;
   const signNode = <SignQuote app={app} />;
   const completeNode = (
     <div className="adtc-pad">
@@ -275,18 +275,18 @@ function CustomerDeck({ app, quote, dashboardHref = null }) {
         ? <div className="adtc-ok">✓ Your ADT system is live — you're all set.</div>
         : scheduled
           ? <div className="adtc-ok">Install set for <b>{DAY_FMT(app.schedule_date)}</b>{app.schedule_window ? ` · ${app.schedule_window}` : ""}</div>
-          : <div className="adtc-muted">Your records are on file. Once your quote is accepted we'll install and finalize your account — a confirmation shows up here.</div>}
+          : <div className="adtc-muted">We'll confirm here after install.</div>}
       {done && (
         <div className="adtc-steps">
           <div className="adtc-sec-t">Next steps</div>
           <ul className="adtc-ul">
-            <li>Test each device from the ADT app to confirm it's reporting.</li>
-            <li>Remember your verbal password — monitoring uses it to verify you.</li>
-            <li>Keep your access PIN <b>{app.access_pin || "—"}</b> for quick check-ins.</li>
+            <li>Test each device in the app.</li>
+            <li>Remember your verbal password.</li>
+            <li>Access PIN: <b>{app.access_pin || "—"}</b>.</li>
           </ul>
         </div>
       )}
-      <div className="adtc-support">Questions or issues? Call <a href={telHref}>{SUPPORT_PHONE}</a> — we're here 24/7.</div>
+      <div className="adtc-support">Questions? Call <a href={telHref}>{SUPPORT_PHONE}</a> · 24/7.</div>
       <div className="adtc-note">Keep your ID <b>{app.adt_id}</b> to check back anytime.</div>
     </div>
   );

@@ -200,7 +200,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
         ) : (
           <label className="ai-doc">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-            <span className="ai-doc-t"><b>Upload document</b><em>Articles of formation, EIN letter, or proof of business — PDF or image</em></span>
+            <span className="ai-doc-t"><b>Upload document</b><em>EIN letter or proof of business</em></span>
             <input type="file" accept=".pdf,image/*" onChange={onDoc} hidden />
           </label>
         )}
@@ -209,7 +209,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       {simple ? (
         <>
           <div className="ai-sec-t">Your protection <em>· how much coverage?</em></div>
-          <div className="ai-note" style={{ marginBottom: 12 }}>Every ADT system includes a smart control panel and 24/7 cellular backup.</div>
+          <div className="ai-note" style={{ marginBottom: 12 }}>Includes control panel + cellular backup.</div>
           {SIMPLE_Q.map((q) => {
             const n = qty[q.id] || 0;
             return (
@@ -302,7 +302,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       )}
 
       <div className="ai-sec-t">Emergency contacts <em>· at least one required</em></div>
-      <div className="ai-note">If we can't reach you by phone, we'll contact these people in an emergency.</div>
+      <div className="ai-note">Backup contacts for emergencies.</div>
       {[0, 1].map((i) => (
         <div className="ai-grid" key={i} style={{ marginBottom: i === 0 ? 8 : 0 }}>
           <label className="ai-fld"><span>Contact {i + 1} · full name</span><input value={emg[i].name} onChange={ec(i, "name")} placeholder="Full name" autoComplete="off" /></label>
@@ -312,7 +312,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
 
       <div className="ai-sec-t">Verbal password <em>· required</em></div>
       <input className="ai-inp" value={f.verbalPassword} onChange={set("verbalPassword")} placeholder="A word or phrase only you know" autoComplete="off" />
-      <div className="ai-note">This verifies your identity and is used in case of emergencies.</div>
+      <div className="ai-note">Verifies your identity.</div>
 
       <div className="ai-sec-t">Preferred install times</div>
       <div className="ai-quick">

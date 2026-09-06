@@ -1252,7 +1252,7 @@ function CustomerInquiryPanel({ project, accessId }) {
         </div>
         <div className="ciq-pill">Inquiry received · <span className="mono">{project.access_id}</span></div>
         <h2 className="ciq-title">You&apos;re in. We&apos;ve got it from here.</h2>
-        <p className="ciq-sub">Someone will reach out within <b>one business day</b> to schedule your free walkthrough &amp; demo.</p>
+        <p className="ciq-sub">We'll call within <b>one business day</b>.</p>
         <a className="ciq-call" href="tel:6463960775">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
           Can&apos;t wait? Call 646-396-0775
@@ -1327,8 +1327,7 @@ function InquiryCard({ project, view }) {
         <div className="iq-h">Inquiry Received</div>
         <div className="iq-ref">Reference: <span className="mono">{project.access_id}</span></div>
         <p className="iq-body">
-          Thank you for reaching out to IOT TECHS! A member of our team will contact you within
-          one business day to schedule your free walkthrough and system demo.
+          We'll call within one business day to schedule your walkthrough.
         </p>
         {project.contact_email && (
           <div className="iq-note">We&apos;ll reach you at: <b>{project.contact_email}</b></div>
@@ -2375,7 +2374,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 18h.01"/></svg>
                   </span>
                   <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--dv-ink,#101418)" }}>Set up your cameras on your phone</div>
-                  <div style={{ fontSize: ".9rem", color: "var(--dv-meta,#787D84)", maxWidth: 360, lineHeight: 1.5 }}>A quick guided walkthrough — install the app, scan your activation code, and see your cameras live. Takes about 5 minutes.</div>
+                  <div style={{ fontSize: ".9rem", color: "var(--dv-meta,#787D84)", maxWidth: 360, lineHeight: 1.5 }}>Install, scan, view — about 5 minutes.</div>
                   <a href={`/guide/mobile-setup?project=${encodeURIComponent(lp.access_id)}`}
                      style={{ marginTop: 4, textDecoration: "none", height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", borderRadius: 10, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontWeight: 800, fontSize: ".92rem" }}>
                     Start setup guide →
@@ -3148,7 +3147,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
             </div>
             <h2 className="pv-modal-title">Verify customer identity</h2>
-            <p className="pv-modal-sub">Confirm these details before granting an external customer access — this prevents adding the wrong person.</p>
+            <p className="pv-modal-sub">Confirm before granting access.</p>
             <div className="pv-verify-rows">
               <div className="pv-verify-row"><span>Name</span><b>{verifyCust.name || <em>— not on file —</em>}</b></div>
               <div className="pv-verify-row"><span>Email</span><b>{verifyCust.email || <em>—</em>}</b></div>
@@ -3456,7 +3455,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 <FlowStep n={1} total={total} status="upcoming" color="#C9A96E" bare>
                   {!woAccepted
                     ? <div className="pv-lockcard"><b>Accept the work order first.</b><span>Head back to <a onClick={() => browse("proposal")}>Work Order Created</a> and sign to accept — the equipment checklist unlocks after that.</span></div>
-                    : <div className="pv-lockcard"><b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b><span>Your equipment checklist becomes available the day of the install.</span></div>}
+                    : <div className="pv-lockcard"><b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b><span>Available on install day.</span></div>}
                 </FlowStep>
               ) : (
                 <>

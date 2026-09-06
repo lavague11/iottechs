@@ -137,7 +137,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
         </div>
         <div className="cmp-hero-tt">
           <div className="cmp-hero-title">{gated ? "Installation complete." : isCustomer ? "Your system is live." : "Project complete."}</div>
-          <div className="cmp-hero-sub">{gated ? "One last step — settle your final balance to unlock your certificate, warranty, and app access." : isCustomer ? "Installation is complete and your cameras are online. Here's everything you need." : `${deviceCount} device${deviceCount === 1 ? "" : "s"} installed and verified in QC.`}</div>
+          <div className="cmp-hero-sub">{gated ? "Settle your final balance to unlock everything below." : isCustomer ? "Everything you need is below." : `${deviceCount} device${deviceCount === 1 ? "" : "s"} installed and verified in QC.`}</div>
         </div>
         <span className="cmp-hero-chev">{open ? "▲" : "▼"}</span>
       </button>
@@ -153,7 +153,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           <div className="cmp-gate-body">
             <div className="cmp-gate-title">Final balance {payLoaded ? "due" : "…"}</div>
             <div className="cmp-gate-amt">{payLoaded ? money(balance) : "Checking payment status…"}</div>
-            <div className="cmp-gate-sub">Your completion certificate, warranty document, and camera app access unlock the moment your final payment is recorded.</div>
+            <div className="cmp-gate-sub">Unlocks when your final payment clears.</div>
             {onBrowseStage && payLoaded && (
               <button type="button" className="cmp-gate-btn" onClick={() => onBrowseStage("payment")}>Go to Payment</button>
             )}
@@ -187,7 +187,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
         </div>
         <div className="cmp-card-body">
           <div className="cmp-card-title">{warrantyLabel} Warranty · Parts &amp; Labour</div>
-          <div className="cmp-card-sub">{doneDate ? <>In effect {fmtDate(doneDate)} → <b>{fmtDate(warrantyEnd)}</b>. Covered issues are serviced at no charge.</> : "Coverage begins on the completion date."}</div>
+          <div className="cmp-card-sub">{doneDate ? <>{fmtDate(doneDate)} → <b>{fmtDate(warrantyEnd)}</b></> : "Coverage begins on the completion date."}</div>
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           </div>
           <div className="cmp-card-body">
             <div className="cmp-card-title">System QR · Activate your app</div>
-            <div className="cmp-card-sub">Scan this in the ANNKE Vision app to connect to your cameras.</div>
+            <div className="cmp-card-sub">Scan in the ANNKE Vision app.</div>
             <button type="button" className="cmp-btn cmp-qr-btn" onClick={() => setQrOpen(true)}>View System QR</button>
           </div>
         </div>
@@ -211,9 +211,9 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           <div className="cmp-card-body">
             <div className="cmp-card-title">Getting started</div>
             <ul className="cmp-guide-list">
-              <li>View your cameras anytime from the mobile app your technician set up on-site.</li>
-              <li>Footage records continuously to your on-site recorder; remote viewing works from anywhere.</li>
-              <li>Questions or a camera acting up? Open a support request from your project page — your warranty has you covered.</li>
+              <li>View your cameras in the app.</li>
+              <li>Records locally · view from anywhere.</li>
+              <li>Need help? Open a support request.</li>
             </ul>
           </div>
         </div>

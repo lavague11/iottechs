@@ -54,7 +54,7 @@ export default function PresetEditor({ serviceKey, onClose, onSaved }) {
           <span className="pst-title">Preset bundles · {serviceLabel(serviceKey)}</span>
           <button className="pst-x" onClick={onClose}>✕</button>
         </div>
-        <div className="pst-sub">One-click line bundles. Each drops as a block with its sub-items, priced from your catalog. Shown at the top of the add bar.</div>
+        <div className="pst-sub">One-click line bundles, priced from your catalog.</div>
         {err && <div className="pst-err">{err}</div>}
 
         <div className="pst-body">

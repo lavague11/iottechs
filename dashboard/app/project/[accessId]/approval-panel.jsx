@@ -134,14 +134,14 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     const { sub, showBtn } = (() => {
       if (isStaff) {
         if (!status || status === "draft") return { sub: "Build and send the proposal to get started.", showBtn: true };
-        if (status === "changes_requested") return { sub: "The customer requested changes — revise the proposal.", showBtn: true };
-        if (status === "declined") return { sub: "The customer declined this proposal — revise it to continue.", showBtn: true };
-        return { sub: "Sent — waiting on the customer to accept a proposal option.", showBtn: true };   // "sent"
+        if (status === "changes_requested") return { sub: "Changes requested — revise.", showBtn: true };
+        if (status === "declined") return { sub: "Declined — revise to continue.", showBtn: true };
+        return { sub: "Awaiting customer acceptance.", showBtn: true };   // "sent"
       }
-      if (!status || status === "draft") return { sub: "Your proposal isn't ready yet — we'll notify you the moment it's sent.", showBtn: false };
-      if (status === "changes_requested") return { sub: "We're revising your proposal based on your requested changes.", showBtn: false };
-      if (status === "declined") return { sub: "You declined this proposal. Contact us if you'd like to revisit it.", showBtn: false };
-      return { sub: "Accept a proposal option to continue — the agreement, signature, and deposit unlock here once it's accepted.", showBtn: true };   // "sent"
+      if (!status || status === "draft") return { sub: "Proposal not ready yet.", showBtn: false };
+      if (status === "changes_requested") return { sub: "Revising your proposal.", showBtn: false };
+      if (status === "declined") return { sub: "Declined — contact us to revisit.", showBtn: false };
+      return { sub: "Accept an option to continue.", showBtn: true };   // "sent"
     })();
     const gatePayments = data.payments || [];
     // Billing figures even before acceptance: total owed, deposit target/due, and remaining
@@ -264,7 +264,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
                   <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
               </div>
               <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
-              <div className="apv-fine">Billing stays open — record a deposit or payment even before the customer accepts or signs.</div>
+              <div className="apv-fine">Record a payment anytime.</div>
             </div>
             )}
           </>
@@ -427,7 +427,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
         {depositDue > 0 && <div className="apv-sum-row"><span className="apv-sum-lbl">Deposit Still Due</span><b className="apv-due">{money(depositDue)}</b></div>}
         <div className="apv-sum-divider" />
         <div className="apv-sum-row"><span className="apv-sum-lbl">Remaining Balance</span><b className={balance > 0 ? "apv-due" : "apv-ok"}>{money(balance)}</b></div>
-        <div className="apv-sum-note">Zelle preferred. Balance due upon completion. Proposal terms apply.</div>
+        <div className="apv-sum-note">Zelle preferred · balance at completion.</div>
       </div>
       )}
 
@@ -460,7 +460,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           </div>
         ) : isCustomer ? (
           <div className="apv-sign-form">
-            <p>Sign to authorize this agreement — same signature tool you used to accept.</p>
+            <p>Sign to authorize this agreement.</p>
             <button className="apv-btn gold sign" disabled={busy} onClick={() => setSignOpen(true)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
               Sign Agreement
@@ -612,7 +612,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
           </div>)}
         </div>
         )}
-        {isCustomer && <div className="apv-fine">Your submission shows as pending until our team confirms receipt — the balance updates once confirmed.</div>}
+        {isCustomer && <div className="apv-fine">Pending until we confirm receipt.</div>}
       </div>
       </div>
       {/* Work-order creation moved to its own "Create Work Order" card (tech assignment + tech pricing

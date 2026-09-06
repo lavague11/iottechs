@@ -142,7 +142,6 @@ export function SvcDiagnosticPanel({ svcCall, view, preview = false }) {
               <>
                 <div className="svg-step">{entryTitle} · step {path.length + 1}</div>
                 <h3>{cur.q}</h3>
-                {cur.widget === "speed" && <div className="svg-hint">Tip: try loading a website on your phone over the same Wi-Fi to check.</div>}
                 <div className="svg-opts">
                   {cur.options.map((o, i) => (
                     <button key={i} className={`svg-opt${i === cur.options.length - 1 ? " last" : ""}`} onClick={() => answer(cur.q, o)}>{o.label}</button>
@@ -213,7 +212,7 @@ export function SvcInvoicePanel({ svcCall, view, preview = false }) {
         </div>
       ) : isCust ? (
         <div className="svg-sign">
-          <p className="svg-sub">Type your full name to approve this invoice — your typed name is your signature.</p>
+          <p className="svg-sub">Type your name to sign.</p>
           <div className="svg-sign-row">
             <input className="svg-in" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sign()} />
             <button className="svg-btn gold" onClick={sign} disabled={busy || name.trim().length < 2 || preview} title={preview ? "Preview — the customer signs" : undefined}>{busy ? "Signing…" : "Approve"}</button>
