@@ -4457,7 +4457,11 @@ const PV_CSS = `
 /* Phone: the survey/mockup toolbar stacks — the tag on its own line, then the controls as
    equal-width, comfortably-tappable buttons that fill the row instead of cramming. */
 @media (max-width:600px){
-  .pvx .ss-embed-bar{flex-direction:column;align-items:stretch;gap:8px}
+  /* Only the MOCKUP toolbar (many buttons) stacks — tag on its own line, controls below. The SURVEY
+     bar is just a tag + a single "Full screen" button, so it stays a compact one-line row (wrapping
+     only if the viewport is genuinely too narrow) instead of stretching Full screen full-width. */
+  .pvx .ss-embed-bar:has(.mk-controls){flex-direction:column;align-items:stretch;gap:8px}
+  .pvx .ss-embed-bar .ss-embed-tag{min-width:0}
   .pvx .mk-controls{width:100%;gap:7px}
   .pvx .mk-controls>*{flex:1 1 auto}
   .pvx .mk-controls .mk-btn,.pvx .mk-controls .ss-embed-open,.pvx .mk-controls .mk-layout>.mk-btn{justify-content:center;height:38px;min-width:0}
