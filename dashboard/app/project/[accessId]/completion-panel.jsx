@@ -165,7 +165,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
       {/* Certificate */}
       <div className="cmp-cert" id="cmp-cert">
         <div className="cmp-cert-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="cmp-cert-brandrow">
             <a href="/go" className="cmp-cert-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
             <TaglinePill tone="light" />
           </div>
@@ -232,14 +232,14 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
           </div>
           {hasRep && (
             <div className="cmp-wrap-row">
-              <div><div className="cmp-wrap-lbl">Sales commission</div><div className="cmp-wrap-meta">{project.sales_rep} · {project.commission_rate}%</div></div>
+              <div className="cmp-wrap-main"><div className="cmp-wrap-lbl">Sales commission</div><div className="cmp-wrap-meta">{project.sales_rep} · {project.commission_rate}%</div></div>
               {commStatus === "paid"
                 ? <span className="cmp-paid">Approved</span>
                 : canWrap && <button className="cmp-btn ghost" disabled={busy} onClick={approveCommission}>Approve</button>}
             </div>
           )}
           <div className="cmp-wrap-row">
-            <div style={{ flex: 1 }}>
+            <div className="cmp-wrap-main">
               <div className="cmp-wrap-lbl">Tech payout</div>
               <div className="cmp-wrap-meta">{assignedTech || "No technician assigned"}{payoutStatus === "paid" ? " · paid" : payoutStatus === "approved" ? " · approved" : ""}</div>
             </div>
@@ -255,7 +255,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
               ) : <span className="cmp-wrap-meta">{payoutStatus === "approved" ? `Approved ${money(payoutAmt)}` : "Pending"}</span>}
           </div>
           <div className="cmp-wrap-row">
-            <div><div className="cmp-wrap-lbl">Warranty term</div><div className="cmp-wrap-meta">Coverage runs from the completion date</div></div>
+            <div className="cmp-wrap-main"><div className="cmp-wrap-lbl">Warranty term</div><div className="cmp-wrap-meta">Coverage runs from the completion date</div></div>
             {canWrap ? (
               <select className="cmp-sel" value={warrantyMonths} onChange={(e) => saveWarranty(+e.target.value)} disabled={busy}>
                 {WARRANTY_TERMS.map((t) => <option key={t.m} value={t.m}>{t.label}</option>)}
@@ -263,7 +263,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
             ) : <span className="cmp-wrap-meta">{warrantyLabel}</span>}
           </div>
           <div className="cmp-wrap-row">
-            <div style={{ flex: 1 }}>
+            <div className="cmp-wrap-main">
               <div className="cmp-wrap-lbl">Job completion</div>
               <div className="cmp-wrap-meta">{completedAt ? `Completed ${fmtDate(completedAt)}` : "Not marked complete yet"}</div>
             </div>
@@ -307,7 +307,8 @@ const CMP_CSS = `
 .cmp-hero-title{font-size:1.25rem;font-weight:600;font-family:inherit}
 .cmp-hero-sub{font-size:.86rem;opacity:.85;margin-top:2px}
 .cmp-cert{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;padding:20px 22px}
-.cmp-cert-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--dv-line-soft,#EDEDE9);padding-bottom:12px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.cmp-cert-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--dv-line-soft,#EDEDE9);padding-bottom:12px;margin-bottom:14px;flex-wrap:wrap;gap:8px 10px}
+.cmp-cert-brandrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;max-width:100%}
 .cmp-cert-brand{font-weight:600;letter-spacing:.08em;font-size:.9rem;color:var(--dv-ink,#101418)}
 .cmp-cert-kicker{font-size:.78rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);text-transform:uppercase;letter-spacing:.06em}
 .cmp-cert-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 22px}
@@ -336,6 +337,7 @@ const CMP_CSS = `
 .cmp-wrap-status.pending{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84)}
 .cmp-wrap-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .cmp-wrap-row:first-of-type{border-top:none}
+.cmp-wrap-main{flex:1 1 auto;min-width:0}
 .cmp-wrap-lbl{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418)}
 .cmp-wrap-meta{font-size:.76rem;color:var(--dv-meta,#787D84);margin-top:1px}
 .cmp-btn{height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
@@ -364,5 +366,37 @@ const CMP_CSS = `
 .cmp-dl:hover{filter:brightness(1.12)}
 .cmp-print{height:36px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);border-radius:8px;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);cursor:pointer;font-family:inherit}
 .cmp-print:hover{filter:brightness(1.12)}
+/* ---- Mobile refinement: tighter cards, no overflow, wrap-up rows stack cleanly ---- */
+@media (max-width:600px){
+  .cmp-root{gap:12px}
+  .cmp-hero{gap:13px;padding:15px 16px}
+  .cmp-hero-ic{width:44px;height:44px;border-radius:12px}
+  .cmp-hero-ic svg{width:26px;height:26px}
+  .cmp-hero-title{font-size:1.12rem}
+  .cmp-hero-sub{font-size:.82rem}
+  .cmp-cert{padding:15px 16px}
+  .cmp-cert-head{align-items:flex-start}
+  .cmp-cert-kicker{font-size:.72rem}
+  .cmp-cert-grid{gap:12px 16px}
+  .cmp-cert-foot{margin-top:12px}
+  .cmp-card{padding:12px 13px;gap:11px}
+  .cmp-card-ic{width:32px;height:32px}
+  .cmp-gate{padding:14px 15px;gap:12px}
+  .cmp-wrap{padding:11px 13px}
+  /* Wrap-up rows: label on its own line, control(s) on a full-width line below */
+  .cmp-wrap-row{flex-wrap:wrap;gap:7px;padding:10px 0}
+  .cmp-wrap-main{flex:1 1 100%}
+  .cmp-payout-ctrl,.cmp-complete-ctrl{width:100%;justify-content:flex-start;flex-wrap:nowrap;gap:8px}
+  .cmp-payout-dollar{flex:1;min-width:0}
+  .cmp-payout-in{flex:1;width:auto;min-width:0}
+  .cmp-date-in{flex:1;min-width:0}
+  .cmp-complete-ctrl .cmp-btn,.cmp-payout-ctrl .cmp-btn{flex-shrink:0}
+  .cmp-sel{width:100%;height:40px}
+  /* a lone button control (commission Approve / job Reopen) sits left, not stretched awkwardly */
+  .cmp-wrap-row > .cmp-btn,.cmp-wrap-row > .cmp-paid{margin-right:auto}
+}
+@media (max-width:360px){
+  .cmp-cert-grid{grid-template-columns:1fr}
+}
 @media print{.cmp-hero,.cmp-wrap,.cmp-actions,.cmp-guide{display:none}.cmp-root{margin:0}}
 `;
