@@ -123,9 +123,14 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
           </div>
         ) : (
           <div className="tab-row">
-            <span className="tab-dot" />
-            <span className="tab-msg">When this {label} is ready, {externalSubmit ? "submit it with the button in the tool above." : "submit it for the customer to review."}</span>
-            {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>}
+            {externalSubmit ? (
+              <>
+                <span className="tab-dot" />
+                <span className="tab-msg">When this {label} is ready, submit it with the button in the tool above.</span>
+              </>
+            ) : (
+              <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>
+            )}
           </div>
         )}
         {err && <div className="tab-err">{err}</div>}
