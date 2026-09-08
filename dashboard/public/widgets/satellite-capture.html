@@ -468,7 +468,7 @@
     var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));
     var baseTilt=0;   // axis is VERTICAL on screen (north up) and FIXED: spinning changes longitude only, so every point keeps its screen-height (latitude never drifts). No tilt = no up/down travel = no clock-face.
     var ripples=[], phase="idle", pt0=0, lastTs=0, spin=tYr, tilt=baseTilt, velY=0, velX=0, dragging=false, rotY0=0, tilt0=baseTilt, startMs=0, exitCb=null, heldT=0;
-    var clickHeat=0, hoverX=-9999, hoverY=-9999, hoverT=0;   // hover glow + click-cadence "heat"
+    var clickHeat=0, hoverX=-9999, hoverY=-9999, hovering=false, hoverGlow=0;   // hover glow (driven by a real hovering flag, not a time decay) + click "heat"
     var warpStr=0, warpCX=-9999, warpCY=-9999;   // mesh-flow: a soft localized dimple that lags the cursor + springs back
     var REDUCE = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     function resize(){ var dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth||320, h=cv.clientHeight||320; cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
@@ -478,7 +478,9 @@
       if(!pt0)pt0=ts; var pt=(ts-pt0)/1000, dt=lastTs?Math.min(0.05,(ts-lastTs)/1000):0; lastTs=ts;
       var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.34;
       ctx.clearRect(0,0,w,h);
-      var now=performance.now(); clickHeat=Math.max(0,clickHeat-dt*0.8); var hoverStr=Math.max(0,1-(now-hoverT)/450);
+      var now=performance.now(); clickHeat=Math.max(0,clickHeat-dt*0.8);
+      // glow eases toward 1 while hovering, back to 0 on leave — it does NOT fade while the cursor rests
+      var hoverStr = hoverGlow += (((hovering&&phase==="loop")?1:0)-hoverGlow)*Math.min(1,dt*8);
       var assemble=1, R=baseR, gA=1, rotY, rotX;
       if(phase==="intro"){ assemble=ez((pt-0.28)/1.05); if(pt>=1.4) phase="loop"; }
       if(phase==="loop" && !dragging){
@@ -510,14 +512,14 @@
         var sx=cx+x*R, sy=cy+y2*R, boost=0;
         // bend the front surface toward the cursor: Gaussian falloff, zero at the centre (d→0) AND far
         // away, so it dimples instead of collapsing into a hole; front hemisphere fades it in past depth .5.
-        if(WARP && depth>0.5){ var wdx=warpCX-sx, wdy=warpCY-sy, wg=Math.exp(-(wdx*wdx+wdy*wdy)/SIG2)*warpStr*0.5*((depth-0.5)*2); sx+=wdx*wg; sy+=wdy*wg; }
+        if(WARP && depth>0.5){ var wdx=warpCX-sx, wdy=warpCY-sy, wg=Math.exp(-(wdx*wdx+wdy*wdy)/SIG2)*warpStr*0.2*((depth-0.5)*2); sx+=wdx*wg; sy+=wdy*wg; }   // a gentle bend, not a pull-away
         for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<20) boost+=Math.max(0,1-d2/20)*(1-rp.age/rp.life); }
-        var hb=0; if(hoverStr>0.02){ var hdx=sx-hoverX, hdy=sy-hoverY, hd2=hdx*hdx+hdy*hdy; if(hd2<5184) hb=(1-Math.sqrt(hd2)/72)*hoverStr; }   // dots near the cursor brighten
-        var neB=P.ne?1.3:1, a=Math.min(1,(assemble*P.b*neB*(0.03+depth*depth*1.12))+boost*0.5+hb*0.6)*gA;   // front a touch clearer, back nearly gone
+        var hb=0; if(hoverStr>0.02){ var hdx=sx-hoverX, hdy=sy-hoverY, hd2=hdx*hdx+hdy*hdy; if(hd2<15625) hb=(1-Math.sqrt(hd2)/125)*hoverStr; }   // a soft pool of dots under the cursor lights up
+        var neB=P.ne?1.3:1, a=Math.min(1,(assemble*P.b*neB*(0.10+depth*depth*1.18))+boost*0.5+hb*1.1)*gA;   // stronger overall; hover clearly brightens
         if(a<=0.012) continue;
-        var size=(P.s*(0.5+depth*0.6))+boost*1.6+hb*1.4, rC,gC,bC;
-        if(P.warm){ rC=184; gC=154; bC=90; }                                                              // #B89A5A — a few NE particles
-        else { var v=140+depth*100; rC=Math.round(v-6); gC=Math.round(v); bC=Math.round(Math.min(255,v+20)); }   // cool white / pale grey
+        var size=(P.s*(0.55+depth*0.65))+boost*1.6+hb*2, rC,gC,bC;
+        if(P.warm){ rC=198; gC=168; bC=104; }                                                             // #B89A5A, lifted — a few NE particles
+        else { var v=176+depth*74; rC=Math.round(v-6); gC=Math.round(v); bC=Math.round(Math.min(255,v+18)); }   // cool white / pale grey, brighter
         ctx.fillStyle="rgba("+rC+","+gC+","+bC+","+a.toFixed(3)+")";
         ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.3,size),0,6.2832); ctx.fill();
       }
@@ -530,7 +532,7 @@
     // spin FASTER (never freezes) and sends a ripple — slow by default, quicker the more you click ----
     var lastX=0, lastY=0, lastMT=0, moved=0;
     function onDown(e){ if(phase==="exit")return; dragging=true; moved=0; lastX=e.clientX; lastY=e.clientY; lastMT=performance.now(); velY=0; velX=0; try{cv.setPointerCapture(e.pointerId);}catch(_){ } }
-    function onMove(e){ var r=cv.getBoundingClientRect(); hoverX=(e.clientX-r.left)*(cv.clientWidth/r.width); hoverY=(e.clientY-r.top)*(cv.clientHeight/r.height); hoverT=performance.now();
+    function onMove(e){ var r=cv.getBoundingClientRect(); hoverX=(e.clientX-r.left)*(cv.clientWidth/r.width); hoverY=(e.clientY-r.top)*(cv.clientHeight/r.height); hovering=true;
       if(!dragging)return;
       var now=performance.now(), mdt=Math.max(8,now-lastMT)/1000, dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; lastMT=now; moved+=Math.abs(dx)+Math.abs(dy);
       spin-=dx*0.006;   // horizontal drag only — spins longitude around the fixed vertical axis; no vertical/tilt drag
@@ -543,9 +545,10 @@
         ripples.push({x:rx, y:ry, age:0, life:1.5, speed:Math.min(cv.clientWidth,cv.clientHeight)*(0.25+clickHeat*0.22)}); } }
     cv.addEventListener("pointerdown",onDown); cv.addEventListener("pointermove",onMove);
     window.addEventListener("pointerup",onUp); cv.addEventListener("pointercancel",onUp);
-    cv.addEventListener("pointerleave",function(){ hoverT=0; });
+    cv.addEventListener("pointerenter",function(){ hovering=true; });
+    cv.addEventListener("pointerleave",function(){ hovering=false; });
     return {
-      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=tYr; tilt=baseTilt; velY=0; velX=0; dragging=false; heldT=0; warpStr=0; warpCX=-9999; warpCY=-9999; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
+      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=tYr; tilt=baseTilt; velY=0; velX=0; dragging=false; heldT=0; warpStr=0; warpCX=-9999; warpCY=-9999; hovering=false; hoverGlow=0; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
       exit:function(cb){ if(!raf){ if(cb)cb(); return; } dragging=false; rotY0=spin; tilt0=tilt; exitCb=cb||null; phase="exit"; pt0=0; },
       stop:function(){ cancelAnimationFrame(raf); raf=null; phase="idle"; startMs=0; }
     };
