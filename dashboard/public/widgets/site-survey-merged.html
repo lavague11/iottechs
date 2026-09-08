@@ -569,6 +569,19 @@
         { k:"cam", x:63, y:18, aim:205, aimed:true, fov:52, range:R, name:"Pool (yard side)",  photo:A+"cam-4-pool-b.jpg",   photoName:"Pool",           cid:"cSAMPLE04" }
       ] }];
       curFloor=0; loadFloor(0); renderFloorTabs(); goStep(1); save();
+      // Also seed the CCTV mockup phone with the same 4 shots (its own tool store, slots by camera
+      // index — same order as the survey cameras), and push both tools to the server right now so the
+      // mockup grid + Visualize walkthrough are consistent immediately (not on the next autosync tick).
+      try {
+        var mock = JSON.stringify({ count:4, view:4, frame:true,
+          names:["Side Yard","Front Driveway","Pool (patio side)","Pool (yard side)"],
+          photos:[A+"cam-1-sideyard.jpg", A+"cam-2-driveway.jpg", A+"cam-3-pool-a.jpg", A+"cam-4-pool-b.jpg"] });
+        localStorage.setItem("iot_cctv_"+(PID||"default"), mock);
+        var post = function(tool, data){ if(data==null) return;
+          fetch("/api/tool-data",{ method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ accessId:PID, tool:tool, data:data }) }).catch(function(){}); };
+        post("mockup", mock);
+        post("survey2", localStorage.getItem(PKEY));   // push the survey now too, so /api/project-cameras is fresh
+      } catch(e){}
     }
     document.getElementById("doorSample").addEventListener("click", loadSample);
     // "Change background" (only visible while revising a satellite bg) → back to the source chooser
