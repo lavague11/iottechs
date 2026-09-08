@@ -34,6 +34,7 @@ import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
 import { projectStatusDetail, phaseHeadline, stageFloorFacts } from "../../../lib/project-status";
 import { customerStatus, customerToneHex } from "../../../lib/customer-status";
+import ProjectReady from "./project-ready";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -2376,6 +2377,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
         }
+        // Customer: the calm post-approval home — Approved → Preparing → Installation Confirmed. This
+        // is where scheduling used to be; the customer never books, they just see the state move itself.
+        if (cView === "customer") {
+          const iAppt = pickAppt("install");
+          const fmtT = (t) => { const [h, m] = String(t || "").split(":").map(Number); return Number.isNaN(h) ? "" : new Date(2000, 0, 1, h, m || 0).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); };
+          const prFacts = { ...custFacts, install_date: iAppt?.date || null };
+          const prStage = ["schedule", "install", "qc", "payment", "completion"].includes(projectStage) ? projectStage : "schedule";
+          const prDate = iAppt ? new Date(iAppt.date + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : null;
+          const prWindow = iAppt ? (iAppt.endTime ? `${fmtT(iAppt.time)} – ${fmtT(iAppt.endTime)}` : (iAppt.time ? `Arriving ${fmtT(iAppt.time)}` : null)) : null;
+          tools.push({ name: "Project Ready", label: "Project",
+            node: <div style={pad}><ProjectReady facts={prFacts} stage={prStage} installDateStr={prDate} installWindowStr={prWindow}
+              onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} /></div> });
+        }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in.
         if (cView === "customer") {
@@ -2402,6 +2416,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (cView === "customer") {
           const pick = (n) => tools.find((t) => t.name === n);
           const secs = [
+            ["Project Ready", pick("Project Ready")],
             ["Shipment Tracking", pick("Shipment Tracking")],
             ["Set Up Your Phone", pick("Set Up Your Phone")],
             ["Job-Site Add-ons", pick("Job-Site Add-ons")],
