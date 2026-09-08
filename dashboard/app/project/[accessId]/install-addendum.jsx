@@ -31,6 +31,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
 
   const [addendums, setAddendums] = useState([]);
   const [building, setBuilding] = useState(false);
+  const [editingId, setEditingId] = useState(null);  // office is pricing an existing (tech-submitted) add-on
   const [draft, setDraft] = useState({ title: "", items: [blankItem()], discount: "" });
   const [signId, setSignId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -66,15 +67,34 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const addRow = () => setDraft((d) => ({ ...d, items: [...d.items, blankItem()] }));
   const delRow = (i) => setDraft((d) => ({ ...d, items: d.items.filter((_, x) => x !== i) }));
   const validItems = () => draft.items.filter((it) => it.name.trim() && +it.price >= 0);
+  const closeBuilder = () => { setDraft({ title: "", items: [blankItem()], discount: "" }); setBuilding(false); setEditingId(null); };
+  // Office prices a tech-submitted add-on: load it into the builder (with any existing values) so the
+  // office can fill in the customer price + payout, then Save writes back to the same record.
+  function startEdit(a) {
+    setDraft({
+      title: a.title || "",
+      items: (a.items || []).map((it) => ({ id: it.id, name: it.name, type: it.type, qty: it.qty, price: it.price ? String(it.price) : "", techPay: it.techPay ? String(it.techPay) : "" })),
+      discount: a.discount ? String(a.discount) : "",
+    });
+    setEditingId(a.id); setBuilding(true);
+  }
   function createAddendum() {
     const items = validItems().map((it) => ({ id: it.id, name: it.name.trim(), type: it.type, qty: +it.qty || 1, price: +it.price || 0, techPay: +it.techPay || 0 }));
     if (!items.length) return;
-    // A tech logs the work only — flag it so the office knows to price it (and, later, so it's held
-    // back from the customer until priced). Office-built ones are priced on creation.
+    if (editingId) {   // office pricing an existing add-on — update in place and clear the pricing flag
+      const next = addendums.map((a) => a.id === editingId ? { ...a, title: draft.title.trim() || a.title, items, discount: +draft.discount || 0, needsPricing: undefined } : a);
+      persist(next);
+      const upd = next.find((a) => a.id === editingId);
+      if (upd) logAddendumAction(accessId, { verb: "priced", title: upd.title, amount: custTotal(upd) }).catch(() => {});
+      closeBuilder();
+      return;
+    }
+    // A tech logs the work only — flag it so the office knows to price it (and so it's held back from
+    // the customer until priced). Office-built ones are priced on creation.
     const rec = { id: newId(), title: draft.title.trim() || "Job-site add-on", items, discount: +draft.discount || 0, at: new Date().toISOString(), status: "pending", needsPricing: isTech ? true : undefined, createdByTech: isTech ? true : undefined };
     persist([...addendums, rec]);
     logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
-    setDraft({ title: "", items: [blankItem()], discount: "" }); setBuilding(false);
+    closeBuilder();
   }
   const removeAddendum = (id) => { const a = addendums.find((x) => x.id === id); persist(addendums.filter((x) => x.id !== id)); if (a) logAddendumAction(accessId, { verb: "removed", title: a.title }).catch(() => {}); };
   // Void an addendum (any status) — it stays on record with the date, but drops out of billing and
@@ -104,7 +124,8 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         </div>
       )}
 
-      {addendums.map((a) => {
+      {/* The customer never sees an add-on still awaiting office pricing. */}
+      {addendums.filter((a) => !(isCustomer && a.needsPricing)).map((a) => {
         const ct = custTotal(a), tt = techTotal(a);
         return (
           <div key={a.id} className={`adn-card ${a.status}`}>
@@ -147,7 +168,11 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
               {a.status === "voided" && canVoid && confirm?.id !== a.id && (
                 <button type="button" className="adn-del" disabled={busy} onClick={() => setConfirm({ id: a.id, action: "delete" })}>Delete</button>
               )}
-              {a.status === "pending" && isCustomer && (
+              {/* Office prices a tech-submitted add-on before it can go to the customer. */}
+              {a.needsPricing && a.status === "pending" && canBuild && !isTech && confirm?.id !== a.id && (
+                <button type="button" className="adn-approve" disabled={busy} onClick={() => startEdit(a)}>Add pricing</button>
+              )}
+              {a.status === "pending" && isCustomer && !a.needsPricing && (
                 <button type="button" className="adn-approve" disabled={readOnly} title={readOnly ? "The customer signs here" : undefined}
                         onClick={() => !readOnly && setSignId(a.id)}>
                   {readOnly ? "Customer signs here" : "Approve & Sign"}
@@ -179,6 +204,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
 
       {canBuild && (building ? (
         <div className="adn-builder">
+          {editingId && <div className="adn-b-editing">Set pricing for this add-on</div>}
           <label className="adn-fld">
             <span className="adn-flbl">Addendum title</span>
             <input className="adn-b-title" placeholder="Added 3 rear cameras" value={draft.title} autoFocus onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} />
@@ -243,8 +269,8 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                 <b className="adn-b-tval">{money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</b>
               </div>
             )}
-            <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>{isTech ? "Submit add-on" : "Create addendum"}</button>
-            <button type="button" className="adn-b-cancel" onClick={() => { setBuilding(false); setDraft({ title: "", items: [blankItem()], discount: "" }); }}>Cancel</button>
+            <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>{editingId ? "Save pricing" : isTech ? "Submit add-on" : "Create addendum"}</button>
+            <button type="button" className="adn-b-cancel" onClick={closeBuilder}>Cancel</button>
           </div>
         </div>
       ) : (
@@ -344,6 +370,7 @@ const ADN_CSS = `
 .adn-b-final{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:13px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adn-b-totalblock{display:flex;flex-direction:column;gap:2px;margin-right:auto}
 .adn-b-note{margin-right:auto;max-width:60%;font-size:.72rem;line-height:1.35;color:var(--dv-meta,#787D84)}
+.adn-b-editing{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-gold-deep,#A8842F);margin-bottom:-2px}
 .adn-b-tval{font-size:1.15rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;line-height:1}
 /* .adn-root prefix beats the deck's ".dv-shell button" background reset so the primary button
    actually reads as a filled button, not plain text. */

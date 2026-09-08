@@ -5505,9 +5505,11 @@ export function getToolMeta(accessId) {
     trkDelivered = ships.length > 0 && ships.every((s) => (typeof s.stage === "number" ? s.stage : 0) === 4);
   } catch { /* bad blob */ }
   // Job-site add-ons count, so the "Add-ons" step stays hidden for the customer until one is submitted.
+  // Exclude tech-submitted ones still awaiting office pricing (needsPricing) — the customer shouldn't
+  // see an add-on before the office has set its price.
   const addRow = getToolData(accessId, "addendum");
   let addCount = 0;
-  try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).length; } catch { /* bad blob */ }
+  try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).filter((a) => !a?.needsPricing).length; } catch { /* bad blob */ }
   // Scheduled visits (survey + install share this store): drives "Scheduling" step green/open state
   // and keeps the scheduler hidden from the customer until a real booking exists.
   const schedRow = getToolData(accessId, "schedule");
