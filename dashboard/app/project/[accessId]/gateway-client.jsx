@@ -1723,10 +1723,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
   const [hCollapsed, setHCollapsed]     = useState(true);
   const [mapHidden, setMapHidden]       = useState(true);
-  const [visualizeOpen, setVisualizeOpen] = useState(false);   // customer is on the read-only "Visualize" step (not a lifecycle stage)
-  // Any real stage navigation (an action button, an advance) leaves the Visualize preview. Clicking
-  // the Visualize step itself doesn't change viewingStage, so this never fights that.
-  useEffect(() => { setVisualizeOpen(false); }, [viewingStage]);
   const [hEditing,   setHEditing]       = useState(false);
   const [hVals,      setHVals]          = useState({});
   const [hSaving,    setHSaving]        = useState(false);
@@ -2581,6 +2577,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         ) : undefined,
         tools: isComplete ? undefined : deckToolsFor(p.key),
+        // Customer preview of the whole consultation — a guided walk of the planned cameras, folded in
+        // at the TOP of the Consulting page (not its own lifecycle step). Only once cameras are placed.
+        intro: (p.key === "ph_survey" && cView === "customer" && (toolMeta?.survey?.cameras || 0) > 0)
+          ? <SystemVisualize accessId={lp.access_id} />
+          : undefined,
         advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
       };
     });
@@ -2669,40 +2670,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         detail: projectStatusDetail(custStage, floorFacts, null),
       };
     }
-    // "Visualize" — a customer-only, read-only deck step inserted right after Consulting, once the
-    // survey has placed cameras. It's not a lifecycle stage: navigation is tracked by visualizeOpen,
-    // and the step maps 1:1 with the deck stage list via stepKinds (so idx/onIdx stay aligned).
-    const showVisualize = cView === "customer" && (toolMeta?.survey?.cameras || 0) > 0;
-    const onViz = showVisualize && visualizeOpen;
-    let deckStagesFinal = deckStages;
-    let stepKinds = phaseList.map((p) => ({ kind: "phase", key: p.key, primary: p.primary }));
-    if (showVisualize) {
-      const visualizeStage = {
-        name: "Visualize", pill: "Preview", pct: 100, mark: "complete", tint: "blue", wide: true,
-        completion: <div style={{ padding: "4px 2px 20px" }}><SystemVisualize accessId={lp.access_id} /></div>,
-        advance: null,
-      };
-      deckStagesFinal = [];
-      stepKinds = [];
-      phaseList.forEach((p, j) => {
-        deckStagesFinal.push(deckStages[j]);
-        stepKinds.push({ kind: "phase", key: p.key, primary: p.primary });
-        if (p.key === "ph_survey") { deckStagesFinal.push(visualizeStage); stepKinds.push({ kind: "visualize" }); }
-      });
-    }
-    const deckIdx = onViz
-      ? Math.max(0, stepKinds.findIndex((s) => s.kind === "visualize"))
-      : Math.max(0, stepKinds.findIndex((s) => s.kind === "phase" && s.key === vPhase));
-    const onDeckIdx = (i) => {
-      const s = stepKinds[i];
-      if (!s) return;
-      if (s.kind === "visualize") setVisualizeOpen(true);
-      else { setVisualizeOpen(false); browse(s.primary); }
-    };
+    // The customer "Visualize" walkthrough is folded into the Consulting page as an `intro` (above),
+    // NOT its own lifecycle step — so the deck stays 1:1 with the phases and the rail isn't renumbered.
+    const deckIdx = Math.max(0, phaseList.findIndex((p) => p.key === vPhase));
+    const onDeckIdx = (i) => { const p = phaseList[i]; if (p) browse(p.primary); };
     return (
       <>
       <DeckView
-        stages={deckStagesFinal}
+        stages={deckStages}
         idx={deckIdx}
         onIdx={onDeckIdx}
         canAdvance={canAdv}

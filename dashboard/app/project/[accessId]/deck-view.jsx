@@ -396,6 +396,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                   <div className="dv-stage-name">{s.name}</div>
                   <span className={`dv-flag f-${(s.pill || "").toLowerCase()}`}>{s.pill}</span>
                 </div>
+                {s.intro && <div className="dv-intro" data-stop>{s.intro}</div>}
                 {s.completion ? s.completion : (
                   (() => {
                       const _tools = s.tools || [];
@@ -674,6 +675,8 @@ const CSS = `
 .dv-tdetail>div{overflow:hidden}
 .dv-tinline{margin:0 6px 16px 28px;border:1px solid var(--dv-line);border-radius:12px;overflow:hidden;background:var(--dv-raise)}
 .dv-solo{margin:0}
+/* Customer walkthrough preview folded into the top of a stage page — set off from the tool rows below. */
+.dv-intro{margin:0 0 22px;padding:0 0 22px;border-bottom:1px solid var(--dv-line)}
 /* Legacy tool-card chrome (e.g. Details & Notes) mounted inside a light tool — flatten it to
    the deck's minimal look: no card border / gold rail / icon chip, title in the deck font. */
 .pvx-deck .dv-tinline .pv-tool-panel{border:none;border-radius:0;background:transparent;overflow:visible}
