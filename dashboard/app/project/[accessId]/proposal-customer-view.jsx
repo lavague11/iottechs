@@ -49,6 +49,10 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [note, setNote] = useState("");
   const [openItems, setOpenItems] = useState({});   // item id -> breakdown expanded
   const toggleItem = (id) => setOpenItems((o) => ({ ...o, [id]: !o[id] }));
+  // Summary-first: the customer reads a calm system summary + the one number up top; the full
+  // itemized cost table lives behind "View detailed breakdown" (collapsed by default). Staff looking
+  // through the preview toggle, or the full-screen deck overlay, get the detail open so nothing hides.
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // ---- Revise mode: per-line change/remove requests (flags), not real edits ----
   const [reviseMode, setReviseMode] = useState(false);
@@ -497,6 +501,45 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         </div>
       )}
 
+      {/* Summary-first — what you're getting, then the one number that matters, then the action.
+          The itemized table (the math) lives behind "View detailed breakdown" just below. */}
+      <div className="pcv-sum">
+        <div className="pcv-sum-hd">Your System{p.payload.options.length > 1 ? ` · Option ${opt.id}` : ""}{p.payload.options.length > 1 ? <span className="pcv-sum-hd-nm">{displayOptionName(opt.name)}</span> : null}</div>
+        <div className="pcv-sum-cats">
+          {opt.services.filter((s) => s.items?.length).map((s, i) => {
+            const camCount = s.key === "camera" ? s.items.filter((it) => (it.sub || []).length > 0).length : 0;
+            const count = camCount || s.items.reduce((a, it) => a + ((it.sub || []).length ? 1 : (+it.qty || 1)), 0);
+            const noun = s.key === "camera" ? `camera${count !== 1 ? "s" : ""}` : `item${count !== 1 ? "s" : ""}`;
+            return (
+              <div key={i} className="pcv-sum-cat">
+                <span className="pcv-sum-dot" style={{ background: serviceColor(s.key) }} />
+                <span className="pcv-sum-cat-nm">{s.label}</span>
+                <span className="pcv-sum-cat-ct">{count} {noun}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="pcv-sum-total">
+          <span className="pcv-sum-total-lbl">Total Investment</span>
+          <span className="pcv-sum-total-amt">{money(t.grand)}</span>
+        </div>
+        <div className="pcv-sum-dep">{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</div>
+        {canAct && (
+          <button className="pcv-sum-cta" disabled={busy} onClick={() => choose(opt.id)}>
+            {optAccepted ? `Remove Option ${opt.id}` : (
+              <>
+                <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+                Approve &amp; Sign
+              </>
+            )}
+          </button>
+        )}
+        <button type="button" className="pcv-sum-more" onClick={() => setDetailOpen((o) => !o)} aria-expanded={detailOpen}>
+          {detailOpen ? "Hide detailed breakdown ▲" : "View detailed breakdown ▾"}
+        </button>
+      </div>
+
+      {detailOpen && (<>
       <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
       <div className="pcv-table">
         <div className="pcv-table-head">
@@ -600,6 +643,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           </div>
         </>
       )}
+      </>)}
 
       <div className="pcv-section-hd">Payment Terms</div>
       <div className="pcv-pay-table">
@@ -863,6 +907,31 @@ const PCV_CSS = `
 .pcv-opt-chk{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
 .pcv-opt-tot{font-size:.86rem;font-weight:600;color:var(--oc)}
 
+/* Summary-first card — scope (what you're getting) + the one number + the primary action, up top.
+   The itemized table (the math) is a click away behind "View detailed breakdown". */
+.pcv-sum{margin:16px 22px 4px;border:1px solid var(--dv-line,#E4E4DF);border-top:3px solid var(--dv-gold,#C9A96E);
+  border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;display:flex;flex-direction:column;gap:12px;
+  box-shadow:0 1px 2px rgba(16,20,24,.04),0 20px 44px -34px rgba(16,20,24,.4)}
+.pcv-sum-hd{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pcv-sum-hd-nm{font-size:.9rem;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--dv-ink,#101418)}
+.pcv-sum-cats{display:flex;flex-direction:column;gap:1px;border:1px solid var(--dv-line-soft,#EDEDE9);border-radius:10px;overflow:hidden}
+.pcv-sum-cat{display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--dv-paper,#F4F4F2)}
+.pcv-sum-cat:nth-child(odd){background:var(--dv-raise,#FBFBFA)}
+.pcv-sum-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.pcv-sum-cat-nm{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);text-transform:capitalize}
+.pcv-sum-cat-ct{margin-left:auto;font-size:.78rem;font-weight:600;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
+.pcv-sum-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 2px 0}
+.pcv-sum-total-lbl{font-size:.82rem;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--dv-ink-soft,#3A4048)}
+.pcv-sum-total-amt{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pcv-sum-dep{font-size:.78rem;color:var(--dv-meta,#787D84);line-height:1.4}
+.pcv-sum-dep b{color:var(--dv-ink-soft,#3A4048);font-weight:700}
+.pcv-sum-cta{height:48px;border:2px solid #3E6FB0;border-radius:10px;background:#F7DC6F;color:#1f1a05;
+  font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:9px}
+.pcv-sum-cta:hover:not(:disabled){background:#F2D45A}
+.pcv-sum-cta:disabled{opacity:.5;cursor:default}
+.pcv-sum-more{align-self:center;background:none;border:none;color:var(--dv-blue,#3E6C9E);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 6px}
+.pcv-sum-more:hover{text-decoration:underline}
+
 .pcv-section-hd{margin:18px 22px 0;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;
   letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:3px solid var(--dv-gold,#C9A96E);border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
 /* Fold header — collapses the whole proposal; matches the page's FlowStep tool-cards (raised row,
@@ -1059,3 +1128,4 @@ const PCV_CSS = `
 .pcv-toast svg{color:var(--dv-green,#2E7D5B)}
 @keyframes pcvToastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 `;
+
