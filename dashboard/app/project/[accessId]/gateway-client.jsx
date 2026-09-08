@@ -2357,7 +2357,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // something on site differs from the proposal. Staff/tech always; customer only once one exists.
         if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked || cView === "tech"} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {

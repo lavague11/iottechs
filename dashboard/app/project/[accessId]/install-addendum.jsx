@@ -22,7 +22,9 @@ const defaultTitle = () => `Add-on · ${new Date().toLocaleDateString("en-US", {
 export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false }) {
   const isCustomer = role === "customer";
   const isTech = role === "tech";
-  const canBuild = !readOnly && ["admin", "manager", "sales"].includes(role);
+  // The technician can create an on-site add-on too, but only logs the WORK — pricing (customer charge
+  // + payout) stays office-controlled, so a tech never sets or sees retail (project role rule #4).
+  const canBuild = !readOnly && ["admin", "manager", "sales", "tech"].includes(role);
   const canVoid = !readOnly && ["admin", "manager"].includes(role); // admin/manager can void an addendum
   const showRetail = !isTech;   // tech never sees the customer (retail) price — only their payout
   const showPayout = !isCustomer; // office + tech see the tech payout; the customer never does
@@ -67,7 +69,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   function createAddendum() {
     const items = validItems().map((it) => ({ id: it.id, name: it.name.trim(), type: it.type, qty: +it.qty || 1, price: +it.price || 0, techPay: +it.techPay || 0 }));
     if (!items.length) return;
-    const rec = { id: newId(), title: draft.title.trim() || "Job-site add-on", items, discount: +draft.discount || 0, at: new Date().toISOString(), status: "pending" };
+    // A tech logs the work only — flag it so the office knows to price it (and, later, so it's held
+    // back from the customer until priced). Office-built ones are priced on creation.
+    const rec = { id: newId(), title: draft.title.trim() || "Job-site add-on", items, discount: +draft.discount || 0, at: new Date().toISOString(), status: "pending", needsPricing: isTech ? true : undefined, createdByTech: isTech ? true : undefined };
     persist([...addendums, rec]);
     logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
     setDraft({ title: "", items: [blankItem()], discount: "" }); setBuilding(false);
@@ -106,7 +110,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
           <div key={a.id} className={`adn-card ${a.status}`}>
             <div className="adn-card-hd">
               <span className="adn-card-title">{a.title}</span>
-              <span className={`adn-badge ${a.status}`}>{a.status === "approved" ? "✓ Approved" : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : "Pending approval"}</span>
+              <span className={`adn-badge ${a.needsPricing && a.status === "pending" ? "pending" : a.status}`}>{a.status === "approved" ? "✓ Approved" : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : a.needsPricing ? "Needs pricing" : "Pending approval"}</span>
             </div>
             <div className="adn-items">
               {(a.items || []).map((it) => (
@@ -202,39 +206,44 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                     <input className="adn-b-qty" type="number" min="1" step="1" value={it.qty} onChange={(e) => dItem(i, { qty: e.target.value })} />
                   </label>
                 </div>
-                <div className="adn-frow">
-                  {showRetail && (
+                {/* Pricing is office-only — a tech logs the work; customer price + payout are set later. */}
+                {!isTech && (
+                  <div className="adn-frow">
                     <label className="adn-fld adn-fld-price">
                       <span className="adn-flbl">Customer price</span>
                       <span className="adn-money"><span className="adn-cur">$</span>
                         <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => dItem(i, { price: e.target.value })} /></span>
                     </label>
-                  )}
-                  {showPayout && (
                     <label className="adn-fld adn-fld-price">
                       <span className="adn-flbl adn-flbl-tech">Tech pay</span>
                       <span className="adn-money tech"><span className="adn-cur">$</span>
                         <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.techPay} onChange={(e) => dItem(i, { techPay: e.target.value })} /></span>
                     </label>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div className="adn-b-act">
             <button type="button" className="adn-b-additem" onClick={addRow}>+ Add item</button>
-            <label className="adn-fld adn-b-disc">
-              <span className="adn-flbl">Discount</span>
-              <span className="adn-money"><span className="adn-cur">$</span>
-                <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} /></span>
-            </label>
+            {!isTech && (
+              <label className="adn-fld adn-b-disc">
+                <span className="adn-flbl">Discount</span>
+                <span className="adn-money"><span className="adn-cur">$</span>
+                  <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} /></span>
+              </label>
+            )}
           </div>
           <div className="adn-b-final">
-            <div className="adn-b-totalblock">
-              <span className="adn-flbl">Total</span>
-              <b className="adn-b-tval">{money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</b>
-            </div>
-            <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>Create addendum</button>
+            {isTech ? (
+              <div className="adn-b-note">The office will price this before the customer sees it.</div>
+            ) : (
+              <div className="adn-b-totalblock">
+                <span className="adn-flbl">Total</span>
+                <b className="adn-b-tval">{money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</b>
+              </div>
+            )}
+            <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>{isTech ? "Submit add-on" : "Create addendum"}</button>
             <button type="button" className="adn-b-cancel" onClick={() => { setBuilding(false); setDraft({ title: "", items: [blankItem()], discount: "" }); }}>Cancel</button>
           </div>
         </div>
@@ -334,6 +343,7 @@ const ADN_CSS = `
 /* Final action area: Total leads, Create is the clear primary, Cancel is quiet. */
 .adn-b-final{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:13px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adn-b-totalblock{display:flex;flex-direction:column;gap:2px;margin-right:auto}
+.adn-b-note{margin-right:auto;max-width:60%;font-size:.72rem;line-height:1.35;color:var(--dv-meta,#787D84)}
 .adn-b-tval{font-size:1.15rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;line-height:1}
 /* .adn-root prefix beats the deck's ".dv-shell button" background reset so the primary button
    actually reads as a filled button, not plain text. */
