@@ -338,6 +338,19 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const hoursDone = Math.round(hoursVal * payFraction * 10) / 10;
   const hoursLeft = Math.round((hoursVal - hoursDone) * 10) / 10;
   const itemsClosed = items.filter(it => doneOf(it) >= stepsFor(it.type).length).length;
+  // Accurate payout breakdown for the summary sub-line. The headline payout is the sum of ALL line
+  // payouts (cameras + equipment/NVR/display + POS + approved add-ons), so "4 cameras · $50/ea" alone
+  // under-explains it. Show each contributing group's real total — they sum to the item payout total.
+  const grpPay = (arr) => arr.reduce((a, it) => a + (payoutOf(it) || 0), 0);
+  const payoutParts = (() => {
+    const p = [];
+    if (cameras.length) p.push(`${cameras.length} camera${cameras.length > 1 ? "s" : ""} ${money(grpPay(cameras))}`);
+    const eq = grpPay(equipment); if (eq > 0.005) p.push(`equipment ${money(eq)}`);
+    const ps = grpPay(posItems);  if (ps > 0.005) p.push(`POS ${money(ps)}`);
+    const ad = grpPay(addonInstalls); if (ad > 0.005) p.push(`add-ons ${money(ad)}`);
+    return p;
+  })();
+  const payoutEdited = payoutOverride != null && payoutOverride !== "";
 
   // Pay follows completion: each logged step credits its slice of the line's payout to whoever did
   // it (weightedInc uses this tech's WPAY weights). Sum by person for the per-technician breakdown.
@@ -488,34 +501,40 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
         </div>
       )}
 
-      {/* Estimated project payout + hours — internal only; payout figure follows the pay toggle. */}
+      {/* One cohesive "estimate" block (payout · hours · avg rate) rather than three squeezed cards.
+          Units stay attached to their number; the sub-line breaks the payout into its real parts. */}
       {canPrice && (
-        <div className="icl-summary">
-          {showPrice && (
-            <div className="icl-sum-cell">
-              <span className="icl-sum-k">{role === "tech" ? "Your project payout" : "Est. project payout"}</span>
+        <div className="icl-est">
+          <div className="icl-est-eyebrow">{role === "tech" ? "Your project" : "Estimated project"}</div>
+          <div className="icl-est-row">
+            {showPrice && (
+              <div className="icl-est-cell">
+                {canEditPay ? (
+                  <span className="icl-est-v"><span className="icl-est-cur">$</span><input className="icl-est-in" type="number" min="0" step="1" value={estPayout} onFocus={pushHist}
+                    onChange={(e) => setPayoutOverride(e.target.value === "" ? null : +e.target.value)} title="Override the project payout" /></span>
+                ) : (
+                  <span className="icl-est-v">{money(estPayout)}</span>
+                )}
+                <span className="icl-est-k">Payout</span>
+              </div>
+            )}
+            <div className="icl-est-cell">
               {canEditPay ? (
-                <span className="icl-sum-v">$<input className="icl-hrs-in wide" type="number" min="0" step="1" value={estPayout} onFocus={pushHist}
-                  onChange={(e) => setPayoutOverride(e.target.value === "" ? null : +e.target.value)} title="Override the project payout" /></span>
+                <span className="icl-est-v"><input className="icl-est-in narrow" type="number" min="0" step="0.5" value={hoursVal} onFocus={pushHist} onChange={(e) => setEstHours(e.target.value === "" ? "" : +e.target.value)} /><span className="icl-est-u">hrs</span></span>
               ) : (
-                <span className="icl-sum-v">{money(estPayout)}</span>
+                <span className="icl-est-v">{hoursVal}<span className="icl-est-u">hrs</span></span>
               )}
-              {cameras.length > 0 && <span className="icl-sum-sub">{cameras.length} cameras · {money(defCameraPay)}/ea{assignedTech ? ` · ${assignedTech}'s rate` : ""}{payoutOverride != null && payoutOverride !== "" ? " · edited" : ""}</span>}
+              <span className="icl-est-k">Hours</span>
             </div>
-          )}
-          <div className="icl-sum-cell">
-            <span className="icl-sum-k">Est. project hours</span>
-            {canEditPay ? (
-              <span className="icl-sum-v"><input className="icl-hrs-in" type="number" min="0" step="0.5" value={hoursVal} onFocus={pushHist} onChange={(e) => setEstHours(e.target.value === "" ? "" : +e.target.value)} /> hrs</span>
-            ) : (
-              <span className="icl-sum-v">{hoursVal} hrs</span>
+            {showPrice && (
+              <div className="icl-est-cell">
+                <span className="icl-est-v">{money(hourlyRate)}<span className="icl-est-u">/hr</span></span>
+                <span className="icl-est-k">Avg rate</span>
+              </div>
             )}
           </div>
-          {showPrice && (
-            <div className="icl-sum-cell">
-              <span className="icl-sum-k">Avg hourly rate</span>
-              <span className="icl-sum-v">{money(hourlyRate)}<span className="icl-sum-unit">/hr</span></span>
-            </div>
+          {showPrice && payoutParts.length > 0 && (
+            <div className="icl-est-sub">{payoutParts.join(" · ")}{assignedTech ? ` · ${assignedTech}'s rate` : ""}{payoutEdited ? " · edited" : ""}</div>
           )}
         </div>
       )}

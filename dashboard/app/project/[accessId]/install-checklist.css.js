@@ -24,15 +24,20 @@ export const ICL_CSS = `
 .icl-crew-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .icl-crew-addbtn{height:26px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);border-radius:7px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
 .icl-crew-addbtn:disabled{opacity:.5;cursor:default}
-.icl-summary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
-.icl-sum-cell{flex:1;min-width:150px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
-.icl-sum-k{font-size:.66rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.icl-sum-v{font-size:1.12rem;font-weight:700;color:var(--dv-ink,#101418);display:flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
-.icl-sum-sub{font-size:.68rem;color:var(--dv-faint,#A1A6AC)}
-.icl-sum-unit{font-size:.72rem;font-weight:600;color:var(--dv-faint,#A1A6AC);margin-left:1px}
-.icl-hrs-in{width:58px;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:1rem;font-weight:700;text-align:center;padding:0 4px;font-family:inherit;outline:none}
-.icl-hrs-in.wide{width:82px;text-align:left}
-.icl-hrs-in:focus{border-color:var(--dv-gold,#C9A96E)}
+/* One cohesive estimate block: an eyebrow label + payout / hours / avg-rate divided by thin rules. */
+.icl-est{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;padding:11px 14px;margin:0 0 12px;display:flex;flex-direction:column;gap:9px}
+.icl-est-eyebrow{font-size:.63rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.icl-est-row{display:flex;align-items:stretch}
+.icl-est-cell{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:3px;padding:0 13px;border-left:1px solid var(--dv-line,#E4E4DF)}
+.icl-est-cell:first-child{padding-left:0;border-left:none}
+.icl-est-v{font-size:1.18rem;font-weight:700;color:var(--dv-ink,#101418);display:flex;align-items:baseline;gap:1px;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.1}
+.icl-est-cur{font-size:.92rem;font-weight:600}
+.icl-est-u{font-size:.7rem;font-weight:600;color:var(--dv-faint,#A1A6AC);margin-left:2px}
+.icl-est-k{font-size:.64rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.icl-est-in{width:66px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:1.05rem;font-weight:700;text-align:right;padding:0 6px;font-family:inherit;outline:none}
+.icl-est-in.narrow{width:50px;text-align:center}
+.icl-est-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.icl-est-sub{font-size:.7rem;color:var(--dv-faint,#A1A6AC);line-height:1.4}
 .icl-paywrap{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .icl-earn{font-size:.82rem;font-weight:700;color:var(--dv-green,#2E7D5B);font-variant-numeric:tabular-nums;white-space:nowrap}
 .icl-earn.done{color:var(--dv-green,#2E7D5B)}
@@ -185,8 +190,9 @@ export const ICL_CSS = `
   .icl-crew{padding:5px 10px;margin-bottom:8px;gap:7px}
   .icl-crew-add{width:100%;margin-left:0}
   .icl-crew-in{flex:1;width:auto}
-  .icl-summary{gap:8px;margin-bottom:8px}
-  .icl-sum-cell{min-width:0;padding:8px 12px}
+  .icl-est{margin-bottom:8px;padding:10px 12px}
+  .icl-est-cell{padding:0 10px}
+  .icl-est-v{font-size:1.1rem}
   /* Quick fill = one intentional control group on mobile: label on its own line, the four state chips
      in a balanced 2-col grid (no orphan, no awkward wrap), then Complete all + Reset on their own row.
      The stray vertical divider is dropped — the grouping conveys the separation. */
