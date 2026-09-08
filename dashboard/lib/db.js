@@ -5,7 +5,7 @@ import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
-import { toolHasData, toolFingerprint } from "./tool-data.js";
+import { toolHasData, toolFingerprint, survey2CameraCount } from "./tool-data.js";
 import { optionTotals } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
@@ -5520,7 +5520,8 @@ export function getToolMeta(accessId) {
   let schedCount = 0;
   try { const s = JSON.parse(schedRow?.data || "{}"); schedCount = (Array.isArray(s.events) ? s.events : []).length; } catch { /* bad blob */ }
   return {
-    survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data) },
+    survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data),
+      cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },
