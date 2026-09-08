@@ -7,6 +7,7 @@ import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction } from "./proposal-actions";
 import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
+import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -103,7 +104,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   useEffect(() => {
     if (!focusCid) return;
     const t = setTimeout(() => {
-      const el = rootRef.current?.querySelector(`[data-cid="${focusCid}"]`);
+      // Walkthrough mode: the tour jumps to the camera (by cid) — bring the tour into view. Static
+      // mode (no placed cameras / plain plans): scroll to the matching dot.
+      const el = rootRef.current?.querySelector(`[data-cid="${focusCid}"]`) || rootRef.current?.querySelector(".swk");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 60);
     const clear = setTimeout(() => setFocusCid(null), 2200);
@@ -114,6 +117,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
     catch { return []; }
   }, [survey2Raw]);
+  // With placed cameras, the interactive walkthrough replaces the static floor grid (it IS the map,
+  // one camera at a time). Floor plans with no cameras still render as plain plans.
+  const hasCams = layoutFloors.some((f) => (f.cams || []).length > 0);
   const layoutPhotos = useMemo(() => {
     try { const d = JSON.parse(mockupRaw); return (d.photos || [])
       .map((url, i) => ({ url, name: (d.names && d.names[i]) || `Camera ${i + 1}` }))
@@ -449,26 +455,14 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
               {!layoutBusy && layoutLoaded && layoutFloors.length === 0 && layoutPhotos.length === 0 && (
                 <div className="pcv-layout-caption" style={{ textAlign: "center", padding: "12px 0" }}>Your system layout will appear here.</div>
               )}
-              {layoutFloors.map((f, i) => (
+              {hasCams ? (
+                <SystemWalkthrough floors={layoutFloors} photos={layoutPhotos} focusCid={focusCid} />
+              ) : layoutFloors.map((f, i) => (
                 <div className="pcv-layout-floor" key={"f" + i}>
                   {layoutFloors.length > 1 && <div className="pcv-layout-floor-nm">{f.name}</div>}
                   <div className="pcv-layout-plan">
                     <img src={f.bg} alt={f.name} loading="lazy" />
-                    {f.cams.map((c, j) => (
-                      <span className={`pcv-layout-cam${c.cid && c.cid === focusCid ? " focus" : ""}`} key={j} data-cid={c.cid || undefined}
-                            style={{ left: `${c.x}%`, top: `${c.y}%` }} title={c.name || `Camera ${j + 1}`}>
-                        {/* Heading arrow — only when the camera has actually been aimed. aim is degrees,
-                            0 = pointing right, clockwise (survey tool convention); no coverage cone. */}
-                        {c.aimed && Number.isFinite(c.aim) && (
-                          <svg className="pcv-cam-aim" viewBox="0 0 40 40" style={{ transform: `translate(-50%,-50%) rotate(${c.aim}deg)` }} aria-hidden="true">
-                            <line x1="20" y1="20" x2="33" y2="20" /><path d="M30 16l6 4-6 4z" />
-                          </svg>
-                        )}
-                        <span className="pcv-cam-n">{j + 1}</span>
-                      </span>
-                    ))}
                   </div>
-                  {f.cams.length > 0 && <div className="pcv-layout-caption">{f.cams.length} camera{f.cams.length !== 1 ? "s" : ""} placed</div>}
                 </div>
               ))}
               {layoutPhotos.length > 0 && (
@@ -916,17 +910,7 @@ const PCV_CSS = `
 .pcv-layout-floor-nm{font-size:.78rem;font-weight:700;color:var(--dv-ink,#101418);margin-bottom:6px}
 .pcv-layout-plan{position:relative;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden;line-height:0;background:#f4f4f2}
 .pcv-layout-plan img{width:100%;display:block}
-.pcv-layout-cam{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:var(--gold,#b08f4f);color:#fff;font-size:.66rem;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35);border:1.5px solid #fff}
-.pcv-cam-n{position:relative;z-index:1;line-height:1}
-/* Heading arrow — a thin gold pointer emitting from the dot centre, rotated to the camera's aim.
-   Sits under the number, above the plan. No coverage cone (customer-facing, read-only). */
-.pcv-cam-aim{position:absolute;left:50%;top:50%;width:40px;height:40px;overflow:visible;pointer-events:none;z-index:0}
-.pcv-cam-aim line{stroke:var(--gold,#b08f4f);stroke-width:2.4;stroke-linecap:round}
-.pcv-cam-aim path{fill:var(--gold,#b08f4f)}
-/* Located via "View Placement" — a brief ring pulse so the eye lands on the right camera. */
-.pcv-layout-cam.focus{z-index:5;animation:pcvCamPulse 1.1s ease-out 2}
-@keyframes pcvCamPulse{0%{box-shadow:0 0 0 0 rgba(201,169,110,.65),0 1px 5px rgba(0,0,0,.35)}70%{box-shadow:0 0 0 12px rgba(201,169,110,0),0 1px 5px rgba(0,0,0,.35)}100%{box-shadow:0 0 0 0 rgba(201,169,110,0),0 1px 5px rgba(0,0,0,.35)}}
-/* "Placement" chip on a camera line item */
+/* "Placement" chip on a camera line item — opens the walkthrough at that camera (View Placement). */
 .pcv-place{display:inline-flex;align-items:center;gap:4px;margin-left:8px;height:22px;padding:0 9px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-blue,#3E6C9E);font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit;vertical-align:middle}
 .pcv-place:hover{border-color:var(--dv-blue,#3E6C9E);background:rgba(62,108,158,.06)}
 .pcv-place svg{flex:0 0 auto}
