@@ -1807,6 +1807,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // the real project (watch install; pay the final balance at closeout). surveyOk is the canonical
   // "survey done" check (every tool with data approved, or no data at all → smooth sailing).
   const surveyOk = surveySatisfied(toolMeta, acceptances);
+  // "Both sent" moment — the office has submitted BOTH the survey AND the mockup for review. Celebrate
+  // once, then glide on to the proposal (they can build it while the customer approves).
+  const bothToolsSubmitted =
+    (toolMeta?.survey?.has || surveyHasLocal) && (toolMeta?.mockup?.has || mockupHasLocal) &&
+    toolAccepted(toolMeta?.survey, acceptances.submit_site_survey) &&
+    toolAccepted(toolMeta?.mockup, acceptances.submit_mockup);
+  const bothSentRef = useRef(null);
+  useEffect(() => {
+    const prev = bothSentRef.current;
+    bothSentRef.current = bothToolsSubmitted;
+    if (prev === null) return;                          // first run — record only, never fire on load
+    if (cView === "customer" || previewRole) return;    // office submits; the customer only approves
+    if (bothToolsSubmitted && !prev) {
+      showLiveToast("Your survey and mockup have been sent");
+      setTimeout(() => browse("proposal"), 1500);       // success → continue to proposal
+    }
+  }, [bothToolsSubmitted, cView, previewRole]);
   const proposalAccepted = (proposalData?.accepted_options?.length > 0) || proposalData?.status === "accepted";
   const custFacts = {
     appt_date:         lp.date,
@@ -2249,14 +2266,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Customer: MERGE the consulting tools into one full-width page — Site Survey and Mockups
         // stacked and always open, no click-to-expand. Each keeps its own inline Approve bar. Nothing
         // to review yet → fall back to the grayed, non-clickable stub rows.
+        // Owner's flow: Mockup first (frame the shots / angles), THEN Site Survey — one order for every role.
+        const ordered = [all[1], all[0]];   // all = [Site Survey, Mockups]
         if (cView === "customer") {
           const showSurvey = svMetaEff.has, showMockup = mkMetaEff.has;
           if (!showSurvey && !showMockup) {
-            return all.map((t) => ({ ...t, node: null }));
+            return ordered.map((t) => ({ ...t, node: null }));
           }
           const csecs = [];
-          if (showSurvey) csecs.push(["Site Survey", all[0].node]);
           if (showMockup) csecs.push(["Mockups", all[1].node]);
+          if (showSurvey) csecs.push(["Site Survey", all[0].node]);
           const merged = (
             <div className="cx-merged">
               {csecs.map(([h, node], k) => (
@@ -2269,8 +2288,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           );
           return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
         }
-        if (["admin", "manager"].includes(cView)) return mergedPage("Consulting", all) || all;
-        return all;
+        if (["admin", "manager"].includes(cView)) return mergedPage("Consulting", ordered) || ordered;
+        return ordered;
       }
       if (pk === "ph_proposal") {
         const tools = [];

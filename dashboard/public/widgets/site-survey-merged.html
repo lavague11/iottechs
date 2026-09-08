@@ -120,6 +120,11 @@
   .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
   button.b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
   button.b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
+  /* One submit control: Submit → Awaiting approval (green) → tap → Unsubmit? (red confirm) → tap → back to draft */
+  button.b.awaiting{background:rgba(58,165,93,.12);color:#2a8a4e;border-color:rgba(58,165,93,.34);display:inline-flex;align-items:center;gap:6px}
+  button.b.awaiting svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  button.b.confirm{background:rgba(196,85,61,.14);color:#b23c26;border-color:rgba(196,85,61,.42)}
+  button.b:disabled{cursor:default}
   /* inline submit-status tag (Awaiting approval / Customer approved) — lives in the nav next to Back/Submit */
   .awaitTag{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:var(--r);background:rgba(58,165,93,.12);color:#2a8a4e;font-size:13px;font-weight:700;white-space:nowrap}
   .awaitTag svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
@@ -464,8 +469,6 @@
       </div>
       <div class="hint" id="wizHint"></div>
       <button class="b lite" id="backBtn" style="display:none">Back</button>
-      <span class="awaitTag" id="awaitTag" style="display:none"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span id="awaitTxt">Awaiting approval</span></span>
-      <button class="b lite" id="unsubmitBtn" style="display:none">Unsubmit</button>
       <button class="b" id="nextBtn">Next</button>
     </div>
   </div>
@@ -1269,7 +1272,7 @@
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
     var nextBtn=document.getElementById("nextBtn");
-    var awaitTag=document.getElementById("awaitTag"), awaitTxt=document.getElementById("awaitTxt"), unsubmitBtn=document.getElementById("unsubmitBtn");
+    var unsubConfirm=false, unsubTimer=null;   // second-tap confirm before an unsubmit
     function goStep(idx){
       idx=Math.max(0,Math.min(2,idx));   // 0 Background · 1 Setup · 2 Submit (clamps any stale 4-step save)
       if(idx>0 && !bgHasImage) return;   // gate: can't Setup/Submit until this floor has a background
@@ -1305,26 +1308,43 @@
       // The Setup toolbar ("+" place · "↗" angles) shows only on the Setup step (1), not Submit (2).
       document.querySelector(".ctxbar").style.display = (idx===1) ? "" : "none";
       var sc=document.getElementById("showCtl"); if(sc) sc.style.display = (!chooser && !RO) ? "flex" : "none";
-      var onSubmit=(idx===2);
-      backBtn.style.display = idx>0 ? "" : "none";   // nothing before Background
-      nextBtn.textContent = onSubmit ? "Submit for approval" : "Next";
-      // Submit step: show the Submit button only while it's a draft; once submitted the status lives
-      // right here in the nav (a small "Awaiting approval" / "Customer approved" tag + Unsubmit) — no
-      // separate approval bar below the tool covering the survey.
-      var done=onSubmit&&(submitted||approved);
-      nextBtn.style.display = done ? "none" : "";
-      if(awaitTag){ awaitTag.style.display = done ? "" : "none"; awaitTxt.textContent = approved ? "Customer approved" : "Awaiting approval"; }
-      if(unsubmitBtn) unsubmitBtn.style.display = (onSubmit && submitted && !approved && !RO) ? "" : "none";
+      backBtn.style.display = idx>0 ? "" : "none";   // Back stays beside the submit control
+      unsubConfirm=false; clearTimeout(unsubTimer);  // changing steps drops any pending unsubmit confirm
+      renderSubmitCtl();                             // ONE control: Submit → Awaiting approval → (tap) Unsubmit?
       setHint("");   // no step instructions — the UI speaks for itself
       queueSave();
+    }
+    // The one submit control (also the wizard's Next on earlier steps). States, in order:
+    //   draft → "Submit"  ·  submitted → "Awaiting approval" (green)  ·  tapped → "Unsubmit?" (red confirm)  ·  approved → "Customer approved" (disabled)
+    function renderSubmitCtl(){
+      if(curStep!==2){ nextBtn.disabled=false; nextBtn.className="b"; nextBtn.textContent="Next"; nextBtn.style.display=""; return; }
+      if(RO){ nextBtn.style.display="none"; return; }   // the customer approves from the bar below, never here
+      nextBtn.style.display=""; nextBtn.disabled=false;
+      var chk='<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+      if(approved){ nextBtn.className="b awaiting"; nextBtn.disabled=true; nextBtn.innerHTML=chk+"Customer approved"; return; }
+      if(submitted){
+        if(unsubConfirm){ nextBtn.className="b confirm"; nextBtn.textContent="Unsubmit?"; }
+        else { nextBtn.className="b awaiting"; nextBtn.innerHTML=chk+"Awaiting approval"; }
+        return;
+      }
+      nextBtn.className="b"; nextBtn.textContent="Submit";
     }
     var backBtn=document.getElementById("backBtn");
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
-    // Next walks the wizard; on the Submit step it submits the whole survey for approval.
-    nextBtn.addEventListener("click", function(){ save();   // commit the current placements/angles as-is before moving on
-      if(curStep<2) goStep(curStep+1); else submit(); });
-    if(unsubmitBtn) unsubmitBtn.addEventListener("click", unsubmit);
+    // Walk the wizard; on the Submit step the same button submits, then flips to Awaiting approval,
+    // then (a confirming second tap) unsubmits.
+    nextBtn.addEventListener("click", function(){
+      if(curStep<2){ save(); goStep(curStep+1); return; }
+      if(RO||approved) return;
+      if(!submitted){ save(); submit(); return; }                       // draft → submit
+      if(!unsubConfirm){                                                // Awaiting approval → ask first
+        unsubConfirm=true; renderSubmitCtl();
+        clearTimeout(unsubTimer); unsubTimer=setTimeout(function(){ unsubConfirm=false; renderSubmitCtl(); }, 3500);
+        return;
+      }
+      clearTimeout(unsubTimer); unsubConfirm=false; unsubmit();          // confirm → unsubmit
+    });
 
     restore();   // reopen the saved survey (all floors) for this project (if any)
   </script>

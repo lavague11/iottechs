@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { acceptStageAction, submitToolAction } from "./proposal-actions";
 
 // The tools write to localStorage and mirror to the server on a ~5s poll (tool-sync.js). A Submit
@@ -66,6 +66,8 @@ const fmt = (s) => { try { return new Date(String(s).replace(" ", "T")).toLocale
 export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submission, role, preview, onChange, externalSubmit = false }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [confirmUnsub, setConfirmUnsub] = useState(false);   // second-tap confirm before unsubmitting
+  const confirmTimer = useRef(null);
   if (!meta?.has) return null;                       // nothing here yet for this tool
 
   const approved = !!acceptance;
@@ -100,39 +102,40 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
     onChange?.(r.acceptances);
   }
 
-  // ---- Office: Submit for review (and re-submit when edited after submitting) ----
+  // ---- Office: ONE control — Submit → Awaiting approval → (tap) Unsubmit? — mirrors the survey wizard button. ----
   if (isOffice) {
+    const check = <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>;
+    const armOrUnsub = () => {
+      if (confirmUnsub) { clearTimeout(confirmTimer.current); setConfirmUnsub(false); submit(false); return; }
+      setConfirmUnsub(true);
+      clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmUnsub(false), 3500);
+    };
+    let body;
+    if (current) {                       // customer approved — terminal status
+      body = (<div className="tab-row"><span className="tab-check">✓</span>
+        <span className="tab-msg">Customer approved this {label}{acceptance.by ? ` — ${acceptance.by}` : ""}{acceptance.at ? ` · ${fmt(acceptance.at)}` : ""}.</span></div>);
+    } else if (submittedStale && !externalSubmit) {   // edited after submitting → re-submit
+      body = (<div className="tab-row"><span className="tab-warn">!</span>
+        <span className="tab-msg"><b>Edited</b> — re-submit.</span>
+        <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : "Re-submit"}</button></div>);
+    } else if (externalSubmit) {          // the tool submits from inside itself → status only, no button here
+      body = (<div className="tab-row">
+        {submittedCurrent ? <><span className="tab-check">✓</span><span className="tab-msg">Awaiting approval.</span></>
+                          : <><span className="tab-dot" /><span className="tab-msg">Submit from the tool above.</span></>}</div>);
+    } else if (submittedCurrent) {        // the unified Awaiting ↔ Unsubmit? button
+      body = (<div className="tab-row">
+        <button type="button" className={`tab-btn ${confirmUnsub ? "confirm" : "awaiting"}`} disabled={busy || preview} onClick={armOrUnsub}>
+          {confirmUnsub ? "Unsubmit?" : <>{check}Awaiting approval</>}
+        </button></div>);
+    } else {                              // draft → Submit
+      body = (<div className="tab-row">
+        <button type="button" className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : "Submit"}</button></div>);
+    }
+    const bare = !current && !submittedStale;   // just a button → no card chrome
     return (
-      <div className={`tab-root${current ? " ok" : submittedCurrent ? " slim" : ""}`}>
-        {current ? (
-          <div className="tab-row">
-            <span className="tab-check">✓</span>
-            <span className="tab-msg">Customer approved this {label}{acceptance.by ? ` — ${acceptance.by}` : ""}{acceptance.at ? ` · ${fmt(acceptance.at)}` : ""}.</span>
-          </div>
-        ) : submittedCurrent ? (
-          <div className="tab-row">
-            <span className="tab-check">✓</span>
-            <span className="tab-msg">Awaiting approval.</span>
-            <button className="tab-btn ghost" disabled={busy || preview} onClick={() => submit(false)}>Unsubmit</button>
-          </div>
-        ) : submittedStale ? (
-          <div className="tab-row">
-            <span className="tab-warn">!</span>
-            <span className="tab-msg"><b>Edited</b> — re-submit.</span>
-            {!externalSubmit && <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Re-submit ${label}`}</button>}
-          </div>
-        ) : (
-          <div className="tab-row">
-            {externalSubmit ? (
-              <>
-                <span className="tab-dot" />
-                <span className="tab-msg">Submit from the tool above.</span>
-              </>
-            ) : (
-              <button className="tab-btn" disabled={busy || preview} onClick={() => submit(true)}>{busy ? "Submitting…" : `Submit ${label}`}</button>
-            )}
-          </div>
-        )}
+      <div className={`tab-root${current ? " ok" : bare ? " slim" : ""}`}>
+        {body}
         {err && <div className="tab-err">{err}</div>}
         {preview && <div className="tab-preview">Submitting is disabled in preview.</div>}
         <style>{TAB_CSS}</style>
@@ -270,6 +273,11 @@ const TAB_CSS = `
 .tab-btn:disabled{opacity:.5;cursor:default;transform:none}
 .tab-btn.ghost{background:transparent;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);font-weight:500}
 .tab-btn.ghost:hover{transform:none;border-color:var(--dv-faint,#A1A6AC);color:var(--dv-ink,#101418)}
+/* Unified submit control states (match the survey wizard button) */
+.tab-btn.awaiting{background:rgba(46,125,91,.10);color:var(--dv-green,#2E7D5B);border:1px solid rgba(46,125,91,.34);display:inline-flex;align-items:center;gap:6px}
+.tab-btn.awaiting:hover{transform:none;background:rgba(46,125,91,.16)}
+.tab-btn.confirm{background:rgba(196,85,61,.12);color:var(--dv-red,#C4553D);border:1px solid rgba(196,85,61,.42)}
+.tab-btn.confirm:hover{transform:none;background:rgba(196,85,61,.2)}
 .tab-err{margin-top:8px;font-size:.78rem;font-weight:500;color:var(--dv-red,#C4553D)}
 .tab-preview{margin-top:6px;font-size:.72rem;color:var(--dv-meta,#787D84)}
 `;
