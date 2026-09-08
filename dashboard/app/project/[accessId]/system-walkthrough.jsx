@@ -41,16 +41,29 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
   const atEnd = idx >= total - 1;
   const togglePlay = () => { if (playing) { setPlaying(false); return; } if (atEnd) setIdx(0); setPlaying(true); };
 
+  // Cinematic map motion — ease-zoom the plan into the active camera on every stop, like a guided
+  // fly-through. The plan scales by Z from its top-left; the pan (tx,ty, in %) is clamped so the
+  // image always covers the frame (no blank margins on edge cameras). Dots live in an un-scaled layer
+  // and are re-projected with the SAME transform (left = tx + Z·x) so they track the map but stay crisp.
+  const Z = 1.9;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const zoomOn = Number.isFinite(cur.cam.x) && Number.isFinite(cur.cam.y);
+  const zf = zoomOn ? Z : 1;
+  const tx = zoomOn ? clamp(50 - Z * cur.cam.x, -(Z - 1) * 100, 0) : 0;
+  const ty = zoomOn ? clamp(50 - Z * cur.cam.y, -(Z - 1) * 100, 0) : 0;
+  const projX = (x) => (Number.isFinite(x) ? tx + zf * x : x);   // re-project a dot's % onto the zoomed map
+  const projY = (y) => (Number.isFinite(y) ? ty + zf * y : y);
+
   return (
     <div className="swk">
       <style>{SWK_CSS}</style>
       <div className="swk-stage">
         <div className="swk-map">
-          <img src={f.bg} alt={f.name} />
+          <img className="swk-map-img" src={f.bg} alt={f.name} style={{ transformOrigin: "0 0", transform: `translate(${tx}%, ${ty}%) scale(${zf})` }} />
           {(f.cams || []).map((c, j) => {
             const on = j === cur.ci;
             return (
-              <span key={j} className={`swk-dot${on ? " on" : ""}`} style={{ left: `${c.x}%`, top: `${c.y}%` }} title={c.name || `Camera ${j + 1}`}>
+              <span key={j} className={`swk-dot${on ? " on" : ""}`} style={{ left: `${projX(c.x)}%`, top: `${projY(c.y)}%` }} title={c.name || `Camera ${j + 1}`}>
                 {on && c.aimed && Number.isFinite(c.aim) && (
                   <svg className="swk-aim" viewBox="0 0 40 40" style={{ transform: `translate(-50%,-50%) rotate(${c.aim}deg)` }} aria-hidden="true">
                     <line x1="20" y1="20" x2="34" y2="20" /><path d="M31 15l7 5-7 5z" />
@@ -107,7 +120,7 @@ const SWK_CSS = `
 .swk-stage{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:560px){.swk-stage{grid-template-columns:1fr}}
 .swk-map{position:relative;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;overflow:hidden;background:#eef0f2;line-height:0}
-.swk-map>img{width:100%;display:block}
+.swk-map-img{width:100%;display:block;will-change:transform;transition:transform .8s cubic-bezier(.4,0,.2,1)}
 .swk-view{position:relative;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;overflow:hidden;background:#0B0F1A;display:flex;align-items:center;justify-content:center;min-height:150px}
 .swk-shot{width:100%;height:100%;object-fit:cover;display:block;animation:swkFade .5s ease}
 @keyframes swkFade{from{opacity:0}to{opacity:1}}
@@ -116,7 +129,8 @@ const SWK_CSS = `
 .swk-badge span{opacity:.6;font-weight:600}
 .swk-floor-tag{position:absolute;left:8px;top:8px;background:rgba(11,15,26,.72);color:#fff;font-size:.68rem;font-weight:600;letter-spacing:.02em;padding:2px 9px;border-radius:100px}
 /* Camera dots — inactive ones recede so the current stop reads as the subject. */
-.swk-dot{position:absolute;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--dv-faint,#A1A6AC);color:#fff;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:.55;transition:all .35s ease;z-index:1}
+.swk-dot{position:absolute;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--dv-faint,#A1A6AC);color:#fff;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);opacity:.55;z-index:1;will-change:left,top;
+  transition:left .8s cubic-bezier(.4,0,.2,1),top .8s cubic-bezier(.4,0,.2,1),width .4s ease,height .4s ease,background .4s ease,opacity .4s ease,box-shadow .4s ease}
 .swk-dot.on{width:24px;height:24px;font-size:.72rem;background:var(--dv-gold,#C9A96E);opacity:1;z-index:3;box-shadow:0 0 0 4px rgba(201,169,110,.28),0 2px 8px rgba(0,0,0,.35)}
 .swk-dot-n{position:relative;z-index:1;line-height:1}
 .swk-aim{position:absolute;left:50%;top:50%;width:44px;height:44px;overflow:visible;pointer-events:none;z-index:0}
@@ -135,5 +149,5 @@ const SWK_CSS = `
 .swk-pip.on{background:var(--dv-gold,#C9A96E);width:22px;border-radius:100px}
 .swk-play{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 15px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .swk-play:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
-@media (prefers-reduced-motion:reduce){.swk-dot,.swk-shot{transition:none;animation:none}}
+@media (prefers-reduced-motion:reduce){.swk-dot,.swk-shot,.swk-map-img{transition:none;animation:none}}
 `;
