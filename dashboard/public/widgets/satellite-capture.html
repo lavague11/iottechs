@@ -466,7 +466,7 @@
     var latR=40.8*Math.PI/180, lonR=-74*Math.PI/180;
     var NY=[Math.cos(latR)*Math.sin(lonR), Math.sin(latR), Math.cos(latR)*Math.cos(lonR)];   // NY/NJ focal point
     var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));
-    var baseTilt=tXr*0.9;   // NE-US near the visual centre
+    var baseTilt=0.41;   // fixed Earth-like axial tilt (~23.5°); the globe spins around this tilted N–S axis only — no clock-face / screen-plane roll
     var ripples=[], phase="idle", pt0=0, lastTs=0, spin=tYr, tilt=baseTilt, velY=0, velX=0, dragging=false, rotY0=0, tilt0=baseTilt, startMs=0, exitCb=null, heldT=0;
     var clickHeat=0, hoverX=-9999, hoverY=-9999, hoverT=0;   // hover glow + click-cadence "heat"
     var REDUCE = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
