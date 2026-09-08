@@ -247,6 +247,13 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         )}
         {statusChip && (() => {
           const chip = statusChip, d = chip.detail;
+          // Customer read-only status — a calm badge showing the real human state, no caret/popover/jump.
+          if (chip.readonly) return (
+            <span className="dv-chip dv-chip-ro" style={{ background: chip.color + "1f", color: chip.color }}
+              title={chip.sub || chip.label} aria-label={`Project status — ${chip.label}${chip.sub ? " · " + chip.sub : ""}`}>
+              <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
+            </span>
+          );
           const canGo = !!(chip.onClick || chip.openTool);
           // Tapping the pill opens the status popover (context first — never a blind jump, which is the
           // mobile hazard). The popover's primary button performs the actual navigation.
@@ -511,6 +518,7 @@ const CSS = `
 .dv-chip-act:hover{filter:brightness(.96)}
 .dv-chip-act.muted{animation:none}   /* a "waiting on the customer" status, not an action — no pulse */
 .dv-jobbar .dv-chip-status{flex:0 0 auto;max-width:none;min-width:0}   /* short fixed label — beat the mobile .dv-chip max-width clamp so it never truncates */
+.dv-jobbar .dv-chip-ro{flex:0 1 auto;max-width:none;min-width:0;text-transform:none;letter-spacing:.005em;font-weight:700}   /* read-only customer status — real label, title-case, no caret */
 .dv-chip-act .dv-chip-caret{margin-left:1px;opacity:.7;transition:transform .2s var(--dv-e)}
 .dv-chip-act.on .dv-chip-caret{transform:rotate(180deg)}
 .dv-chip-act.on{filter:brightness(.96)}

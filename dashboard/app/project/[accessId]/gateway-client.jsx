@@ -33,6 +33,7 @@ import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
 import { projectStatusDetail, phaseHeadline, stageFloorFacts } from "../../../lib/project-status";
+import { customerStatus, customerToneHex } from "../../../lib/customer-status";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -1894,14 +1895,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // Walks survey → mockup → proposal → sign → deposit → final payment; tapping it browses to the step
   // and spotlights the exact tool card. Shown in the customer view AND the staff "customer view" preview.
   function customerNextAction(f = custFacts) {
-    // A booked site-survey visit they don't have results for yet — tell them when the tech is coming.
-    if (!f.survey_has && !f.survey_done) { const a = pickAppt("survey"); if (a) return { label: `Survey · ${apptLabel(a)}`, schedule: "survey", muted: true }; }
+    // Only real customer decisions live here (approve / sign / pay). Scheduling is NOT a customer task —
+    // once the sale is done the pill falls through to the read-only customerStatus badge (Approved →
+    // Preparing → Installation Confirmed), and dispatch owns the calendar.
     if (f.survey_has && !f.survey_done)   return { label: "Approve site survey", target: "site_survey",      spot: "Site Survey" };
     if (f.mockup_has && !f.mockup_done)   return { label: "Approve mockup",        target: "site_survey",      spot: "Mockups" };
     if (f.proposal_status && f.proposal_status !== "accepted")                    return { label: "Review proposal",    target: "proposal",         spot: "Proposal" };
     if (custStage === "approval_deposit" && f.proposal_status === "accepted" && !f.proposal_signed) return { label: "Sign agreement",     target: "approval_deposit", spot: "Approval & Deposit" };
     if (custStage === "approval_deposit" && !f.deposit_recorded)                  return { label: "Pay deposit",        target: "approval_deposit", spot: "Approval & Deposit" };
-    if (f.deposit_recorded && custStage === "schedule") { const a = pickAppt("install") || pickUpcomingAny(); return a ? { label: `${apptKindOf(a) === "survey" ? "Survey" : "Install"} · ${apptLabel(a)}`, schedule: "install", muted: true } : { label: "Scheduling your installation", target: "schedule", spot: null, muted: true }; }
     if (custStage === "payment" && !f.final_balance_paid)                         return { label: "Pay final balance",  target: "approval_deposit", spot: "Final Payment" };
     return null;
   }
@@ -2570,7 +2571,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onClick: () => { if (!previewRole && cView !== "customer") logCallAction(lp.access_id, lp.customer); } },
         lp.contact_email && { label: "Message", icon: DVI.mail, href: `mailto:${lp.contact_email}` },
         { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
-        { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSchedule(schedKindNow); } },
+        // Scheduling is internal only — the customer never books; dispatch assigns and the status reflects it.
+        cView !== "customer" && { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSchedule(schedKindNow); } },
         { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
         { label: "Share", icon: DVI.share, onClick: (e) => { e.preventDefault(); shareProjectLink(lp.access_id, lp.customer, () => showLiveToast("Project link copied")); } },
       ].filter(Boolean),
@@ -2600,23 +2602,34 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // (phase headline + ✓/○ milestone checklist) from the shared selector, so tapping it explains
     // where the project is and what's next before navigating — never a blind jump (esp. on mobile).
     const officeRole = ["admin", "manager", "sales"].includes(cView);
-    const statusChip = headerAction
-      ? {
-          label: headerAction.label,
-          color: headerAction.muted ? "#2E7D5B" : "#C9A96E",
-          muted: !!headerAction.muted,
-          openTool: headerAction.schedule ? null : headerAction.spot,
-          onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target),
-          detail: projectStatusDetail(custStage, floorFacts, headerAction),
-        }
-      : (officeRole && custStage)
-        ? {   // Fallback (§13): no single owed action → a neutral status control, never a fake CTA.
-            label: `${phaseHeadline(custStage).label} · ${phaseHeadline(custStage).statusWord}`,
-            color: "#3E6C9E", muted: true, openTool: null,
-            onClick: () => browse(custStage),
-            detail: projectStatusDetail(custStage, floorFacts, null),
-          }
-        : null;
+    const isCustomerView = cView === "customer";
+    // The customer's status uses the REAL install appointment (dispatch-assigned), not custFacts'
+    // survey-date fallback — otherwise every project would read "Installation Confirmed" too early.
+    const custStatusFacts = { ...floorFacts, install_date: (isCustomerView ? pickAppt("install")?.date : floorFacts.install_date) || null };
+    let statusChip = null;
+    if (headerAction) {
+      statusChip = {
+        label: headerAction.label,
+        color: headerAction.muted ? "#2E7D5B" : "#C9A96E",
+        muted: !!headerAction.muted,
+        openTool: headerAction.schedule ? null : headerAction.spot,
+        onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target),
+        // Customer's action pill is a plain CTA (Review / Sign / Pay) — no internal milestone popover.
+        detail: isCustomerView ? null : projectStatusDetail(custStage, floorFacts, headerAction),
+      };
+    } else if (isCustomerView && custStage) {
+      // Read-only, human status — Approved → Preparing → Installation Confirmed. Never a task, never scheduling.
+      const cs = customerStatus(custStage, custStatusFacts);
+      statusChip = { label: cs.label, color: customerToneHex(cs.tone), muted: cs.tone !== "gold", readonly: true, sub: cs.sub };
+    } else if (officeRole && custStage) {
+      // Fallback (§13): no single owed action → a neutral status control, never a fake CTA.
+      statusChip = {
+        label: `${phaseHeadline(custStage).label} · ${phaseHeadline(custStage).statusWord}`,
+        color: "#3E6C9E", muted: true, openTool: null,
+        onClick: () => browse(custStage),
+        detail: projectStatusDetail(custStage, floorFacts, null),
+      };
+    }
     return (
       <>
       <DeckView
