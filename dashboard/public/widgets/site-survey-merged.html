@@ -40,6 +40,11 @@
 
   /* ---- Background step: one question, three doors ---- */
   .bgstep{width:100%;max-width:640px;padding:30px;text-align:center}
+  .sampleBtn{margin:20px auto 0;display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border:1px solid var(--line);
+    background:#fff;border-radius:9px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s}
+  .sampleBtn:hover{border-color:var(--ink);color:var(--ink)}
+  .sampleBtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  body.ro .sampleBtn{display:none}
   .bgstep .q{font-size:17px;font-weight:600;margin:0 0 4px}
   .bgstep .qsub{font-size:13px;color:var(--muted);margin:0 0 22px}
   .doors{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -413,6 +418,11 @@
             </div>
           </div>
           <input id="upIn" type="file" accept="image/*" style="display:none">
+          <!-- staff-only demo helper: drop in the sample aerial + 4 placed/aimed cameras (with view photos) -->
+          <button class="sampleBtn" id="doorSample" type="button" title="Load a ready-made sample survey for demos">
+            <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+            Load sample
+          </button>
           <!-- library picker: grid of saved plans -->
           <div id="libModal"><div class="libCard"><div class="libHead"><b>Floor-plan library</b><button id="libClose">&times;</button></div><div id="libGrid" class="libGrid"></div></div></div>
         </div>
@@ -547,6 +557,20 @@
     }
 
     document.getElementById("doorSat").addEventListener("click", enterBg);
+    // Demo helper: populate this floor with the committed sample aerial + 4 placed/aimed cameras, each
+    // carrying its "what it sees" view photo — so the survey + mockup + Visualize walkthrough can be
+    // shown end-to-end without any manual placement. Staff only (hidden for read-only customers).
+    function loadSample(){
+      if(RO) return; var A="/samples/", R=RANGE;
+      floors=[{ name:"Property", bg:A+"survey-aerial.jpg", bgSource:{ type:"sample", name:"Sample aerial" }, started:true, devices:[
+        { k:"cam", x:34, y:49, aim:150, aimed:true, fov:34, range:R, name:"Side Yard",         photo:A+"cam-1-sideyard.jpg", photoName:"Side Yard",     cid:"cSAMPLE01" },
+        { k:"cam", x:47, y:71, aim:190, aimed:true, fov:40, range:R, name:"Front Driveway",    photo:A+"cam-2-driveway.jpg", photoName:"Front Driveway", cid:"cSAMPLE02" },
+        { k:"cam", x:50, y:31, aim:15,  aimed:true, fov:52, range:R, name:"Pool (patio side)", photo:A+"cam-3-pool-a.jpg",   photoName:"Pool",           cid:"cSAMPLE03" },
+        { k:"cam", x:63, y:18, aim:205, aimed:true, fov:52, range:R, name:"Pool (yard side)",  photo:A+"cam-4-pool-b.jpg",   photoName:"Pool",           cid:"cSAMPLE04" }
+      ] }];
+      curFloor=0; loadFloor(0); renderFloorTabs(); goStep(1); save();
+    }
+    document.getElementById("doorSample").addEventListener("click", loadSample);
     // "Change background" (only visible while revising a satellite bg) → back to the source chooser
     document.getElementById("changeBgBtn").addEventListener("click", function(){
       satFrame.style.display="none";
