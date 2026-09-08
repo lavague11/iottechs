@@ -66,12 +66,13 @@
      punch back in when it lands. "We're fixing our satellites." */
   #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:radial-gradient(circle at 50% 42%,#0b1a34,#02040a 70%)}
   #scan.on{display:block}
-  /* video mode (when the two enhance clips are present) replaces the CSS globe */
-  #scan .scanVid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:1;background:#02040a}
-  #scan.has-vid .stars,#scan.has-vid .space{display:none}
-  #scan.vid-start #vidStart{display:block}
-  #scan.vid-load #vidLoad{display:block}
-  #scan.vid-end #vidEnd{display:block}
+  /* particle-globe canvas fills the scan overlay (stars behind, caption + timer on top).
+     Intro: the overlay fades to black (aerial "captured"), then the canvas assembles the globe. */
+  #scan.on{animation:scanIn .45s ease both}
+  @keyframes scanIn{from{opacity:0}to{opacity:1}}
+  #pglobe{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;cursor:crosshair;touch-action:none}
+  .scanTimer{position:absolute;right:13px;bottom:12px;z-index:3;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:700;
+    color:#bcd4ff;letter-spacing:.06em;background:rgba(8,16,34,.5);border:1px solid rgba(120,170,255,.28);border-radius:8px;padding:4px 10px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
   #scan .stars{position:absolute;inset:0;opacity:0;animation:starsIn 1.3s ease .25s forwards;
     background-image:
       radial-gradient(1.2px 1.2px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 68%,#cfe0ff,transparent),
@@ -81,31 +82,7 @@
       radial-gradient(1px 1px at 70% 82%,#cfe0ff,transparent),radial-gradient(1.2px 1.2px at 54% 34%,#fff,transparent),
       radial-gradient(1px 1px at 20% 46%,#fff,transparent),radial-gradient(1px 1px at 94% 44%,#fff,transparent)}
   @keyframes starsIn{to{opacity:.9}}
-  #scan .space{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform-origin:50% 50%;
-    animation:zoomOut 1.6s cubic-bezier(.16,.84,.3,1) both}
-  @keyframes zoomOut{0%{transform:scale(7.5)}100%{transform:scale(1)}}
-  #scan.exit .space{animation:zoomIn .95s cubic-bezier(.7,0,.85,.35) both}
-  @keyframes zoomIn{0%{transform:scale(1);opacity:1}72%{opacity:1}100%{transform:scale(13);opacity:0}}
-  .earth{width:min(46vmin,260px);height:min(46vmin,260px);border-radius:50%;position:relative;overflow:hidden;
-    box-shadow:0 0 70px 14px rgba(70,140,255,.4),0 0 150px 40px rgba(40,90,200,.22)}
-  .earth::before{content:"";position:absolute;inset:0;background-repeat:repeat-x;background-size:200% 100%;
-    background-image:
-      radial-gradient(ellipse 20% 30% at 14% 42%,#2f8a45 0 58%,transparent 61%),
-      radial-gradient(ellipse 15% 24% at 38% 62%,#37954d 0 58%,transparent 61%),
-      radial-gradient(ellipse 19% 32% at 60% 34%,#2c8a44 0 58%,transparent 61%),
-      radial-gradient(ellipse 13% 20% at 80% 60%,#35914a 0 58%,transparent 61%),
-      radial-gradient(ellipse 12% 18% at 96% 30%,#2f8a45 0 58%,transparent 61%),
-      linear-gradient(#12559e,#0c4487);
-    animation:earthSpin 7s linear infinite}
-  @keyframes earthSpin{from{background-position:0 0}to{background-position:-200% 0}}
-  .earth .cloud{position:absolute;inset:0;background-repeat:repeat-x;background-size:200% 100%;opacity:.55;mix-blend-mode:screen;
-    background-image:radial-gradient(ellipse 16% 11% at 30% 30%,#fff 0 52%,transparent 56%),
-      radial-gradient(ellipse 20% 9% at 66% 56%,#fff 0 52%,transparent 56%),
-      radial-gradient(ellipse 13% 8% at 48% 74%,#fff 0 52%,transparent 56%);
-    animation:earthSpin 5s linear infinite}
-  .earth::after{content:"";position:absolute;inset:0;border-radius:50%;
-    box-shadow:inset -28px -20px 55px rgba(0,0,0,.68),inset 26px 18px 45px rgba(150,200,255,.28);
-    background:radial-gradient(circle at 33% 28%,rgba(255,255,255,.42),rgba(255,255,255,0) 42%)}
+  /* (globe is now drawn on #pglobe canvas — see the JS particle-globe module) */
   #scan .cap{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#eaf1ff;font-size:14px;font-weight:700;letter-spacing:.04em;text-shadow:0 1px 10px rgba(0,0,0,.7);z-index:2}
   #scan .cap b{display:inline-block;min-width:16px;text-align:left}
   .pvbar{position:absolute;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:9}
@@ -214,13 +191,10 @@
       <span class="cmpTag cmpA" id="cmpTagA">After</span>
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan">
-        <video id="vidStart" class="scanVid" muted playsinline preload="auto"></video>
-        <video id="vidLoad" class="scanVid" muted playsinline preload="auto"></video>
-        <video id="vidEnd" class="scanVid" muted playsinline preload="auto"></video>
-        <!-- CSS-globe fallback if the clips are missing -->
         <div class="stars"></div>
-        <div class="space"><div class="earth"><div class="cloud"></div></div></div>
+        <canvas id="pglobe"></canvas>
         <div class="cap">We&rsquo;re fixing our satellites<b id="scanDots">…</b></div>
+        <div id="scanTimer" class="scanTimer">0:00</div>
       </div>
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
     </div>
@@ -436,34 +410,80 @@
   $("cmpTagB").addEventListener("click", function(){ showSide(true); });   // Before
   $("cmpTagA").addEventListener("click", function(){ showSide(false); });  // After
 
-  var scanTimer=null, hasStart=false, hasLoad=false, hasEnd=false;
-  // 3 enhance clips: zoom-out (start) → rotating (loops while enhancing) → zoom-in (reveal). Each is
-  // probed independently; a missing loading clip falls back to the CSS globe, a missing zoom-in to the
-  // CSS punch-in, so nothing breaks.
-  (function(){ var a=$("vidStart"), b=$("vidLoad"), c=$("vidEnd");
-    a.src="media/zoom-out.mp4"; b.src="media/rotating.mp4"; c.src="media/zoom-in.mp4";
-    a.addEventListener("loadeddata",function(){hasStart=true;}); a.addEventListener("error",function(){hasStart=false;});
-    b.addEventListener("loadeddata",function(){hasLoad=true;});  b.addEventListener("error",function(){hasLoad=false;});
-    c.addEventListener("loadeddata",function(){hasEnd=true;});   c.addEventListener("error",function(){hasEnd=false;});
-  })();
+  var scanTimer=null;
   function startDots(){ clearInterval(scanTimer); var n=0; scanTimer=setInterval(function(){ n=(n+1)%4; $("scanDots").textContent=".".repeat(n+1); }, 320); }
-  function playV(v){ try{ v.currentTime=0; var p=v.play(); if(p&&p.catch)p.catch(function(){}); }catch(_){} }
-  function loadLoop(){ var s=$("scan"); s.classList.remove("vid-start"); s.classList.add("vid-load"); var v=$("vidLoad"); v.loop=true; playV(v); }   // rotating loop for the wait
+
+  /* ---- Particle globe — the enhance animation (replaces the old video clips). A rotating sphere of
+     points. Intro: the overlay fades to black (the aerial is "captured"), then the particles fly in
+     and assemble. Loop: it spins + glows, a click sends a ripple through it, a live timer counts in
+     the bottom-right. Exit: it rotates so the New York / NE-US region faces front and zooms all the
+     way in, then hands off to the enhanced-aerial reveal. ---- */
+  var Globe=(function(){
+    var cv=$("pglobe"); if(!cv) return null;
+    var ctx=cv.getContext("2d"), raf=null, N=640, sp=[], seed=[];
+    for(var i=0;i<N;i++){ var y=1-(i/(N-1))*2, r=Math.sqrt(Math.max(0,1-y*y)), th=i*2.399963;
+      sp.push([Math.cos(th)*r, y, Math.sin(th)*r]);
+      var aa=Math.random()*6.283, bb=Math.acos(2*Math.random()-1), rr=1.8+Math.random()*1.7;
+      seed.push([Math.sin(bb)*Math.cos(aa)*rr, Math.cos(bb)*rr, Math.sin(bb)*Math.sin(aa)*rr]);   // scattered fly-in start
+    }
+    var latR=40.7*Math.PI/180, lonR=-74*Math.PI/180;
+    var NY=[Math.cos(latR)*Math.sin(lonR), Math.sin(latR), Math.cos(latR)*Math.cos(lonR)];   // New York on the sphere
+    var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));           // rotation that brings NY to front
+    var ripples=[], phase="idle", pt0=0, lastTs=0, spin=0, rotY0=0, startMs=0, exitCb=null;
+    function resize(){ var dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth||320, h=cv.clientHeight||320; cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    function ez(t){ t=t<0?0:t>1?1:t; return t*t*(3-2*t); }
+    function shortest(a,b){ var d=(b-a)%(2*Math.PI); if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; return d; }
+    function frame(ts){
+      if(!pt0)pt0=ts; var pt=(ts-pt0)/1000, dt=lastTs?Math.min(0.05,(ts-lastTs)/1000):0; lastTs=ts;
+      var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.34;
+      ctx.clearRect(0,0,w,h);
+      var assemble=1, R=baseR, gA=1, rotY, rotX=0.42;
+      if(phase==="intro"){ assemble=ez((pt-0.28)/1.0); if(pt>=1.35) phase="loop"; }
+      if(phase!=="exit") spin+=dt*0.5;
+      rotY=spin;
+      if(phase==="exit"){ var e=pt/1.5;
+        var al=ez(e/0.55);
+        rotY=rotY0 + shortest(rotY0,tYr)*al;
+        rotX=0.42 + (tXr-0.42)*al;
+        var zt=ez((e-0.4)/0.6);
+        R=baseR*(1+zt*zt*11);
+        gA=1-ez((e-0.6)/0.4);
+        if(e>=1){ phase="idle"; cancelAnimationFrame(raf); raf=null; startMs=0; var c=exitCb; exitCb=null; if(c)c(); return; }
+      }
+      var cyy=Math.cos(rotY),syy=Math.sin(rotY),cxx=Math.cos(rotX),sxx=Math.sin(rotX);
+      function proj(P){ var x=P[0]*cyy-P[2]*syy, z0=P[0]*syy+P[2]*cyy, y=P[1]; var y2=y*cxx-z0*sxx, z2=y*sxx+z0*cxx; return [cx+x*R, cy+y2*R, (z2+1)/2]; }
+      ctx.globalCompositeOperation="lighter";
+      for(var i=0;i<sp.length;i++){ var P=sp[i], S=seed[i], L;
+        if(assemble<1){ L=[S[0]+(P[0]-S[0])*assemble, S[1]+(P[1]-S[1])*assemble, S[2]+(P[2]-S[2])*assemble]; } else L=P;
+        var pr=proj(L), sx=pr[0], sy=pr[1], depth=pr[2], boost=0;
+        for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<24) boost+=Math.max(0,1-d2/24)*(1-rp.age/rp.life); }
+        var size=(0.5+depth*1.7)+boost*2.6, a=Math.min(1,(assemble*(0.10+depth*0.82))+boost*0.9)*gA;
+        if(a<=0.012) continue;
+        ctx.fillStyle="rgba("+Math.round(90+depth*120)+","+Math.round(160+depth*80+boost*40)+",255,"+a.toFixed(3)+")";
+        ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.4,size),0,6.2832); ctx.fill();
+      }
+      var m=proj(NY);   // gold "your location" pin on the globe
+      if(m[2]>0.4 && assemble>0.6){ var pa=gA*(0.45+m[2]*0.55); ctx.fillStyle="rgba(232,203,148,"+pa.toFixed(3)+")"; ctx.beginPath(); ctx.arc(m[0],m[1],2.4+m[2]*1.8,0,6.2832); ctx.fill(); }
+      ctx.globalCompositeOperation="source-over";
+      for(var k2=ripples.length-1;k2>=0;k2--){ ripples[k2].age+=dt; if(ripples[k2].age>ripples[k2].life) ripples.splice(k2,1); }
+      if(startMs){ var s=Math.floor((Date.now()-startMs)/1000), tm=$("scanTimer"); if(tm) tm.textContent=Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
+      raf=requestAnimationFrame(frame);
+    }
+    cv.addEventListener("pointerdown", function(e){ var r=cv.getBoundingClientRect(); ripples.push({x:(e.clientX-r.left)*(cv.clientWidth/r.width), y:(e.clientY-r.top)*(cv.clientHeight/r.height), age:0, life:1.0, speed:Math.min(cv.clientWidth,cv.clientHeight)*1.05}); });
+    return {
+      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=0; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
+      exit:function(cb){ if(!raf){ if(cb)cb(); return; } rotY0=spin; exitCb=cb||null; phase="exit"; pt0=0; },
+      stop:function(){ cancelAnimationFrame(raf); raf=null; phase="idle"; startMs=0; }
+    };
+  })();
+
   function scanOn(on){ var s=$("scan");
-    if(on){ s.classList.remove("exit","vid-start","vid-load","vid-end"); s.classList.add("on"); startDots();
-      if(hasLoad){ s.classList.add("has-vid");
-        if(hasStart){ s.classList.add("vid-start"); var a=$("vidStart"); a.loop=false; a.onended=loadLoop; playV(a); }   // zoom out → then loop
-        else loadLoop();
-      } else { s.classList.remove("has-vid"); }   // no loading clip → CSS globe
-    } else { s.classList.remove("on","exit","has-vid","vid-start","vid-load","vid-end"); clearInterval(scanTimer); scanTimer=null; try{$("vidStart").pause();$("vidLoad").pause();$("vidEnd").pause();}catch(_){} } }
-  // Exit — play the zoom-IN clip (or the CSS punch-back-in), then hand off (reveal the enhanced aerial).
+    if(on){ s.classList.add("on"); startDots(); if(Globe) Globe.start(); }
+    else { s.classList.remove("on"); clearInterval(scanTimer); scanTimer=null; if(Globe) Globe.stop(); } }
+  // Exit — rotate to the NE-US / New York region and zoom in, then reveal the enhanced aerial.
   function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
-    if(hasEnd){ s.classList.add("has-vid"); s.classList.remove("vid-start","vid-load"); s.classList.add("vid-end"); var v=$("vidEnd"), done=false;
-      function fin(){ if(done)return; done=true; s.classList.remove("on","exit","has-vid","vid-start","vid-load","vid-end"); clearInterval(scanTimer); scanTimer=null; try{v.pause();}catch(_){} if(cb)cb(); }
-      v.loop=false; v.onended=fin; playV(v); setTimeout(fin, 8000);   // safety net if the clip stalls
-    } else {
-      s.classList.add("exit"); setTimeout(function(){ s.classList.remove("on","exit"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); }, 950);
-    } }
+    var fin=function(){ s.classList.remove("on"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); };
+    if(Globe) Globe.exit(fin); else fin(); }
 
   var enhancedOnce=false;
   function enhance(revision){ if(!capCanvas) return; var w=$("tEnhance");
