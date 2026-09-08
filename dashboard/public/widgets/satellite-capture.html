@@ -523,8 +523,8 @@
     function onMove(e){ var r=cv.getBoundingClientRect(); hoverX=(e.clientX-r.left)*(cv.clientWidth/r.width); hoverY=(e.clientY-r.top)*(cv.clientHeight/r.height); hoverT=performance.now();
       if(!dragging)return;
       var now=performance.now(), mdt=Math.max(8,now-lastMT)/1000, dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; lastMT=now; moved+=Math.abs(dx)+Math.abs(dy);
-      spin-=dx*0.006; tilt=Math.max(0.12,Math.min(1.18,tilt+dy*0.006));
-      velY=Math.max(-3.2,Math.min(3.2,-dx*0.006/mdt)); velX=Math.max(-2.2,Math.min(2.2,dy*0.006/mdt)); }
+      spin-=dx*0.006; tilt=Math.max(0.12,Math.min(1.18,tilt-dy*0.006));   // drag down tilts the globe down (was inverted)
+      velY=Math.max(-3.2,Math.min(3.2,-dx*0.006/mdt)); velX=Math.max(-2.2,Math.min(2.2,-dy*0.006/mdt)); }
     function onUp(e){ if(!dragging)return; dragging=false; try{cv.releasePointerCapture(e.pointerId);}catch(_){ }
       if(moved<5){   // a tap → spin faster (not freeze) + a ripple that quickens the more you click
         clickHeat=Math.min(4.5, clickHeat+1.1);
