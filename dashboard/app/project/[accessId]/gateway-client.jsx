@@ -2361,9 +2361,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {
-          tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: true, state: installDone ? "done" : "active",
+          tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: !techLocked, state: installDone ? "done" : "active",
             node: techLocked
-              ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>{!woAccepted ? "Accept the work order first." : (iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet.")}</b></div></div>
+              ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard">
+                  {!woAccepted ? (<>
+                    <b>Accept the work order to start.</b>
+                    <span>Sign to accept — that assigns the job to you and unlocks the equipment checklist.</span>
+                    <button type="button" className="pv-lock-cta" onClick={() => browse("proposal")}>Review &amp; accept →</button>
+                  </>) : (
+                    <b>{iDate ? `Opens on install day — ${fmtDate(iDate)}.` : "Install date not scheduled yet."}</b>
+                  )}
+                </div></div>
               : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
         }
@@ -4384,6 +4392,8 @@ const PV_CSS = `
 .pvx .pv-lockbanner-btn{height:30px;padding:0 14px;border:1px solid #C9A96E;background:#fff;color:#7a5f1f;border-radius:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:inherit}
 .pvx .pv-lockbanner-btn:hover{background:#fbf7ee}
 .pvx .pv-lockcard a{color:#8a6d2f;font-weight:700;cursor:pointer;text-decoration:underline}
+.pvx .pv-lock-cta{margin-top:8px;align-self:center;height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--ink,#101418);color:#fff;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .pv-lock-cta:hover{filter:brightness(1.12)}
 .pvx .pv-survey-continue{margin-top:4px}
 .pvx .pv-continue-btn{width:100%;height:48px;border:none;border-radius:11px;background:#0B0F1A;color:#fff;font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit}
 .pvx .pv-continue-btn:hover{background:#2C3347}
