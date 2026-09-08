@@ -29,9 +29,29 @@ function loadSurveyForImport(accessId) {
       const isDefault = /^[A-Za-z].* \d+$/.test(nm);
       return (nm && !isDefault) ? nm : (d.tag || nm);
     };
-    return { floors: s2.floors.map((f) => ({ ...f, markers: (f.devices || []).map((d) => ({ kind: d.k, name: nameFor(d), mode: d.mode || d.io || "in" })) })) };
+    return { floors: s2.floors.map((f) => ({ ...f, markers: (f.devices || []).map((d) => ({ kind: d.k, name: nameFor(d), mode: d.mode || d.io || "in", cid: d.cid || null })) })) };
   }
   return read(`iottechs_sitesurvey_v2_${accessId}`);
+}
+
+// Stamp a stable id (cid) onto every survey camera that lacks one, and persist it back to the
+// survey2 blob (localStorage → autosynced to the server). Done once, at proposal-import time, so a
+// proposal camera line item can carry camera_id = that cid and "View Placement" can map it back to
+// the exact placed camera — never by name. Idempotent: a camera keeps its cid across re-imports.
+// cid is NOT part of the survey fingerprint (lib/tool-data.js), so stamping never voids an approval.
+function ensureSurveyCameraIds(accessId) {
+  const key = `iottechs_survey2_${accessId}`;
+  let d;
+  try { d = JSON.parse(localStorage.getItem(key) || "null"); } catch { return; }
+  if (!d || !Array.isArray(d.floors)) return;
+  const seen = new Set();
+  d.floors.forEach((f) => (f.devices || []).forEach((dev) => { if (dev && dev.cid) seen.add(dev.cid); }));
+  const mint = () => { let id; do { id = "c" + Math.random().toString(36).slice(2, 9); } while (seen.has(id)); seen.add(id); return id; };
+  let changed = false;
+  d.floors.forEach((f) => (f.devices || []).forEach((dev) => {
+    if (dev && dev.k === "cam" && !dev.cid) { dev.cid = mint(); changed = true; }
+  }));
+  if (changed) { try { localStorage.setItem(key, JSON.stringify(d)); } catch { /* quota/private mode — link just won't persist this pass */ } }
 }
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
@@ -165,6 +185,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // `auto` = fired on first open of an empty draft. `floorIndex` = a single floor index, an
   // array of indices (the floor-plan checkbox picker), or null for every floor.
   function importSurvey(auto = false, floorIndex = null) {
+    ensureSurveyCameraIds(accessId);   // stamp stable cids first, so imported camera line items carry camera_id
     const survey = loadSurveyForImport(accessId);
     const groups = survey ? surveyToImport(survey, floorIndex) : [];
     const picked = floorIndex == null ? null : (Array.isArray(floorIndex) ? floorIndex : [floorIndex]);

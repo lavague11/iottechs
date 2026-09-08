@@ -515,7 +515,10 @@ export function surveyToImport(survey, floorIndex) {
       seenKinds.add(m.kind);
       // Every marker carries its placement mode from the survey tool ('out'/'in') — shown
       // as an (O)/(I) suffix on camera and Toast line items (per the owner's convention).
-      const named = { name: m.name ? titleCase(m.name) : null, floor: floors.length > 1 ? floorShort(fi) : null, io: m.mode === "out" ? "O" : "I" };
+      // cid = the survey camera's stable id (stamped on import, persisted in survey2). It rides
+      // onto the camera line item as camera_id so "View Placement" can map a proposal camera back
+      // to the exact placed camera — never by name (names change; the link must not break).
+      const named = { name: m.name ? titleCase(m.name) : null, floor: floors.length > 1 ? floorShort(fi) : null, io: m.mode === "out" ? "O" : "I", cid: m.cid || null };
       if (map.bundle) { cameras.push(named); return; }
       if (map.locate) { devices.push({ ...named, kind: m.kind }); return; }
       counts[m.kind] = (counts[m.kind] || 0) + 1;
@@ -534,6 +537,7 @@ export function surveyToImport(survey, floorIndex) {
     const label = withLocSuffix(base, cam.floor, cam.io);
     svc.items.push({
       id: newItemId(), name: label, qty: 1, price: 0, cost: 0, outdoor: cam.io === "O",
+      camera_id: cam.cid || null,   // → project camera (getProjectCameras id); null for manually-added cameras
       sub: [
         { id: newItemId(), name: dn("Camera"), qty: 1, price: px("Camera"), cost: 0 },
         ...CAMERA_BUNDLE.map((b) => ({ id: newItemId(), name: dn(b.name), qty: 1, price: px(b.name), cost: 0 })),

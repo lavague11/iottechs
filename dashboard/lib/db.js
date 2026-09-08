@@ -5376,12 +5376,16 @@ export function getProjectCameras(accessId) {
       (Array.isArray(f?.devices) ? f.devices : []).forEach((dev, di) => {
         if (dev && dev.k === "cam") {
           out.push({
+            id: dev.cid || null,            // stable camera id (stamped on proposal import) — the target of proposal_line_item.camera_id
             name: dev.name || null,
             tag: dev.tag || null,
             photo: dev.photo || null,       // /api/media/:id (or a legacy/fallback data-URL)
             photoName: dev.photoName || null,
+            aim: Number.isFinite(dev.aim) ? dev.aim : null,   // heading in degrees (0–359); the survey tool already stores this
             floor: fi,
             floorName: f?.name || `Floor ${fi + 1}`,
+            x: Number.isFinite(dev.x) ? dev.x : null,         // placement on the floor plan (percent) — for View Placement
+            y: Number.isFinite(dev.y) ? dev.y : null,
             di,                              // index in floors[fi].devices — the locator for setSurveyCameraPhoto
           });
         }
