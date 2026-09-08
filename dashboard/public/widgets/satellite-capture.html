@@ -485,7 +485,7 @@
       if(phase==="intro"){ assemble=ez((pt-0.28)/1.05); if(pt>=1.4) phase="loop"; }
       if(phase==="loop" && !dragging){
         heldT+=dt;
-        var idle = REDUCE ? 0 : 0.05*ez((heldT-1.6)/2.6);   // hold facing the NE, then an extremely slow constant spin
+        var idle = REDUCE ? 0 : 0.085*ez((heldT-1.6)/2.6);   // hold facing the NE, then a slow, steady constant spin
         spin+=velY*dt;
         velY = idle + (velY-idle)*Math.pow(0.95,dt*60);      // release momentum decays back into the idle spin
       }
@@ -515,11 +515,11 @@
         if(WARP && depth>0.5){ var wdx=warpCX-sx, wdy=warpCY-sy, wg=Math.exp(-(wdx*wdx+wdy*wdy)/SIG2)*warpStr*0.2*((depth-0.5)*2); sx+=wdx*wg; sy+=wdy*wg; }   // a gentle bend, not a pull-away
         for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<20) boost+=Math.max(0,1-d2/20)*(1-rp.age/rp.life); }
         var hb=0; if(hoverStr>0.02){ var hdx=sx-hoverX, hdy=sy-hoverY, hd2=hdx*hdx+hdy*hdy; if(hd2<15625) hb=(1-Math.sqrt(hd2)/125)*hoverStr; }   // a soft pool of dots under the cursor lights up
-        var neB=P.ne?1.3:1, a=Math.min(1,(assemble*P.b*neB*(0.10+depth*depth*1.18))+boost*0.5+hb*1.1)*gA;   // stronger overall; hover clearly brightens
+        var neB=P.ne?1.3:1, a=Math.min(1,(assemble*P.b*neB*(0.06+depth*depth*1.05))+boost*0.5+hb*1.0)*gA;   // subtle overall; hover still clearly brightens
         if(a<=0.012) continue;
-        var size=(P.s*(0.55+depth*0.65))+boost*1.6+hb*2, rC,gC,bC;
-        if(P.warm){ rC=198; gC=168; bC=104; }                                                             // #B89A5A, lifted — a few NE particles
-        else { var v=176+depth*74; rC=Math.round(v-6); gC=Math.round(v); bC=Math.round(Math.min(255,v+18)); }   // cool white / pale grey, brighter
+        var size=(P.s*(0.5+depth*0.62))+boost*1.6+hb*2, rC,gC,bC;
+        if(P.warm){ rC=178; gC=148; bC=90; }                                                              // #B89A5A — a few NE particles
+        else { var v=150+depth*82; rC=Math.round(v-6); gC=Math.round(v); bC=Math.round(Math.min(255,v+18)); }   // cool white / pale grey, dimmed
         ctx.fillStyle="rgba("+rC+","+gC+","+bC+","+a.toFixed(3)+")";
         ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.3,size),0,6.2832); ctx.fill();
       }
