@@ -35,6 +35,7 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
   const [savedAt, setSavedAt] = useState(null);
   const [open, setOpen] = useState(false);       // start collapsed — part of the compact flow
   const [ratesOpen, setRatesOpen] = useState(false);
+  const [expanded, setExpanded] = useState({});  // mobile: which item cards are open (collapsed by default)
   const [rates, setRates] = useState(null);      // effective standard rates (for reset + placeholders)
 
   useEffect(() => { setTech(initial); }, [initial]);
@@ -45,16 +46,22 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
 
   if (!opt) return null;
 
-  // Every editable row across all services, grouped by service block (matches the proposal layout).
-  const blocks = (opt.services || []).map((s) => ({
-    key: s.key, label: s.label, color: serviceColor(s.key),
-    rows: (s.items || []).flatMap((it) => [
-      { id: it.id, name: titleCase(it.name), qty: it.qty, custPrice: it.price, svc: s.key, header: (it.sub || []).length > 0 },
-      ...(it.sub || []).map((x) => ({ id: x.id, name: titleCase(x.name), qty: x.qty, custPrice: x.price, svc: s.key, sub: true })),
-    ]),
-  })).filter((b) => b.rows.length);
+  // Every editable line, grouped by service block (matches the proposal layout). `items` keeps the
+  // parent/child grouping (for the mobile cards); `rows` is the flattened parent+sub list (desktop table).
+  const blocks = (opt.services || []).map((s) => {
+    const items = (s.items || []).map((it) => ({
+      id: it.id, name: titleCase(it.name), qty: it.qty, custPrice: it.price, svc: s.key,
+      sub: (it.sub || []).map((x) => ({ id: x.id, name: titleCase(x.name), qty: x.qty, custPrice: x.price, svc: s.key })),
+    }));
+    const rows = items.flatMap((it) => [
+      { id: it.id, name: it.name, qty: it.qty, custPrice: it.custPrice, svc: it.svc, header: it.sub.length > 0 },
+      ...it.sub.map((x) => ({ ...x, sub: true })),
+    ]);
+    return { key: s.key, label: s.label, color: serviceColor(s.key), items, rows };
+  }).filter((b) => b.rows.length);
 
   const lineTotal = (id, qty) => (+qty || 0) * (+tech[id] || 0);
+  const itemTechTotal = (it) => it.sub.length ? it.sub.reduce((s, x) => s + lineTotal(x.id, x.qty), 0) : lineTotal(it.id, it.qty);
   const blockTotal = (b) => b.rows.reduce((s, r) => (r.header ? s : s + lineTotal(r.id, r.qty)), 0);
   const total = blocks.reduce((s, b) => s + blockTotal(b), 0);
   const dirty = Object.keys({ ...initial, ...tech }).some((k) => (tech[k] || "") !== (initial[k] || ""));
@@ -107,26 +114,86 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
                 <div className="tpx-block-hd">
                   <span className="tpx-block-dot" />
                   <span className="tpx-block-name">{b.label}</span>
-                  <span className="tpx-block-tot">{money(blockTotal(b))}</span>
+                  <span className="tpx-block-tot">{money(blockTotal(b))}<span className="tpx-block-tot-lbl"> payout</span></span>
                 </div>
-                <div className="tpx-thead"><span>Item</span><span className="r">Qty</span><span className="r">Customer</span><span className="r">Tech Rate</span><span className="r">Tech Total</span></div>
-                {b.rows.map((r) => (
-                  <div key={r.id} className={`tpx-row${r.sub ? " sub" : ""}${r.header ? " header" : ""}`}>
-                    <span className="tpx-name">{r.sub ? "· " : ""}{r.name}</span>
-                    <span className="r tpx-muted">{r.header ? "" : r.qty}</span>
-                    <span className="r tpx-muted">{r.header ? "" : money(r.custPrice)}</span>
-                    <span className="r">
-                      {r.header ? <span className="tpx-muted">—</span> : (
-                        <span className="tpx-inp"><span>$</span>
-                          <input type="number" min="0" step="0.01" value={tech[r.id] ?? ""}
-                                 placeholder={rates ? String(stdRate(r)) : "0"}
-                                 onChange={(e) => setTech((m) => ({ ...m, [r.id]: e.target.value }))} />
-                        </span>
-                      )}
-                    </span>
-                    <span className="r tpx-tot">{r.header ? "" : money(lineTotal(r.id, r.qty))}</span>
-                  </div>
-                ))}
+
+                {/* Desktop / tablet: the multi-column table. */}
+                <div className="tpx-table">
+                  <div className="tpx-thead"><span>Item</span><span className="r">Qty</span><span className="r">Customer</span><span className="r">Tech Rate</span><span className="r">Tech Total</span></div>
+                  {b.rows.map((r) => (
+                    <div key={r.id} className={`tpx-row${r.sub ? " sub" : ""}${r.header ? " header" : ""}`}>
+                      <span className="tpx-name">{r.sub ? "· " : ""}{r.name}</span>
+                      <span className="r tpx-muted">{r.header ? "" : r.qty}</span>
+                      <span className="r tpx-muted">{r.header ? "" : money(r.custPrice)}</span>
+                      <span className="r">
+                        {r.header ? <span className="tpx-muted">—</span> : (
+                          <span className="tpx-inp"><span>$</span>
+                            <input type="number" min="0" step="0.01" value={tech[r.id] ?? ""}
+                                   placeholder={rates ? String(stdRate(r)) : "0"}
+                                   onChange={(e) => setTech((m) => ({ ...m, [r.id]: e.target.value }))} />
+                          </span>
+                        )}
+                      </span>
+                      <span className="r tpx-tot">{r.header ? "" : money(lineTotal(r.id, r.qty))}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Mobile: one card per item; multi-step items collapse (default closed) so a 16-camera
+                    job isn't a giant scroll. Customer price is read-only reference; Tech pay is the field. */}
+                <div className="tpx-cards">
+                  {b.items.map((it) => {
+                    const techField = (id) => (
+                      <span className="tpx-inp"><span>$</span>
+                        <input type="number" min="0" step="0.01" value={tech[id] ?? ""}
+                               placeholder={rates ? String(stdRate({ name: it.name, svc: it.svc })) : "0"}
+                               onChange={(e) => setTech((m) => ({ ...m, [id]: e.target.value }))} /></span>
+                    );
+                    if (!it.sub.length) return (
+                      <div key={it.id} className="tpx-cam solo">
+                        <div className="tpx-cam-hd static">
+                          <span className="tpx-cam-name">{it.name}</span>
+                          <span className="tpx-cam-steps">Qty {it.qty}</span>
+                          <span className="tpx-cam-tot">{money(itemTechTotal(it))}</span>
+                        </div>
+                        <div className="tpx-step-pay">
+                          <span className="tpx-pay"><span className="tpx-pay-lbl">Customer</span><span className="tpx-pay-cval">{money(it.custPrice)}</span></span>
+                          <span className="tpx-pay tech"><span className="tpx-pay-lbl">Tech pay</span>{techField(it.id)}</span>
+                        </div>
+                      </div>
+                    );
+                    const isOpen = !!expanded[it.id];
+                    return (
+                      <div key={it.id} className={`tpx-cam${isOpen ? " open" : ""}`}>
+                        <button type="button" className="tpx-cam-hd" aria-expanded={isOpen}
+                                onClick={() => setExpanded((m) => ({ ...m, [it.id]: !m[it.id] }))}>
+                          <span className="tpx-cam-name">{it.name}</span>
+                          <span className="tpx-cam-steps">{it.sub.length} steps</span>
+                          <span className="tpx-cam-tot">{money(itemTechTotal(it))}</span>
+                          <svg className="tpx-cam-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                        </button>
+                        {isOpen && (
+                          <div className="tpx-steps">
+                            {it.sub.map((st) => (
+                              <div key={st.id} className="tpx-step">
+                                <div className="tpx-step-hd"><span className="tpx-step-name">{st.name}</span><span className="tpx-step-qty">Qty {st.qty}</span></div>
+                                <div className="tpx-step-pay">
+                                  <span className="tpx-pay"><span className="tpx-pay-lbl">Customer</span><span className="tpx-pay-cval">{money(st.custPrice)}</span></span>
+                                  <span className="tpx-pay tech"><span className="tpx-pay-lbl">Tech pay</span>
+                                    <span className="tpx-inp"><span>$</span>
+                                      <input type="number" min="0" step="0.01" value={tech[st.id] ?? ""}
+                                             placeholder={rates ? String(stdRate(st)) : "0"}
+                                             onChange={(e) => setTech((m) => ({ ...m, [st.id]: e.target.value }))} /></span>
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
@@ -160,6 +227,8 @@ const TPX_CSS = `
   .tpx-sub-lbl{display:none}   /* drop "Tech payout" label on mobile — just the $ — so the title keeps one line */
   .tpx-body{padding:12px 13px}
   .tpx-note-row{gap:10px;margin-bottom:10px}
+  .tpx-table{display:none}     /* the 5-col grid can't fit a phone — use the stacked cards instead */
+  .tpx-cards{display:flex;flex-direction:column}
 }
 .tpx-body{padding:14px 16px}
 .tpx-note-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
@@ -200,4 +269,31 @@ const TPX_CSS = `
 .tpx-save{margin-left:auto;height:38px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
 .tpx-save:hover{filter:brightness(1.12)}
 .tpx-save:disabled{opacity:.5;cursor:default}
+.tpx-block-tot-lbl{font-weight:500;color:var(--dv-meta,#787D84);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+/* ---- Mobile stacked cards. Desktop hides them via a min-width query (not a bare rule, which would
+   win on source-order over the max-width "show" rule above) ---- */
+@media (min-width:601px){ .tpx-cards{display:none} }
+.tpx-cam{border-top:1px solid var(--dv-line-soft,#EDEDE9)}
+.tpx-cam:first-child{border-top:none}
+.tpx-cam-hd{width:100%;display:grid;grid-template-columns:1fr auto auto;grid-template-rows:auto auto;column-gap:10px;row-gap:1px;align-items:center;padding:11px 12px;background:none;border:none;font-family:inherit;text-align:left;cursor:pointer}
+.tpx-cam-hd.static{cursor:default}
+.tpx-cam-name{grid-column:1/2;grid-row:1;font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpx-cam-steps{grid-column:1/2;grid-row:2;font-size:.7rem;color:var(--dv-faint,#A1A6AC)}
+.tpx-cam-tot{grid-column:2/3;grid-row:1/3;align-self:center;font-size:.9rem;font-weight:700;color:var(--dv-green,#2E7D5B);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tpx-cam-chev{grid-column:3/4;grid-row:1/3;align-self:center;color:var(--dv-faint,#A1A6AC);transition:transform .2s var(--dv-e,ease)}
+.tpx-cam.open .tpx-cam-chev{transform:rotate(180deg)}
+.tpx-cam.solo{padding-bottom:11px}
+.tpx-cam.solo .tpx-step-pay{padding:0 12px}
+.tpx-steps{display:flex;flex-direction:column;gap:8px;padding:1px 12px 12px}
+.tpx-step{border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:9px 11px;background:var(--dv-raise,#FBFBFA)}
+.tpx-step-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tpx-step-name{font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
+.tpx-step-qty{font-size:.7rem;color:var(--dv-faint,#A1A6AC);white-space:nowrap}
+.tpx-step-pay{display:flex;gap:10px}
+.tpx-pay{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px}
+.tpx-pay-lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-meta,#787D84)}
+.tpx-pay.tech .tpx-pay-lbl{color:var(--dv-gold-deep,#A8842F)}
+.tpx-pay-cval{height:36px;display:flex;align-items:center;font-size:.9rem;font-weight:600;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
+.tpx-step-pay .tpx-inp{width:100%;height:36px;border-radius:8px}
+.tpx-step-pay .tpx-inp input{width:100%;flex:1 1 0;height:100%;font-size:.9rem}
 `;
