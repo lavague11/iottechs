@@ -420,58 +420,75 @@
      way in, then hands off to the enhanced-aerial reveal. ---- */
   var Globe=(function(){
     var cv=$("pglobe"); if(!cv) return null;
-    var ctx=cv.getContext("2d"), raf=null, N=640, sp=[], seed=[];
-    for(var i=0;i<N;i++){ var y=1-(i/(N-1))*2, r=Math.sqrt(Math.max(0,1-y*y)), th=i*2.399963;
-      sp.push([Math.cos(th)*r, y, Math.sin(th)*r]);
-      var aa=Math.random()*6.283, bb=Math.acos(2*Math.random()-1), rr=1.8+Math.random()*1.7;
-      seed.push([Math.sin(bb)*Math.cos(aa)*rr, Math.cos(bb)*rr, Math.sin(bb)*Math.sin(aa)*rr]);   // scattered fly-in start
+    var ctx=cv.getContext("2d"), raf=null;
+    // Landmass field — continents as soft lat/lon ellipses [lat, lon, rLat, rLon]. Particles cluster
+    // on land (continents read through their density), sparse + faint over ocean for the sphere form.
+    var CONT=[[55,-102,19,25],[63,-112,14,32],[41,-90,12,18],[40,-77,8,10],[16,-91,7,9],
+      [-12,-60,24,14],[-38,-64,10,8],[72,-40,9,17],[50,13,10,18],[63,22,8,24],
+      [9,20,20,17],[-18,25,17,15],[52,90,19,50],[30,102,15,28],[22,79,10,10],[8,110,10,16],[-25,134,10,17]];
+    function nz(x,y){ var s=Math.sin(x*12.9898+y*78.233)*43758.5453; return s-Math.floor(s); }
+    function landAt(lat,lon){ var m=0; for(var i=0;i<CONT.length;i++){ var c=CONT[i], dlon=((lon-c[1]+540)%360)-180, d=(lat-c[0])/c[2], e=dlon/c[3], v=1-(d*d+e*e); if(v>m)m=v; }
+      return m + (nz(lat*0.55,lon*0.55)-0.5)*0.5; }   // organic, broken coastlines
+    function inNE(lat,lon){ return lat>37&&lat<45&&lon>-81&&lon<-69; }
+    var pts=[], M=9200;
+    for(var i=0;i<M;i++){ var y=1-(i/(M-1))*2, r=Math.sqrt(Math.max(0,1-y*y)), th=i*2.399963;
+      var x=Math.cos(th)*r, z=Math.sin(th)*r, lat=Math.asin(y)*57.2958, lon=Math.atan2(x,z)*57.2958;
+      var d=landAt(lat,lon), keep=false, land=false, b=0.13, s=0.5;
+      if(d>0.12){ if(nz(i*0.13,i*0.71)<0.30+Math.min(0.6,d)*0.55){ keep=true; land=true; b=0.42+Math.min(0.5,d)*0.5*(0.65+nz(i,i*3)*0.7); s=0.55+Math.min(1,d)*0.85; } }
+      else if(nz(i*0.37,i*1.7)<0.045){ keep=true; b=0.09+nz(i,i*5)*0.07; s=0.5; }
+      if(!keep) continue;
+      var aa=Math.random()*6.283, bb=Math.acos(2*Math.random()-1), rr=1.8+Math.random()*1.6;
+      pts.push({p:[x,y,z], b:b, s:s, land:land, ne:land&&inNE(lat,lon), seed:[Math.sin(bb)*Math.cos(aa)*rr,Math.cos(bb)*rr,Math.sin(bb)*Math.sin(aa)*rr]});
     }
-    var latR=40.7*Math.PI/180, lonR=-74*Math.PI/180;
-    var NY=[Math.cos(latR)*Math.sin(lonR), Math.sin(latR), Math.cos(latR)*Math.cos(lonR)];   // New York on the sphere
-    var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));           // rotation that brings NY to front
-    var ripples=[], phase="idle", pt0=0, lastTs=0, spin=0, rotY0=0, startMs=0, exitCb=null;
+    var latR=41*Math.PI/180, lonR=-74.2*Math.PI/180;
+    var NY=[Math.cos(latR)*Math.sin(lonR), Math.sin(latR), Math.cos(latR)*Math.cos(lonR)];   // NE-US focal point
+    var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));
+    var baseTilt=tXr*0.82;   // keep the NE-US latitude band centred (not full, so it reads natural)
+    var ripples=[], phase="idle", pt0=0, lastTs=0, spin=tYr, rotY0=0, startMs=0, exitCb=null;
     function resize(){ var dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth||320, h=cv.clientHeight||320; cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
     function ez(t){ t=t<0?0:t>1?1:t; return t*t*(3-2*t); }
     function shortest(a,b){ var d=(b-a)%(2*Math.PI); if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; return d; }
     function frame(ts){
       if(!pt0)pt0=ts; var pt=(ts-pt0)/1000, dt=lastTs?Math.min(0.05,(ts-lastTs)/1000):0; lastTs=ts;
-      var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.34;
+      var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.35;
       ctx.clearRect(0,0,w,h);
-      var assemble=1, R=baseR, gA=1, rotY, rotX=0.42;
-      if(phase==="intro"){ assemble=ez((pt-0.28)/1.0); if(pt>=1.35) phase="loop"; }
-      if(phase!=="exit") spin+=dt*0.5;
+      var assemble=1, R=baseR, gA=1, rotY, rotX=baseTilt;
+      if(phase==="intro"){ assemble=ez((pt-0.28)/1.05); if(pt>=1.4) phase="loop"; }
+      if(phase!=="exit") spin+=dt*0.14;   // slow, premium rotation
       rotY=spin;
-      if(phase==="exit"){ var e=pt/1.5;
-        var al=ez(e/0.55);
-        rotY=rotY0 + shortest(rotY0,tYr)*al;
-        rotX=0.42 + (tXr-0.42)*al;
-        var zt=ez((e-0.4)/0.6);
-        R=baseR*(1+zt*zt*11);
-        gA=1-ez((e-0.6)/0.4);
+      if(phase==="exit"){ var e=pt/1.6, al=ez(e/0.55);
+        rotY=rotY0 + shortest(rotY0,tYr)*al; rotX=baseTilt+(tXr-baseTilt)*al;
+        var zt=ez((e-0.4)/0.6); R=baseR*(1+zt*zt*12); gA=1-ez((e-0.62)/0.38);
         if(e>=1){ phase="idle"; cancelAnimationFrame(raf); raf=null; startMs=0; var c=exitCb; exitCb=null; if(c)c(); return; }
       }
+      // soft atmosphere halo behind the globe
+      var atm=Math.min(1,assemble)*gA, ga=ctx.createRadialGradient(cx,cy,R*0.62,cx,cy,R*1.18);
+      ga.addColorStop(0,"rgba(38,74,140,0)"); ga.addColorStop(0.78,"rgba(42,86,158,"+(0.11*atm)+")"); ga.addColorStop(0.93,"rgba(70,120,200,"+(0.16*atm)+")"); ga.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=ga; ctx.beginPath(); ctx.arc(cx,cy,R*1.18,0,6.2832); ctx.fill();
       var cyy=Math.cos(rotY),syy=Math.sin(rotY),cxx=Math.cos(rotX),sxx=Math.sin(rotX);
-      function proj(P){ var x=P[0]*cyy-P[2]*syy, z0=P[0]*syy+P[2]*cyy, y=P[1]; var y2=y*cxx-z0*sxx, z2=y*sxx+z0*cxx; return [cx+x*R, cy+y2*R, (z2+1)/2]; }
       ctx.globalCompositeOperation="lighter";
-      for(var i=0;i<sp.length;i++){ var P=sp[i], S=seed[i], L;
-        if(assemble<1){ L=[S[0]+(P[0]-S[0])*assemble, S[1]+(P[1]-S[1])*assemble, S[2]+(P[2]-S[2])*assemble]; } else L=P;
-        var pr=proj(L), sx=pr[0], sy=pr[1], depth=pr[2], boost=0;
-        for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<24) boost+=Math.max(0,1-d2/24)*(1-rp.age/rp.life); }
-        var size=(0.5+depth*1.7)+boost*2.6, a=Math.min(1,(assemble*(0.10+depth*0.82))+boost*0.9)*gA;
-        if(a<=0.012) continue;
-        ctx.fillStyle="rgba("+Math.round(90+depth*120)+","+Math.round(160+depth*80+boost*40)+",255,"+a.toFixed(3)+")";
-        ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.4,size),0,6.2832); ctx.fill();
+      for(var i=0;i<pts.length;i++){ var P=pts[i], L=P.p;
+        if(assemble<1){ var S=P.seed; L=[S[0]+(P.p[0]-S[0])*assemble,S[1]+(P.p[1]-S[1])*assemble,S[2]+(P.p[2]-S[2])*assemble]; }
+        var x=L[0]*cyy-L[2]*syy, z0=L[0]*syy+L[2]*cyy, yy=L[1], y2=yy*cxx-z0*sxx, z2=yy*sxx+z0*cxx, depth=(z2+1)/2;
+        if(depth<0.02) continue;
+        var sx=cx+x*R, sy=cy+y2*R, boost=0;
+        for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<22) boost+=Math.max(0,1-d2/22)*(1-rp.age/rp.life); }
+        var a=Math.min(1,(assemble*P.b*(0.26+depth*0.86))+boost*0.8)*gA;
+        if(a<=0.014) continue;
+        var size=(P.s*(0.55+depth*0.95))+boost*2.2, rC,gC,bC;
+        if(P.ne){ rC=232; gC=214; bC=176; }                                   // restrained champagne accent
+        else { rC=Math.round(150+depth*95); gC=Math.round(188+depth*58); bC=255; }   // soft white / icy blue
+        ctx.fillStyle="rgba("+rC+","+gC+","+bC+","+a.toFixed(3)+")";
+        ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.35,size),0,6.2832); ctx.fill();
       }
-      var m=proj(NY);   // gold "your location" pin on the globe
-      if(m[2]>0.4 && assemble>0.6){ var pa=gA*(0.45+m[2]*0.55); ctx.fillStyle="rgba(232,203,148,"+pa.toFixed(3)+")"; ctx.beginPath(); ctx.arc(m[0],m[1],2.4+m[2]*1.8,0,6.2832); ctx.fill(); }
       ctx.globalCompositeOperation="source-over";
       for(var k2=ripples.length-1;k2>=0;k2--){ ripples[k2].age+=dt; if(ripples[k2].age>ripples[k2].life) ripples.splice(k2,1); }
-      if(startMs){ var s=Math.floor((Date.now()-startMs)/1000), tm=$("scanTimer"); if(tm) tm.textContent=Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
+      if(startMs){ var sc=Math.floor((Date.now()-startMs)/1000), tm=$("scanTimer"); if(tm) tm.textContent=Math.floor(sc/60)+":"+("0"+(sc%60)).slice(-2); }
       raf=requestAnimationFrame(frame);
     }
     cv.addEventListener("pointerdown", function(e){ var r=cv.getBoundingClientRect(); ripples.push({x:(e.clientX-r.left)*(cv.clientWidth/r.width), y:(e.clientY-r.top)*(cv.clientHeight/r.height), age:0, life:1.0, speed:Math.min(cv.clientWidth,cv.clientHeight)*1.05}); });
     return {
-      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=0; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
+      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=tYr; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
       exit:function(cb){ if(!raf){ if(cb)cb(); return; } rotY0=spin; exitCb=cb||null; phase="exit"; pt0=0; },
       stop:function(){ cancelAnimationFrame(raf); raf=null; phase="idle"; startMs=0; }
     };
