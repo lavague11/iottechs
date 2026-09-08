@@ -326,7 +326,7 @@ function rebuildCards(){
   for(let p=0;p<n;p++){const cv=document.createElement('canvas');track.appendChild(cv);S._cv[p]=cv;
     bindCanvas(cv,p);renderPageCanvas(cv,p);}
   screen.appendChild(track);phone.appendChild(screen);
-  phone.insertAdjacentHTML('beforeend','<div class="island"></div><div class="home"></div><div class="glare"></div><div class="bpwr"></div><div class="bvol"></div><div class="bvol b2"></div>');
+  phone.insertAdjacentHTML('beforeend','<div class="home"></div><div class="glare"></div><div class="bpwr"></div><div class="bvol"></div><div class="bvol b2"></div>');
   stage.appendChild(phone);stack.appendChild(stage);
   screenEl=screen;trackEl=track;
   if(n>1){dotsEl=document.createElement('div');dotsEl.className='dots';

@@ -2257,7 +2257,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               // Approve bar sits directly beneath it. No dead grey space under the preview.
               <div>
                 <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} />
+                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
                 <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                   acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
               </div>

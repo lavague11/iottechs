@@ -9,10 +9,15 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // themed controls (Upload · Layout · Cameras · paging) in the host bar and drives the
 // iframe over postMessage. It auto-saves to localStorage per-project; ?ro=1 renders the
 // read-only customer grid.
-export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData, embedded = false }) {
+export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData, embedded = false, hasData = false }) {
   // Edit lock: only Admin / Manager / Sales rep build the mockup. Every other role
   // (Customer, Technician, Vendor, …) — and the admin "customer view" preview — is read-only.
   const readOnly = !["admin", "manager", "sales"].includes(view) || customerView;
+  // The empty phone is a big UI eyesore when the mockup is being skipped. Gate it behind a Build
+  // button: staff see "Build" until they opt in (or the mockup already has photos); a read-only
+  // customer only ever sees a mockup that already has content, so the phone shows straight away.
+  const [built, setBuilt] = useState(false);
+  const showPhone = readOnly || hasData || built;
   const [stat, setStat] = useState(null);   // {count, filled, view, page, pages, surveyDriven}
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
@@ -126,7 +131,7 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
         </span>
 
         <div className="mk-controls">
-          {!readOnly && (
+          {!readOnly && showPhone && (
             <>
               {/* Cameras count — manual when standalone; derived from the survey when it drives the grid */}
               {surveyDriven ? (
@@ -200,7 +205,17 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
         </div>
       </div>
 
-      {synced ? (
+      {!showPhone ? (
+        // Build gate — no empty phone by default; tap Build to bring up the preview.
+        <div className="ss-embed-frame" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 190, padding: "34px 20px", textAlign: "center" }}>
+          <button type="button" onClick={() => setBuilt(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 9, height: 46, padding: "0 26px", border: "none", borderRadius: 11, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontSize: ".94rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 10px 26px -14px rgba(201,169,110,.9)" }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>
+            Build
+          </button>
+          <div style={{ fontSize: ".82rem", color: "var(--dv-meta,#787D84)", maxWidth: "34ch" }}>Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup.</div>
+        </div>
+      ) : synced ? (
         <iframe
           ref={frameRef}
           key={src}
