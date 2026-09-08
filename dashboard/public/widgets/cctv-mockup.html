@@ -522,10 +522,10 @@ async function loadImageFile(f){
     img.onload=()=>shrinkPhoto(img,rd.result).then(res);img.onerror=()=>res(undefined);img.src=rd.result;};rd.readAsDataURL(f);});}
 function loadImageURL(u){return new Promise(res=>{const img=new Image();img.onload=()=>res({img,url:u});
   img.onerror=()=>res(undefined);img.src=u;});}
-function loadInto(i,f){loadImageFile(f).then(p=>{if(!p)return;S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}refreshAll();});}
+function loadInto(i,f){loadImageFile(f).then(p=>{if(!p)return;S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}pushPhotoToSurvey(i,p.url,S.names[i]);refreshAll();});}
 function bulkAdd(list){const files=[...list].filter(okImg);if(!files.length)return;
   Promise.all(files.map(loadImageFile)).then(ps=>{ps.forEach(p=>{if(!p)return;
-    let i=0;while(i<S.count&&S.slots[i])i++;if(i>=S.count){S.count=i+1;syncCount();}S.slots[i]=p;});refreshAll();});}
+    let i=0;while(i<S.count&&S.slots[i])i++;if(i>=S.count){S.count=i+1;syncCount();}S.slots[i]=p;pushPhotoToSurvey(i,p.url,S.names[i]);});refreshAll();});}
 const fileInput=document.getElementById('file');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
 fileInput.onchange=e=>bulkAdd(e.target.files);
@@ -626,7 +626,7 @@ function lbNav(dir){const f=filledIndices(),pos=f.indexOf(lbIndex);if(pos<0)retu
 document.getElementById('lbClose').onclick=closeLightbox;
 document.getElementById('lbPrev').onclick=()=>lbNav(-1);
 document.getElementById('lbNext').onclick=()=>lbNav(1);
-document.getElementById('lbRemove').onclick=()=>{if(lbIndex!=null){S.slots[lbIndex]=undefined;closeLightbox();refreshAll();}};
+document.getElementById('lbRemove').onclick=()=>{if(lbIndex!=null){var _i=lbIndex;S.slots[_i]=undefined;pushPhotoToSurvey(_i,null);closeLightbox();refreshAll();}};
 // Read-only: comment on the camera you're viewing → hand the anchor to the host, close the view.
 document.getElementById('lbComment').onclick=()=>{const i=lbIndex;closeLightbox();postComment(i);};
 lightbox.addEventListener('click',e=>{if(e.target===lightbox)closeLightbox();});
@@ -693,8 +693,10 @@ rebuildCards();
   try{ new ResizeObserver(function(){ iotNotify(); }).observe(document.getElementById('stack')); }catch(_e){}
   window.addEventListener('resize',iotNotify);
 
-  // Apply the survey camera roster: count + names are the survey's; each empty slot pre-fills with that
-  // camera's view photo (office photos already placed here win). Runs after restore so it never races it.
+  // Apply the survey camera roster: count + names are the survey's, and the survey camera's view photo
+  // is the SINGLE SOURCE OF TRUTH — it OVERRIDES any (possibly stale) mockup slot, so the mockup phone
+  // always matches the survey + the Visualize walkthrough. A camera with no survey photo keeps whatever
+  // photo was attached here (that upload is written back to the survey below, so it becomes the truth).
   function applyCameras(cams){
     SURVEY_CAMS=Array.isArray(cams)?cams:[]; SURVEY_DRIVEN=SURVEY_CAMS.length>0;
     if(!SURVEY_DRIVEN){ iotNotify(); return; }
@@ -702,11 +704,20 @@ rebuildCards();
     SURVEY_CAMS.forEach(function(c,i){ S.names[i]=(c&&(c.name||c.tag))||S.names[i]||''; });
     syncCount();
     var toLoad=[];
-    SURVEY_CAMS.forEach(function(c,i){ if(c&&c.photo&&!S.slots[i]) toLoad.push({i:i,url:c.photo}); });
+    SURVEY_CAMS.forEach(function(c,i){ if(c&&c.photo && (!S.slots[i] || S.slots[i].url!==c.photo)) toLoad.push({i:i,url:c.photo}); });
     if(toLoad.length){
-      Promise.all(toLoad.map(function(t){ return loadImageURL(t.url).then(function(sl){ if(sl&&!S.slots[t.i])S.slots[t.i]=sl; }).catch(function(){}); }))
+      Promise.all(toLoad.map(function(t){ return loadImageURL(t.url).then(function(sl){ if(sl)S.slots[t.i]=sl; }).catch(function(){}); }))
         .then(function(){ refreshAll(); });
     } else refreshAll();
+  }
+  // Write a mockup photo edit back to the survey camera (the source of truth) so it shows identically in
+  // the survey, the mockup, and the walkthrough — and never drifts. No-op unless survey-driven + signed in.
+  function pushPhotoToSurvey(i, url, name){
+    if(!SURVEY_DRIVEN) return; var c=SURVEY_CAMS[i]; if(!c || c.floor==null || c.di==null) return;
+    var pid=new URLSearchParams(location.search).get('project'); if(!pid) return;
+    try{ fetch('/api/project-cameras',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body:JSON.stringify({ accessId:pid, floor:c.floor, di:c.di, photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }) })
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok&&Array.isArray(j.cameras)) SURVEY_CAMS=j.cameras; }).catch(function(){}); }catch(_){}
   }
 
   // Host → tool commands from the native toolbar in the React wrapper.
