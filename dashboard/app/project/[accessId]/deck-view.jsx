@@ -253,10 +253,12 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
           return (
             <div className="dv-chipwrap">
-              <button className={`dv-chip dv-chip-act${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
-                aria-expanded={statusOpen} aria-haspopup="dialog"
+              <button className={`dv-chip dv-chip-act dv-chip-status${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
+                aria-expanded={statusOpen} aria-haspopup="dialog" aria-label={`Project status — ${chip.label}`} title={chip.label}
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? setStatusOpen((o) => !o) : goNext(); }}>
-                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
+                {/* Fixed, stable trigger — never the long stage phrase (it truncated to "SCHEDU…"). The dot
+                    keeps the status colour; the real state lives in the popover + the title/aria-label. */}
+                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">Status</span>
                 <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </button>
               {d && statusOpen && (<>
@@ -508,6 +510,7 @@ const CSS = `
 .dv-chip-act{border:none;cursor:pointer;font-family:inherit;transition:filter .15s var(--dv-e);animation:dvChipPulse 2.2s ease-in-out infinite}
 .dv-chip-act:hover{filter:brightness(.96)}
 .dv-chip-act.muted{animation:none}   /* a "waiting on the customer" status, not an action — no pulse */
+.dv-jobbar .dv-chip-status{flex:0 0 auto;max-width:none;min-width:0}   /* short fixed label — beat the mobile .dv-chip max-width clamp so it never truncates */
 .dv-chip-act .dv-chip-caret{margin-left:1px;opacity:.7;transition:transform .2s var(--dv-e)}
 .dv-chip-act.on .dv-chip-caret{transform:rotate(180deg)}
 .dv-chip-act.on{filter:brightness(.96)}
