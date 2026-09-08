@@ -871,10 +871,13 @@
     // Count matching devices on all EARLIER floors so numbering is continuous across floors
     // (Floor 2's first camera continues after Floor 1's last — a "continuation", not a restart).
     function floorsBefore(pred){ var n=0; for(var i=0;i<curFloor;i++){ ((floors[i]&&floors[i].devices)||[]).forEach(function(sd){ if(pred(sd)) n++; }); } return n; }
+    // cid = a stable per-camera id that outlives (floor, index): it rides through save/restore so a
+    // proposal line item's camera_id can always find this exact camera (View Placement). Cameras only.
+    function mkcid(){ var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(devices.some(function(d){return d.cid===id;})); return id; }
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group, across floors
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
-      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType};
+      var d={id:devSeq,k:k,cone:!!it.cone,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
@@ -1088,7 +1091,7 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -1102,7 +1105,7 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
       devices.push(d); mountDevice(d); }
     function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
     // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned

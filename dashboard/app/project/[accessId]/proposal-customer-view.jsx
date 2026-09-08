@@ -70,22 +70,45 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [layoutBusy, setLayoutBusy] = useState(false);
   const [survey2Raw, setSurvey2Raw] = useState(null);
   const [mockupRaw, setMockupRaw]   = useState(null);
+  const [focusCid, setFocusCid]     = useState(null);   // camera the customer asked to locate (View Placement)
+  const rootRef = useRef(null);
   useEffect(() => {   // booleans only — the heavy survey/mockup blobs are NOT fetched here
     let live = true;
     proposalLayoutMetaAction(accessId).then((r) => { if (live && r?.ok) setHasLayout(!!(r.hasSurvey || r.hasMockup)); });
     return () => { live = false; };
   }, [accessId]);
-  async function toggleLayout() {
-    const next = !layoutOpen; setLayoutOpen(next);
-    if (next && !layoutLoaded) {   // fetch the full data only the first time it's opened
-      setLayoutLoaded(true); setLayoutBusy(true);
-      const [sv, mk] = await Promise.all([
-        getToolDataAction(accessId, "survey2").catch(() => null),
-        getToolDataAction(accessId, "mockup").catch(() => null),
-      ]);
-      setSurvey2Raw(sv?.saved?.data || null); setMockupRaw(mk?.saved?.data || null); setLayoutBusy(false);
-    }
+  async function ensureLayoutLoaded() {
+    if (layoutLoaded) return;
+    setLayoutLoaded(true); setLayoutBusy(true);   // fetch the full data only the first time it's opened
+    const [sv, mk] = await Promise.all([
+      getToolDataAction(accessId, "survey2").catch(() => null),
+      getToolDataAction(accessId, "mockup").catch(() => null),
+    ]);
+    setSurvey2Raw(sv?.saved?.data || null); setMockupRaw(mk?.saved?.data || null); setLayoutBusy(false);
   }
+  function toggleLayout() {
+    const next = !layoutOpen; setLayoutOpen(next);
+    if (next) ensureLayoutLoaded();
+  }
+  // "View Placement" on a camera line: open the layout, load it, and locate that exact camera by its
+  // stable id (camera_id → survey camera cid). Read-only — the customer sees where it goes, nothing to edit.
+  async function viewPlacement(cid) {
+    if (!cid) return;
+    setLayoutOpen(true);
+    await ensureLayoutLoaded();
+    setFocusCid(cid);
+  }
+  // Once the located dot exists in the DOM, scroll it into view and let the pulse play; then release
+  // the focus so tapping the same camera again re-triggers it.
+  useEffect(() => {
+    if (!focusCid) return;
+    const t = setTimeout(() => {
+      const el = rootRef.current?.querySelector(`[data-cid="${focusCid}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    const clear = setTimeout(() => setFocusCid(null), 2200);
+    return () => { clearTimeout(t); clearTimeout(clear); };
+  }, [focusCid, layoutBusy, survey2Raw]);
   const layoutFloors = useMemo(() => {
     try { const d = JSON.parse(survey2Raw); return (d.floors || []).filter((f) => f.bg)
       .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
@@ -337,7 +360,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   }
 
   return (
-    <div className="pcv-root">
+    <div className="pcv-root" ref={rootRef}>
       <style>{PCV_CSS}</style>
 
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
@@ -432,7 +455,17 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                   <div className="pcv-layout-plan">
                     <img src={f.bg} alt={f.name} loading="lazy" />
                     {f.cams.map((c, j) => (
-                      <span className="pcv-layout-cam" key={j} style={{ left: `${c.x}%`, top: `${c.y}%` }} title={c.name || `Camera ${j + 1}`}>{j + 1}</span>
+                      <span className={`pcv-layout-cam${c.cid && c.cid === focusCid ? " focus" : ""}`} key={j} data-cid={c.cid || undefined}
+                            style={{ left: `${c.x}%`, top: `${c.y}%` }} title={c.name || `Camera ${j + 1}`}>
+                        {/* Heading arrow — only when the camera has actually been aimed. aim is degrees,
+                            0 = pointing right, clockwise (survey tool convention); no coverage cone. */}
+                        {c.aimed && Number.isFinite(c.aim) && (
+                          <svg className="pcv-cam-aim" viewBox="0 0 40 40" style={{ transform: `translate(-50%,-50%) rotate(${c.aim}deg)` }} aria-hidden="true">
+                            <line x1="20" y1="20" x2="33" y2="20" /><path d="M30 16l6 4-6 4z" />
+                          </svg>
+                        )}
+                        <span className="pcv-cam-n">{j + 1}</span>
+                      </span>
                     ))}
                   </div>
                   {f.cams.length > 0 && <div className="pcv-layout-caption">{f.cams.length} camera{f.cams.length !== 1 ? "s" : ""} placed</div>}
@@ -568,6 +601,15 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                         {reviseMode && <span className="pcv-flagdot">⚑</span>}
                         {!reviseMode && hasSub && <span className="pcv-chev">{expanded ? "▾" : "▸"}</span>}
                         {itemNameNode(it.name, it.outdoor)}{it.slot ? ` · Slot ${it.slot}` : ""}
+                        {/* View Placement — jumps to this exact camera on the floor-plan mini-map, matched
+                            by its stable camera_id (never by name). Only when there's a layout to show. */}
+                        {it.camera_id && hasLayout && (
+                          <button type="button" className="pcv-place" title="See where this camera goes on your floor plan"
+                                  aria-label="View placement" onClick={(e) => { e.stopPropagation(); viewPlacement(it.camera_id); }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                            Placement
+                          </button>
+                        )}
                         {it.waived && <span className="pcv-waived-chip">Waived</span>}
                         {flags[it.id] && (
                           <span className={`pcv-flag-chip ${flags[it.id].type}`}>
@@ -875,6 +917,19 @@ const PCV_CSS = `
 .pcv-layout-plan{position:relative;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;overflow:hidden;line-height:0;background:#f4f4f2}
 .pcv-layout-plan img{width:100%;display:block}
 .pcv-layout-cam{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:var(--gold,#b08f4f);color:#fff;font-size:.66rem;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35);border:1.5px solid #fff}
+.pcv-cam-n{position:relative;z-index:1;line-height:1}
+/* Heading arrow — a thin gold pointer emitting from the dot centre, rotated to the camera's aim.
+   Sits under the number, above the plan. No coverage cone (customer-facing, read-only). */
+.pcv-cam-aim{position:absolute;left:50%;top:50%;width:40px;height:40px;overflow:visible;pointer-events:none;z-index:0}
+.pcv-cam-aim line{stroke:var(--gold,#b08f4f);stroke-width:2.4;stroke-linecap:round}
+.pcv-cam-aim path{fill:var(--gold,#b08f4f)}
+/* Located via "View Placement" — a brief ring pulse so the eye lands on the right camera. */
+.pcv-layout-cam.focus{z-index:5;animation:pcvCamPulse 1.1s ease-out 2}
+@keyframes pcvCamPulse{0%{box-shadow:0 0 0 0 rgba(201,169,110,.65),0 1px 5px rgba(0,0,0,.35)}70%{box-shadow:0 0 0 12px rgba(201,169,110,0),0 1px 5px rgba(0,0,0,.35)}100%{box-shadow:0 0 0 0 rgba(201,169,110,0),0 1px 5px rgba(0,0,0,.35)}}
+/* "Placement" chip on a camera line item */
+.pcv-place{display:inline-flex;align-items:center;gap:4px;margin-left:8px;height:22px;padding:0 9px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-blue,#3E6C9E);font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit;vertical-align:middle}
+.pcv-place:hover{border-color:var(--dv-blue,#3E6C9E);background:rgba(62,108,158,.06)}
+.pcv-place svg{flex:0 0 auto}
 .pcv-layout-caption{font-size:.72rem;color:var(--dv-meta,#787D84);margin-top:6px}
 .pcv-layout-sec{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pcv-layout-mocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
