@@ -427,66 +427,80 @@
     var MW=720, MH=360, lc=document.createElement("canvas"); lc.width=MW; lc.height=MH;
     var lg=lc.getContext("2d"); lg.fillStyle="#000"; lg.fillRect(0,0,MW,MH); lg.fillStyle="#fff";
     var LAND=[
-      [[-168,65],[-158,71],[-128,70],[-95,72],[-80,73],[-62,60],[-56,52],[-66,45],[-70,41],[-74,40],[-76,35],[-81,25],[-90,29],[-97,26],[-104,22],[-106,30],[-114,31],[-124,40],[-124,48],[-131,54],[-152,59],[-166,60]], // North America
-      [[-92,17],[-86,15],[-83,9],[-77,8],[-83,14],[-90,16]],                                                                                        // Central America
-      [[-80,9],[-72,11],[-60,10],[-50,4],[-35,-6],[-40,-14],[-48,-25],[-58,-35],[-66,-45],[-73,-52],[-74,-44],[-71,-30],[-70,-18],[-78,-5],[-81,2]], // South America
-      [[-46,60],[-28,60],[-18,70],[-30,83],[-56,80],[-55,69]],                                                                                       // Greenland
-      [[-10,44],[-8,37],[4,40],[13,38],[19,40],[29,41],[40,47],[40,56],[30,60],[26,71],[10,63],[4,58],[-5,50],[-10,52]],                              // Europe
-      [[-17,15],[-17,21],[-10,31],[10,34],[22,32],[33,31],[43,12],[51,12],[42,-2],[40,-16],[33,-25],[26,-34],[18,-35],[12,-16],[8,4],[-8,5],[-16,10]], // Africa
-      [[26,42],[42,40],[50,42],[47,25],[58,26],[62,20],[68,24],[70,15],[77,8],[80,14],[89,22],[92,9],[99,8],[106,0],[110,-6],[120,-9],[122,12],[112,20],[120,30],[122,41],[135,46],[145,50],[160,61],[180,66],[168,72],[130,76],[95,78],[58,70],[50,46],[38,48],[30,45]], // Asia
-      [[130,31],[137,35],[142,41],[145,44],[140,36],[133,34]],                                                                                       // Japan
-      [[113,-22],[122,-18],[132,-12],[142,-11],[147,-20],[150,-37],[140,-38],[129,-32],[115,-34],[113,-26]]                                          // Australia
+      // North America — Alaska, Canada, East Coast + Florida, Gulf, Mexico, Baja, West Coast
+      [[-166,60],[-168,66],[-156,71],[-140,70],[-125,70],[-108,68],[-95,70],[-82,73],[-78,68],[-95,62],[-90,56],[-79,56],[-64,61],[-56,53],[-52,47],[-60,46],[-67,44],[-70,43],[-71,41],[-74,40.5],[-75,38],[-76,35],[-81,31],[-80,25],[-83,28],[-90,29],[-94,29],[-97,26],[-97,21],[-105,20],[-112,24],[-114,29],[-117,32],[-122,37],[-124,42],[-124,48],[-131,53],[-146,60],[-160,59]],
+      [[-92,17],[-88,14],[-83,9],[-78,8],[-83,13],[-90,16]],                                                                                         // Central America
+      // South America — bulge of Brazil + point of Patagonia
+      [[-80,8],[-77,5],[-70,11],[-61,10],[-50,0],[-44,-3],[-38,-6],[-35,-8],[-39,-14],[-41,-22],[-48,-25],[-54,-34],[-58,-40],[-66,-46],[-70,-51],[-73,-54],[-75,-48],[-72,-40],[-71,-33],[-70,-24],[-72,-17],[-77,-12],[-80,-4],[-81,2]],
+      [[-45,60],[-30,60],[-18,68],[-22,76],[-35,83],[-55,80],[-58,70]],                                                                              // Greenland
+      // Europe — Iberia, Italy, Scandinavia, Baltic
+      [[-9,43],[-9,38],[-6,37],[0,39],[3,42],[6,43],[9,44],[12,38],[16,40],[19,42],[13,45],[19,45],[24,40],[28,41],[31,46],[37,47],[40,48],[30,54],[24,57],[22,60],[26,66],[24,71],[15,68],[11,64],[5,61],[9,58],[5,54],[-2,51],[-5,48],[-9,45]],
+      [[-6,50],[-5,54],[-3,58],[-6,56],[-8,52]],                                                                                                     // British Isles
+      // Africa — horn, Gulf of Guinea, Cape
+      [[-16,14],[-17,20],[-12,28],[-6,34],[2,37],[10,34],[11,37],[20,33],[30,31],[33,28],[34,23],[36,18],[43,12],[48,12],[51,11],[46,4],[41,-1],[40,-8],[35,-18],[32,-24],[26,-33],[19,-35],[15,-29],[13,-23],[12,-16],[9,-5],[8,4],[3,6],[-4,5],[-9,7],[-13,10],[-16,12]],
+      // Asia — Arabia, India point, SE Asia, Siberia, Far East
+      [[26,42],[35,43],[36,37],[45,42],[48,30],[43,25],[50,25],[57,25],[60,22],[57,17],[50,15],[48,13],[57,8],[67,25],[73,19],[72,8],[77,8],[80,14],[80,21],[87,22],[92,21],[90,15],[97,16],[99,10],[105,10],[106,0],[104,-2],[110,-7],[118,-8],[120,-4],[119,5],[122,14],[113,22],[121,30],[121,38],[126,41],[131,43],[136,46],[143,49],[142,53],[158,58],[165,61],[170,66],[180,68],[172,72],[145,73],[110,77],[80,76],[65,76],[57,70],[50,48],[42,49],[33,46],[28,44]],
+      [[95,5],[105,-2],[116,-4],[118,1],[110,4],[100,5]],                                                                                            // Indonesia
+      [[130,31],[137,35],[142,41],[145,44],[140,36],[132,33]],                                                                                       // Japan
+      // Australia
+      [[113,-22],[122,-18],[130,-12],[137,-11],[142,-11],[147,-20],[151,-32],[148,-38],[140,-38],[129,-32],[115,-34],[114,-27]]
     ];
     LAND.forEach(function(poly){ lg.beginPath(); poly.forEach(function(v,idx){ var X=(v[0]+180)/360*MW, Y=(90-v[1])/180*MH; idx?lg.lineTo(X,Y):lg.moveTo(X,Y); }); lg.closePath(); lg.fill(); });
     var mask=lg.getImageData(0,0,MW,MH).data;
-    function isLand(lat,lon){ var xx=((Math.round((lon+180)/360*MW))%MW+MW)%MW, yy=Math.round((90-lat)/180*MH); if(yy<0)yy=0; if(yy>=MH)yy=MH-1; return mask[(yy*MW+xx)*4]>120; }
+    function isLand(lat,lon){ lon=((lon+180)%360+360)%360-180; var xx=((Math.round((lon+180)/360*MW))%MW+MW)%MW, yy=Math.round((90-lat)/180*MH); if(yy<0)yy=0; if(yy>=MH)yy=MH-1; return mask[(yy*MW+xx)*4]>120; }
     function nz(a,b){ var s=Math.sin(a*12.9898+b*78.233)*43758.5453; return s-Math.floor(s); }
     function inNE(lat,lon){ return lat>37&&lat<45&&lon>-81&&lon<-69; }
-    var pts=[], M=13000;
-    for(var i=0;i<M;i++){ var y=1-(i/(M-1))*2, r=Math.sqrt(Math.max(0,1-y*y)), th=i*2.399963;
-      var x=Math.cos(th)*r, z=Math.sin(th)*r, lat=Math.asin(y)*57.2958, lon=Math.atan2(x,z)*57.2958;
+    var pts=[], M=17000, D2R=Math.PI/180;
+    for(var i=0;i<M;i++){ var y0=1-(i/(M-1))*2, r=Math.sqrt(Math.max(0,1-y0*y0)), th=i*2.399963;
+      var lat=Math.asin(y0)*57.2958, lon=Math.atan2(Math.cos(th)*r, Math.sin(th)*r)*57.2958;
+      lat+=(nz(i*1.7,i)-0.5)*1.3; lon+=(nz(i,i*1.7)-0.5)*1.3;   // organic jitter — breaks the fib grid, softens coasts
+      var la=lat*D2R, lo=lon*D2R, cla=Math.cos(la), x=cla*Math.sin(lo), yv=Math.sin(la), z=cla*Math.cos(lo);
       var land=isLand(lat,lon), keep=false, b=0.05, s=0.42;
-      if(land){ if(nz(i*0.13,i*0.71)<0.75){ keep=true; b=0.30+nz(i,i*3)*0.24; s=0.5+nz(i*1.3,i)*0.2; } }   // dense land = legible continents
-      else if(nz(i*0.37,i*1.7)<0.014){ keep=true; b=0.05+nz(i,i*5)*0.04; s=0.4; }                          // ocean: very sparse + faint
+      if(land){ if(nz(i*0.13,i*0.71)<0.82){ keep=true; b=0.30+nz(i,i*3)*0.22; s=0.46+nz(i*1.3,i)*0.22; } }   // dense land → the silhouette resolves
+      else if(nz(i*0.37,i*1.7)<0.012){ keep=true; b=0.05+nz(i,i*5)*0.035; s=0.4; }                            // ocean: very sparse + faint
       if(!keep) continue;
-      var ne=land&&inNE(lat,lon), warm=ne&&nz(i*2.1,i*0.7)<0.16;
+      var ne=land&&inNE(lat,lon), warm=ne&&nz(i*2.1,i*0.7)<0.14;
       var aa=Math.random()*6.283, bb=Math.acos(2*Math.random()-1), rr=1.8+Math.random()*1.6;
-      pts.push({p:[x,y,z], b:b, s:s, ne:ne, warm:warm, seed:[Math.sin(bb)*Math.cos(aa)*rr,Math.cos(bb)*rr,Math.sin(bb)*Math.sin(aa)*rr]});
+      pts.push({p:[x,yv,z], b:b, s:s, ne:ne, warm:warm, seed:[Math.sin(bb)*Math.cos(aa)*rr,Math.cos(bb)*rr,Math.sin(bb)*Math.sin(aa)*rr]});
     }
     var latR=40.8*Math.PI/180, lonR=-74*Math.PI/180;
     var NY=[Math.cos(latR)*Math.sin(lonR), Math.sin(latR), Math.cos(latR)*Math.cos(lonR)];   // NY/NJ focal point
     var tYr=Math.atan2(NY[0],NY[2]), tXr=Math.atan2(NY[1],Math.hypot(NY[0],NY[2]));
     var baseTilt=tXr*0.9;   // NE-US near the visual centre
-    var ripples=[], phase="idle", pt0=0, lastTs=0, spin=tYr, rotY0=0, startMs=0, exitCb=null, heldT=0;
+    var ripples=[], phase="idle", pt0=0, lastTs=0, spin=tYr, tilt=baseTilt, velY=0, velX=0, dragging=false, rotY0=0, tilt0=baseTilt, startMs=0, exitCb=null, heldT=0;
+    var REDUCE = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     function resize(){ var dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth||320, h=cv.clientHeight||320; cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
     function ez(t){ t=t<0?0:t>1?1:t; return t*t*(3-2*t); }
     function shortest(a,b){ var d=(b-a)%(2*Math.PI); if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; return d; }
     function frame(ts){
       if(!pt0)pt0=ts; var pt=(ts-pt0)/1000, dt=lastTs?Math.min(0.05,(ts-lastTs)/1000):0; lastTs=ts;
-      var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.33;
+      var w=cv.clientWidth, h=cv.clientHeight, cx=w/2, cy=h/2, baseR=Math.min(w,h)*0.34;
       ctx.clearRect(0,0,w,h);
-      var assemble=1, R=baseR, gA=1, rotY, rotX=baseTilt;
+      var assemble=1, R=baseR, gA=1, rotY, rotX;
       if(phase==="intro"){ assemble=ez((pt-0.28)/1.05); if(pt>=1.4) phase="loop"; }
-      if(phase==="loop"){ heldT+=dt; spin+=dt*0.05*ez((heldT-1.6)/2.6); }   // hold on the NE, then a very slow drift
-      rotY=spin;
+      if(phase==="loop" && !dragging){
+        heldT+=dt;
+        var idle = REDUCE ? 0 : 0.05*ez((heldT-1.6)/2.6);   // hold on the NE, then an almost-imperceptible drift
+        spin+=velY*dt; tilt+=velX*dt; tilt=Math.max(0.12,Math.min(1.18,tilt));
+        velY = idle + (velY-idle)*Math.pow(0.95,dt*60);      // release momentum decays back into the idle drift
+        velX = velX*Math.pow(0.86,dt*60);
+      }
+      rotY=spin; rotX=tilt;
       if(phase==="exit"){ var e=pt/1.6, al=ez(e/0.55);
-        rotY=rotY0+shortest(rotY0,tYr)*al; rotX=baseTilt+(tXr-baseTilt)*al;
+        rotY=rotY0+shortest(rotY0,tYr)*al; rotX=tilt0+(tXr-tilt0)*al;
         var zt=ez((e-0.4)/0.6); R=baseR*(1+zt*zt*12); gA=1-ez((e-0.62)/0.38);
         if(e>=1){ phase="idle"; cancelAnimationFrame(raf); raf=null; startMs=0; var c=exitCb; exitCb=null; if(c)c(); return; }
       }
-      // very faint rim only — no foggy bloom
-      var atm=Math.min(1,assemble)*gA, ga=ctx.createRadialGradient(cx,cy,R*0.82,cx,cy,R*1.05);
-      ga.addColorStop(0,"rgba(26,46,86,0)"); ga.addColorStop(0.9,"rgba(28,50,94,"+(0.016*atm).toFixed(3)+")"); ga.addColorStop(0.98,"rgba(60,88,132,"+(0.038*atm).toFixed(3)+")"); ga.addColorStop(1,"rgba(0,0,0,0)");
-      ctx.fillStyle=ga; ctx.beginPath(); ctx.arc(cx,cy,R*1.05,0,6.2832); ctx.fill();
+      // no shell — the sphere is defined by the particles + depth falloff alone (Scrolltide-style)
       var cyy=Math.cos(rotY),syy=Math.sin(rotY),cxx=Math.cos(rotX),sxx=Math.sin(rotX);
       ctx.globalCompositeOperation="lighter";
       for(var i=0;i<pts.length;i++){ var P=pts[i], L=P.p;
         if(assemble<1){ var S=P.seed; L=[S[0]+(P.p[0]-S[0])*assemble,S[1]+(P.p[1]-S[1])*assemble,S[2]+(P.p[2]-S[2])*assemble]; }
         var x=L[0]*cyy-L[2]*syy, z0=L[0]*syy+L[2]*cyy, yy=L[1], y2=yy*cxx-z0*sxx, z2=yy*sxx+z0*cxx, depth=(z2+1)/2;
-        if(depth<0.03) continue;
+        if(depth<0.04) continue;
         var sx=cx+x*R, sy=cy+y2*R, boost=0;
         for(var k=0;k<ripples.length;k++){ var rp=ripples[k], dd=Math.hypot(sx-rp.x,sy-rp.y), ring=rp.age*rp.speed, d2=Math.abs(dd-ring); if(d2<20) boost+=Math.max(0,1-d2/20)*(1-rp.age/rp.life); }
-        var neB=P.ne?1.32:1, a=Math.min(1,(assemble*P.b*neB*(0.05+depth*depth*0.95))+boost*0.5)*gA;   // back fades hard → sphere from depth
+        var neB=P.ne?1.3:1, a=Math.min(1,(assemble*P.b*neB*(0.03+depth*depth*1.12))+boost*0.5)*gA;   // front a touch clearer, back nearly gone
         if(a<=0.012) continue;
         var size=(P.s*(0.5+depth*0.6))+boost*1.6, rC,gC,bC;
         if(P.warm){ rC=184; gC=154; bC=90; }                                                              // #B89A5A — a few NE particles
@@ -499,10 +513,19 @@
       if(startMs){ var sc=Math.floor((Date.now()-startMs)/1000), tm=$("scanTimer"); if(tm) tm.textContent=Math.floor(sc/60)+":"+("0"+(sc%60)).slice(-2); }
       raf=requestAnimationFrame(frame);
     }
-    cv.addEventListener("pointerdown", function(e){ var r=cv.getBoundingClientRect(); ripples.push({x:(e.clientX-r.left)*(cv.clientWidth/r.width), y:(e.clientY-r.top)*(cv.clientHeight/r.height), age:0, life:1.0, speed:Math.min(cv.clientWidth,cv.clientHeight)*1.05}); });
+    // ---- drag to spin, release keeps momentum (a quick tap sends a ripple instead) ----
+    var lastX=0, lastY=0, lastMT=0, moved=0;
+    function onDown(e){ if(phase==="exit")return; dragging=true; moved=0; lastX=e.clientX; lastY=e.clientY; lastMT=performance.now(); velY=0; velX=0; try{cv.setPointerCapture(e.pointerId);}catch(_){ } }
+    function onMove(e){ if(!dragging)return; var now=performance.now(), mdt=Math.max(8,now-lastMT)/1000, dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; lastMT=now; moved+=Math.abs(dx)+Math.abs(dy);
+      spin-=dx*0.006; tilt=Math.max(0.12,Math.min(1.18,tilt+dy*0.006));
+      velY=Math.max(-3.2,Math.min(3.2,-dx*0.006/mdt)); velX=Math.max(-2.2,Math.min(2.2,dy*0.006/mdt)); }
+    function onUp(e){ if(!dragging)return; dragging=false; try{cv.releasePointerCapture(e.pointerId);}catch(_){ }
+      if(moved<5){ velY=0; velX=0; var r=cv.getBoundingClientRect(); ripples.push({x:(e.clientX-r.left)*(cv.clientWidth/r.width), y:(e.clientY-r.top)*(cv.clientHeight/r.height), age:0, life:1.0, speed:Math.min(cv.clientWidth,cv.clientHeight)*1.05}); } }
+    cv.addEventListener("pointerdown",onDown); cv.addEventListener("pointermove",onMove);
+    window.addEventListener("pointerup",onUp); cv.addEventListener("pointercancel",onUp);
     return {
-      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=tYr; heldT=0; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
-      exit:function(cb){ if(!raf){ if(cb)cb(); return; } rotY0=spin; exitCb=cb||null; phase="exit"; pt0=0; },
+      start:function(){ resize(); phase="intro"; pt0=0; lastTs=0; spin=tYr; tilt=baseTilt; velY=0; velX=0; dragging=false; heldT=0; startMs=Date.now(); ripples=[]; var tm=$("scanTimer"); if(tm)tm.textContent="0:00"; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); },
+      exit:function(cb){ if(!raf){ if(cb)cb(); return; } dragging=false; rotY0=spin; tilt0=tilt; exitCb=cb||null; phase="exit"; pt0=0; },
       stop:function(){ cancelAnimationFrame(raf); raf=null; phase="idle"; startMs=0; }
     };
   })();
