@@ -32,6 +32,7 @@
 
   #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
   #preview.show{display:block}
+  #preview.demo{position:fixed;inset:0;background:#05080f;z-index:50}   /* intro-preview demo: fill the viewport, no captured aerial behind the globe */
   /* leveling grid — fixed reference lines (4 across, 4 down) shown while Level is active */
   #levelGrid{position:absolute;inset:0;z-index:9;pointer-events:none;display:none;opacity:.7;mix-blend-mode:difference;
     background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
@@ -64,7 +65,12 @@
   @keyframes revScan{0%{top:-14%}100%{top:100%}}
   /* in-progress enhance: a Google-Earth drone pull-back into space (rotating globe), then a fast
      punch back in when it lands. "We're fixing our satellites." */
-  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:radial-gradient(circle at 50% 47%,#070b14 0%,#03050b 58%,#010104 100%)}
+  #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;
+    background:
+      radial-gradient(70% 60% at 26% 24%, rgba(48,70,132,.18) 0%, transparent 68%),
+      radial-gradient(62% 55% at 78% 72%, rgba(92,62,116,.14) 0%, transparent 72%),
+      radial-gradient(120% 95% at 50% 44%, rgba(60,88,156,.10) 0%, transparent 56%),
+      radial-gradient(circle at 50% 46%, #0e1930 0%, #0a1322 52%, #05080f 100%)}
   #scan.on{display:block}
   /* particle-globe canvas fills the scan overlay (stars behind, caption + timer on top).
      Intro: the overlay fades to black (aerial "captured"), then the canvas assembles the globe. */
@@ -73,16 +79,41 @@
   #pglobe{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;cursor:crosshair;touch-action:none}
   .scanTimer{position:absolute;right:13px;bottom:12px;z-index:3;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:700;
     color:#bcd4ff;letter-spacing:.06em;background:rgba(8,16,34,.5);border:1px solid rgba(120,170,255,.28);border-radius:8px;padding:4px 10px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
-  #scan .stars{position:absolute;inset:0;opacity:0;animation:starsIn 1.3s ease .25s forwards;
+  #scan .stars,#scan .stars2{position:absolute;inset:0;opacity:0;pointer-events:none;background-repeat:no-repeat}
+  #scan .stars{animation:starsIn 1.3s ease .25s forwards, twinkleA 6s ease-in-out 1.7s infinite;
     background-image:
-      radial-gradient(1.2px 1.2px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 68%,#cfe0ff,transparent),
-      radial-gradient(1.4px 1.4px at 46% 14%,#fff,transparent),radial-gradient(1px 1px at 62% 52%,#fff,transparent),
-      radial-gradient(1.2px 1.2px at 78% 28%,#dbe8ff,transparent),radial-gradient(1px 1px at 88% 74%,#fff,transparent),
-      radial-gradient(1px 1px at 8% 84%,#fff,transparent),radial-gradient(1.3px 1.3px at 36% 88%,#fff,transparent),
-      radial-gradient(1px 1px at 70% 82%,#cfe0ff,transparent),radial-gradient(1.2px 1.2px at 54% 34%,#fff,transparent),
-      radial-gradient(1px 1px at 20% 46%,#fff,transparent),radial-gradient(1px 1px at 94% 44%,#fff,transparent)}
-  @keyframes starsIn{to{opacity:.28}}
+      radial-gradient(1.5px 1.5px at 12% 22%,#fff,transparent),radial-gradient(1.3px 1.3px at 28% 68%,#cfe0ff,transparent),
+      radial-gradient(1.7px 1.7px at 46% 14%,#fff,transparent),radial-gradient(1.3px 1.3px at 62% 52%,#fff,transparent),
+      radial-gradient(1.6px 1.6px at 78% 28%,#dbe8ff,transparent),radial-gradient(1.3px 1.3px at 88% 74%,#fff,transparent),
+      radial-gradient(1.3px 1.3px at 8% 84%,#fff,transparent),radial-gradient(1.6px 1.6px at 36% 88%,#fff,transparent),
+      radial-gradient(1.4px 1.4px at 70% 82%,#cfe0ff,transparent),radial-gradient(1.5px 1.5px at 54% 34%,#fff,transparent),
+      radial-gradient(1.3px 1.3px at 20% 46%,#fff,transparent),radial-gradient(1.3px 1.3px at 94% 44%,#fff,transparent),
+      radial-gradient(1.6px 1.6px at 40% 62%,#fff,transparent),radial-gradient(1.4px 1.4px at 84% 46%,#dbe8ff,transparent),
+      radial-gradient(1.3px 1.3px at 6% 34%,#fff,transparent),radial-gradient(1.5px 1.5px at 66% 20%,#fff,transparent),
+      radial-gradient(1.4px 1.4px at 50% 8%,#cfe0ff,transparent),radial-gradient(1.4px 1.4px at 32% 40%,#fff,transparent)}
+  #scan .stars2{animation:starsIn2 1.7s ease .45s forwards, twinkleB 8s ease-in-out 2.4s infinite;
+    background-image:
+      radial-gradient(1px 1px at 18% 12%,#bcd0ff,transparent),radial-gradient(1px 1px at 34% 78%,#fff,transparent),
+      radial-gradient(1px 1px at 52% 24%,#fff,transparent),radial-gradient(1px 1px at 72% 60%,#bcd0ff,transparent),
+      radial-gradient(1px 1px at 84% 18%,#fff,transparent),radial-gradient(1px 1px at 92% 84%,#fff,transparent),
+      radial-gradient(1px 1px at 14% 58%,#fff,transparent),radial-gradient(1px 1px at 44% 92%,#bcd0ff,transparent),
+      radial-gradient(1px 1px at 60% 88%,#fff,transparent),radial-gradient(1px 1px at 26% 34%,#fff,transparent),
+      radial-gradient(1px 1px at 4% 70%,#fff,transparent),radial-gradient(1px 1px at 98% 56%,#bcd0ff,transparent),
+      radial-gradient(1px 1px at 38% 6%,#fff,transparent),radial-gradient(1px 1px at 76% 40%,#fff,transparent),
+      radial-gradient(1px 1px at 58% 66%,#fff,transparent),radial-gradient(1px 1px at 22% 90%,#fff,transparent)}
+  @keyframes starsIn{to{opacity:.6}}
+  @keyframes starsIn2{to{opacity:.4}}
+  @keyframes twinkleA{0%,100%{opacity:.6}50%{opacity:.42}}
+  @keyframes twinkleB{0%,100%{opacity:.4;transform:translateY(0)}50%{opacity:.24;transform:translateY(-4px)}}
+  @media (prefers-reduced-motion:reduce){ #scan .stars,#scan .stars2{animation-iteration-count:1} }
   /* (globe is now drawn on #pglobe canvas — see the JS particle-globe module) */
+  #introDemo{position:fixed;left:14px;bottom:14px;z-index:60;display:none;align-items:center;gap:7px;
+    height:36px;padding:0 15px;border-radius:9px;border:1px solid rgba(120,170,255,.30);
+    background:rgba(10,18,36,.72);color:#cfe0ff;font:600 12.5px/1 inherit;letter-spacing:.03em;cursor:pointer;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 6px 20px -10px rgba(0,0,0,.7);transition:border-color .14s,background .14s}
+  #introDemo.show{display:inline-flex}
+  #introDemo:hover{border-color:rgba(150,190,255,.55);background:rgba(14,24,46,.86)}
+  #introDemo svg{width:14px;height:14px;fill:currentColor;flex:none}
   #scan .cap{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#eaf1ff;font-size:14px;font-weight:700;letter-spacing:.04em;text-shadow:0 1px 10px rgba(0,0,0,.7);z-index:2}
   #scan .cap b{display:inline-block;min-width:16px;text-align:left}
   .pvbar{position:absolute;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:9}
@@ -192,12 +223,19 @@
       <div id="cmpHandle"><span class="grip"><svg viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
       <div id="scan">
         <div class="stars"></div>
+        <div class="stars2"></div>
         <canvas id="pglobe"></canvas>
         <div class="cap">We&rsquo;re fixing our satellites<b id="scanDots">…</b></div>
         <div id="scanTimer" class="scanTimer">0:00</div>
       </div>
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
     </div>
+    <!-- Demo control: replay the enhance intro on its own. Only shown on the standalone page (never inside the survey embed). -->
+    <button id="introDemo" type="button" title="Preview the enhance intro">
+      <svg class="pI" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg class="pX" viewBox="0 0 24 24" hidden><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <span>Preview intro</span>
+    </button>
 
     <!-- floating toolbar over the aerial: Level · Crop · Enhance · Download · Done -->
     <div class="tbar" id="tbar">
@@ -557,6 +595,20 @@
   function scanOn(on){ var s=$("scan");
     if(on){ s.classList.add("on"); startDots(); if(Globe) Globe.start(); }
     else { s.classList.remove("on"); clearInterval(scanTimer); scanTimer=null; if(Globe) Globe.stop(); } }
+  // Standalone demo control: replay the enhance intro (globe loader) on its own, no capture/API needed.
+  // Shown ONLY on the top-level page — never inside the survey iframe, so customers never see it.
+  (function(){ var b=$("introDemo"); if(!b) return;
+    var standalone = false; try{ standalone = window.self===window.top; }catch(_){ standalone=false; }
+    if(!standalone) return;
+    b.classList.add("show"); var playing=false;
+    function sync(){ b.querySelector(".pI").hidden=playing; b.querySelector(".pX").hidden=!playing; b.querySelector("span").textContent=playing?"Close intro":"Preview intro"; }
+    b.addEventListener("click", function(){
+      var pv=$("preview");
+      if(playing){ scanOn(false); pv.classList.remove("show","demo"); }
+      else { pv.classList.add("show","demo"); scanOn(true); }
+      playing=!playing; sync();
+    });
+  })();
   // Exit — rotate to the NE-US / New York region and zoom in, then reveal the enhanced aerial.
   function scanExit(cb){ var s=$("scan"); if(!s.classList.contains("on")){ if(cb)cb(); return; }
     var fin=function(){ s.classList.remove("on"); clearInterval(scanTimer); scanTimer=null; if(cb)cb(); };
