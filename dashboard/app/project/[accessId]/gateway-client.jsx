@@ -2238,7 +2238,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal}
+                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has || surveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
                     onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }} />

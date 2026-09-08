@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import SignaturePanel from "./signature-panel";
 import SurveyDevices from "./survey-devices";
+import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
@@ -9,8 +10,13 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false }) {
   const readOnly = view === "customer" || customerView;
+  // Build gate — the empty survey editor is a big surface; staff see a Build button first (matching
+  // the Mockup), so a skipped survey isn't an eyesore and Consulting reads as building the system. A
+  // survey that already has content — and the read-only customer view — open the editor straight away.
+  const [built, setBuilt] = useState(false);
+  const showEditor = readOnly || hasData || built;
   const [floorCount, setFloorCount] = useState(null);
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
@@ -118,7 +124,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           {readOnly ? "Customer view" : "Live survey editor"}
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
-        {fs ? (
+        {showEditor && (fs ? (
           <button className="ss-embed-open ss-embed-close" onClick={() => setFs(false)}>
             ✕ Exit
           </button>
@@ -126,9 +132,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           <button className="ss-embed-open" onClick={() => setFs(true)}>
             ⛶ Full screen
           </button>
-        )}
+        ))}
       </div>
-      {synced ? (
+      {!showEditor ? (
+        <BuildGate onBuild={() => setBuilt(true)}
+          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg>}
+          hint="Lay out where the cameras go on the floor plan. Skip it if this job doesn’t need a survey." />
+      ) : synced ? (
         <iframe
           key={src}
           ref={frameRef}

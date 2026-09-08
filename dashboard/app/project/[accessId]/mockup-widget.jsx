@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import SignaturePanel from "./signature-panel";
 import ToolComments from "./tool-comments";
+import BuildGate from "./build-gate";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
 // Embeds the full self-contained CCTV Mockup tool (public/widgets/cctv-mockup.html).
@@ -206,15 +207,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
       </div>
 
       {!showPhone ? (
-        // Build gate — no empty phone by default; tap Build to bring up the preview.
-        <div className="ss-embed-frame" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 190, padding: "34px 20px", textAlign: "center" }}>
-          <button type="button" onClick={() => setBuilt(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 9, height: 46, padding: "0 26px", border: "none", borderRadius: 11, background: "linear-gradient(180deg,#E8CB94,#C9A96E)", color: "#0B0F1A", fontSize: ".94rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 10px 26px -14px rgba(201,169,110,.9)" }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>
-            Build
-          </button>
-          <div style={{ fontSize: ".82rem", color: "var(--dv-meta,#787D84)", maxWidth: "34ch" }}>Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup.</div>
-        </div>
+        <BuildGate onBuild={() => setBuilt(true)}
+          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>}
+          hint="Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup." />
       ) : synced ? (
         <iframe
           ref={frameRef}
