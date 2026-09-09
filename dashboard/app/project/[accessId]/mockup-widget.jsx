@@ -166,9 +166,8 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
                 </>
               ) : (
                 (stat?.filled > 0) && (
-                  <button className="mk-btn" title="Clear all photos and names" onClick={() => setConfirmReset(true)}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
-                    Reset
+                  <button className="mk-btn mk-ico" title="Reset — clear all photos" aria-label="Reset" onClick={() => setConfirmReset(true)}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
                   </button>
                 )
               )}
@@ -179,11 +178,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           {/* Layout — EVERYONE gets the view-grid switcher; customers navigate the views (Single/2×2/
               3×3/4×4), staff also build. Only the photo-editing controls above stay staff-only. */}
           <div className="mk-layout">
-            <button className="mk-btn" aria-expanded={layoutOpen} title="Layout"
+            <button className="mk-btn mk-ico" aria-expanded={layoutOpen} title="Layout" aria-label="Layout"
               onClick={(e) => { e.stopPropagation(); setLayoutOpen((o) => !o); }}>
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7">{(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).icon}</svg>
-              {(LAYOUTS.find((l) => l.v === curView) || LAYOUTS[1]).label}
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ opacity: 0.55 }}><path d="M6 9l6 6 6-6" /></svg>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M12 4v16M4 12h16" /></svg>
             </button>
             {layoutOpen && (
               <div className="mk-layoutmenu" onClick={(e) => e.stopPropagation()}>
@@ -199,9 +196,13 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           </div>
 
           {fs ? (
-            <button className="ss-embed-open ss-embed-close" onClick={() => setFs(false)}>✕ Exit</button>
+            <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
           ) : (
-            <button className="ss-embed-open" onClick={() => setFs(true)}>⛶ Full screen</button>
+            <button className="mk-btn mk-ico" title="Fullscreen" aria-label="Fullscreen" onClick={() => setFs(true)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+            </button>
           )}
         </div>
       </div>

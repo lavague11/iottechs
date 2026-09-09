@@ -4534,10 +4534,15 @@ const PV_CSS = `
 .pvx .mk-count input{width:52px;height:30px;padding:0 6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.82rem;font-weight:700;font-family:inherit;outline:none}
 .pvx .mk-count input:focus{border-color:var(--gold)}
 .pvx .mk-fromsurvey{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid var(--gold);border-radius:8px;background:rgba(201,169,110,.1);color:var(--gold-deep,#8a6d2f);font-size:.72rem;font-weight:700;letter-spacing:.02em;white-space:nowrap}
-.pvx .mk-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .mk-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
 .pvx .mk-danger{border-color:#e0b0a8;background:#fdf0ef;color:#a8442f}
 .pvx .mk-danger:hover{background:#a8442f;border-color:#a8442f;color:#fff}
-.pvx .mk-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
+.pvx .mk-btn:hover{background:rgba(16,17,18,.05);border-color:var(--line);color:var(--ink)}
+/* Compact icon-only utility button — quiet by default (no fill/border), soft-gray on hover, matches the
+   internal-tool aesthetic. Used for Reset / Layout / Fullscreen (Upload keeps its label). */
+.pvx .mk-ico{width:34px;height:34px;padding:0;gap:0;justify-content:center;border-color:transparent;background:transparent;color:var(--muted)}
+.pvx .mk-ico:hover{background:rgba(16,17,18,.06);border-color:transparent;color:var(--ink)}
+.pvx .mk-ico:active,.pvx .mk-ico.on,.pvx .mk-ico[aria-expanded="true"]{background:rgba(16,17,18,.10);color:var(--ink)}
 .pvx .mk-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--bg-soft)}
 .pvx .mk-seg-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:26px;border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
 .pvx .mk-seg-btn:hover{color:var(--ink)}
