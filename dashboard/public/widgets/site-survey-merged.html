@@ -170,7 +170,7 @@
   .devNode .devDot svg{width:calc(var(--isz,40px)*.47);height:calc(var(--isz,40px)*.47);stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot,.devNode:hover .devDot,.devNode.hl .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
-  .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none}
+  .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;z-index:5;pointer-events:none}
   .devNode.aim .icLabel{pointer-events:auto;cursor:grab}
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* View photo — a real shot of what the camera sees, attached per device */
@@ -942,7 +942,8 @@
       var dot=el.querySelector(".devDot"); if(dot) dot.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
-      lab.textContent=d.tag;
+      lab.textContent=(d.name&&d.name.trim())||d.tag;   // label by NAME (matches the roster, mockup + walkthrough); tag only if unnamed
+      lab.title=lab.textContent;
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.left=cen+"px"; wrap.style.top=cen+"px"; wrap.style.transform="rotate("+d.aim+"deg)";
