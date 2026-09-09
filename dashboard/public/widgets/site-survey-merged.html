@@ -118,8 +118,11 @@
   .steps .s.done::before{content:"\2713  ";color:var(--gold)}
   .nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
   .floorTabs{display:flex;gap:6px;align-items:center;overflow-x:auto}
-  .ftab{flex:none;background:#fff;border:1px solid var(--line);border-radius:20px;padding:7px 13px;font-size:12px;color:var(--muted);cursor:pointer}
+  .ftab{flex:none;background:transparent;border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--muted);cursor:pointer}
+  .ftab:hover{background:rgba(16,17,18,.05)}
   .ftab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  /* "+" add-floor → compact circular icon-only, quiet */
+  .ftab.add{width:28px;height:28px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1;color:var(--muted)}
   .fnm-edit{width:88px;border:1px solid var(--gold);border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:12px;padding:2px 6px;outline:none}
   .ftab.add{color:var(--ink);font-weight:600}
   .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
@@ -212,7 +215,7 @@
   body.show-all-angles .devNode.aimed .fovWrap,body.show-fov .devNode.aimed .fovWrap{display:block}
   /* bottom-right "Show" control (Angles / FOV on-off) */
   .showCtl{position:absolute;right:14px;bottom:14px;z-index:7;display:none;flex-direction:column;align-items:flex-end;gap:8px}
-  .showBtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:1px solid var(--line);border-radius:99px;background:rgba(255,255,255,.92);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
+  .showBtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border:1px solid rgba(16,17,18,.10);border-radius:99px;background:rgba(255,255,255,.86);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 1px 4px rgba(16,17,18,.10);backdrop-filter:blur(4px)}
   .showBtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7}
   .showBtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .showPop{display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
