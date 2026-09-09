@@ -634,14 +634,14 @@ const CSS = `
 .cx-merged{display:flex;flex-direction:column;gap:26px}
 .cx-sec{display:flex;flex-direction:column}
 .cx-sec-h{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 2px 12px}
-.cx-sec-frame{position:relative;height:calc(100vh - 250px);min-height:480px;border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.cx-sec-frame{position:relative;height:calc(100vh - 250px);min-height:480px;border:1px solid rgba(16,17,18,.08);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
 .cx-sec-frame>*{flex:1;min-height:0}
 @media (max-width:760px){.cx-sec-frame{height:calc(100vh - 210px);min-height:440px;border-radius:12px}}
 /* The survey/mockup widget is a bare column (bar + iframe), not a card. Inside a frame it must fill
    flush — no inner 660px box, no inner radius, no gap — so the frame is the ONE rounded edge and the
    tool sits in it seamlessly. Its tag row becomes a proper flush header strip. */
 .cx-merged .cx-sec-frame .ss-embed{height:100%;gap:0;padding:0}
-.cx-merged .cx-sec-frame .ss-embed-bar{flex:0 0 auto;padding:13px 18px;border-bottom:1px solid var(--dv-line,#E4E4DF);margin:0;background:var(--dv-raise,#FBFBFA)}
+.cx-merged .cx-sec-frame .ss-embed-bar{flex:0 0 auto;padding:11px 16px;border-bottom:1px solid rgba(16,17,18,.06);margin:0;background:transparent}
 .cx-merged .cx-sec-frame .ss-embed-frame{flex:1 1 0;min-height:0;height:auto;border-radius:0;background:#fff}
 /* Full-length flow (proposal, approval, payment) = ONE seamless page. No section gap, no inner
    scrollbar, no outer card edge — the tools read as continuous content and the page is the only

@@ -111,10 +111,12 @@
 
   /* bottom wizard */
   .wiz{flex:none;background:#fff;border-top:1px solid var(--line)}
-  .steps{display:flex;padding:9px 16px 0}
-  .steps .s{flex:1;text-align:center;font-size:11px;color:var(--muted);padding-bottom:9px;border-bottom:2px solid var(--line);letter-spacing:.02em;cursor:pointer}
-  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--ink)}
-  .steps .s.done{color:var(--ink)}
+  /* Quiet progress indicator (not a heavy wizard): thin baseline, gold underline on the active step. */
+  .steps{display:flex;padding:8px 16px 0;gap:4px}
+  .steps .s{flex:1;text-align:center;font-size:10.5px;color:var(--muted);padding-bottom:8px;border-bottom:1.5px solid rgba(16,17,18,.08);letter-spacing:.03em;cursor:pointer;transition:color .12s,border-color .12s}
+  .steps .s:hover{color:var(--ink)}
+  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--gold)}
+  .steps .s.done{color:var(--soft,#6f7686)}
   .steps .s.done::before{content:"\2713  ";color:var(--gold)}
   .nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
   .floorTabs{display:flex;gap:6px;align-items:center;overflow-x:auto}
