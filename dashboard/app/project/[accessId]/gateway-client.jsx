@@ -18,7 +18,7 @@ import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
-import SystemVisualize   from "./system-visualize";
+import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -2259,33 +2259,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             ) },
         ];
-        // Customer: MERGE the consulting tools into one full-width page — Site Survey and Mockups
-        // stacked and always open, no click-to-expand. Each keeps its own inline Approve bar. Nothing
-        // to review yet → fall back to the grayed, non-clickable stub rows.
-        // Owner's flow: Mockup first (frame the shots / angles), THEN Site Survey — one order for every role.
-        const ordered = [all[1], all[0]];   // all = [Site Survey, Mockups]
-        if (cView === "customer") {
-          const showSurvey = svMetaEff.has, showMockup = mkMetaEff.has;
-          if (!showSurvey && !showMockup) {
-            return ordered.map((t) => ({ ...t, node: null }));
-          }
-          const csecs = [];
-          if (showMockup) csecs.push(["Mockups", all[1].node]);
-          if (showSurvey) csecs.push(["Site Survey", all[0].node]);
-          const merged = (
-            <div className="cx-merged">
-              {csecs.map(([h, node], k) => (
-                <section className="cx-sec" key={k}>
-                  {k > 0 && <div className="cx-sec-h">{h}</div>}
-                  {h === "Site Survey" ? <div className="cx-sec-frame"><ScrollActivate>{node}</ScrollActivate></div> : node}
-                </section>
-              ))}
-            </div>
-          );
-          return [{ name: "Consulting", label: "Consulting", wide: true, node: merged }];
+        // ONE unified workspace for every role — the System Planner. Two working modes, PLAN (the
+        // survey map, where cameras are created + named) | CAMERA VIEWS (the mockup grid, where each
+        // shot is attached/reviewed), plus a ▶ Walkthrough presentation. The survey + mockup tools are
+        // passed in as fully-wired nodes (their own Submit/Approve bars ride along), so the submission
+        // and approval flow is unchanged — the Planner only owns the mode switch and the walkthrough.
+        const surveyNode = all[0].node, viewsNode = all[1].node;
+        const hasSurvey = svMetaEff.has, hasViews = mkMetaEff.has;
+        const hasCams = (toolMeta?.survey?.cameras || 0) > 0;
+        // Customer with nothing to review yet → the grayed stub rows, not an empty workspace.
+        if (cView === "customer" && !hasSurvey && !hasViews) {
+          return [all[1], all[0]].map((t) => ({ ...t, node: null }));
         }
-        if (["admin", "manager"].includes(cView)) return mergedPage("Consulting", ordered) || ordered;
-        return ordered;
+        return [{ name: "Consulting", label: "Consulting", wide: true, node: (
+          <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
+            planNode={surveyNode} viewsNode={viewsNode}
+            hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams} />
+        ) }];
       }
       if (pk === "ph_proposal") {
         const tools = [];
@@ -2577,13 +2567,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         ) : undefined,
         tools: isComplete ? undefined : deckToolsFor(p.key),
-        // Guided walk of the whole consultation — a fly-through of the planned cameras (location + what
-        // each sees), folded in at the TOP of the Consulting page (not its own lifecycle step). The
-        // customer sees their preview; the office (admin/manager/sales) can play the same walkthrough.
-        // Only once cameras are placed.
-        intro: (p.key === "ph_survey" && ["customer", "admin", "manager", "sales"].includes(cView) && (toolMeta?.survey?.cameras || 0) > 0)
-          ? <SystemVisualize accessId={lp.access_id} />
-          : undefined,
+        // The Consulting walkthrough now lives INSIDE the System Planner (its ▶ Walkthrough action),
+        // so it's no longer a separate intro slot — one walkthrough entry, not two.
         advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
       };
     });
