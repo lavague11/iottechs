@@ -358,7 +358,14 @@ function focusCamera(i){
   else { const pv=S._prevView||4; setView(pv,false); S.page=Math.floor(i/pv); dir='out'; }
   rebuildCards();   // reposition instantly to the target view/page — NO horizontal slide…
   zoomAnim(dir);    // …then zoom into (or out of) it
+  // Broadcast the focused camera's cid so the host (System Planner) can select the same camera in the
+  // PLAN pane. On zoom-out (dir 'out') nothing is focused → cid null. Only user double-clicks reach here
+  // (the relay uses focusTo), so there's no echo loop.
+  try{ var c=SURVEY_CAMS[i]; parent.postMessage({ type:'iotMockupSelect', project:(new URLSearchParams(location.search).get('project')||'default'), cid:(dir==='in'&&c)?(c.id||null):null }, '*'); }catch(_e){}
 }
+// Focus a camera by index for the host relay — always zooms IN to single view (never toggles), and
+// posts nothing back (avoids a select↔focus loop).
+function focusTo(i){ if(i<0||i>=S.count) return; if(S.view!==1) S._prevView=S.view; setView(1,false); S.page=i; rebuildCards(); zoomAnim('in'); }
 function zoomAnim(dir){const cv=S._cv[S.page];if(!cv)return;const cls=dir==='in'?'zin':'zout';
   cv.classList.remove('zin','zout');void cv.offsetWidth;cv.classList.add(cls);
   cv.addEventListener('animationend',function(){cv.classList.remove(cls);},{once:true});}
@@ -732,6 +739,8 @@ rebuildCards();
       if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
     else if(m.cmd==='customerView'){ try{openCustomerView();}catch(_e){} }
     else if(m.cmd==='page'){ goPage(S.page+(+m.dir||0)); }
+    // Relay from the host: zoom into the camera with this cid (System Planner cross-mode selection).
+    else if(m.cmd==='focus'){ if(m.cid){ for(var fi=0;fi<SURVEY_CAMS.length;fi++){ if(SURVEY_CAMS[fi]&&SURVEY_CAMS[fi].id===m.cid){ focusTo(fi); break; } } } }
   });
 
   IOT_RO=RO;

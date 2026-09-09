@@ -974,7 +974,13 @@
         s1.setAttribute("stop-color",d.color); s1.setAttribute("stop-opacity",".08");
         line.style.left=ap+"px"; line.style.width=R+"px"; line.style.color=d.color; }
     }
-    function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); if(id!=null) growCone(id); }
+    var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
+    function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); if(id!=null) growCone(id);
+      // Broadcast the picked camera's cid so the host (System Planner) can focus the same camera in
+      // the CAMERA VIEWS pane. Only on genuine picks here — suppressed when we're applying a relay.
+      if(!_suppressSelPost){ var sd=byIdDev(id); try{ parent.postMessage({ type:"iotSurveySelect", project:PID, cid:(sd&&sd.cid)||null }, "*"); }catch(e){} }
+      _suppressSelPost=false;
+    }
     // replay the expand animation on the selected camera's cone
     function growCone(id){ if(!angleMode) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
       if(g){ g.classList.remove("grow"); void g.offsetWidth; g.classList.add("grow"); } }
@@ -1091,7 +1097,7 @@
         var isCur=fi===curFloor, list=isCur?devices:(f.devices||[]);
         return { name:f.name||("Floor "+(fi+1)), current:isCur, devices:list.map(function(d,di){
           var it=cat(d.k)||{};
-          return { id:isCur?d.id:null, floor:fi, di:di, k:d.k, kind:(it.name||d.k),
+          return { id:isCur?d.id:null, cid:d.cid||null, floor:fi, di:di, k:d.k, kind:(it.name||d.k),
                    tag:d.tag||"", name:d.name||"", cone:!!(isCur?d.cone:it.cone), fov:d.fov||it.fov||0,
                    color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed,
                    photo:d.photo||null, photoName:d.photoName||null, busy:!!d.photoBusy }; }) };
@@ -1125,6 +1131,8 @@
       if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
+      // Relay from the host: focus the camera with this cid (System Planner cross-mode selection).
+      if(m.cmd==="selectCid"){ var cd=null; for(var ci=0;ci<devices.length;ci++){ if(devices[ci].cid&&devices[ci].cid===m.cid){ cd=devices[ci]; break; } } if(cd){ if(curStep!==1) goStep(1); _suppressSelPost=true; select(cd.id); } return; }
       // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
       if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
       if(!d) return;

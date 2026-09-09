@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 
@@ -21,6 +21,26 @@ export default function SystemPlanner({
 }) {
   const [mode, setMode] = useState("plan");     // "plan" (survey) | "views" (camera mockups)
   const [walkOpen, setWalkOpen] = useState(false);
+  const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
+  const rootRef = useRef(null);
+
+  // The camera is ONE object across the two modes. Each iframe broadcasts the cid the user picked; we
+  // relay it to the OTHER iframe so the same camera is focused there — even while that pane is hidden,
+  // so switching modes lands on the same camera. The relay commands are applied silently (no echo),
+  // so there's no select↔focus loop.
+  useEffect(() => {
+    function onMsg(ev) {
+      const m = ev.data; if (!m || !m.type) return;
+      const post = (title, msg) => {
+        try { const fr = rootRef.current && rootRef.current.querySelector(`iframe[title="${title}"]`);
+          if (fr && fr.contentWindow) fr.contentWindow.postMessage(msg, "*"); } catch { /* iframe not ready */ }
+      };
+      if (m.type === "iotSurveySelect" && m.cid) { setSelectedCid(m.cid); post("CCTV Mockup", { type: "iotMockupCmd", cmd: "focus", cid: m.cid }); }
+      else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [accessId]);
 
   // Load the survey placements + view photos once, for the walkthrough (same shape SystemVisualize used).
   const [sv, setSv] = useState(null);
@@ -49,7 +69,7 @@ export default function SystemPlanner({
   const canWalk = hasCams || camCount > 0;
 
   return (
-    <div className="syp">
+    <div className="syp" ref={rootRef}>
       <style>{CSS}</style>
 
       <div className="syp-head">
@@ -76,7 +96,7 @@ export default function SystemPlanner({
       </div>
 
       {walkOpen && (
-        <SystemWalkthrough accessId={accessId} floors={floors} photos={photos} customerName={customerName}
+        <SystemWalkthrough accessId={accessId} floors={floors} photos={photos} focusCid={selectedCid} customerName={customerName}
           defaultFs onClose={() => setWalkOpen(false)} />
       )}
     </div>
