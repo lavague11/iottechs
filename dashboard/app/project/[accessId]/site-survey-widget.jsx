@@ -125,12 +125,12 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
         {showEditor && (fs ? (
-          <button className="ss-embed-open ss-embed-close" onClick={() => setFs(false)}>
-            ✕ Exit
+          <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         ) : (
-          <button className="ss-embed-open" onClick={() => setFs(true)}>
-            ⛶ Full screen
+          <button className="mk-btn mk-ico" title="Fullscreen" aria-label="Fullscreen" onClick={() => setFs(true)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
           </button>
         ))}
       </div>

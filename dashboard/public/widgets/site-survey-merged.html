@@ -123,8 +123,12 @@
   .fnm-edit{width:88px;border:1px solid var(--gold);border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:12px;padding:2px 6px;outline:none}
   .ftab.add{color:var(--ink);font-weight:600}
   .hint{flex:1;text-align:center;font-size:12px;color:var(--muted)}
-  button.b{border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff}
-  button.b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
+  /* Quiet internal-tool actions — no dark pills. Submit/Next read as simple text buttons on the right;
+     Back is understated. (Awaiting/Unsubmit keep a light status tint below.) */
+  button.b{border-radius:9px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid transparent;background:transparent;color:var(--ink);display:inline-flex;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
+  button.b:hover{background:rgba(16,17,18,.055)}
+  button.b.lite{background:transparent;color:var(--muted);border-color:transparent}
+  button.b.lite:hover{color:var(--ink);background:rgba(16,17,18,.055)}
   /* One submit control: Submit → Awaiting approval (green) → tap → Unsubmit? (red confirm) → tap → back to draft */
   button.b.awaiting{background:rgba(58,165,93,.12);color:#2a8a4e;border-color:rgba(58,165,93,.34);display:inline-flex;align-items:center;gap:6px}
   button.b.awaiting svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
