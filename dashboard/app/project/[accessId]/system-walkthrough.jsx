@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 // A cinematic, spatial walkthrough. The aerial SITE SURVEY is the stage; every planned camera is a
 // numbered marker on it. When a camera is picked (or the tour plays), that marker MORPHS open — it
@@ -11,7 +12,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 const norm = (s) => String(s || "").trim().toLowerCase();
 const EASE = "cubic-bezier(.22,1,.36,1)";
 
-export default function SystemWalkthrough({ floors = [], photos = [], focusCid = null, customerName = "" }) {
+export default function SystemWalkthrough({ floors = [], photos = [], focusCid = null, customerName = "", defaultFs = false, onClose = null }) {
   const stops = useMemo(() => {
     const out = [];
     floors.forEach((f, fi) => (f.cams || []).forEach((cam, ci) => out.push({ fi, floor: f, cam, ci })));
@@ -26,7 +27,9 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
   const [mode, setMode] = useState("map");        // "map" (survey) | "cam" (a camera expanded)
   const [expanded, setExpanded] = useState(false); // morph expanded (drives the CSS)
   const [playing, setPlaying] = useState(false);
-  const [fs, setFs] = useState(false);
+  const [fs, setFs] = useState(!!defaultFs);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [commentOpen, setCommentOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [notes, setNotes] = useState({});          // key → note text
@@ -99,14 +102,14 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
 
   const camActive = mode === "cam";
 
-  return (
+  const tree = (
     <div className={`swk2${fs ? " fs" : ""}`}>
       <style>{CSS}</style>
 
       {fs && (
         <div className="swk2-fsbar">
           <span className="swk2-fsttl">Walkthrough{customerName ? ` · ${customerName}` : ""}</span>
-          <button className="swk2-ico" title="Close" aria-label="Close walkthrough" onClick={() => { setPlaying(false); setFs(false); }}>
+          <button className="swk2-ico" title="Close" aria-label="Close walkthrough" onClick={() => { setPlaying(false); setFs(false); if (onClose) onClose(); }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
@@ -199,6 +202,9 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
       )}
     </div>
   );
+  // Fullscreen must escape any transformed/filtered ancestor (which would trap position:fixed),
+  // so we portal it to <body> — that makes "full screen" truly cover the whole viewport.
+  return fs && mounted ? createPortal(tree, document.body) : tree;
 }
 
 const CSS = `
