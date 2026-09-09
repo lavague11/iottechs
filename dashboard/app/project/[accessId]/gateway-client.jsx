@@ -2577,9 +2577,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         ) : undefined,
         tools: isComplete ? undefined : deckToolsFor(p.key),
-        // Customer preview of the whole consultation — a guided walk of the planned cameras, folded in
-        // at the TOP of the Consulting page (not its own lifecycle step). Only once cameras are placed.
-        intro: (p.key === "ph_survey" && cView === "customer" && (toolMeta?.survey?.cameras || 0) > 0)
+        // Guided walk of the whole consultation — a fly-through of the planned cameras (location + what
+        // each sees), folded in at the TOP of the Consulting page (not its own lifecycle step). The
+        // customer sees their preview; the office (admin/manager/sales) can play the same walkthrough.
+        // Only once cameras are placed.
+        intro: (p.key === "ph_survey" && ["customer", "admin", "manager", "sales"].includes(cView) && (toolMeta?.survey?.cameras || 0) > 0)
           ? <SystemVisualize accessId={lp.access_id} />
           : undefined,
         advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
