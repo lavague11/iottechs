@@ -16,7 +16,7 @@ const norm = (s) => String(s || "").trim().toLowerCase();
 
 export default function SystemPlanner({
   accessId, customerName = "",
-  planNode = null, viewsNode = null,
+  planNode = null, viewsNode = null, footer = null,
   hasSurvey = false, hasViews = false, hasCams = false,
 }) {
   const [mode, setMode] = useState("plan");     // "plan" (survey) | "views" (camera mockups)
@@ -95,6 +95,9 @@ export default function SystemPlanner({
         {viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>}
       </div>
 
+      {/* ONE submit surface — both tools' Submit/Approve, always visible under either mode. */}
+      {footer}
+
       {walkOpen && (
         <SystemWalkthrough accessId={accessId} floors={floors} photos={photos} focusCid={selectedCid} customerName={customerName}
           defaultFs onClose={() => setWalkOpen(false)} />
@@ -127,4 +130,11 @@ const CSS = `
 .syp .ss-embed-tag{display:none}
 .syp .ss-embed-bar{justify-content:flex-end;padding-bottom:8px}
 .syp-empty{text-align:center;padding:40px 16px;color:var(--dv-meta,#787D84);font-size:.86rem;border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px}
+/* One submit surface — both tools' Submit/Approve controls, always visible under either mode. */
+.syp-submit{margin-top:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:6px 16px;display:flex;flex-direction:column}
+.syp-submit-row{display:flex;align-items:center;gap:14px;padding:10px 0;flex-wrap:wrap}
+.syp-submit-row + .syp-submit-row{border-top:1px solid var(--dv-line,#E4E4DF)}
+.syp-submit-lbl{font-size:.8rem;font-weight:700;color:var(--dv-ink,#101418);min-width:96px;flex:0 0 auto}
+.syp-submit-row .tab-root{margin-top:0;flex:1 1 auto;border:none;background:transparent;padding:0}
+.syp-submit-row .tab-root.slim{padding:0;margin-top:0}
 `;

@@ -2224,7 +2224,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const svMetaEff = { ...svMeta, has: svMeta.has || surveyHasLocal };
         const mkMetaEff = { ...mkMeta, has: mkMeta.has || mockupHasLocal };
         const onApprove = (a) => setAcceptances(a);
-        const barWrap = { padding: "10px 14px", borderTop: "1px solid var(--dv-line,#E4E4DF)", flex: "0 0 auto", background: "var(--dv-raise,#FBFBFA)" };
         const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
         const all = [
           // Scheduling moved to the contact action bar + the header chip (openSchedule) — no tool card.
@@ -2239,11 +2238,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
                     onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }} />
                 </div>
-                {/* Staff submit lives inside the tool nav now; the customer gets the same Approve bar the mockup has. */}
-                {cView === "customer" && (
-                  <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
-                    acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
-                )}
+                {/* Submit / Approve moved to the ONE Planner footer (both tools together). */}
               </div>
             ) },
           { name: "Mockups", label: "Mockup generator", heavy: false,
@@ -2254,8 +2249,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div>
                 <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                   customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
-                <div style={barWrap}><ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
-                  acceptance={acceptances.mockup} submission={acceptances.submit_mockup} role={cView} preview={!!previewRole} onChange={onApprove} /></div>
+                {/* Submit / Approve moved to the ONE Planner footer (both tools together). */}
               </div>
             ) },
         ];
@@ -2267,13 +2261,37 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const surveyNode = all[0].node, viewsNode = all[1].node;
         const hasSurvey = svMetaEff.has, hasViews = mkMetaEff.has;
         const hasCams = (toolMeta?.survey?.cameras || 0) > 0;
+        // ONE submit surface: both tools' Submit/Approve controls live together in the Planner footer,
+        // always visible regardless of the active mode — so you never hunt for "submit survey" in Plans
+        // and "approve mockup" in Views. Still two independently fingerprinted artifacts, each flushing
+        // its own draft before submit (surveySatisfied stays the single gate).
+        const footerNode = (hasSurvey || hasViews) ? (
+          <div className="syp-submit">
+            {hasSurvey && (
+              <div className="syp-submit-row">
+                <span className="syp-submit-lbl">Site survey</span>
+                <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
+                  acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey}
+                  role={cView} preview={!!previewRole} onChange={onApprove} />
+              </div>
+            )}
+            {hasViews && (
+              <div className="syp-submit-row">
+                <span className="syp-submit-lbl">Camera views</span>
+                <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
+                  acceptance={acceptances.mockup} submission={acceptances.submit_mockup}
+                  role={cView} preview={!!previewRole} onChange={onApprove} />
+              </div>
+            )}
+          </div>
+        ) : null;
         // Customer with nothing to review yet → the grayed stub rows, not an empty workspace.
         if (cView === "customer" && !hasSurvey && !hasViews) {
           return [all[1], all[0]].map((t) => ({ ...t, node: null }));
         }
         return [{ name: "Consulting", label: "Consulting", wide: true, node: (
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
-            planNode={surveyNode} viewsNode={viewsNode}
+            planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
             hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams} />
         ) }];
       }
