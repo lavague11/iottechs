@@ -134,7 +134,7 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
     }
     const bare = !current && !submittedStale;   // just a button → no card chrome
     return (
-      <div className={`tab-root${current ? " ok" : bare ? " slim" : ""}`}>
+      <div className={`tab-root office${current ? " ok" : bare ? " slim" : ""}`}>
         {body}
         {err && <div className="tab-err">{err}</div>}
         {preview && <div className="tab-preview">Submitting is disabled in preview.</div>}
@@ -263,6 +263,10 @@ const TAB_CSS = `
 .tab-root.slim .tab-btn.ghost{height:auto;padding:0;border:none;background:transparent;color:var(--dv-meta,#787D84);font-weight:500;font-size:.78rem;text-decoration:underline;text-underline-offset:2px}
 .tab-root.slim .tab-btn.ghost:hover{transform:none;color:var(--dv-red,#C4553D)}
 .tab-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+/* Office submit control sits on the RIGHT (matches the survey's in-nav Submit button); any status
+   message keeps to the left. */
+.tab-root.office .tab-row{justify-content:flex-end}
+.tab-root.office .tab-msg{margin-right:auto}
 .tab-check{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-green,#2E7D5B);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
 .tab-warn{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--dv-gold,#C9A96E);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
 .tab-dot{width:9px;height:9px;flex-shrink:0;border-radius:50%;border:2px solid var(--dv-gold,#C9A96E)}
