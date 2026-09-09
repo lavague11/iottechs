@@ -121,5 +121,10 @@ const CSS = `
 .syp-plan .ss-tool-col,.syp-plan .ss-tool-body{height:auto!important;display:block!important;min-height:0}
 .syp-plan .ss-embed{display:flex;flex-direction:column;height:auto}
 .syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(58vh,520px);min-height:340px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
+/* One workspace, not stacked tools: the header's Plans/Views tabs already name the mode, so drop each
+   widget's redundant descriptive tag ("Live survey editor · N floors" / the empty mockup tag) and keep
+   only the functional controls (fullscreen, etc.) pinned to the right of a slim bar. */
+.syp .ss-embed-tag{display:none}
+.syp .ss-embed-bar{justify-content:flex-end;padding-bottom:8px}
 .syp-empty{text-align:center;padding:40px 16px;color:var(--dv-meta,#787D84);font-size:.86rem;border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px}
 `;
