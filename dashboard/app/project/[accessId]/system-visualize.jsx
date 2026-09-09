@@ -3,11 +3,11 @@ import { useState, useEffect, useMemo } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 
-// The customer-facing "Visualize" deck step: a guided walk through the planned system before any
-// pricing. Self-contained — loads the survey2 (camera placements + headings) and mockup (what each
-// camera sees) data itself and hands it to SystemWalkthrough. Read-only. Renders a calm placeholder
-// if there is nothing to show yet (the step itself is only surfaced once cameras are placed).
-export default function SystemVisualize({ accessId }) {
+// The "Visualize" deck step: a guided, cinematic walk through the planned system before any pricing.
+// The aerial site survey is the stage; each camera marker morphs open into what that camera sees.
+// Self-contained — loads survey2 (placements + headings) + mockup (what each camera sees). Read-only.
+// Calm placeholder until cameras exist.
+export default function SystemVisualize({ accessId, customerName = "" }) {
   const [sv, setSv] = useState(null);
   const [mk, setMk] = useState(null);
   const [busy, setBusy] = useState(true);
@@ -48,7 +48,7 @@ export default function SystemVisualize({ accessId }) {
       {busy
         ? <div className="svz-note">Loading your visualization…</div>
         : hasCams
-          ? <SystemWalkthrough floors={floors} photos={photos} />
+          ? <SystemWalkthrough floors={floors} photos={photos} customerName={customerName} />
           : <div className="svz-note">Your system visualization will appear here once your cameras are placed.</div>}
     </div>
   );
