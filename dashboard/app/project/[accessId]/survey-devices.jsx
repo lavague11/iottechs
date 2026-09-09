@@ -151,7 +151,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                         onMouseEnter={() => cmd({ cmd: "hover", id: d.id })}
                         onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
                         <div className="sd-r1">
-                          <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{(d.tag || "").replace(/^I/, "") || (i + 1)}</span>
+                          <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{d.tag || (i + 1)}</span>
                           {locked
                             ? <span className="sd-nm sd-nm-static">{label(d, i)}</span>
                             : <input key={d.name} className="sd-nm" defaultValue={d.name} spellCheck={false}

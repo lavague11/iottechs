@@ -986,7 +986,7 @@
       card.addEventListener("mouseleave", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.remove("hl"); });
       var showFov=(angleMode && d.cone);
       var CAMSVG='<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>';
-      card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+d.tag.replace(/^I/,'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
+      card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+(d.tag||'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
         (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'')+
         (d.photoBusy
           ? '<div class="pv"><button class="pvAdd" type="button" disabled>'+CAMSVG+'Adding photo…</button></div>'
