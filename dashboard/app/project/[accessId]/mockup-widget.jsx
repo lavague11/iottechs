@@ -127,8 +127,12 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       <div className="ss-embed-bar">
         <span className="ss-embed-tag">
+          {/* Inside the System Planner (embedded) the header already names the mode + owns the camera
+              count — so drop the "Mockup builder · 6/4 cameras" tag here (that bare grid-slot fraction
+              could exceed the survey roster and read as "6 of 4"). The roster-sourced "From survey · N"
+              below is the single count. Standalone usage keeps the descriptive tag. */}
           {!embedded && (readOnly ? "Customer view — camera mockups" : "Mockup builder")}
-          {stat && <>{!embedded && " · "}{stat.filled}/{stat.count} cameras</>}
+          {stat && !embedded && <> · {stat.filled}/{stat.count} cameras</>}
         </span>
 
         <div className="mk-controls">
