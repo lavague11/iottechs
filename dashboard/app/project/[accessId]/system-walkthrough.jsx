@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { addToolNoteAction } from "./proposal-actions";
 
 // A cinematic, spatial walkthrough. The aerial SITE SURVEY is the stage; every planned camera is a
 // numbered marker on it. When a camera is picked (or the tour plays), that marker MORPHS open — it
@@ -12,7 +13,7 @@ import { createPortal } from "react-dom";
 const norm = (s) => String(s || "").trim().toLowerCase();
 const EASE = "cubic-bezier(.22,1,.36,1)";
 
-export default function SystemWalkthrough({ floors = [], photos = [], focusCid = null, customerName = "", defaultFs = false, onClose = null }) {
+export default function SystemWalkthrough({ accessId = "", floors = [], photos = [], focusCid = null, customerName = "", defaultFs = false, onClose = null }) {
   const stops = useMemo(() => {
     const out = [];
     floors.forEach((f, fi) => (f.cams || []).forEach((cam, ci) => out.push({ fi, floor: f, cam, ci })));
@@ -32,8 +33,8 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
   useEffect(() => { setMounted(true); }, []);
   const [commentOpen, setCommentOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [notes, setNotes] = useState({});          // key → note text
-  const [approved, setApproved] = useState({});     // key → true
+  const [notes, setNotes] = useState({});          // key → note text (persisted to the real comment channel)
+  const [saving, setSaving] = useState(false);
 
   const modeRef = useRef("map");
   const tokRef = useRef(0);
@@ -97,8 +98,17 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
   const next = () => { if (idx < total - 1) { setPlaying(false); show(idx + 1); } };
   const prev = () => { if (idx > 0) { setPlaying(false); show(idx - 1); } };
   const togglePlay = () => { if (playing) { setPlaying(false); return; } if (mode === "map") show(idx); setPlaying(true); };
-  const saveNote = () => { const v = draft.trim(); setNotes((n) => ({ ...n, [keyFor(cur)]: v })); setCommentOpen(false); };
-  const toggleApprove = () => setApproved((a) => ({ ...a, [keyFor(cur)]: !a[keyFor(cur)] }));
+  // A per-camera note is REAL feedback — persist it to the same comment channel the tools use, anchored
+  // by the camera's name (the existing convention), so staff actually see it on the mockup thread.
+  const saveNote = async () => {
+    const v = draft.trim(); if (!v) return;
+    const anchor = (cur.cam.name && cur.cam.name.trim()) || `Camera ${cur.ci + 1}`;
+    setNotes((n) => ({ ...n, [keyFor(cur)]: v })); setCommentOpen(false);
+    if (!accessId) return;
+    setSaving(true);
+    try { await addToolNoteAction(accessId, "mockup", anchor, v); } catch { /* keep the optimistic note */ }
+    setSaving(false);
+  };
 
   const camActive = mode === "cam";
 
@@ -124,14 +134,13 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
         {(f.cams || []).map((c, j) => {
           const active = j === cur.ci;
           const k = keyFor({ ...cur, cam: c, ci: j });
-          const noted = !!notes[k]; const ok = !!approved[k];
+          const noted = !!notes[k];
           return Number.isFinite(c.x) && Number.isFinite(c.y) ? (
             <button key={j} className={`swk2-mk${active ? " active" : ""}${camActive && active ? " hidden" : ""}`}
               style={{ left: `${c.x}%`, top: `${c.y}%` }} onClick={() => openCam(j === cur.ci ? idx : stops.findIndex((s) => s.fi === cur.fi && s.ci === j))}
               title={(c.name && c.name.trim()) || `Camera ${j + 1}`} aria-label={(c.name && c.name.trim()) || `Camera ${j + 1}`}>
               <span className="swk2-mk-n">{j + 1}</span>
-              {ok && <span className="swk2-mk-badge ok">✓</span>}
-              {!ok && noted && <span className="swk2-mk-badge note" />}
+              {noted && <span className="swk2-mk-badge note" />}
             </button>
           ) : null;
         })}
@@ -145,11 +154,7 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
           <div className={`swk2-caption${expanded ? " in" : ""}`}>
             <div className="swk2-eyebrow">Camera {idx + 1} of {total}</div>
             <div className="swk2-name">{nameFor(cur)}</div>
-            {(approved[keyFor(cur)] || notes[keyFor(cur)]) && (
-              <div className={`swk2-status ${approved[keyFor(cur)] ? "ok" : "note"}`}>
-                {approved[keyFor(cur)] ? "✓ Approved" : "✎ Change requested"}
-              </div>
-            )}
+            {notes[keyFor(cur)] && <div className="swk2-status note">✎ Change requested</div>}
           </div>
         </div>
 
@@ -162,7 +167,6 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
             <span className="swk2-sep" />
             <button className="swk2-ico" onClick={() => { setPlaying(false); hide(); }} title="Back to map" aria-label="Back to map"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 20l-5.5 2V6L9 4m0 16 6-2m-6 2V4m6 14 5.5 2V6L15 4m0 14V4m-6 0 6 2" /></svg></button>
             <button className={`swk2-ico${notes[keyFor(cur)] ? " marked" : ""}`} onClick={() => { setDraft(notes[keyFor(cur)] || ""); setCommentOpen((v) => !v); setPlaying(false); }} title="Leave a note" aria-label="Leave a note"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></button>
-            <button className={`swk2-ico approve${approved[keyFor(cur)] ? " on" : ""}`} onClick={toggleApprove} title={approved[keyFor(cur)] ? "Approved" : "Approve"} aria-label="Approve"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></button>
             {!fs && <button className="swk2-ico" onClick={() => setFs(true)} title="Fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg></button>}
           </div>
         )}
@@ -176,7 +180,7 @@ export default function SystemWalkthrough({ floors = [], photos = [], focusCid =
                 placeholder="Tell us what you'd like adjusted… e.g. raise the angle · more driveway · less of the fence" />
               <div className="swk2-note-act">
                 <button className="swk2-btn ghost" onClick={() => setCommentOpen(false)}>Cancel</button>
-                <button className="swk2-btn primary" disabled={!draft.trim()} onClick={saveNote}>Save note</button>
+                <button className="swk2-btn primary" disabled={!draft.trim() || saving} onClick={saveNote}>{saving ? "Saving…" : "Save note"}</button>
               </div>
             </div>
           </div>
@@ -231,7 +235,6 @@ const CSS = `
 .swk2-mk.hidden{opacity:0;pointer-events:none;transition:opacity .18s ease}
 .swk2-mk-n{position:relative;line-height:1}
 .swk2-mk-badge{position:absolute;right:-4px;top:-4px;width:14px;height:14px;border-radius:50%;border:1.5px solid #fff;font-size:.5rem;display:flex;align-items:center;justify-content:center;line-height:1}
-.swk2-mk-badge.ok{background:#2a7d5b;color:#fff}
 .swk2-mk-badge.note{background:var(--dv-gold,#C9A96E)}
 
 /* morph — the shared-element that grows from the marker into the camera view */
@@ -250,7 +253,6 @@ const CSS = `
 .swk2-eyebrow.gold{color:var(--dv-gold,#C9A96E)}
 .swk2-name{font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#fff;margin-top:4px;text-shadow:0 2px 20px rgba(0,0,0,.5)}
 .swk2-status{display:inline-block;margin-top:8px;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:100px}
-.swk2-status.ok{background:rgba(46,125,91,.24);color:#8fe3bf}
 .swk2-status.note{background:rgba(201,169,110,.24);color:#e6cfa0}
 
 /* controls */
@@ -261,7 +263,6 @@ const CSS = `
 .swk2-ico:hover:not(:disabled){background:rgba(255,255,255,.18)}
 .swk2-ico:disabled{opacity:.4;cursor:default}
 .swk2-ico.marked{color:var(--dv-gold,#C9A96E)}
-.swk2-ico.approve.on{background:#2a7d5b}
 .swk2-sep{width:1px;height:22px;background:rgba(255,255,255,.28);margin:0 4px}
 .swk2-fsbar .swk2-ico{color:#fff}.swk2-fsbar .swk2-ico:hover{background:rgba(255,255,255,.12)}
 

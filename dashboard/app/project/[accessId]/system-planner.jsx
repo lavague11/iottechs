@@ -54,8 +54,8 @@ export default function SystemPlanner({
 
       <div className="syp-head">
         <div className="syp-seg" role="tablist" aria-label="Planner mode">
-          <button role="tab" aria-selected={mode === "plan"} className={`syp-tab${mode === "plan" ? " on" : ""}`} onClick={() => setMode("plan")}>Plan</button>
-          <button role="tab" aria-selected={mode === "views"} className={`syp-tab${mode === "views" ? " on" : ""}`} onClick={() => setMode("views")}>Camera Views</button>
+          <button role="tab" aria-selected={mode === "plan"} className={`syp-tab${mode === "plan" ? " on" : ""}`} onClick={() => setMode("plan")}>Plans</button>
+          <button role="tab" aria-selected={mode === "views"} className={`syp-tab${mode === "views" ? " on" : ""}`} onClick={() => setMode("views")}>Views</button>
         </div>
         {canWalk && (
           <button className="syp-walk" onClick={() => setWalkOpen(true)}>
@@ -65,20 +65,18 @@ export default function SystemPlanner({
         )}
       </div>
 
-      {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. */}
-      <div className="syp-pane" hidden={mode !== "plan"}>
-        {planNode
-          ? <div className="syp-frame">{planNode}</div>
-          : <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
+      {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
+          flows as a document: the survey MAP gets its own bounded height, and the camera roster flows
+          BELOW it (the page scrolls) — never trapped inside a fixed frame that would clip the roster. */}
+      <div className="syp-pane syp-plan" hidden={mode !== "plan"}>
+        {planNode || <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
       </div>
       <div className="syp-pane" hidden={mode !== "views"}>
-        {viewsNode
-          ? viewsNode
-          : <div className="syp-empty">Camera views will appear here once photos are added.</div>}
+        {viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>}
       </div>
 
       {walkOpen && (
-        <SystemWalkthrough floors={floors} photos={photos} customerName={customerName}
+        <SystemWalkthrough accessId={accessId} floors={floors} photos={photos} customerName={customerName}
           defaultFs onClose={() => setWalkOpen(false)} />
       )}
     </div>
@@ -98,7 +96,10 @@ const CSS = `
 .syp-walk:hover{background:#fff;border-color:var(--dv-ink,#101418)}
 .syp-walk svg{margin-left:-1px}
 .syp-pane[hidden]{display:none!important}
-.syp-frame{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;overflow:hidden;height:min(72vh,720px);display:flex;flex-direction:column}
-.syp-frame>*{flex:1 1 auto;min-height:0}
+/* PLAN pane flows like a document — bound only the MAP, never the whole survey (which would clip the
+   camera roster below it). The survey node itself stays auto-height so the roster + comments flow. */
+.syp-plan .ss-tool-col,.syp-plan .ss-tool-body{height:auto!important;display:block!important;min-height:0}
+.syp-plan .ss-embed{display:flex;flex-direction:column;height:auto}
+.syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(58vh,520px);min-height:340px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
 .syp-empty{text-align:center;padding:40px 16px;color:var(--dv-meta,#787D84);font-size:.86rem;border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px}
 `;
