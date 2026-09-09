@@ -6,7 +6,7 @@ import { useState, useRef, useCallback } from "react";
 // postMessage (`iotSurveyCmd`): rename, FOV, delete, view photo, select-on-map, and Rapid Capture. The
 // current floor's devices are fully editable; other floors list read-only (tap to jump there). Photos
 // upload to /api/media (HEIC-safe) then attach to the device. Customers never see this (office tool).
-export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cmd }) {
+export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd }) {
   const [open, setOpen] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -102,7 +102,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
         <svg className={`sd-chev${open ? " on" : ""}`} viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
         <span className="sd-title">Survey devices</span>
         <span className="sd-count">{total} device{total !== 1 ? "s" : ""}</span>
-        {cams.some((d) => d.photo) && (
+        {locked && <span className="sd-locked" title="Unsubmit the survey to edit"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>Submitted</span>}
+        {!locked && cams.some((d) => d.photo) && (
           <span className={`sd-ai-all${aiAll ? " busy" : ""}`} role="button" tabIndex={0}
             title="Name every photographed camera from its photo"
             onClick={(e) => { e.stopPropagation(); if (!aiAll) { setOpen(true); nameAllCams(); } }}>
@@ -112,7 +113,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
             {aiAll ? `Naming… ${aiAll.done}/${aiAll.total}` : "Auto-name"}
           </span>
         )}
-        {cams.length > 0 && !inCapture && (
+        {!locked && cams.length > 0 && !inCapture && (
           <span className="sd-cap" role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); setOpen(true); setCapture(0); }}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
             Rapid capture
@@ -151,10 +152,12 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
                         onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
                         <div className="sd-r1">
                           <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{(d.tag || "").replace(/^I/, "") || (i + 1)}</span>
-                          <input key={d.name} className="sd-nm" defaultValue={d.name} spellCheck={false}
-                            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                            onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); }} />
-                          {d.k === "cam" && d.photo && (
+                          {locked
+                            ? <span className="sd-nm sd-nm-static">{label(d, i)}</span>
+                            : <input key={d.name} className="sd-nm" defaultValue={d.name} spellCheck={false}
+                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); }} />}
+                          {!locked && d.k === "cam" && d.photo && (
                             <button className="sd-ai" title="Auto-name from photo" disabled={aiIds.has(d.id) || !!aiAll}
                               onClick={() => nameOne(d, curDevices.map((x) => (x.name || "").trim()).filter(Boolean))}>
                               {aiIds.has(d.id)
@@ -162,27 +165,32 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
                                 : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z" /><path d="M18.5 13l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>}
                             </button>
                           )}
-                          {confirmDel === d.id ? (
+                          {!locked && (confirmDel === d.id ? (
                             <span className="sd-confirm">
                               <button className="sd-del yes" onClick={() => { cmd({ cmd: "delete", id: d.id }); setConfirmDel(null); }}>Delete</button>
                               <button className="sd-del no" onClick={() => setConfirmDel(null)}>×</button>
                             </span>
                           ) : (
                             <button className="sd-x" title="Delete device" onClick={() => setConfirmDel(d.id)}>×</button>
-                          )}
+                          ))}
                         </div>
                         {d.k === "cam" && (
                           <div className="sd-pv">
                             {d.busy || busyId === d.id ? (
                               <button className="sd-btn" disabled>Adding photo…</button>
                             ) : d.photo ? (
-                              <>
+                              // Submitted → the photo is view-only (tap to enlarge); no Replace/Remove until unsubmit.
+                              locked ? (
                                 <span className="sd-thumb" style={{ backgroundImage: `url(${d.photo})` }} onClick={() => setLightbox({ url: d.photo, name: label(d, i) })} />
-                                <button className="sd-btn" onClick={() => shoot(d.id, false)}>Replace</button>
-                                <button className="sd-btn sd-ghost" onClick={() => cmd({ cmd: "clearPhoto", id: d.id })}>Remove</button>
-                              </>
+                              ) : (
+                                <>
+                                  <span className="sd-thumb" style={{ backgroundImage: `url(${d.photo})` }} onClick={() => setLightbox({ url: d.photo, name: label(d, i) })} />
+                                  <button className="sd-btn" onClick={() => shoot(d.id, false)}>Replace</button>
+                                  <button className="sd-btn sd-ghost" onClick={() => cmd({ cmd: "clearPhoto", id: d.id })}>Remove</button>
+                                </>
+                              )
                             ) : (
-                              <button className="sd-btn" onClick={() => shoot(d.id, false)}>+ View photo</button>
+                              locked ? <span className="sd-nophoto">No photo</span> : <button className="sd-btn" onClick={() => shoot(d.id, false)}>+ View photo</button>
                             )}
                           </div>
                         )}
@@ -246,6 +254,9 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, cm
         .sd-chip:hover{filter:brightness(1.08);box-shadow:0 0 0 2px rgba(201,169,110,.4)}
         .sd-nm{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;padding:5px 7px;font-size:.82rem;font-weight:600;color:var(--ink,#1a1a1a);font-family:inherit;background:var(--bg-soft,#f5f2ea)}
         .sd-nm:focus{outline:none;border-color:var(--gold,#c9a96e);background:#fff}
+        .sd-nm-static{background:none;border-color:transparent;cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sd-locked{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;letter-spacing:.02em;color:var(--muted,#6f7686);background:var(--bg-soft,#f5f2ea);border:1px solid var(--line,#e6e2d9);border-radius:100px;padding:3px 9px;margin-left:auto}
+        .sd-nophoto{font-size:.74rem;color:var(--faint,#9a9280);font-style:italic}
         .sd-x{flex:none;border:0;background:none;cursor:pointer;color:var(--muted,#6f7686);padding:4px;border-radius:6px;font-size:18px;line-height:1;width:26px;height:26px}.sd-x:hover{color:#c0392b}
         .sd-confirm{display:flex;align-items:center;gap:4px}
         .sd-del{border:1px solid var(--line,#d9d4c8);border-radius:6px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 7px}

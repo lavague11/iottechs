@@ -316,6 +316,8 @@
 
   /* read-only (customer) view: hide editing, show the finished plan + cones */
   body.ro #addDeviceBtn,body.ro .devmenu,body.ro .utils{display:none}
+  /* Submitted → the map is view-only for staff too (Unsubmit to edit); hide the placement/angle/undo tools. */
+  body.frozen #addDeviceBtn,body.frozen #angleModeBtn,body.frozen .devmenu,body.frozen .utils{display:none}
   body.ro .wiz .nav .b,body.ro .wiz .floorTabs{display:none}
   body.ro #surveyWiz{display:none}   /* customer just reviews the plan to approve — no Background/Setup/Submit tabs or nav */
   body.ro .card .x,body.ro .card .fov input{display:none}
@@ -792,7 +794,7 @@
       document.getElementById("showFovTog").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
     })();
     // Undo: remove the last-placed device
-    var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(RO||!devices.length) return; removeDevice(devices[devices.length-1].id); });
+    var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; removeDevice(devices[devices.length-1].id); });
     // collapse / expand the SURVEY panel
     function applySideCollapsed(){ document.body.classList.toggle("side-collapsed", sideCollapsed); }
     document.getElementById("sideTgl").addEventListener("click", function(){ sideCollapsed=true; applySideCollapsed(); queueSave(); });
@@ -821,7 +823,7 @@
     work.addEventListener("pointerup", ptrGone, true);
     work.addEventListener("pointercancel", ptrGone, true);
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
-    function placeAt(cx,cy){ if(RO||!armedK) return; var r=document.getElementById("scene").getBoundingClientRect();
+    function placeAt(cx,cy){ if(frozen()||!armedK) return; var r=document.getElementById("scene").getBoundingClientRect();
       addDevice(armedK,(cx-r.left)/r.width*100,(cy-r.top)/r.height*100); devMenu.classList.remove("show"); }
     // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
     var loupeEl=null;
@@ -838,7 +840,7 @@
     // the crosshair. Mouse places immediately (precise cursor). A second finger (pinch) cancels it.
     var placing=false, placePt=null;
     work.addEventListener("pointerdown", function(e){
-      if(RO||!armedK||inChrome(e)) return;
+      if(frozen()||!armedK||inChrome(e)) return;
       if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }
       if(activePtrs.size>1){ placing=false; hideLoupe(); return; }
       placing=true; placePt={x:e.clientX,y:e.clientY};
@@ -865,7 +867,7 @@
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
-    work.addEventListener("pointerdown", function(e){ if(RO || !angleMode || selId==null) return;
+    work.addEventListener("pointerdown", function(e){ if(frozen() || !angleMode || selId==null) return;
       if(activePtrs.size>1) return;                                   // pinch-zoom in progress → don't re-aim
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
@@ -1013,7 +1015,7 @@
     function byIdDev(id){ for(var i=0;i<devices.length;i++){ if(devices[i].id===id) return devices[i]; } return null; }
     var photoInput=document.createElement("input"); photoInput.type="file"; photoInput.accept="image/*,.heic,.heif"; photoInput.style.display="none"; document.body.appendChild(photoInput);
     var photoTargetId=null;
-    function openPhotoPicker(id){ if(RO) return; photoTargetId=id; photoInput.value=""; photoInput.click(); }
+    function openPhotoPicker(id){ if(frozen()) return; photoTargetId=id; photoInput.value=""; photoInput.click(); }
     photoInput.addEventListener("change", function(){ var f=photoInput.files&&photoInput.files[0]; if(!f) return; var d=byIdDev(photoTargetId); if(!d) return; attachPhoto(d, f); });
     // Attach a view photo: convert + store server-side (HEIC-safe) and keep the returned URL; if that
     // fails (offline / not signed in), fall back to a client-downscaled data URL so it still works.
@@ -1117,6 +1119,7 @@
       // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
       if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
       if(!d) return;
+      if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
       if(m.cmd==="rename"){ d.name=cap(String(m.name||"").trim())||cap(cat(d.k).name); renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="delete"){ removeDevice(d.id); }
@@ -1223,7 +1226,14 @@
       if(curFloor>i) curFloor--; else if(wasCur) curFloor=Math.min(i, floors.length-1);
       loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
     }
-    function setStatus(){ var pill=document.querySelector(".pill"); if(!pill) return;
+    // A submitted survey is locked for editing (staff must Unsubmit to change it) — same as the customer's
+    // read-only view, but staff keep the Unsubmit control. frozen() gates every edit action below.
+    function frozen(){ return RO || submitted; }
+    function setStatus(){
+      var froze = submitted && !RO;                       // staff, submitted → lock the map's edit tools
+      document.body.classList.toggle("frozen", froze);
+      if(froze){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); }
+      var pill=document.querySelector(".pill"); if(!pill) return;
       var lbl, col;
       if(approved){ lbl="Approved"; col="#2a8a4e"; }
       else if(submitted){ lbl = RO ? "Awaiting approval" : "Submitted"; col="#3aa55d"; }   // customer sees it as awaiting THEIR approval
@@ -1254,7 +1264,7 @@
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(RO){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only: tap a photographed camera to view it
+      dot.addEventListener("pointerdown", function(e){ if(frozen()){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only / submitted: tap a photographed camera to view it (no drag)
         if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
@@ -1269,7 +1279,7 @@
         }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
-    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(RO||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
+    function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(frozen()||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
         function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); d.aimed=true; renderDevice(d); }
         function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); queueSave(); }

@@ -184,7 +184,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     </div>
     {/* The device roster lives OUTSIDE the tool now — below the map, never overlapping it. Hidden while
         the tool is full-screen (the overlay covers the page). */}
-    {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} cmd={cmd} />}
+    {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
     {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
     <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
     </>
