@@ -10,7 +10,8 @@ export default function BugsClient({ initial = [] }) {
   const [filter, setFilter] = useState("open");
   const [busy, setBusy] = useState(null);
   const [zoom, setZoom] = useState(null);
-  const [suggest, setSuggest] = useState({});   // id -> AI fix suggestion text
+  // Seed from the persisted fix_prompt so saved prompts show on load without regenerating.
+  const [suggest, setSuggest] = useState(() => Object.fromEntries(initial.filter((b) => b.fix_prompt).map((b) => [b.id, b.fix_prompt])));
   const [sugBusy, setSugBusy] = useState(null);
   const [fresh, setFresh] = useState(false);     // brief "updated" flash when the poll pulls new bugs
   const seenRef = useRef(new Set(initial.map((b) => b.id)));
@@ -24,6 +25,8 @@ export default function BugsClient({ initial = [] }) {
       const hasNew = r.bugs.some((b) => b.status === "open" && !seenRef.current.has(b.id));
       seenRef.current = new Set(r.bugs.map((b) => b.id));
       setBugs(r.bugs);
+      // Pull in any prompts saved elsewhere, without clobbering one just generated locally.
+      setSuggest((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.fix_prompt && !next[b.id]) next[b.id] = b.fix_prompt; }); return next; });
       if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
     };
     const t = setInterval(poll, 15000);
@@ -37,7 +40,7 @@ export default function BugsClient({ initial = [] }) {
     setSugBusy(b.id);
     const r = await fetch("/api/bug-suggest", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: b.description, path: b.path }),
+      body: JSON.stringify({ id: b.id, description: b.description, path: b.path }),
     }).then((x) => x.json()).catch(() => null);
     setSugBusy(null);
     if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));

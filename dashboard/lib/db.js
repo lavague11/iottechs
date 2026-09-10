@@ -783,6 +783,8 @@ function init() {
       resolved_by  TEXT
     )
   `);
+  const bugCols = db.prepare("PRAGMA table_info(bug_reports)").all().map((c) => c.name);
+  if (!bugCols.includes("fix_prompt")) db.exec("ALTER TABLE bug_reports ADD COLUMN fix_prompt TEXT");
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -5472,6 +5474,10 @@ export function resolveBugReport(id, on, by) {
   const r = db.prepare(
     `UPDATE bug_reports SET status=?, resolved_at=?, resolved_by=? WHERE id=?`
   ).run(on ? "resolved" : "open", on ? new Date().toISOString() : null, on ? (by || null) : null, +id);
+  return { ok: r.changes > 0 };
+}
+export function setBugFixPrompt(id, prompt) {
+  const r = db.prepare(`UPDATE bug_reports SET fix_prompt=? WHERE id=?`).run(String(prompt || "").slice(0, 4000), +id);
   return { ok: r.changes > 0 };
 }
 

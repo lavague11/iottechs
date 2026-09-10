@@ -1,4 +1,4 @@
-import { secretValue } from "../../../lib/db";
+import { secretValue, setBugFixPrompt } from "../../../lib/db";
 import { getSessionUser } from "../../../lib/session";
 
 // One-click "fix prompt": Claude Haiku rewrites a user's bug report into a crisp, self-contained task
@@ -17,12 +17,13 @@ export async function POST(request) {
   const desc = String(body?.description || "").trim();
   if (!desc) return Response.json({ error: "empty" }, { status: 400 });
   const path = String(body?.path || "").trim();
+  const id = body?.id;
 
   const prompt = `Rewrite this user's bug report into a clear, self-contained task prompt for a coding agent working on an internal web app (Next.js App Router + React, node:sqlite, a deck-style project UI).
 
 User report: "${desc}"${path ? `\nReported from the page: ${path}` : ""}
 
-State the PROBLEM precisely and unambiguously: what the buggy behavior is, where in the app it happens, and what the correct/expected behavior should be. Write it as a direct instruction that starts with "Fix this bug:". Do NOT propose solutions, do NOT list steps, and do NOT name files or components — only describe the problem so the agent can investigate and fix it. If a key detail is missing, note the one thing that would help. Output ONLY the prompt text, no preamble or quotes.`;
+State the PROBLEM precisely and unambiguously: what the buggy behavior is, where in the app it happens, and what the correct/expected behavior should be. Write it as a direct instruction that starts with "Fix this bug:". Do NOT propose solutions, do NOT list steps, and do NOT name files or components — only describe the problem so the agent can investigate and fix it. If a key detail is missing, note the one thing that would help. ALWAYS write the prompt in ENGLISH — if the report is in another language, translate it to English. Output ONLY the prompt text, no preamble or quotes.`;
 
   try {
     const upstream = await fetch(ANTHROPIC_URL, {
@@ -37,6 +38,7 @@ State the PROBLEM precisely and unambiguously: what the buggy behavior is, where
     }
     const j = await upstream.json();
     const out = (j?.content?.[0]?.text || "").trim();
+    if (out && id) { try { setBugFixPrompt(id, out); } catch { /* non-fatal — still return it */ } }
     return Response.json({ ok: true, suggestion: out });
   } catch (e) {
     console.error("bug-suggest error", e?.message);
