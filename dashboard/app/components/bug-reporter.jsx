@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import MicButton from "./mic-button";
+import IconButton from "./ui/icon-button";
 import ScreenshotAnnotator from "./screenshot-annotator";
 
 function dataURLtoFile(dataUrl, name) {
@@ -10,50 +11,70 @@ function dataURLtoFile(dataUrl, name) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new File([arr], name, { type: mime });
 }
+const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
 
-// Site-wide "Report a bug" button — mounted once in the root layout, so it sits at the bottom of every
-// page. Opens a small form: describe it + attach/paste a screenshot. Files to /api/bug-report; staff
-// resolve them at /bugs. The screenshot uploads through /api/media (staff), text always submits.
+// Site-wide "Report" button — mounted once in the root layout, so it sits at the bottom of every page.
+// Small form: describe it + capture/attach/paste a screenshot + dictate. Files to /api/bug-report;
+// staff resolve at /bugs. Capture uses native tab capture (includes iframes); the bug-report UI and
+// its blurred backdrop are removed from the DOM and given a real repaint BEFORE the frame is grabbed,
+// so the screenshot is the clean, sharp page — never the dimmed/blurred overlay.
 export default function BugReporter() {
   const [open, setOpen] = useState(false);
   const [desc, setDesc] = useState("");
-  const [img, setImg] = useState(null);        // { file, preview }
+  const [img, setImg] = useState(null);         // { file, preview } — flattened attachment
+  const [cleanShot, setCleanShot] = useState(null); // unannotated capture (data URL), for re-editing
+  const [shapes, setShapes] = useState([]);      // annotations on the current screenshot
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
-  const [shot, setShot] = useState(null);       // captured screenshot awaiting annotation (data URL)
+  const [shot, setShot] = useState(null);        // screenshot currently open in the editor
   const [capturing, setCapturing] = useState(false);
   const fileRef = useRef(null);
 
   function pickImage(file) {
     if (!file || !file.type?.startsWith("image/")) return;
+    setCleanShot(null); setShapes([]);
     setImg({ file, preview: URL.createObjectURL(file) });
   }
-  // Capture the current tab (native screen-capture — includes iframes), then annotate in red. The bug
-  // form is hidden during capture so it isn't in the shot.
+
+  // Capture the current tab (native — includes iframes). We acquire the stream first (the picker is
+  // browser chrome, not captured), THEN remove every piece of bug-report UI and wait two frames + a
+  // beat so the clean page is what the live stream is compositing, THEN grab a frame. No "hope the
+  // blur went away" timeout — the hide → repaint → grab order is deterministic.
   async function capture() {
-    if (!navigator.mediaDevices?.getDisplayMedia) { setErr("Screenshot isn't supported in this browser — attach or paste one instead."); return; }
-    setErr(null); setCapturing(true);
-    await new Promise((r) => setTimeout(r, 120));   // let the form hide before the grab
+    if (!navigator.mediaDevices?.getDisplayMedia) { setErr("Screenshot isn't supported here — attach or paste one instead."); return; }
+    setErr(null);
     let stream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" }, preferCurrentTab: true, audio: false });
-    } catch { setCapturing(false); return; }        // user cancelled the share prompt
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser", frameRate: 30 }, preferCurrentTab: true, audio: false });
+    } catch { return; }                            // user cancelled the picker
+    setCapturing(true);                            // adds .bugr-capturing → hides all bug UI + backdrop
     try {
       const video = document.createElement("video");
       video.srcObject = stream; video.muted = true; await video.play();
-      await new Promise((r) => setTimeout(r, 250));  // let a frame paint
+      await raf(); await raf();                     // let the hidden state composite into the stream
+      await new Promise((r) => setTimeout(r, 90));  // one settle beat for the compositor
       const cv = document.createElement("canvas");
       cv.width = video.videoWidth; cv.height = video.videoHeight;
       cv.getContext("2d").drawImage(video, 0, 0, cv.width, cv.height);
-      setShot(cv.toDataURL("image/png"));
+      const url = cv.toDataURL("image/png");
+      setCleanShot(url); setShapes([]); setShot(url);
     } catch { setErr("Couldn't capture the screen — try again."); }
     finally { stream.getTracks().forEach((t) => t.stop()); setCapturing(false); }
   }
-  function onAnnotated(dataUrl) {
+  function onAnnotated(dataUrl, nextShapes) {
     try { setImg({ file: dataURLtoFile(dataUrl, "bug-screenshot.png"), preview: dataUrl }); } catch { /* noop */ }
-    setShot(null);
+    setShapes(nextShapes || []); setShot(null);
   }
+  function removeImg() { setImg(null); setCleanShot(null); setShapes([]); }
+
+  // Toggle a root class while grabbing the frame so CSS removes the FAB, scrim and its blur from paint.
+  useEffect(() => {
+    const el = document.documentElement;
+    if (capturing) el.classList.add("bugr-capturing"); else el.classList.remove("bugr-capturing");
+    return () => el.classList.remove("bugr-capturing");
+  }, [capturing]);
+
   // Paste a screenshot straight from the clipboard while the form is open.
   useEffect(() => {
     if (!open) return;
@@ -87,57 +108,55 @@ export default function BugReporter() {
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setDone(true);
-    setTimeout(() => { setOpen(false); setDone(false); setDesc(""); setImg(null); }, 1400);
+    setTimeout(() => { setOpen(false); setDone(false); setDesc(""); removeImg(); }, 1400);
   }
 
   return (
     <>
-      <button className="bugr-fab" onClick={() => setOpen(true)} aria-label="Report a bug" title="Report a bug">
+      <button className="bugr-fab" onClick={() => setOpen(true)} aria-label="Report" title="Report">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
       </button>
 
       {open && (
         <div className="bugr-scrim" hidden={capturing || !!shot} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
-          <div className="bugr-card" role="dialog" aria-label="Report a bug">
+          <div className="bugr-card" role="dialog" aria-label="Report">
             {done ? (
               <div className="bugr-done">
                 <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                <span>Thanks — filed to the bug portal.</span>
+                <span>Filed to the portal.</span>
               </div>
             ) : (
               <>
                 <div className="bugr-head">
-                  <span className="bugr-title">Report a bug</span>
+                  <span className="bugr-title">Report</span>
                   <button className="bugr-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
                 </div>
                 <textarea className="bugr-in" autoFocus rows={4} value={desc} maxLength={4000}
-                  onChange={(e) => setDesc(e.target.value)} placeholder="What went wrong? What did you expect?" />
+                  onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
                 <div className="bugr-tools">
                   {img ? (
-                    <div className="bugr-thumb">
+                    <div className="bugr-thumb" onClick={() => cleanShot && setShot(cleanShot)} title={cleanShot ? "Edit markup" : undefined} style={{ cursor: cleanShot ? "pointer" : "default" }}>
                       <img src={img.preview} alt="attachment" />
-                      <button className="bugr-thumbx" onClick={() => setImg(null)} aria-label="Remove image">✕</button>
+                      <button className="bugr-thumbx" onClick={(e) => { e.stopPropagation(); removeImg(); }} aria-label="Remove">✕</button>
                     </div>
                   ) : (
-                    <>
-                      <button className="bugr-attach bugr-shot" onClick={capture} disabled={capturing} title="Screenshot this page and mark it up">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                        {capturing ? "Capturing…" : "Screenshot"}
-                      </button>
-                      <button className="bugr-attach" onClick={() => fileRef.current?.click()} title="Attach or paste an image">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-                        Attach
-                      </button>
-                    </>
+                    <div className="bugr-icons">
+                      <IconButton label="Capture" onClick={capture} disabled={capturing}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                      </IconButton>
+                      <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
+                      </IconButton>
+                      <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
+                    </div>
                   )}
-                  <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
                 </div>
                 {err && <div className="bugr-err">{err}</div>}
                 <div className="bugr-act">
                   <button className="bugr-ghost" onClick={() => setOpen(false)}>Cancel</button>
-                  <button className="bugr-send" disabled={busy || !desc.trim()} onClick={submit}>{busy ? "Sending…" : "Send report"}</button>
+                  <button className="bugr-send" disabled={busy || !desc.trim()} onClick={submit}>{busy ? "Sending…" : "Send"}</button>
                 </div>
               </>
             )}
@@ -145,7 +164,7 @@ export default function BugReporter() {
         </div>
       )}
 
-      {shot && <ScreenshotAnnotator shot={shot} onDone={onAnnotated} onCancel={() => setShot(null)} />}
+      {shot && <ScreenshotAnnotator shot={shot} initialShapes={shapes} onDone={onAnnotated} onCancel={() => setShot(null)} />}
 
       <style>{CSS}</style>
     </>
@@ -155,12 +174,13 @@ export default function BugReporter() {
 const CSS = `
 .bugr-fab{position:fixed;right:14px;bottom:14px;z-index:2147483000;display:inline-flex;align-items:center;justify-content:center;
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
-  background:#12151b;color:#f0a04b;cursor:pointer;
-  box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
+  background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
+/* during a capture, keep the page pristine — no bug UI, no dim, no blur baked into the frame */
+.bugr-capturing .bugr-fab,.bugr-capturing .bugr-scrim{visibility:hidden!important}
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:rgba(8,10,14,.5);backdrop-filter:blur(2px);
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
-.bugr-card{width:min(420px,94vw);background:#fff;color:#12151b;border-radius:16px;padding:16px;
+.bugr-card{width:min(400px,94vw);background:#fff;color:#12151b;border-radius:16px;padding:16px;
   box-shadow:0 24px 60px -12px rgba(0,0,0,.5);font-family:system-ui,-apple-system,Segoe UI,sans-serif;animation:bugrIn .18s ease}
 @keyframes bugrIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .bugr-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -169,20 +189,17 @@ const CSS = `
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
-.bugr-tools{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.bugr-attach{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;
-  border:1px dashed #cfd4db;background:#fff;color:#4a5058;font:600 .8rem/1 inherit;cursor:pointer}
-.bugr-attach:hover{border-color:#12151b;color:#12151b}
+.bugr-tools{display:flex;align-items:center;gap:8px;margin-top:10px;min-height:36px}
+.bugr-icons{display:flex;align-items:center;gap:2px;color:#4a5058}
 .bugr-mic{display:inline-flex;align-items:center;color:#4a5058}
-.bugr-hint{color:#9aa0a8;font-weight:500}
 .bugr-thumb{position:relative;display:inline-block}
-.bugr-thumb img{max-height:120px;max-width:100%;border-radius:10px;border:1px solid #e2e5ea;display:block}
+.bugr-thumb img{max-height:96px;max-width:100%;border-radius:10px;border:1px solid #e2e5ea;display:block}
 .bugr-thumbx{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:0;background:#12151b;color:#fff;cursor:pointer;font-size:.7rem}
 .bugr-err{margin-top:9px;font-size:.8rem;color:#c4553d;font-weight:600}
 .bugr-act{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .bugr-ghost{height:36px;padding:0 14px;border:1px solid #e2e5ea;border-radius:9px;background:#fff;color:#4a5058;font:600 .84rem/1 inherit;cursor:pointer}
-.bugr-send{height:36px;padding:0 18px;border:0;border-radius:9px;background:#12151b;color:#fff;font:700 .84rem/1 inherit;cursor:pointer}
+.bugr-send{height:36px;padding:0 20px;border:0;border-radius:9px;background:#12151b;color:#fff;font:700 .84rem/1 inherit;cursor:pointer}
 .bugr-send:disabled{opacity:.5;cursor:default}
 .bugr-done{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 10px;text-align:center;color:#2e7d5b;font-weight:700}
-@media (max-width:560px){ .bugr-scrim{align-items:flex-end;justify-content:center} .bugr-fab{height:32px} }
+@media (max-width:560px){ .bugr-scrim{align-items:flex-end;justify-content:center} }
 `;

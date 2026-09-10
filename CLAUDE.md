@@ -27,6 +27,38 @@ Derived from ~690 prompts of recurring corrections. Apply these BEFORE presentin
 
 Also: gate features on the EARLIEST valid signal (e.g., work order from *sent* proposal, not accepted); show "awaiting X" states instead of blocking. Every role always sees one clear next action per stage.
 
+## UI DESIGN CONSTITUTION
+
+The permanent, non-negotiable design standard for ALL UI — every screen, tool, modal, dashboard, form, admin page, and customer portal, current and future. Read and obey this BEFORE designing or changing any UI. Full reference: `dashboard/docs/DESIGN_SYSTEM.md` (read it before non-trivial UI work).
+
+**Assume the user is competent.** Do not explain obvious controls, narrate the interface, or add instructional copy. Communicate through hierarchy, position, familiar icons, state, spacing, typography, and context — not paragraphs.
+
+**The label ladder — the fundamental rule:** icon-only → one word (only if an icon would be unclear) → two words (only when one word is materially worse) → a sentence (only when the feature is genuinely incomprehensible without it, and 3+ words needs real justification). Never turn a button label into an instruction.
+- Icon-only for familiar actions: back/next (arrows), close (×), delete (trash), edit (pencil), upload/download, reset (rotate), fullscreen, layout (grid), search (magnifier), filter, more (•••), settings (gear), view (eye), play/pause, approve (check). Never `[icon] Fullscreen` when `[icon]` alone is clear.
+- One-word actions: Save, Send, Submit, Add, Edit, Delete, Share, Filter, Search, Export, Reset, Approve, Reject, Notes, Layout, Plan, Views, Replay, Assign, Pay, Print, Status, Next, Back, Close, Cancel. Not "Send report", "Attach a screenshot", "Continue to Proposal", "Add New Camera" → Send, [icon], Continue →, + Camera.
+
+**Icons:** inline SVG only — never emoji, Unicode, or mixed icon families. One consistent family, consistent stroke/viewBox/alignment. 16–18px in compact controls, 20–22px where more prominent.
+
+**Tooltips:** for icon-only controls where useful. Usually ONE word (Fullscreen, Reset, Layout, Markup, Notes). Never a tutorial sentence.
+
+**No redundant text:** never repeat what's already conveyed by the page/section title, an icon, selected state, the route, button placement, or a placeholder. A section whose content is self-explanatory (a table, a list) gets no subtitle.
+
+**Helper text — off by default.** Add it ONLY for: unusual input format, irreversible actions, legal meaning, security implications, or non-obvious validation. Otherwise delete it. Placeholders are short (Search, Email, "What happened?"), never sentences.
+
+**Structure:** cards only for a genuinely useful grouping — never cards inside cards. Borders sparingly (one subtle boundary, not box-in-box). Pills only for status/tags/compact filters — not every button. One clearly dominant task per screen; split multiple tasks into modes/tabs, don't show everything at once. Contextual controls appear only when relevant (markup tools in markup mode). Low-frequency actions live under •••. Progressive disclosure.
+
+**Buttons:** compact — icon 32–36px, text 34–40px, primary 38–44px; never default to 48–56px. Exactly one obvious primary action per view; secondary actions quiet; tertiary are text/icon only. Never five equally-prominent buttons in a row.
+
+**Copy:** headings are short nouns (Orders, Planner, Report), not "Manage Your Customer Orders". Subheadings only when they add info (3–8 words), never paragraphs. Empty states compact ("No orders", optional `+ Add`). Confirmations explain risk only when risk exists ("Delete camera?" / Cancel · Delete). Status values are terse (Pending, Ready, Paid, Sent, Draft, Done, Failed, Open, Closed). No robotic AI microcopy ("Let's get started", "You're all set!", "Manage everything in one place"). Nav and table headings are one word where possible.
+
+**Accessibility is not sacrificed:** icon-only controls still get an `aria-label`, keyboard focus, and a tooltip where helpful. Screen readers may get a descriptive name even when the visible UI stays minimal.
+
+**Enforce with primitives:** prefer the shared minimal primitives (e.g. `IconButton` in `dashboard/app/components/ui/`) so the restrained default is automatic — don't hand-roll verbose one-offs.
+
+**Copy-deletion pass — mandatory before shipping ANY UI.** For every heading/button/helper/placeholder/tooltip/empty-state/label: can this sentence disappear? can this label become one word? can this word become an icon? can this explanation become a one-word tooltip? If yes, do it. **Auto-reject and refactor** any design where: every icon has a text label, a button is 3+ words without strong reason, a familiar action has a sentence explaining it, instructional text sits above an obvious control, cards are needlessly nested, every section has a subtitle, every empty state has a paragraph, or it feels like onboarding software.
+
+Target: a quiet, sharp, fast, precise professional tool — not a tutorial, wizard, or AI-generated SaaS dashboard.
+
 ## Working style — solo by default
 
 This is a single-developer project. Work directly — read, edit, verify — without spawning
