@@ -134,7 +134,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     return () => el?.removeEventListener("keydown", onKey);
   }, [idx, go]);
   useEffect(() => {
-    function onDoc(e) { if (!e.target.closest?.(".dv-cluster")) setMenuOpen(false); }
+    function onDoc(e) {
+      if (!e.target.closest?.(".dv-cluster")) setMenuOpen(false);
+      // Collapse the contact card on any click outside it — but not on its own toggle (which handles itself).
+      if (!e.target.closest?.(".dv-customer") && !e.target.closest?.(".dv-identity")) setCustOpen(false);
+    }
     document.addEventListener("click", onDoc); return () => document.removeEventListener("click", onDoc);
   }, []);
   // Switching stages should land you at the TOP of the new stage — not wherever it was last scrolled.
