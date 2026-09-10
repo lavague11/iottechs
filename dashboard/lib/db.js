@@ -767,6 +767,22 @@ function init() {
       created_at   TEXT DEFAULT (datetime('now','localtime'))
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bug_reports (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      url          TEXT,
+      path         TEXT,
+      description  TEXT NOT NULL,
+      image_url    TEXT,
+      reporter     TEXT,
+      role         TEXT,
+      user_agent   TEXT,
+      status       TEXT NOT NULL DEFAULT 'open',
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      resolved_at  TEXT,
+      resolved_by  TEXT
+    )
+  `);
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -5432,6 +5448,31 @@ export function setSurveyCameraName(accessId, cid, name) {
   hit.name = clean || hit.name || null;
   saveToolData(accessId, "survey2", JSON.stringify(d), "camera-list");
   return getProjectCameras(accessId);
+}
+
+// ---- Bug reports — the site-wide "Report a bug" button files here; the /bugs portal resolves them ----
+export function createBugReport({ url, path, description, imageUrl, reporter, role, userAgent }) {
+  const desc = String(description || "").trim().slice(0, 4000);
+  if (!desc) return { error: "Describe the bug first." };
+  const info = db.prepare(
+    `INSERT INTO bug_reports (url, path, description, image_url, reporter, role, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(String(url || "").slice(0, 500), String(path || "").slice(0, 300), desc,
+        imageUrl ? String(imageUrl).slice(0, 500) : null,
+        reporter ? String(reporter).slice(0, 120) : null,
+        role ? String(role).slice(0, 40) : null,
+        userAgent ? String(userAgent).slice(0, 400) : null);
+  return { ok: true, id: info.lastInsertRowid };
+}
+export function listBugReports(status) {
+  const where = status === "open" ? "WHERE status='open'" : status === "resolved" ? "WHERE status='resolved'" : "";
+  return db.prepare(`SELECT * FROM bug_reports ${where} ORDER BY (status='open') DESC, id DESC LIMIT 500`).all();
+}
+export function resolveBugReport(id, on, by) {
+  const r = db.prepare(
+    `UPDATE bug_reports SET status=?, resolved_at=?, resolved_by=? WHERE id=?`
+  ).run(on ? "resolved" : "open", on ? new Date().toISOString() : null, on ? (by || null) : null, +id);
+  return { ok: r.changes > 0 };
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.

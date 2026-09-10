@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
+import BugReporter from "./components/bug-reporter";
 
 // The deck-theme faces, self-hosted by Next (no external CDN). Exposed as CSS vars so any
 // component can opt in with var(--font-sans) / var(--font-mono).
@@ -28,7 +29,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${fontSans.variable} ${fontMono.variable}`}>
-      <body>{children}</body>
+      <body>{children}<BugReporter /></body>
     </html>
   );
 }
