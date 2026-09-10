@@ -11,7 +11,62 @@ export default function BugReporter() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const fileRef = useRef(null);
+  const recRef = useRef(null);
+  const gotSpeechRef = useRef(false);
+  const descRef = useRef("");
+  descRef.current = desc;
+
+  // Polish the dictation with Claude Haiku — grammar/punctuation cleanup, fillers removed. Fails soft:
+  // a hiccup or a missing key just leaves the raw (already-decent) transcription.
+  async function polish(text) {
+    const t = (text || "").trim(); if (!t) return;
+    setPolishing(true);
+    try {
+      const r = await fetch("/api/clean-dictation", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+        body: JSON.stringify({ text: t }),
+      }).then((x) => x.json()).catch(() => null);
+      if (r?.ok && r.text) setDesc(r.text);
+    } catch { /* keep raw */ }
+    setPolishing(false);
+  }
+
+  // Dictation — the browser's built-in Web Speech API (free, no API key). It already punctuates; we
+  // just tidy spacing + sentence capitalization. Chromium/Safari support it; other browsers hide the mic.
+  const speechOK = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  function tidy(s) {
+    return String(s || "").replace(/\s+/g, " ").replace(/\s+([,.!?;:])/g, "$1")
+      .replace(/(^\s*|[.!?]\s+)([a-z])/g, (m, p, c) => p + c.toUpperCase()).trim();
+  }
+  function toggleMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setErr("Dictation isn't supported in this browser."); return; }
+    if (listening) { try { recRef.current?.stop(); } catch { /* already stopped */ } return; }
+    const rec = new SR();
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true;
+    let base = descRef.current ? descRef.current.replace(/\s+$/, "") + " " : "";
+    rec.onresult = (e) => {
+      let finalT = "", interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalT += t + " "; else interim += t;
+      }
+      if (finalT) { base = tidy(base + finalT) + " "; gotSpeechRef.current = true; }
+      setDesc(tidy(base + interim));
+    };
+    rec.onerror = (e) => { if (e.error !== "no-speech") setErr("Dictation error — try again."); setListening(false); };
+    rec.onend = () => {
+      setListening(false); recRef.current = null;
+      const finalText = tidy(base); setDesc(finalText);
+      if (gotSpeechRef.current) { gotSpeechRef.current = false; polish(finalText); }   // auto clean-up with Haiku
+    };
+    recRef.current = rec; setErr(null);
+    try { rec.start(); setListening(true); } catch { setListening(false); }
+  }
+  useEffect(() => () => { try { recRef.current?.stop(); } catch { /* noop */ } }, []);
 
   function pickImage(file) {
     if (!file || !file.type?.startsWith("image/")) return;
@@ -77,21 +132,29 @@ export default function BugReporter() {
                   onChange={(e) => setDesc(e.target.value)} placeholder="What went wrong? What did you expect?" />
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
-                {img ? (
-                  <div className="bugr-thumb">
-                    <img src={img.preview} alt="attachment" />
-                    <button className="bugr-thumbx" onClick={() => setImg(null)} aria-label="Remove image">✕</button>
-                  </div>
-                ) : (
-                  <button className="bugr-attach" onClick={() => fileRef.current?.click()}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-                    Attach a screenshot <span className="bugr-hint">or paste</span>
-                  </button>
-                )}
+                <div className="bugr-tools">
+                  {img ? (
+                    <div className="bugr-thumb">
+                      <img src={img.preview} alt="attachment" />
+                      <button className="bugr-thumbx" onClick={() => setImg(null)} aria-label="Remove image">✕</button>
+                    </div>
+                  ) : (
+                    <button className="bugr-attach" onClick={() => fileRef.current?.click()}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+                      Attach a screenshot <span className="bugr-hint">or paste</span>
+                    </button>
+                  )}
+                  {speechOK && (
+                    <button className={`bugr-mic${listening ? " on" : ""}`} onClick={toggleMic} disabled={polishing} title={listening ? "Stop dictation" : "Dictate"} aria-label="Dictate">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v4" /></svg>
+                      {listening ? "Listening…" : polishing ? "Polishing…" : "Dictate"}
+                    </button>
+                  )}
+                </div>
                 {err && <div className="bugr-err">{err}</div>}
                 <div className="bugr-act">
                   <button className="bugr-ghost" onClick={() => setOpen(false)}>Cancel</button>
-                  <button className="bugr-send" disabled={busy || !desc.trim()} onClick={submit}>{busy ? "Sending…" : "Send report"}</button>
+                  <button className="bugr-send" disabled={busy || polishing || !desc.trim()} onClick={submit}>{busy ? "Sending…" : "Send report"}</button>
                 </div>
               </>
             )}
@@ -121,11 +184,19 @@ const CSS = `
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
-.bugr-attach{margin-top:10px;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;
+.bugr-tools{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.bugr-attach{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;
   border:1px dashed #cfd4db;background:#fff;color:#4a5058;font:600 .8rem/1 inherit;cursor:pointer}
 .bugr-attach:hover{border-color:#12151b;color:#12151b}
+.bugr-mic{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;
+  border:1px solid #cfd4db;background:#fff;color:#4a5058;font:600 .8rem/1 inherit;cursor:pointer}
+.bugr-mic:hover{border-color:#12151b;color:#12151b}
+.bugr-mic:disabled{opacity:.6;cursor:default}
+.bugr-mic.on{border-color:#c4553d;color:#c4553d;background:#fdf2f0}
+.bugr-mic.on svg{animation:bugrPulse 1s ease-in-out infinite}
+@keyframes bugrPulse{0%,100%{opacity:1}50%{opacity:.35}}
 .bugr-hint{color:#9aa0a8;font-weight:500}
-.bugr-thumb{margin-top:10px;position:relative;display:inline-block}
+.bugr-thumb{position:relative;display:inline-block}
 .bugr-thumb img{max-height:120px;max-width:100%;border-radius:10px;border:1px solid #e2e5ea;display:block}
 .bugr-thumbx{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:0;background:#12151b;color:#fff;cursor:pointer;font-size:.7rem}
 .bugr-err{margin-top:9px;font-size:.8rem;color:#c4553d;font-weight:600}
