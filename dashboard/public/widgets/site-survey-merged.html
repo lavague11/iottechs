@@ -484,7 +484,7 @@
     <div class="steps">
       <div class="s active" data-step="0">Background</div>
       <div class="s" data-step="1">Setup</div>
-      <div class="s" data-step="2">Submit</div>
+      <!-- Submit step removed: submit lives in the host's Planner footer (one submit surface). -->
     </div>
     <div class="nav">
       <div class="floorTabs">
@@ -1337,7 +1337,7 @@
     var nextBtn=document.getElementById("nextBtn");
     var unsubConfirm=false, unsubTimer=null;   // second-tap confirm before an unsubmit
     function goStep(idx){
-      idx=Math.max(0,Math.min(2,idx));   // 0 Background · 1 Setup · 2 Submit (clamps any stale 4-step save)
+      idx=Math.max(0,Math.min(1,idx));   // 0 Background · 1 Setup (submit is in the host footer; clamps any stale Submit/4-step save)
       if(idx>0 && !bgHasImage) return;   // gate: can't Setup/Submit until this floor has a background
       curStep=idx;
       stepEls.forEach(function(x,i){ x.classList.toggle("active", i===idx); });
@@ -1373,24 +1373,15 @@
       var sc=document.getElementById("showCtl"); if(sc) sc.style.display = (!chooser && !RO) ? "flex" : "none";
       backBtn.style.display = idx>0 ? "" : "none";   // Back stays beside the submit control
       unsubConfirm=false; clearTimeout(unsubTimer);  // changing steps drops any pending unsubmit confirm
-      renderSubmitCtl();                             // ONE control: Submit → Awaiting approval → (tap) Unsubmit?
+      renderSubmitCtl();                             // just Next / (hidden on the last step) — submit is in the host footer
       setHint("");   // no step instructions — the UI speaks for itself
       queueSave();
     }
-    // The one submit control (also the wizard's Next on earlier steps). States, in order:
-    //   draft → "Submit"  ·  submitted → "Awaiting approval" (green)  ·  tapped → "Unsubmit?" (red confirm)  ·  approved → "Customer approved" (disabled)
+    // Submit now lives in the host's Planner footer (one submit surface). The wizard just walks
+    // Background → Setup: show "Next" only while a later step exists; hide the control on the last step.
     function renderSubmitCtl(){
-      if(curStep!==2){ nextBtn.disabled=false; nextBtn.className="b"; nextBtn.textContent="Next"; nextBtn.style.display=""; return; }
-      if(RO){ nextBtn.style.display="none"; return; }   // the customer approves from the bar below, never here
-      nextBtn.style.display=""; nextBtn.disabled=false;
-      var chk='<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
-      if(approved){ nextBtn.className="b awaiting"; nextBtn.disabled=true; nextBtn.innerHTML=chk+"Customer approved"; return; }
-      if(submitted){
-        if(unsubConfirm){ nextBtn.className="b confirm"; nextBtn.textContent="Unsubmit?"; }
-        else { nextBtn.className="b awaiting"; nextBtn.innerHTML=chk+"Awaiting approval"; }
-        return;
-      }
-      nextBtn.className="b"; nextBtn.textContent="Submit";
+      if(curStep>=1){ nextBtn.style.display="none"; return; }   // Setup is the last step — no in-tool submit
+      nextBtn.disabled=false; nextBtn.className="b"; nextBtn.textContent="Next"; nextBtn.style.display="";
     }
     var backBtn=document.getElementById("backBtn");
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
@@ -1398,15 +1389,8 @@
     // Walk the wizard; on the Submit step the same button submits, then flips to Awaiting approval,
     // then (a confirming second tap) unsubmits.
     nextBtn.addEventListener("click", function(){
-      if(curStep<2){ save(); goStep(curStep+1); return; }
-      if(RO||approved) return;
-      if(!submitted){ save(); submit(); return; }                       // draft → submit
-      if(!unsubConfirm){                                                // Awaiting approval → ask first
-        unsubConfirm=true; renderSubmitCtl();
-        clearTimeout(unsubTimer); unsubTimer=setTimeout(function(){ unsubConfirm=false; renderSubmitCtl(); }, 3500);
-        return;
-      }
-      clearTimeout(unsubTimer); unsubConfirm=false; unsubmit();          // confirm → unsubmit
+      // Only advances the wizard now (Background → Setup). Submitting happens in the host footer.
+      if(curStep<1){ save(); goStep(curStep+1); }
     });
 
     restore();   // reopen the saved survey (all floors) for this project (if any)
