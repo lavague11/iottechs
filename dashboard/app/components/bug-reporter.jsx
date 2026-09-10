@@ -29,12 +29,25 @@ export default function BugReporter() {
   const [err, setErr] = useState(null);
   const [shot, setShot] = useState(null);        // screenshot currently open in the editor
   const [capturing, setCapturing] = useState(false);
+  const [canCapture, setCanCapture] = useState(true); // corrected on mount; false on iOS/Safari mobile
   const fileRef = useRef(null);
+  const shotFileRef = useRef(null);              // picks an existing image to mark up (mobile path)
+
+  // getDisplayMedia doesn't exist on iOS Safari — there's no way to grab the screen from the page. So
+  // on those devices the camera button picks the shot the user already took and sends it to the editor.
+  useEffect(() => { setCanCapture(!!navigator.mediaDevices?.getDisplayMedia); }, []);
 
   function pickImage(file) {
     if (!file || !file.type?.startsWith("image/")) return;
     setCleanShot(null); setShapes([]);
     setImg({ file, preview: URL.createObjectURL(file) });
+  }
+  // Route a chosen image straight into the annotator so mobile users still get red-pen markup.
+  function pickForAnnotate(file) {
+    if (!file || !file.type?.startsWith("image/")) return;
+    const rd = new FileReader();
+    rd.onload = () => { const url = String(rd.result); setCleanShot(url); setShapes([]); setShot(url); };
+    rd.readAsDataURL(file);
   }
 
   // Capture the current tab (native — includes iframes). We acquire the stream first (the picker is
@@ -75,16 +88,19 @@ export default function BugReporter() {
     return () => el.classList.remove("bugr-capturing");
   }, [capturing]);
 
-  // Paste a screenshot straight from the clipboard while the form is open.
+  // Paste a screenshot from the clipboard, and Escape closes — only while the form is open and no
+  // screenshot editor is up (the editor owns Escape then).
   useEffect(() => {
     if (!open) return;
     function onPaste(e) {
       const it = [...(e.clipboardData?.items || [])].find((x) => x.type?.startsWith("image/"));
       if (it) { const f = it.getAsFile(); if (f) pickImage(f); }
     }
+    function onKey(e) { if (e.key === "Escape" && !shot && !capturing) setOpen(false); }
     window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [open]);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("paste", onPaste); window.removeEventListener("keydown", onKey); };
+  }, [open, shot, capturing]);
 
   async function submit() {
     if (busy) return;
@@ -135,6 +151,8 @@ export default function BugReporter() {
                   onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
+                <input ref={shotFileRef} type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={(e) => { pickForAnnotate(e.target.files?.[0]); e.target.value = ""; }} />
                 <div className="bugr-tools">
                   {img ? (
                     <div className="bugr-thumb" onClick={() => cleanShot && setShot(cleanShot)} title={cleanShot ? "Edit markup" : undefined} style={{ cursor: cleanShot ? "pointer" : "default" }}>
@@ -143,7 +161,7 @@ export default function BugReporter() {
                     </div>
                   ) : (
                     <div className="bugr-icons">
-                      <IconButton label="Capture" onClick={capture} disabled={capturing}>
+                      <IconButton label={canCapture ? "Capture" : "Screenshot"} onClick={canCapture ? capture : () => shotFileRef.current?.click()} disabled={capturing}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
                       </IconButton>
                       <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
@@ -178,10 +196,13 @@ const CSS = `
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
 /* during a capture, keep the page pristine — no bug UI, no dim, no blur baked into the frame */
 .bugr-capturing .bugr-fab,.bugr-capturing .bugr-scrim{visibility:hidden!important}
-.bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:rgba(8,10,14,.5);backdrop-filter:blur(2px);
+/* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. Depth comes from
+   the card's own border + shadow. The transparent full-screen layer only catches click-outside. */
+.bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
 .bugr-card{width:min(400px,94vw);background:#fff;color:#12151b;border-radius:16px;padding:16px;
-  box-shadow:0 24px 60px -12px rgba(0,0,0,.5);font-family:system-ui,-apple-system,Segoe UI,sans-serif;animation:bugrIn .18s ease}
+  border:1px solid rgba(0,0,0,.08);box-shadow:0 12px 34px -10px rgba(0,0,0,.28),0 2px 8px -2px rgba(0,0,0,.12);
+  font-family:system-ui,-apple-system,Segoe UI,sans-serif;animation:bugrIn .18s ease}
 @keyframes bugrIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .bugr-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .bugr-title{font-size:.98rem;font-weight:800}
