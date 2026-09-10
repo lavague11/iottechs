@@ -1,6 +1,15 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import MicButton from "./mic-button";
+import ScreenshotAnnotator from "./screenshot-annotator";
+
+function dataURLtoFile(dataUrl, name) {
+  const [head, b64] = dataUrl.split(",");
+  const mime = (head.match(/:(.*?);/) || [])[1] || "image/png";
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], name, { type: mime });
+}
 
 // Site-wide "Report a bug" button — mounted once in the root layout, so it sits at the bottom of every
 // page. Opens a small form: describe it + attach/paste a screenshot. Files to /api/bug-report; staff
@@ -12,11 +21,38 @@ export default function BugReporter() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
+  const [shot, setShot] = useState(null);       // captured screenshot awaiting annotation (data URL)
+  const [capturing, setCapturing] = useState(false);
   const fileRef = useRef(null);
 
   function pickImage(file) {
     if (!file || !file.type?.startsWith("image/")) return;
     setImg({ file, preview: URL.createObjectURL(file) });
+  }
+  // Capture the current tab (native screen-capture — includes iframes), then annotate in red. The bug
+  // form is hidden during capture so it isn't in the shot.
+  async function capture() {
+    if (!navigator.mediaDevices?.getDisplayMedia) { setErr("Screenshot isn't supported in this browser — attach or paste one instead."); return; }
+    setErr(null); setCapturing(true);
+    await new Promise((r) => setTimeout(r, 120));   // let the form hide before the grab
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" }, preferCurrentTab: true, audio: false });
+    } catch { setCapturing(false); return; }        // user cancelled the share prompt
+    try {
+      const video = document.createElement("video");
+      video.srcObject = stream; video.muted = true; await video.play();
+      await new Promise((r) => setTimeout(r, 250));  // let a frame paint
+      const cv = document.createElement("canvas");
+      cv.width = video.videoWidth; cv.height = video.videoHeight;
+      cv.getContext("2d").drawImage(video, 0, 0, cv.width, cv.height);
+      setShot(cv.toDataURL("image/png"));
+    } catch { setErr("Couldn't capture the screen — try again."); }
+    finally { stream.getTracks().forEach((t) => t.stop()); setCapturing(false); }
+  }
+  function onAnnotated(dataUrl) {
+    try { setImg({ file: dataURLtoFile(dataUrl, "bug-screenshot.png"), preview: dataUrl }); } catch { /* noop */ }
+    setShot(null);
   }
   // Paste a screenshot straight from the clipboard while the form is open.
   useEffect(() => {
@@ -61,7 +97,7 @@ export default function BugReporter() {
       </button>
 
       {open && (
-        <div className="bugr-scrim" onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
+        <div className="bugr-scrim" hidden={capturing || !!shot} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
           <div className="bugr-card" role="dialog" aria-label="Report a bug">
             {done ? (
               <div className="bugr-done">
@@ -85,10 +121,16 @@ export default function BugReporter() {
                       <button className="bugr-thumbx" onClick={() => setImg(null)} aria-label="Remove image">✕</button>
                     </div>
                   ) : (
-                    <button className="bugr-attach" onClick={() => fileRef.current?.click()}>
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-                      Attach a screenshot <span className="bugr-hint">or paste</span>
-                    </button>
+                    <>
+                      <button className="bugr-attach bugr-shot" onClick={capture} disabled={capturing} title="Screenshot this page and mark it up">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                        {capturing ? "Capturing…" : "Screenshot"}
+                      </button>
+                      <button className="bugr-attach" onClick={() => fileRef.current?.click()} title="Attach or paste an image">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+                        Attach
+                      </button>
+                    </>
                   )}
                   <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
                 </div>
@@ -102,6 +144,8 @@ export default function BugReporter() {
           </div>
         </div>
       )}
+
+      {shot && <ScreenshotAnnotator shot={shot} onDone={onAnnotated} onCancel={() => setShot(null)} />}
 
       <style>{CSS}</style>
     </>
