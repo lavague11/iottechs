@@ -711,6 +711,32 @@ function techWorkOrder(payload) {
   };
 }
 
+// The camera's location name lives ONCE in the survey (survey2, keyed by cid) — the single source of
+// truth. This maps a proposal's camera line items → the name to DISPLAY, resolved from the survey
+// roster by the stable camera_id (cid). Only camera_id-LINKED items resolve — never by position/guess,
+// so a customer-facing line is never mislabeled. Returns Map(item.id → name); callers fall back to the
+// item's own stored name when there's no override. `roster` = getProjectCameras.
+// `byPosition` opts into a best-effort position match (Nth camera block ↔ Nth surveyed camera) for
+// staff-only, editable surfaces where a wrong guess is visible and correctable — never for customers.
+export function cameraNameOverrides(services, roster, { byPosition = false } = {}) {
+  const list = Array.isArray(roster) ? roster : [];
+  const byCid = new Map(list.filter((c) => c && c.id).map((c) => [c.id, c.name]));
+  const out = new Map();
+  (services || []).forEach((s) => {
+    if (s.key !== "camera") return;
+    let pos = 0;
+    (s.items || []).forEach((it) => {
+      if (!((it.sub || []).length > 0)) return;         // camera blocks carry the labor sub-items; NVR/drive don't
+      const linked = it.camera_id && byCid.has(it.camera_id) ? byCid.get(it.camera_id) : null;
+      const byPos = byPosition && list[pos] ? list[pos].name : null;
+      const nm = (linked || byPos || "").trim();
+      if (nm) out.set(it.id, nm);
+      pos++;
+    });
+  });
+  return out;
+}
+
 export function sanitizeProposal(row, role) {
   if (!row) return null;
   const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;

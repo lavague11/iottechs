@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
@@ -73,9 +73,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const [mockupRaw, setMockupRaw]   = useState(null);
   const [focusCid, setFocusCid]     = useState(null);   // camera the customer asked to locate (View Placement)
   const rootRef = useRef(null);
+  const [camRoster, setCamRoster] = useState([]);   // survey camera roster → camera line-item location names
   useEffect(() => {   // booleans only — the heavy survey/mockup blobs are NOT fetched here
     let live = true;
     proposalLayoutMetaAction(accessId).then((r) => { if (live && r?.ok) setHasLayout(!!(r.hasSurvey || r.hasMockup)); });
+    // The camera location names come from the survey (single source of truth) — lightweight roster.
+    fetch(`/api/project-cameras?accessId=${encodeURIComponent(accessId)}`).then((r) => r.json())
+      .then((j) => { if (live && j?.ok) setCamRoster(Array.isArray(j.cameras) ? j.cameras : []); }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
   async function ensureLayoutLoaded() {
@@ -278,6 +282,9 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
   const camSvc = opt.services.find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
+  // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
+  // one source of truth — instead of a generic "Full Camera Install".
+  const camNames = cameraNameOverrides(opt.services, camRoster);
   const depositPct = +p.deposit_pct || 50;
   const finalPct = 100 - depositPct;
   const payPlan = p.payload.payment_plan || "custom";
@@ -594,7 +601,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                       <span className="pcv-rowdesc">
                         {reviseMode && <span className="pcv-flagdot">⚑</span>}
                         {!reviseMode && hasSub && <span className="pcv-chev">{expanded ? "▾" : "▸"}</span>}
-                        {itemNameNode(it.name, it.outdoor)}{it.slot ? ` · Slot ${it.slot}` : ""}
+                        {itemNameNode(camNames.get(it.id) || it.name, it.outdoor)}{it.slot ? ` · Slot ${it.slot}` : ""}
                         {/* View Placement — jumps to this exact camera on the floor-plan mini-map, matched
                             by its stable camera_id (never by name). Only when there's a layout to show. */}
                         {it.camera_id && hasLayout && (
