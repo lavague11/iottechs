@@ -783,6 +783,16 @@ function init() {
       resolved_by  TEXT
     )
   `);
+  // One autosaved bug draft per owner (user/session) so a half-written report survives refresh/close.
+  // Screenshots live in it as uploaded media URLs + vector annotations, never as raw image blobs.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bug_drafts (
+      owner_key   TEXT PRIMARY KEY,
+      description TEXT,
+      shots       TEXT,
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
   const bugCols = db.prepare("PRAGMA table_info(bug_reports)").all().map((c) => c.name);
   if (!bugCols.includes("fix_prompt")) db.exec("ALTER TABLE bug_reports ADD COLUMN fix_prompt TEXT");
   // Multiple screenshots per report — a JSON array of media URLs. image_url stays the first one so
@@ -5490,6 +5500,27 @@ export function resolveBugReport(id, on, by) {
 export function setBugFixPrompt(id, prompt) {
   const r = db.prepare(`UPDATE bug_reports SET fix_prompt=? WHERE id=?`).run(String(prompt || "").slice(0, 4000), +id);
   return { ok: r.changes > 0 };
+}
+
+// Autosaved bug draft (one per owner). `shots` is a bounded JSON array of { url, cleanUrl, shapes }.
+export function getBugDraft(owner) {
+  if (!owner) return null;
+  return db.prepare("SELECT description, shots, updated_at FROM bug_drafts WHERE owner_key=?").get(String(owner)) || null;
+}
+export function saveBugDraft(owner, { description, shots } = {}) {
+  if (!owner) return { ok: false };
+  const s = Array.isArray(shots) && shots.length ? JSON.stringify(shots).slice(0, 300000) : null;
+  db.prepare(
+    `INSERT INTO bug_drafts (owner_key, description, shots, updated_at)
+     VALUES (?, ?, ?, datetime('now','localtime'))
+     ON CONFLICT(owner_key) DO UPDATE SET description=excluded.description, shots=excluded.shots, updated_at=excluded.updated_at`
+  ).run(String(owner), String(description || "").slice(0, 4000), s);
+  return { ok: true };
+}
+export function deleteBugDraft(owner) {
+  if (!owner) return { ok: false };
+  db.prepare("DELETE FROM bug_drafts WHERE owner_key=?").run(String(owner));
+  return { ok: true };
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.

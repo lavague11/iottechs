@@ -64,7 +64,8 @@ function install() {
     const now = Date.now();
     const errors = st.errors.filter((e) => now - e.ts < RECENT_MS).slice(-5)
       .map((e) => ({ type: e.type, message: e.message, stack: e.stack || undefined, route: e.route, occurrences: e.occurrences, agoMs: now - e.ts }));
-    return { route: location.pathname, viewport: `${window.innerWidth}x${window.innerHeight}`, ua: navigator.userAgent.slice(0, 300), routes: st.routes.slice(-MAX_ROUTES), errors };
+    const dpr = window.devicePixelRatio || 1;
+    return { route: location.pathname, viewport: `${window.innerWidth}×${window.innerHeight}${dpr !== 1 ? ` · DPR ${dpr}` : ""}`, ua: navigator.userAgent.slice(0, 300), routes: st.routes.slice(-MAX_ROUTES), errors };
   };
 }
 
