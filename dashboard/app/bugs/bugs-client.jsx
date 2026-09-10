@@ -30,6 +30,8 @@ export default function BugsClient({ initial = [] }) {
     return () => { live = false; clearInterval(t); };
   }, []);
 
+  const [copied, setCopied] = useState(null);   // "<id>:<kind>" just copied → brief flash
+
   async function getSuggestion(b) {
     if (sugBusy) return;
     setSugBusy(b.id);
@@ -39,8 +41,13 @@ export default function BugsClient({ initial = [] }) {
     }).then((x) => x.json()).catch(() => null);
     setSugBusy(null);
     if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
-    else setSuggest((s) => ({ ...s, [b.id]: r?.error || "Couldn't get a suggestion." }));
+    else setSuggest((s) => ({ ...s, [b.id]: r?.error || "Couldn't generate a prompt." }));
   }
+  async function copy(text, key) {
+    try { await navigator.clipboard.writeText(text); } catch { return; }
+    setCopied(key); setTimeout(() => setCopied((c) => (c === key ? null : c)), 1400);
+  }
+  const bugText = (b) => `Fix this bug: ${b.description}${b.path ? `\n\n(Reported from ${b.path})` : ""}`;
 
   const openN = bugs.filter((b) => b.status === "open").length;
   const shown = bugs.filter((b) => (filter === "all" ? true : b.status === filter));
@@ -94,15 +101,25 @@ export default function BugsClient({ initial = [] }) {
                   </div>
                 </div>
                 <div className="bgp-actions">
-                  <button className="bgp-ai" disabled={sugBusy === b.id} onClick={() => getSuggestion(b)} title="Ask Haiku for a likely cause + fix">
-                    {sugBusy === b.id ? "Thinking…" : suggest[b.id] ? "Re-analyze" : "✨ Suggest fix"}
+                  <button className="bgp-ai" disabled={sugBusy === b.id} onClick={() => getSuggestion(b)} title="Generate a copy-ready fix prompt for a coding agent">
+                    {sugBusy === b.id ? "Writing…" : suggest[b.id] ? "Regenerate" : "✨ Fix prompt"}
+                  </button>
+                  <button className="bgp-copy" onClick={() => copy(bugText(b), b.id + ":bug")} title="Copy the bug as a prompt">
+                    {copied === b.id + ":bug" ? "Copied ✓" : "Copy bug"}
                   </button>
                   <button className={`bgp-btn${b.status === "resolved" ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
                     {busy === b.id ? "…" : b.status === "resolved" ? "Reopen" : "Resolve"}
                   </button>
                 </div>
               </div>
-              {suggest[b.id] && <div className="bgp-sug">{suggest[b.id]}</div>}
+              {suggest[b.id] && (
+                <div className="bgp-sug">
+                  <button className="bgp-sugcopy" onClick={() => copy(suggest[b.id], b.id + ":prompt")}>
+                    {copied === b.id + ":prompt" ? "Copied ✓" : "Copy prompt"}
+                  </button>
+                  {suggest[b.id]}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -134,7 +151,11 @@ const CSS = `
 .bgp-ai{height:32px;padding:0 12px;border:1px solid #d9c9a3;border-radius:8px;background:#fbf6ea;color:#8a6d2f;font:700 .76rem/1 inherit;cursor:pointer;white-space:nowrap}
 .bgp-ai:hover{background:#f6eed8}
 .bgp-ai:disabled{opacity:.6;cursor:default}
-.bgp-sug{white-space:pre-wrap;font-size:.82rem;line-height:1.5;color:#2b2f36;background:#f7f8fa;border:1px solid #e4e4df;border-left:3px solid #c9a96e;border-radius:10px;padding:11px 13px}
+.bgp-copy{height:32px;padding:0 12px;border:1px solid #e4e4df;border-radius:8px;background:#fff;color:#4a5058;font:600 .76rem/1 inherit;cursor:pointer;white-space:nowrap}
+.bgp-copy:hover{border-color:#12151b;color:#12151b}
+.bgp-sug{position:relative;white-space:pre-wrap;font-size:.82rem;line-height:1.5;color:#2b2f36;background:#f7f8fa;border:1px solid #e4e4df;border-left:3px solid #c9a96e;border-radius:10px;padding:11px 90px 11px 13px}
+.bgp-sugcopy{position:absolute;top:9px;right:9px;height:26px;padding:0 10px;border:1px solid #d9c9a3;border-radius:7px;background:#fbf6ea;color:#8a6d2f;font:700 .72rem/1 inherit;cursor:pointer;white-space:nowrap}
+.bgp-sugcopy:hover{background:#f6eed8}
 .bgp-live{color:#2e7d5b;font-weight:700}
 .bgp-thumb{flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:9px;overflow:hidden;line-height:0}
 .bgp-thumb img{width:84px;height:84px;object-fit:cover;border:1px solid #e4e4df;border-radius:9px}
@@ -156,5 +177,7 @@ const CSS = `
   .bgp-btn.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2} .bgp-empty{border-color:#2a2f37}
   .bgp-ai{background:#241f14;border-color:#4a3f26;color:#e0c88a} .bgp-ai:hover{background:#2c2617}
   .bgp-sug{background:#12151a;border-color:#2a2f37;border-left-color:#c9a96e;color:#c8ccd2}
+  .bgp-copy{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-sugcopy{background:#241f14;border-color:#4a3f26;color:#e0c88a}
 }
 `;

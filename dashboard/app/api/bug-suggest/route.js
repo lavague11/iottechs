@@ -1,8 +1,9 @@
 import { secretValue } from "../../../lib/db";
 import { getSessionUser } from "../../../lib/session";
 
-// One-click triage: given a bug report, Claude Haiku returns a likely root cause + concrete fix steps
-// so the admin can act on it fast. Staff-only; tiny + cheap. Advisory only — it never changes code.
+// One-click "fix prompt": Claude Haiku rewrites a user's bug report into a crisp, self-contained task
+// prompt for a coding agent — it states the problem precisely (no solutions), so you can copy it and
+// hand it straight to Claude Code / an agent to fix. Staff-only; tiny + cheap; never changes code.
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5";
 
@@ -17,15 +18,11 @@ export async function POST(request) {
   if (!desc) return Response.json({ error: "empty" }, { status: 400 });
   const path = String(body?.path || "").trim();
 
-  const prompt = `You are a senior engineer triaging a bug in an internal web app (Next.js App Router + React, node:sqlite, deck-style project UI). A user reported:
+  const prompt = `Rewrite this user's bug report into a clear, self-contained task prompt for a coding agent working on an internal web app (Next.js App Router + React, node:sqlite, a deck-style project UI).
 
-"${desc}"${path ? `\n\nReported from the page: ${path}` : ""}
+User report: "${desc}"${path ? `\nReported from the page: ${path}` : ""}
 
-Give a short, practical triage. Use exactly these three labelled lines, nothing else:
-LIKELY CAUSE: <one sentence>
-WHERE TO LOOK: <the most likely component/file/area, best guess>
-FIX: <2-4 concrete steps>
-Be specific and concise. If the report is too vague, say what one detail you'd need.`;
+State the PROBLEM precisely and unambiguously: what the buggy behavior is, where in the app it happens, and what the correct/expected behavior should be. Write it as a direct instruction that starts with "Fix this bug:". Do NOT propose solutions, do NOT list steps, and do NOT name files or components — only describe the problem so the agent can investigate and fix it. If a key detail is missing, note the one thing that would help. Output ONLY the prompt text, no preamble or quotes.`;
 
   try {
     const upstream = await fetch(ANTHROPIC_URL, {
