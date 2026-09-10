@@ -5411,6 +5411,29 @@ export function setSurveyCameraPhoto(accessId, floor, di, photo, photoName) {
   return getProjectCameras(accessId);
 }
 
+// Rename one survey camera, targeting it by its stable cid (the id getProjectCameras hands out). The
+// name lives ONCE in the survey2 blob, so this is the single write every surface (survey, mockup,
+// proposal) routes a rename through — a rename anywhere shows everywhere. Returns the refreshed camera
+// list, or null if no camera has that cid. (Name is part of the tool fingerprint, so a rename after
+// approval re-opens it — same as renaming in the survey tool.)
+export function setSurveyCameraName(accessId, cid, name) {
+  if (!cid) return null;
+  const row = getToolData(accessId, "survey2");
+  let d;
+  try { d = JSON.parse(row?.data || "{}"); } catch { return null; }
+  const floors = Array.isArray(d.floors) ? d.floors : [];
+  let hit = null;
+  for (const f of floors) {
+    const dev = (Array.isArray(f?.devices) ? f.devices : []).find((x) => x && x.k === "cam" && x.cid === cid);
+    if (dev) { hit = dev; break; }
+  }
+  if (!hit) return null;                              // cid no longer exists → refuse rather than clobber
+  const clean = String(name || "").trim().slice(0, 60);
+  hit.name = clean || hit.name || null;
+  saveToolData(accessId, "survey2", JSON.stringify(d), "camera-list");
+  return getProjectCameras(accessId);
+}
+
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
 export function getApprovedAddons(accessId) {
   const rec = getToolData(accessId, "addendum");

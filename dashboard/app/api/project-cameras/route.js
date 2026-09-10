@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { getJobByAccessId, getProjectCameras, setSurveyCameraPhoto } from "../../../lib/db";
+import { getJobByAccessId, getProjectCameras, setSurveyCameraPhoto, setSurveyCameraName } from "../../../lib/db";
 
 // The project's canonical camera list, derived from the Site Survey (see getProjectCameras). This is
 // the single source of truth the CCTV mockup grid reflects — and, later, the proposal/PDF — so cameras
@@ -42,12 +42,23 @@ export async function GET(req) {
 // The client uploads the image to /api/media first and passes the returned URL as `photo` (or null to
 // clear). Survey + mockup both read the same survey2 blob, so the edit shows up everywhere.
 export async function POST(req) {
-  const { accessId, floor, di, photo, photoName } = await req.json();
+  const body = await req.json();
+  const { accessId, floor, di, photo, photoName, cid, name } = body;
   const tok = await getSessionRole();
   if (!tok) return Response.json({ error: "Session expired." });
   if (!["admin", "manager", "sales"].includes(tok.role)) return Response.json({ error: "Read-only for your role." });
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return Response.json({ error: "Not your project." });
-  if (!accessId || !Number.isInteger(floor) || !Number.isInteger(di)) return Response.json({ error: "Bad target." });
+  if (!accessId) return Response.json({ error: "Bad target." });
+  // Rename a camera by its stable cid — the name lives once in the survey, so survey/mockup/proposal
+  // all route a rename through here and stay in sync.
+  if (typeof name === "string" && cid) {
+    const cameras = setSurveyCameraName(accessId, cid, name);
+    if (!cameras) return Response.json({ error: "Camera not found — the survey changed. Reopen and retry." });
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/project/${accessId}`);
+    return Response.json({ ok: true, cameras });
+  }
+  if (!Number.isInteger(floor) || !Number.isInteger(di)) return Response.json({ error: "Bad target." });
   if (photo != null && (typeof photo !== "string" || photo.length > 8_000_000)) return Response.json({ error: "Bad photo." });
   const cameras = setSurveyCameraPhoto(accessId, floor, di, photo || null, typeof photoName === "string" ? photoName : null);
   if (!cameras) return Response.json({ error: "Camera not found — the survey changed. Reopen and retry." });
