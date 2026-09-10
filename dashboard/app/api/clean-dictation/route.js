@@ -7,7 +7,7 @@ import { getSessionUser } from "../../../lib/session";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5";
 
-const PROMPT = `Clean up this dictated note. Fix grammar, punctuation, capitalization and spacing; remove speech filler (um, uh, like, you know) and false starts; keep it in the writer's own words and tone — do NOT add new information, do NOT answer or summarize, do NOT change the meaning. Return ONLY the cleaned text with no preamble, quotes, or commentary.`;
+const PROMPT = `Clean up this dictated note, which may be in ANY language (English, Spanish, French, Arabic, Chinese, etc.). Fix grammar, punctuation, capitalization and spacing in that SAME language; remove speech filler and false starts; keep the writer's own language, words, meaning and tone. Do NOT translate, do NOT add information, do NOT answer or summarize. Return ONLY the cleaned text with no preamble, quotes, or commentary.`;
 
 export async function POST(request) {
   const user = await getSessionUser();
