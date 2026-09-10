@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // Bug portal list. Open reports on top; resolve/reopen with one tap. Each shows the page it came from,
 // who reported it, when, and its screenshot (click to view full-size).
@@ -10,6 +10,37 @@ export default function BugsClient({ initial = [] }) {
   const [filter, setFilter] = useState("open");
   const [busy, setBusy] = useState(null);
   const [zoom, setZoom] = useState(null);
+  const [suggest, setSuggest] = useState({});   // id -> AI fix suggestion text
+  const [sugBusy, setSugBusy] = useState(null);
+  const [fresh, setFresh] = useState(false);     // brief "updated" flash when the poll pulls new bugs
+  const seenRef = useRef(new Set(initial.map((b) => b.id)));
+
+  // Auto-refresh — poll for new reports so the portal stays live without a manual reload.
+  useEffect(() => {
+    let live = true;
+    const poll = async () => {
+      const r = await fetch("/api/bug-report", { credentials: "same-origin" }).then((x) => x.json()).catch(() => null);
+      if (!live || !r?.ok || !Array.isArray(r.bugs)) return;
+      const hasNew = r.bugs.some((b) => b.status === "open" && !seenRef.current.has(b.id));
+      seenRef.current = new Set(r.bugs.map((b) => b.id));
+      setBugs(r.bugs);
+      if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
+    };
+    const t = setInterval(poll, 15000);
+    return () => { live = false; clearInterval(t); };
+  }, []);
+
+  async function getSuggestion(b) {
+    if (sugBusy) return;
+    setSugBusy(b.id);
+    const r = await fetch("/api/bug-suggest", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: b.description, path: b.path }),
+    }).then((x) => x.json()).catch(() => null);
+    setSugBusy(null);
+    if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
+    else setSuggest((s) => ({ ...s, [b.id]: r?.error || "Couldn't get a suggestion." }));
+  }
 
   const openN = bugs.filter((b) => b.status === "open").length;
   const shown = bugs.filter((b) => (filter === "all" ? true : b.status === filter));
@@ -31,7 +62,7 @@ export default function BugsClient({ initial = [] }) {
       <div className="bgp-top">
         <div>
           <h1 className="bgp-h1">Bug portal</h1>
-          <p className="bgp-sub">{openN} open · {bugs.length} total</p>
+          <p className="bgp-sub">{openN} open · {bugs.length} total{fresh && <span className="bgp-live"> · new report</span>}</p>
         </div>
         <div className="bgp-seg">
           {["open", "resolved", "all"].map((k) => (
@@ -46,24 +77,32 @@ export default function BugsClient({ initial = [] }) {
         <div className="bgp-list">
           {shown.map((b) => (
             <div key={b.id} className={`bgp-card${b.status === "resolved" ? " done" : ""}`}>
-              {b.image_url && (
-                <button className="bgp-thumb" onClick={() => setZoom(b.image_url)} title="View screenshot">
-                  <img src={b.image_url} alt="screenshot" />
-                </button>
-              )}
-              <div className="bgp-body">
-                <div className="bgp-desc">{b.description}</div>
-                <div className="bgp-meta">
-                  <span className="bgp-id">#{b.id}</span>
-                  {b.path && <a className="bgp-path" href={b.url || b.path} target="_blank" rel="noreferrer">{b.path}</a>}
-                  <span>{b.reporter || "anonymous"}{b.role ? ` · ${b.role}` : ""}</span>
-                  <span>{fmt(b.created_at)}</span>
-                  {b.status === "resolved" && b.resolved_at && <span className="bgp-res">resolved {fmt(b.resolved_at)}{b.resolved_by ? ` · ${b.resolved_by}` : ""}</span>}
+              <div className="bgp-cardtop">
+                {b.image_url && (
+                  <button className="bgp-thumb" onClick={() => setZoom(b.image_url)} title="View screenshot">
+                    <img src={b.image_url} alt="screenshot" />
+                  </button>
+                )}
+                <div className="bgp-body">
+                  <div className="bgp-desc">{b.description}</div>
+                  <div className="bgp-meta">
+                    <span className="bgp-id">#{b.id}</span>
+                    {b.path && <a className="bgp-path" href={b.url || b.path} target="_blank" rel="noreferrer">{b.path}</a>}
+                    <span>{b.reporter || "anonymous"}{b.role ? ` · ${b.role}` : ""}</span>
+                    <span>{fmt(b.created_at)}</span>
+                    {b.status === "resolved" && b.resolved_at && <span className="bgp-res">resolved {fmt(b.resolved_at)}{b.resolved_by ? ` · ${b.resolved_by}` : ""}</span>}
+                  </div>
+                </div>
+                <div className="bgp-actions">
+                  <button className="bgp-ai" disabled={sugBusy === b.id} onClick={() => getSuggestion(b)} title="Ask Haiku for a likely cause + fix">
+                    {sugBusy === b.id ? "Thinking…" : suggest[b.id] ? "Re-analyze" : "✨ Suggest fix"}
+                  </button>
+                  <button className={`bgp-btn${b.status === "resolved" ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
+                    {busy === b.id ? "…" : b.status === "resolved" ? "Reopen" : "Resolve"}
+                  </button>
                 </div>
               </div>
-              <button className={`bgp-btn${b.status === "resolved" ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
-                {busy === b.id ? "…" : b.status === "resolved" ? "Reopen" : "Resolve"}
-              </button>
+              {suggest[b.id] && <div className="bgp-sug">{suggest[b.id]}</div>}
             </div>
           ))}
         </div>
@@ -88,8 +127,15 @@ const CSS = `
 .bgp-tab.on{background:#12151b;color:#fff}
 .bgp-empty{text-align:center;padding:60px 16px;color:#787d84;border:1px dashed #e4e4df;border-radius:14px}
 .bgp-list{display:flex;flex-direction:column;gap:10px}
-.bgp-card{display:flex;align-items:flex-start;gap:14px;padding:14px;border:1px solid #e4e4df;border-radius:14px;background:#fff}
+.bgp-card{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid #e4e4df;border-radius:14px;background:#fff}
 .bgp-card.done{opacity:.6;background:#fbfbfa}
+.bgp-cardtop{display:flex;align-items:flex-start;gap:14px}
+.bgp-actions{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+.bgp-ai{height:32px;padding:0 12px;border:1px solid #d9c9a3;border-radius:8px;background:#fbf6ea;color:#8a6d2f;font:700 .76rem/1 inherit;cursor:pointer;white-space:nowrap}
+.bgp-ai:hover{background:#f6eed8}
+.bgp-ai:disabled{opacity:.6;cursor:default}
+.bgp-sug{white-space:pre-wrap;font-size:.82rem;line-height:1.5;color:#2b2f36;background:#f7f8fa;border:1px solid #e4e4df;border-left:3px solid #c9a96e;border-radius:10px;padding:11px 13px}
+.bgp-live{color:#2e7d5b;font-weight:700}
 .bgp-thumb{flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:9px;overflow:hidden;line-height:0}
 .bgp-thumb img{width:84px;height:84px;object-fit:cover;border:1px solid #e4e4df;border-radius:9px}
 .bgp-body{flex:1;min-width:0}
@@ -108,5 +154,7 @@ const CSS = `
   .bgp{color:#e9edf2} .bgp-h1{color:#fff} .bgp-card{background:#161a20;border-color:#2a2f37} .bgp-card.done{background:#12151a}
   .bgp-seg{background:#1b1f26;border-color:#2a2f37} .bgp-tab.on{background:#e9edf2;color:#12151b}
   .bgp-btn.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2} .bgp-empty{border-color:#2a2f37}
+  .bgp-ai{background:#241f14;border-color:#4a3f26;color:#e0c88a} .bgp-ai:hover{background:#2c2617}
+  .bgp-sug{background:#12151a;border-color:#2a2f37;border-left-color:#c9a96e;color:#c8ccd2}
 }
 `;
