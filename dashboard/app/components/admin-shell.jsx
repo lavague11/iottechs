@@ -320,6 +320,7 @@ export default function AdminShell({ user, alerts, active, children }) {
   const isGrouped = ["admin", "manager"].includes(user?.role);
   const navModel  = isGrouped ? groupedNavFor(user.role) : null;
   const [openMenu, setOpenMenu] = useState(null);
+  const [mobOpen, setMobOpen] = useState(false);   // mobile nav drawer
   const navRef = useRef(null);
   useEffect(() => {
     if (!openMenu) return;
@@ -350,10 +351,13 @@ export default function AdminShell({ user, alerts, active, children }) {
             <NotifBell alerts={alerts} />
             <UserMenu user={user} />
             {!["tech","sales"].includes(user?.role) && (
-              <button className="btn btn-primary" onClick={() => setNpOpen(true)}>
+              <button className="btn btn-primary np-desktop" onClick={() => setNpOpen(true)}>
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> New Project
               </button>
             )}
+            <button className="apx-burger" aria-label="Menu" onClick={() => setMobOpen(true)}>
+              <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+            </button>
           </div>
         </div>
 
@@ -403,6 +407,40 @@ export default function AdminShell({ user, alerts, active, children }) {
         </div>
       </header>
 
+      {mobOpen && (
+        <div className="apx-mobnav" onClick={() => setMobOpen(false)}>
+          <div className="apx-mobsheet" onClick={(e) => e.stopPropagation()}>
+            <div className="apx-mobsheet-head">
+              <span>Menu</span>
+              <button onClick={() => setMobOpen(false)} aria-label="Close">✕</button>
+            </div>
+            <nav className="apx-moblinks">
+              {isGrouped
+                ? navModel.map((g) => (
+                    g.items.length === 1 ? (
+                      <Link key={g.key} href={g.items[0].href} className={`apx-moblink${active === g.items[0].key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{g.label}</Link>
+                    ) : (
+                      <div className="apx-mobgroup" key={g.key}>
+                        <div className="apx-mobsec">{g.label}</div>
+                        {g.items.map((it) => (
+                          <Link key={it.key} href={it.href} className={`apx-moblink sub${active === it.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{it.label}</Link>
+                        ))}
+                      </div>
+                    )
+                  ))
+                : allowed.map((t) => (
+                    <Link key={t.key} href={t.href} className={`apx-moblink${active === t.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{t.label}</Link>
+                  ))}
+            </nav>
+            {!["tech","sales"].includes(user?.role) && (
+              <button className="btn btn-primary apx-mobnew" onClick={() => { setMobOpen(false); setNpOpen(true); }}>
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> New Project
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <EnrollBanner />
       {children}
 
@@ -435,6 +473,7 @@ const CSS = `
   --purple:#7c3aed;--purple-soft:#f3eeff;
   --radius:16px;
   font-family:'Hanken Grotesk',sans-serif;background:var(--bg-soft);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh;
+  overflow-x:hidden;   /* safety net — the shell never renders wider than the screen on mobile */
 }
 .apx *{margin:0;padding:0;box-sizing:border-box}
 .apx a{text-decoration:none;color:inherit}
@@ -473,6 +512,25 @@ const CSS = `
 .apx .nav-search input::placeholder{color:var(--muted)}
 
 .apx .nav-right{display:flex;align-items:center;gap:10px}
+/* mobile hamburger + slide-in nav drawer (revealed at <=820px; hidden on desktop) */
+.apx .apx-burger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);cursor:pointer;flex:0 0 auto}
+.apx .apx-burger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.apx-mobnav{position:fixed;inset:0;z-index:250;background:rgba(14,19,32,.42);display:flex;justify-content:flex-end}
+.apx-mobsheet{width:min(86vw,340px);height:100%;background:#fff;box-shadow:-16px 0 44px -14px rgba(14,19,32,.5);
+  padding:calc(14px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;overflow-y:auto;
+  font-family:'Hanken Grotesk',sans-serif;animation:apxSheet .2s ease}
+@keyframes apxSheet{from{transform:translateX(24px);opacity:.5}to{transform:none;opacity:1}}
+.apx-mobsheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.apx-mobsheet-head span{font-weight:800;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:#5b6275}
+.apx-mobsheet-head button{border:0;background:none;font-size:1rem;color:#5b6275;cursor:pointer;padding:6px 8px;line-height:1}
+.apx-moblinks{display:flex;flex-direction:column;gap:2px}
+.apx-mobgroup{display:flex;flex-direction:column;gap:1px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #e6e8ee}
+.apx-mobsec{font-size:.66rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#b08f4f;padding:9px 12px 3px}
+.apx-moblink{display:block;padding:11px 12px;border-radius:10px;font-weight:600;font-size:.96rem;color:#0e1320}
+.apx-moblink.sub{padding-left:22px;font-weight:500;color:#2C3347}
+.apx-moblink.on{background:#f0f2f7}
+.apx-moblink:active{background:#f6f7f9}
+.apx-mobnew{margin-top:14px;justify-content:center;width:100%}
 .apx .notif-wrap{position:relative}
 .apx .notif-btn{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);cursor:pointer;transition:.18s;position:relative}
 .apx .notif-btn:hover{border-color:var(--gold);box-shadow:0 6px 16px -8px rgba(14,19,32,.25)}
@@ -751,8 +809,17 @@ const CSS = `
 
 @media(max-width:1100px){.apx .kpi-row,.apx .kpi-row.k5{grid-template-columns:repeat(3,1fr)}.apx .kpi-row.k4{grid-template-columns:repeat(2,1fr)}.apx .two-col{grid-template-columns:1fr}.apx .three-col{grid-template-columns:1fr 1fr}}
 @media(max-width:720px){.apx .actions{grid-template-columns:1fr 1fr}.apx .three-col{grid-template-columns:1fr}.apx .kpi-row,.apx .kpi-row.k4,.apx .kpi-row.k5{grid-template-columns:1fr 1fr}.apx .nav-search{display:none}.apx .edit-grid{grid-template-columns:1fr}}
+@media(max-width:820px){
+  /* Below tablet: the 9-item grouped menu can't fit — swap it for the hamburger drawer so the page
+     fits the screen instead of overflowing wide. */
+  .apx .tabbar-wrap{display:none}
+  .apx .apx-burger{display:inline-flex}
+  .apx .nav-right .np-desktop{display:none}   /* New Project lives in the drawer on mobile */
+}
 @media(max-width:560px){
   .apx-wrap{padding:0 14px}
+  .apx .user-chip .u-name,.apx .user-chip .caret{display:none}   /* avatar-only chip to save room */
+  .apx .user-chip{padding:5px}
   .apx .welcome{padding:22px 0 0}
   .apx .kpi-row,.apx .kpi-row.k4,.apx .kpi-row.k5{gap:10px}
   .apx .kpi{padding:13px 14px 12px;border-radius:13px}
