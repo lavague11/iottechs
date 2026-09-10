@@ -785,6 +785,9 @@ function init() {
   `);
   const bugCols = db.prepare("PRAGMA table_info(bug_reports)").all().map((c) => c.name);
   if (!bugCols.includes("fix_prompt")) db.exec("ALTER TABLE bug_reports ADD COLUMN fix_prompt TEXT");
+  // Multiple screenshots per report — a JSON array of media URLs. image_url stays the first one so
+  // any older reader keeps working.
+  if (!bugCols.includes("image_urls")) db.exec("ALTER TABLE bug_reports ADD COLUMN image_urls TEXT");
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -5453,14 +5456,18 @@ export function setSurveyCameraName(accessId, cid, name) {
 }
 
 // ---- Bug reports — the site-wide "Report a bug" button files here; the /bugs portal resolves them ----
-export function createBugReport({ url, path, description, imageUrl, reporter, role, userAgent }) {
+export function createBugReport({ url, path, description, imageUrl, imageUrls, reporter, role, userAgent }) {
   const desc = String(description || "").trim().slice(0, 4000);
   if (!desc) return { error: "Describe the bug first." };
+  // Accept an array (multi-screenshot) or a single URL. Cap at 10, keep the first in image_url.
+  let urls = Array.isArray(imageUrls) ? imageUrls : (imageUrl ? [imageUrl] : []);
+  urls = urls.filter((u) => typeof u === "string" && u).map((u) => u.slice(0, 500)).slice(0, 10);
+  const first = urls[0] || null;
   const info = db.prepare(
-    `INSERT INTO bug_reports (url, path, description, image_url, reporter, role, user_agent)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO bug_reports (url, path, description, image_url, image_urls, reporter, role, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(String(url || "").slice(0, 500), String(path || "").slice(0, 300), desc,
-        imageUrl ? String(imageUrl).slice(0, 500) : null,
+        first, urls.length ? JSON.stringify(urls) : null,
         reporter ? String(reporter).slice(0, 120) : null,
         role ? String(role).slice(0, 40) : null,
         userAgent ? String(userAgent).slice(0, 400) : null);

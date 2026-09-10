@@ -21,7 +21,9 @@ export async function POST(req) {
   const reporter = tok ? (tok.name || tok.email || tok.role) : "anonymous";
   const r = createBugReport({
     url: body.url, path: body.path, description: body.description,
-    imageUrl: body.imageUrl || null, reporter,
+    imageUrl: body.imageUrl || null,
+    imageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : undefined,
+    reporter,
     role: tok?.role || "guest",
     userAgent: req.headers.get("user-agent") || null,
   });

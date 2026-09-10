@@ -4,6 +4,8 @@ import MicButton from "./mic-button";
 import IconButton from "./ui/icon-button";
 import ScreenshotAnnotator from "./screenshot-annotator";
 
+const MAX_SHOTS = 10;
+
 function dataURLtoFile(dataUrl, name) {
   const [head, b64] = dataUrl.split(",");
   const mime = (head.match(/:(.*?);/) || [])[1] || "image/png";
@@ -11,120 +13,131 @@ function dataURLtoFile(dataUrl, name) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new File([arr], name, { type: mime });
 }
+const readDataURL = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(file); });
 const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
 
 // Site-wide "Report" button — mounted once in the root layout, so it sits at the bottom of every page.
-// Small form: describe it + capture/attach/paste a screenshot + dictate. Files to /api/bug-report;
-// staff resolve at /bugs. Capture uses native tab capture (includes iframes); the bug-report UI and
-// its blurred backdrop are removed from the DOM and given a real repaint BEFORE the frame is grabbed,
-// so the screenshot is the clean, sharp page — never the dimmed/blurred overlay.
+// Describe it + capture/attach/paste MULTIPLE screenshots (each independently marked up) + dictate.
+// Capture uses native tab capture (includes iframes); the bug-report UI and its backdrop are removed
+// from paint BEFORE the frame is grabbed, so each screenshot is the clean, sharp page. All shots upload
+// to /api/media and file to /api/bug-report as one report; staff triage at /bugs.
+//
+// shots: [{ preview, cleanShot, shapes, file }] — preview is the flattened image shown/uploaded;
+// cleanShot is the unannotated base so any shot can be reopened and re-marked without quality loss.
 export default function BugReporter() {
   const [open, setOpen] = useState(false);
   const [desc, setDesc] = useState("");
-  const [img, setImg] = useState(null);         // { file, preview } — flattened attachment
-  const [cleanShot, setCleanShot] = useState(null); // unannotated capture (data URL), for re-editing
-  const [shapes, setShapes] = useState([]);      // annotations on the current screenshot
+  const [shots, setShots] = useState([]);
+  const [editor, setEditor] = useState(null);   // { index, shot(cleanURL), shapes } — drives the annotator
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
-  const [shot, setShot] = useState(null);        // screenshot currently open in the editor
   const [capturing, setCapturing] = useState(false);
   const [canCapture, setCanCapture] = useState(true); // corrected on mount; false on iOS/Safari mobile
-  const fileRef = useRef(null);
-  const shotFileRef = useRef(null);              // picks an existing image to mark up (mobile path)
+  const fileRef = useRef(null);                  // Attach — adds an image directly
+  const shotFileRef = useRef(null);              // mobile Capture — picks an image straight into markup
 
-  // getDisplayMedia doesn't exist on iOS Safari — there's no way to grab the screen from the page. So
-  // on those devices the camera button picks the shot the user already took and sends it to the editor.
   useEffect(() => { setCanCapture(!!navigator.mediaDevices?.getDisplayMedia); }, []);
 
-  function pickImage(file) {
-    if (!file || !file.type?.startsWith("image/")) return;
-    setCleanShot(null); setShapes([]);
-    setImg({ file, preview: URL.createObjectURL(file) });
+  const atLimit = shots.length >= MAX_SHOTS;
+  function addShot(item) { setShots((prev) => (prev.length >= MAX_SHOTS ? prev : [...prev, item])); }
+  function removeShot(i) { setShots((prev) => prev.filter((_, k) => k !== i)); }
+
+  // Attach / paste an existing image → a new shot (re-editable, since we keep its data URL as cleanShot).
+  async function pickImage(file) {
+    if (!file || !file.type?.startsWith("image/") || atLimit) return;
+    const url = await readDataURL(file);
+    addShot({ preview: url, cleanShot: url, shapes: [], file: dataURLtoFile(url, `bug-${Date.now()}.png`) });
   }
-  // Route a chosen image straight into the annotator so mobile users still get red-pen markup.
-  function pickForAnnotate(file) {
-    if (!file || !file.type?.startsWith("image/")) return;
-    const rd = new FileReader();
-    rd.onload = () => { const url = String(rd.result); setCleanShot(url); setShapes([]); setShot(url); };
-    rd.readAsDataURL(file);
+  // Mobile camera fallback (no getDisplayMedia): pick the shot the user already took, straight into markup.
+  async function pickForAnnotate(file) {
+    if (!file || !file.type?.startsWith("image/") || atLimit) return;
+    const url = await readDataURL(file);
+    setEditor({ index: shots.length, shot: url, shapes: [] });
   }
 
-  // Capture the current tab (native — includes iframes). We acquire the stream first (the picker is
-  // browser chrome, not captured), THEN remove every piece of bug-report UI and wait two frames + a
-  // beat so the clean page is what the live stream is compositing, THEN grab a frame. No "hope the
-  // blur went away" timeout — the hide → repaint → grab order is deterministic.
+  // Capture the current tab (native — includes iframes). Acquire the stream first (the picker is browser
+  // chrome, not captured), THEN remove every piece of bug-report UI + backdrop and wait two frames + a
+  // beat so the clean page is what the live stream composites, THEN grab a frame → open the editor.
   async function capture() {
+    if (atLimit) return;
     if (!navigator.mediaDevices?.getDisplayMedia) { setErr("Screenshot isn't supported here — attach or paste one instead."); return; }
     setErr(null);
     let stream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser", frameRate: 30 }, preferCurrentTab: true, audio: false });
-    } catch { return; }                            // user cancelled the picker
-    setCapturing(true);                            // adds .bugr-capturing → hides all bug UI + backdrop
+    } catch { return; }
+    setCapturing(true);
     try {
       const video = document.createElement("video");
       video.srcObject = stream; video.muted = true; await video.play();
-      await raf(); await raf();                     // let the hidden state composite into the stream
-      await new Promise((r) => setTimeout(r, 90));  // one settle beat for the compositor
+      await raf(); await raf();
+      await new Promise((r) => setTimeout(r, 90));
       const cv = document.createElement("canvas");
       cv.width = video.videoWidth; cv.height = video.videoHeight;
       cv.getContext("2d").drawImage(video, 0, 0, cv.width, cv.height);
       const url = cv.toDataURL("image/png");
-      setCleanShot(url); setShapes([]); setShot(url);
+      setEditor({ index: shots.length, shot: url, shapes: [] });
     } catch { setErr("Couldn't capture the screen — try again."); }
     finally { stream.getTracks().forEach((t) => t.stop()); setCapturing(false); }
   }
   function onAnnotated(dataUrl, nextShapes) {
-    try { setImg({ file: dataURLtoFile(dataUrl, "bug-screenshot.png"), preview: dataUrl }); } catch { /* noop */ }
-    setShapes(nextShapes || []); setShot(null);
+    const idx = editor?.index ?? shots.length;
+    const base = editor?.shot;
+    setShots((prev) => {
+      const next = [...prev];
+      const item = { preview: dataUrl, cleanShot: base, shapes: nextShapes || [], file: dataURLtoFile(dataUrl, `bug-${Date.now()}.png`) };
+      if (idx >= next.length) next.push(item); else next[idx] = item;
+      return next.slice(0, MAX_SHOTS);
+    });
+    setEditor(null);
   }
-  function removeImg() { setImg(null); setCleanShot(null); setShapes([]); }
+  function reset() { setShots([]); setDesc(""); }
 
-  // Toggle a root class while grabbing the frame so CSS removes the FAB, scrim and its blur from paint.
+  // Hide the FAB, scrim and its blur from paint while grabbing the frame.
   useEffect(() => {
     const el = document.documentElement;
     if (capturing) el.classList.add("bugr-capturing"); else el.classList.remove("bugr-capturing");
     return () => el.classList.remove("bugr-capturing");
   }, [capturing]);
 
-  // Paste a screenshot from the clipboard, and Escape closes — only while the form is open and no
-  // screenshot editor is up (the editor owns Escape then).
+  // Paste a screenshot from the clipboard; Escape closes (the editor owns Escape while it's up).
   useEffect(() => {
     if (!open) return;
     function onPaste(e) {
       const it = [...(e.clipboardData?.items || [])].find((x) => x.type?.startsWith("image/"));
       if (it) { const f = it.getAsFile(); if (f) pickImage(f); }
     }
-    function onKey(e) { if (e.key === "Escape" && !shot && !capturing) setOpen(false); }
+    function onKey(e) { if (e.key === "Escape" && !editor && !capturing) setOpen(false); }
     window.addEventListener("paste", onPaste);
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("paste", onPaste); window.removeEventListener("keydown", onKey); };
-  }, [open, shot, capturing]);
+  }, [open, editor, capturing, shots.length]);
 
   async function submit() {
     if (busy) return;
     const d = desc.trim();
     if (!d) { setErr("Describe the bug first."); return; }
     setBusy(true); setErr(null);
-    let imageUrl = null;
-    if (img?.file) {
+    const imageUrls = [];
+    for (const s of shots) {
+      if (!s.file) continue;
       try {
         const fd = new FormData();
-        fd.append("file", img.file, img.file.name || "bug.png");
+        fd.append("file", s.file, s.file.name || "bug.png");
         fd.append("kind", "bug");
         const j = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" }).then((r) => r.ok ? r.json() : null).catch(() => null);
-        if (j?.ok && j.url) imageUrl = j.url;
-      } catch { /* attach is best-effort; the report still files without it */ }
+        if (j?.ok && j.url) imageUrls.push(j.url);
+      } catch { /* per-image best-effort; the report still files with the rest */ }
     }
     const r = await fetch("/api/bug-report", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrl }),
+      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setDone(true);
-    setTimeout(() => { setOpen(false); setDone(false); setDesc(""); removeImg(); }, 1400);
+    setTimeout(() => { setOpen(false); setDone(false); reset(); }, 1400);
   }
 
   return (
@@ -134,7 +147,7 @@ export default function BugReporter() {
       </button>
 
       {open && (
-        <div className="bugr-scrim" hidden={capturing || !!shot} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
+        <div className="bugr-scrim" hidden={capturing || !!editor} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
           <div className="bugr-card" role="dialog" aria-label="Report">
             {done ? (
               <div className="bugr-done">
@@ -153,23 +166,32 @@ export default function BugReporter() {
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
                 <input ref={shotFileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickForAnnotate(e.target.files?.[0]); e.target.value = ""; }} />
+
+                {shots.length > 0 && (
+                  <div className="bugr-strip">
+                    {shots.map((s, i) => (
+                      <div className="bugr-chip" key={i}>
+                        <button className="bugr-chip-img" onClick={() => setEditor({ index: i, shot: s.cleanShot, shapes: s.shapes })} aria-label={`Edit screenshot ${i + 1}`} title="Edit">
+                          <img src={s.preview} alt={`screenshot ${i + 1}`} />
+                        </button>
+                        <button className="bugr-chip-x" onClick={() => removeShot(i)} aria-label={`Remove screenshot ${i + 1}`}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="bugr-tools">
-                  {img ? (
-                    <div className="bugr-thumb" onClick={() => cleanShot && setShot(cleanShot)} title={cleanShot ? "Edit markup" : undefined} style={{ cursor: cleanShot ? "pointer" : "default" }}>
-                      <img src={img.preview} alt="attachment" />
-                      <button className="bugr-thumbx" onClick={(e) => { e.stopPropagation(); removeImg(); }} aria-label="Remove">✕</button>
-                    </div>
-                  ) : (
-                    <div className="bugr-icons">
-                      <IconButton label={canCapture ? "Capture" : "Screenshot"} onClick={canCapture ? capture : () => shotFileRef.current?.click()} disabled={capturing}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                      </IconButton>
-                      <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
-                      </IconButton>
-                      <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
-                    </div>
-                  )}
+                  <div className="bugr-icons">
+                    <IconButton label={atLimit ? "Limit reached" : (canCapture ? "Capture" : "Screenshot")} disabled={capturing || atLimit}
+                      onClick={canCapture ? capture : () => shotFileRef.current?.click()}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                    </IconButton>
+                    <IconButton label="Attach" disabled={atLimit} onClick={() => fileRef.current?.click()}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
+                    </IconButton>
+                    <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
+                    {shots.length > 0 && <span className="bugr-count">{shots.length}/{MAX_SHOTS}</span>}
+                  </div>
                 </div>
                 {err && <div className="bugr-err">{err}</div>}
                 <div className="bugr-act">
@@ -182,7 +204,7 @@ export default function BugReporter() {
         </div>
       )}
 
-      {shot && <ScreenshotAnnotator shot={shot} initialShapes={shapes} onDone={onAnnotated} onCancel={() => setShot(null)} />}
+      {editor && <ScreenshotAnnotator shot={editor.shot} initialShapes={editor.shapes} onDone={onAnnotated} onCancel={() => setEditor(null)} />}
 
       <style>{CSS}</style>
     </>
@@ -210,12 +232,16 @@ const CSS = `
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
+.bugr-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.bugr-chip{position:relative;width:60px;height:46px}
+.bugr-chip-img{width:60px;height:46px;padding:0;border:1px solid #e2e5ea;border-radius:8px;overflow:hidden;background:#fafafa;cursor:pointer;line-height:0}
+.bugr-chip-img img{width:100%;height:100%;object-fit:cover;display:block}
+.bugr-chip-img:hover{border-color:#12151b}
+.bugr-chip-x{position:absolute;top:-7px;right:-7px;width:19px;height:19px;border-radius:50%;border:0;background:#12151b;color:#fff;cursor:pointer;font-size:.62rem;line-height:1}
 .bugr-tools{display:flex;align-items:center;gap:8px;margin-top:10px;min-height:36px}
 .bugr-icons{display:flex;align-items:center;gap:2px;color:#4a5058}
 .bugr-mic{display:inline-flex;align-items:center;color:#4a5058}
-.bugr-thumb{position:relative;display:inline-block}
-.bugr-thumb img{max-height:96px;max-width:100%;border-radius:10px;border:1px solid #e2e5ea;display:block}
-.bugr-thumbx{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:0;background:#12151b;color:#fff;cursor:pointer;font-size:.7rem}
+.bugr-count{margin-left:6px;font-size:.72rem;font-weight:700;color:#9aa0a8}
 .bugr-err{margin-top:9px;font-size:.8rem;color:#c4553d;font-weight:600}
 .bugr-act{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .bugr-ghost{height:36px;padding:0 14px;border:1px solid #e2e5ea;border-radius:9px;background:#fff;color:#4a5058;font:600 .84rem/1 inherit;cursor:pointer}

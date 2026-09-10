@@ -9,6 +9,8 @@ import { Wordmark, BrandLink } from "../components/brand";
 const fmt = (s) => { try { const d = new Date(String(s).replace(" ", "T")); return d.toLocaleString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleString("en-US", { hour: "numeric", minute: "2-digit" }); } catch { return s; } };
 const who = (r) => (r && r.includes("@") ? r.split("@")[0] : r);
 const isLong = (t) => !!t && (t.length > 230 || (t.match(/\n/g) || []).length > 3);
+// A report may carry several screenshots (image_urls JSON) or one legacy image_url.
+const imgsOf = (b) => { try { const a = JSON.parse(b.image_urls || "null"); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ } return b.image_url ? [b.image_url] : []; };
 
 async function toPngBlob(blob) {
   if (blob.type === "image/png") return blob;
@@ -26,7 +28,7 @@ export default function BugsClient({ initial = [] }) {
   const [bugs, setBugs] = useState(initial);
   const [filter, setFilter] = useState("open");
   const [busy, setBusy] = useState(null);
-  const [zoom, setZoom] = useState(null);
+  const [gallery, setGallery] = useState(null);   // { urls, i } image preview
   const [suggest, setSuggest] = useState(() => Object.fromEntries(initial.filter((b) => b.fix_prompt).map((b) => [b.id, b.fix_prompt])));
   const [sugBusy, setSugBusy] = useState(null);
   const [fresh, setFresh] = useState(false);
@@ -60,27 +62,33 @@ export default function BugsClient({ initial = [] }) {
     return () => window.removeEventListener("click", h);
   }, [menuFor, moreFor]);
   useEffect(() => {
-    const h = (e) => { if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); setZoom(null); } };
+    const h = (e) => {
+      if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); setGallery(null); }
+      else if (e.key === "ArrowLeft") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i - 1 + g.urls.length) % g.urls.length } : g));
+      else if (e.key === "ArrowRight") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i + 1) % g.urls.length } : g));
+    };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 1300); }
   async function copyText(text) { try { await navigator.clipboard.writeText(text); flash("Copied"); } catch { flash("Copy failed"); } }
-  async function copyImage(b) {
-    if (!b.image_url) return;
+  async function copyImageUrl(url) {
+    if (!url) return;
     try {
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw 0;
-      const raw = await fetch(b.image_url, { credentials: "same-origin" }).then((r) => r.blob());
+      const raw = await fetch(url, { credentials: "same-origin" }).then((r) => r.blob());
       const png = await toPngBlob(raw);
       await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
       flash("Copied");
     } catch { flash("Image copy unsupported"); }
   }
   function copyAll(b) {
+    const imgs = imgsOf(b);
     const parts = [`BUG #${b.id}`];
     if (b.path) parts.push(b.path);
     parts.push("", b.description);
+    if (imgs.length) parts.push("", `${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}:`, ...imgs);
     if (suggest[b.id]) parts.push("", "PROMPT", suggest[b.id]);
     copyText(parts.join("\n"));
   }
@@ -90,7 +98,7 @@ export default function BugsClient({ initial = [] }) {
     setSugBusy(b.id); setMoreFor(null);
     const r = await fetch("/api/bug-suggest", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: b.id, description: b.description, path: b.path }),
+      body: JSON.stringify({ id: b.id, description: b.description, path: b.path, shots: imgsOf(b).length }),
     }).then((x) => x.json()).catch(() => null);
     setSugBusy(null);
     if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
@@ -143,12 +151,14 @@ export default function BugsClient({ initial = [] }) {
             const prompt = suggest[b.id];
             const long = isLong(prompt);
             const open = expanded.has(b.id);
+            const imgs = imgsOf(b);
             return (
               <div key={b.id} className={`bgp-card${b.status === "resolved" ? " done" : ""}`}>
                 <div className="bgp-row">
-                  {b.image_url && (
-                    <button className="bgp-thumb" onClick={() => setZoom(b.image_url)} aria-label="View screenshot" title="View">
-                      <img src={b.image_url} alt="screenshot" />
+                  {imgs.length > 0 && (
+                    <button className={`bgp-thumb${imgs.length > 1 ? " stack" : ""}`} onClick={() => setGallery({ urls: imgs, i: 0 })} aria-label={`View ${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}`} title="View">
+                      <img src={imgs[0]} alt="screenshot" />
+                      {imgs.length > 1 && <span className="bgp-count-badge">{imgs.length}</span>}
                     </button>
                   )}
                   <div className="bgp-body">
@@ -169,7 +179,13 @@ export default function BugsClient({ initial = [] }) {
                       </button>
                       {menuFor === b.id && (
                         <div className="bgp-menu" onClick={stop}>
-                          {b.image_url && <button onClick={() => { setMenuFor(null); copyImage(b); }}>Image</button>}
+                          {imgs.length === 1 && <button onClick={() => { setMenuFor(null); copyImageUrl(imgs[0]); }}>Image</button>}
+                          {imgs.length > 1 && (
+                            <div className="bgp-imgrow">
+                              <span>Image</span>
+                              {imgs.map((u, i) => <button key={i} className="bgp-imgnum" onClick={() => { setMenuFor(null); copyImageUrl(u); }}>{i + 1}</button>)}
+                            </div>
+                          )}
                           <button onClick={() => { setMenuFor(null); copyText(b.description); }}>Text</button>
                           {prompt && <button onClick={() => { setMenuFor(null); copyText(prompt); }}>Prompt</button>}
                           <button onClick={() => { setMenuFor(null); copyAll(b); }}>All</button>
@@ -215,13 +231,20 @@ export default function BugsClient({ initial = [] }) {
         </div>
       )}
 
-      {zoom && (
-        <div className="bgp-zoom" onClick={() => setZoom(null)}>
+      {gallery && (
+        <div className="bgp-zoom" onClick={() => setGallery(null)}>
           <div className="bgp-zoom-bar" onClick={stop}>
-            <button className="bgp-ib light" aria-label="Copy" title="Copy" onClick={async () => { try { const raw = await fetch(zoom, { credentials: "same-origin" }).then((r) => r.blob()); await navigator.clipboard.write([new ClipboardItem({ "image/png": await toPngBlob(raw) })]); flash("Copied"); } catch { flash("Image copy unsupported"); } }}><CopyI /></button>
-            <button className="bgp-ib light" aria-label="Close" title="Close" onClick={() => setZoom(null)}><CloseI /></button>
+            {gallery.urls.length > 1 && <span className="bgp-zoom-count">{gallery.i + 1} / {gallery.urls.length}</span>}
+            <button className="bgp-ib light" aria-label="Copy" title="Copy" onClick={() => copyImageUrl(gallery.urls[gallery.i])}><CopyI /></button>
+            <button className="bgp-ib light" aria-label="Close" title="Close" onClick={() => setGallery(null)}><CloseI /></button>
           </div>
-          <img src={zoom} alt="screenshot" onClick={stop} />
+          {gallery.urls.length > 1 && (
+            <>
+              <button className="bgp-nav prev" aria-label="Previous" onClick={(e) => { stop(e); setGallery((g) => ({ ...g, i: (g.i - 1 + g.urls.length) % g.urls.length })); }}><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <button className="bgp-nav next" aria-label="Next" onClick={(e) => { stop(e); setGallery((g) => ({ ...g, i: (g.i + 1) % g.urls.length })); }}><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg></button>
+            </>
+          )}
+          <img src={gallery.urls[gallery.i]} alt={`screenshot ${gallery.i + 1}`} onClick={stop} />
         </div>
       )}
 
@@ -252,8 +275,20 @@ const CSS = `
 .bgp-card{padding:13px 14px;border:1px solid #e8e8e3;border-radius:12px;background:#fff}
 .bgp-card.done{opacity:.62;background:#fbfbfa}
 .bgp-row{display:flex;align-items:flex-start;gap:13px}
-.bgp-thumb{flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:9px;overflow:hidden;line-height:0}
+.bgp-thumb{position:relative;flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:9px;line-height:0}
 .bgp-thumb img{width:92px;height:70px;object-fit:cover;border:1px solid #e4e4df;border-radius:9px;display:block}
+.bgp-thumb.stack{box-shadow:3px 3px 0 -1px #fff,3px 3px 0 0 #e4e4df,6px 6px 0 -1px #fff,6px 6px 0 0 #e4e4df}
+.bgp-count-badge{position:absolute;right:-5px;bottom:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#12151b;color:#fff;font-size:.66rem;font-weight:800;line-height:18px;text-align:center}
+.bgp-imgrow{display:flex;align-items:center;gap:5px;padding:6px 10px}
+.bgp-imgrow>span{font-size:.82rem;font-weight:600;color:#2b2f36;margin-right:2px}
+.bgp-imgnum{width:24px;height:24px;padding:0;border:1px solid #e4e4df;border-radius:6px;background:#fff;color:#2b2f36;font:700 .74rem/1 inherit;cursor:pointer}
+.bgp-imgnum:hover{background:#f4f5f7;border-color:#12151b}
+.bgp-zoom-count{color:#fff;font-size:.8rem;font-weight:700;align-self:center;margin-right:4px}
+.bgp-nav{position:fixed;top:50%;transform:translateY(-50%);z-index:1001;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,.2);border-radius:50%;background:rgba(255,255,255,.1);color:#fff;cursor:pointer}
+.bgp-nav:hover{background:rgba(255,255,255,.22)}
+.bgp-nav.prev{left:16px}
+.bgp-nav.next{right:16px}
 .bgp-body{flex:1;min-width:0}
 .bgp-desc{font-size:.9rem;font-weight:600;white-space:pre-wrap;word-break:break-word;line-height:1.35}
 .bgp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:3px 9px;margin-top:6px;font-size:.74rem;color:#9297a0}
@@ -315,6 +350,9 @@ const CSS = `
   .bgp-menu{background:#1b1f26;border-color:#2a2f37}
   .bgp-menu button,.bgp-menu a{color:#c8ccd2}
   .bgp-menu button:hover,.bgp-menu a:hover{background:#232830}
+  .bgp-imgrow>span{color:#c8ccd2}
+  .bgp-imgnum{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-imgnum:hover{background:#232830;border-color:#5a6068}
   .bgp-resolve.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-prompt{border-color:#2a2f37}
   .bgp-prompt-body{background:#12151a;color:#c8ccd2}
