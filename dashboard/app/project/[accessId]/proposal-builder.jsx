@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, fmtSignStamp,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, fmtSignStamp, cameraNameOverrides,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
@@ -88,6 +88,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [pricingOpen, setPricingOpen] = useState(null);
   const [priceBookVersion, setPriceBookVersion] = useState(0);
   const [surveyFloors, setSurveyFloors] = useState([]); // [{index, name, count}] for the import picker
+  const [camRoster, setCamRoster] = useState([]);        // survey camera roster → live location names on camera lines
+  const [syncConfirm, setSyncConfirm] = useState(false); // two-tap confirm for the destructive "Sync from survey" rebuild
   const [waiveOpen, setWaiveOpen] = useState(false);     // waiver tool panel
   const [bodyOpenState, setBodyOpen] = useState(true);   // whole-card collapse (matches the other proposal-phase cards)
   const bodyOpen = embedded ? true : bodyOpenState;      // in the deck overlay the card is always open (no self-collapse)
@@ -96,9 +98,14 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   // the customer-safe variant from the server render). If the draft is still empty and
   // this device has survey data, auto-import the devices once (idempotent — see importSurvey).
   const autoImportedRef = useRef(false);
+  const rosterReloadRef = useRef(null);   // re-fetch the survey camera roster after a rename writes back
   useEffect(() => {
     try { setSurveyFloors(surveyFloorSummary(loadSurveyForImport(accessId))); } catch {}
     let live = true;
+    const loadRoster = () => fetch(`/api/project-cameras?accessId=${encodeURIComponent(accessId)}`).then((r) => r.json())
+      .then((j) => { if (live && j?.ok) setCamRoster(Array.isArray(j.cameras) ? j.cameras : []); }).catch(() => {});
+    loadRoster();
+    rosterReloadRef.current = loadRoster;
     // Sync the company-wide price book to the local cache FIRST, so auto-import prices correctly.
     getPriceBookAction()
       .then((pb) => { if (live && pb?.ok && pb.prices) savePriceOverrides(pb.prices); })
@@ -153,6 +160,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const status = meta?.status && meta.payload ? meta.status : (meta?.status || "draft");
   const readOnly = status !== "draft";
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
+  // Camera lines display the survey's live location name (by camera_id — the single source of truth).
+  const camNames = cameraNameOverrides(opt?.services, camRoster);
 
   function patchPayload(next) { setPayload(next); setDirty(true); setErr(null); }
   function patchOption(patch) {
@@ -233,6 +242,36 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     setImportMsg(added === 0
       ? `${floorName || "The survey"} is already imported — nothing new to add.`
       : `${auto ? "Auto-imported" : "Imported"} ${added} item${added !== 1 ? "s" : ""} from ${floorName || "the survey"}.`);
+  }
+
+  // Rebuild from survey: the survey is the source of truth for the camera LIST — replace this option's
+  // camera service with the survey's cameras (each named by location + linked by camera_id), so the
+  // proposal mirrors the survey exactly. Other services are kept. Changes the camera count/total.
+  function syncCamerasFromSurvey() {
+    ensureSurveyCameraIds(accessId);
+    const survey = loadSurveyForImport(accessId);
+    const groups = survey ? surveyToImport(survey, null) : [];
+    const camGroup = groups.find((g) => g.key === "camera");
+    if (!camGroup) { setImportMsg("No survey cameras to sync."); return; }
+    setPayload((prev) => {
+      const optId = prev.options.some((o) => o.id === activeOpt) ? activeOpt : prev.options[0].id;
+      return { ...prev, options: prev.options.map((o) => o.id !== optId ? o
+        : { ...o, services: [camGroup, ...o.services.filter((s) => s.key !== "camera")] }) };
+    });
+    setDirty(true);
+    const n = (camGroup.items || []).filter((it) => (it.sub || []).length).length;
+    setImportMsg(`Cameras rebuilt from the survey — ${n} camera${n !== 1 ? "s" : ""}.`);
+  }
+
+  // A rename on a camera line writes through to the survey (single source of truth, by cid), so the
+  // new name shows on the survey, the mockup, and here. Only linked camera lines write back.
+  async function writeCameraName(cid, name) {
+    if (!cid) return;
+    try {
+      await fetch("/api/project-cameras", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessId, cid, name }) });
+      rosterReloadRef.current?.();
+    } catch { /* keep the local edit; a later save/reload reconciles */ }
   }
 
   async function save() {
@@ -532,6 +571,15 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       {!readOnly && surveyFloors.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} />
+          {syncConfirm ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: ".76rem", color: "var(--muted)" }}>Replace the cameras with the survey&apos;s?</span>
+              <button className="prop-tab" onClick={() => { setSyncConfirm(false); syncCamerasFromSurvey(); }}>Rebuild</button>
+              <button className="prop-tab" onClick={() => setSyncConfirm(false)}>Cancel</button>
+            </span>
+          ) : (
+            <button className="prop-tab" title="Replace this option's cameras with the survey's — named + linked to each surveyed camera" onClick={() => setSyncConfirm(true)}>Sync from survey</button>
+          )}
         </div>
       )}
 
@@ -548,6 +596,8 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
           onRemove={() => patchOption({ services: opt.services.filter((_, j) => j !== i) })}
           onOpenPricing={readOnly ? undefined : setPricingOpen}
           priceBookVersion={priceBookVersion}
+          cameraNames={camNames}
+          onCameraRename={writeCameraName}
         />
       ))}
       {opt.services.length === 0 && <div className="prop-empty">No services yet — import the survey or add one below.</div>}

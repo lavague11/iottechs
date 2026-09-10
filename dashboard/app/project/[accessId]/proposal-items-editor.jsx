@@ -87,7 +87,7 @@ function recommendedNvr(count) {
 }
 const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 
-export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag }) {
+export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename }) {
   const flags = customerFlags || {};
   // Recomputed whenever the price book changes (priceBookVersion bumps after Save) — includes
   // renamed/priced defaults, minus hidden ones, plus any custom items added for this service.
@@ -330,6 +330,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     // breakdown lines carry that.
     const hasSub = !parent && !!it.sub && it.sub.length > 0;
     const expandable = !parent;
+    // A camera line's label is the survey's location name (single source of truth). We DISPLAY the
+    // survey name (camName) but edit it.name; entering edit mode seeds it.name from the survey name,
+    // and on blur a camera line linked by camera_id writes the new name back to the survey (→ survey +
+    // mockup stay in sync). camName resolves by camera_id only, so a line is never mislabeled.
+    const camName = svc.key === "camera" && cameraNames ? cameraNames.get(it.id) : null;
+    const startCamEdit = () => { if (readOnly) return; if (camName && camName !== it.name) patchItem(it.id, { name: camName }); setEditingId(it.id); };
+    const writeCamName = () => { if (svc.key === "camera" && it.camera_id && onCameraRename) onCameraRename(it.camera_id, it.name); };  // survey write-back on rename
     return (
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}>
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -341,12 +348,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <input value={it.name} disabled={readOnly} placeholder="Item" autoFocus
                    style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
                    onChange={(e) => patchItem(it.id, { name: e.target.value })}
-                   onBlur={() => setEditingId(null)}
-                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingId(null); } }} />
+                   onBlur={() => { setEditingId(null); writeCamName(); }}
+                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingId(null); writeCamName(); } }} />
           ) : (
             <span className="prop-item-nametext" title={readOnly ? undefined : "Double-click to rename"}
                   style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
-                  onDoubleClick={() => { if (!readOnly) setEditingId(it.id); }}>{it.name || "Item"}</span>
+                  onDoubleClick={() => { if (camName != null) startCamEdit(); else if (!readOnly) setEditingId(it.id); }}>{camName || it.name || "Item"}</span>
           )
         ) : (
           <ItemNameField
