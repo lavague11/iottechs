@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { addToolNoteAction } from "./proposal-actions";
+import MicButton from "../../components/mic-button";
 
 // A cinematic, spatial walkthrough. The aerial SITE SURVEY is the stage; every planned camera is a
 // numbered marker on it. When a camera is picked (or the tour plays), that marker MORPHS open — it
@@ -175,7 +176,7 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
         {commentOpen && camActive && (
           <div className="swk2-notewrap" onClick={(e) => { if (e.target.classList.contains("swk2-notewrap")) setCommentOpen(false); }}>
             <div className="swk2-note">
-              <div className="swk2-note-h">Leave a note on <b>{nameFor(cur)}</b></div>
+              <div className="swk2-note-h">Leave a note on <b>{nameFor(cur)}</b><span style={{ marginLeft: "auto" }}><MicButton value={draft} onChange={setDraft} /></span></div>
               <textarea autoFocus rows={3} className="swk2-note-in" value={draft} onChange={(e) => setDraft(e.target.value)}
                 placeholder="Tell us what you'd like adjusted… e.g. raise the angle · more driveway · less of the fence" />
               <div className="swk2-note-act">
@@ -270,7 +271,7 @@ const CSS = `
 .swk2-notewrap{position:absolute;inset:0;z-index:6;background:rgba(6,9,16,.4);display:flex;align-items:flex-end;justify-content:center;padding:0 14px 78px;animation:swk2In .2s ease}
 .swk2-note{width:100%;max-width:480px;background:#fff;border-radius:15px;padding:15px;box-shadow:0 26px 60px -18px rgba(0,0,0,.55);animation:swk2Up .28s ${EASE}}
 @keyframes swk2Up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.swk2-note-h{font-size:.88rem;font-weight:700;color:#1A1712;margin-bottom:9px}
+.swk2-note-h{display:flex;align-items:center;font-size:.88rem;font-weight:700;color:#1A1712;margin-bottom:9px}
 .swk2-note-in{width:100%;border:1px solid rgba(16,17,18,.16);border-radius:10px;padding:9px 11px;font-size:.86rem;font-family:inherit;color:#1A1712;resize:vertical;outline:none}
 .swk2-note-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .swk2-note-act{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}

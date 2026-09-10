@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { addToolNoteAction, getToolNotesAction } from "./proposal-actions";
+import MicButton from "../../components/mic-button";
 
 // Customer read-only comment thread for a tool (survey / mockup / portal). The customer can't edit
 // the tool — tapping an item opens a small toast to leave a comment TAGGED to that item (anchor,
@@ -91,6 +92,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
               <div className="tc-row">
                 <input className="tc-in" autoFocus placeholder={`Leave a comment on ${anchor}…`} value={text} maxLength={2000}
                   onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+                <MicButton value={text} onChange={setText} />
                 <button className="tc-btn" onClick={submit} disabled={busy || !text.trim()}>{busy ? "…" : "Send"}</button>
               </div>
             ) : <div className="tc-preview">Comments are disabled in preview.</div>}
@@ -119,6 +121,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
             <div className="tc-row" style={{ marginTop: groups.length ? 11 : 2 }}>
               <input className="tc-in" placeholder="Leave a comment…" value={genText} maxLength={2000}
                 onChange={(e) => setGenText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitGeneral(); }} />
+              <MicButton value={genText} onChange={setGenText} />
               <button className="tc-btn" onClick={submitGeneral} disabled={genBusy || !genText.trim()}>{genBusy ? "…" : "Send"}</button>
             </div>
           )}
