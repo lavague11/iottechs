@@ -56,8 +56,7 @@ export default function BugReporter() {
   return (
     <>
       <button className="bugr-fab" onClick={() => setOpen(true)} aria-label="Report a bug" title="Report a bug">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
-        Report a bug
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
       </button>
 
       {open && (
@@ -106,12 +105,11 @@ export default function BugReporter() {
 }
 
 const CSS = `
-.bugr-fab{position:fixed;right:14px;bottom:14px;z-index:2147483000;display:inline-flex;align-items:center;gap:7px;
-  height:34px;padding:0 13px;border-radius:100px;border:1px solid rgba(255,255,255,.14);
-  background:#12151b;color:#e9edf2;font:600 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;
-  box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.72;transition:opacity .16s,transform .16s}
+.bugr-fab{position:fixed;right:14px;bottom:14px;z-index:2147483000;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
+  background:#12151b;color:#f0a04b;cursor:pointer;
+  box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
-.bugr-fab svg{color:#f0a04b}
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:rgba(8,10,14,.5);backdrop-filter:blur(2px);
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
 .bugr-card{width:min(420px,94vw);background:#fff;color:#12151b;border-radius:16px;padding:16px;

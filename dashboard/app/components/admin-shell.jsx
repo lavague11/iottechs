@@ -21,6 +21,7 @@ const TABS = [
   { key: "activity",  label: "Activity",  href: "/activity" },
   { key: "support",   label: "Support",   href: "/support" },
   { key: "dev",       label: "Dev",       href: "/dev" },
+  { key: "bugs",      label: "Bugs",      href: "/bugs" },
 ];
 
 // Grouped nav for admin/manager — collapses the long flat bar into dropdowns,
@@ -35,6 +36,7 @@ const NAV_GROUPS = [
     { key: "onboarding", label: "Hiring",  href: "/hiring" },
     { key: "activity", label: "Activity Log", href: "/activity" },
     { key: "dev",      label: "Dev Roadmap",  href: "/dev" },
+    { key: "bugs",     label: "Bug Portal",   href: "/bugs" },
     { key: "archives", label: "Archives",     href: "/archives" },
   ]},
   { key: "bio-grp", label: "Biometrics", items: [
