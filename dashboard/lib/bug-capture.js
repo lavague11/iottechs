@@ -66,16 +66,19 @@ export async function captureViewport() {
   };
 }
 
-// Optional native screen capture (desktop only). Captures iframes and off-app content, needs a
-// screen-share prompt. Kept available for a future "Screen" option; not the default.
-export async function nativeCapture() {
+// Native screen capture (desktop only). This is the way to capture IFRAME content (the survey/mockup
+// tools) and anything DOM capture can't render. It captures the live composited tab, so any bug UI on
+// screen would be baked in — `onBeforeGrab` runs after the stream is live but before the frame is
+// grabbed, giving the caller a deterministic window to hide the Report UI and let it repaint.
+export async function nativeCapture(onBeforeGrab) {
   if (!canNativeCapture()) throw new Error("native capture unavailable");
   const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" }, preferCurrentTab: true, audio: false });
   try {
     const video = document.createElement("video");
     video.srcObject = stream; video.muted = true; await video.play();
+    if (typeof onBeforeGrab === "function") await onBeforeGrab();
     await new Promise((r) => requestAnimationFrame(() => r()));
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 100));
     const cv = document.createElement("canvas");
     cv.width = video.videoWidth; cv.height = video.videoHeight;
     cv.getContext("2d").drawImage(video, 0, 0, cv.width, cv.height);

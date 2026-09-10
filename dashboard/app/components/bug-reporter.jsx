@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import MicButton from "./mic-button";
 import IconButton from "./ui/icon-button";
 import ScreenshotAnnotator from "./screenshot-annotator";
-import { captureViewport, prewarm } from "../../lib/bug-capture";
+import { captureViewport, nativeCapture, canNativeCapture, prewarm } from "../../lib/bug-capture";
 
 const MAX_SHOTS = 10;
 
@@ -43,9 +43,12 @@ export default function BugReporter() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
   const [capturing, setCapturing] = useState(false);
+  const [nativeOk, setNativeOk] = useState(false);   // desktop screen-capture available? (offers "Screen")
   const fileRef = useRef(null);
   const loadedRef = useRef(false);               // draft loaded for this open? (gates autosave)
   const saveTimer = useRef(null);
+
+  useEffect(() => { setNativeOk(canNativeCapture()); }, []);
 
   const atLimit = shots.length >= MAX_SHOTS;
   function removeShot(id) { setShots((prev) => prev.filter((s) => s.id !== id)); }
@@ -79,6 +82,23 @@ export default function BugReporter() {
       setEditor({ id: null, shot: dataUrl, shapes: [] });
     } catch { setErr("Capture failed — attach or paste one instead."); }
     finally { setCapturing(false); }
+  }
+  // Native screen capture — the way to grab IFRAME content (survey/mockup) that DOM capture leaves
+  // blank. Hides the Report UI from the composited frame right before the grab (no flash on the live
+  // page since it's only hidden for a couple frames).
+  async function captureScreen() {
+    if (atLimit || capturing || !nativeOk) return;
+    setErr(null); setCapturing(true);
+    const html = document.documentElement;
+    try {
+      const { dataUrl } = await nativeCapture(async () => {
+        html.classList.add("bugr-capturing");
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await new Promise((r) => setTimeout(r, 70));
+      });
+      setEditor({ id: null, shot: dataUrl, shapes: [] });
+    } catch (e) { if (e?.name !== "NotAllowedError" && e?.name !== "AbortError") setErr("Screen capture failed."); }
+    finally { html.classList.remove("bugr-capturing"); setCapturing(false); }
   }
   function onAnnotated(dataUrl, nextShapes) {
     const ed = editor;
@@ -200,6 +220,11 @@ export default function BugReporter() {
                     <IconButton label={atLimit ? "Limit reached" : (capturing ? "Capturing" : "Capture")} disabled={capturing || atLimit} onClick={capture}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
                     </IconButton>
+                    {nativeOk && (
+                      <IconButton label="Screen" disabled={capturing || atLimit} onClick={captureScreen}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+                      </IconButton>
+                    )}
                     <IconButton label="Attach" disabled={atLimit} onClick={() => fileRef.current?.click()}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
                     </IconButton>
@@ -232,6 +257,8 @@ const CSS = `
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
   background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
+/* native "Screen" capture grabs the composited tab, so hide bug UI for the couple frames before the grab */
+.bugr-capturing .bugr-fab,.bugr-capturing .bugr-scrim{visibility:hidden!important}
 /* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. */
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
