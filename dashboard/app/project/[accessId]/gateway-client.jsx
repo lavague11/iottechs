@@ -2232,7 +2232,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has || surveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
@@ -2292,7 +2292,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         return [{ name: "Consulting", label: "Consulting", wide: true, node: (
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
             planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
-            hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams} />
+            hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams}
+            devReadOnly={cView === "customer"} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }
       if (pk === "ph_proposal") {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
+import SurveyDevices from "./survey-devices";
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
@@ -18,11 +19,21 @@ export default function SystemPlanner({
   accessId, customerName = "",
   planNode = null, viewsNode = null, footer = null,
   hasSurvey = false, hasViews = false, hasCams = false,
+  devReadOnly = false, devLocked = false,
 }) {
   const [mode, setMode] = useState("plan");     // "plan" (survey) | "views" (camera mockups)
   const [walkOpen, setWalkOpen] = useState(false);
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
+  const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
+  const [curFloor, setCurFloor] = useState(0);
   const rootRef = useRef(null);
+
+  // Talk to the survey iframe (the devices live in survey2). The roster is shared across both tabs, so
+  // its edits post straight to the survey iframe (which stays mounted even while the Plan pane is hidden).
+  const surveyCmd = (payload) => {
+    try { const fr = rootRef.current && rootRef.current.querySelector('iframe[title="Site Survey"]');
+      if (fr && fr.contentWindow) fr.contentWindow.postMessage({ type: "iotSurveyCmd", project: accessId, ...payload }, "*"); } catch { /* iframe not ready */ }
+  };
 
   // The camera is ONE object across the two modes. Each iframe broadcasts the cid the user picked; we
   // relay it to the OTHER iframe so the same camera is focused there — even while that pane is hidden,
@@ -37,6 +48,8 @@ export default function SystemPlanner({
       };
       if (m.type === "iotSurveySelect" && m.cid) { setSelectedCid(m.cid); post("CCTV Mockup", { type: "iotMockupCmd", cmd: "focus", cid: m.cid }); }
       else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
+      // The devices roster is lifted into the shell (shown on both tabs) — mirror the survey's live roster.
+      else if (m.type === "iotSurveyDevices") { setRoster(Array.isArray(m.floors) ? m.floors : []); setCurFloor(m.curFloor || 0); }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -94,6 +107,13 @@ export default function SystemPlanner({
       <div className="syp-pane" hidden={mode !== "views"}>
         {viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>}
       </div>
+
+      {/* The DEVICES roster — the camera account. Shared across BOTH tabs (not tied to the survey map),
+          so cameras can be named/photographed from either mode. Office-only (customers see cameras in
+          the views). */}
+      {!devReadOnly && (
+        <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} />
+      )}
 
       {/* ONE submit surface — both tools' Submit/Approve, always visible under either mode. */}
       {footer}

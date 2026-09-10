@@ -10,7 +10,7 @@ import { seedToolData, startToolAutosync } from "./tool-sync";
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false, noRoster = false }) {
   const readOnly = view === "customer" || customerView;
   // Build gate — the empty survey editor is a big surface; staff see a Build button first (matching
   // the Mockup), so a skipped survey isn't an eyesore and Consulting reads as building the system. A
@@ -184,7 +184,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     </div>
     {/* The device roster lives OUTSIDE the tool now — below the map, never overlapping it. Hidden while
         the tool is full-screen (the overlay covers the page). */}
-    {!fs && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
+    {/* The devices roster is lifted into the System Planner shell (shown on BOTH tabs), so the survey
+        widget doesn't render its own copy when embedded there (noRoster). */}
+    {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
     {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
     <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
     </>

@@ -100,7 +100,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
 
       <button className="sd-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <svg className={`sd-chev${open ? " on" : ""}`} viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
-        <span className="sd-title">Survey devices</span>
+        <span className="sd-title">Devices</span>
         <span className="sd-count">{total} device{total !== 1 ? "s" : ""}</span>
         {locked && <span className="sd-locked" title="Unsubmit the survey to edit"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>Submitted</span>}
         {!locked && cams.some((d) => d.photo) && (
