@@ -23,6 +23,7 @@ export async function POST(req) {
     url: body.url, path: body.path, description: body.description,
     imageUrl: body.imageUrl || null,
     imageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : undefined,
+    context: body.context && typeof body.context === "object" ? body.context : undefined,
     reporter,
     role: tok?.role || "guest",
     userAgent: req.headers.get("user-agent") || null,

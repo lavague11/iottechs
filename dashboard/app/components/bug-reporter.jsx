@@ -130,9 +130,12 @@ export default function BugReporter() {
         if (j?.ok && j.url) imageUrls.push(j.url);
       } catch { /* per-image best-effort; the report still files with the rest */ }
     }
+    // "What the application knew" — sanitized route/error context, present only on staff pages.
+    let context = null;
+    try { if (typeof window !== "undefined" && window.__iotBugContext) context = window.__iotBugContext(); } catch { /* noop */ }
     const r = await fetch("/api/bug-report", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls }),
+      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls, context }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }

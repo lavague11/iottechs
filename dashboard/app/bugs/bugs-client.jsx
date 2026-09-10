@@ -11,6 +11,7 @@ const who = (r) => (r && r.includes("@") ? r.split("@")[0] : r);
 const isLong = (t) => !!t && (t.length > 230 || (t.match(/\n/g) || []).length > 3);
 // A report may carry several screenshots (image_urls JSON) or one legacy image_url.
 const imgsOf = (b) => { try { const a = JSON.parse(b.image_urls || "null"); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ } return b.image_url ? [b.image_url] : []; };
+const ctxOf = (b) => { try { const c = JSON.parse(b.context || "null"); return c && typeof c === "object" ? c : null; } catch { return null; } };
 
 async function toPngBlob(blob) {
   if (blob.type === "image/png") return blob;
@@ -35,6 +36,7 @@ export default function BugsClient({ initial = [] }) {
   const [menuFor, setMenuFor] = useState(null);   // bug id whose Copy menu is open
   const [moreFor, setMoreFor] = useState(null);   // bug id whose More menu is open
   const [expanded, setExpanded] = useState(() => new Set());
+  const [ctxOpen, setCtxOpen] = useState(() => new Set());
   const [toast, setToast] = useState(null);
   const seenRef = useRef(new Set(initial.map((b) => b.id)));
 
@@ -98,7 +100,7 @@ export default function BugsClient({ initial = [] }) {
     setSugBusy(b.id); setMoreFor(null);
     const r = await fetch("/api/bug-suggest", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: b.id, description: b.description, path: b.path, shots: imgsOf(b).length }),
+      body: JSON.stringify({ id: b.id, description: b.description, path: b.path, shots: imgsOf(b).length, error: ctxOf(b)?.errors?.[0]?.message || undefined }),
     }).then((x) => x.json()).catch(() => null);
     setSugBusy(null);
     if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
@@ -152,6 +154,7 @@ export default function BugsClient({ initial = [] }) {
             const long = isLong(prompt);
             const open = expanded.has(b.id);
             const imgs = imgsOf(b);
+            const ctx = ctxOf(b);
             return (
               <div key={b.id} className={`bgp-card${b.status === "resolved" ? " done" : ""}`}>
                 <div className="bgp-row">
@@ -222,6 +225,24 @@ export default function BugsClient({ initial = [] }) {
                         <div className={`bgp-prompt-body${long && !open ? " clamp" : ""}`}>{prompt}</div>
                         {long && <button className="bgp-toggle" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>{open ? "Less" : "More"}</button>}
                       </>
+                    )}
+                  </div>
+                )}
+
+                {ctx && (ctx.errors?.length > 0 || ctx.routes?.length > 1 || ctx.viewport) && (
+                  <div className="bgp-ctx">
+                    <button className="bgp-ctx-head" onClick={() => setCtxOpen((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>
+                      Context {ctx.errors?.length > 0 && <em className="bgp-ctx-flag">{ctx.errors.length} error{ctx.errors.length > 1 ? "s" : ""}</em>}<span className="bgp-ctx-caret">{ctxOpen.has(b.id) ? "−" : "+"}</span>
+                    </button>
+                    {ctxOpen.has(b.id) && (
+                      <div className="bgp-ctx-body">
+                        <div><span className="bgp-ctx-k">Route</span> {ctx.route}{ctx.viewport ? ` · ${ctx.viewport}` : ""}</div>
+                        {ctx.routes?.length > 1 && <div><span className="bgp-ctx-k">Trail</span> {ctx.routes.join(" → ")}</div>}
+                        {ctx.errors?.map((e, i) => (
+                          <div key={i} className="bgp-ctx-err"><span className={`bgp-ctx-tag ${e.type}`}>{e.type}</span> {e.message}{e.occurrences > 1 ? ` ×${e.occurrences}` : ""}</div>
+                        ))}
+                        {ctx.ua && <div className="bgp-ctx-ua">{ctx.ua}</div>}
+                      </div>
                     )}
                   </div>
                 )}
@@ -319,6 +340,18 @@ const CSS = `
 .bgp-prompt-body.muted{color:#9aa0a8}
 .bgp-prompt-body.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .bgp-toggle{margin-top:5px;border:0;background:none;cursor:pointer;font:700 .76rem/1 inherit;color:#8a6d2f;padding:2px 0}
+.bgp-ctx{margin-top:9px;padding-top:9px;border-top:1px solid #eee}
+.bgp-ctx-head{display:inline-flex;align-items:center;gap:7px;border:0;background:none;cursor:pointer;font:800 .7rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0;padding:0}
+.bgp-ctx-flag{font-style:normal;text-transform:none;letter-spacing:0;font-weight:700;font-size:.72rem;color:#c4553d}
+.bgp-ctx-caret{font-size:.9rem;color:#b3b8bf}
+.bgp-ctx-body{margin-top:7px;display:flex;flex-direction:column;gap:4px;font-size:.76rem;line-height:1.45;color:#5a6068;
+  background:#f7f8fa;border-radius:8px;padding:9px 11px;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+.bgp-ctx-k{display:inline-block;min-width:44px;font-weight:700;color:#9297a0}
+.bgp-ctx-err{word-break:break-word}
+.bgp-ctx-tag{display:inline-block;font-size:.66rem;font-weight:800;text-transform:uppercase;padding:1px 5px;border-radius:5px;background:#eceef1;color:#6b7079;margin-right:4px}
+.bgp-ctx-tag.error,.bgp-ctx-tag.rejection{background:#fbe6e2;color:#b34a3a}
+.bgp-ctx-tag.network{background:#fdf2dc;color:#8a6d2f}
+.bgp-ctx-ua{color:#a9aeb5;word-break:break-word;font-size:.7rem}
 .bgp-zoom{position:fixed;inset:0;z-index:1000;background:rgba(8,10,14,.9);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
 .bgp-zoom img{max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
 .bgp-zoom-bar{position:fixed;top:16px;right:16px;display:flex;gap:6px;z-index:1001}
@@ -353,6 +386,11 @@ const CSS = `
   .bgp-imgrow>span{color:#c8ccd2}
   .bgp-imgnum{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-imgnum:hover{background:#232830;border-color:#5a6068}
+  .bgp-ctx{border-color:#2a2f37}
+  .bgp-ctx-body{background:#12151a;color:#a9b0b8}
+  .bgp-ctx-tag{background:#232830;color:#9aa0a8}
+  .bgp-ctx-tag.error,.bgp-ctx-tag.rejection{background:#3a201c;color:#e5a89c}
+  .bgp-ctx-tag.network{background:#2c2617;color:#e0c88a}
   .bgp-resolve.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-prompt{border-color:#2a2f37}
   .bgp-prompt-body{background:#12151a;color:#c8ccd2}

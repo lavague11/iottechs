@@ -1,6 +1,9 @@
 import "./globals.css";
+import { cookies } from "next/headers";
 import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
+import { parseToken } from "../lib/auth";
 import BugReporter from "./components/bug-reporter";
+import ErrorContextProbe from "./components/error-context";
 
 // The deck-theme faces, self-hosted by Next (no external CDN). Exposed as CSS vars so any
 // component can opt in with var(--font-sans) / var(--font-mono).
@@ -26,10 +29,17 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  // Error-context capture runs for staff only — read the session token here and gate the probe.
+  let staff = false;
+  try {
+    const tok = (await cookies()).get("iot_session")?.value;
+    const s = tok ? await parseToken(tok) : null;
+    staff = !!(s?.id && ["admin", "manager"].includes(s.role));
+  } catch { /* no session → no capture */ }
   return (
     <html lang="en" className={`${fontSans.variable} ${fontMono.variable}`}>
-      <body>{children}<BugReporter /></body>
+      <body>{children}<BugReporter />{staff && <ErrorContextProbe />}</body>
     </html>
   );
 }
