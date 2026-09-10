@@ -17,6 +17,9 @@ const PALETTE = [
   ["#31c46b", "Green"], ["#3b82f6", "Blue"], ["#ffffff", "White"], ["#101317", "Black"],
 ];
 const STROKES = [["Thin", 0.62], ["Medium", 1], ["Thick", 1.7]];
+const clampZ = (z) => Math.max(1, Math.min(6, z));
+const dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mid2 = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
 export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialShapes }) {
   const canvasRef = useRef(null);
@@ -36,6 +39,14 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const toolRef = useRef(tool); toolRef.current = tool;
   const colorRef = useRef(color); colorRef.current = color;
   const mulRef = useRef(strokeMul); mulRef.current = strokeMul;
+  // Zoom/pan: a CSS transform on the canvas. pt() reads getBoundingClientRect, which already reflects
+  // the transform, so annotation coordinates stay correct at any zoom. Two-finger pinch/drag on touch,
+  // wheel + on-screen ± controls on desktop.
+  const [view, setView] = useState({ z: 1, x: 0, y: 0 });
+  const viewRef = useRef(view); viewRef.current = view;
+  const pointers = useRef(new Map());   // active pointerId -> {x,y}
+  const pinch = useRef(null);           // { dist, mid, z, x, y } during a two-finger gesture
+  const zoomBy = (f) => setView((v) => { const z = clampZ(v.z * f); return z <= 1 ? { z: 1, x: 0, y: 0 } : { ...v, z }; });
 
   const commit = useCallback((next) => setH(({ stack, i }) => ({ stack: [...stack.slice(0, i + 1), next], i: i + 1 })), []);
   const undo = useCallback(() => setH((s) => (s.i > 0 ? { ...s, i: s.i - 1 } : s)), []);
@@ -103,6 +114,15 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
 
   function down(e) {
     if (editor) return;                    // let the text editor keep focus
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // Second finger → pan/zoom gesture: abandon any in-progress draw and start the pinch.
+    if (pointers.current.size === 2) {
+      drawing.current = false; draftRef.current = null; redraw();
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { dist: dist2(a, b), mid: mid2(a, b), z: viewRef.current.z, x: viewRef.current.x, y: viewRef.current.y };
+      return;
+    }
+    if (pointers.current.size > 2) return;
     const t = toolRef.current, p = pt(e), lw = baseLw() * mulRef.current, col = colorRef.current;
     if (t === "text") { openEditor(e, p); return; }
     e.preventDefault(); drawing.current = true;
@@ -113,19 +133,36 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     redraw(draftRef.current);
   }
   function move(e) {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && pointers.current.size >= 2) {
+      e.preventDefault();
+      const [a, b] = [...pointers.current.values()];
+      const d = dist2(a, b), m = mid2(a, b);
+      const z = clampZ(pinch.current.z * (d / (pinch.current.dist || 1)));
+      const nx = pinch.current.x + (m.x - pinch.current.mid.x);
+      const ny = pinch.current.y + (m.y - pinch.current.mid.y);
+      setView(z <= 1 ? { z: 1, x: 0, y: 0 } : { z, x: nx, y: ny });
+      return;
+    }
     if (!drawing.current) return; e.preventDefault(); const p = pt(e), d = draftRef.current;
     if (d.type === "rect") { d.w = p.x - d.x; d.h = p.y - d.y; }
     else if (d.type === "arrow") d.to = p;
     else d.points.push(p);
     redraw(d);
   }
-  function up() {
+  function up(e) {
+    if (e) pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
     if (!drawing.current) return; drawing.current = false; const d = draftRef.current; draftRef.current = null;
     if (!d) return;
     const tiny = (d.type === "rect" && Math.abs(d.w) < 5 && Math.abs(d.h) < 5) ||
       (d.type === "arrow" && Math.hypot(d.to.x - d.from.x, d.to.y - d.from.y) < 5);
     if (tiny) { redraw(); return; }
     commit([...shapes, d]);
+  }
+  function onWheel(e) {
+    if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return;
+    zoomBy(e.deltaY < 0 ? 1.15 : 0.87);
   }
 
   // ---- text editor (inline over the image) ----
@@ -198,9 +235,19 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
         <button className="mk-btn go" onClick={attach} disabled={!ready}>Attach</button>
       </div>
 
-      <div className="mk-stage" onPointerDown={(e) => { if (e.target.classList.contains("mk-stage") && !editor) onCancel?.(); }}>
+      <div className="mk-stage" onPointerDown={(e) => { if (e.target.classList.contains("mk-stage") && !editor) onCancel?.(); }} onWheel={onWheel}>
         <canvas ref={canvasRef} className={`mk-canvas mk-t-${tool}`}
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`, transformOrigin: "center center" }}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+        <div className="mk-zoom" onPointerDown={(e) => e.stopPropagation()}>
+          <button className="mk-ztool" aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.25)}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="6" x2="12" y2="18" /><line x1="6" y1="12" x2="18" y2="12" /></svg>
+          </button>
+          <button className="mk-ztool" aria-label="Zoom out" title="Zoom out" disabled={view.z <= 1} onClick={() => zoomBy(0.8)}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="12" x2="18" y2="12" /></svg>
+          </button>
+          {view.z > 1 && <button className="mk-ztool mk-zreset" aria-label="Reset zoom" title="Reset" onClick={() => setView({ z: 1, x: 0, y: 0 })}>{Math.round(view.z * 10) / 10}×</button>}
+        </div>
         {editor && (
           <textarea autoFocus className="mk-text-in"
             style={{ left: editor.clientX, top: editor.clientY, color, font: `600 ${editor.cssFont}px system-ui,-apple-system,Segoe UI,sans-serif` }}
@@ -332,9 +379,15 @@ const CSS = `
 .mk-btn.go{background:#e0574a;border-color:#e0574a;color:#fff}
 .mk-btn.go:hover{background:#d34a3d}
 .mk-btn:disabled{opacity:.45;cursor:default}
-.mk-stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:16px}
+.mk-stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden}
 .mk-canvas{max-width:calc(100vw - 32px);max-height:calc(100vh - 92px);border-radius:6px;
-  box-shadow:0 24px 70px rgba(0,0,0,.6);cursor:crosshair;touch-action:none;background:#fff;image-rendering:auto}
+  box-shadow:0 24px 70px rgba(0,0,0,.6);cursor:crosshair;touch-action:none;background:#fff;image-rendering:auto;will-change:transform}
+.mk-zoom{position:absolute;right:14px;bottom:14px;z-index:7;display:flex;flex-direction:column;gap:6px}
+.mk-ztool{width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;background:rgba(18,21,27,.86);color:#e9edf2;cursor:pointer;backdrop-filter:blur(6px);font:700 .78rem/1 system-ui}
+.mk-ztool:hover:not(:disabled){background:rgba(30,34,42,.92)}
+.mk-ztool:disabled{opacity:.4;cursor:default}
+.mk-zreset{font-variant-numeric:tabular-nums}
 .mk-canvas.mk-t-text{cursor:text}
 .mk-text-in{position:fixed;z-index:6;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
@@ -352,5 +405,6 @@ const CSS = `
   .mk-dock .mk-swatch:hover{background:rgba(255,255,255,.1)}
   .mk-stage{padding:8px 12px calc(86px + env(safe-area-inset-bottom))}
   .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 150px)}
+  .mk-zoom{right:12px;bottom:calc(84px + env(safe-area-inset-bottom))}   /* above the bottom dock */
 }
 `;
