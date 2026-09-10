@@ -399,15 +399,19 @@ function tileAt(e,canvas,page){const rect=canvas.getBoundingClientRect(),sx=canv
   const cx=(e.clientX-rect.left)*sx,cy=(e.clientY-rect.top)*sy,a={X:0,Y:0,W:canvas.width,H:canvas.height};
   const hit=gridRects(a.X,a.Y,a.W,a.H,page).find(r=>cx>=r.x&&cx<=r.x+r.w&&cy>=r.y&&cy<=r.y+r.h&&r.i<S.count);
   return hit?{...hit,cx,cy,rect,sx,sy}:null;}
+// Open the inline name editor over a tile's top strip. When the survey drives the grid, commitName
+// writes the rename back to the survey (single source of truth); otherwise it's a local mockup name.
+function openNameEdit(h){const pad=Math.max(7,h.h*0.05);
+  nameEdit.style.left=(h.rect.left+(h.x+pad)/h.sx)+'px';nameEdit.style.top=(h.rect.top+(h.y+pad*0.6)/h.sy)+'px';
+  nameEdit.style.width=Math.max(120,(h.w*0.72)/h.sx)+'px';
+  nameEdit.value=(SURVEY_DRIVEN&&SURVEY_CAMS[h.i]?SURVEY_CAMS[h.i].name:S.names[h.i])||'';nameEdit.placeholder='CAM '+(h.i+1);
+  nameEdit.dataset.i=h.i;nameEdit.style.display='block';nameEdit.focus();nameEdit.select();}
 function doSingleClick(h){
   const ph=S.slots[h.i];
   if(IOT_RO){ if(ph)openLightbox(h.i); return; }               // read-only: view the photo, never edit
   const inTop=h.cy<=h.y+h.h*0.28;
-  if(ph&&inTop&&!SURVEY_DRIVEN){const pad=Math.max(7,h.h*0.05);   // names come from the survey when it drives the grid
-    nameEdit.style.left=(h.rect.left+(h.x+pad)/h.sx)+'px';nameEdit.style.top=(h.rect.top+(h.y+pad*0.6)/h.sy)+'px';
-    nameEdit.style.width=Math.max(120,(h.w*0.72)/h.sx)+'px';nameEdit.value=S.names[h.i]||'';nameEdit.placeholder='CAM '+(h.i+1);
-    nameEdit.dataset.i=h.i;nameEdit.style.display='block';nameEdit.focus();nameEdit.select();
-  }else{pendingSlot=h.i;slotFile.value='';slotFile.click();}
+  if(ph&&inTop){ openNameEdit(h); }
+  else{pendingSlot=h.i;slotFile.value='';slotFile.click();}
 }
 let clickTimer=null;
 let lastTile={p:null,i:null};   // tile currently under the cursor — the target for a Ctrl+V paste
@@ -421,8 +425,10 @@ function bindCanvas(canvas,page){
     if(IOT_RO){ clearTimeout(clickTimer); clickTimer=setTimeout(()=>{ if(h&&S.slots[h.i]) openLightbox(h.i); else postComment(h?h.i:-1); },240); return; }
     if(!h)return;
     // Editing: single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A
-    // FILLED tile does nothing on single-click — double-click fills the whole phone (1×1 view).
-    if(!S.slots[h.i]){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}});
+    // Empty tile: single-click adds a photo. Filled tile: single-click the TOP strip opens the name
+    // editor (rename → writes back to the survey); double-click still fills the whole phone (1×1 view).
+    if(!S.slots[h.i]){clearTimeout(clickTimer);clickTimer=setTimeout(()=>doSingleClick(h),220);}
+    else{const inTop=h.cy<=h.y+h.h*0.28; if(inTop){clearTimeout(clickTimer);clickTimer=setTimeout(()=>openNameEdit(h),220);}}});
   canvas.addEventListener('dblclick',e=>{clearTimeout(clickTimer);
     // Read-only: double-tap the mockup → ask the host to go fullscreen (not single-camera zoom).
     if(IOT_RO){ try{parent.postMessage({type:'iotMockupFullscreen', project:(new URLSearchParams(location.search).get('project')||'default')},'*');}catch(_e){} return; }
@@ -481,7 +487,17 @@ document.addEventListener('paste',e=>{
   setStatus('Pasted photo');
 });
 function commitName(){if(nameEdit.style.display!=='block')return;
-  S.names[+nameEdit.dataset.i]=nameEdit.value.trim();nameEdit.style.display='none';renderAll();touch();}
+  var i=+nameEdit.dataset.i, val=nameEdit.value.trim();
+  nameEdit.style.display='none';
+  // When the survey drives the grid, a rename writes back to the survey camera (by cid) — the single
+  // source of truth — so the name syncs to the survey + proposal. Otherwise it's a local mockup name.
+  if(SURVEY_DRIVEN){ var c=SURVEY_CAMS[i];
+    if(c&&c.id){ var pid=(new URLSearchParams(location.search).get('project')||'default');
+      fetch('/api/project-cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessId:pid,cid:c.id,name:val})})
+        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ c.name=val; S.names[i]=val; renderAll();
+          try{ parent.postMessage({type:'iotMockupRenamed', project:pid, cid:c.id, name:val}, '*'); }catch(_e){} } }).catch(function(){}); }
+    return; }
+  S.names[i]=val;renderAll();touch();}
 nameEdit.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitName();}
   else if(e.key==='Escape'){nameEdit.style.display='none';}});
 nameEdit.addEventListener('blur',commitName);
