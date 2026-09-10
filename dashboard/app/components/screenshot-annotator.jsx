@@ -28,6 +28,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const [color, setColor] = useState("#ff2d2d");
   const [strokeMul, setStrokeMul] = useState(1);
   const [showColor, setShowColor] = useState(false);
+  const [showMore, setShowMore] = useState(false);   // mobile dock ••• menu (Redo / Clear)
   const [editor, setEditor] = useState(null);   // { clientX, clientY, nx, ny, value, cssFont }
   const [H, setH] = useState({ stack: [initialShapes && initialShapes.length ? initialShapes : []], i: 0 });
   const shapes = H.stack[H.i];
@@ -164,49 +165,36 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   }
 
   const canUndo = H.i > 0, canRedo = H.i < H.stack.length - 1;
+  const closeMenus = () => { if (showColor) setShowColor(false); if (showMore) setShowMore(false); };
+
+  const colorControl = (up) => (
+    <ColorControl color={color} setColor={setColor} strokeMul={strokeMul} setStrokeMul={setStrokeMul}
+      show={showColor} setShow={setShowColor} up={up} />
+  );
 
   return (
-    <div className="mk-scrim" onPointerDown={() => showColor && setShowColor(false)}>
+    <div className="mk-scrim" onPointerDown={closeMenus}>
+      {/* TOP BAR — desktop: full toolbar. mobile: just X (left) + Attach (right). */}
       <div className="mk-bar" onPointerDown={(e) => e.stopPropagation()}>
-        <div className="mk-seg" role="toolbar" aria-label="Tools">
-          <Tool on={tool === "rect"} onClick={() => setTool("rect")} tip="Box · R"><RectI /></Tool>
-          <Tool on={tool === "arrow"} onClick={() => setTool("arrow")} tip="Arrow · A"><ArrowI /></Tool>
-          <Tool on={tool === "pen"} onClick={() => setTool("pen")} tip="Pen · P"><PenI /></Tool>
-          <Tool on={tool === "text"} onClick={() => setTool("text")} tip="Text · T"><TextI /></Tool>
-        </div>
-        <div className="mk-sep" />
-        <div className="mk-colwrap">
-          <button className="mk-swatch" aria-label="Color" title="Color" onClick={() => setShowColor((v) => !v)}>
-            <span className="mk-dot" style={{ background: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px rgba(0,0,0,.3)" : "none" }} />
-          </button>
-          {showColor && (
-            <div className="mk-pop" onPointerDown={(e) => e.stopPropagation()}>
-              <div className="mk-sw-row">
-                {PALETTE.map(([hex, name]) => (
-                  <button key={hex} className={`mk-sw${color === hex ? " on" : ""}`} aria-label={name} title={name}
-                    style={{ background: hex, boxShadow: hex === "#ffffff" ? "inset 0 0 0 1px rgba(0,0,0,.25)" : "none" }}
-                    onClick={() => { setColor(hex); setShowColor(false); }} />
-                ))}
-              </div>
-              <div className="mk-str-row">
-                {STROKES.map(([name, mul]) => (
-                  <button key={name} className={`mk-str${strokeMul === mul ? " on" : ""}`} title={name} aria-label={name}
-                    onClick={() => setStrokeMul(mul)}>
-                    <span className="mk-str-bar" style={{ height: Math.max(2, Math.round(mul * 3)) }} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="mk-sep" />
-        <div className="mk-seg">
-          <Tool onClick={undo} disabled={!canUndo} tip="Undo"><UndoI /></Tool>
-          <Tool onClick={redo} disabled={!canRedo} tip="Redo"><RedoI /></Tool>
-          <Tool onClick={clear} disabled={!shapes.length} tip="Clear"><TrashI /></Tool>
+        <button className="mk-x mk-mobile" onClick={onCancel} aria-label="Close" title="Close"><CloseI /></button>
+        <div className="mk-desk">
+          <div className="mk-seg" role="toolbar" aria-label="Tools">
+            <Tool on={tool === "rect"} onClick={() => setTool("rect")} tip="Box · R"><RectI /></Tool>
+            <Tool on={tool === "arrow"} onClick={() => setTool("arrow")} tip="Arrow · A"><ArrowI /></Tool>
+            <Tool on={tool === "pen"} onClick={() => setTool("pen")} tip="Pen · P"><PenI /></Tool>
+            <Tool on={tool === "text"} onClick={() => setTool("text")} tip="Text · T"><TextI /></Tool>
+          </div>
+          <div className="mk-sep" />
+          {colorControl(false)}
+          <div className="mk-sep" />
+          <div className="mk-seg">
+            <Tool onClick={undo} disabled={!canUndo} tip="Undo"><UndoI /></Tool>
+            <Tool onClick={redo} disabled={!canRedo} tip="Redo"><RedoI /></Tool>
+            <Tool onClick={clear} disabled={!shapes.length} tip="Clear"><TrashI /></Tool>
+          </div>
         </div>
         <div className="mk-spacer" />
-        <button className="mk-btn ghost" onClick={onCancel}>Cancel</button>
+        <button className="mk-btn ghost mk-desktop" onClick={onCancel}>Cancel</button>
         <button className="mk-btn go" onClick={attach} disabled={!ready}>Attach</button>
       </div>
 
@@ -223,6 +211,25 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
             placeholder="" />
         )}
       </div>
+
+      {/* MOBILE DOCK — drawing tools float over the bottom, within thumb reach. */}
+      <div className="mk-dock mk-mobile" onPointerDown={(e) => e.stopPropagation()}>
+        <Tool on={tool === "rect"} onClick={() => setTool("rect")} tip="Box"><RectI /></Tool>
+        <Tool on={tool === "arrow"} onClick={() => setTool("arrow")} tip="Arrow"><ArrowI /></Tool>
+        <Tool on={tool === "pen"} onClick={() => setTool("pen")} tip="Pen"><PenI /></Tool>
+        <Tool on={tool === "text"} onClick={() => setTool("text")} tip="Text"><TextI /></Tool>
+        {colorControl(true)}
+        <Tool onClick={undo} disabled={!canUndo} tip="Undo"><UndoI /></Tool>
+        <div className="mk-morewrap">
+          <Tool on={showMore} onClick={() => setShowMore((v) => !v)} tip="More"><MoreI /></Tool>
+          {showMore && (
+            <div className="mk-pop up mk-moremenu" onPointerDown={(e) => e.stopPropagation()}>
+              <button disabled={!canRedo} onClick={() => { redo(); setShowMore(false); }}><RedoI /> Redo</button>
+              <button disabled={!shapes.length} onClick={() => { clear(); setShowMore(false); }}><TrashI /> Clear</button>
+            </div>
+          )}
+        </div>
+      </div>
       <style>{CSS}</style>
     </div>
   );
@@ -235,6 +242,36 @@ function Tool({ on, onClick, disabled, tip, children }) {
   );
 }
 
+// Color swatch + palette + stroke width. `up` opens the popover above (for the mobile bottom dock).
+function ColorControl({ color, setColor, strokeMul, setStrokeMul, show, setShow, up }) {
+  return (
+    <div className="mk-colwrap">
+      <button className="mk-swatch" aria-label="Color" title="Color" onClick={() => setShow((v) => !v)}>
+        <span className="mk-dot" style={{ background: color, boxShadow: color === "#ffffff" ? "inset 0 0 0 1px rgba(0,0,0,.3)" : "none" }} />
+      </button>
+      {show && (
+        <div className={`mk-pop${up ? " up" : ""}`} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="mk-sw-row">
+            {PALETTE.map(([hex, name]) => (
+              <button key={hex} className={`mk-sw${color === hex ? " on" : ""}`} aria-label={name} title={name}
+                style={{ background: hex, boxShadow: hex === "#ffffff" ? "inset 0 0 0 1px rgba(0,0,0,.25)" : "none" }}
+                onClick={() => { setColor(hex); setShow(false); }} />
+            ))}
+          </div>
+          <div className="mk-str-row">
+            {STROKES.map(([name, mul]) => (
+              <button key={name} className={`mk-str${strokeMul === mul ? " on" : ""}`} title={name} aria-label={name}
+                onClick={() => setStrokeMul(mul)}>
+                <span className="mk-str-bar" style={{ height: Math.max(2, Math.round(mul * 3)) }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* icons — one family, 2px stroke, currentColor */
 const S = { viewBox: "0 0 24 24", width: 18, height: 18, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 const RectI = () => (<svg {...S}><rect x="3" y="5" width="18" height="14" rx="1.5" /></svg>);
@@ -244,6 +281,8 @@ const TextI = () => (<svg {...S}><polyline points="4 7 4 5 20 5 20 7" /><line x1
 const UndoI = () => (<svg {...S}><path d="M9 14L4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-1" /></svg>);
 const RedoI = () => (<svg {...S}><path d="M15 14l5-5-5-5" /><path d="M20 9H9a5 5 0 0 0 0 10h1" /></svg>);
 const TrashI = () => (<svg {...S}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+const CloseI = () => (<svg {...S}><path d="M18 6 6 18M6 6l12 12" /></svg>);
+const MoreI = () => (<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>);
 
 const CSS = `
 .mk-scrim{position:fixed;inset:0;z-index:2147483200;background:#0b0d11;display:flex;flex-direction:column;
@@ -259,12 +298,25 @@ const CSS = `
 .mk-tool:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(94,150,255,.7)}
 .mk-sep{width:1px;height:26px;background:rgba(255,255,255,.12)}
 .mk-spacer{flex:1}
+.mk-desk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mk-mobile{display:none}                 /* X + bottom dock — revealed only in the mobile query */
+.mk-x{align-items:center;justify-content:center;width:40px;height:40px;border:0;border-radius:9px;background:transparent;color:#c2c7ce;cursor:pointer;line-height:0}
+.mk-x:hover{background:rgba(255,255,255,.1);color:#fff}
+.mk-dock{display:none;align-items:center;gap:4px;padding:6px;background:#12151b;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+.mk-morewrap{position:relative;display:inline-flex}
+.mk-moremenu{left:auto;right:0;min-width:120px;padding:4px;flex-direction:column;gap:2px}
+.mk-moremenu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:none;color:#e9edf2;font:600 .82rem/1 inherit;padding:9px 10px;border-radius:8px;cursor:pointer}
+.mk-moremenu button:hover:not(:disabled){background:rgba(255,255,255,.1)}
+.mk-moremenu button:disabled{opacity:.4;cursor:default}
+.mk-moremenu svg{width:16px;height:16px}
 .mk-colwrap{position:relative;display:inline-flex}
 .mk-swatch{width:36px;height:36px;border:1px solid rgba(255,255,255,.14);border-radius:9px;background:rgba(255,255,255,.05);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .mk-swatch:hover{background:rgba(255,255,255,.1)}
 .mk-dot{width:16px;height:16px;border-radius:50%}
 .mk-pop{position:absolute;top:44px;left:0;z-index:5;background:#1b1f27;border:1px solid rgba(255,255,255,.14);border-radius:12px;
   padding:9px;box-shadow:0 16px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:8px}
+.mk-pop.up{top:auto;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%)}
+.mk-pop.up.mk-moremenu{left:auto;right:0;transform:none}
 .mk-sw-row{display:flex;gap:6px}
 .mk-sw{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .mk-sw.on{border-color:#fff;box-shadow:0 0 0 2px #1b1f27,0 0 0 3px #fff}
@@ -288,9 +340,17 @@ const CSS = `
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
 @media (max-width:640px){
-  .mk-bar{gap:6px;padding:8px}
-  .mk-btn{padding:0 12px}
-  .mk-tool{width:40px;height:40px}
-  .mk-canvas{max-height:calc(100vh - 120px)}
+  /* Split responsibilities: slim top bar (X · Attach), drawing tools in a floating bottom dock. */
+  .mk-desk,.mk-desktop{display:none!important}
+  .mk-mobile{display:inline-flex}
+  .mk-bar{gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;min-height:52px;flex-wrap:nowrap}
+  .mk-btn{height:40px;padding:0 18px}
+  .mk-dock{display:flex;position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(12px + env(safe-area-inset-bottom));z-index:8}
+  .mk-dock .mk-tool,.mk-dock .mk-swatch{width:44px;height:44px}
+  .mk-dock .mk-swatch{border:0;background:transparent}
+  .mk-dock .mk-swatch:hover{background:rgba(255,255,255,.1)}
+  .mk-stage{padding:8px 12px calc(86px + env(safe-area-inset-bottom))}
+  .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 150px)}
 }
 `;
