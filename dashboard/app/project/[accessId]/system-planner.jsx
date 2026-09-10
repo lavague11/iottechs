@@ -123,7 +123,10 @@ const CSS = `
    camera roster below it). The survey node itself stays auto-height so the roster + comments flow. */
 .syp-plan .ss-tool-col,.syp-plan .ss-tool-body{height:auto!important;display:block!important;min-height:0}
 .syp-plan .ss-embed{display:flex;flex-direction:column;height:auto}
-.syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(58vh,520px);min-height:340px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
+/* Keep the map taller than 540px on desktop so the survey uses CONTAIN (whole aerial visible + zoomable),
+   not the phone COVER mode that crops the sides and blocks zooming back out. */
+.syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(74vh,680px);min-height:560px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
+@media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px} }
 /* One workspace, not stacked tools: the header's Plans/Views tabs already name the mode, so drop each
    widget's redundant descriptive tag ("Live survey editor · N floors" / the empty mockup tag) and keep
    only the functional controls (fullscreen, etc.) pinned to the right of a slim bar. */
