@@ -321,6 +321,13 @@ export default function AdminShell({ user, alerts, active, children }) {
   const navModel  = isGrouped ? groupedNavFor(user.role) : null;
   const [openMenu, setOpenMenu] = useState(null);
   const [mobOpen, setMobOpen] = useState(false);   // mobile nav drawer
+  // Accordion: groups are collapsed by default; the group holding the current page starts open.
+  const [openGroups, setOpenGroups] = useState(() => {
+    const s = new Set();
+    if (navModel) navModel.forEach((g) => { if (g.items.length > 1 && g.items.some((it) => it.key === active)) s.add(g.key); });
+    return s;
+  });
+  const toggleGroup = (k) => setOpenGroups((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const navRef = useRef(null);
   useEffect(() => {
     if (!openMenu) return;
@@ -421,10 +428,18 @@ export default function AdminShell({ user, alerts, active, children }) {
                       <Link key={g.key} href={g.items[0].href} className={`apx-moblink${active === g.items[0].key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{g.label}</Link>
                     ) : (
                       <div className="apx-mobgroup" key={g.key}>
-                        <div className="apx-mobsec">{g.label}</div>
-                        {g.items.map((it) => (
-                          <Link key={it.key} href={it.href} className={`apx-moblink sub${active === it.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{it.label}</Link>
-                        ))}
+                        <button type="button" className={`apx-mobhead${openGroups.has(g.key) ? " open" : ""}${g.items.some((it) => it.key === active) ? " active" : ""}`}
+                          aria-expanded={openGroups.has(g.key)} onClick={() => toggleGroup(g.key)}>
+                          <span>{g.label}</span>
+                          <svg className="apx-mobchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+                        </button>
+                        {openGroups.has(g.key) && (
+                          <div className="apx-mobitems">
+                            {g.items.map((it) => (
+                              <Link key={it.key} href={it.href} className={`apx-moblink sub${active === it.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{it.label}</Link>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   ))
@@ -523,11 +538,19 @@ const CSS = `
 .apx-mobsheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .apx-mobsheet-head span{font-weight:800;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:#5b6275}
 .apx-mobsheet-head button{border:0;background:none;font-size:1rem;color:#5b6275;cursor:pointer;padding:6px 8px;line-height:1}
-.apx-moblinks{display:flex;flex-direction:column;gap:2px}
-.apx-mobgroup{display:flex;flex-direction:column;gap:1px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #e6e8ee}
-.apx-mobsec{font-size:.66rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#b08f4f;padding:9px 12px 3px}
-.apx-moblink{display:block;padding:11px 12px;border-radius:10px;font-weight:600;font-size:.96rem;color:#0e1320}
-.apx-moblink.sub{padding-left:22px;font-weight:500;color:#2C3347}
+.apx-moblinks{display:flex;flex-direction:column;gap:1px}
+/* collapsible groups — collapsed by default (the current section starts open), so the drawer reads as
+   ~one screen of destinations instead of every route at once */
+.apx-mobgroup{display:flex;flex-direction:column}
+.apx-mobhead{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:none;cursor:pointer;
+  font-family:inherit;font-weight:700;font-size:.96rem;color:#0e1320;padding:12px;border-radius:10px}
+.apx-mobhead:active{background:#f6f7f9}
+.apx-mobhead.active{color:#b08f4f}
+.apx-mobchev{width:18px;height:18px;stroke:#8a8f99;fill:none;stroke-width:2;transition:transform .2s;flex:0 0 auto}
+.apx-mobhead.open .apx-mobchev{transform:rotate(180deg)}
+.apx-mobitems{display:flex;flex-direction:column;gap:1px;padding-bottom:6px}
+.apx-moblink{display:block;padding:12px;border-radius:10px;font-weight:700;font-size:.96rem;color:#0e1320}
+.apx-moblink.sub{padding:10px 12px 10px 22px;font-weight:500;font-size:.92rem;color:#2C3347}
 .apx-moblink.on{background:#f0f2f7}
 .apx-moblink:active{background:#f6f7f9}
 .apx-mobnew{margin-top:14px;justify-content:center;width:100%}
