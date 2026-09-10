@@ -113,7 +113,11 @@ function fmtDate(d) {
   try { const dt = new Date(d + "T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); } catch(_) { return d; }
 }
 function fmtPhone(v) {
-  const d = String(v || "").replace(/\D/g, "").slice(0, 10);
+  let d = String(v || "").replace(/\D/g, "");
+  // Strip the US country code (leading 1 on an 11-digit number) BEFORE formatting. Never truncate to
+  // the first 10 digits — that would keep the "1" as an (invalid) area-code start and drop the real
+  // last digit, e.g. 1·347·376·767X shown as (134) 737-6767.
+  if (d.length === 11 && d[0] === "1") d = d.slice(1);
   if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
   if (d.length === 7)  return `${d.slice(0,3)}-${d.slice(3)}`;
   return v;

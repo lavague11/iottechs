@@ -179,7 +179,12 @@ export default function BugReporter() {
 
   return (
     <>
-      <button className="bugr-fab" data-bug-capture-ignore onClick={() => setOpen(true)} aria-label="Report" title="Report">
+      {/* Stop the FAB's events at the source so opening Report never registers as an "outside click"
+          on the page (which would collapse menus/cards and change what gets screenshotted). */}
+      <button className="bugr-fab" data-bug-capture-ignore aria-label="Report" title="Report"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
       </button>
 
@@ -197,7 +202,8 @@ export default function BugReporter() {
                   <span className="bugr-title">Report</span>
                   <button className="bugr-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
                 </div>
-                <textarea className="bugr-in" autoFocus rows={4} value={desc} maxLength={4000}
+                {/* No autoFocus — opening Report shouldn't pop the mobile keyboard. Tap the field to type. */}
+                <textarea className="bugr-in" rows={4} value={desc} maxLength={4000}
                   onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
