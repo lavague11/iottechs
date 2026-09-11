@@ -182,7 +182,14 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   function openEditor(e, p) {
     const c = canvasRef.current, r = c.getBoundingClientRect();
     const cssFont = Math.round(natFont() * (r.width / c.width));
-    setEditor({ clientX: e.clientX, clientY: e.clientY, nx: p.x, ny: p.y, value: "", cssFont });
+    // On mobile the software keyboard covers the lower half — keep the typing box above it (the text
+    // still lands where you tapped; only the input box floats up so you can see what you type).
+    let clientY = e.clientY;
+    if (typeof window !== "undefined" && window.matchMedia("(max-width:640px)").matches) {
+      const vh = window.visualViewport?.height || window.innerHeight;
+      clientY = Math.min(clientY, Math.round(vh * 0.42));
+    }
+    setEditor({ clientX: e.clientX, clientY, nx: p.x, ny: p.y, value: "", cssFont });
   }
   function commitEditor() {
     if (!editor) return; const v = editor.value.trim();
@@ -223,7 +230,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   );
 
   return (
-    <div className="mk-scrim" onPointerDown={closeMenus}>
+    <div className={`mk-scrim${editor ? " mk-editing" : ""}`} onPointerDown={closeMenus}>
       {/* TOP BAR — desktop: full toolbar. mobile: just X (left) + Attach (right). */}
       <div className="mk-bar" onPointerDown={(e) => e.stopPropagation()}>
         <button className="mk-x mk-mobile" onClick={onCancel} aria-label="Close" title="Close"><CloseI /></button>
@@ -404,7 +411,7 @@ const CSS = `
 .mk-canvas.mk-t-text{cursor:text}
 .mk-canvas.mk-t-pan{cursor:grab}
 .mk-canvas.mk-t-pan:active{cursor:grabbing}
-.mk-text-in{position:fixed;z-index:6;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
+.mk-text-in{position:fixed;z-index:12;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
 @media (max-width:640px){
@@ -417,12 +424,15 @@ const CSS = `
   .mk-x{background:rgba(18,21,27,.9);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
   .mk-btn{height:44px;padding:0 22px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
   .mk-dock{display:flex;position:fixed;left:50%;transform:translateX(-50%);
-    bottom:calc(12px + env(safe-area-inset-bottom));z-index:8}
-  .mk-dock .mk-tool,.mk-dock .mk-swatch{width:44px;height:44px}
+    bottom:calc(12px + env(safe-area-inset-bottom));z-index:8;max-width:calc(100vw - 8px)}
+  /* fluid width so all 7 tools always fit — even on narrow / zoomed-display phones (~320px) */
+  .mk-dock .mk-tool,.mk-dock .mk-swatch{width:min(44px, calc((100vw - 46px) / 7));height:44px}
   .mk-dock .mk-swatch{border:0;background:transparent}
   .mk-dock .mk-swatch:hover{background:rgba(255,255,255,.1)}
   .mk-stage{padding:8px 12px calc(128px + env(safe-area-inset-bottom))}
   .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 172px)}
   .mk-zoom{right:12px;bottom:calc(124px + env(safe-area-inset-bottom))}   /* above the X/Attach row */
+  /* while typing text, get the tool chrome out of the way so it can't cover the input */
+  .mk-editing .mk-dock,.mk-editing .mk-bar,.mk-editing .mk-zoom{display:none}
 }
 `;
