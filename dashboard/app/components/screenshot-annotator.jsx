@@ -393,18 +393,21 @@ const CSS = `
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
 @media (max-width:640px){
-  /* Split responsibilities: slim top bar (X · Attach), drawing tools in a floating bottom dock. */
+  /* Everything lives at the BOTTOM on mobile. The old top bar collided with the browser's address
+     bar and hid Attach — so X + Attach float above the tool dock, in thumb reach, clear of chrome. */
   .mk-desk,.mk-desktop{display:none!important}
   .mk-mobile{display:inline-flex}
-  .mk-bar{gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;min-height:52px;flex-wrap:nowrap}
-  .mk-btn{height:40px;padding:0 18px}
+  .mk-bar{position:fixed;left:0;right:0;top:auto;bottom:calc(70px + env(safe-area-inset-bottom));
+    padding:0 14px;min-height:0;background:transparent;border:0;justify-content:space-between;gap:8px;z-index:9}
+  .mk-x{background:rgba(18,21,27,.9);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .mk-btn{height:44px;padding:0 22px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
   .mk-dock{display:flex;position:fixed;left:50%;transform:translateX(-50%);
     bottom:calc(12px + env(safe-area-inset-bottom));z-index:8}
   .mk-dock .mk-tool,.mk-dock .mk-swatch{width:44px;height:44px}
   .mk-dock .mk-swatch{border:0;background:transparent}
   .mk-dock .mk-swatch:hover{background:rgba(255,255,255,.1)}
-  .mk-stage{padding:8px 12px calc(86px + env(safe-area-inset-bottom))}
-  .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 150px)}
-  .mk-zoom{right:12px;bottom:calc(84px + env(safe-area-inset-bottom))}   /* above the bottom dock */
+  .mk-stage{padding:8px 12px calc(128px + env(safe-area-inset-bottom))}
+  .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 172px)}
+  .mk-zoom{right:12px;bottom:calc(124px + env(safe-area-inset-bottom))}   /* above the X/Attach row */
 }
 `;
