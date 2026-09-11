@@ -2471,7 +2471,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const cust = lp.company_name || lp.contact_name || lp.customer;
         const pad = { padding: "16px 18px" };
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
-        // Closeout order: Final Payment first, then internal QC, then the Activation QR handover LAST.
+        // Closeout order: the device/Activation QR upload sits at the TOP (techs upload it here and
+        // shouldn't have to scroll past the whole QC checklist), then Final Payment, then internal QC.
+        if (["admin", "manager", "tech"].includes(cView)) {
+          tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
+        } else if (cView === "customer" && lp.system_qr) {
+          // Customer only sees the Activation QR once it actually exists — no empty stub.
+          tools.push({ name: "System QR", label: "Activation QR",
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
+        }
         if (["admin", "manager", "customer"].includes(cView)) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
             node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
@@ -2482,15 +2491,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
             node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
               readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
-        }
-        // Activation QR handover — the last closeout step.
-        if (["admin", "manager", "tech"].includes(cView)) {
-          tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
-            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
-        } else if (cView === "customer" && lp.system_qr) {
-          // Customer only sees the Activation QR once it actually exists — no empty stub.
-          tools.push({ name: "System QR", label: "Activation QR",
-            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
         // Customer: MERGE Closeout into one full-width page — Final Payment then the Activation QR
         // handover (once it exists). Both flow FULL LENGTH (documents, not maps): one page scroll,
