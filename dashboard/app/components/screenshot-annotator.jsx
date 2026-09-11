@@ -46,7 +46,11 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const viewRef = useRef(view); viewRef.current = view;
   const pointers = useRef(new Map());   // active pointerId -> {x,y}
   const pinch = useRef(null);           // { dist, mid, z, x, y } during a two-finger gesture
+  const panning = useRef(null);         // { x, y, vx, vy } during a one-finger pan (tool deselected)
   const zoomBy = (f) => setView((v) => { const z = clampZ(v.z * f); return z <= 1 ? { z: 1, x: 0, y: 0 } : { ...v, z }; });
+  // Tapping the active tool deselects it → "pan mode": one finger pans, nothing draws (so you can
+  // zoom/pan the screenshot freely). Tap any tool again to resume drawing.
+  const selectTool = (k) => setTool((cur) => (cur === k ? null : k));
 
   const commit = useCallback((next) => setH(({ stack, i }) => ({ stack: [...stack.slice(0, i + 1), next], i: i + 1 })), []);
   const undo = useCallback(() => setH((s) => (s.i > 0 ? { ...s, i: s.i - 1 } : s)), []);
@@ -123,7 +127,10 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       return;
     }
     if (pointers.current.size > 2) return;
-    const t = toolRef.current, p = pt(e), lw = baseLw() * mulRef.current, col = colorRef.current;
+    const t = toolRef.current;
+    // No tool selected → pan mode: one finger drags the (zoomed) screenshot, nothing draws.
+    if (!t) { panning.current = { x: e.clientX, y: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y }; try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ } return; }
+    const p = pt(e), lw = baseLw() * mulRef.current, col = colorRef.current;
     if (t === "text") { openEditor(e, p); return; }
     e.preventDefault(); drawing.current = true;
     try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ }
@@ -144,6 +151,11 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       setView(z <= 1 ? { z: 1, x: 0, y: 0 } : { z, x: nx, y: ny });
       return;
     }
+    if (panning.current) {
+      e.preventDefault();
+      if (viewRef.current.z > 1) setView((v) => ({ ...v, x: panning.current.vx + (e.clientX - panning.current.x), y: panning.current.vy + (e.clientY - panning.current.y) }));
+      return;
+    }
     if (!drawing.current) return; e.preventDefault(); const p = pt(e), d = draftRef.current;
     if (d.type === "rect") { d.w = p.x - d.x; d.h = p.y - d.y; }
     else if (d.type === "arrow") d.to = p;
@@ -153,6 +165,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   function up(e) {
     if (e) pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
+    if (panning.current) { panning.current = null; return; }
     if (!drawing.current) return; drawing.current = false; const d = draftRef.current; draftRef.current = null;
     if (!d) return;
     const tiny = (d.type === "rect" && Math.abs(d.w) < 5 && Math.abs(d.h) < 5) ||
@@ -216,10 +229,10 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
         <button className="mk-x mk-mobile" onClick={onCancel} aria-label="Close" title="Close"><CloseI /></button>
         <div className="mk-desk">
           <div className="mk-seg" role="toolbar" aria-label="Tools">
-            <Tool on={tool === "rect"} onClick={() => setTool("rect")} tip="Box · R"><RectI /></Tool>
-            <Tool on={tool === "arrow"} onClick={() => setTool("arrow")} tip="Arrow · A"><ArrowI /></Tool>
-            <Tool on={tool === "pen"} onClick={() => setTool("pen")} tip="Pen · P"><PenI /></Tool>
-            <Tool on={tool === "text"} onClick={() => setTool("text")} tip="Text · T"><TextI /></Tool>
+            <Tool on={tool === "rect"} onClick={() => selectTool("rect")} tip="Box · R"><RectI /></Tool>
+            <Tool on={tool === "arrow"} onClick={() => selectTool("arrow")} tip="Arrow · A"><ArrowI /></Tool>
+            <Tool on={tool === "pen"} onClick={() => selectTool("pen")} tip="Pen · P"><PenI /></Tool>
+            <Tool on={tool === "text"} onClick={() => selectTool("text")} tip="Text · T"><TextI /></Tool>
           </div>
           <div className="mk-sep" />
           {colorControl(false)}
@@ -236,7 +249,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       </div>
 
       <div className="mk-stage" onPointerDown={(e) => { if (e.target.classList.contains("mk-stage") && !editor) onCancel?.(); }} onWheel={onWheel}>
-        <canvas ref={canvasRef} className={`mk-canvas mk-t-${tool}`}
+        <canvas ref={canvasRef} className={`mk-canvas mk-t-${tool || "pan"}`}
           style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`, transformOrigin: "center center" }}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
         <div className="mk-zoom" onPointerDown={(e) => e.stopPropagation()}>
@@ -261,10 +274,10 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
 
       {/* MOBILE DOCK — drawing tools float over the bottom, within thumb reach. */}
       <div className="mk-dock mk-mobile" onPointerDown={(e) => e.stopPropagation()}>
-        <Tool on={tool === "rect"} onClick={() => setTool("rect")} tip="Box"><RectI /></Tool>
-        <Tool on={tool === "arrow"} onClick={() => setTool("arrow")} tip="Arrow"><ArrowI /></Tool>
-        <Tool on={tool === "pen"} onClick={() => setTool("pen")} tip="Pen"><PenI /></Tool>
-        <Tool on={tool === "text"} onClick={() => setTool("text")} tip="Text"><TextI /></Tool>
+        <Tool on={tool === "rect"} onClick={() => selectTool("rect")} tip="Box"><RectI /></Tool>
+        <Tool on={tool === "arrow"} onClick={() => selectTool("arrow")} tip="Arrow"><ArrowI /></Tool>
+        <Tool on={tool === "pen"} onClick={() => selectTool("pen")} tip="Pen"><PenI /></Tool>
+        <Tool on={tool === "text"} onClick={() => selectTool("text")} tip="Text"><TextI /></Tool>
         {colorControl(true)}
         <Tool onClick={undo} disabled={!canUndo} tip="Undo"><UndoI /></Tool>
         <div className="mk-morewrap">
@@ -389,6 +402,8 @@ const CSS = `
 .mk-ztool:disabled{opacity:.4;cursor:default}
 .mk-zreset{font-variant-numeric:tabular-nums}
 .mk-canvas.mk-t-text{cursor:text}
+.mk-canvas.mk-t-pan{cursor:grab}
+.mk-canvas.mk-t-pan:active{cursor:grabbing}
 .mk-text-in{position:fixed;z-index:6;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
