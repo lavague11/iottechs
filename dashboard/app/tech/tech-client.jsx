@@ -29,6 +29,7 @@ const VEHICLE_CHECKLIST = [
 
 export default function TechClient({ user, alerts, myJobs, unassignedJobs, expenses, tickets, today }) {
   const [woFilter, setWoFilter]   = useState("all");
+  const [showAllExp, setShowAllExp] = useState(false);   // Expenses: show all vs. first 5
   const [toolsChecked, setToolsChecked] = useState({});
   const [vehicleChecked, setVehicleChecked] = useState({});
   const [nowStr, setNowStr]       = useState("");
@@ -196,10 +197,16 @@ export default function TechClient({ user, alerts, myJobs, unassignedJobs, expen
           <div className="panel">
             <div className="panel-head">
               <h3>Expenses</h3>
-              <Link href="/expenses" className="btn btn-ghost btn-sm">View All</Link>
+              {/* Techs can't reach the admin /expenses approval page (it redirects them back here),
+                  so "View All" expands the list in place instead of navigating nowhere. */}
+              {myExpenses.length > 5 && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAllExp(v => !v)}>
+                  {showAllExp ? "Show less" : "View All"}
+                </button>
+              )}
             </div>
             {myExpenses.length === 0 && <div className="empty">No expenses on record.</div>}
-            {myExpenses.slice(0,5).map(e => {
+            {(showAllExp ? myExpenses : myExpenses.slice(0,5)).map(e => {
               const st = normExpStatus(e.status);
               return (
                 <div className="tk-exp" key={e.id}>
