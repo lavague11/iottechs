@@ -800,6 +800,8 @@ function init() {
   if (!bugCols.includes("image_urls")) db.exec("ALTER TABLE bug_reports ADD COLUMN image_urls TEXT");
   // Sanitized technical context (route trail, viewport, recent runtime/network errors) captured on staff pages.
   if (!bugCols.includes("context")) db.exec("ALTER TABLE bug_reports ADD COLUMN context TEXT");
+  // Vision UI review — a coding-agent prompt generated from the screenshot (issues + upgrades).
+  if (!bugCols.includes("ui_prompt")) db.exec("ALTER TABLE bug_reports ADD COLUMN ui_prompt TEXT");
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -5499,6 +5501,10 @@ export function resolveBugReport(id, on, by) {
 }
 export function setBugFixPrompt(id, prompt) {
   const r = db.prepare(`UPDATE bug_reports SET fix_prompt=? WHERE id=?`).run(String(prompt || "").slice(0, 4000), +id);
+  return { ok: r.changes > 0 };
+}
+export function setBugUiPrompt(id, prompt) {
+  const r = db.prepare(`UPDATE bug_reports SET ui_prompt=? WHERE id=?`).run(String(prompt || "").slice(0, 6000), +id);
   return { ok: r.changes > 0 };
 }
 

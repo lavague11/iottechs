@@ -32,6 +32,8 @@ export default function BugsClient({ initial = [] }) {
   const [gallery, setGallery] = useState(null);   // { urls, i } image preview
   const [suggest, setSuggest] = useState(() => Object.fromEntries(initial.filter((b) => b.fix_prompt).map((b) => [b.id, b.fix_prompt])));
   const [sugBusy, setSugBusy] = useState(null);
+  const [uiRev, setUiRev] = useState(() => Object.fromEntries(initial.filter((b) => b.ui_prompt).map((b) => [b.id, b.ui_prompt])));
+  const [uiBusy, setUiBusy] = useState(null);   // bug id whose vision UI review is generating
   const [fresh, setFresh] = useState(false);
   const [menuFor, setMenuFor] = useState(null);   // bug id whose Copy menu is open
   const [moreFor, setMoreFor] = useState(null);   // bug id whose More menu is open
@@ -50,6 +52,7 @@ export default function BugsClient({ initial = [] }) {
       seenRef.current = new Set(r.bugs.map((b) => b.id));
       setBugs(r.bugs);
       setSuggest((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.fix_prompt && !next[b.id]) next[b.id] = b.fix_prompt; }); return next; });
+      setUiRev((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.ui_prompt && !next[b.id]) next[b.id] = b.ui_prompt; }); return next; });
       if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
     };
     const t = setInterval(poll, 15000);
@@ -105,6 +108,18 @@ export default function BugsClient({ initial = [] }) {
     setSugBusy(null);
     if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
     else setSuggest((s) => ({ ...s, [b.id]: r?.error || "Couldn't generate a prompt." }));
+  }
+  // Vision UI review — Claude looks at the screenshot and returns an upgrade/fix prompt.
+  async function getUiReview(b) {
+    if (uiBusy) return;
+    setUiBusy(b.id); setMoreFor(null); setMenuFor(null);
+    setExpanded((s) => new Set(s).add(`ui:${b.id}`));   // show the panel expanded while it writes
+    const r = await fetch("/api/bug-ui-review", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: b.id, description: b.description, path: b.path, imageUrls: imgsOf(b) }),
+    }).then((x) => x.json()).catch(() => null);
+    setUiBusy(null);
+    setUiRev((s) => ({ ...s, [b.id]: r?.ok && r.review ? r.review : (r?.error || "Couldn't review the UI.") }));
   }
   async function toggle(b) {
     setBusy(b.id);
@@ -176,6 +191,11 @@ export default function BugsClient({ initial = [] }) {
                   </div>
 
                   <div className="bgp-act">
+                    {imgs.length > 0 && (
+                      <button className="bgp-ib bgp-ui" aria-label="UI review" title="AI UI review" disabled={uiBusy === b.id} onClick={() => getUiReview(b)}>
+                        {uiBusy === b.id ? <span className="bgp-spin" /> : <WandI />}
+                      </button>
+                    )}
                     <div className="bgp-menuwrap">
                       <button className="bgp-ib" aria-label="Copy" title="Copy" onClick={(e) => { stop(e); setMoreFor(null); setMenuFor(menuFor === b.id ? null : b.id); }}>
                         <CopyI />
@@ -229,6 +249,26 @@ export default function BugsClient({ initial = [] }) {
                   </div>
                 )}
 
+                {(uiRev[b.id] || uiBusy === b.id) && (() => {
+                  const review = uiRev[b.id], uiLong = isLong(review), uiOpen = expanded.has(`ui:${b.id}`);
+                  return (
+                    <div className="bgp-prompt bgp-uirev">
+                      <div className="bgp-prompt-head">
+                        <span>UI review</span>
+                        {review && <button className="bgp-ib sm" aria-label="Copy" title="Copy" onClick={() => copyText(review)}><CopyI /></button>}
+                      </div>
+                      {uiBusy === b.id && !review ? (
+                        <div className="bgp-prompt-body muted">Looking at the screenshot…</div>
+                      ) : (
+                        <>
+                          <div className={`bgp-prompt-body${uiLong && !uiOpen ? " clamp" : ""}`}>{review}</div>
+                          {uiLong && <button className="bgp-toggle" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(`ui:${b.id}`) ? n.delete(`ui:${b.id}`) : n.add(`ui:${b.id}`); return n; })}>{uiOpen ? "Less" : "More"}</button>}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {ctx && (ctx.errors?.length > 0 || ctx.routes?.length > 1 || ctx.viewport) && (
                   <div className="bgp-ctx">
                     <button className="bgp-ctx-head" onClick={() => setCtxOpen((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>
@@ -277,6 +317,7 @@ export default function BugsClient({ initial = [] }) {
 const CopyI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const MoreI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>);
 const CloseI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>);
+const WandI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4V2M15 10V8M12.5 5.5h-2M19.5 5.5h-2M5 20l9-9M13 6.5 17.5 11" /></svg>);
 
 const CSS = `
 .bgp{max-width:1040px;margin:0 auto;padding:20px 22px 80px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#12151b}
@@ -340,6 +381,12 @@ const CSS = `
 .bgp-prompt-body.muted{color:#9aa0a8}
 .bgp-prompt-body.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .bgp-toggle{margin-top:5px;border:0;background:none;cursor:pointer;font:700 .76rem/1 inherit;color:#8a6d2f;padding:2px 0}
+.bgp-ui{color:#7c3aed}
+.bgp-ui:hover:not(:disabled){background:#f3eeff;color:#6d28d9}
+.bgp-uirev .bgp-prompt-body{background:#f5f2ff}
+.bgp-uirev .bgp-prompt-head span{color:#7c3aed}
+.bgp-spin{width:15px;height:15px;border-radius:50%;border:2px solid rgba(124,58,237,.25);border-top-color:#7c3aed;animation:bgpSpin .7s linear infinite;display:inline-block}
+@keyframes bgpSpin{to{transform:rotate(360deg)}}
 .bgp-ctx{margin-top:9px;padding-top:9px;border-top:1px solid #eee}
 .bgp-ctx-head{display:inline-flex;align-items:center;gap:7px;border:0;background:none;cursor:pointer;font:800 .7rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0;padding:0}
 .bgp-ctx-flag{font-style:normal;text-transform:none;letter-spacing:0;font-weight:700;font-size:.72rem;color:#c4553d}
@@ -394,6 +441,10 @@ const CSS = `
   .bgp-resolve.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-prompt{border-color:#2a2f37}
   .bgp-prompt-body{background:#12151a;color:#c8ccd2}
+  .bgp-ui{color:#b794f6}
+  .bgp-ui:hover:not(:disabled){background:#241a3a;color:#c9b0fb}
+  .bgp-uirev .bgp-prompt-body{background:#1a1526}
+  .bgp-uirev .bgp-prompt-head span{color:#b794f6}
   .bgp-toast{background:#e9edf2;color:#12151b}
   .bgp-thumb img{border-color:#2a2f37}
 }
