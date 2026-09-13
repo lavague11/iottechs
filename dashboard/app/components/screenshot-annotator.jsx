@@ -33,13 +33,17 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const [strokeMul, setStrokeMul] = useState(1);
   const [showColor, setShowColor] = useState(false);
   const [showMore, setShowMore] = useState(false);   // mobile dock ••• menu (Redo / Clear)
-  const [editor, setEditor] = useState(null);   // { clientX, clientY, nx, ny, value, cssFont }
+  const [editor, setEditor] = useState(null);   // { clientX, clientY, nx, ny, value, scale }
+  const [fmt, setFmt] = useState({ bold: false, italic: false, underline: false, strike: false, sizeMul: 1 });
   const [H, setH] = useState({ stack: [initialShapes && initialShapes.length ? initialShapes : []], i: 0 });
   const shapes = H.stack[H.i];
 
   const toolRef = useRef(tool); toolRef.current = tool;
   const colorRef = useRef(color); colorRef.current = color;
   const mulRef = useRef(strokeMul); mulRef.current = strokeMul;
+  const fmtRef = useRef(fmt); fmtRef.current = fmt;
+  const toggleFmt = (k) => setFmt((f) => ({ ...f, [k]: !f[k] }));
+  const stepSize = (d) => setFmt((f) => ({ ...f, sizeMul: Math.max(0.6, Math.min(2.6, +(f.sizeMul + d * 0.2).toFixed(2))) }));
   // Zoom/pan: a CSS transform on the canvas. pt() reads getBoundingClientRect, which already reflects
   // the transform, so annotation coordinates stay correct at any zoom. Two-finger pinch/drag on touch,
   // wheel + on-screen ± controls on desktop.
@@ -99,9 +103,20 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       else if (p.length > 1) { ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y); ctx.stroke(); }
     } else if (s.type === "text") {
       ctx.shadowBlur = Math.max(3, s.size * 0.14);
-      ctx.font = `600 ${s.size}px system-ui,-apple-system,Segoe UI,sans-serif`;
+      ctx.font = `${s.italic ? "italic " : ""}${s.bold ? "700" : "600"} ${s.size}px system-ui,-apple-system,Segoe UI,sans-serif`;
       ctx.textBaseline = "top";
-      s.text.split("\n").forEach((ln, i) => ctx.fillText(ln, s.x, s.y + i * s.size * 1.22));
+      const lh = s.size * 1.22, dlw = Math.max(1.5, s.size * 0.06);
+      s.text.split("\n").forEach((ln, i) => {
+        const yy = s.y + i * lh;
+        ctx.fillText(ln, s.x, yy);
+        if (s.underline || s.strike) {
+          const w = ctx.measureText(ln).width;
+          ctx.lineWidth = dlw; ctx.beginPath();
+          if (s.underline) { ctx.moveTo(s.x, yy + s.size * 1.02); ctx.lineTo(s.x + w, yy + s.size * 1.02); }
+          if (s.strike) { ctx.moveTo(s.x, yy + s.size * 0.62); ctx.lineTo(s.x + w, yy + s.size * 0.62); }
+          ctx.stroke();
+        }
+      });
     }
     ctx.shadowBlur = 0;
   }
@@ -132,7 +147,8 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     // No tool selected → pan mode: one finger drags the (zoomed) screenshot, nothing draws.
     if (!t) { panning.current = { x: e.clientX, y: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y }; try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ } return; }
     const p = pt(e), lw = baseLw() * mulRef.current, col = colorRef.current;
-    if (t === "text") { openEditor(e, p); return; }
+    // preventDefault so the browser's default mousedown doesn't steal focus back from the text field.
+    if (t === "text") { e.preventDefault(); openEditor(e, p); return; }
     e.preventDefault(); drawing.current = true;
     try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ }
     if (t === "rect") draftRef.current = { type: "rect", x: p.x, y: p.y, w: 0, h: 0, color: col, lw };
@@ -182,7 +198,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   // ---- text editor (inline over the image) ----
   function openEditor(e, p) {
     const c = canvasRef.current, r = c.getBoundingClientRect();
-    const cssFont = Math.round(natFont() * (r.width / c.width));
+    const scale = r.width / c.width;   // natural→display; textarea font = natFont * sizeMul * scale (live)
     // On mobile the software keyboard covers the lower half — keep the typing box above it (the text
     // still lands where you tapped; only the input box floats up so you can see what you type).
     let clientY = e.clientY;
@@ -190,15 +206,15 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       const vh = window.visualViewport?.height || window.innerHeight;
       clientY = Math.min(clientY, Math.round(vh * 0.42));
     }
-    setEditor({ clientX: e.clientX, clientY, nx: p.x, ny: p.y, value: "", cssFont });
+    setEditor({ clientX: e.clientX, clientY, nx: p.x, ny: p.y, value: "", scale });
     // iOS only opens the keyboard when focus() runs INSIDE the tap gesture. The field is always
     // mounted, so focus it now (synchronously) — repositioning happens on the next render.
     const el = textRef.current;
     if (el) { el.value = ""; try { el.focus({ preventScroll: true }); } catch { el.focus(); } }
   }
   function commitEditor() {
-    if (!editor) return; const v = editor.value.trim();
-    if (v) commit([...shapes, { type: "text", x: editor.nx, y: editor.ny, text: editor.value, size: natFont(), color: colorRef.current, lw: 0 }]);
+    if (!editor) return; const v = editor.value.trim(); const f = fmtRef.current;
+    if (v) commit([...shapes, { type: "text", x: editor.nx, y: editor.ny, text: editor.value, size: Math.round(natFont() * f.sizeMul), color: colorRef.current, lw: 0, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike }]);
     setEditor(null);
   }
 
@@ -276,13 +292,32 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
         {/* Always mounted so it can be focused synchronously on tap (iOS keyboard); parked off-screen
             when not editing. */}
         <textarea ref={textRef} className={`mk-text-in${editor ? "" : " mk-text-idle"}`}
-          style={editor ? { left: editor.clientX, top: editor.clientY, color, font: `600 ${editor.cssFont}px system-ui,-apple-system,Segoe UI,sans-serif` } : undefined}
+          style={editor ? {
+            left: editor.clientX, top: editor.clientY, color,
+            fontFamily: "system-ui,-apple-system,Segoe UI,sans-serif",
+            fontSize: `${Math.round(natFont() * fmt.sizeMul * editor.scale)}px`,
+            fontWeight: fmt.bold ? 700 : 600, fontStyle: fmt.italic ? "italic" : "normal",
+            textDecoration: `${fmt.underline ? "underline" : ""} ${fmt.strike ? "line-through" : ""}`.trim() || "none",
+          } : undefined}
           value={editor ? editor.value : ""}
           onChange={(e) => setEditor((s) => (s ? { ...s, value: e.target.value } : s))}
           onBlur={commitEditor}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditor(); } else if (e.key === "Escape") { e.preventDefault(); setEditor(null); } }}
           placeholder="" aria-label="Text" />
       </div>
+
+      {/* Text format bar — visible whenever the Text tool is active (size + B/I/U/S). */}
+      {tool === "text" && (
+        <div className="mk-fmt" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
+          <button className={`mk-fb${fmt.bold ? " on" : ""}`} onClick={() => toggleFmt("bold")} aria-label="Bold" title="Bold" style={{ fontWeight: 800 }}>B</button>
+          <button className={`mk-fb${fmt.italic ? " on" : ""}`} onClick={() => toggleFmt("italic")} aria-label="Italic" title="Italic" style={{ fontStyle: "italic", fontFamily: "Georgia,serif" }}>I</button>
+          <button className={`mk-fb${fmt.underline ? " on" : ""}`} onClick={() => toggleFmt("underline")} aria-label="Underline" title="Underline" style={{ textDecoration: "underline" }}>U</button>
+          <button className={`mk-fb${fmt.strike ? " on" : ""}`} onClick={() => toggleFmt("strike")} aria-label="Strikethrough" title="Strikethrough" style={{ textDecoration: "line-through" }}>S</button>
+          <span className="mk-fsep" />
+          <button className="mk-fb" onClick={() => stepSize(-1)} disabled={fmt.sizeMul <= 0.6} aria-label="Smaller" title="Smaller">A−</button>
+          <button className="mk-fb" onClick={() => stepSize(1)} disabled={fmt.sizeMul >= 2.6} aria-label="Larger" title="Larger">A+</button>
+        </div>
+      )}
 
       {/* MOBILE DOCK — drawing tools float over the bottom, within thumb reach. */}
       <div className="mk-dock mk-mobile" onPointerDown={(e) => e.stopPropagation()}>
@@ -417,6 +452,14 @@ const CSS = `
 .mk-canvas.mk-t-pan{cursor:grab}
 .mk-canvas.mk-t-pan:active{cursor:grabbing}
 .mk-text-idle{left:-9999px!important;top:0!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;border:0!important}
+.mk-fmt{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:13;display:flex;align-items:center;gap:3px;padding:5px;
+  background:#1b1f27;border:1px solid rgba(255,255,255,.14);border-radius:11px;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.mk-fb{min-width:34px;height:34px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:#c8ccd2;cursor:pointer;font:700 .92rem/1 system-ui,-apple-system,Segoe UI,sans-serif}
+.mk-fb:hover:not(:disabled){background:rgba(255,255,255,.1);color:#fff}
+.mk-fb.on{background:#fff;color:#12151b}
+.mk-fb:disabled{opacity:.4;cursor:default}
+.mk-fsep{width:1px;height:20px;background:rgba(255,255,255,.14);margin:0 2px}
+@media(max-width:640px){ .mk-fmt{top:calc(8px + env(safe-area-inset-top))} }
 .mk-text-in{position:fixed;z-index:12;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
