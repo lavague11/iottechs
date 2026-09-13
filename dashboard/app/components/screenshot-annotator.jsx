@@ -24,6 +24,7 @@ const mid2 = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialShapes }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
+  const textRef = useRef(null);           // the (always-mounted) text-entry field
   const drawing = useRef(false);
   const draftRef = useRef(null);          // in-progress shape during a drag (not yet committed)
   const [ready, setReady] = useState(false);
@@ -190,6 +191,10 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       clientY = Math.min(clientY, Math.round(vh * 0.42));
     }
     setEditor({ clientX: e.clientX, clientY, nx: p.x, ny: p.y, value: "", cssFont });
+    // iOS only opens the keyboard when focus() runs INSIDE the tap gesture. The field is always
+    // mounted, so focus it now (synchronously) — repositioning happens on the next render.
+    const el = textRef.current;
+    if (el) { el.value = ""; try { el.focus({ preventScroll: true }); } catch { el.focus(); } }
   }
   function commitEditor() {
     if (!editor) return; const v = editor.value.trim();
@@ -268,15 +273,15 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
           </button>
           {view.z > 1 && <button className="mk-ztool mk-zreset" aria-label="Reset zoom" title="Reset" onClick={() => setView({ z: 1, x: 0, y: 0 })}>{Math.round(view.z * 10) / 10}×</button>}
         </div>
-        {editor && (
-          <textarea autoFocus className="mk-text-in"
-            style={{ left: editor.clientX, top: editor.clientY, color, font: `600 ${editor.cssFont}px system-ui,-apple-system,Segoe UI,sans-serif` }}
-            value={editor.value}
-            onChange={(e) => setEditor((s) => ({ ...s, value: e.target.value }))}
-            onBlur={commitEditor}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditor(); } else if (e.key === "Escape") { e.preventDefault(); setEditor(null); } }}
-            placeholder="" />
-        )}
+        {/* Always mounted so it can be focused synchronously on tap (iOS keyboard); parked off-screen
+            when not editing. */}
+        <textarea ref={textRef} className={`mk-text-in${editor ? "" : " mk-text-idle"}`}
+          style={editor ? { left: editor.clientX, top: editor.clientY, color, font: `600 ${editor.cssFont}px system-ui,-apple-system,Segoe UI,sans-serif` } : undefined}
+          value={editor ? editor.value : ""}
+          onChange={(e) => setEditor((s) => (s ? { ...s, value: e.target.value } : s))}
+          onBlur={commitEditor}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditor(); } else if (e.key === "Escape") { e.preventDefault(); setEditor(null); } }}
+          placeholder="" aria-label="Text" />
       </div>
 
       {/* MOBILE DOCK — drawing tools float over the bottom, within thumb reach. */}
@@ -411,6 +416,7 @@ const CSS = `
 .mk-canvas.mk-t-text{cursor:text}
 .mk-canvas.mk-t-pan{cursor:grab}
 .mk-canvas.mk-t-pan:active{cursor:grabbing}
+.mk-text-idle{left:-9999px!important;top:0!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;border:0!important}
 .mk-text-in{position:fixed;z-index:12;min-width:40px;min-height:1.2em;background:transparent;border:1px dashed rgba(120,160,255,.9);
   border-radius:4px;padding:2px 4px;outline:none;resize:none;overflow:hidden;white-space:pre;line-height:1.22;
   text-shadow:0 1px 3px rgba(0,0,0,.4);caret-color:currentColor}
