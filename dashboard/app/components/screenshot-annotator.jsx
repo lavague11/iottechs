@@ -25,6 +25,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const textRef = useRef(null);           // the (always-mounted) text-entry field
+  const editingIdxRef = useRef(-1);       // index of the text shape being re-edited (-1 = new)
   const drawing = useRef(false);
   const draftRef = useRef(null);          // in-progress shape during a drag (not yet committed)
   const [ready, setReady] = useState(false);
@@ -49,6 +50,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   // wheel + on-screen ± controls on desktop.
   const [view, setView] = useState({ z: 1, x: 0, y: 0 });
   const viewRef = useRef(view); viewRef.current = view;
+  editingIdxRef.current = editor?.replaceIndex ?? -1;   // hide the shape being re-edited from the canvas
   const pointers = useRef(new Map());   // active pointerId -> {x,y}
   const pinch = useRef(null);           // { dist, mid, z, x, y } during a two-finger gesture
   const panning = useRef(null);         // { x, y, vx, vy } during a one-finger pan (tool deselected)
@@ -76,8 +78,8 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shot]);
 
-  // redraw whenever committed shapes change
-  useEffect(() => { redraw(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [H]);
+  // redraw whenever committed shapes change, or when entering/leaving text edit (to hide/show it)
+  useEffect(() => { redraw(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [H, editor]);
 
   function drawArrow(ctx, a, b, lw) {
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -124,7 +126,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     const c = canvasRef.current, img = imgRef.current; if (!c || !img) return;
     const ctx = c.getContext("2d");
     ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0);
-    for (const s of shapes) drawShape(ctx, s);
+    for (let k = 0; k < shapes.length; k++) { if (k === editingIdxRef.current) continue; drawShape(ctx, shapes[k]); }
     if (extra) drawShape(ctx, extra);
   }
   function pt(e) {
@@ -148,7 +150,8 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     if (!t) { panning.current = { x: e.clientX, y: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y }; try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ } return; }
     const p = pt(e), lw = baseLw() * mulRef.current, col = colorRef.current;
     // preventDefault so the browser's default mousedown doesn't steal focus back from the text field.
-    if (t === "text") { e.preventDefault(); openEditor(e, p); return; }
+    // Tapping ON an existing text re-opens it for editing; tapping empty space starts a new one.
+    if (t === "text") { e.preventDefault(); const hit = hitText(p); if (hit >= 0) editTextShape(hit); else openEditor(e, p); return; }
     e.preventDefault(); drawing.current = true;
     try { canvasRef.current.setPointerCapture(e.pointerId); } catch { /* noop */ }
     if (t === "rect") draftRef.current = { type: "rect", x: p.x, y: p.y, w: 0, h: 0, color: col, lw };
@@ -212,9 +215,45 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     const el = textRef.current;
     if (el) { el.value = ""; try { el.focus({ preventScroll: true }); } catch { el.focus(); } }
   }
+  // Which committed text shape (if any) is under point p (natural coords) — topmost first.
+  function hitText(p) {
+    const c = canvasRef.current; if (!c) return -1;
+    const ctx = c.getContext("2d");
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      const s = shapes[i]; if (s.type !== "text") continue;
+      ctx.font = `${s.italic ? "italic " : ""}${s.bold ? "700" : "600"} ${s.size}px system-ui,-apple-system,Segoe UI,sans-serif`;
+      const lines = s.text.split("\n"); let w = 0; lines.forEach((ln) => { w = Math.max(w, ctx.measureText(ln).width); });
+      const h = lines.length * s.size * 1.22, pad = s.size * 0.35;
+      if (p.x >= s.x - pad && p.x <= s.x + w + pad && p.y >= s.y - pad && p.y <= s.y + h + pad) return i;
+    }
+    return -1;
+  }
+  // Re-open an existing text shape for editing (tap it with the Text tool).
+  function editTextShape(i) {
+    const s = shapes[i], c = canvasRef.current, r = c.getBoundingClientRect(), scale = r.width / c.width;
+    let clientY = r.top + s.y * scale;
+    if (typeof window !== "undefined" && window.matchMedia("(max-width:640px)").matches) {
+      const vh = window.visualViewport?.height || window.innerHeight;
+      clientY = Math.min(clientY, Math.round(vh * 0.42));
+    }
+    setColor(s.color);
+    setFmt({ bold: !!s.bold, italic: !!s.italic, underline: !!s.underline, strike: !!s.strike, sizeMul: +(s.size / natFont()).toFixed(2) || 1 });
+    setEditor({ clientX: r.left + s.x * scale, clientY, nx: s.x, ny: s.y, value: s.text, scale, replaceIndex: i });
+    const el = textRef.current;
+    if (el) { el.value = s.text; try { el.focus({ preventScroll: true }); } catch { el.focus(); } }
+  }
   function commitEditor() {
     if (!editor) return; const v = editor.value.trim(); const f = fmtRef.current;
-    if (v) commit([...shapes, { type: "text", x: editor.nx, y: editor.ny, text: editor.value, size: Math.round(natFont() * f.sizeMul), color: colorRef.current, lw: 0, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike }]);
+    const idx = editor.replaceIndex;
+    if (idx != null && idx >= 0) {
+      // editing an existing text — update it, or delete it if cleared
+      const next = shapes.slice();
+      if (!v) next.splice(idx, 1);
+      else next[idx] = { ...next[idx], text: editor.value, size: Math.round(natFont() * f.sizeMul), color: colorRef.current, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike };
+      commit(next);
+    } else if (v) {
+      commit([...shapes, { type: "text", x: editor.nx, y: editor.ny, text: editor.value, size: Math.round(natFont() * f.sizeMul), color: colorRef.current, lw: 0, bold: f.bold, italic: f.italic, underline: f.underline, strike: f.strike }]);
+    }
     setEditor(null);
   }
 
