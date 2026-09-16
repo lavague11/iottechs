@@ -81,6 +81,8 @@
   .utils{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;z-index:4}
   .ubtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;height:34px;width:34px;padding:0;display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(4px)}
   .ubtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .ubtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .ubtn:disabled{opacity:.5;cursor:default}
   /* dim (moon) sits in the plan's top-right corner */
   .plandim{position:absolute;right:14px;top:14px;z-index:7;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
   .plandim svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -451,6 +453,8 @@
           <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+            <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
+            <button class="ubtn" id="fitBtn" title="Fit" aria-label="Fit plan to screen"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
           <div class="showCtl" id="showCtl">
@@ -917,6 +921,42 @@
     work.addEventListener("touchend", function(e){ if(e.touches.length<2) pinchDist=0; });
     var cbtn=document.getElementById("centerBtn"); if(cbtn) cbtn.addEventListener("click", resetZoom);   // Center resets the view
 
+    // ---- Fit: toggle whole-plan (contain) vs fill-screen (cover). A portrait plan on a wide canvas
+    //      leaves side margins in "Fit"; "Fill" edges it out (pan/zoom to reach the cropped sides). ----
+    var fitBtn=document.getElementById("fitBtn");
+    function updateFitBtn(){ if(fitBtn){ fitBtn.classList.toggle("on", curCover); fitBtn.title = curCover ? "Fit" : "Fill"; } }
+    if(fitBtn) fitBtn.addEventListener("click", function(){ fitOverride=!curCover; resetZoom(); fitScene(); updateFitBtn(); });
+
+    // ---- Rotate: turn the plan 90° clockwise. Baked into the image itself so aspect/fit/device
+    //      anchoring all stay correct; placed devices + aims rotate with it. ----
+    var rotBtn=document.getElementById("rotateBtn");
+    function rotatePlan(){
+      if(frozen() || !bgData) return;
+      if(rotBtn) rotBtn.disabled=true;
+      var im=new Image(); im.crossOrigin="anonymous";
+      im.onload=function(){
+        var w=im.naturalWidth, h=im.naturalHeight, out=null;
+        try{
+          var cv=document.createElement("canvas"); cv.width=h; cv.height=w;   // dims swap on a 90° turn
+          var ctx=cv.getContext("2d"); ctx.translate(h,0); ctx.rotate(Math.PI/2); ctx.drawImage(im,0,0);
+          out=cv.toDataURL("image/jpeg",0.9);
+          sceneAspect=(cv.width/cv.height)||1;
+        }catch(e){ out=null; }
+        if(!out){ if(rotBtn) rotBtn.disabled=false; return; }
+        // rotate every placed device to the same physical spot (90° CW: x'=100-y, y'=x)
+        devices.forEach(function(d){ var nx=100-d.y, ny=d.x; d.x=nx; d.y=ny; if(typeof d.aim==="number") d.aim=((d.aim+90)%360+360)%360; });
+        uploadBackground(out, function(url){
+          bgData=url||out; setStageBg();                       // setStageBg re-runs fitScene at the new aspect
+          devices.forEach(function(d){ renderDevice(d); });
+          snapFloor(); queueSave(); updateFitBtn();
+          if(rotBtn) rotBtn.disabled=false;
+        });
+      };
+      im.onerror=function(){ if(rotBtn) rotBtn.disabled=false; };
+      im.src=bgData;
+    }
+    if(rotBtn) rotBtn.addEventListener("click", rotatePlan);
+
     // Count matching devices on all EARLIER floors so numbering is continuous across floors
     // (Floor 2's first camera continues after Floor 1's last — a "continuation", not a restart).
     function floorsBefore(pred){ var n=0; for(var i=0;i<curFloor;i++){ ((floors[i]&&floors[i].devices)||[]).forEach(function(sd){ if(pred(sd)) n++; }); } return n; }
@@ -1172,6 +1212,7 @@
     // and the whole photo shows with blank space AROUND the plate (never inside it → no floating icons,
     // no tiling, no crop). Recomputed on every bg change, floor switch, and resize.
     var sceneAspect=null;   // width/height of the current floor's background image
+    var fitOverride=null, curCover=false;   // Fit button: null=auto (by screen), true=Fill(cover), false=Fit(contain)
     function fitScene(){
       var scene=document.getElementById("scene"), host=document.getElementById("working");
       if(!scene||!host) return;
@@ -1182,6 +1223,8 @@
       // sides). Desktop: CONTAIN — the whole plan stays visible. Device coords are % of the scene, so
       // either fit keeps them locked to the image.
       var cover=false; try{ cover=window.matchMedia("(max-width:700px), (max-height:540px) and (orientation:landscape)").matches; }catch(e){}
+      if(fitOverride!=null) cover=fitOverride;   // user chose Fit/Fill explicitly → honor it
+      curCover=cover;
       var wide=cw/ch>sceneAspect, byHeight=cover?!wide:wide;
       var w,h; if(byHeight){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
       scene.style.right="auto"; scene.style.bottom="auto";
