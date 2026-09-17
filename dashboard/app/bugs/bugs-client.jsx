@@ -3,12 +3,18 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark, BrandLink } from "../components/brand";
 
-// Internal Bugs surface. Header ties it to the app (logo → home/dashboard, back arrow → history).
-// Each record: screenshot · issue · metadata · one Copy menu (Image/Text/Prompt/All) · More · Resolve,
-// with the generated fix prompt flattened underneath. Auto-refreshes so new reports appear live.
-const fmt = (s) => { try { const d = new Date(String(s).replace(" ", "T")); return d.toLocaleString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleString("en-US", { hour: "numeric", minute: "2-digit" }); } catch { return s; } };
+// Internal Bugs surface — a fast engineering inbox. DEFAULT: one compact row per bug (thumbnail · title ·
+// #id/route/date · copy/•••/resolve). Click a row to expand ONE bug inline into Review / Prompt / Context
+// tabs (AI review, fix prompt, and technical context are all hidden until asked for). No data is removed —
+// everything is reachable, just progressively disclosed. Auto-refreshes so new reports appear live.
+const two = (n) => String(n).padStart(2, "0");
+const asDate = (s) => { try { return new Date(String(s).replace(" ", "T")); } catch { return null; } };
+const fmtDate = (s) => { const d = asDate(s); return d ? d.toLocaleString("en-US", { month: "short", day: "numeric" }) : s; };
+const fmtTime = (s) => { const d = asDate(s); return d ? d.toLocaleString("en-US", { hour: "numeric", minute: "2-digit" }) : s; };
+const fmt = (s) => `${fmtDate(s)} · ${fmtTime(s)}`;
 const who = (r) => (r && r.includes("@") ? r.split("@")[0] : r);
-const isLong = (t) => !!t && (t.length > 230 || (t.match(/\n/g) || []).length > 3);
+// Short browser name from a UA string, for the Context tab.
+const uaName = (ua) => { if (!ua) return null; if (/edg\//i.test(ua)) return "Edge"; if (/chrome|crios/i.test(ua)) return "Chrome"; if (/firefox|fxios/i.test(ua)) return "Firefox"; if (/safari/i.test(ua)) return "Safari"; return ua.split(" ")[0]; };
 // A report may carry several screenshots (image_urls JSON) or one legacy image_url.
 const imgsOf = (b) => { try { const a = JSON.parse(b.image_urls || "null"); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ } return b.image_url ? [b.image_url] : []; };
 const ctxOf = (b) => { try { const c = JSON.parse(b.context || "null"); return c && typeof c === "object" ? c : null; } catch { return null; } };
@@ -36,11 +42,14 @@ export default function BugsClient({ initial = [] }) {
   const [uiBusy, setUiBusy] = useState(null);   // bug id whose vision UI review is generating
   const [fresh, setFresh] = useState(false);
   const [menuFor, setMenuFor] = useState(null);   // bug id whose Copy menu is open
-  const [moreFor, setMoreFor] = useState(null);   // bug id whose More menu is open
-  const [expanded, setExpanded] = useState(() => new Set());
-  const [ctxOpen, setCtxOpen] = useState(() => new Set());
+  const [moreFor, setMoreFor] = useState(null);   // bug id whose ••• menu is open
+  const [openId, setOpenId] = useState(null);     // the ONE expanded bug
+  const [tab, setTab] = useState("prompt");       // active tab of the expanded bug
+  const [q, setQ] = useState("");                 // search text
+  const [searchOn, setSearchOn] = useState(false);
   const [toast, setToast] = useState(null);
   const seenRef = useRef(new Set(initial.map((b) => b.id)));
+  const searchRef = useRef(null);
 
   // Auto-refresh — poll so the surface stays live without a manual reload.
   useEffect(() => {
@@ -59,7 +68,7 @@ export default function BugsClient({ initial = [] }) {
     return () => { live = false; clearInterval(t); };
   }, []);
 
-  // Close menus on outside click / Escape; Escape also closes the image preview.
+  // Close menus on outside click; Escape closes menus / preview / search.
   useEffect(() => {
     if (menuFor == null && moreFor == null) return;
     const h = () => { setMenuFor(null); setMoreFor(null); };
@@ -68,13 +77,13 @@ export default function BugsClient({ initial = [] }) {
   }, [menuFor, moreFor]);
   useEffect(() => {
     const h = (e) => {
-      if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); setGallery(null); }
+      if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); if (gallery) setGallery(null); else if (searchOn) { setSearchOn(false); setQ(""); } }
       else if (e.key === "ArrowLeft") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i - 1 + g.urls.length) % g.urls.length } : g));
       else if (e.key === "ArrowRight") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i + 1) % g.urls.length } : g));
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, []);
+  }, [gallery, searchOn]);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 1300); }
   async function copyText(text) { try { await navigator.clipboard.writeText(text); flash("Copied"); } catch { flash("Copy failed"); } }
@@ -98,22 +107,28 @@ export default function BugsClient({ initial = [] }) {
     copyText(parts.join("\n"));
   }
 
+  // Open a bug to a given tab (used by row-click and by the AI actions so their result is visible).
+  function openTo(id, t) { setOpenId(id); if (t) setTab(t); setMoreFor(null); setMenuFor(null); }
+  function toggleRow(b) {
+    if (openId === b.id) { setOpenId(null); return; }
+    const t = suggest[b.id] ? "prompt" : uiRev[b.id] ? "review" : "context";
+    openTo(b.id, t);
+  }
+
   async function getSuggestion(b) {
     if (sugBusy) return;
-    setSugBusy(b.id); setMoreFor(null);
+    openTo(b.id, "prompt"); setSugBusy(b.id);
     const r = await fetch("/api/bug-suggest", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: b.id, description: b.description, path: b.path, shots: imgsOf(b).length, error: ctxOf(b)?.errors?.[0]?.message || undefined }),
     }).then((x) => x.json()).catch(() => null);
     setSugBusy(null);
-    if (r?.ok && r.suggestion) setSuggest((s) => ({ ...s, [b.id]: r.suggestion }));
-    else setSuggest((s) => ({ ...s, [b.id]: r?.error || "Couldn't generate a prompt." }));
+    setSuggest((s) => ({ ...s, [b.id]: r?.ok && r.suggestion ? r.suggestion : (r?.error || "Couldn't generate a prompt.") }));
   }
   // Vision UI review — Claude looks at the screenshot and returns an upgrade/fix prompt.
   async function getUiReview(b) {
     if (uiBusy) return;
-    setUiBusy(b.id); setMoreFor(null); setMenuFor(null);
-    setExpanded((s) => new Set(s).add(`ui:${b.id}`));   // show the panel expanded while it writes
+    openTo(b.id, "review"); setUiBusy(b.id);
     const r = await fetch("/api/bug-ui-review", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: b.id, description: b.description, path: b.path, imageUrls: imgsOf(b) }),
@@ -135,28 +150,48 @@ export default function BugsClient({ initial = [] }) {
   function stop(e) { e.stopPropagation(); }
 
   const openN = bugs.filter((b) => b.status === "open").length;
-  const shown = bugs.filter((b) => (filter === "all" ? true : b.status === filter));
-  const emptyMsg = filter === "open" ? "All clear" : "No bugs";
+  const qn = q.trim().toLowerCase();
+  const shown = bugs
+    .filter((b) => (filter === "all" ? true : b.status === filter))
+    .filter((b) => {
+      if (!qn) return true;
+      const hay = `#${b.id} ${b.description || ""} ${b.path || ""} ${suggest[b.id] || ""} ${uiRev[b.id] || ""}`.toLowerCase();
+      return hay.includes(qn) || (qn.startsWith("#") && String(b.id) === qn.slice(1));
+    });
+  const emptyMsg = qn ? "No matches" : filter === "open" ? "All clear" : "No bugs";
+
+  useEffect(() => { if (searchOn) searchRef.current?.focus(); }, [searchOn]);
 
   return (
     <div className="bgp">
       <style>{CSS}</style>
 
       <header className="bgp-head">
-        <BrandLink className="bgp-logo"><Wordmark height={19} /></BrandLink>
-        <div className="bgp-title">
+        <div className="bgp-hnav">
+          <BrandLink className="bgp-logo"><Wordmark height={18} /></BrandLink>
           <button className="bgp-back" onClick={goBack} aria-label="Back" title="Back">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           </button>
-          <div>
+          <div className="bgp-titlewrap">
             <h1 className="bgp-h1">Bugs</h1>
             <p className="bgp-sub">{openN} open · {bugs.length} total{fresh && <span className="bgp-live"> · new</span>}</p>
           </div>
         </div>
-        <div className="bgp-seg" role="tablist" aria-label="Filter">
-          {["open", "resolved", "all"].map((k) => (
-            <button key={k} className={`bgp-tab${filter === k ? " on" : ""}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{k[0].toUpperCase() + k.slice(1)}</button>
-          ))}
+        <div className="bgp-controls">
+          <div className={`bgp-search${searchOn ? " on" : ""}`}>
+            <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search bugs" />
+            <button className="bgp-ib" aria-label={searchOn ? "Close search" : "Search"} title="Search"
+              onClick={() => { if (searchOn && !q) setSearchOn(false); else setSearchOn(true); }}>
+              {searchOn && q
+                ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" onClick={(e) => { e.stopPropagation(); setQ(""); searchRef.current?.focus(); }}><path d="M18 6 6 18M6 6l12 12" /></svg>
+                : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>}
+            </button>
+          </div>
+          <div className="bgp-seg" role="tablist" aria-label="Filter">
+            {["open", "resolved", "all"].map((k) => (
+              <button key={k} className={`bgp-tab${filter === k ? " on" : ""}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{k[0].toUpperCase() + k.slice(1)}</button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -165,37 +200,29 @@ export default function BugsClient({ initial = [] }) {
       ) : (
         <div className="bgp-list">
           {shown.map((b) => {
-            const prompt = suggest[b.id];
-            const long = isLong(prompt);
-            const open = expanded.has(b.id);
             const imgs = imgsOf(b);
-            const ctx = ctxOf(b);
+            const isOpen = openId === b.id;
+            const resolved = b.status === "resolved";
             return (
-              <div key={b.id} className={`bgp-card${b.status === "resolved" ? " done" : ""}`}>
-                <div className="bgp-row">
+              <div key={b.id} className={`bgp-card${resolved ? " done" : ""}${isOpen ? " open" : ""}`}>
+                <div className="bgp-row" onClick={() => toggleRow(b)} role="button" aria-expanded={isOpen}>
                   {imgs.length > 0 && (
-                    <button className={`bgp-thumb${imgs.length > 1 ? " stack" : ""}`} onClick={() => setGallery({ urls: imgs, i: 0 })} aria-label={`View ${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}`} title="View">
+                    <button className={`bgp-thumb${imgs.length > 1 ? " stack" : ""}`} onClick={(e) => { stop(e); setGallery({ urls: imgs, i: 0 }); }} aria-label={`View ${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}`} title="View">
                       <img src={imgs[0]} alt="screenshot" />
                       {imgs.length > 1 && <span className="bgp-count-badge">{imgs.length}</span>}
                     </button>
                   )}
                   <div className="bgp-body">
-                    <div className="bgp-desc">{b.description}</div>
+                    <div className="bgp-desc" dir="auto">{b.description}</div>
                     <div className="bgp-meta">
-                      <span className="bgp-id">#{b.id}</span>
+                      <button className="bgp-id" onClick={(e) => { stop(e); copyText(`BUG #${b.id}`); }} title="Copy ID">#{b.id}</button>
                       {b.path && <a className="bgp-path" href={b.url || b.path} target="_blank" rel="noreferrer" onClick={stop}>{b.path}</a>}
-                      <span>{fmt(b.created_at)}</span>
-                      {b.reporter && <span className="bgp-who">{who(b.reporter)}{b.role ? ` · ${b.role}` : ""}</span>}
-                      {b.status === "resolved" && b.resolved_at && <span className="bgp-res">resolved {fmt(b.resolved_at)}</span>}
+                      <span>{fmtDate(b.created_at)}</span>
+                      {resolved && b.resolved_at && <span className="bgp-res">Resolved {fmtTime(b.resolved_at)}</span>}
                     </div>
                   </div>
 
-                  <div className="bgp-act">
-                    {imgs.length > 0 && (
-                      <button className="bgp-ib bgp-ui" aria-label="UI review" title="AI UI review" disabled={uiBusy === b.id} onClick={() => getUiReview(b)}>
-                        {uiBusy === b.id ? <span className="bgp-spin" /> : <WandI />}
-                      </button>
-                    )}
+                  <div className="bgp-act" onClick={stop}>
                     <div className="bgp-menuwrap">
                       <button className="bgp-ib" aria-label="Copy" title="Copy" onClick={(e) => { stop(e); setMoreFor(null); setMenuFor(menuFor === b.id ? null : b.id); }}>
                         <CopyI />
@@ -210,7 +237,7 @@ export default function BugsClient({ initial = [] }) {
                             </div>
                           )}
                           <button onClick={() => { setMenuFor(null); copyText(b.description); }}>Text</button>
-                          {prompt && <button onClick={() => { setMenuFor(null); copyText(prompt); }}>Prompt</button>}
+                          {suggest[b.id] && <button onClick={() => { setMenuFor(null); copyText(suggest[b.id]); }}>Prompt</button>}
                           <button onClick={() => { setMenuFor(null); copyAll(b); }}>All</button>
                         </div>
                       )}
@@ -221,69 +248,39 @@ export default function BugsClient({ initial = [] }) {
                       </button>
                       {moreFor === b.id && (
                         <div className="bgp-menu" onClick={stop}>
-                          <button disabled={sugBusy === b.id} onClick={() => getSuggestion(b)}>{sugBusy === b.id ? "Writing…" : prompt ? "Regenerate" : "Prompt"}</button>
-                          {b.path && <a href={b.url || b.path} target="_blank" rel="noreferrer" onClick={() => setMoreFor(null)}>Open page</a>}
+                          <button disabled={sugBusy === b.id} onClick={() => getSuggestion(b)}>{sugBusy === b.id ? "Writing…" : suggest[b.id] ? "Regenerate" : "Prompt"}</button>
+                          {imgs.length > 0 && <button disabled={uiBusy === b.id} onClick={() => getUiReview(b)}>{uiBusy === b.id ? "Reviewing…" : uiRev[b.id] ? "Re-review" : "UI review"}</button>}
+                          <a href={b.url || b.path} target="_blank" rel="noreferrer" onClick={() => setMoreFor(null)}>Open page</a>
                         </div>
                       )}
                     </div>
-                    <button className={`bgp-resolve${b.status === "resolved" ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
-                      {busy === b.id ? "…" : b.status === "resolved" ? "Reopen" : "Resolve"}
+                    <button className={`bgp-resolve${resolved ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
+                      {busy === b.id ? "…" : resolved ? "Reopen" : "Resolve"}
                     </button>
                   </div>
                 </div>
 
-                {(prompt || sugBusy === b.id) && (
-                  <div className="bgp-prompt">
-                    <div className="bgp-prompt-head">
-                      <span>Prompt</span>
-                      {prompt && <button className="bgp-ib sm" aria-label="Copy" title="Copy" onClick={() => copyText(prompt)}><CopyI /></button>}
+                {isOpen && (
+                  <div className="bgp-detail" onClick={stop}>
+                    <div className="bgp-tabs" role="tablist">
+                      <button className={`bgp-tabb${tab === "review" ? " on rev" : ""}`} aria-pressed={tab === "review"} onClick={() => setTab("review")}>Review</button>
+                      <button className={`bgp-tabb${tab === "prompt" ? " on" : ""}`} aria-pressed={tab === "prompt"} onClick={() => setTab("prompt")}>Prompt</button>
+                      <button className={`bgp-tabb${tab === "context" ? " on" : ""}`} aria-pressed={tab === "context"} onClick={() => setTab("context")}>Context</button>
                     </div>
-                    {sugBusy === b.id && !prompt ? (
-                      <div className="bgp-prompt-body muted">Writing…</div>
-                    ) : (
-                      <>
-                        <div className={`bgp-prompt-body${long && !open ? " clamp" : ""}`}>{prompt}</div>
-                        {long && <button className="bgp-toggle" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>{open ? "Less" : "More"}</button>}
-                      </>
-                    )}
-                  </div>
-                )}
 
-                {(uiRev[b.id] || uiBusy === b.id) && (() => {
-                  const review = uiRev[b.id], uiLong = isLong(review), uiOpen = expanded.has(`ui:${b.id}`);
-                  return (
-                    <div className="bgp-prompt bgp-uirev">
-                      <div className="bgp-prompt-head">
-                        <span>UI review</span>
-                        {review && <button className="bgp-ib sm" aria-label="Copy" title="Copy" onClick={() => copyText(review)}><CopyI /></button>}
-                      </div>
-                      {uiBusy === b.id && !review ? (
-                        <div className="bgp-prompt-body muted">Looking at the screenshot…</div>
-                      ) : (
-                        <>
-                          <div className={`bgp-prompt-body${uiLong && !uiOpen ? " clamp" : ""}`}>{review}</div>
-                          {uiLong && <button className="bgp-toggle" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(`ui:${b.id}`) ? n.delete(`ui:${b.id}`) : n.add(`ui:${b.id}`); return n; })}>{uiOpen ? "Less" : "More"}</button>}
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {ctx && (ctx.errors?.length > 0 || ctx.routes?.length > 1 || ctx.viewport) && (
-                  <div className="bgp-ctx">
-                    <button className="bgp-ctx-head" onClick={() => setCtxOpen((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>
-                      Context {ctx.errors?.length > 0 && <em className="bgp-ctx-flag">{ctx.errors.length} error{ctx.errors.length > 1 ? "s" : ""}</em>}<span className="bgp-ctx-caret">{ctxOpen.has(b.id) ? "−" : "+"}</span>
-                    </button>
-                    {ctxOpen.has(b.id) && (
-                      <div className="bgp-ctx-body">
-                        <div><span className="bgp-ctx-k">Route</span> {ctx.route}{ctx.viewport ? ` · ${ctx.viewport}` : ""}</div>
-                        {ctx.routes?.length > 1 && <div><span className="bgp-ctx-k">Trail</span> {ctx.routes.join(" → ")}</div>}
-                        {ctx.errors?.map((e, i) => (
-                          <div key={i} className="bgp-ctx-err"><span className={`bgp-ctx-tag ${e.type}`}>{e.type}</span> {e.message}{e.occurrences > 1 ? ` ×${e.occurrences}` : ""}</div>
-                        ))}
-                        {ctx.ua && <div className="bgp-ctx-ua">{ctx.ua}</div>}
-                      </div>
+                    {tab === "review" && (
+                      <TabBody busy={uiBusy === b.id} busyLabel="Looking at the screenshot…"
+                        value={uiRev[b.id]} onCopy={() => copyText(uiRev[b.id])}
+                        canGen={imgs.length > 0} genLabel={uiRev[b.id] ? "Re-review" : "Generate"} onGen={() => getUiReview(b)}
+                        emptyNo={imgs.length === 0 ? "No screenshot to review." : "No review yet."} />
                     )}
+                    {tab === "prompt" && (
+                      <TabBody busy={sugBusy === b.id} busyLabel="Writing…"
+                        value={suggest[b.id]} onCopy={() => copyText(suggest[b.id])}
+                        canGen genLabel={suggest[b.id] ? "Regenerate" : "Generate"} onGen={() => getSuggestion(b)}
+                        emptyNo="No prompt yet." />
+                    )}
+                    {tab === "context" && <ContextBody b={b} ctx={ctxOf(b)} />}
                   </div>
                 )}
               </div>
@@ -314,107 +311,161 @@ export default function BugsClient({ initial = [] }) {
   );
 }
 
+// One tab body for the AI panels (Review / Prompt): live status, the text with its own Copy, a Generate/
+// Regenerate action, and a clamp+chevron for long text. Neutral surface — the accent lives on the tab.
+function TabBody({ busy, busyLabel, value, onCopy, canGen, genLabel, onGen, emptyNo }) {
+  const [more, setMore] = useState(false);
+  const long = !!value && (value.length > 320 || (value.match(/\n/g) || []).length > 5);
+  return (
+    <div className="bgp-tabbody">
+      <div className="bgp-tabtools">
+        {canGen && <button className="bgp-mini" disabled={busy} onClick={onGen}>{busy ? "…" : genLabel}</button>}
+        {value && !busy && <button className="bgp-ib sm" aria-label="Copy" title="Copy" onClick={onCopy}><CopyI /></button>}
+      </div>
+      {busy && !value ? (
+        <div className="bgp-text muted">{busyLabel}</div>
+      ) : value ? (
+        <>
+          <div className={`bgp-text${long && !more ? " clamp" : ""}`} dir="auto">{value}</div>
+          {long && <button className="bgp-chev" onClick={() => setMore((m) => !m)}>{more ? "Show less" : "Show more"}</button>}
+        </>
+      ) : (
+        <div className="bgp-text muted">{emptyNo}</div>
+      )}
+    </div>
+  );
+}
+
+// Context tab — compact key/value technical metadata (route, viewport, browser, reporter, errors, trail).
+function ContextBody({ b, ctx }) {
+  const rows = [];
+  rows.push(["Route", b.path || ctx?.route || "—"]);
+  if (ctx?.viewport) rows.push(["Viewport", ctx.viewport]);
+  const br = uaName(ctx?.ua || b.user_agent);
+  if (br) rows.push(["Browser", br]);
+  if (b.reporter) rows.push(["Reporter", `${who(b.reporter)}${b.role ? ` · ${b.role}` : ""}`]);
+  if (ctx?.routes?.length > 1) rows.push(["Trail", ctx.routes.join(" → ")]);
+  return (
+    <div className="bgp-tabbody">
+      <div className="bgp-kv">
+        {rows.map(([k, v]) => (<div className="bgp-kvrow" key={k}><span className="bgp-kvk">{k}</span><span className="bgp-kvv" dir="auto">{v}</span></div>))}
+      </div>
+      {ctx?.errors?.length > 0 && (
+        <div className="bgp-errs">
+          {ctx.errors.map((e, i) => (
+            <div key={i} className="bgp-err"><span className={`bgp-etag ${e.type}`}>{e.type}</span> {e.message}{e.occurrences > 1 ? ` ×${e.occurrences}` : ""}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CopyI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const MoreI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>);
 const CloseI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>);
-const WandI = () => (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4V2M15 10V8M12.5 5.5h-2M19.5 5.5h-2M5 20l9-9M13 6.5 17.5 11" /></svg>);
 
 const CSS = `
-.bgp{max-width:1040px;margin:0 auto;padding:20px 22px 80px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#12151b}
-.bgp-head{display:flex;align-items:center;gap:16px 20px;flex-wrap:wrap;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #e8e8e3}
+.bgp{max-width:1040px;margin:0 auto;padding:18px 20px 80px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#12151b}
+.bgp-head{display:flex;align-items:center;justify-content:space-between;gap:12px 18px;padding-bottom:13px;margin-bottom:14px;border-bottom:1px solid #e8e8e3}
+.bgp-hnav{display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto}
 .bgp-logo{color:#12151b;flex:0 0 auto}
-.bgp-title{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}
-.bgp-back{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4df;border-radius:9px;background:#fff;color:#4a5058;cursor:pointer}
+.bgp-back{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #e4e4df;border-radius:8px;background:#fff;color:#4a5058;cursor:pointer;flex:0 0 auto}
 .bgp-back:hover{border-color:#12151b;color:#12151b}
-.bgp-h1{margin:0;font-size:1.25rem;font-weight:800;letter-spacing:-.02em;line-height:1.1}
-.bgp-sub{margin:2px 0 0;color:#8a8f96;font-size:.78rem}
+.bgp-titlewrap{min-width:0;flex:0 1 auto}
+.bgp-h1{margin:0;font-size:1.16rem;font-weight:800;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
+.bgp-sub{margin:1px 0 0;color:#8a8f96;font-size:.75rem}
 .bgp-live{color:#2e7d5b;font-weight:700}
+.bgp-controls{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.bgp-search{display:flex;align-items:center;border:1px solid transparent;border-radius:100px}
+.bgp-search input{width:0;padding:0;border:0;background:none;outline:none;font:600 .8rem/1 inherit;color:#12151b;transition:width .18s ease}
+.bgp-search.on{border-color:#e4e4df;background:#fff;padding-left:12px}
+.bgp-search.on input{width:150px;padding:7px 0}
 .bgp-seg{display:inline-flex;padding:3px;gap:2px;background:#f1f2f4;border:1px solid #e4e4df;border-radius:100px;flex:0 0 auto}
-.bgp-tab{border:0;background:transparent;cursor:pointer;font:700 .78rem/1 inherit;color:#787d84;padding:7px 13px;border-radius:100px}
+.bgp-tab{border:0;background:transparent;cursor:pointer;font:700 .76rem/1 inherit;color:#787d84;padding:7px 12px;border-radius:100px}
 .bgp-tab.on{background:#12151b;color:#fff}
-.bgp-empty{text-align:center;padding:64px 16px;color:#9aa0a8;font-size:.95rem;font-weight:600}
+.bgp-empty{text-align:center;padding:60px 16px;color:#9aa0a8;font-size:.95rem;font-weight:600}
 .bgp-list{display:flex;flex-direction:column;gap:9px}
-.bgp-card{padding:13px 14px;border:1px solid #e8e8e3;border-radius:12px;background:#fff}
-.bgp-card.done{opacity:.62;background:#fbfbfa}
-.bgp-row{display:flex;align-items:flex-start;gap:13px}
-.bgp-thumb{position:relative;flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:9px;line-height:0}
-.bgp-thumb img{width:92px;height:70px;object-fit:cover;border:1px solid #e4e4df;border-radius:9px;display:block}
+.bgp-card{border:1px solid #e8e8e3;border-radius:12px;background:#fff;overflow:hidden}
+.bgp-card.done{background:#fbfbfa}
+.bgp-card.open{border-color:#d9d9d2;box-shadow:0 1px 3px rgba(16,17,18,.04)}
+.bgp-row{display:flex;align-items:center;gap:12px;padding:12px 13px;cursor:pointer}
+.bgp-thumb{position:relative;flex:0 0 auto;border:0;padding:0;background:none;cursor:pointer;border-radius:8px;line-height:0;align-self:center}
+.bgp-thumb img{width:80px;height:62px;object-fit:cover;border:1px solid #e4e4df;border-radius:8px;display:block}
 .bgp-thumb.stack{box-shadow:3px 3px 0 -1px #fff,3px 3px 0 0 #e4e4df,6px 6px 0 -1px #fff,6px 6px 0 0 #e4e4df}
-.bgp-count-badge{position:absolute;right:-5px;bottom:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#12151b;color:#fff;font-size:.66rem;font-weight:800;line-height:18px;text-align:center}
+.bgp-count-badge{position:absolute;right:-5px;bottom:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#12151b;color:#fff;font-size:.64rem;font-weight:800;line-height:17px;text-align:center}
+.bgp-body{flex:1;min-width:0}
+.bgp-desc{font-size:.875rem;font-weight:600;line-height:1.35;color:#1b1f26;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.bgp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;margin-top:5px;font-size:.735rem;color:#9297a0}
+.bgp-id{font:700 .735rem/1 inherit;color:#5a6068;border:0;background:none;padding:0;cursor:pointer}
+.bgp-id:hover{color:#12151b;text-decoration:underline}
+.bgp-path{color:#3a6ea5;text-decoration:none;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgp-path:hover{text-decoration:underline}
+.bgp-res{color:#2e7d5b;font-weight:600}
+.bgp-act{display:flex;align-items:center;gap:3px;flex:0 0 auto;align-self:center}
+.bgp-menuwrap{position:relative;display:inline-flex}
+.bgp-ib{display:inline-flex;align-items:center;justify-content:center;width:31px;height:31px;border:1px solid transparent;border-radius:8px;background:transparent;color:#6b7079;cursor:pointer;line-height:0}
+.bgp-ib:hover{background:#f1f2f4;color:#12151b}
+.bgp-ib.sm{width:26px;height:26px}
+.bgp-ib:disabled{opacity:.4;cursor:default}
+.bgp-menu{position:absolute;top:35px;right:0;z-index:20;min-width:130px;background:#fff;border:1px solid #e4e4df;border-radius:10px;
+  box-shadow:0 12px 30px -8px rgba(0,0,0,.2);padding:4px;display:flex;flex-direction:column}
+.bgp-menu button,.bgp-menu a{text-align:left;border:0;background:none;cursor:pointer;font:600 .82rem/1 inherit;color:#2b2f36;padding:8px 10px;border-radius:7px;text-decoration:none;display:block}
+.bgp-menu button:hover,.bgp-menu a:hover{background:#f4f5f7}
+.bgp-menu button:disabled{opacity:.5;cursor:default}
 .bgp-imgrow{display:flex;align-items:center;gap:5px;padding:6px 10px}
 .bgp-imgrow>span{font-size:.82rem;font-weight:600;color:#2b2f36;margin-right:2px}
 .bgp-imgnum{width:24px;height:24px;padding:0;border:1px solid #e4e4df;border-radius:6px;background:#fff;color:#2b2f36;font:700 .74rem/1 inherit;cursor:pointer}
 .bgp-imgnum:hover{background:#f4f5f7;border-color:#12151b}
+.bgp-resolve{flex:0 0 auto;height:31px;padding:0 14px;margin-left:2px;border:0;border-radius:8px;background:#12151b;color:#fff;font:700 .78rem/1 inherit;cursor:pointer}
+.bgp-resolve.reopen{background:#fff;border:1px solid #e4e4df;color:#4a5058}
+.bgp-resolve:disabled{opacity:.5}
+/* Expanded detail — one container, separated by a hairline; tabs carry the disclosure. */
+.bgp-detail{border-top:1px solid #eee;padding:11px 13px 13px}
+.bgp-tabs{display:inline-flex;gap:3px;background:#f4f5f7;border-radius:9px;padding:3px;margin-bottom:10px}
+.bgp-tabb{border:0;background:none;cursor:pointer;font:700 .77rem/1 inherit;color:#787d84;padding:6px 12px;border-radius:7px}
+.bgp-tabb.on{background:#fff;color:#12151b;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.bgp-tabb.on.rev{color:#7c3aed}
+.bgp-tabbody{min-height:24px}
+.bgp-tabtools{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:5px;min-height:26px}
+.bgp-mini{border:1px solid #e4e4df;background:#fff;cursor:pointer;font:700 .74rem/1 inherit;color:#4a5058;padding:6px 11px;border-radius:7px}
+.bgp-mini:hover:not(:disabled){border-color:#12151b;color:#12151b}
+.bgp-mini:disabled{opacity:.5;cursor:default}
+.bgp-text{white-space:pre-wrap;font-size:.82rem;line-height:1.5;color:#3a3f47;word-break:break-word}
+.bgp-text.muted{color:#9aa0a8}
+.bgp-text.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.bgp-chev{margin-top:5px;border:0;background:none;cursor:pointer;font:700 .75rem/1 inherit;color:#8a6d2f;padding:2px 0}
+.bgp-kv{display:flex;flex-direction:column;gap:6px}
+.bgp-kvrow{display:flex;gap:12px;font-size:.8rem;line-height:1.4}
+.bgp-kvk{flex:0 0 74px;color:#9297a0;font-weight:700}
+.bgp-kvv{flex:1;min-width:0;color:#3a3f47;word-break:break-word;font-family:var(--font-mono),ui-monospace,Menlo,monospace;font-size:.78rem}
+.bgp-errs{margin-top:9px;display:flex;flex-direction:column;gap:5px}
+.bgp-err{font-size:.78rem;line-height:1.4;color:#5a6068;word-break:break-word;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+.bgp-etag{display:inline-block;font-size:.66rem;font-weight:800;text-transform:uppercase;padding:1px 5px;border-radius:5px;background:#eceef1;color:#6b7079;margin-right:5px}
+.bgp-etag.error,.bgp-etag.rejection{background:#fbe6e2;color:#b34a3a}
+.bgp-etag.network{background:#fdf2dc;color:#8a6d2f}
+.bgp-zoom{position:fixed;inset:0;z-index:1000;background:rgba(8,10,14,.9);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+.bgp-zoom img{max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
+.bgp-zoom-bar{position:fixed;top:16px;right:16px;display:flex;gap:6px;z-index:1001}
 .bgp-zoom-count{color:#fff;font-size:.8rem;font-weight:700;align-self:center;margin-right:4px}
 .bgp-nav{position:fixed;top:50%;transform:translateY(-50%);z-index:1001;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
   border:1px solid rgba(255,255,255,.2);border-radius:50%;background:rgba(255,255,255,.1);color:#fff;cursor:pointer}
 .bgp-nav:hover{background:rgba(255,255,255,.22)}
 .bgp-nav.prev{left:16px}
 .bgp-nav.next{right:16px}
-.bgp-body{flex:1;min-width:0}
-.bgp-desc{font-size:.9rem;font-weight:600;white-space:pre-wrap;word-break:break-word;line-height:1.35}
-.bgp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:3px 9px;margin-top:6px;font-size:.74rem;color:#9297a0}
-.bgp-meta>span,.bgp-meta>a{position:relative}
-.bgp-id{font-weight:700;color:#5a6068}
-.bgp-path{color:#3a6ea5;text-decoration:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bgp-path:hover{text-decoration:underline}
-.bgp-who{color:#9297a0}
-.bgp-res{color:#2e7d5b;font-weight:600}
-.bgp-act{display:flex;align-items:center;gap:4px;flex:0 0 auto}
-.bgp-menuwrap{position:relative;display:inline-flex}
-.bgp-ib{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid transparent;border-radius:8px;background:transparent;color:#6b7079;cursor:pointer;line-height:0}
-.bgp-ib:hover{background:#f1f2f4;color:#12151b}
-.bgp-ib.sm{width:26px;height:26px}
-.bgp-ib:disabled{opacity:.4;cursor:default}
-.bgp-menu{position:absolute;top:36px;right:0;z-index:20;min-width:132px;background:#fff;border:1px solid #e4e4df;border-radius:10px;
-  box-shadow:0 12px 30px -8px rgba(0,0,0,.2);padding:4px;display:flex;flex-direction:column}
-.bgp-menu button,.bgp-menu a{text-align:left;border:0;background:none;cursor:pointer;font:600 .82rem/1 inherit;color:#2b2f36;padding:8px 10px;border-radius:7px;text-decoration:none;display:block}
-.bgp-menu button:hover,.bgp-menu a:hover{background:#f4f5f7}
-.bgp-menu button:disabled{opacity:.5;cursor:default}
-.bgp-resolve{flex:0 0 auto;height:32px;padding:0 15px;margin-left:2px;border:0;border-radius:8px;background:#12151b;color:#fff;font:700 .8rem/1 inherit;cursor:pointer}
-.bgp-resolve.reopen{background:#fff;border:1px solid #e4e4df;color:#4a5058}
-.bgp-resolve:disabled{opacity:.5}
-.bgp-prompt{margin-top:12px;padding-top:11px;border-top:1px solid #eee}
-.bgp-prompt-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
-.bgp-prompt-head span{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9297a0}
-.bgp-prompt-body{white-space:pre-wrap;font-size:.82rem;line-height:1.5;color:#3a3f47;background:#faf8f3;border-radius:8px;padding:9px 11px}
-.bgp-prompt-body.muted{color:#9aa0a8}
-.bgp-prompt-body.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.bgp-toggle{margin-top:5px;border:0;background:none;cursor:pointer;font:700 .76rem/1 inherit;color:#8a6d2f;padding:2px 0}
-.bgp-ui{color:#7c3aed}
-.bgp-ui:hover:not(:disabled){background:#f3eeff;color:#6d28d9}
-.bgp-uirev .bgp-prompt-body{background:#f5f2ff}
-.bgp-uirev .bgp-prompt-head span{color:#7c3aed}
-.bgp-spin{width:15px;height:15px;border-radius:50%;border:2px solid rgba(124,58,237,.25);border-top-color:#7c3aed;animation:bgpSpin .7s linear infinite;display:inline-block}
-@keyframes bgpSpin{to{transform:rotate(360deg)}}
-.bgp-ctx{margin-top:9px;padding-top:9px;border-top:1px solid #eee}
-.bgp-ctx-head{display:inline-flex;align-items:center;gap:7px;border:0;background:none;cursor:pointer;font:800 .7rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0;padding:0}
-.bgp-ctx-flag{font-style:normal;text-transform:none;letter-spacing:0;font-weight:700;font-size:.72rem;color:#c4553d}
-.bgp-ctx-caret{font-size:.9rem;color:#b3b8bf}
-.bgp-ctx-body{margin-top:7px;display:flex;flex-direction:column;gap:4px;font-size:.76rem;line-height:1.45;color:#5a6068;
-  background:#f7f8fa;border-radius:8px;padding:9px 11px;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
-.bgp-ctx-k{display:inline-block;min-width:44px;font-weight:700;color:#9297a0}
-.bgp-ctx-err{word-break:break-word}
-.bgp-ctx-tag{display:inline-block;font-size:.66rem;font-weight:800;text-transform:uppercase;padding:1px 5px;border-radius:5px;background:#eceef1;color:#6b7079;margin-right:4px}
-.bgp-ctx-tag.error,.bgp-ctx-tag.rejection{background:#fbe6e2;color:#b34a3a}
-.bgp-ctx-tag.network{background:#fdf2dc;color:#8a6d2f}
-.bgp-ctx-ua{color:#a9aeb5;word-break:break-word;font-size:.7rem}
-.bgp-zoom{position:fixed;inset:0;z-index:1000;background:rgba(8,10,14,.9);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
-.bgp-zoom img{max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
-.bgp-zoom-bar{position:fixed;top:16px;right:16px;display:flex;gap:6px;z-index:1001}
 .bgp-ib.light{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.2)}
 .bgp-ib.light:hover{background:rgba(255,255,255,.22);color:#fff}
 .bgp-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2000;background:#12151b;color:#fff;
   font-size:.82rem;font-weight:700;padding:8px 16px;border-radius:100px;box-shadow:0 10px 26px -8px rgba(0,0,0,.4);animation:bgpToast .16s ease}
 @keyframes bgpToast{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (max-width:640px){
-  .bgp{padding:14px 14px 72px}
-  .bgp-head{gap:12px}
-  .bgp-title{order:2;flex:1 1 100%}
-  .bgp-seg{order:3;flex:1 1 100%;justify-content:center}
-  .bgp-row{flex-wrap:wrap}
-  .bgp-thumb img{width:72px;height:56px}
-  .bgp-act{width:100%;justify-content:flex-end;margin-top:4px}
+  .bgp{padding:12px 12px 72px}
+  .bgp-head{gap:10px;flex-wrap:wrap}
+  .bgp-hnav{flex:1 1 auto}
+  .bgp-controls{flex:1 1 100%;justify-content:space-between}
+  .bgp-search.on input{width:120px}
+  .bgp-thumb img{width:66px;height:52px}
+  .bgp-path{max-width:150px}
 }
 @media (prefers-color-scheme:dark){
   .bgp{color:#e9edf2}
@@ -422,10 +473,16 @@ const CSS = `
   .bgp-logo{color:#fff}
   .bgp-h1{color:#fff}
   .bgp-back{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-search.on{background:#161a20;border-color:#2a2f37}
+  .bgp-search input{color:#e9edf2}
   .bgp-seg{background:#1b1f26;border-color:#2a2f37}
   .bgp-tab.on{background:#e9edf2;color:#12151b}
   .bgp-card{background:#161a20;border-color:#2a2f37}
   .bgp-card.done{background:#12151a}
+  .bgp-card.open{border-color:#3a4048}
+  .bgp-desc{color:#eef1f5}
+  .bgp-id{color:#9aa0a8}
+  .bgp-id:hover{color:#fff}
   .bgp-ib:hover{background:#232830;color:#fff}
   .bgp-menu{background:#1b1f26;border-color:#2a2f37}
   .bgp-menu button,.bgp-menu a{color:#c8ccd2}
@@ -433,18 +490,18 @@ const CSS = `
   .bgp-imgrow>span{color:#c8ccd2}
   .bgp-imgnum{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-imgnum:hover{background:#232830;border-color:#5a6068}
-  .bgp-ctx{border-color:#2a2f37}
-  .bgp-ctx-body{background:#12151a;color:#a9b0b8}
-  .bgp-ctx-tag{background:#232830;color:#9aa0a8}
-  .bgp-ctx-tag.error,.bgp-ctx-tag.rejection{background:#3a201c;color:#e5a89c}
-  .bgp-ctx-tag.network{background:#2c2617;color:#e0c88a}
   .bgp-resolve.reopen{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
-  .bgp-prompt{border-color:#2a2f37}
-  .bgp-prompt-body{background:#12151a;color:#c8ccd2}
-  .bgp-ui{color:#b794f6}
-  .bgp-ui:hover:not(:disabled){background:#241a3a;color:#c9b0fb}
-  .bgp-uirev .bgp-prompt-body{background:#1a1526}
-  .bgp-uirev .bgp-prompt-head span{color:#b794f6}
+  .bgp-detail{border-color:#2a2f37}
+  .bgp-tabs{background:#1b1f26}
+  .bgp-tabb.on{background:#0f1216;color:#fff}
+  .bgp-tabb.on.rev{color:#b794f6}
+  .bgp-mini{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-mini:hover:not(:disabled){border-color:#5a6068;color:#fff}
+  .bgp-text{color:#c8ccd2}
+  .bgp-kvv,.bgp-err{color:#c8ccd2}
+  .bgp-etag{background:#232830;color:#9aa0a8}
+  .bgp-etag.error,.bgp-etag.rejection{background:#3a201c;color:#e5a89c}
+  .bgp-etag.network{background:#2c2617;color:#e0c88a}
   .bgp-toast{background:#e9edf2;color:#12151b}
   .bgp-thumb img{border-color:#2a2f37}
 }

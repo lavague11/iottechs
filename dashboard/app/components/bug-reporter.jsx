@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import MicButton from "./mic-button";
 import IconButton from "./ui/icon-button";
 import ScreenshotAnnotator from "./screenshot-annotator";
@@ -44,11 +45,32 @@ export default function BugReporter() {
   const [err, setErr] = useState(null);
   const [capturing, setCapturing] = useState(false);
   const [nativeOk, setNativeOk] = useState(false);   // desktop screen-capture available? (offers "Screen")
+  const [isStaff, setIsStaff] = useState(false);     // bug-list API answers 200 for staff, 403 otherwise → our staff signal
+  const [pageBugs, setPageBugs] = useState([]);      // OPEN bugs already reported on THIS route (staff only)
+  const pathname = usePathname();
   const fileRef = useRef(null);
   const loadedRef = useRef(false);               // draft loaded for this open? (gates autosave)
   const saveTimer = useRef(null);
 
   useEffect(() => { setNativeOk(canNativeCapture()); }, []);
+
+  // When Report opens, ask the (staff-only) bug list who we are and what's already been reported on THIS
+  // page. 200 → staff: show the Portal link + the "already open here" log so a bug isn't filed twice and
+  // you can jump straight to fixing it. 403/any error → not staff: both stay hidden.
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    fetch("/api/bug-report", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!live) return;
+        if (!j?.ok || !Array.isArray(j.bugs)) { setIsStaff(false); setPageBugs([]); return; }
+        setIsStaff(true);
+        setPageBugs(j.bugs.filter((b) => b.status === "open" && b.path === pathname));
+      })
+      .catch(() => { if (live) { setIsStaff(false); setPageBugs([]); } });
+    return () => { live = false; };
+  }, [open, pathname]);
 
   const atLimit = shots.length >= MAX_SHOTS;
   function removeShot(id) { setShots((prev) => prev.filter((s) => s.id !== id)); }
@@ -200,8 +222,31 @@ export default function BugReporter() {
               <>
                 <div className="bugr-head">
                   <span className="bugr-title">Report</span>
-                  <button className="bugr-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+                  <div className="bugr-headr">
+                    {isStaff && (
+                      <a className="bugr-portal" href="/bugs" title="Bug portal" aria-label="Open bug portal">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
+                        <span>Portal</span>
+                      </a>
+                    )}
+                    <button className="bugr-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+                  </div>
                 </div>
+
+                {/* Staff only: bugs already reported on THIS page — so it isn't filed twice, and you can
+                    jump to the portal to fix it. */}
+                {isStaff && pageBugs.length > 0 && (
+                  <a className="bugr-here" href="/bugs" title="Open in the bug portal">
+                    <span className="bugr-here-h">{pageBugs.length} open on this page</span>
+                    {pageBugs.slice(0, 3).map((b) => (
+                      <span className="bugr-here-row" key={b.id}>
+                        <span className="bugr-here-id">#{b.id}</span>
+                        <span className="bugr-here-t">{b.description}</span>
+                      </span>
+                    ))}
+                    {pageBugs.length > 3 && <span className="bugr-here-more">+{pageBugs.length - 3} more</span>}
+                  </a>
+                )}
                 {/* No autoFocus — opening Report shouldn't pop the mobile keyboard. Tap the field to type. */}
                 <textarea className="bugr-in" rows={4} value={desc} maxLength={4000}
                   onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
@@ -274,7 +319,18 @@ const CSS = `
 @keyframes bugrIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .bugr-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .bugr-title{font-size:.98rem;font-weight:800}
+.bugr-headr{display:inline-flex;align-items:center;gap:6px}
+.bugr-portal{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid #e2e5ea;border-radius:8px;
+  background:#fff;color:#4a5058;font:700 .76rem/1 inherit;text-decoration:none}
+.bugr-portal:hover{border-color:#12151b;color:#12151b}
 .bugr-x{border:0;background:none;font-size:.9rem;color:#8a9099;cursor:pointer;padding:4px}
+.bugr-here{display:block;margin-bottom:10px;padding:9px 11px;border:1px solid #efe3d3;background:#fbf6ec;border-radius:10px;text-decoration:none}
+.bugr-here:hover{border-color:#e0c9a6}
+.bugr-here-h{display:block;font:800 .68rem/1 inherit;letter-spacing:.05em;text-transform:uppercase;color:#a9836b;margin-bottom:6px}
+.bugr-here-row{display:flex;gap:7px;align-items:baseline;font-size:.78rem;line-height:1.35;color:#5a4f45;margin-top:3px}
+.bugr-here-id{flex:0 0 auto;font-weight:800;color:#a9836b}
+.bugr-here-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bugr-here-more{display:block;margin-top:5px;font:700 .72rem/1 inherit;color:#a9836b}
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
