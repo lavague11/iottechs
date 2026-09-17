@@ -38,6 +38,7 @@ async function uploadMedia(file) {
 export default function BugReporter() {
   const [open, setOpen] = useState(false);
   const [desc, setDesc] = useState("");
+  const [severity, setSeverity] = useState("medium");   // reporter picks how bad; area is derived server-side
   const [shots, setShots] = useState([]);
   const [editor, setEditor] = useState(null);   // { id|null, shot(cleanURL), shapes }
   const [busy, setBusy] = useState(false);
@@ -172,7 +173,7 @@ export default function BugReporter() {
   }, [open, editor, capturing, shots.length]);
 
   function clearDraft() { fetch("/api/bug-draft", { method: "DELETE", credentials: "same-origin" }).catch(() => {}); }
-  function discard() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setErr(null); setOpen(false); }
+  function discard() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setOpen(false); }
 
   async function submit() {
     if (busy) return;
@@ -188,7 +189,7 @@ export default function BugReporter() {
     try { if (typeof window !== "undefined" && window.__iotBugContext) context = window.__iotBugContext(); } catch { /* noop */ }
     const r = await fetch("/api/bug-report", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls, context }),
+      body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls, context, severity }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
@@ -250,6 +251,14 @@ export default function BugReporter() {
                 {/* No autoFocus — opening Report shouldn't pop the mobile keyboard. Tap the field to type. */}
                 <textarea className="bugr-in" rows={4} value={desc} maxLength={4000}
                   onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
+                <div className="bugr-sev" role="group" aria-label="Severity">
+                  {["low", "medium", "high", "critical"].map((s) => (
+                    <button key={s} type="button" className={`bugr-sevb ${s}${severity === s ? " on" : ""}`}
+                      aria-pressed={severity === s} onClick={() => setSeverity(s)}>
+                      {s === "medium" ? "Med" : s[0].toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
+                </div>
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
 
@@ -334,6 +343,13 @@ const CSS = `
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
+.bugr-sev{display:flex;gap:6px;margin-top:10px}
+.bugr-sevb{flex:1;height:30px;border:1px solid #e2e5ea;border-radius:8px;background:#fff;color:#6b7079;font:700 .75rem/1 inherit;cursor:pointer}
+.bugr-sevb:hover{border-color:#c7ccd3}
+.bugr-sevb.low.on{background:#eef1f4;border-color:#c7ccd3;color:#4a5058}
+.bugr-sevb.medium.on{background:#eaf1fb;border-color:#9cc0ee;color:#2b5f9e}
+.bugr-sevb.high.on{background:#fdf3e2;border-color:#e6c589;color:#8a6320}
+.bugr-sevb.critical.on{background:#fbe8e4;border-color:#eaa89b;color:#b24a3a}
 .bugr-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .bugr-chip{position:relative;width:60px;height:46px}
 .bugr-chip-img{width:60px;height:46px;padding:0;border:1px solid #e2e5ea;border-radius:8px;overflow:hidden;background:#fafafa;cursor:pointer;line-height:0}

@@ -802,6 +802,14 @@ function init() {
   if (!bugCols.includes("context")) db.exec("ALTER TABLE bug_reports ADD COLUMN context TEXT");
   // Vision UI review — a coding-agent prompt generated from the screenshot (issues + upgrades).
   if (!bugCols.includes("ui_prompt")) db.exec("ALTER TABLE bug_reports ADD COLUMN ui_prompt TEXT");
+  // Triage fields: severity (how bad) + area (which part of the app). Severity is a fixed enum; area is
+  // a short label auto-derived from the route on creation and editable by staff.
+  if (!bugCols.includes("severity")) db.exec("ALTER TABLE bug_reports ADD COLUMN severity TEXT NOT NULL DEFAULT 'medium'");
+  if (!bugCols.includes("area")) {
+    db.exec("ALTER TABLE bug_reports ADD COLUMN area TEXT");
+    // Backfill area for existing reports from their route so the new filter works on current data.
+    try { const up = db.prepare("UPDATE bug_reports SET area=? WHERE id=?"); for (const r of db.prepare("SELECT id, path FROM bug_reports").all()) up.run(areaFromPath(r.path), r.id); } catch { /* non-fatal */ }
+  }
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -5470,7 +5478,24 @@ export function setSurveyCameraName(accessId, cid, name) {
 }
 
 // ---- Bug reports — the site-wide "Report a bug" button files here; the /bugs portal resolves them ----
-export function createBugReport({ url, path, description, imageUrl, imageUrls, context, reporter, role, userAgent }) {
+export const BUG_SEVERITIES = ["low", "medium", "high", "critical"];
+const cleanSeverity = (s) => (BUG_SEVERITIES.includes(String(s || "").toLowerCase()) ? String(s).toLowerCase() : "medium");
+// A short human area label derived from the route, so bugs are groupable/filterable without asking the
+// reporter. Staff can override it later via setBugMeta.
+export function areaFromPath(path) {
+  const p = String(path || "").toLowerCase();
+  const m = [
+    [/^\/project\b/, "Project"], [/^\/adt/, "ADT"], [/^\/assessment\b/, "Assessment"],
+    [/^\/application\b/, "Application"], [/^\/apply\b/, "Hiring"], [/^\/tech\b/, "Tech"],
+    [/^\/dashboard\b/, "Dashboard"], [/^\/expenses\b/, "Finance"], [/^\/bugs\b/, "Bugs"],
+    [/^\/dev\b/, "Developer"], [/^\/id-scan|^\/face-verify|^\/biometr/, "Identity"],
+    [/^\/login|^\/go\b/, "Login"], [/^\/service/, "Service"],
+  ].find(([re]) => re.test(p));
+  if (m) return m[1];
+  const seg = p.split("/").filter(Boolean)[0];
+  return seg ? seg.charAt(0).toUpperCase() + seg.slice(1) : "Other";
+}
+export function createBugReport({ url, path, description, imageUrl, imageUrls, context, reporter, role, userAgent, severity, area }) {
   const desc = String(description || "").trim().slice(0, 4000);
   if (!desc) return { error: "Describe the bug first." };
   // Accept an array (multi-screenshot) or a single URL. Cap at 10, keep the first in image_url.
@@ -5479,15 +5504,27 @@ export function createBugReport({ url, path, description, imageUrl, imageUrls, c
   const first = urls[0] || null;
   let ctx = null;
   if (context && typeof context === "object") { try { ctx = JSON.stringify(context).slice(0, 8000); } catch { ctx = null; } }
+  const sev = cleanSeverity(severity);
+  const ar = (area && String(area).trim()) ? String(area).trim().slice(0, 40) : areaFromPath(path);
   const info = db.prepare(
-    `INSERT INTO bug_reports (url, path, description, image_url, image_urls, context, reporter, role, user_agent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO bug_reports (url, path, description, image_url, image_urls, context, reporter, role, user_agent, severity, area)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(String(url || "").slice(0, 500), String(path || "").slice(0, 300), desc,
         first, urls.length ? JSON.stringify(urls) : null, ctx,
         reporter ? String(reporter).slice(0, 120) : null,
         role ? String(role).slice(0, 40) : null,
-        userAgent ? String(userAgent).slice(0, 400) : null);
+        userAgent ? String(userAgent).slice(0, 400) : null,
+        sev, ar);
   return { ok: true, id: info.lastInsertRowid };
+}
+// Staff triage edit — set severity and/or area on an existing report.
+export function setBugMeta(id, { severity, area } = {}) {
+  const sets = [], vals = [];
+  if (severity !== undefined) { sets.push("severity=?"); vals.push(cleanSeverity(severity)); }
+  if (area !== undefined) { sets.push("area=?"); vals.push(area ? String(area).trim().slice(0, 40) : null); }
+  if (!sets.length) return { ok: false };
+  const r = db.prepare(`UPDATE bug_reports SET ${sets.join(", ")} WHERE id=?`).run(...vals, +id);
+  return { ok: r.changes > 0 };
 }
 export function listBugReports(status) {
   const where = status === "open" ? "WHERE status='open'" : status === "resolved" ? "WHERE status='resolved'" : "";

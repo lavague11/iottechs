@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { createBugReport, listBugReports, resolveBugReport } from "../../../lib/db";
+import { createBugReport, listBugReports, resolveBugReport, setBugMeta } from "../../../lib/db";
 
 // The site-wide "Report a bug" button POSTs here (description + optional screenshot URL). Anyone using
 // the app can file one; we capture who (if signed in) for context. Staff read/resolve them at /bugs.
@@ -24,6 +24,7 @@ export async function POST(req) {
     imageUrl: body.imageUrl || null,
     imageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : undefined,
     context: body.context && typeof body.context === "object" ? body.context : undefined,
+    severity: body.severity, area: body.area,
     reporter,
     role: tok?.role || "guest",
     userAgent: req.headers.get("user-agent") || null,
@@ -41,8 +42,13 @@ export async function GET() {
 export async function PATCH(req) {
   const tok = await getSession();
   if (!isStaff(tok)) return Response.json({ error: "Staff only." }, { status: 403 });
-  const { id, resolved } = await req.json();
+  const body = await req.json();
+  const { id, resolved, severity, area } = body;
   if (!id) return Response.json({ error: "Missing id." }, { status: 400 });
+  // Triage edit (severity/area) — no `resolved` key present.
+  if (resolved === undefined && (severity !== undefined || area !== undefined)) {
+    return Response.json(setBugMeta(id, { severity, area }));
+  }
   const r = resolveBugReport(id, !!resolved, tok.name || tok.email || tok.role);
   return Response.json(r);
 }

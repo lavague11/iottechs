@@ -16,6 +16,8 @@ const who = (r) => (r && r.includes("@") ? r.split("@")[0] : r);
 // Short browser name from a UA string, for the Context tab.
 const uaName = (ua) => { if (!ua) return null; if (/edg\//i.test(ua)) return "Edge"; if (/chrome|crios/i.test(ua)) return "Chrome"; if (/firefox|fxios/i.test(ua)) return "Firefox"; if (/safari/i.test(ua)) return "Safari"; return ua.split(" ")[0]; };
 // A report may carry several screenshots (image_urls JSON) or one legacy image_url.
+const SEVS = ["critical", "high", "medium", "low"];   // most-severe first (for filter order)
+const sevLabel = (s) => (s === "medium" ? "Med" : (s || "medium").charAt(0).toUpperCase() + (s || "medium").slice(1));
 const imgsOf = (b) => { try { const a = JSON.parse(b.image_urls || "null"); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ } return b.image_url ? [b.image_url] : []; };
 const ctxOf = (b) => { try { const c = JSON.parse(b.context || "null"); return c && typeof c === "object" ? c : null; } catch { return null; } };
 
@@ -47,6 +49,9 @@ export default function BugsClient({ initial = [] }) {
   const [tab, setTab] = useState("prompt");       // active tab of the expanded bug
   const [q, setQ] = useState("");                 // search text
   const [searchOn, setSearchOn] = useState(false);
+  const [sevFilter, setSevFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
+  const [filterOn, setFilterOn] = useState(false);
   const [toast, setToast] = useState(null);
   const seenRef = useRef(new Set(initial.map((b) => b.id)));
   const searchRef = useRef(null);
@@ -70,14 +75,14 @@ export default function BugsClient({ initial = [] }) {
 
   // Close menus on outside click; Escape closes menus / preview / search.
   useEffect(() => {
-    if (menuFor == null && moreFor == null) return;
-    const h = () => { setMenuFor(null); setMoreFor(null); };
+    if (menuFor == null && moreFor == null && !filterOn) return;
+    const h = () => { setMenuFor(null); setMoreFor(null); setFilterOn(false); };
     window.addEventListener("click", h);
     return () => window.removeEventListener("click", h);
-  }, [menuFor, moreFor]);
+  }, [menuFor, moreFor, filterOn]);
   useEffect(() => {
     const h = (e) => {
-      if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); if (gallery) setGallery(null); else if (searchOn) { setSearchOn(false); setQ(""); } }
+      if (e.key === "Escape") { setMenuFor(null); setMoreFor(null); setFilterOn(false); if (gallery) setGallery(null); else if (searchOn) { setSearchOn(false); setQ(""); } }
       else if (e.key === "ArrowLeft") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i - 1 + g.urls.length) % g.urls.length } : g));
       else if (e.key === "ArrowRight") setGallery((g) => (g && g.urls.length > 1 ? { ...g, i: (g.i + 1) % g.urls.length } : g));
     };
@@ -146,19 +151,28 @@ export default function BugsClient({ initial = [] }) {
     setBusy(null);
     if (r?.ok) setBugs((list) => list.map((x) => x.id === b.id ? { ...x, status: resolved ? "resolved" : "open", resolved_at: resolved ? new Date().toISOString() : null } : x));
   }
+  // Staff triage edit — set severity/area. Optimistic; PATCH with no `resolved` key hits setBugMeta.
+  async function patchMeta(b, changes) {
+    setBugs((list) => list.map((x) => (x.id === b.id ? { ...x, ...changes } : x)));
+    await fetch("/api/bug-report", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: b.id, ...changes }) }).catch(() => {});
+  }
   function goBack() { if (typeof window !== "undefined" && window.history.length > 2) router.back(); else router.push("/dashboard"); }
   function stop(e) { e.stopPropagation(); }
 
   const openN = bugs.filter((b) => b.status === "open").length;
+  const areas = [...new Set(bugs.map((b) => b.area).filter(Boolean))].sort();
+  const activeFilters = (sevFilter !== "all" ? 1 : 0) + (areaFilter !== "all" ? 1 : 0);
   const qn = q.trim().toLowerCase();
   const shown = bugs
     .filter((b) => (filter === "all" ? true : b.status === filter))
+    .filter((b) => (sevFilter === "all" ? true : (b.severity || "medium") === sevFilter))
+    .filter((b) => (areaFilter === "all" ? true : b.area === areaFilter))
     .filter((b) => {
       if (!qn) return true;
-      const hay = `#${b.id} ${b.description || ""} ${b.path || ""} ${suggest[b.id] || ""} ${uiRev[b.id] || ""}`.toLowerCase();
+      const hay = `#${b.id} ${b.description || ""} ${b.path || ""} ${b.area || ""} ${suggest[b.id] || ""} ${uiRev[b.id] || ""}`.toLowerCase();
       return hay.includes(qn) || (qn.startsWith("#") && String(b.id) === qn.slice(1));
     });
-  const emptyMsg = qn ? "No matches" : filter === "open" ? "All clear" : "No bugs";
+  const emptyMsg = qn || activeFilters ? "No matches" : filter === "open" ? "All clear" : "No bugs";
 
   useEffect(() => { if (searchOn) searchRef.current?.focus(); }, [searchOn]);
 
@@ -187,7 +201,27 @@ export default function BugsClient({ initial = [] }) {
                 : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>}
             </button>
           </div>
-          <div className="bgp-seg" role="tablist" aria-label="Filter">
+          <div className="bgp-menuwrap">
+            <button className={`bgp-ib${activeFilters ? " act" : ""}`} aria-label="Filter" title="Filter" onClick={(e) => { stop(e); setFilterOn((o) => !o); }}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z" /></svg>
+              {activeFilters > 0 && <span className="bgp-fbadge">{activeFilters}</span>}
+            </button>
+            {filterOn && (
+              <div className="bgp-menu bgp-filter" onClick={stop}>
+                <div className="bgp-fgrp">Severity</div>
+                <div className="bgp-frow">
+                  <button className={sevFilter === "all" ? "on" : ""} onClick={() => setSevFilter("all")}>All</button>
+                  {SEVS.map((s) => <button key={s} className={`sev ${s}${sevFilter === s ? " on" : ""}`} onClick={() => setSevFilter(s)}>{sevLabel(s)}</button>)}
+                </div>
+                <div className="bgp-fgrp">Area</div>
+                <div className="bgp-frow wrap">
+                  <button className={areaFilter === "all" ? "on" : ""} onClick={() => setAreaFilter("all")}>All</button>
+                  {areas.map((a) => <button key={a} className={areaFilter === a ? "on" : ""} onClick={() => setAreaFilter(a)}>{a}</button>)}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="bgp-seg" role="tablist" aria-label="Status">
             {["open", "resolved", "all"].map((k) => (
               <button key={k} className={`bgp-tab${filter === k ? " on" : ""}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{k[0].toUpperCase() + k.slice(1)}</button>
             ))}
@@ -215,7 +249,9 @@ export default function BugsClient({ initial = [] }) {
                   <div className="bgp-body">
                     <div className="bgp-desc" dir="auto">{b.description}</div>
                     <div className="bgp-meta">
+                      <span className={`bgp-sev ${b.severity || "medium"}`} title={`${sevLabel(b.severity)} severity`}>{sevLabel(b.severity)}</span>
                       <button className="bgp-id" onClick={(e) => { stop(e); copyText(`BUG #${b.id}`); }} title="Copy ID">#{b.id}</button>
+                      {b.area && <span className="bgp-areatag">{b.area}</span>}
                       {b.path && <a className="bgp-path" href={b.url || b.path} target="_blank" rel="noreferrer" onClick={stop}>{b.path}</a>}
                       <span>{fmtDate(b.created_at)}</span>
                       {resolved && b.resolved_at && <span className="bgp-res">Resolved {fmtTime(b.resolved_at)}</span>}
@@ -280,7 +316,7 @@ export default function BugsClient({ initial = [] }) {
                         canGen genLabel={suggest[b.id] ? "Regenerate" : "Generate"} onGen={() => getSuggestion(b)}
                         emptyNo="No prompt yet." />
                     )}
-                    {tab === "context" && <ContextBody b={b} ctx={ctxOf(b)} />}
+                    {tab === "context" && <ContextBody b={b} ctx={ctxOf(b)} areas={areas} onMeta={(ch) => patchMeta(b, ch)} />}
                   </div>
                 )}
               </div>
@@ -336,8 +372,8 @@ function TabBody({ busy, busyLabel, value, onCopy, canGen, genLabel, onGen, empt
   );
 }
 
-// Context tab — compact key/value technical metadata (route, viewport, browser, reporter, errors, trail).
-function ContextBody({ b, ctx }) {
+// Context tab — editable triage (severity/area) plus compact read-only technical metadata.
+function ContextBody({ b, ctx, areas = [], onMeta }) {
   const rows = [];
   rows.push(["Route", b.path || ctx?.route || "—"]);
   if (ctx?.viewport) rows.push(["Viewport", ctx.viewport]);
@@ -348,6 +384,21 @@ function ContextBody({ b, ctx }) {
   return (
     <div className="bgp-tabbody">
       <div className="bgp-kv">
+        <div className="bgp-kvrow"><span className="bgp-kvk">Severity</span>
+          <span className="bgp-sevedit">
+            {SEVS.slice().reverse().map((s) => (
+              <button key={s} className={`bgp-sevb ${s}${(b.severity || "medium") === s ? " on" : ""}`} onClick={() => onMeta?.({ severity: s })}>{sevLabel(s)}</button>
+            ))}
+          </span>
+        </div>
+        <div className="bgp-kvrow"><span className="bgp-kvk">Area</span>
+          <span className="bgp-kvv">
+            <input className="bgp-areain" defaultValue={b.area || ""} list="bgp-areas" placeholder="Area"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v !== (b.area || "")) onMeta?.({ area: v }); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }} />
+            <datalist id="bgp-areas">{areas.map((a) => <option key={a} value={a} />)}</datalist>
+          </span>
+        </div>
         {rows.map(([k, v]) => (<div className="bgp-kvrow" key={k}><span className="bgp-kvk">{k}</span><span className="bgp-kvv" dir="auto">{v}</span></div>))}
       </div>
       {ctx?.errors?.length > 0 && (
@@ -402,6 +453,34 @@ const CSS = `
 .bgp-path{color:#3a6ea5;text-decoration:none;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bgp-path:hover{text-decoration:underline}
 .bgp-res{color:#2e7d5b;font-weight:600}
+.bgp-sev{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:5px;font:800 .62rem/1 inherit;text-transform:uppercase;letter-spacing:.03em;flex:0 0 auto}
+.bgp-sev.critical{background:#fbe8e4;color:#b24a3a}
+.bgp-sev.high{background:#fdf3e2;color:#8a6320}
+.bgp-sev.medium{background:#eaf1fb;color:#2b5f9e}
+.bgp-sev.low{background:#eef1f4;color:#6b7079}
+.bgp-areatag{font-weight:600;color:#6b7079}
+.bgp-ib.act{color:#12151b}
+.bgp-fbadge{position:absolute;top:-1px;right:-1px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#12151b;color:#fff;font:800 .58rem/14px inherit;text-align:center}
+.bgp-filter{min-width:214px;padding:9px 11px}
+.bgp-fgrp{font:800 .66rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0;margin:8px 2px 6px}
+.bgp-fgrp:first-child{margin-top:2px}
+.bgp-frow{display:flex;gap:5px}
+.bgp-frow.wrap{flex-wrap:wrap}
+.bgp-frow button{border:1px solid #e4e4df;background:#fff;cursor:pointer;font:700 .72rem/1 inherit;color:#5a6068;padding:6px 9px;border-radius:7px}
+.bgp-frow button:hover{border-color:#12151b}
+.bgp-frow button.on{background:#12151b;border-color:#12151b;color:#fff}
+.bgp-frow button.sev.on.critical{background:#b24a3a;border-color:#b24a3a}
+.bgp-frow button.sev.on.high{background:#8a6320;border-color:#8a6320}
+.bgp-frow button.sev.on.medium{background:#2b5f9e;border-color:#2b5f9e}
+.bgp-frow button.sev.on.low{background:#6b7079;border-color:#6b7079}
+.bgp-sevedit{display:inline-flex;gap:5px;flex-wrap:wrap}
+.bgp-sevedit .bgp-sevb{border:1px solid #e4e4df;background:#fff;cursor:pointer;font:700 .72rem/1 inherit;color:#6b7079;padding:5px 9px;border-radius:7px}
+.bgp-sevedit .bgp-sevb.on.critical{background:#fbe8e4;border-color:#eaa89b;color:#b24a3a}
+.bgp-sevedit .bgp-sevb.on.high{background:#fdf3e2;border-color:#e6c589;color:#8a6320}
+.bgp-sevedit .bgp-sevb.on.medium{background:#eaf1fb;border-color:#9cc0ee;color:#2b5f9e}
+.bgp-sevedit .bgp-sevb.on.low{background:#eef1f4;border-color:#c7ccd3;color:#4a5058}
+.bgp-areain{border:1px solid #e4e4df;border-radius:7px;padding:5px 9px;font:600 .8rem/1 inherit;color:#12151b;background:#fff;outline:none;max-width:180px}
+.bgp-areain:focus{border-color:#12151b}
 .bgp-act{display:flex;align-items:center;gap:3px;flex:0 0 auto;align-self:center}
 .bgp-menuwrap{position:relative;display:inline-flex}
 .bgp-ib{display:inline-flex;align-items:center;justify-content:center;width:31px;height:31px;border:1px solid transparent;border-radius:8px;background:transparent;color:#6b7079;cursor:pointer;line-height:0}
@@ -436,7 +515,7 @@ const CSS = `
 .bgp-text.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
 .bgp-chev{margin-top:5px;border:0;background:none;cursor:pointer;font:700 .75rem/1 inherit;color:#8a6d2f;padding:2px 0}
 .bgp-kv{display:flex;flex-direction:column;gap:6px}
-.bgp-kvrow{display:flex;gap:12px;font-size:.8rem;line-height:1.4}
+.bgp-kvrow{display:flex;align-items:center;gap:12px;font-size:.8rem;line-height:1.4;min-height:26px}
 .bgp-kvk{flex:0 0 74px;color:#9297a0;font-weight:700}
 .bgp-kvv{flex:1;min-width:0;color:#3a3f47;word-break:break-word;font-family:var(--font-mono),ui-monospace,Menlo,monospace;font-size:.78rem}
 .bgp-errs{margin-top:9px;display:flex;flex-direction:column;gap:5px}
@@ -504,5 +583,21 @@ const CSS = `
   .bgp-etag.network{background:#2c2617;color:#e0c88a}
   .bgp-toast{background:#e9edf2;color:#12151b}
   .bgp-thumb img{border-color:#2a2f37}
+  .bgp-sev.critical{background:#3a201c;color:#e5a89c}
+  .bgp-sev.high{background:#2c2617;color:#e0c88a}
+  .bgp-sev.medium{background:#182636;color:#8fb6e6}
+  .bgp-sev.low{background:#22262d;color:#9aa0a8}
+  .bgp-areatag{color:#9aa0a8}
+  .bgp-ib.act{color:#fff}
+  .bgp-frow button{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-frow button:hover{border-color:#5a6068}
+  .bgp-frow button.on{background:#e9edf2;border-color:#e9edf2;color:#12151b}
+  .bgp-sevedit .bgp-sevb{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
+  .bgp-sevedit .bgp-sevb.on.critical{background:#3a201c;border-color:#6e3a30;color:#e5a89c}
+  .bgp-sevedit .bgp-sevb.on.high{background:#2c2617;border-color:#5e4f24;color:#e0c88a}
+  .bgp-sevedit .bgp-sevb.on.medium{background:#182636;border-color:#2f4d70;color:#8fb6e6}
+  .bgp-sevedit .bgp-sevb.on.low{background:#22262d;border-color:#3a4048;color:#c8ccd2}
+  .bgp-areain{background:#161a20;border-color:#2a2f37;color:#e9edf2}
+  .bgp-areain:focus{border-color:#5a6068}
 }
 `;
