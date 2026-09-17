@@ -121,7 +121,12 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     try { const s = Number(localStorage.getItem(`asx_start_${appId}`)); if (s) openedAt = new Date(s).toISOString(); } catch {}
     try {
       const r = await submitAssessmentAction(appId, payload, { openedAt, timedOut: force || timedOut.current });
-      if (r?.ok) { try { localStorage.removeItem(`asx_start_${appId}`); localStorage.removeItem(`asx_secs_${appId}`); } catch {} setLocked(true); }
+      if (r?.ok) {
+        try { localStorage.removeItem(`asx_start_${appId}`); localStorage.removeItem(`asx_secs_${appId}`); } catch {}
+        // Send them straight to their application page (status + next steps) instead of a dead-end
+        // "submitted, close this page" screen. Keep busy=true so the button stays put during the nav.
+        try { window.location.assign(`/application/${appId}`); return; } catch { setLocked(true); }
+      }
       else setErr(r?.error === "locked" ? "This assessment was already submitted." : "Could not submit — please try again.");
     } catch { setErr("Could not submit — please try again."); }
     setBusy(false);

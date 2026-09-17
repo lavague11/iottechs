@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { cookies } from "next/headers";
 import { resolveApplicationRef, getApplicationAssessment, saveApplicationAssessment, setApplicationStatus, logApplicationEvent } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
@@ -55,8 +56,13 @@ export async function submitAssessmentAction(appId, responses, meta = {}) {
   });
   if (["applied", "assessment"].includes(a.app.status)) setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
   try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 (explanations pending)`, actor_role: "system", actor_name: "Assessment" }); } catch {}
-  // Best-effort AI grading of the explanations + profile — never blocks the candidate's submit.
-  try { await gradeAssessmentAI(a.app.app_id); } catch {}
+  // AI grading of the explanations + profile is a multi-second Claude pass — run it AFTER the response
+  // so the candidate's submit returns instantly (it was previously awaited, hanging "Submitting…").
+  // after() runs the work once the response is sent; if unavailable, fire-and-forget on our persistent
+  // Node server. Either way the record is graded in the background and submit never blocks on it.
+  const appId2 = a.app.app_id;
+  try { after(() => gradeAssessmentAI(appId2).catch(() => {})); }
+  catch { gradeAssessmentAI(appId2).catch(() => {}); }
   return { ok: true };
 }
 
