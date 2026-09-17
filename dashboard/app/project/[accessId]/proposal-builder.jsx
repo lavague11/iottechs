@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { skipOutsideClose } from "../../../lib/outside-click";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
@@ -819,7 +820,7 @@ function FloorImportPicker({ floors, onImport }) {
 
   useEffect(() => {
     if (!open) return;
-    function onDocDown(e) { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
+    function onDocDown(e) { if (skipOutsideClose(e)) return; if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);

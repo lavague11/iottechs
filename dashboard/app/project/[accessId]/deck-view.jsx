@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AddressAutocomplete from "../../components/address-autocomplete";
 import { Wordmark } from "../../components/brand";
+import { skipOutsideClose } from "../../../lib/outside-click";
 
 /*
   DeckView — the redesigned project page shell (horizontal stage deck).
@@ -135,9 +136,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   }, [idx, go]);
   useEffect(() => {
     function onDoc(e) {
-      // The bug-report FAB/modal are never an "outside click" — tapping them must not collapse anything
-      // (it would change what gets screenshotted).
-      if (e.target.closest?.("[data-bug-capture-ignore]")) return;
+      // Skip the bug tool, and skip a target React just detached (clicking "Edit" re-renders the drawer,
+      // detaching the button before this runs — its .closest can't see .dv-customer, so we'd wrongly close).
+      if (skipOutsideClose(e)) return;
       if (!e.target.closest?.(".dv-cluster")) setMenuOpen(false);
       // Collapse the contact card on any click outside it — but not on its own toggle (which handles itself).
       if (!e.target.closest?.(".dv-customer") && !e.target.closest?.(".dv-identity")) setCustOpen(false);

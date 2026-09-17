@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
+import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
@@ -163,7 +164,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // Close the per-line action menu on an outside click.
   useEffect(() => {
     if (menuFor == null) return;
-    function onDown(e) { if (!e.target.closest(".pcv-linemenu") && !e.target.closest(".pcv-row")) setMenuFor(null); }
+    function onDown(e) { if (skipOutsideClose(e)) return; if (!e.target.closest(".pcv-linemenu") && !e.target.closest(".pcv-row")) setMenuFor(null); }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuFor]);

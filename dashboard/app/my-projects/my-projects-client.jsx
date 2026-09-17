@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { skipOutsideClose } from "../../lib/outside-click";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
 import { PHASES, phasesForType, masterToPhaseKey, phaseLabelOf } from "../../lib/spec";
@@ -457,6 +458,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => {
     function handleClick(e) {
+      if (skipOutsideClose(e)) return;
       if (userRef.current  && !userRef.current.contains(e.target))  setUserOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     }

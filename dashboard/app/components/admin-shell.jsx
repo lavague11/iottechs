@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { skipOutsideClose } from "../../lib/outside-click";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "../login/actions";
 import AddressAutocomplete from "./address-autocomplete";
@@ -106,7 +107,7 @@ function NotifBell({ alerts }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onDoc(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     document.addEventListener("click", onDoc);
     return () => document.removeEventListener("click", onDoc);
   }, []);
@@ -137,7 +138,7 @@ function UserMenu({ user }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onDoc(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     document.addEventListener("click", onDoc);
     return () => document.removeEventListener("click", onDoc);
   }, []);
@@ -332,6 +333,7 @@ export default function AdminShell({ user, alerts, active, children }) {
   useEffect(() => {
     if (!openMenu) return;
     function onDoc(e) {
+      if (skipOutsideClose(e)) return;
       if (navRef.current && !navRef.current.contains(e.target)) setOpenMenu(null);
     }
     document.addEventListener("mousedown", onDoc);

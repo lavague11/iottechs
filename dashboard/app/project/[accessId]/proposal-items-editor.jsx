@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock } from "../../../lib/proposal";
+import { skipOutsideClose } from "../../../lib/outside-click";
 import PresetEditor from "./proposal-preset-editor";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
@@ -15,7 +16,7 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
 
   useEffect(() => {
     if (!open) return;
-    function onDocDown(e) { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
+    function onDocDown(e) { if (skipOutsideClose(e)) return; if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);

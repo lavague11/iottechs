@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
+import { skipOutsideClose } from "../../../lib/outside-click";
 import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
@@ -1427,7 +1428,7 @@ function PersonSearch({ candidates, value, onSelect, placeholder }) {
     : candidates;
 
   useEffect(() => {
-    function close(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    function close(e) { if (skipOutsideClose(e)) return; if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
@@ -1480,7 +1481,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
   const wrapRef         = useRef(null);
 
   useEffect(() => {
-    function close(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    function close(e) { if (skipOutsideClose(e)) return; if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
@@ -1772,7 +1773,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const previewMenuRef = useRef(null);
   useEffect(() => {
-    function close(e) { if (previewMenuRef.current && !previewMenuRef.current.contains(e.target)) setPreviewMenuOpen(false); }
+    function close(e) { if (skipOutsideClose(e)) return; if (previewMenuRef.current && !previewMenuRef.current.contains(e.target)) setPreviewMenuOpen(false); }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
