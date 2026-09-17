@@ -896,7 +896,11 @@
     var scene=document.getElementById("scene"), zScale=1, zTx=0, zTy=0;
     function applyZoom(){ scene.style.transform="translate("+zTx+"px,"+zTy+"px) scale("+zScale+")"; }
     function zoomAt(mx,my,factor){ var z2=Math.max(1, Math.min(4, zScale*factor));
-      if(z2!==zScale){ zTx=mx-(mx-zTx)/zScale*z2; zTy=my-(my-zTy)/zScale*z2; zScale=z2; }   // scale toward (mx,my)
+      // The plate (#scene) is centered in #working with an offset (left/top from fitScene), and its
+      // transform-origin is its own top-left — so the zoom anchor must be measured from THAT origin, not
+      // the work frame's. Without this a centered (portrait) plan drifts sideways as you zoom.
+      var sL=scene.offsetLeft||0, sT=scene.offsetTop||0;
+      if(z2!==zScale){ zTx=(mx-sL)-((mx-sL)-zTx)/zScale*z2; zTy=(my-sT)-((my-sT)-zTy)/zScale*z2; zScale=z2; }   // scale toward (mx,my)
       var W=work.clientWidth, H=work.clientHeight;                     // keep the scene covering the viewport
       zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }   // always clamp + apply, even on a pure pan
     function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
