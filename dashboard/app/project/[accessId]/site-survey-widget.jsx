@@ -40,11 +40,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [synced, setSynced] = useState(false);
   useEffect(() => {
     let stop = null, live = true;
-    // A real customer (view === "customer") is a pure viewer: always pull the office's latest so
-    // survey edits — device names, added cameras — reach them even on a return visit. Staff
-    // previewing the customer view (customerView via previewRole, but view still "admin") keep
-    // their own working draft, so don't force there.
-    const viewerRefresh = view === "customer";
+    // Any READ-ONLY view — a real customer, or staff using the "Customer view" preview — must mirror
+    // the office's latest survey (device names, added cameras, the floor plan). Previously only a real
+    // customer force-pulled; a staff preview kept whatever was in THIS browser's localStorage, so on a
+    // second device (e.g. the owner checking the customer view on their phone) it showed a stale/empty
+    // draft — a blank survey. seedToolData only overwrites when the server actually has data, so this
+    // never clobbers a live draft with nothing.
+    const viewerRefresh = readOnly;
     (async () => {
       await seedToolData(accessId, "survey2", `iottechs_survey2_${accessId}`, { force: viewerRefresh });
       if (!live) return;
