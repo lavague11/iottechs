@@ -1227,6 +1227,9 @@
       // sides). Desktop: CONTAIN — the whole plan stays visible. Device coords are % of the scene, so
       // either fit keeps them locked to the image.
       var cover=false; try{ cover=window.matchMedia("(max-width:700px), (max-height:540px) and (orientation:landscape)").matches; }catch(e){}
+      // The customer (read-only) is REVIEWING the plan: show the WHOLE thing zoomed-out by default, then
+      // let them pinch to zoom in and two-finger pan. Editors keep the cover fill so they can place devices.
+      if(RO) cover=false;
       if(fitOverride!=null) cover=fitOverride;   // user chose Fit/Fill explicitly → honor it
       curCover=cover;
       var wide=cw/ch>sceneAspect, byHeight=cover?!wide:wide;
