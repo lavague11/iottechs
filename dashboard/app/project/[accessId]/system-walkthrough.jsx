@@ -41,6 +41,30 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
   const tokRef = useRef(0);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // The plan image fills the stage inline, but in FULLSCREEN it's letterboxed (object-fit:contain), so a
+  // marker at x%/y% of the STAGE lands in the black bars instead of on the plan. Measure the image's real
+  // displayed rect and place the markers + camera morph over THAT, so placement always matches the survey.
+  const stageRef = useRef(null);
+  const aerialRef = useRef(null);
+  const [plate, setPlate] = useState(null);   // {l,t,w,h}px letterbox rect, or null when the image fills the stage
+  const measure = useCallback(() => {
+    const stage = stageRef.current, img = aerialRef.current;
+    if (!stage || !img || !img.complete || !img.naturalWidth) return;
+    const sr = stage.getBoundingClientRect(), ir = img.getBoundingClientRect();
+    if (!sr.width || !sr.height) return;
+    const l = ir.left - sr.left, t = ir.top - sr.top;
+    const fills = Math.abs(l) < 1 && Math.abs(t) < 1 && Math.abs(ir.width - sr.width) < 1.5 && Math.abs(ir.height - sr.height) < 1.5;
+    setPlate(fills ? null : { l, t, w: ir.width, h: ir.height, sw: sr.width, sh: sr.height });
+  }, []);
+  useEffect(() => {
+    measure();
+    let ro; try { ro = new ResizeObserver(() => measure()); if (stageRef.current) ro.observe(stageRef.current); } catch { /* no RO */ }
+    window.addEventListener("resize", measure);
+    return () => { try { ro && ro.disconnect(); } catch { /* noop */ } window.removeEventListener("resize", measure); };
+  }, [measure]);
+  // Re-measure once the layout settles after entering/leaving fullscreen.
+  useEffect(() => { const r = requestAnimationFrame(() => requestAnimationFrame(measure)); return () => cancelAnimationFrame(r); }, [fs, measure]);
+
   // Morph a camera open — collapsing any current one first (the "shared element" grows from its marker).
   const show = useCallback(async (i) => {
     const tok = ++tokRef.current;
@@ -94,6 +118,10 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
   const shot = shotFor(cam);
   const ox = Number.isFinite(cam.x) ? cam.x : 50;
   const oy = Number.isFinite(cam.y) ? cam.y : 50;
+  // The full-bleed camera morph lives in the stage, so its grow-origin must be the marker's real position
+  // ON the stage — which, when the plan is letterboxed in fullscreen, differs from its % on the image.
+  const ox2 = plate ? ((plate.l + (ox / 100) * plate.w) / plate.sw) * 100 : ox;
+  const oy2 = plate ? ((plate.t + (oy / 100) * plate.h) / plate.sh) * 100 : oy;
 
   const openCam = (i) => { setPlaying(false); show(i); };
   const next = () => { if (idx < total - 1) { setPlaying(false); show(idx + 1); } };
@@ -126,10 +154,13 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
         </div>
       )}
 
-      <div className="swk2-stage" style={{ "--ox": `${ox}%`, "--oy": `${oy}%` }}>
+      <div className="swk2-stage" ref={stageRef} style={{ "--ox": `${ox2}%`, "--oy": `${oy2}%` }}>
         {/* the survey — dims + eases toward the active marker while a camera is open */}
-        <img className={`swk2-aerial${camActive ? " zoom" : ""}`} src={f.bg} alt={f.name} />
+        <img ref={aerialRef} onLoad={measure} className={`swk2-aerial${camActive ? " zoom" : ""}`} src={f.bg} alt={f.name} />
         <div className={`swk2-dim${camActive ? " on" : ""}`} />
+
+        {/* markers + camera morph live on a plate matched to the image's real rect (see measure()) */}
+        <div className="swk2-plate" style={plate ? { left: plate.l, top: plate.t, width: plate.w, height: plate.h } : { inset: 0 }}>
 
         {/* markers */}
         {(f.cams || []).map((c, j) => {
@@ -146,7 +177,9 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
           ) : null;
         })}
 
-        {/* the morph — grows from the active marker into the full camera view */}
+        </div>{/* /swk2-plate */}
+
+        {/* the morph — grows from the active marker into the full camera view (full-bleed; origin = ox2/oy2) */}
         <div className={`swk2-morph${camActive ? " show" : ""}${expanded ? " open" : ""}`}>
           {shot
             ? <img src={shot} alt={nameFor(cur)} className="swk2-shot" />
@@ -227,9 +260,11 @@ const CSS = `
 .swk2-aerial.zoom{transform:scale(1.16);filter:brightness(.62) saturate(.92)}
 .swk2-dim{position:absolute;inset:0;background:rgba(6,9,16,.36);opacity:0;transition:opacity .55s ease;pointer-events:none;z-index:1}
 .swk2-dim.on{opacity:1}
+/* overlay matched to the image's displayed rect; markers/morph position against THIS, not the letterboxed stage */
+.swk2-plate{position:absolute;z-index:2;pointer-events:none}
 
 /* markers */
-.swk2-mk{position:absolute;transform:translate(-50%,-50%);z-index:2;min-width:26px;height:26px;padding:0 6px;border-radius:100px;border:2px solid #fff;background:rgba(16,17,18,.5);color:#fff;font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .3s ${EASE},background .3s,opacity .3s,box-shadow .3s}
+.swk2-mk{position:absolute;transform:translate(-50%,-50%);z-index:2;min-width:26px;height:26px;padding:0 6px;border-radius:100px;border:2px solid #fff;background:rgba(16,17,18,.5);color:#fff;font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .3s ${EASE},background .3s,opacity .3s,box-shadow .3s}
 .swk2-mk:hover{transform:translate(-50%,-50%) scale(1.12)}
 .swk2-mk.active{background:var(--dv-gold,#C9A96E);color:#1a1712;box-shadow:0 0 0 5px rgba(201,169,110,.28),0 3px 10px rgba(0,0,0,.4);animation:swk2Pulse 2s ease-out infinite}
 @keyframes swk2Pulse{0%{box-shadow:0 0 0 4px rgba(201,169,110,.4),0 3px 10px rgba(0,0,0,.4)}70%{box-shadow:0 0 0 13px rgba(201,169,110,0),0 3px 10px rgba(0,0,0,.4)}100%{box-shadow:0 0 0 4px rgba(201,169,110,0),0 3px 10px rgba(0,0,0,.4)}}
