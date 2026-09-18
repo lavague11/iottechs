@@ -220,22 +220,23 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
           </div>
         )}
 
-        {/* map-view intro caption (before any camera is opened / while collapsed) */}
-        {!camActive && (
-          <div className="swk2-mapcap">
-            <div className="swk2-eyebrow gold">Your system</div>
-            <div className="swk2-mapcap-t">{total} camera{total !== 1 ? "s" : ""} — tap a point or play the tour</div>
-          </div>
-        )}
       </div>
 
-      {/* map-view controls — prev · progress · next · Play tour */}
+      {/* map-view dock — one compact row: count · prev · position · next · Play */}
       {!camActive && (
-        <div className="swk2-maprow">
-          <button className="swk2-round" onClick={prev} disabled={idx === 0} aria-label="Previous"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
-          <div className="swk2-pips">{stops.map((_, i) => <button key={i} className={`swk2-pip${i === idx ? " on" : ""}`} onClick={() => openCam(i)} aria-label={`Camera ${i + 1}`} />)}</div>
-          <button className="swk2-round" onClick={next} disabled={idx === total - 1} aria-label="Next"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
-          <button className="swk2-play" onClick={togglePlay}><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>Play tour</button>
+        <div className="swk2-dock">
+          <div className="swk2-dock-meta">{total} camera{total !== 1 ? "s" : ""}</div>
+          <div className="swk2-dock-row">
+            <button className="swk2-round" onClick={prev} disabled={idx === 0} aria-label="Previous"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+            <span className="swk2-counter">{idx + 1} / {total}</span>
+            <button className="swk2-round" onClick={next} disabled={idx === total - 1} aria-label="Next"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
+            <button className="swk2-play" onClick={togglePlay} aria-label={playing ? "Pause tour" : "Play tour"}>
+              {playing
+                ? <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                : <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>}
+              {playing ? "Pause" : "Play"}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -247,14 +248,14 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
 
 const CSS = `
 .swk2{margin:2px 0 4px}
-.swk2.fs{position:fixed;inset:0;z-index:4000;margin:0;background:#07090e;display:flex;flex-direction:column;animation:swk2In .3s ease}
+.swk2.fs{position:fixed;top:0;left:0;right:0;height:100dvh;z-index:4000;margin:0;background:#07090e;display:flex;flex-direction:column;animation:swk2In .3s ease}
 @keyframes swk2In{from{opacity:0}to{opacity:1}}
-.swk2-fsbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;color:#fff}
-.swk2-fsttl{font-size:.8rem;font-weight:800;letter-spacing:.04em}
+.swk2-fsbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:11px 15px;padding-top:calc(11px + env(safe-area-inset-top));color:#fff}
+.swk2-fsttl{font-size:.86rem;font-weight:800;letter-spacing:.02em}
 
 /* stage — the survey is the hero */
 .swk2-stage{position:relative;border-radius:14px;overflow:hidden;background:#0b0f16;line-height:0;--ox:50%;--oy:50%}
-.swk2.fs .swk2-stage{flex:1 1 0;min-height:0;border-radius:0;display:flex;align-items:center;justify-content:center}
+.swk2.fs .swk2-stage{flex:1 1 0;min-height:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:6px 14px}
 .swk2-aerial{width:100%;display:block;transform-origin:var(--ox) var(--oy);transition:transform .72s ${EASE},filter .55s ease;will-change:transform}
 .swk2.fs .swk2-aerial{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
 .swk2-aerial.zoom{transform:scale(1.16);filter:brightness(.62) saturate(.92)}
@@ -314,19 +315,20 @@ const CSS = `
 .swk2-btn.primary{background:#1A1712;color:#fff}.swk2-btn.primary:disabled{opacity:.5;cursor:default}
 .swk2-btn.ghost{background:transparent;color:#1A1712;border-color:rgba(16,17,18,.16)}
 
-/* map caption */
-.swk2-mapcap{position:absolute;left:0;right:0;bottom:0;padding:16px 18px;z-index:2;background:linear-gradient(to top,rgba(6,9,16,.7),transparent);pointer-events:none}
-.swk2-mapcap-t{font-size:.92rem;font-weight:700;color:#fff;margin-top:3px;text-shadow:0 1px 10px rgba(0,0,0,.5)}
-
-/* map-view row */
-.swk2-maprow{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px}
-.swk2-round{width:36px;height:36px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
+/* map-view dock — count line + one compact control row (prev · i/total · next · Play) */
+.swk2-dock{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:10px}
+.swk2.fs .swk2-dock{margin-top:0;padding:8px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(7,9,14,.55),transparent)}
+.swk2-dock-meta{font-size:.74rem;font-weight:700;letter-spacing:.02em;color:var(--dv-faint,#8a8f98)}
+.swk2.fs .swk2-dock-meta{color:#c8ccd2}
+.swk2-dock-row{display:flex;align-items:center;justify-content:center;gap:14px}
+.swk2-round{width:40px;height:40px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
 .swk2-round:hover:not(:disabled){border-color:var(--dv-ink,#101418)}.swk2-round:disabled{opacity:.35;cursor:default}
-.swk2-pips{display:flex;align-items:center;gap:7px}
-.swk2-pip{width:8px;height:8px;border-radius:50%;border:none;background:var(--dv-line,#E4E4DF);cursor:pointer;padding:0;transition:all .2s}
-.swk2-pip.on{background:var(--dv-gold,#C9A96E);width:22px;border-radius:100px}
-.swk2-play{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 15px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
-.swk2-play:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.swk2.fs .swk2-round{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.24);color:#fff}
+.swk2.fs .swk2-round:hover:not(:disabled){background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.4)}
+.swk2-counter{min-width:50px;text-align:center;font-size:.84rem;font-weight:800;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.swk2.fs .swk2-counter{color:#fff}
+.swk2-play{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 17px;border-radius:100px;border:1px solid var(--dv-gold,#C9A96E);background:var(--dv-gold,#C9A96E);color:#1a1712;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
+.swk2-play:hover{filter:brightness(1.05)}
 
 @media (prefers-reduced-motion:reduce){.swk2 *{animation:none!important;transition:opacity .2s ease!important}.swk2-morph.show{transform:scale(1);border-radius:0}}
 `;
