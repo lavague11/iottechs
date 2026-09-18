@@ -574,7 +574,10 @@ const CSS = `
 .dv-menu button.danger:hover{background:#FBEDE9;color:var(--dv-red)}
 
 .dv-customer{flex:0 0 auto;overflow:hidden;max-height:0;transition:max-height .46s var(--dv-eo)}
-.dv-customer.open{max-height:360px}
+/* Open tall enough for the whole card (contact + security + emergency + edit button); if it still
+   exceeds the cap — a long commercial record on a short screen — the drawer scrolls so the Edit
+   button and lower fields stay reachable (previously clipped at 360px with overflow:hidden). */
+.dv-customer.open{max-height:min(74vh,640px);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .dv-cust-in{margin:12px 24px 0;padding:20px 22px;border-radius:16px;background:var(--dv-raise);border:1px solid var(--dv-line);display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:22px 26px;opacity:0;transform:translateY(-8px);transition:.4s var(--dv-eo) .04s}
 .dv-customer.open .dv-cust-in{opacity:1;transform:none}
 .dv-field dt{font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);margin-bottom:6px}
