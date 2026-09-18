@@ -1223,13 +1223,10 @@
       if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; return; }  // no image → CSS inset:0 (full)
       if(!sceneAspect){ var im=new Image(); im.onload=function(){ sceneAspect=(im.naturalWidth/im.naturalHeight)||1; fitScene(); }; im.onerror=function(){ sceneAspect=1; fitScene(); }; im.src=bgData; return; }
       var cw=host.clientWidth, ch=host.clientHeight; if(!cw||!ch) return;
-      // Phones/landscape: COVER — the aerial fills the canvas edge-to-edge (pan to reach the cropped
-      // sides). Desktop: CONTAIN — the whole plan stays visible. Device coords are % of the scene, so
-      // either fit keeps them locked to the image.
-      var cover=false; try{ cover=window.matchMedia("(max-width:700px), (max-height:540px) and (orientation:landscape)").matches; }catch(e){}
-      // The customer (read-only) is REVIEWING the plan: show the WHOLE thing zoomed-out by default, then
-      // let them pinch to zoom in and two-finger pan. Editors keep the cover fill so they can place devices.
-      if(RO) cover=false;
+      // Default to CONTAIN everywhere: the WHOLE plan shows zoomed-out (customers review it; editors see the
+      // full layout at a glance). Pinch to zoom in and pan; editors can tap Fill for edge-to-edge cover.
+      // Device coords are % of the scene, so either fit keeps them locked to the image.
+      var cover=false;
       if(fitOverride!=null) cover=fitOverride;   // user chose Fit/Fill explicitly → honor it
       curCover=cover;
       var wide=cw/ch>sceneAspect, byHeight=cover?!wide:wide;
