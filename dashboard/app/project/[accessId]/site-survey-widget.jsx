@@ -6,6 +6,11 @@ import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 
+// Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
+// changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
+// iframe documents aggressively; a page reload alone won't re-fetch it).
+const WIDGET_VERSION = "20260918-2";
+
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
@@ -33,7 +38,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // The redesigned Site Survey tool (chooser → Satellite/Upload/Draw → Place → Angles → Submit).
   // Staff edit; customers get ?ro=1. It persists to its own store (survey2) so the swap doesn't
   // disturb existing "survey" data / downstream consumers while the redesign is wired up.
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}`;
+  // ?v — bump WIDGET_VERSION whenever public/widgets/site-survey-merged.html changes, so browsers (esp.
+  // iOS Safari, which caches iframe HTML hard) fetch the new widget instead of serving a stale cached one.
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.

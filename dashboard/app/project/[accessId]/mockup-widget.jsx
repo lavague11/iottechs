@@ -41,7 +41,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
     e.target.value = "";   // let the same file(s) be re-picked later
   }
 
-  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}`;
+  // ?v cache-buster — bump when public/widgets/cctv-mockup.html changes so browsers don't run a stale
+  // cached iframe (iOS Safari caches iframe HTML hard; a page reload won't re-fetch it).
+  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20260918-1`;
 
   // Seed this browser's localStorage from the server backup before the iframe reads it, then
   // mirror every local change back up (see tool-sync.js).
