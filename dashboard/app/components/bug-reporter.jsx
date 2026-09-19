@@ -59,6 +59,7 @@ export default function BugReporter() {
   const [err, setErr] = useState(null);
   const [capturing, setCapturing] = useState(false);
   const [nativeOk, setNativeOk] = useState(false);   // desktop screen-capture available? (offers "Screen")
+  const [screenHint, setScreenHint] = useState(false); // a widget iframe is on screen → nudge toward "Screen"
   const [isStaff, setIsStaff] = useState(false);     // bug-list API answers 200 for staff, 403 otherwise → our staff signal
   const [pageBugs, setPageBugs] = useState([]);      // OPEN bugs already reported on THIS route (staff only)
   const pathname = usePathname();
@@ -67,6 +68,8 @@ export default function BugReporter() {
   const saveTimer = useRef(null);
 
   useEffect(() => { setNativeOk(canNativeCapture()); }, []);
+  // Only relevant when Screen exists (native capture) AND an un-rasterizable widget iframe is on screen.
+  useEffect(() => { setScreenHint(open && canNativeCapture() && hasWidgetIframe()); }, [open, pathname]);
 
   // When Report opens, ask the (staff-only) bug list who we are and what's already been reported on THIS
   // page. 200 → staff: show the Portal link + the "already open here" log so a bug isn't filed twice and
@@ -107,14 +110,12 @@ export default function BugReporter() {
     addFinal({ preview: url, cleanShot: url, shapes: [] });
   }
 
-  // Capture — renders the current app viewport. The Report UI and FAB carry data-bug-capture-ignore so
-  // html2canvas's clone omits them; the live page is never touched, so no hide/blur/flash. But our embedded
-  // tools (Site Survey floor plan, CCTV Mockup) live in iframes that html2canvas rasterizes BLANK. So when
-  // such a widget is actually on screen and the browser can grab the live tab, capture that instead — it's
-  // the only way to include the floor plan (BUG #21/#24/#30). No widget iframe → fast DOM capture, no prompt.
+  // DOM capture — renders the current app viewport (cross-browser, iOS included). The Report UI and FAB
+  // carry data-bug-capture-ignore so html2canvas's clone omits them; the live page is never touched, so
+  // no hide/blur/flash. Embedded tools (Site Survey floor plan, CCTV Mockup) live in iframes html2canvas
+  // rasterizes blank — the screenHint tells the user to use "Screen" for those (BUG #30).
   async function capture() {
     if (atLimit || capturing) return;
-    if (nativeOk && hasWidgetIframe()) { captureScreen(); return; }
     setErr(null); setCapturing(true);
     try {
       const { dataUrl } = await captureViewport();
@@ -308,6 +309,12 @@ export default function BugReporter() {
                     {shots.length > 0 && <span className="bugr-count">{shots.length}/{MAX_SHOTS}</span>}
                   </div>
                 </div>
+                {screenHint && (
+                  <div className="bugr-hint">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+                    Use <b>Screen</b> to include the floor plan.
+                  </div>
+                )}
                 {err && <div className="bugr-err">{err}</div>}
                 <div className="bugr-act">
                   {hasContent && <button className="bugr-discard" onClick={discard} title="Discard draft">Discard</button>}
@@ -380,6 +387,8 @@ const CSS = `
 .bugr-icons{display:flex;align-items:center;gap:2px;color:#4a5058}
 .bugr-mic{display:inline-flex;align-items:center;color:#4a5058}
 .bugr-count{margin-left:6px;font-size:.72rem;font-weight:700;color:#9aa0a8}
+.bugr-hint{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:.76rem;color:#8a6320}
+.bugr-hint b{font-weight:800}
 .bugr-err{margin-top:9px;font-size:.8rem;color:#c4553d;font-weight:600}
 .bugr-act{display:flex;align-items:center;gap:8px;margin-top:14px}
 .bugr-spacer{flex:1}
