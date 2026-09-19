@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import MicButton from "./mic-button";
 import IconButton from "./ui/icon-button";
 import ScreenshotAnnotator from "./screenshot-annotator";
-import { captureViewport, nativeCapture, canNativeCapture, prewarm } from "../../lib/bug-capture";
+import { captureViewport, prewarm } from "../../lib/bug-capture";
 
 const MAX_SHOTS = 10;
 
@@ -16,19 +16,6 @@ function dataURLtoFile(dataUrl, name) {
   return new File([arr], name, { type: mime });
 }
 const readDataURL = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(file); });
-// Is one of our embedded tool widgets (Site Survey / CCTV Mockup) visible right now? Those render inside
-// /widgets/ iframes that html2canvas can't rasterize, so their presence flips Capture to native tab grab.
-function hasWidgetIframe() {
-  try {
-    const vw = window.innerWidth, vh = window.innerHeight;
-    return Array.from(document.querySelectorAll('iframe[src*="/widgets/"]')).some((f) => {
-      if (f.closest("[data-bug-capture-ignore]")) return false;
-      const r = f.getBoundingClientRect();
-      if (r.width < 40 || r.height < 40) return false;
-      return r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw;   // actually on screen
-    });
-  } catch { return false; }
-}
 const uid = () => Math.random().toString(36).slice(2);
 async function uploadMedia(file) {
   try {
@@ -58,8 +45,6 @@ export default function BugReporter() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
   const [capturing, setCapturing] = useState(false);
-  const [nativeOk, setNativeOk] = useState(false);   // desktop screen-capture available? (offers "Screen")
-  const [screenHint, setScreenHint] = useState(false); // a widget iframe is on screen → nudge toward "Screen"
   const [isStaff, setIsStaff] = useState(false);     // bug-list API answers 200 for staff, 403 otherwise → our staff signal
   const [pageBugs, setPageBugs] = useState([]);      // OPEN bugs already reported on THIS route (staff only)
   const pathname = usePathname();
@@ -69,9 +54,6 @@ export default function BugReporter() {
   const saveTimer = useRef(null);
   const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
 
-  useEffect(() => { setNativeOk(canNativeCapture()); }, []);
-  // Only relevant when Screen exists (native capture) AND an un-rasterizable widget iframe is on screen.
-  useEffect(() => { setScreenHint(open && canNativeCapture() && hasWidgetIframe()); }, [open, pathname]);
 
   // When Report opens, ask the (staff-only) bug list who we are and what's already been reported on THIS
   // page. 200 → staff: show the Portal link + the "already open here" log so a bug isn't filed twice and
@@ -106,16 +88,22 @@ export default function BugReporter() {
     setShots((prev) => prev.map((s) => (s.id === id ? { ...s, url, cleanUrl, uploading: false } : s)));
   }
 
-  async function pickImage(file) {           // Attach / paste — direct add
+  async function pickImage(file) {           // single image (paste) — direct add
     if (!file || !file.type?.startsWith("image/") || atLimit) return;
     const url = await readDataURL(file);
     addFinal({ preview: url, cleanShot: url, shapes: [] });
   }
+  async function pickFiles(list) {           // Attach — one OR many images at once (addFinal caps at MAX_SHOTS)
+    for (const f of [...(list || [])]) {
+      if (!f || !f.type?.startsWith("image/")) continue;
+      const url = await readDataURL(f);
+      addFinal({ preview: url, cleanShot: url, shapes: [] });
+    }
+  }
 
   // DOM capture — renders the current app viewport (cross-browser, iOS included). The Report UI and FAB
   // carry data-bug-capture-ignore so html2canvas's clone omits them; the live page is never touched, so
-  // no hide/blur/flash. Embedded tools (Site Survey floor plan, CCTV Mockup) live in iframes html2canvas
-  // rasterizes blank — the screenHint tells the user to use "Screen" for those (BUG #30).
+  // no hide/blur/flash.
   async function capture() {
     if (atLimit || capturing) return;
     setErr(null); setCapturing(true);
@@ -124,23 +112,6 @@ export default function BugReporter() {
       setEditor({ id: null, shot: dataUrl, shapes: [] });
     } catch { setErr("Capture failed — attach or paste one instead."); }
     finally { setCapturing(false); }
-  }
-  // Native screen capture — the way to grab IFRAME content (survey/mockup) that DOM capture leaves
-  // blank. Hides the Report UI from the composited frame right before the grab (no flash on the live
-  // page since it's only hidden for a couple frames).
-  async function captureScreen() {
-    if (atLimit || capturing || !nativeOk) return;
-    setErr(null); setCapturing(true);
-    const html = document.documentElement;
-    try {
-      const { dataUrl } = await nativeCapture(async () => {
-        html.classList.add("bugr-capturing");
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        await new Promise((r) => setTimeout(r, 70));
-      });
-      setEditor({ id: null, shot: dataUrl, shapes: [] });
-    } catch (e) { if (e?.name !== "NotAllowedError" && e?.name !== "AbortError") setErr("Screen capture failed."); }
-    finally { html.classList.remove("bugr-capturing"); setCapturing(false); }
   }
   function onAnnotated(dataUrl, nextShapes) {
     const ed = editor;
@@ -250,6 +221,12 @@ export default function BugReporter() {
                 <div className="bugr-head">
                   <span className="bugr-title">Report</span>
                   <div className="bugr-headr">
+                    {/* Importance is a single toggle now — flag it critical or leave it normal. */}
+                    <button type="button" className={`bugr-flag${severity === "critical" ? " on" : ""}`}
+                      aria-pressed={severity === "critical"} title={severity === "critical" ? "Critical — tap to clear" : "Mark critical"} aria-label="Mark critical"
+                      onClick={() => setSeverity((s) => (s === "critical" ? "medium" : "critical"))}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill={severity === "critical" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                    </button>
                     {isStaff && (
                       <a className="bugr-portal" href="/bugs" title="Bug portal" aria-label="Open bug portal">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
@@ -277,16 +254,8 @@ export default function BugReporter() {
                 {/* No autoFocus — opening Report shouldn't pop the mobile keyboard. Tap the field to type. */}
                 <textarea className="bugr-in" rows={4} value={desc} maxLength={4000}
                   onChange={(e) => setDesc(e.target.value)} placeholder="What happened?" />
-                <div className="bugr-sev" role="group" aria-label="Severity">
-                  {["low", "medium", "high", "critical"].map((s) => (
-                    <button key={s} type="button" className={`bugr-sevb ${s}${severity === s ? " on" : ""}`}
-                      aria-pressed={severity === s} onClick={() => setSeverity(s)}>
-                      {s === "medium" ? "Med" : s[0].toUpperCase() + s.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
-                  onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = ""; }} />
+                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+                  onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} />
 
                 {shots.length > 0 && (
                   <div className="bugr-strip">
@@ -306,11 +275,6 @@ export default function BugReporter() {
                     <IconButton label={atLimit ? "Limit reached" : (capturing ? "Capturing" : "Capture")} disabled={capturing || atLimit} onClick={capture}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
                     </IconButton>
-                    {nativeOk && (
-                      <IconButton label="Screen" disabled={capturing || atLimit} onClick={captureScreen}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
-                      </IconButton>
-                    )}
                     <IconButton label="Attach" disabled={atLimit} onClick={() => fileRef.current?.click()}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
                     </IconButton>
@@ -323,12 +287,6 @@ export default function BugReporter() {
                     {shots.length > 0 && <span className="bugr-count">{shots.length}/{MAX_SHOTS}</span>}
                   </div>
                 </div>
-                {screenHint && !confirmReset && (
-                  <div className="bugr-hint">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
-                    Use <b>Screen</b> to include the floor plan.
-                  </div>
-                )}
                 {confirmReset && (
                   <div className="bugr-confirm">
                     <span>Reset this report?</span>
@@ -361,8 +319,6 @@ const CSS = `
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
   background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
-/* native "Screen" capture grabs the composited tab, so hide bug UI for the couple frames before the grab */
-.bugr-capturing .bugr-fab,.bugr-capturing .bugr-scrim{visibility:hidden!important}
 /* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. */
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
@@ -376,6 +332,10 @@ const CSS = `
 .bugr-portal{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid #e2e5ea;border-radius:8px;
   background:#fff;color:#4a5058;font:700 .76rem/1 inherit;text-decoration:none}
 .bugr-portal:hover{border-color:#12151b;color:#12151b}
+/* Critical flag — single importance toggle; quiet outline off, red when flagged. */
+.bugr-flag{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #e2e5ea;border-radius:8px;background:#fff;color:#9aa0a8;cursor:pointer}
+.bugr-flag:hover{border-color:#eaa89b;color:#b24a3a}
+.bugr-flag.on{background:#fbe8e4;border-color:#eaa89b;color:#b24a3a}
 .bugr-x{border:0;background:none;font-size:.9rem;color:#8a9099;cursor:pointer;padding:4px}
 .bugr-here{display:block;margin-bottom:10px;padding:9px 11px;border:1px solid #efe3d3;background:#fbf6ec;border-radius:10px;text-decoration:none}
 .bugr-here:hover{border-color:#e0c9a6}
@@ -387,13 +347,6 @@ const CSS = `
 .bugr-in{width:100%;box-sizing:border-box;border:1px solid #e2e5ea;border-radius:10px;padding:10px 12px;font:inherit;
   font-size:.88rem;resize:vertical;outline:none;color:#12151b;background:#fbfbfc}
 .bugr-in:focus{border-color:#12151b}
-.bugr-sev{display:flex;gap:6px;margin-top:10px}
-.bugr-sevb{flex:1;height:30px;border:1px solid #e2e5ea;border-radius:8px;background:#fff;color:#6b7079;font:700 .75rem/1 inherit;cursor:pointer}
-.bugr-sevb:hover{border-color:#c7ccd3}
-.bugr-sevb.low.on{background:#eef1f4;border-color:#c7ccd3;color:#4a5058}
-.bugr-sevb.medium.on{background:#eaf1fb;border-color:#9cc0ee;color:#2b5f9e}
-.bugr-sevb.high.on{background:#fdf3e2;border-color:#e6c589;color:#8a6320}
-.bugr-sevb.critical.on{background:#fbe8e4;border-color:#eaa89b;color:#b24a3a}
 .bugr-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .bugr-chip{position:relative;width:60px;height:46px}
 .bugr-chip-img{width:60px;height:46px;padding:0;border:1px solid #e2e5ea;border-radius:8px;overflow:hidden;background:#fafafa;cursor:pointer;line-height:0}
@@ -408,8 +361,6 @@ const CSS = `
 .bugr-icons{display:flex;align-items:center;gap:2px;color:#4a5058}
 .bugr-mic{display:inline-flex;align-items:center;color:#4a5058}
 .bugr-count{margin-left:6px;font-size:.72rem;font-weight:700;color:#9aa0a8}
-.bugr-hint{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:.76rem;color:#8a6320}
-.bugr-hint b{font-weight:800}
 .bugr-confirm{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.8rem;font-weight:600;color:#12151b}
 .bugr-confirm>span{flex:1}
 .bugr-cbtn{height:28px;padding:0 12px;border:1px solid #e2e5ea;border-radius:8px;background:#fff;color:#4a5058;font:700 .76rem/1 inherit;cursor:pointer}

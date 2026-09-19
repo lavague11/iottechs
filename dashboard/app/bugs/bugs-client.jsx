@@ -67,6 +67,7 @@ export default function BugsClient({ initial = [] }) {
   // One portal-rendered popover at a time: { id, kind:"copy"|"more", el:anchorNode }. Rendering the menu
   // through a body portal (see Popover) is what lets it escape the card's overflow:hidden + stacking context.
   const [pop, setPop] = useState(null);
+  const [copyChecks, setCopyChecks] = useState({});   // selective-copy checklist: { report, shots, page, env, error, fix }
   const [openId, setOpenId] = useState(null);     // the ONE expanded bug
   const [q, setQ] = useState("");                 // search text
   const [searchOn, setSearchOn] = useState(false);
@@ -137,6 +138,38 @@ export default function BugsClient({ initial = [] }) {
     if (err) parts.push("", `ERROR: ${err.type} · ${err.message}`);
     if (suggest[b.id]) parts.push("", "FIX", suggest[b.id]);
     copyText(parts.join("\n"));
+  }
+  // Which pieces of a bug can be copied — drives the selective-copy checklist (only what exists shows).
+  function copyParts(b) {
+    const imgs = imgsOf(b), ctx = ctxOf(b), pf = platform(ctx?.ua || b.user_agent);
+    const env = [pf.device, pf.os, pf.browser].filter(Boolean).join(" · ");
+    const parts = [{ key: "report", label: "Report" }];
+    if (imgs.length) parts.push({ key: "shots", label: imgs.length > 1 ? `Screenshots (${imgs.length})` : "Screenshot" });
+    if (b.path) parts.push({ key: "page", label: "Page" });
+    if (env) parts.push({ key: "env", label: "Environment" });
+    if (ctx?.errors?.[0]) parts.push({ key: "error", label: "Error" });
+    if (suggest[b.id]) parts.push({ key: "fix", label: "Fix" });
+    return parts;
+  }
+  // Build the combined clipboard text from the checked pieces (mirrors copyAll, filtered).
+  function buildCopyText(b, checks) {
+    const imgs = imgsOf(b), ctx = ctxOf(b), pf = platform(ctx?.ua || b.user_agent);
+    const env = [pf.device, pf.os, pf.browser].filter(Boolean).join(" · ");
+    const err = ctx?.errors?.[0];
+    const out = [`BUG #${b.id}`];
+    if (checks.page && b.path) out.push(b.url || b.path);
+    if (checks.env && env) out.push(env);
+    if (checks.report) out.push("", "REPORT", b.description);
+    if (checks.shots && imgs.length) out.push("", `${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}:`, ...imgs);
+    if (checks.error && err) out.push("", `ERROR: ${err.type} · ${err.message}`);
+    if (checks.fix && suggest[b.id]) out.push("", "FIX", suggest[b.id]);
+    return out.join("\n");
+  }
+  // Open the selective-copy checklist (all ticked), or — if it's already open for this bug — copy the ticks.
+  function toggleCopyMenu(b, el) {
+    if (pop?.id === b.id && pop.kind === "copy") { const t = buildCopyText(b, copyChecks); setPop(null); copyText(t); return; }
+    const init = {}; copyParts(b).forEach((p) => { init[p.key] = true; });
+    setCopyChecks(init); setPop({ id: b.id, kind: "copy", el });
   }
 
   // Expand a bug (used by row-click and by the AI actions so their result is visible). One open at a time.
@@ -287,11 +320,10 @@ export default function BugsClient({ initial = [] }) {
                     <button className="bgp-ib" aria-label="Copy report" title="Copy report" onClick={(e) => { stop(e); copyAll(b); }}>
                       <CopyI />
                     </button>
-                    {/* Selective copy — pick one piece (image · text · prompt · all). Capture the button node
-                        NOW: React nulls e.currentTarget before the functional updater runs, which would leave
-                        the popover un-anchored and invisible (BUG #32). */}
+                    {/* Selective copy — opens a checklist of pieces; tick what you want, then click this again
+                        (or the Copy button) to copy just those. Capture the node now (React nulls currentTarget). */}
                     <button className={`bgp-ib${pop?.id === b.id && pop.kind === "copy" ? " on" : ""}`} aria-label="Copy part" title="Copy part…"
-                      onClick={(e) => { stop(e); const el = e.currentTarget; setPop((p) => (p?.id === b.id && p.kind === "copy" ? null : { id: b.id, kind: "copy", el })); }}>
+                      onClick={(e) => { stop(e); toggleCopyMenu(b, e.currentTarget); }}>
                       <CopyPickI />
                     </button>
                     <button className={`bgp-ib${pop?.id === b.id && pop.kind === "more" ? " on" : ""}`} aria-label="More" title="More"
@@ -326,20 +358,18 @@ export default function BugsClient({ initial = [] }) {
         if (!b) return null;
         const imgs = imgsOf(b);
         return (
-          <Popover anchor={pop.el} onClose={() => setPop(null)} width={pop.kind === "copy" ? 150 : 208}>
+          <Popover anchor={pop.el} onClose={() => setPop(null)} width={pop.kind === "copy" ? 186 : 208}>
             {pop.kind === "copy" ? (
-              <>
-                {imgs.length === 1 && <button onClick={() => { setPop(null); copyImageUrl(imgs[0]); }}>Image</button>}
-                {imgs.length > 1 && (
-                  <div className="bgp-imgrow">
-                    <span>Image</span>
-                    {imgs.map((u, i) => <button key={i} className="bgp-imgnum" onClick={() => { setPop(null); copyImageUrl(u); }}>{i + 1}</button>)}
-                  </div>
-                )}
-                <button onClick={() => { setPop(null); copyText(b.description); }}>Text</button>
-                {suggest[b.id] && <button onClick={() => { setPop(null); copyText(suggest[b.id]); }}>Fix</button>}
-                <button onClick={() => { setPop(null); copyAll(b); }}>All</button>
-              </>
+              <div className="bgp-check">
+                {copyParts(b).map((p) => (
+                  <label key={p.key} className="bgp-checkrow">
+                    <input type="checkbox" checked={!!copyChecks[p.key]} onChange={() => setCopyChecks((c) => ({ ...c, [p.key]: !c[p.key] }))} />
+                    <span>{p.label}</span>
+                  </label>
+                ))}
+                <button className="bgp-checkcopy" disabled={!copyParts(b).some((p) => copyChecks[p.key])}
+                  onClick={() => { const t = buildCopyText(b, copyChecks); setPop(null); copyText(t); }}>Copy</button>
+              </div>
             ) : (
               <>
                 {/* Triage lives here, not in the bug body: severity + area. */}
@@ -619,6 +649,13 @@ const CSS = `
 .bgp-imgrow>span{font-size:.82rem;font-weight:600;color:#2b2f36;margin-right:2px}
 .bgp-imgnum{width:24px;height:24px;padding:0;border:1px solid #e4e4df;border-radius:6px;background:#fff;color:#2b2f36;font:700 .74rem/1 inherit;cursor:pointer}
 .bgp-imgnum:hover{background:#f4f5f7;border-color:#12151b}
+/* Selective-copy checklist */
+.bgp-check{display:flex;flex-direction:column;gap:1px}
+.bgp-checkrow{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;cursor:pointer;font:600 .82rem/1 inherit;color:#2b2f36}
+.bgp-checkrow:hover{background:#f4f5f7}
+.bgp-checkrow input{width:15px;height:15px;accent-color:#12151b;cursor:pointer;margin:0}
+.bgp-checkcopy{margin-top:4px;height:32px;border:0;border-radius:7px;background:#12151b;color:#fff;font:700 .8rem/1 inherit;cursor:pointer}
+.bgp-checkcopy:disabled{opacity:.45;cursor:default}
 /* Triage inside the ••• menu */
 .bgp-mlabel{font:800 .64rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0;padding:7px 8px 5px}
 .bgp-msev{display:flex;gap:4px;padding:0 6px 4px}
@@ -730,6 +767,10 @@ const CSS = `
   .bgp-menu button,.bgp-menu a{color:#c8ccd2}
   .bgp-menu button:hover,.bgp-menu a:hover{background:#232830}
   .bgp-imgrow>span{color:#c8ccd2}
+  .bgp-checkrow{color:#c8ccd2}
+  .bgp-checkrow:hover{background:#232830}
+  .bgp-checkrow input{accent-color:#e9edf2}
+  .bgp-checkcopy{background:#e9edf2;color:#12151b}
   .bgp-imgnum{background:#161a20;border-color:#2a2f37;color:#c8ccd2}
   .bgp-imgnum:hover{background:#232830;border-color:#5a6068}
   .bgp-ib.on{background:#232830;color:#fff}
