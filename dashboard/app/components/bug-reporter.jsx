@@ -65,7 +65,9 @@ export default function BugReporter() {
   const pathname = usePathname();
   const fileRef = useRef(null);
   const loadedRef = useRef(false);               // draft loaded for this open? (gates autosave)
+  const filedRef = useRef(false);                // report just submitted → block any further autosave PUT
   const saveTimer = useRef(null);
+  const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
 
   useEffect(() => { setNativeOk(canNativeCapture()); }, []);
   // Only relevant when Screen exists (native capture) AND an un-rasterizable widget iframe is on screen.
@@ -156,6 +158,8 @@ export default function BugReporter() {
   useEffect(() => {
     if (!open) { loadedRef.current = false; return; }
     loadedRef.current = false;
+    filedRef.current = false;   // fresh open → autosave allowed again
+    setConfirmReset(false);
     prewarm();
     fetch("/api/bug-draft", { credentials: "same-origin" }).then((r) => r.json()).then((j) => {
       const d = j?.draft;
@@ -169,7 +173,7 @@ export default function BugReporter() {
   // Debounced autosave — persists text + already-uploaded shots. Skips the initial restore render and
   // never saves an empty draft (that's what Discard/Send are for).
   useEffect(() => {
-    if (!open || !loadedRef.current) return;
+    if (!open || !loadedRef.current || filedRef.current) return;   // never re-save a just-filed report
     const uploaded = shots.filter((s) => s.url).map((s) => ({ url: s.url, cleanUrl: s.cleanUrl, shapes: s.shapes }));
     if (!desc.trim() && uploaded.length === 0) return;
     clearTimeout(saveTimer.current);
@@ -191,11 +195,16 @@ export default function BugReporter() {
 
   function clearDraft() { fetch("/api/bug-draft", { method: "DELETE", credentials: "same-origin" }).catch(() => {}); }
   function discard() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setOpen(false); }
+  // Reset — clear the whole draft but stay open for a fresh report (two-step confirm).
+  function resetDraft() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setConfirmReset(false); }
 
   async function submit() {
     if (busy) return;
     const d = desc.trim();
     if (!d) { setErr("Describe the bug first."); return; }
+    // Stop autosave NOW — before the await — so a pending/in-flight debounced PUT can't land after the
+    // draft DELETE and resurrect it (that's why a filed report kept coming back). filedRef blocks re-saves.
+    clearTimeout(saveTimer.current); filedRef.current = true;
     setBusy(true); setErr(null);
     const imageUrls = [];
     for (const s of shots) {
@@ -209,10 +218,10 @@ export default function BugReporter() {
       body: JSON.stringify({ description: d, url: location.href, path: location.pathname, imageUrls, context, severity }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setBusy(false);
-    if (r?.error) { setErr(r.error); return; }
+    if (r?.error) { filedRef.current = false; setErr(r.error); return; }   // failed → let autosave resume
     clearTimeout(saveTimer.current); clearDraft();
-    setDone(true);
-    setTimeout(() => { setOpen(false); setDone(false); setShots([]); setDesc(""); }, 1400);
+    setDone(true); setShots([]); setDesc(""); setSeverity("medium"); setConfirmReset(false);
+    setTimeout(() => { setOpen(false); setDone(false); }, 1400);
   }
 
   const hasContent = !!desc.trim() || shots.length > 0;
@@ -306,13 +315,25 @@ export default function BugReporter() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
                     </IconButton>
                     <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
+                    {hasContent && (
+                      <IconButton label="Reset" disabled={capturing} onClick={() => setConfirmReset(true)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </IconButton>
+                    )}
                     {shots.length > 0 && <span className="bugr-count">{shots.length}/{MAX_SHOTS}</span>}
                   </div>
                 </div>
-                {screenHint && (
+                {screenHint && !confirmReset && (
                   <div className="bugr-hint">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
                     Use <b>Screen</b> to include the floor plan.
+                  </div>
+                )}
+                {confirmReset && (
+                  <div className="bugr-confirm">
+                    <span>Reset this report?</span>
+                    <button className="bugr-cbtn" onClick={() => setConfirmReset(false)}>Cancel</button>
+                    <button className="bugr-cbtn danger" onClick={resetDraft}>Reset</button>
                   </div>
                 )}
                 {err && <div className="bugr-err">{err}</div>}
@@ -389,6 +410,12 @@ const CSS = `
 .bugr-count{margin-left:6px;font-size:.72rem;font-weight:700;color:#9aa0a8}
 .bugr-hint{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:.76rem;color:#8a6320}
 .bugr-hint b{font-weight:800}
+.bugr-confirm{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.8rem;font-weight:600;color:#12151b}
+.bugr-confirm>span{flex:1}
+.bugr-cbtn{height:28px;padding:0 12px;border:1px solid #e2e5ea;border-radius:8px;background:#fff;color:#4a5058;font:700 .76rem/1 inherit;cursor:pointer}
+.bugr-cbtn:hover{border-color:#12151b;color:#12151b}
+.bugr-cbtn.danger{background:#b24a3a;border-color:#b24a3a;color:#fff}
+.bugr-cbtn.danger:hover{background:#9d3f31;border-color:#9d3f31;color:#fff}
 .bugr-err{margin-top:9px;font-size:.8rem;color:#c4553d;font-weight:600}
 .bugr-act{display:flex;align-items:center;gap:8px;margin-top:14px}
 .bugr-spacer{flex:1}
