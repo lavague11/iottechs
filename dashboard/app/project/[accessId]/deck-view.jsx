@@ -40,6 +40,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);   // smart status pill popover
   const [moved, setMoved] = useState(false);
+  const [compact, setCompact] = useState(false);         // scrolled into content → condense the header (reclaim vertical space)
+  // Threshold + hysteresis so the header doesn't flicker between expanded/compact around one scroll line.
+  function onDeckScroll(e) { const y = e.currentTarget.scrollTop || 0; setCompact((c) => (c ? y > 36 : y > 76)); }
   // "Complete but unread" markers blink green until the viewer has actually looked at the finished
   // stage; once seen they go solid green. Seen-state is per viewer (this browser), remembered across
   // visits in localStorage and keyed to the project/account so each one tracks its own.
@@ -191,6 +194,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     return m;
   };
 
+  // Switching stages lands the new slide at the top → expand the header again.
+  useEffect(() => { setCompact(false); }, [idx]);
   // Load this viewer's seen-set once (client only).
   useEffect(() => {
     let set = new Set();
@@ -211,7 +216,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   }, [idx, seenLoaded, stages, seenKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="dv-shell" data-tint={cur.tint || "ink"}>
+    <div className={`dv-shell${compact ? " dv-compact" : ""}`} data-tint={cur.tint || "ink"}>
       {/* top bar */}
       <header className="dv-top">
         <a className="dv-logo" href="/go" title="IOT TECHS" aria-label="IOT TECHS home"><Wordmark height={16} /></a>
@@ -398,7 +403,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         {stages.map((s, i) => (
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
             <div className={`dv-pane${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-wide" : ""}`}>
-              <div className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
+              <div onScroll={i === idx ? onDeckScroll : undefined} className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
                 {/* The stage header scrolls WITH the content — not a frozen bar covering the page. */}
                 <div className="dv-pane-head">
                   <div className="dv-stage-name">{s.name}</div>
@@ -600,7 +605,19 @@ const CSS = `
 .dv-crow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dv-cust-edit .dv-cust-actions{border-top:none;padding-top:6px}
 
-.dv-rail{flex:0 0 auto;padding:18px 24px 14px;display:flex;align-items:center;gap:18px}
+.dv-rail{flex:0 0 auto;padding:18px 24px 14px;display:flex;align-items:center;gap:18px;transition:padding .2s var(--dv-e)}
+/* Scrolled into content → condense the header so the workspace gets the room back. Masthead (brand +
+   viewer control) drops out; the project name, stage dots and % stay for orientation. Scroll up restores it. */
+.dv-top{transition:height .2s var(--dv-e),opacity .15s}
+.dv-jobbar{transition:padding .2s var(--dv-e)}
+.dv-title{transition:font-size .2s var(--dv-e)}
+.dv-compact .dv-top{height:0;opacity:0;pointer-events:none;overflow:hidden;padding-top:0;padding-bottom:0}
+.dv-compact .dv-jobbar{padding-top:8px}
+.dv-compact .dv-title{font-size:18px}
+.dv-compact .dv-code{display:none}
+.dv-compact .dv-rail{padding-top:9px;padding-bottom:9px}
+.dv-compact .dv-lab .nm{display:none}
+.dv-compact .dv-readout .cap{display:none}
 .dv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}
 .dv-seg{flex:1;text-align:left;min-width:0;padding-top:6px}
 .dv-bar{height:2px;border-radius:99px;background:var(--dv-line);overflow:hidden;position:relative}
