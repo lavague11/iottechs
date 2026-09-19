@@ -4,14 +4,13 @@ import { createPortal } from "react-dom";
 import { addToolNoteAction } from "./proposal-actions";
 import MicButton from "../../components/mic-button";
 
-// A cinematic, spatial walkthrough. The aerial SITE SURVEY is the stage; every planned camera is a
-// numbered marker on it. When a camera is picked (or the tour plays), that marker MORPHS open — it
-// grows from its dot into the full camera view — so it reads as "this camera goes HERE → and this is
-// what it sees." The Map control collapses the view right back into its marker. Play tour auto-advances
-// (collapse → next marker → expand); a Fullscreen mode makes it immersive. Read-only; notes/approvals
-// are held locally per camera. Driven by the same survey2/mockup data the layout already loads.
-//   floors: [{ name, bg, cams:[{ x, y, aim, aimed, name, cid, photo }] }]   photos: [{ url, name }]
+// Two-panel Walkthrough (mobile-first): the floor plan stays PUT on top with the active camera's marker
+// highlighted, and the camera view below is a horizontal photo carousel (swipe / prev-next / autoplay).
+// You always see WHERE a camera is and WHAT it sees at once. No map zoom, no marker→photo morph, no
+// circular reveal — just a stable map + a clean iPhone-style photo carousel.
+//   floors: [{ name, bg, cams:[{ x, y, name, cid, photo }] }]   photos: [{ url, name }]
 const norm = (s) => String(s || "").trim().toLowerCase();
+const pad2 = (n) => String(n).padStart(2, "0");
 const EASE = "cubic-bezier(.22,1,.36,1)";
 
 export default function SystemWalkthrough({ accessId = "", floors = [], photos = [], focusCid = null, customerName = "", defaultFs = false, onClose = null }) {
@@ -26,110 +25,94 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
   const keyFor = (s) => s.cam.cid || `${s.fi}:${s.ci}`;
 
   const [idx, setIdx] = useState(0);
-  const [mode, setMode] = useState("map");        // "map" (survey) | "cam" (a camera expanded)
-  const [expanded, setExpanded] = useState(false); // morph expanded (drives the CSS)
   const [playing, setPlaying] = useState(false);
+  const [ended, setEnded] = useState(false);
   const [fs, setFs] = useState(!!defaultFs);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => setMounted(true), []);
   const [commentOpen, setCommentOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [notes, setNotes] = useState({});          // key → note text (persisted to the real comment channel)
+  const [notes, setNotes] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const modeRef = useRef("map");
-  const tokRef = useRef(0);
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  // The plan image fills the stage inline, but in FULLSCREEN it's letterboxed (object-fit:contain), so a
-  // marker at x%/y% of the STAGE lands in the black bars instead of on the plan. Measure the image's real
-  // displayed rect and place the markers + camera morph over THAT, so placement always matches the survey.
-  const stageRef = useRef(null);
-  const aerialRef = useRef(null);
-  const [plate, setPlate] = useState(null);   // {l,t,w,h}px letterbox rect, or null when the image fills the stage
+  // Marker positioning on the (stable) map panel — the plan is contain-fit; place markers on its real rect.
+  const mapRef = useRef(null), aerialRef = useRef(null);
+  const [plate, setPlate] = useState(null);   // { l, t, w, h } of the plan image within the map panel
   const measure = useCallback(() => {
-    const stage = stageRef.current, img = aerialRef.current;
-    if (!stage || !img || !img.complete || !img.naturalWidth) return;
-    const sr = stage.getBoundingClientRect(), ir = img.getBoundingClientRect();
-    if (!sr.width || !sr.height) return;
-    const l = ir.left - sr.left, t = ir.top - sr.top;
-    const fills = Math.abs(l) < 1 && Math.abs(t) < 1 && Math.abs(ir.width - sr.width) < 1.5 && Math.abs(ir.height - sr.height) < 1.5;
-    setPlate(fills ? null : { l, t, w: ir.width, h: ir.height, sw: sr.width, sh: sr.height });
+    const box = mapRef.current, img = aerialRef.current;
+    if (!box || !img || !img.naturalWidth) return;
+    const bw = box.clientWidth, bh = box.clientHeight; if (!bw || !bh) return;
+    const a = img.naturalWidth / img.naturalHeight;
+    let w, h; if (bw / bh > a) { h = bh; w = bh * a; } else { w = bw; h = bw / a; }
+    setPlate({ l: (bw - w) / 2, t: (bh - h) / 2, w, h });
   }, []);
   useEffect(() => {
     measure();
-    let ro; try { ro = new ResizeObserver(() => measure()); if (stageRef.current) ro.observe(stageRef.current); } catch { /* no RO */ }
+    let ro; try { ro = new ResizeObserver(measure); if (mapRef.current) ro.observe(mapRef.current); } catch { /* no RO */ }
     window.addEventListener("resize", measure);
     return () => { try { ro && ro.disconnect(); } catch { /* noop */ } window.removeEventListener("resize", measure); };
-  }, [measure]);
-  // Re-measure once the layout settles after entering/leaving fullscreen.
-  useEffect(() => { const r = requestAnimationFrame(() => requestAnimationFrame(measure)); return () => cancelAnimationFrame(r); }, [fs, measure]);
+  }, [measure, fs]);
 
-  // Morph a camera open — collapsing any current one first (the "shared element" grows from its marker).
-  const show = useCallback(async (i) => {
-    const tok = ++tokRef.current;
-    if (modeRef.current === "cam") { setExpanded(false); await sleep(560); if (tok !== tokRef.current) return; }
-    setIdx(i); setMode("cam"); modeRef.current = "cam"; setExpanded(false); setCommentOpen(false);
-    await sleep(60); if (tok !== tokRef.current) return;
-    setExpanded(true);
-  }, []);
-  // Collapse the camera view back into its marker → the survey.
-  const hide = useCallback(async () => {
-    const tok = ++tokRef.current;
-    setExpanded(false); setCommentOpen(false); await sleep(600); if (tok !== tokRef.current) return;
-    setMode("map"); modeRef.current = "map";
-  }, []);
-
-  useEffect(() => { if (idx > total - 1) setIdx(0); }, [total, idx]);
+  useEffect(() => { if (idx > total - 1) setIdx(Math.max(0, total - 1)); }, [total, idx]);
   // "View placement" from a camera line jumps straight to that camera.
   useEffect(() => {
     if (!focusCid) return;
     const i = stops.findIndex((s) => s.cam.cid && s.cam.cid === focusCid);
-    if (i >= 0) { setPlaying(false); show(i); }
-  }, [focusCid, stops, show]);
+    if (i >= 0) { setPlaying(false); setEnded(false); setIdx(i); }
+  }, [focusCid, stops]);
 
-  // Autoplay — expand, hold, then collapse→next. Pauses while a note box is open; stops on the last camera.
+  const go = useCallback((i) => setIdx(Math.max(0, Math.min(total - 1, i))), [total]);
+  const next = () => { setPlaying(false); setEnded(false); go(idx + 1); };
+  const prev = () => { setPlaying(false); setEnded(false); go(idx - 1); };
+  const selectCam = (i) => { setPlaying(false); setEnded(false); go(i); };
+
+  // Autoplay — advance every ~4.2s; the MAP NEVER MOVES, only the marker + carousel. Stops at the end (→ Replay).
   useEffect(() => {
     if (!playing) return;
-    if (mode === "map") { show(idx); return; }
-    if (!expanded || commentOpen) return;
-    const t = setTimeout(() => { if (idx >= total - 1) setPlaying(false); else show(idx + 1); }, 3400);
+    const t = setTimeout(() => { if (idx >= total - 1) { setPlaying(false); setEnded(true); } else setIdx(idx + 1); }, 4200);
     return () => clearTimeout(t);
-  }, [playing, mode, expanded, idx, commentOpen, show, total]);
+  }, [playing, idx, total]);
+  const togglePlay = () => {
+    if (playing) { setPlaying(false); return; }
+    if (ended || idx >= total - 1) { setEnded(false); setIdx(0); }
+    setPlaying(true);
+  };
 
-  // Fullscreen: lock scroll + Esc backs out (close note → collapse → exit fullscreen).
-  useEffect(() => {
-    if (!fs) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") { if (commentOpen) setCommentOpen(false); else if (mode === "cam") hide(); else setFs(false); }
-      else if (e.key === "ArrowRight") next();
-      else if (e.key === "ArrowLeft") prev();
-    };
-    window.addEventListener("keydown", onKey);
-    const prevOv = document.body.style.overflow; document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prevOv; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fs, commentOpen, mode]);
+  // ---- horizontal swipe carousel (camera panel only) ----
+  const [drag, setDrag] = useState(0);        // live px offset during a swipe (for the render)
+  const dragRef = useRef(0), dragging = useRef(false), axis = useRef(null);
+  const startX = useRef(0), startY = useRef(0), trackW = useRef(1);
+  const carRef = useRef(null);
+  const setDragBoth = (v) => { dragRef.current = v; setDrag(v); };
+  function onDown(e) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging.current = true; axis.current = null;
+    startX.current = e.clientX; startY.current = e.clientY;
+    trackW.current = carRef.current?.clientWidth || 1;
+  }
+  function onMove(e) {
+    if (!dragging.current) return;
+    const dx = e.clientX - startX.current, dy = e.clientY - startY.current;
+    if (axis.current === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) axis.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    if (axis.current !== "x") return;
+    if (playing) setPlaying(false);
+    let d = dx;                                   // resist past the ends
+    if ((idx === 0 && dx > 0) || (idx === total - 1 && dx < 0)) d = dx * 0.35;
+    setDragBoth(d);
+  }
+  function onUp() {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const d = dragRef.current, th = Math.min(90, trackW.current * 0.22);
+    setDragBoth(0);
+    if (axis.current === "x") { setEnded(false); if (d < -th) go(idx + 1); else if (d > th) go(idx - 1); }
+    axis.current = null;
+  }
 
-  if (!total) return null;
-  const cur = stops[idx];
-  const f = cur.floor;
-  const cam = cur.cam;
-  const shot = shotFor(cam);
-  const ox = Number.isFinite(cam.x) ? cam.x : 50;
-  const oy = Number.isFinite(cam.y) ? cam.y : 50;
-  // The full-bleed camera morph lives in the stage, so its grow-origin must be the marker's real position
-  // ON the stage — which, when the plan is letterboxed in fullscreen, differs from its % on the image.
-  const ox2 = plate ? ((plate.l + (ox / 100) * plate.w) / plate.sw) * 100 : ox;
-  const oy2 = plate ? ((plate.t + (oy / 100) * plate.h) / plate.sh) * 100 : oy;
-
-  const openCam = (i) => { setPlaying(false); show(i); };
-  const next = () => { if (idx < total - 1) { setPlaying(false); show(idx + 1); } };
-  const prev = () => { if (idx > 0) { setPlaying(false); show(idx - 1); } };
-  const togglePlay = () => { if (playing) { setPlaying(false); return; } if (mode === "map") show(idx); setPlaying(true); };
-  // A per-camera note is REAL feedback — persist it to the same comment channel the tools use, anchored
-  // by the camera's name (the existing convention), so staff actually see it on the mockup thread.
+  // A per-camera note is REAL feedback — persist it to the mockup comment channel, anchored by the
+  // camera's name (existing convention), so staff see it on the thread.
   const saveNote = async () => {
+    const cur = stops[idx]; if (!cur) return;
     const v = draft.trim(); if (!v) return;
     const anchor = (cur.cam.name && cur.cam.name.trim()) || `Camera ${cur.ci + 1}`;
     setNotes((n) => ({ ...n, [keyFor(cur)]: v })); setCommentOpen(false);
@@ -139,196 +122,189 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
     setSaving(false);
   };
 
-  const camActive = mode === "cam";
+  // Fullscreen: lock scroll + Esc/arrows.
+  useEffect(() => {
+    if (!fs) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { if (commentOpen) setCommentOpen(false); else { setFs(false); onClose && onClose(); } }
+      else if (e.key === "ArrowRight") next();
+      else if (e.key === "ArrowLeft") prev();
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOv = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prevOv; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fs, commentOpen, idx, total]);
+
+  if (!total) return null;
+  const cur = stops[idx];
+  const f = cur.floor;
+  const noteKey = keyFor(cur);
 
   const tree = (
     <div className={`swk2${fs ? " fs" : ""}`}>
       <style>{CSS}</style>
 
       {fs && (
-        <div className="swk2-fsbar">
-          <span className="swk2-fsttl">Walkthrough{customerName ? ` · ${customerName}` : ""}</span>
-          <button className="swk2-ico" title="Close" aria-label="Close walkthrough" onClick={() => { setPlaying(false); setFs(false); if (onClose) onClose(); }}>
+        <div className="swk2-bar">
+          <span className="swk2-ttl">Walkthrough{customerName ? ` · ${customerName}` : ""}</span>
+          <button className="swk2-x" title="Close" aria-label="Close walkthrough" onClick={() => { setPlaying(false); setFs(false); onClose && onClose(); }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
       )}
 
-      <div className="swk2-stage" ref={stageRef} style={{ "--ox": `${ox2}%`, "--oy": `${oy2}%` }}>
-        {/* the survey — dims + eases toward the active marker while a camera is open */}
-        <img ref={aerialRef} onLoad={measure} className={`swk2-aerial${camActive ? " zoom" : ""}`} src={f.bg} alt={f.name} />
-        <div className={`swk2-dim${camActive ? " on" : ""}`} />
-
-        {/* markers + camera morph live on a plate matched to the image's real rect (see measure()) */}
-        <div className="swk2-plate" style={plate ? { left: plate.l, top: plate.t, width: plate.w, height: plate.h } : { inset: 0 }}>
-
-        {/* markers */}
-        {(f.cams || []).map((c, j) => {
-          const active = j === cur.ci;
-          const k = keyFor({ ...cur, cam: c, ci: j });
-          const noted = !!notes[k];
-          return Number.isFinite(c.x) && Number.isFinite(c.y) ? (
-            <button key={j} className={`swk2-mk${active ? " active" : ""}${camActive && active ? " hidden" : ""}`}
-              style={{ left: `${c.x}%`, top: `${c.y}%` }} onClick={() => openCam(j === cur.ci ? idx : stops.findIndex((s) => s.fi === cur.fi && s.ci === j))}
-              title={(c.name && c.name.trim()) || `Camera ${j + 1}`} aria-label={(c.name && c.name.trim()) || `Camera ${j + 1}`}>
-              <span className="swk2-mk-n">{j + 1}</span>
-              {noted && <span className="swk2-mk-badge note" />}
+      <div className="swk2-body">
+      {/* TOP — the floor plan stays put; the active camera's marker is highlighted */}
+      <div className="swk2-map" ref={mapRef}>
+        <img className="swk2-plan" ref={aerialRef} onLoad={measure} src={f.bg} alt={f.name} />
+        {plate && (f.cams || []).map((c, j) => (
+          Number.isFinite(c.x) && Number.isFinite(c.y) ? (
+            <button key={j} className={`swk2-mk${j === cur.ci ? " on" : ""}`}
+              style={{ left: `${plate.l + (c.x / 100) * plate.w}px`, top: `${plate.t + (c.y / 100) * plate.h}px` }}
+              onClick={() => selectCam(stops.findIndex((s) => s.fi === cur.fi && s.ci === j))}
+              aria-label={(c.name && c.name.trim()) || `Camera ${j + 1}`} aria-current={j === cur.ci}>
+              {j + 1}
             </button>
-          ) : null;
-        })}
-
-        </div>{/* /swk2-plate */}
-
-        {/* the morph — grows from the active marker into the full camera view (full-bleed; origin = ox2/oy2) */}
-        <div className={`swk2-morph${camActive ? " show" : ""}${expanded ? " open" : ""}`}>
-          {shot
-            ? <img src={shot} alt={nameFor(cur)} className="swk2-shot" />
-            : <div className="swk2-noshot"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg><span>View photo coming soon</span></div>}
-          <div className="swk2-morph-scrim" />
-          <div className={`swk2-caption${expanded ? " in" : ""}`}>
-            <div className="swk2-eyebrow">Camera {idx + 1} of {total}</div>
-            <div className="swk2-name">{nameFor(cur)}</div>
-            {notes[keyFor(cur)] && <div className="swk2-status note">✎ Change requested</div>}
-          </div>
-        </div>
-
-        {/* camera controls — a slim media-player bar over the view */}
-        {camActive && (
-          <div className={`swk2-controls${expanded ? " in" : ""}`}>
-            <button className="swk2-ico" onClick={prev} disabled={idx === 0} title="Previous" aria-label="Previous"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
-            <button className="swk2-ico" onClick={togglePlay} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"}>{playing ? <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg> : <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>}</button>
-            <button className="swk2-ico" onClick={next} disabled={idx === total - 1} title="Next" aria-label="Next"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
-            <span className="swk2-sep" />
-            <button className="swk2-ico" onClick={() => { setPlaying(false); hide(); }} title="Back to map" aria-label="Back to map"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 20l-5.5 2V6L9 4m0 16 6-2m-6 2V4m6 14 5.5 2V6L15 4m0 14V4m-6 0 6 2" /></svg></button>
-            <button className={`swk2-ico${notes[keyFor(cur)] ? " marked" : ""}`} onClick={() => { setDraft(notes[keyFor(cur)] || ""); setCommentOpen((v) => !v); setPlaying(false); }} title="Leave a note" aria-label="Leave a note"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></button>
-            {!fs && <button className="swk2-ico" onClick={() => setFs(true)} title="Fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg></button>}
-          </div>
-        )}
-
-        {/* note panel */}
-        {commentOpen && camActive && (
-          <div className="swk2-notewrap" onClick={(e) => { if (e.target.classList.contains("swk2-notewrap")) setCommentOpen(false); }}>
-            <div className="swk2-note">
-              <div className="swk2-note-h">Leave a note on <b>{nameFor(cur)}</b><span style={{ marginLeft: "auto" }}><MicButton value={draft} onChange={setDraft} /></span></div>
-              <textarea autoFocus rows={3} className="swk2-note-in" value={draft} onChange={(e) => setDraft(e.target.value)}
-                placeholder="Tell us what you'd like adjusted… e.g. raise the angle · more driveway · less of the fence" />
-              <div className="swk2-note-act">
-                <button className="swk2-btn ghost" onClick={() => setCommentOpen(false)}>Cancel</button>
-                <button className="swk2-btn primary" disabled={!draft.trim() || saving} onClick={saveNote}>{saving ? "Saving…" : "Save note"}</button>
-              </div>
-            </div>
-          </div>
-        )}
-
+          ) : null
+        ))}
       </div>
 
-      {/* map-view dock — one compact row: count · prev · position · next · Play */}
-      {!camActive && (
-        <div className="swk2-dock">
-          <div className="swk2-dock-meta">{total} camera{total !== 1 ? "s" : ""}</div>
-          <div className="swk2-dock-row">
-            <button className="swk2-round" onClick={prev} disabled={idx === 0} aria-label="Previous"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
-            <span className="swk2-counter">{idx + 1} / {total}</span>
-            <button className="swk2-round" onClick={next} disabled={idx === total - 1} aria-label="Next"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
-            <button className="swk2-play" onClick={togglePlay} aria-label={playing ? "Pause tour" : "Play tour"}>
-              {playing
-                ? <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-                : <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>}
-              {playing ? "Pause" : "Play"}
-            </button>
+      {/* BOTTOM — camera identity + a horizontal photo carousel */}
+      <div className="swk2-cam">
+        <div className="swk2-cam-h">
+          <div className="swk2-cam-idx">{pad2(idx + 1)} / {pad2(total)}</div>
+          <div className="swk2-cam-name">{nameFor(cur)}{notes[noteKey] && <span className="swk2-cam-note">✎</span>}</div>
+          <button className={`swk2-note-btn${notes[noteKey] ? " on" : ""}`} title="Leave a note" aria-label="Leave a note"
+            onClick={() => { setDraft(notes[noteKey] || ""); setCommentOpen((v) => !v); setPlaying(false); }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+          </button>
+        </div>
+        <div className="swk2-viewer" ref={carRef}
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={onUp}>
+          <div className={`swk2-track${dragging.current ? " dragging" : ""}`}
+            style={{ width: `${total * 100}%`, transform: `translate3d(calc(${(-idx * 100) / total}% + ${drag}px), 0, 0)` }}>
+            {stops.map((s, i) => {
+              const shot = shotFor(s.cam);
+              const near = Math.abs(i - idx) <= 1;   // render/preload only current + neighbours' images
+              return (
+                <div className="swk2-slide" key={keyFor(s)} style={{ width: `${100 / total}%` }} aria-hidden={i !== idx}>
+                  {shot
+                    ? (near ? <img className="swk2-shot" src={shot} alt={nameFor(s)} draggable="false" /> : null)
+                    : <div className="swk2-noshot"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg><span>No photo</span></div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      </div>{/* /swk2-body */}
+
+      {/* CONTROLS — one compact dock */}
+      <div className="swk2-dock">
+        <button className="swk2-round" onClick={prev} disabled={idx === 0} aria-label="Previous"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+        <span className="swk2-counter">{idx + 1} / {total}</span>
+        <button className="swk2-round" onClick={next} disabled={idx === total - 1} aria-label="Next"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
+        <button className="swk2-play" onClick={togglePlay} aria-label={playing ? "Pause" : ended ? "Replay" : "Play"}>
+          {playing
+            ? <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            : ended
+              ? <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+              : <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>}
+          {playing ? "Pause" : ended ? "Replay" : "Play"}
+        </button>
+      </div>
+
+      {/* note panel */}
+      {commentOpen && (
+        <div className="swk2-notewrap" onClick={(e) => { if (e.target.classList.contains("swk2-notewrap")) setCommentOpen(false); }}>
+          <div className="swk2-note">
+            <div className="swk2-note-h">Leave a note on <b>{nameFor(cur)}</b><span style={{ marginLeft: "auto" }}><MicButton value={draft} onChange={setDraft} /></span></div>
+            <textarea autoFocus rows={3} className="swk2-note-in" value={draft} onChange={(e) => setDraft(e.target.value)}
+              placeholder="Tell us what you'd like adjusted… e.g. raise the angle · more driveway · less of the fence" />
+            <div className="swk2-note-act">
+              <button className="swk2-btn ghost" onClick={() => setCommentOpen(false)}>Cancel</button>
+              <button className="swk2-btn primary" disabled={!draft.trim() || saving} onClick={saveNote}>{saving ? "Saving…" : "Save note"}</button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
-  // Fullscreen must escape any transformed/filtered ancestor (which would trap position:fixed),
-  // so we portal it to <body> — that makes "full screen" truly cover the whole viewport.
+  // Fullscreen portals to <body> so it escapes any transformed/filtered ancestor.
   return fs && mounted ? createPortal(tree, document.body) : tree;
 }
 
 const CSS = `
-.swk2{margin:2px 0 4px}
-.swk2.fs{position:fixed;top:0;left:0;right:0;height:100dvh;z-index:4000;margin:0;background:#07090e;display:flex;flex-direction:column;animation:swk2In .3s ease}
+.swk2{margin:2px 0 4px;display:flex;flex-direction:column;gap:10px}
+.swk2.fs{position:fixed;top:0;left:0;right:0;height:100dvh;z-index:4000;margin:0;gap:0;background:#07090e;animation:swk2In .28s ease}
 @keyframes swk2In{from{opacity:0}to{opacity:1}}
-.swk2-fsbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:11px 15px;padding-top:calc(11px + env(safe-area-inset-top));color:#fff}
-.swk2-fsttl{font-size:.86rem;font-weight:800;letter-spacing:.02em}
 
-/* stage — the survey is the hero */
-.swk2-stage{position:relative;border-radius:14px;overflow:hidden;background:#0b0f16;line-height:0;--ox:50%;--oy:50%}
-.swk2.fs .swk2-stage{flex:1 1 0;min-height:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:6px 14px}
-.swk2-aerial{width:100%;display:block;transform-origin:var(--ox) var(--oy);transition:transform .72s ${EASE},filter .55s ease;will-change:transform}
-.swk2.fs .swk2-aerial{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
-.swk2-aerial.zoom{transform:scale(1.16);filter:brightness(.62) saturate(.92)}
-.swk2-dim{position:absolute;inset:0;background:rgba(6,9,16,.36);opacity:0;transition:opacity .55s ease;pointer-events:none;z-index:1}
-.swk2-dim.on{opacity:1}
-/* overlay matched to the image's displayed rect; markers/morph position against THIS, not the letterboxed stage */
-.swk2-plate{position:absolute;z-index:2;pointer-events:none}
+/* header (fullscreen only) */
+.swk2-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:11px 15px;padding-top:calc(11px + env(safe-area-inset-top));color:#fff}
+.swk2-ttl{font-size:.86rem;font-weight:800;letter-spacing:.02em}
+.swk2-x{width:36px;height:36px;border:none;background:rgba(255,255,255,.12);border-radius:50%;color:#fff;display:grid;place-items:center;cursor:pointer}
+.swk2-x:hover{background:rgba(255,255,255,.2)}
 
-/* markers */
-.swk2-mk{position:absolute;transform:translate(-50%,-50%);z-index:2;min-width:26px;height:26px;padding:0 6px;border-radius:100px;border:2px solid #fff;background:rgba(16,17,18,.5);color:#fff;font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .3s ${EASE},background .3s,opacity .3s,box-shadow .3s}
-.swk2-mk:hover{transform:translate(-50%,-50%) scale(1.12)}
-.swk2-mk.active{background:var(--dv-gold,#C9A96E);color:#1a1712;box-shadow:0 0 0 5px rgba(201,169,110,.28),0 3px 10px rgba(0,0,0,.4);animation:swk2Pulse 2s ease-out infinite}
-@keyframes swk2Pulse{0%{box-shadow:0 0 0 4px rgba(201,169,110,.4),0 3px 10px rgba(0,0,0,.4)}70%{box-shadow:0 0 0 13px rgba(201,169,110,0),0 3px 10px rgba(0,0,0,.4)}100%{box-shadow:0 0 0 4px rgba(201,169,110,0),0 3px 10px rgba(0,0,0,.4)}}
-.swk2-mk.hidden{opacity:0;pointer-events:none;transition:opacity .18s ease}
-.swk2-mk-n{position:relative;line-height:1}
-.swk2-mk-badge{position:absolute;right:-4px;top:-4px;width:14px;height:14px;border-radius:50%;border:1.5px solid #fff;font-size:.5rem;display:flex;align-items:center;justify-content:center;line-height:1}
-.swk2-mk-badge.note{background:var(--dv-gold,#C9A96E)}
+/* body wraps the two panels so leftover space becomes even framing, not gaps */
+.swk2-body{display:flex;flex-direction:column;gap:10px}
+.swk2.fs .swk2-body{flex:1 1 auto;min-height:0;justify-content:center;gap:10px;padding:6px 0}
 
-/* morph — the shared-element that grows from the marker into the camera view */
-.swk2-morph{position:absolute;inset:0;z-index:3;overflow:hidden;background:#0B0F1A;opacity:0;pointer-events:none;
-  transform-origin:var(--ox) var(--oy);transform:scale(.05);border-radius:50%;
-  transition:transform .72s ${EASE},border-radius .72s ${EASE},opacity .28s ease;will-change:transform,border-radius}
-.swk2-morph.show{opacity:1;pointer-events:auto}
-.swk2-morph.open{transform:scale(1);border-radius:0}
-.swk2-shot{width:100%;height:100%;object-fit:cover;display:block}
-.swk2.fs .swk2-morph.open{border-radius:0}
-.swk2-noshot{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:#8a93a2;font-size:.82rem;font-weight:600}
-.swk2-morph-scrim{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to top,rgba(6,9,16,.82) 0,rgba(6,9,16,.15) 26%,rgba(6,9,16,0) 48%)}
-.swk2-caption{position:absolute;left:0;right:0;bottom:0;padding:20px 22px 74px;z-index:2;opacity:0;transform:translateY(8px);transition:opacity .4s ease .1s,transform .4s ${EASE} .1s;line-height:1.25}
-.swk2-caption.in{opacity:1;transform:none}
-.swk2-eyebrow{font-size:.66rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--dv-gold,#C9A96E)}
-.swk2-eyebrow.gold{color:var(--dv-gold,#C9A96E)}
-.swk2-name{font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#fff;margin-top:4px;text-shadow:0 2px 20px rgba(0,0,0,.5)}
-.swk2-status{display:inline-block;margin-top:8px;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:100px}
-.swk2-status.note{background:rgba(201,169,110,.24);color:#e6cfa0}
+/* TOP — stable floor plan; the plan image drives the panel height (no internal letterbox for wide plans) */
+.swk2-map{position:relative;overflow:hidden;background:#0b0f16;border-radius:14px}
+.swk2.fs .swk2-map{flex:0 0 auto;border-radius:0;background:#07090e}
+.swk2-plan{display:block;width:100%;height:auto;max-height:34dvh;margin:0 auto;object-fit:contain;-webkit-user-drag:none;user-select:none}
+.swk2:not(.fs) .swk2-plan{max-height:230px}
+.swk2-mk{position:absolute;transform:translate(-50%,-50%);z-index:2;width:28px;height:28px;border-radius:50%;border:2px solid #fff;
+  background:rgba(20,22,26,.62);color:#fff;font-size:.72rem;font-weight:800;display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 2px 7px rgba(0,0,0,.4);transition:background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
+.swk2-mk:hover{transform:translate(-50%,-50%) scale(1.08)}
+.swk2-mk.on{background:var(--dv-gold,#C9A96E);color:#1a1712;border-color:#fff;box-shadow:0 0 0 4px rgba(201,169,110,.3),0 3px 9px rgba(0,0,0,.4)}
 
-/* controls */
-.swk2-controls{position:absolute;left:50%;bottom:16px;transform:translateX(-50%) translateY(8px);z-index:5;display:flex;align-items:center;gap:4px;padding:6px;border-radius:100px;
-  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 30px -10px rgba(0,0,0,.5);opacity:0;transition:opacity .4s ease .12s,transform .4s ${EASE} .12s}
-.swk2-controls.in{opacity:1;transform:translateX(-50%)}
-.swk2-ico{width:38px;height:38px;border-radius:50%;border:none;background:transparent;color:#fff;display:grid;place-items:center;cursor:pointer;transition:background .14s}
-.swk2-ico:hover:not(:disabled){background:rgba(255,255,255,.18)}
-.swk2-ico:disabled{opacity:.4;cursor:default}
-.swk2-ico.marked{color:var(--dv-gold,#C9A96E)}
-.swk2-sep{width:1px;height:22px;background:rgba(255,255,255,.28);margin:0 4px}
-.swk2-fsbar .swk2-ico{color:#fff}.swk2-fsbar .swk2-ico:hover{background:rgba(255,255,255,.12)}
+/* BOTTOM — camera identity + photo carousel */
+.swk2-cam{display:flex;flex-direction:column;min-height:0}
+.swk2.fs .swk2-cam{flex:0 0 auto}
+.swk2-cam-h{display:flex;align-items:baseline;gap:10px;padding:2px 2px 8px}
+.swk2.fs .swk2-cam-h{padding:12px 16px 8px}
+.swk2-cam-idx{font-size:.72rem;font-weight:800;letter-spacing:.1em;color:var(--dv-gold,#C9A96E);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.swk2-cam-name{font-size:1.02rem;font-weight:800;letter-spacing:-.01em;color:var(--dv-ink,#101418);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.swk2.fs .swk2-cam-name{color:#fff}
+.swk2-cam-note{margin-left:6px;color:var(--dv-gold,#C9A96E)}
+.swk2-note-btn{margin-left:auto;flex:0 0 auto;width:32px;height:32px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;border-radius:8px;color:var(--dv-muted,#6b7079);display:grid;place-items:center;cursor:pointer}
+.swk2-note-btn.on,.swk2-note-btn:hover{color:var(--dv-gold-deep,#A8842F);border-color:var(--dv-gold,#C9A96E)}
+.swk2.fs .swk2-note-btn{border-color:rgba(255,255,255,.22);color:#c8ccd2}
+.swk2.fs .swk2-note-btn.on,.swk2.fs .swk2-note-btn:hover{color:var(--dv-gold,#C9A96E);border-color:var(--dv-gold,#C9A96E)}
+.swk2-viewer{position:relative;overflow:hidden;border-radius:14px;background:#0b0f1a;touch-action:pan-y;aspect-ratio:16/9;width:100%;max-height:52dvh}
+.swk2.fs .swk2-viewer{border-radius:0}
+.swk2-track{display:flex;height:100%;will-change:transform;transition:transform .34s ${EASE}}
+.swk2-track.dragging{transition:none}
+.swk2-slide{flex:0 0 auto;height:100%;display:flex;align-items:center;justify-content:center}
+.swk2-shot{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:none;user-select:none}
+.swk2-noshot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#8a93a2;font-size:.82rem;font-weight:600;width:100%;height:100%}
+
+/* controls dock */
+.swk2-dock{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0}
+.swk2.fs .swk2-dock{padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(7,9,14,.55),transparent)}
+.swk2-round{width:42px;height:42px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
+.swk2-round:hover:not(:disabled){border-color:var(--dv-ink,#101418)}.swk2-round:disabled{opacity:.35;cursor:default}
+.swk2.fs .swk2-round{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.24);color:#fff}
+.swk2.fs .swk2-round:hover:not(:disabled){background:rgba(255,255,255,.24)}
+.swk2-counter{min-width:52px;text-align:center;font-size:.86rem;font-weight:800;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.swk2.fs .swk2-counter{color:#fff}
+.swk2-play{display:inline-flex;align-items:center;gap:6px;height:42px;padding:0 18px;border-radius:100px;border:1px solid var(--dv-gold,#C9A96E);background:var(--dv-gold,#C9A96E);color:#1a1712;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
+.swk2-play:hover{filter:brightness(1.05)}
 
 /* note panel */
-.swk2-notewrap{position:absolute;inset:0;z-index:6;background:rgba(6,9,16,.4);display:flex;align-items:flex-end;justify-content:center;padding:0 14px 78px;animation:swk2In .2s ease}
+.swk2-notewrap{position:fixed;inset:0;z-index:4100;background:rgba(6,9,16,.45);display:flex;align-items:flex-end;justify-content:center;padding:0 14px calc(20px + env(safe-area-inset-bottom));animation:swk2In .2s ease}
 .swk2-note{width:100%;max-width:480px;background:#fff;border-radius:15px;padding:15px;box-shadow:0 26px 60px -18px rgba(0,0,0,.55);animation:swk2Up .28s ${EASE}}
 @keyframes swk2Up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .swk2-note-h{display:flex;align-items:center;font-size:.88rem;font-weight:700;color:#1A1712;margin-bottom:9px}
-.swk2-note-in{width:100%;border:1px solid rgba(16,17,18,.16);border-radius:10px;padding:9px 11px;font-size:.86rem;font-family:inherit;color:#1A1712;resize:vertical;outline:none}
+.swk2-note-in{width:100%;box-sizing:border-box;border:1px solid rgba(16,17,18,.16);border-radius:10px;padding:9px 11px;font-size:.86rem;font-family:inherit;color:#1A1712;resize:vertical;outline:none}
 .swk2-note-in:focus{border-color:var(--dv-gold,#C9A96E)}
 .swk2-note-act{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .swk2-btn{height:36px;padding:0 16px;border-radius:100px;border:1px solid transparent;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
 .swk2-btn.primary{background:#1A1712;color:#fff}.swk2-btn.primary:disabled{opacity:.5;cursor:default}
 .swk2-btn.ghost{background:transparent;color:#1A1712;border-color:rgba(16,17,18,.16)}
 
-/* map-view dock — count line + one compact control row (prev · i/total · next · Play) */
-.swk2-dock{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:10px}
-.swk2.fs .swk2-dock{margin-top:0;padding:8px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(7,9,14,.55),transparent)}
-.swk2-dock-meta{font-size:.74rem;font-weight:700;letter-spacing:.02em;color:var(--dv-faint,#8a8f98)}
-.swk2.fs .swk2-dock-meta{color:#c8ccd2}
-.swk2-dock-row{display:flex;align-items:center;justify-content:center;gap:14px}
-.swk2-round{width:40px;height:40px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
-.swk2-round:hover:not(:disabled){border-color:var(--dv-ink,#101418)}.swk2-round:disabled{opacity:.35;cursor:default}
-.swk2.fs .swk2-round{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.24);color:#fff}
-.swk2.fs .swk2-round:hover:not(:disabled){background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.4)}
-.swk2-counter{min-width:50px;text-align:center;font-size:.84rem;font-weight:800;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.swk2.fs .swk2-counter{color:#fff}
-.swk2-play{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 17px;border-radius:100px;border:1px solid var(--dv-gold,#C9A96E);background:var(--dv-gold,#C9A96E);color:#1a1712;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
-.swk2-play:hover{filter:brightness(1.05)}
-
-@media (prefers-reduced-motion:reduce){.swk2 *{animation:none!important;transition:opacity .2s ease!important}.swk2-morph.show{transform:scale(1);border-radius:0}}
+@media (prefers-reduced-motion:reduce){.swk2-track{transition:opacity .2s ease!important}}
 `;
