@@ -203,7 +203,6 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
       {/* CONTROLS — one compact dock */}
       <div className="swk2-dock">
         <button className="swk2-round" onClick={prev} disabled={idx === 0} aria-label="Previous"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
-        <span className="swk2-counter">{idx + 1} / {total}</span>
         <button className="swk2-round" onClick={next} disabled={idx === total - 1} aria-label="Next"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></button>
         <button className="swk2-play" onClick={togglePlay} aria-label={playing ? "Pause" : ended ? "Replay" : "Play"}>
           {playing
@@ -237,24 +236,27 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
 
 const CSS = `
 .swk2{margin:2px 0 4px;display:flex;flex-direction:column;gap:10px}
-.swk2.fs{position:fixed;top:0;left:0;right:0;height:100dvh;z-index:4000;margin:0;gap:0;background:#07090e;animation:swk2In .28s ease}
+/* Fullscreen = a tight top-to-bottom grid (header · map · camera · dock). No vertical centering, so the
+   map sits right under the header and the camera panel fills down to the controls — no black dead zones. */
+.swk2.fs{position:fixed;top:0;left:0;right:0;height:100dvh;z-index:4000;margin:0;gap:0;background:#07090e;animation:swk2In .28s ease;
+  display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
 @keyframes swk2In{from{opacity:0}to{opacity:1}}
 
 /* header (fullscreen only) */
-.swk2-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:11px 15px;padding-top:calc(11px + env(safe-area-inset-top));color:#fff}
+.swk2-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:9px 15px;padding-top:calc(9px + env(safe-area-inset-top));color:#fff}
 .swk2-ttl{font-size:.86rem;font-weight:800;letter-spacing:.02em}
 .swk2-x{width:36px;height:36px;border:none;background:rgba(255,255,255,.12);border-radius:50%;color:#fff;display:grid;place-items:center;cursor:pointer}
 .swk2-x:hover{background:rgba(255,255,255,.2)}
 
-/* body wraps the two panels so leftover space becomes even framing, not gaps */
+/* body wraps the two panels. Inline: stacked. Fullscreen: a grid [map · camera] filling the middle row. */
 .swk2-body{display:flex;flex-direction:column;gap:10px}
-.swk2.fs .swk2-body{flex:1 1 auto;min-height:0;justify-content:center;gap:10px;padding:6px 0}
+.swk2.fs .swk2-body{display:grid;grid-template-rows:30dvh minmax(0,1fr);gap:8px;min-height:0;padding:8px 12px 0}
 
-/* TOP — stable floor plan; the plan image drives the panel height (no internal letterbox for wide plans) */
+/* TOP — stable floor plan; a white panel (contain letterbox is seamless on white plans) */
 .swk2-map{position:relative;overflow:hidden;background:#0b0f16;border-radius:14px}
-.swk2.fs .swk2-map{flex:0 0 auto;border-radius:0;background:#07090e}
-.swk2-plan{display:block;width:100%;height:auto;max-height:34dvh;margin:0 auto;object-fit:contain;-webkit-user-drag:none;user-select:none}
-.swk2:not(.fs) .swk2-plan{max-height:230px}
+.swk2.fs .swk2-map{min-height:0;border-radius:12px;background:#fff}
+.swk2-plan{display:block;width:100%;height:auto;max-height:230px;margin:0 auto;object-fit:contain;-webkit-user-drag:none;user-select:none}
+.swk2.fs .swk2-plan{height:100%;max-height:none}
 .swk2-mk{position:absolute;transform:translate(-50%,-50%);z-index:2;width:28px;height:28px;border-radius:50%;border:2px solid #fff;
   background:rgba(20,22,26,.62);color:#fff;font-size:.72rem;font-weight:800;display:grid;place-items:center;cursor:pointer;
   box-shadow:0 2px 7px rgba(0,0,0,.4);transition:background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
@@ -263,7 +265,7 @@ const CSS = `
 
 /* BOTTOM — camera identity + photo carousel */
 .swk2-cam{display:flex;flex-direction:column;min-height:0}
-.swk2.fs .swk2-cam{flex:0 0 auto}
+.swk2.fs .swk2-cam{display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}
 .swk2-cam-h{display:flex;align-items:baseline;gap:10px;padding:2px 2px 8px}
 .swk2.fs .swk2-cam-h{padding:12px 16px 8px}
 .swk2-cam-idx{font-size:.72rem;font-weight:800;letter-spacing:.1em;color:var(--dv-gold,#C9A96E);font-variant-numeric:tabular-nums;flex:0 0 auto}
@@ -275,7 +277,7 @@ const CSS = `
 .swk2.fs .swk2-note-btn{border-color:rgba(255,255,255,.22);color:#c8ccd2}
 .swk2.fs .swk2-note-btn.on,.swk2.fs .swk2-note-btn:hover{color:var(--dv-gold,#C9A96E);border-color:var(--dv-gold,#C9A96E)}
 .swk2-viewer{position:relative;overflow:hidden;border-radius:14px;background:#0b0f1a;touch-action:pan-y;aspect-ratio:16/9;width:100%;max-height:52dvh}
-.swk2.fs .swk2-viewer{border-radius:0}
+.swk2.fs .swk2-viewer{aspect-ratio:auto;height:100%;max-height:none;border-radius:12px}
 .swk2-track{display:flex;height:100%;will-change:transform;transition:transform .34s ${EASE}}
 .swk2-track.dragging{transition:none}
 .swk2-slide{flex:0 0 auto;height:100%;display:flex;align-items:center;justify-content:center}
@@ -283,15 +285,13 @@ const CSS = `
 .swk2-noshot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#8a93a2;font-size:.82rem;font-weight:600;width:100%;height:100%}
 
 /* controls dock */
-.swk2-dock{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0}
-.swk2.fs .swk2-dock{padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(7,9,14,.55),transparent)}
-.swk2-round{width:42px;height:42px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
+.swk2-dock{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:12px;padding:6px 0}
+.swk2.fs .swk2-dock{padding:8px 16px calc(8px + env(safe-area-inset-bottom))}
+.swk2-round{width:40px;height:40px;border-radius:50%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);display:grid;place-items:center;cursor:pointer}
 .swk2-round:hover:not(:disabled){border-color:var(--dv-ink,#101418)}.swk2-round:disabled{opacity:.35;cursor:default}
 .swk2.fs .swk2-round{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.24);color:#fff}
 .swk2.fs .swk2-round:hover:not(:disabled){background:rgba(255,255,255,.24)}
-.swk2-counter{min-width:52px;text-align:center;font-size:.86rem;font-weight:800;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.swk2.fs .swk2-counter{color:#fff}
-.swk2-play{display:inline-flex;align-items:center;gap:6px;height:42px;padding:0 18px;border-radius:100px;border:1px solid var(--dv-gold,#C9A96E);background:var(--dv-gold,#C9A96E);color:#1a1712;font-size:.84rem;font-weight:800;cursor:pointer;font-family:inherit}
+.swk2-play{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 15px;border-radius:100px;border:1px solid var(--dv-gold,#C9A96E);background:var(--dv-gold,#C9A96E);color:#1a1712;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;margin-left:4px}
 .swk2-play:hover{filter:brightness(1.05)}
 
 /* note panel */
