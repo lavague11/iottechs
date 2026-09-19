@@ -111,20 +111,24 @@ export default function BugReporter() {
     setErr(null); setCapturing(true);
     try {
       const { dataUrl } = await captureViewport();
-      setEditor({ id: null, shot: dataUrl, shapes: [] });
+      setEditor({ pages: [{ key: null, base: dataUrl, shapes: [] }], start: 0 });
     } catch { setErr("Capture failed — attach or paste one instead."); }
     finally { setCapturing(false); }
   }
-  function onAnnotated(dataUrl, nextShapes) {
-    const ed = editor;
-    if (ed?.id) {
-      // re-marked an existing shot — replace its flattened image + shapes, re-upload the flattened
-      setShots((prev) => prev.map((s) => (s.id === ed.id ? { ...s, preview: dataUrl, shapes: nextShapes || [], file: dataURLtoFile(dataUrl, `bug-${Date.now()}.png`), uploading: true } : s)));
-      (async () => { const url = await uploadMedia(dataURLtoFile(dataUrl, `bug-${Date.now()}.png`)); setShots((prev) => prev.map((s) => (s.id === ed.id ? { ...s, url, uploading: false } : s))); })();
-    } else {
-      addFinal({ preview: dataUrl, cleanShot: ed?.shot || dataUrl, shapes: nextShapes || [] });
-    }
+  // The annotator returns every NEW page (key null → add) and every EDITED existing page (key → replace).
+  function onAnnotated(results) {
     setEditor(null);
+    if (!Array.isArray(results)) return;
+    for (const r of results) {
+      if (r.key != null) {
+        // re-marked an existing shot — replace flattened image + shapes, re-upload
+        setShots((prev) => prev.map((s) => (s.id === r.key ? { ...s, preview: r.dataUrl, shapes: r.shapes || [], file: dataURLtoFile(r.dataUrl, `bug-${Date.now()}.png`), uploading: true } : s)));
+        const key = r.key, dataUrl = r.dataUrl;
+        (async () => { const url = await uploadMedia(dataURLtoFile(dataUrl, `bug-${Date.now()}.png`)); setShots((prev) => prev.map((s) => (s.id === key ? { ...s, url, uploading: false } : s))); })();
+      } else {
+        addFinal({ preview: r.dataUrl, cleanShot: r.base || r.dataUrl, shapes: r.shapes || [] });
+      }
+    }
   }
 
   // Restore the autosaved draft when the report opens (only into an empty form), and warm the capture lib.
@@ -272,7 +276,7 @@ export default function BugReporter() {
                   <div className="bugr-strip">
                     {shots.map((s, i) => (
                       <div className={`bugr-chip${s.uploading ? " up" : ""}`} key={s.id}>
-                        <button className="bugr-chip-img" onClick={() => setEditor({ id: s.id, shot: s.cleanShot, shapes: s.shapes })} aria-label={`Edit screenshot ${i + 1}`} title="Edit">
+                        <button className="bugr-chip-img" onClick={() => setEditor({ pages: shots.map((sh) => ({ key: sh.id, base: sh.cleanShot, shapes: sh.shapes })), start: i })} aria-label={`Edit screenshot ${i + 1}`} title="Edit">
                           <img src={s.preview} alt={`screenshot ${i + 1}`} />
                         </button>
                         <button className="bugr-chip-x" onClick={() => removeShot(s.id)} aria-label={`Remove screenshot ${i + 1}`}>✕</button>
@@ -318,7 +322,7 @@ export default function BugReporter() {
         </div>
       )}
 
-      {editor && <ScreenshotAnnotator shot={editor.shot} initialShapes={editor.shapes} onDone={onAnnotated} onCancel={() => setEditor(null)} />}
+      {editor && <ScreenshotAnnotator pages={editor.pages} start={editor.start} onDone={onAnnotated} onCancel={() => setEditor(null)} />}
 
       <style>{CSS}</style>
     </>

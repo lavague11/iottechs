@@ -21,7 +21,19 @@ const clampZ = (z) => Math.max(1, Math.min(6, z));
 const dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const mid2 = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
-export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialShapes }) {
+export default function ScreenshotAnnotator({ pages, start = 0, shot, onDone, onCancel, initialShapes }) {
+  // Multi-page: the annotator can hold every captured screenshot and flip between them. Normalize both the
+  // new `pages` API and the legacy single-`shot` call into one working list {key, base(unannotated), shapes}.
+  const pagesRef = useRef(
+    (Array.isArray(pages) && pages.length
+      ? pages.map((p) => ({ key: p.key ?? null, base: p.base ?? p.shot, shapes: (p.shapes || []).slice() }))
+      : [{ key: null, base: shot, shapes: (initialShapes || []).slice() }])
+  );
+  const dirtyRef = useRef(new Set());     // page indices whose annotations changed → re-flatten on Attach
+  const [idx, setIdx] = useState(Math.max(0, Math.min(start, pagesRef.current.length - 1)));
+  const idxRef = useRef(idx); idxRef.current = idx;
+  const pageCount = pagesRef.current.length;
+  const curBase = pagesRef.current[idx]?.base;
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const textRef = useRef(null);           // the (always-mounted) text-entry field
@@ -36,7 +48,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   const [showMore, setShowMore] = useState(false);   // mobile dock ••• menu (Redo / Clear)
   const [editor, setEditor] = useState(null);   // { clientX, clientY, nx, ny, value, scale }
   const [fmt, setFmt] = useState({ bold: false, italic: false, underline: false, strike: false, sizeMul: 1 });
-  const [H, setH] = useState({ stack: [initialShapes && initialShapes.length ? initialShapes : []], i: 0 });
+  const [H, setH] = useState({ stack: [pagesRef.current[idx]?.shapes?.length ? pagesRef.current[idx].shapes : []], i: 0 });
   const shapes = H.stack[H.i];
 
   const toolRef = useRef(tool); toolRef.current = tool;
@@ -59,7 +71,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   // zoom/pan the screenshot freely). Tap any tool again to resume drawing.
   const selectTool = (k) => setTool((cur) => (cur === k ? null : k));
 
-  const commit = useCallback((next) => setH(({ stack, i }) => ({ stack: [...stack.slice(0, i + 1), next], i: i + 1 })), []);
+  const commit = useCallback((next) => { dirtyRef.current.add(idxRef.current); setH(({ stack, i }) => ({ stack: [...stack.slice(0, i + 1), next], i: i + 1 })); }, []);
   const undo = useCallback(() => setH((s) => (s.i > 0 ? { ...s, i: s.i - 1 } : s)), []);
   const redo = useCallback(() => setH((s) => (s.i < s.stack.length - 1 ? { ...s, i: s.i + 1 } : s)), []);
   const clear = useCallback(() => { if (shapes.length) commit([]); }, [shapes.length, commit]);
@@ -74,9 +86,24 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       imgRef.current = img; const c = canvasRef.current; if (!c) return;
       c.width = img.naturalWidth; c.height = img.naturalHeight; setReady(true); redraw();
     };
-    img.src = shot;
+    img.src = curBase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shot]);
+  }, [curBase]);
+
+  // Flip to another captured screenshot: persist the current page's shapes, reset view/history for the next.
+  const goTo = useCallback((i) => {
+    const n = pagesRef.current.length;
+    const t = ((i % n) + n) % n;                       // wrap around
+    if (t === idxRef.current) return;
+    pagesRef.current[idxRef.current].shapes = H.stack[H.i];   // save edits
+    setEditor(null); setShowColor(false); setShowMore(false);
+    setView({ z: 1, x: 0, y: 0 });
+    setReady(false);
+    setIdx(t);
+    setH({ stack: [pagesRef.current[t].shapes.length ? pagesRef.current[t].shapes : []], i: 0 });
+  }, [H]);
+  const prevPage = useCallback(() => goTo(idxRef.current - 1), [goTo]);
+  const nextPage = useCallback(() => goTo(idxRef.current + 1), [goTo]);
 
   // redraw whenever committed shapes change, or when entering/leaving text edit (to hide/show it)
   useEffect(() => { redraw(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [H, editor]);
@@ -197,6 +224,17 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
     if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return;
     zoomBy(e.deltaY < 0 ? 1.15 : 0.87);
   }
+  // Backdrop gestures (only when the gesture starts on the dark margin, never on the canvas — so it can't
+  // fight drawing): a horizontal swipe flips screenshots; a plain tap dismisses the annotator.
+  const stageSwipe = useRef(null);
+  function stageDown(e) { if (e.target.classList.contains("mk-stage")) stageSwipe.current = { x: e.clientX, y: e.clientY }; }
+  function stageUp(e) {
+    const s = stageSwipe.current; stageSwipe.current = null;
+    if (!s || editor) return;
+    const dx = e.clientX - s.x, dy = e.clientY - s.y;
+    if (pageCount > 1 && Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) { if (dx < 0) nextPage(); else prevPage(); return; }
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) onCancel?.();   // a real tap on the backdrop → close
+  }
 
   // ---- text editor (inline over the image) ----
   function openEditor(e, p) {
@@ -267,18 +305,46 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
       if (meta && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
       if (e.key === "Escape") { e.preventDefault(); if (drawing.current) { drawing.current = false; draftRef.current = null; redraw(); } else onCancel?.(); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && shapes.length) { e.preventDefault(); undo(); return; }
+      if (pageCount > 1 && e.key === "ArrowLeft") { e.preventDefault(); prevPage(); return; }
+      if (pageCount > 1 && e.key === "ArrowRight") { e.preventDefault(); nextPage(); return; }
       const k = e.key.toLowerCase();
       if (k === "r") setTool("rect"); else if (k === "a") setTool("arrow");
       else if (k === "p") setTool("pen"); else if (k === "t") setTool("text");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editor, shapes.length, undo, redo, onCancel]);
+  }, [editor, shapes.length, undo, redo, onCancel, pageCount, prevPage, nextPage]);
 
-  function attach() {
-    const c = canvasRef.current; if (!c) return;
-    draftRef.current = null; redraw();               // ensure no draft lingers
-    onDone?.(c.toDataURL("image/png"), shapes);
+  // Flatten one page (base image + its shapes) to a PNG at natural resolution, off-screen.
+  function flatten(base, shps) {
+    return new Promise((resolve) => {
+      const im = new Image();
+      im.onload = () => {
+        try {
+          const cv = document.createElement("canvas"); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+          const ctx = cv.getContext("2d"); ctx.drawImage(im, 0, 0);
+          for (const s of shps) drawShape(ctx, s);
+          resolve(cv.toDataURL("image/png"));
+        } catch { resolve(base); }
+      };
+      im.onerror = () => resolve(base);
+      im.src = base;
+    });
+  }
+  async function attach() {
+    if (!ready) return;
+    draftRef.current = null; redraw();
+    pagesRef.current[idxRef.current].shapes = H.stack[H.i];   // persist the visible page
+    // Return every NEW page (must be added) and every EDITED existing page; untouched ones are left as-is.
+    const results = [];
+    for (let i = 0; i < pagesRef.current.length; i++) {
+      const pg = pagesRef.current[i];
+      if (pg.key == null || dirtyRef.current.has(i)) {
+        const dataUrl = await flatten(pg.base, pg.shapes);
+        results.push({ key: pg.key, dataUrl, base: pg.base, shapes: pg.shapes });
+      }
+    }
+    onDone?.(results);
   }
 
   const canUndo = H.i > 0, canRedo = H.i < H.stack.length - 1;
@@ -290,7 +356,7 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
   );
 
   return (
-    <div className={`mk-scrim${editor ? " mk-editing" : ""}`} onPointerDown={closeMenus}>
+    <div className={`mk-scrim${editor ? " mk-editing" : ""}${pageCount > 1 ? " mk-multi" : ""}`} onPointerDown={closeMenus}>
       {/* TOP BAR — desktop: full toolbar. mobile: just X (left) + Attach (right). */}
       <div className="mk-bar" onPointerDown={(e) => e.stopPropagation()}>
         <button className="mk-x mk-mobile" onClick={onCancel} aria-label="Close" title="Close"><CloseI /></button>
@@ -315,10 +381,26 @@ export default function ScreenshotAnnotator({ shot, onDone, onCancel, initialSha
         <button className="mk-btn go" onClick={attach} disabled={!ready}>Attach</button>
       </div>
 
-      <div className="mk-stage" onPointerDown={(e) => { if (e.target.classList.contains("mk-stage") && !editor) onCancel?.(); }} onWheel={onWheel}>
+      <div className="mk-stage" onPointerDown={stageDown} onPointerUp={stageUp} onWheel={onWheel}>
         <canvas ref={canvasRef} className={`mk-canvas mk-t-${tool || "pan"}`}
           style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`, transformOrigin: "center center" }}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+
+        {/* Multi-screenshot navigation — arrows on the sides, a page pill at the bottom, plus backdrop swipe. */}
+        {pageCount > 1 && (
+          <>
+            <button className="mk-pnav prev" onClick={prevPage} aria-label="Previous screenshot" title="Previous" onPointerDown={(e) => e.stopPropagation()}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <button className="mk-pnav next" onClick={nextPage} aria-label="Next screenshot" title="Next" onPointerDown={(e) => e.stopPropagation()}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+            </button>
+            <div className="mk-pageind" onPointerDown={(e) => e.stopPropagation()}>
+              {pagesRef.current.map((_, i) => <span key={i} className={`mk-pagedot${i === idx ? " on" : ""}`} />)}
+              <span className="mk-pagenum">{idx + 1} / {pageCount}</span>
+            </div>
+          </>
+        )}
         <div className="mk-zoom" onPointerDown={(e) => e.stopPropagation()}>
           <button className="mk-ztool" aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.25)}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="6" x2="12" y2="18" /><line x1="6" y1="12" x2="18" y2="12" /></svg>
@@ -481,7 +563,23 @@ const CSS = `
 .mk-stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden}
 .mk-canvas{max-width:calc(100vw - 32px);max-height:calc(100vh - 92px);border-radius:6px;
   box-shadow:0 24px 70px rgba(0,0,0,.6);cursor:crosshair;touch-action:none;background:#fff;image-rendering:auto;will-change:transform}
+/* Multi-screenshot paging — side arrows, a bottom page pill, and extra bottom room so nothing crowds. */
+.mk-multi .mk-stage{padding-bottom:60px}
+.mk-pnav{position:absolute;top:50%;transform:translateY(-50%);z-index:8;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,.16);border-radius:50%;background:rgba(18,21,27,.82);color:#e9edf2;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  box-shadow:0 8px 24px rgba(0,0,0,.45);transition:background .13s,transform .13s}
+.mk-pnav:hover{background:rgba(34,39,48,.95);transform:translateY(-50%) scale(1.06)}
+.mk-pnav:active{transform:translateY(-50%) scale(.94)}
+.mk-pnav.prev{left:14px}
+.mk-pnav.next{right:14px}
+.mk-pageind{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:8;display:inline-flex;align-items:center;gap:8px;
+  padding:7px 13px;border-radius:100px;background:rgba(18,21,27,.82);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.mk-pagedot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);transition:background .15s,transform .15s}
+.mk-pagedot.on{background:#fff;transform:scale(1.35)}
+.mk-pagenum{font:700 .74rem/1 system-ui,-apple-system,Segoe UI,sans-serif;color:#c8ccd2;letter-spacing:.02em;margin-left:2px;font-variant-numeric:tabular-nums}
 .mk-zoom{position:absolute;right:14px;bottom:14px;z-index:7;display:flex;flex-direction:column;gap:6px}
+.mk-multi .mk-zoom{bottom:64px}
 .mk-ztool{width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.14);
   border-radius:10px;background:rgba(18,21,27,.86);color:#e9edf2;cursor:pointer;backdrop-filter:blur(6px);font:700 .78rem/1 system-ui}
 .mk-ztool:hover:not(:disabled){background:rgba(30,34,42,.92)}
@@ -520,7 +618,15 @@ const CSS = `
   .mk-stage{padding:8px 12px calc(128px + env(safe-area-inset-bottom))}
   .mk-canvas{max-width:calc(100vw - 24px);max-height:calc(100vh - 172px)}
   .mk-zoom{right:12px;bottom:calc(124px + env(safe-area-inset-bottom))}   /* above the X/Attach row */
+  .mk-multi .mk-zoom{bottom:calc(124px + env(safe-area-inset-bottom))}
+  /* bottom is full (dock + X/Attach) on mobile → page pill goes up top, keep the dock's bottom room */
+  .mk-multi .mk-stage{padding-bottom:calc(128px + env(safe-area-inset-bottom))}
+  .mk-pageind{top:calc(8px + env(safe-area-inset-top));bottom:auto}
+  .mk-pnav{width:40px;height:40px}
+  .mk-pnav.prev{left:8px}
+  .mk-pnav.next{right:8px}
   /* while typing text, get the tool chrome out of the way so it can't cover the input */
   .mk-editing .mk-dock,.mk-editing .mk-bar,.mk-editing .mk-zoom{display:none}
+  .mk-editing .mk-pnav,.mk-editing .mk-pageind{display:none}
 }
 `;
