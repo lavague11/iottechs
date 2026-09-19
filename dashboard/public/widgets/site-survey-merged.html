@@ -546,7 +546,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
-    var DRAW_SRC="draw-floorplan.html"+(PID?"?project="+encodeURIComponent(PID):"");
+    var DRAW_SRC="draw-floorplan.html?v=20260919-struct"+(PID?"&project="+encodeURIComponent(PID):"");
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
     var surveyWiz=document.getElementById("surveyWiz");
