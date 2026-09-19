@@ -182,6 +182,10 @@ function NewProjectModal({ onClose }) {
   // free-typed. Cleared the moment the field is edited by hand.
   const [addrVerified, setAddrVerified] = useState(false);
   const [addrWarned, setAddrWarned] = useState(false);   // guided once, so we never brick creation
+  // The exact address string that was PICKED from suggestions. Google fires the input's onChange when it
+  // fills the field on selection; comparing against this keeps "verified" true through that echo, and only
+  // clears it when the user actually edits the text (ref → immune to onChange/onPlace firing order).
+  const verifiedRef = useRef("");
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
 
@@ -250,13 +254,13 @@ function NewProjectModal({ onClose }) {
             <form className="np-form" onSubmit={submit}>
               <div className="np-row2">
                 <div className="np-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })); if (p.address) setAddrVerified(true); }} placeholder="Start typing a business name…" /></div>
+                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Start typing a business name…" /></div>
               </div>
               <div className="np-row2">
                 <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
                 <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
               </div>
-              <div className="np-f"><label>Service Address {addrVerified ? <span className="np-verified">✓ Verified</span> : <span className="np-opt">pick from the list</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); setAddrVerified(false); setAddrWarned(false); }} onPlace={(p) => { set("address", p.address); setAddrVerified(true); }} placeholder="Start typing, then choose the address" /></div>
+              <div className="np-f"><label>Service Address {addrVerified ? <span className="np-verified">✓ Verified</span> : <span className="np-opt">pick from the list</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" /></div>
               <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
               <div className="np-f"><label>Notes <span className="np-opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}
