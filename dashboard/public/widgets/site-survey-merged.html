@@ -757,7 +757,7 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
-    var ISZ=28, showFovState=false, sideCollapsed=true, showAllAngles=false;   // icon size (default Small) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
+    var ISZ=28, showFovState=false, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium — the primary size) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
     var collapsedFloors={};   // floor index → collapsed? (the SURVEY panel shows every floor under a divider)
@@ -812,7 +812,9 @@
     [].forEach.call(devMenu.querySelectorAll(".mg"), function(mg){ if(openG.indexOf(mg.dataset.g)>=0) mg.classList.add("open"); });
     function saveMenuGroups(){ var os=[]; [].forEach.call(devMenu.querySelectorAll(".mg.open"), function(x){ os.push(x.dataset.g); }); try{ localStorage.setItem(MENUKEY, JSON.stringify(os)); }catch(e){} }
     // ---- settings: icon size + show-FOV (global, persisted with the survey) ----
-    var ISZ_STEPS=[28,44,64], ISZ_LABELS=["S","M","L"];   // Small / Medium / Large
+    // Rescaled smaller — Medium (28) is the primary size. Old Small(28)→Medium, old Medium(44)→Large(40),
+    // plus a new smaller Small(20) for the occasional tight spot. Old Large(64) dropped (rarely used).
+    var ISZ_STEPS=[20,28,40], ISZ_LABELS=["S","M","L"];   // Small / Medium / Large
     function iszIndex(){ var best=0,bd=1e9; for(var i=0;i<ISZ_STEPS.length;i++){ var d=Math.abs(ISZ-ISZ_STEPS[i]); if(d<bd){bd=d;best=i;} } return best; }
     function applySettings(){ document.body.style.setProperty("--isz", ISZ+"px");
       document.body.classList.toggle("no-fov", !showFovState);

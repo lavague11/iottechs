@@ -10,7 +10,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20260919-3";
+const WIDGET_VERSION = "20260919-4";
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
