@@ -4,6 +4,7 @@ import SignaturePanel from "./signature-panel";
 import ToolComments from "./tool-comments";
 import BuildGate from "./build-gate";
 import { seedToolData, startToolAutosync } from "./tool-sync";
+import { mockupHasData } from "../../../lib/tool-data";
 
 // Embeds the full self-contained CCTV Mockup tool (public/widgets/cctv-mockup.html).
 // The tool's own toolbar is hidden in builder-embed mode; this wrapper renders NATIVE,
@@ -18,7 +19,10 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   // button: staff see "Build" until they opt in (or the mockup already has photos); a read-only
   // customer only ever sees a mockup that already has content, so the phone shows straight away.
   const [built, setBuilt] = useState(false);
-  const showPhone = readOnly || hasData || built;
+  // Real mockup content in THIS browser's seeded store — so a previously-built mockup opens straight into
+  // the phone preview instead of flashing the Build gate on reload (server `hasData` lags the meta poll).
+  const [localHasData, setLocalHasData] = useState(false);
+  const showPhone = readOnly || hasData || localHasData || built;
   const [stat, setStat] = useState(null);   // {count, filled, view, page, pages, surveyDriven}
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
@@ -53,6 +57,7 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
     (async () => {
       await seedToolData(accessId, "mockup", `iot_cctv_${accessId}`);
       if (!live) return;
+      try { setLocalHasData(mockupHasData(localStorage.getItem(`iot_cctv_${accessId}`))); } catch { /* storage blocked */ }
       setSynced(true);
       stop = startToolAutosync(accessId, "mockup", `iot_cctv_${accessId}`);
     })();
@@ -213,11 +218,13 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
         </div>
       </div>
 
-      {!showPhone ? (
-        <BuildGate onBuild={() => setBuilt(true)}
-          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>}
-          hint="Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup." />
-      ) : synced ? (
+      {/* Loading until the local store is seeded — so a previously-built mockup never flashes the
+          Build gate on reload; only once synced do we decide phone vs Build. */}
+      {!synced ? (
+        <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
+          Loading mockup…
+        </div>
+      ) : showPhone ? (
         <iframe
           ref={frameRef}
           key={src}
@@ -229,9 +236,9 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           style={!fs && stat?.height ? { height: Math.max(200, stat.height) } : undefined}
         />
       ) : (
-        <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
-          Loading mockup…
-        </div>
+        <BuildGate onBuild={() => setBuilt(true)}
+          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>}
+          hint="Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup." />
       )}
 
       {/* Paging — host-driven (tool's own nav is hidden in embed mode), shown for both builder and read-only */}

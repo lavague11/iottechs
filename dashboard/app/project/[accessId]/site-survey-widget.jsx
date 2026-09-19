@@ -5,6 +5,7 @@ import SurveyDevices from "./survey-devices";
 import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
+import { survey2HasData } from "../../../lib/tool-data";
 
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
@@ -21,7 +22,11 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // the Mockup), so a skipped survey isn't an eyesore and Consulting reads as building the system. A
   // survey that already has content — and the read-only customer view — open the editor straight away.
   const [built, setBuilt] = useState(false);
-  const showEditor = readOnly || hasData || built;
+  // Whether THIS browser's seeded survey2 draft has real content — read from localStorage once seeded, so
+  // a previously-built survey opens straight into the editor instead of flashing the Build gate on reload
+  // (the server `hasData` prop lags behind the tool-meta poll).
+  const [localHasData, setLocalHasData] = useState(false);
+  const showEditor = readOnly || hasData || localHasData || built;
   const [floorCount, setFloorCount] = useState(null);
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);
@@ -57,6 +62,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     (async () => {
       await seedToolData(accessId, "survey2", `iottechs_survey2_${accessId}`, { force: viewerRefresh });
       if (!live) return;
+      // Now that the draft is seeded, decide from localStorage whether there's a real survey — so we can
+      // open the editor (or show the Build gate) without a flash.
+      try { setLocalHasData(survey2HasData(localStorage.getItem(`iottechs_survey2_${accessId}`))); } catch { /* storage blocked */ }
       setSynced(true);
       stop = startToolAutosync(accessId, "survey2", `iottechs_survey2_${accessId}`);
     })();
@@ -143,11 +151,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           </button>
         ))}
       </div>
-      {!showEditor ? (
-        <BuildGate onBuild={() => setBuilt(true)}
-          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg>}
-          hint="Lay out where the cameras go on the floor plan. Skip it if this job doesn’t need a survey." />
-      ) : synced ? (
+      {!synced ? (
+        /* Until the draft is seeded we don't yet know if this project has a survey — show Loading, never
+           the Build gate, so a previously-built survey doesn't flash "Build" on reload. */
+        <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
+          Loading survey…
+        </div>
+      ) : showEditor ? (
         <iframe
           key={src}
           ref={frameRef}
@@ -158,9 +168,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           onLoad={pushSubmitState}
         />
       ) : (
-        <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
-          Loading survey…
-        </div>
+        <BuildGate onBuild={() => setBuilt(true)}
+          icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg>}
+          hint="Lay out where the cameras go on the floor plan. Skip it if this job doesn’t need a survey." />
       )}
 
       {zoomImg && (
