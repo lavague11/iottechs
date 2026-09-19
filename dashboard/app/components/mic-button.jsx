@@ -30,7 +30,7 @@ function defaultLang() {
   return "en-US";
 }
 
-export default function MicButton({ value = "", onChange, onActive, title = "Dictate", size = 16 }) {
+export default function MicButton({ value = "", onChange, onActive, controlRef, title = "Dictate", size = 16 }) {
   const [listening, setListening] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [lang, setLang] = useState("en-US");
@@ -39,10 +39,14 @@ export default function MicButton({ value = "", onChange, onActive, title = "Dic
   const valRef = useRef(value); valRef.current = value;
   const langRef = useRef(lang); langRef.current = lang;
   const gotSpeechRef = useRef(false);
+  const wantsRef = useRef(false);      // user wants dictation ON — keeps the session alive across auto-ends
+  const baseRef = useRef("");          // finalized transcript so far (survives recognition restarts)
+  const restartsRef = useRef([]);      // recent restart timestamps → guard against tight restart loops
+  const skipPolishRef = useRef(false); // Send/Discard stop: host already has the text, don't polish/rewrite it
   const speechOK = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   useEffect(() => { setLang(defaultLang()); }, []);
-  useEffect(() => () => { try { recRef.current?.stop(); } catch { /* noop */ } }, []);
+  useEffect(() => () => { wantsRef.current = false; try { recRef.current?.stop(); } catch { /* noop */ } }, []);
   // Tell the host whether the mic is doing anything (recording or polishing) so it can keep the report
   // mounted while collapsed and blink its launcher — dictation survives clicking outside (BUG feedback).
   useEffect(() => { onActive?.(listening || polishing); /* eslint-disable-next-line */ }, [listening, polishing]);
@@ -68,32 +72,62 @@ export default function MicButton({ value = "", onChange, onActive, title = "Dic
     setPolishing(false);
   }
 
-  function toggle(e) {
-    e?.preventDefault?.(); e?.stopPropagation?.();
+  // A recognition session belongs to the reporter, not the panel: browsers auto-end SpeechRecognition
+  // (silence/timeout), so while the user still wants dictation we transparently restart it, accumulating
+  // into baseRef. Only an explicit Stop (wantsRef=false) finalizes + polishes.
+  function startRec() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
-    if (listening) { try { recRef.current?.stop(); } catch { /* stopped */ } return; }
     const rec = new SR();
     rec.lang = langRef.current; rec.interimResults = true; rec.continuous = true;
-    let base = valRef.current ? valRef.current.replace(/\s+$/, "") + " " : "";
     rec.onresult = (ev) => {
       let finalT = "", interim = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const t = ev.results[i][0].transcript;
         if (ev.results[i].isFinal) finalT += t + " "; else interim += t;
       }
-      if (finalT) { base = tidy(base + finalT) + " "; gotSpeechRef.current = true; }
-      onChange?.(tidy(base + interim));
+      if (finalT) { baseRef.current = tidy(baseRef.current + finalT) + " "; gotSpeechRef.current = true; }
+      onChange?.(tidy(baseRef.current + interim));
     };
-    rec.onerror = () => setListening(false);
+    rec.onerror = (e) => { if (e?.error === "not-allowed" || e?.error === "service-not-allowed") wantsRef.current = false; };
     rec.onend = () => {
-      setListening(false); recRef.current = null;
-      const finalText = tidy(base); onChange?.(finalText);
-      if (gotSpeechRef.current) { gotSpeechRef.current = false; polish(finalText); }
+      recRef.current = null;
+      if (wantsRef.current) {                                   // browser auto-ended → keep the session alive
+        const now = Date.now();
+        restartsRef.current = restartsRef.current.filter((t) => now - t < 10000);
+        restartsRef.current.push(now);
+        if (restartsRef.current.length <= 8) { try { startRec(); return; } catch { /* fall through to finish */ } }
+        wantsRef.current = false;                               // too many rapid restarts → give up cleanly
+      }
+      finishSession();
     };
     recRef.current = rec;
-    try { rec.start(); setListening(true); } catch { setListening(false); }
+    try { rec.start(); setListening(true); } catch { /* an instance is already starting */ }
   }
+  function finishSession() {
+    setListening(false);
+    if (skipPolishRef.current) { skipPolishRef.current = false; gotSpeechRef.current = false; return; }   // host owns the text (Send/Discard)
+    const finalText = tidy(baseRef.current); onChange?.(finalText);
+    if (gotSpeechRef.current) { gotSpeechRef.current = false; polish(finalText); }
+  }
+  function stopDictation(skipPolish) {
+    if (!wantsRef.current && !recRef.current) return;
+    wantsRef.current = false; skipPolishRef.current = !!skipPolish;
+    if (recRef.current) { try { recRef.current.stop(); } catch { /* already ended → onend won't fire */ recRef.current = null; finishSession(); } }
+    else finishSession();
+  }
+  function toggle(e) {
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (wantsRef.current || listening) { stopDictation(); return; }
+    wantsRef.current = true;
+    baseRef.current = valRef.current ? valRef.current.replace(/\s+$/, "") + " " : "";
+    restartsRef.current = [];
+    startRec();
+  }
+  // Let the host stop the session cleanly on Send/Discard without owning the recognition instance.
+  if (controlRef) controlRef.current = { stop: stopDictation, isActive: () => wantsRef.current || listening };
 
   return (
     <span className="micwrap">

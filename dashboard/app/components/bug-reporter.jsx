@@ -53,6 +53,7 @@ export default function BugReporter() {
   const loadedRef = useRef(false);               // draft loaded for this open? (gates autosave)
   const filedRef = useRef(false);                // report just submitted → block any further autosave PUT
   const saveTimer = useRef(null);
+  const micCtl = useRef(null);                   // imperative handle to the dictation session (stop from Send/Discard)
   const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
 
 
@@ -166,14 +167,15 @@ export default function BugReporter() {
   }, [open, editor, capturing, shots.length]);
 
   function clearDraft() { fetch("/api/bug-draft", { method: "DELETE", credentials: "same-origin" }).catch(() => {}); }
-  function discard() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setOpen(false); }
+  function discard() { micCtl.current?.stop?.(true); clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setOpen(false); }
   // Reset — clear the whole draft but stay open for a fresh report (two-step confirm).
-  function resetDraft() { clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setConfirmReset(false); }
+  function resetDraft() { micCtl.current?.stop?.(true); clearTimeout(saveTimer.current); clearDraft(); setShots([]); setDesc(""); setSeverity("medium"); setErr(null); setConfirmReset(false); }
 
   async function submit() {
     if (busy) return;
     const d = desc.trim();
     if (!d) { setErr("Describe the bug first."); return; }
+    micCtl.current?.stop?.(true);   // end dictation cleanly; d already holds the on-screen (incl. interim) text
     // Stop autosave NOW — before the await — so a pending/in-flight debounced PUT can't land after the
     // draft DELETE and resurrect it (that's why a filed report kept coming back). filedRef blocks re-saves.
     clearTimeout(saveTimer.current); filedRef.current = true;
@@ -197,18 +199,22 @@ export default function BugReporter() {
   }
 
   const hasContent = !!desc.trim() || shots.length > 0;
+  // Launcher beacon: red pulse while dictating, quiet gold dot when a draft is waiting (report closed).
+  const draftDot = hasContent && !open && !micActive;
 
   return (
     <>
       {/* Stop the FAB's events at the source so opening Report never registers as an "outside click"
           on the page (which would collapse menus/cards and change what gets screenshotted). */}
-      <button className={`bugr-fab${micActive ? " rec" : ""}`} data-bug-capture-ignore
-        aria-label={micActive ? "Recording — open report" : "Report"} title={micActive ? "Recording — tap to open" : "Report"}
+      <button className={`bugr-fab${micActive ? " rec" : ""}${draftDot ? " draft" : ""}`} data-bug-capture-ignore
+        aria-label={micActive ? "Bug reporter — recording" : draftDot ? "Bug reporter — draft" : "Report"}
+        title={micActive ? "Recording" : draftDot ? "Draft" : "Report"}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
         {micActive && <span className="bugr-recdot" aria-hidden="true" />}
+        {draftDot && <span className="bugr-draftdot" aria-hidden="true" />}
       </button>
 
       {/* Stay mounted while dictating even when "closed", so recognition keeps running; just hide the panel
@@ -283,7 +289,7 @@ export default function BugReporter() {
                     <IconButton label="Attach" disabled={atLimit} onClick={() => fileRef.current?.click()}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
                     </IconButton>
-                    <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} onActive={setMicActive} /></span>
+                    <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} onActive={setMicActive} controlRef={micCtl} /></span>
                     {hasContent && (
                       <IconButton label="Reset" disabled={capturing} onClick={() => setConfirmReset(true)}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -324,11 +330,18 @@ const CSS = `
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
   background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
-/* Recording — the report is collapsed but dictation is live: pulse a red ring + blink a corner dot. */
-.bugr-fab.rec{opacity:1;color:#fff;background:#c0392b;border-color:rgba(255,255,255,.2);animation:bugrRec 1.4s ease-in-out infinite}
-.bugr-recdot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#ff6b5e;border:2px solid #12151b;animation:bugrBlink 1s steps(2,start) infinite}
-@keyframes bugrRec{0%,100%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 0 rgba(224,87,74,.55)}50%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 9px rgba(224,87,74,0)}}
-@keyframes bugrBlink{50%{opacity:.2}}
+/* Recording — the report is collapsed but dictation is live: soft red ring pulse + blink a corner dot. */
+.bugr-fab.rec{opacity:1;color:#fff;background:#c0392b;border-color:rgba(255,255,255,.2);animation:bugrRec 1.6s ease-in-out infinite}
+.bugr-recdot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#ff6b5e;border:2px solid #12151b;animation:bugrBlink 1.2s steps(2,start) infinite}
+/* Draft waiting (not recording) — quiet gold dot so you know a report is still open. */
+.bugr-fab.draft{opacity:.9}
+.bugr-draftdot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:#e0a94b;border:2px solid #12151b}
+@keyframes bugrRec{0%,100%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 0 rgba(224,87,74,.5)}50%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 9px rgba(224,87,74,0)}}
+@keyframes bugrBlink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){
+  .bugr-fab.rec{animation:none}
+  .bugr-recdot{animation:none}
+}
 /* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. */
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
