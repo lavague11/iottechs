@@ -30,7 +30,7 @@ function defaultLang() {
   return "en-US";
 }
 
-export default function MicButton({ value = "", onChange, title = "Dictate", size = 16 }) {
+export default function MicButton({ value = "", onChange, onActive, title = "Dictate", size = 16 }) {
   const [listening, setListening] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [lang, setLang] = useState("en-US");
@@ -43,6 +43,9 @@ export default function MicButton({ value = "", onChange, title = "Dictate", siz
 
   useEffect(() => { setLang(defaultLang()); }, []);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* noop */ } }, []);
+  // Tell the host whether the mic is doing anything (recording or polishing) so it can keep the report
+  // mounted while collapsed and blink its launcher — dictation survives clicking outside (BUG feedback).
+  useEffect(() => { onActive?.(listening || polishing); /* eslint-disable-next-line */ }, [listening, polishing]);
   if (!speechOK) return null;
 
   const cur = LANGS.find((l) => l.code === lang) || LANGS[0];

@@ -45,6 +45,7 @@ export default function BugReporter() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState(null);
   const [capturing, setCapturing] = useState(false);
+  const [micActive, setMicActive] = useState(false);   // dictation is recording/polishing — keep mounted + blink FAB
   const [isStaff, setIsStaff] = useState(false);     // bug-list API answers 200 for staff, 403 otherwise → our staff signal
   const [pageBugs, setPageBugs] = useState([]);      // OPEN bugs already reported on THIS route (staff only)
   const pathname = usePathname();
@@ -144,7 +145,7 @@ export default function BugReporter() {
   // Debounced autosave — persists text + already-uploaded shots. Skips the initial restore render and
   // never saves an empty draft (that's what Discard/Send are for).
   useEffect(() => {
-    if (!open || !loadedRef.current || filedRef.current) return;   // never re-save a just-filed report
+    if ((!open && !micActive) || !loadedRef.current || filedRef.current) return;   // keep saving while collapsed+recording; never re-save a filed report
     const uploaded = shots.filter((s) => s.url).map((s) => ({ url: s.url, cleanUrl: s.cleanUrl, shapes: s.shapes }));
     if (!desc.trim() && uploaded.length === 0) return;
     clearTimeout(saveTimer.current);
@@ -152,7 +153,7 @@ export default function BugReporter() {
       fetch("/api/bug-draft", { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ description: desc, shots: uploaded }) }).catch(() => { /* retried on next change */ });
     }, 700);
     return () => clearTimeout(saveTimer.current);
-  }, [desc, shots, open]);
+  }, [desc, shots, open, micActive]);
 
   // Paste a screenshot from the clipboard; Escape closes (the editor owns Escape while it's up).
   useEffect(() => {
@@ -201,15 +202,19 @@ export default function BugReporter() {
     <>
       {/* Stop the FAB's events at the source so opening Report never registers as an "outside click"
           on the page (which would collapse menus/cards and change what gets screenshotted). */}
-      <button className="bugr-fab" data-bug-capture-ignore aria-label="Report" title="Report"
+      <button className={`bugr-fab${micActive ? " rec" : ""}`} data-bug-capture-ignore
+        aria-label={micActive ? "Recording — open report" : "Report"} title={micActive ? "Recording — tap to open" : "Report"}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.5 2.5M16 2l-1.5 2.5" /><rect x="7" y="6" width="10" height="12" rx="5" /><path d="M12 6v12M3 9h4M17 9h4M3 14h4M17 14h4M3 19l4-2M17 17l4 2" /></svg>
+        {micActive && <span className="bugr-recdot" aria-hidden="true" />}
       </button>
 
-      {open && (
-        <div className="bugr-scrim" data-bug-capture-ignore hidden={!!editor} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
+      {/* Stay mounted while dictating even when "closed", so recognition keeps running; just hide the panel
+          (display:none via hidden) so the page is fully interactive and the FAB blinks instead. */}
+      {(open || micActive) && (
+        <div className="bugr-scrim" data-bug-capture-ignore hidden={!!editor || !open} onClick={(e) => { if (e.target.classList.contains("bugr-scrim")) setOpen(false); }}>
           <div className="bugr-card" role="dialog" aria-label="Report">
             {done ? (
               <div className="bugr-done">
@@ -278,7 +283,7 @@ export default function BugReporter() {
                     <IconButton label="Attach" disabled={atLimit} onClick={() => fileRef.current?.click()}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12.5 21a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.49 8.49a1 1 0 0 1-1.42-1.42l7.78-7.78" /></svg>
                     </IconButton>
-                    <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} /></span>
+                    <span className="bugr-mic"><MicButton value={desc} onChange={setDesc} onActive={setMicActive} /></span>
                     {hasContent && (
                       <IconButton label="Reset" disabled={capturing} onClick={() => setConfirmReset(true)}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -319,6 +324,11 @@ const CSS = `
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
   background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
 .bugr-fab:hover{opacity:1;transform:translateY(-1px)}
+/* Recording — the report is collapsed but dictation is live: pulse a red ring + blink a corner dot. */
+.bugr-fab.rec{opacity:1;color:#fff;background:#c0392b;border-color:rgba(255,255,255,.2);animation:bugrRec 1.4s ease-in-out infinite}
+.bugr-recdot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#ff6b5e;border:2px solid #12151b;animation:bugrBlink 1s steps(2,start) infinite}
+@keyframes bugrRec{0%,100%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 0 rgba(224,87,74,.55)}50%{box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 9px rgba(224,87,74,0)}}
+@keyframes bugrBlink{50%{opacity:.2}}
 /* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. */
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
