@@ -4,6 +4,7 @@ import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import { parseToken } from "../lib/auth";
 import BugReporter from "./components/bug-reporter";
 import ErrorContextProbe from "./components/error-context";
+import StaleActionGuard from "./components/stale-action-guard";
 
 // The deck-theme faces, self-hosted by Next (no external CDN). Exposed as CSS vars so any
 // component can opt in with var(--font-sans) / var(--font-mono).
@@ -39,7 +40,7 @@ export default async function RootLayout({ children }) {
   } catch { /* no session → no capture */ }
   return (
     <html lang="en" className={`${fontSans.variable} ${fontMono.variable}`}>
-      <body>{children}<BugReporter />{staff && <ErrorContextProbe />}</body>
+      <body>{children}<StaleActionGuard /><BugReporter />{staff && <ErrorContextProbe />}</body>
     </html>
   );
 }
