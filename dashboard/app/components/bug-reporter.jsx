@@ -16,6 +16,19 @@ function dataURLtoFile(dataUrl, name) {
   return new File([arr], name, { type: mime });
 }
 const readDataURL = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(file); });
+// Is one of our embedded tool widgets (Site Survey / CCTV Mockup) visible right now? Those render inside
+// /widgets/ iframes that html2canvas can't rasterize, so their presence flips Capture to native tab grab.
+function hasWidgetIframe() {
+  try {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    return Array.from(document.querySelectorAll('iframe[src*="/widgets/"]')).some((f) => {
+      if (f.closest("[data-bug-capture-ignore]")) return false;
+      const r = f.getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) return false;
+      return r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw;   // actually on screen
+    });
+  } catch { return false; }
+}
 const uid = () => Math.random().toString(36).slice(2);
 async function uploadMedia(file) {
   try {
@@ -94,11 +107,14 @@ export default function BugReporter() {
     addFinal({ preview: url, cleanShot: url, shapes: [] });
   }
 
-  // DOM capture — renders the current app viewport (cross-browser, iOS included). The Report UI and FAB
-  // carry data-bug-capture-ignore so html2canvas's clone omits them; the live page is never touched, so
-  // no hide/blur/flash. On real failure we surface a compact error and Attach remains.
+  // Capture — renders the current app viewport. The Report UI and FAB carry data-bug-capture-ignore so
+  // html2canvas's clone omits them; the live page is never touched, so no hide/blur/flash. But our embedded
+  // tools (Site Survey floor plan, CCTV Mockup) live in iframes that html2canvas rasterizes BLANK. So when
+  // such a widget is actually on screen and the browser can grab the live tab, capture that instead — it's
+  // the only way to include the floor plan (BUG #21/#24/#30). No widget iframe → fast DOM capture, no prompt.
   async function capture() {
     if (atLimit || capturing) return;
+    if (nativeOk && hasWidgetIframe()) { captureScreen(); return; }
     setErr(null); setCapturing(true);
     try {
       const { dataUrl } = await captureViewport();
