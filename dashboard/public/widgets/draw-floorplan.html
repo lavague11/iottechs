@@ -106,7 +106,11 @@
   </div>
 
 <script>
-  var PID=new URLSearchParams(location.search).get("project")||"";
+  var _qs=new URLSearchParams(location.search);
+  var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0";
+  // Per-floor draft: the structure/room geometry is stored per (project, floor) so re-opening Draw for a
+  // floor resumes exactly where it was left. The floor's rendered background image stays the survey's own.
+  var LSK = PID ? ("iot_struct_"+PID+"_"+FLOOR) : null;
   function $(id){return document.getElementById(id);}
   var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage");
   // STRUCTURE = grid blockout. The building is stored as OCCUPIED HALF-CELLS (a Set of integer "hc,hr"
@@ -191,10 +195,14 @@
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawPreview(); }
 
+  // ---- per-floor persistence ----
+  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:rooms})); }catch(e){} }
+  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=s.rooms; } }catch(e){} }
+
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
   var hist=[snapshot()], hi=0;
-  function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); }
+  function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
   function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); sel=null; closeLabel(); }
   function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } } }
   function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); } }
@@ -246,7 +254,7 @@
     inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); closeLabel(); } };
     $("lpDel").onclick=function(){ rooms=rooms.filter(function(x){return x!==r;}); sel=null; closeLabel(); pushHist(); redraw(); };
     $("lpDone").onclick=closeLabel; }
-  function closeLabel(){ $("labelPop").classList.remove("on"); }
+  function closeLabel(){ $("labelPop").classList.remove("on"); persist(); }   // capture labels + undo/redo state
 
   // ---- render the current plan to a padded SQUARE png (sent to AI + used if not enhanced) ----
   function sketchPNG(){ var S=1024, c=document.createElement("canvas"); c.width=S; c.height=S; var g=c.getContext("2d");
@@ -317,8 +325,11 @@
     var url=enhancedURL || sketchPNG().toDataURL("image/png");
     try{ parent.postMessage({type:"satellite-capture-result", dataUrl:url}, "*"); }catch(e){} });
 
-  setMode("structure");
+  restore();                                        // resume this floor's saved structure/rooms
+  hist=[snapshot()]; hi=0;                           // baseline history on the restored state
+  setMode(cells.size ? "room" : "structure");        // existing structure → continue with rooms
   fitCanvas();
+  updateTools();
 </script>
 </body>
 </html>
