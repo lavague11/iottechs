@@ -287,13 +287,15 @@ export default function BugsClient({ initial = [] }) {
                     <button className="bgp-ib" aria-label="Copy report" title="Copy report" onClick={(e) => { stop(e); copyAll(b); }}>
                       <CopyI />
                     </button>
-                    {/* Selective copy — pick one piece (image · text · prompt · all). */}
+                    {/* Selective copy — pick one piece (image · text · prompt · all). Capture the button node
+                        NOW: React nulls e.currentTarget before the functional updater runs, which would leave
+                        the popover un-anchored and invisible (BUG #32). */}
                     <button className={`bgp-ib${pop?.id === b.id && pop.kind === "copy" ? " on" : ""}`} aria-label="Copy part" title="Copy part…"
-                      onClick={(e) => { stop(e); setPop((p) => (p?.id === b.id && p.kind === "copy" ? null : { id: b.id, kind: "copy", el: e.currentTarget })); }}>
+                      onClick={(e) => { stop(e); const el = e.currentTarget; setPop((p) => (p?.id === b.id && p.kind === "copy" ? null : { id: b.id, kind: "copy", el })); }}>
                       <CopyPickI />
                     </button>
                     <button className={`bgp-ib${pop?.id === b.id && pop.kind === "more" ? " on" : ""}`} aria-label="More" title="More"
-                      onClick={(e) => { stop(e); setPop((p) => (p?.id === b.id && p.kind === "more" ? null : { id: b.id, kind: "more", el: e.currentTarget })); }}>
+                      onClick={(e) => { stop(e); const el = e.currentTarget; setPop((p) => (p?.id === b.id && p.kind === "more" ? null : { id: b.id, kind: "more", el })); }}>
                       <MoreI />
                     </button>
                     <button className={`bgp-resolve${resolved ? " reopen" : ""}`} disabled={busy === b.id} onClick={() => toggle(b)}>
