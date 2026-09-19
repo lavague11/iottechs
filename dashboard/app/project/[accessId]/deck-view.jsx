@@ -54,6 +54,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const startY = useRef(null);
   const capturing = useRef(false);
   const wheelLock = useRef(false);
+  // Vertical touch-drag started over the HEADER (not the deck): forward it to the active content's scroll.
+  const vScroll = useRef(null);   // { el, lastY } while dragging vertically from the header
+  const overHeader = useRef(false);
 
   const go = useCallback((i) => { const n = Math.max(0, Math.min(N - 1, i)); setMoved(true); onIdx ? onIdx(n) : null; }, [N, onIdx]);
   // Jump to a named tool AND open it — used by the "your next step" chip so tapping it lands the
@@ -103,19 +106,28 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     // swipe still only captures on a clearly-horizontal move, so vertical scrolls and taps pass through.
     if (e.target.closest("button, a, input, textarea, select, label, iframe, [contenteditable=true]")) return;
     startX.current = e.clientX; startY.current = e.clientY; capturing.current = false;
+    vScroll.current = null;
+    // A gesture that begins ABOVE the deck (header/rail) can't scroll natively — forward it to the content.
+    overHeader.current = !e.target.closest(".dv-deck");
   }
   function onPointerMove(e) {
     if (startX.current == null) return;
     const dx = e.clientX - startX.current, dy = e.clientY - startY.current;
-    // Only a clearly-horizontal swipe pages the deck — vertical scrolls and taps pass through.
-    if (!capturing.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { capturing.current = true; deckRef.current?.setPointerCapture?.(e.pointerId); }
-    if (capturing.current) setDrag(dx);
+    // Horizontal swipe pages the deck.
+    if (!capturing.current && !vScroll.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { capturing.current = true; deckRef.current?.setPointerCapture?.(e.pointerId); }
+    if (capturing.current) { setDrag(dx); return; }
+    // Vertical drag from the header → forward to the active stage's scroll (touch scroll from the top strip).
+    if (overHeader.current && !vScroll.current && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+      const el = deckRef.current?.querySelector('.dv-slide:not([aria-hidden="true"]) .dv-scroll');
+      if (el && el.scrollHeight > el.clientHeight) { vScroll.current = { el, lastY: e.clientY }; deckRef.current?.setPointerCapture?.(e.pointerId); }
+    }
+    if (vScroll.current) { const v = vScroll.current; v.el.scrollTop -= (e.clientY - v.lastY); v.lastY = e.clientY; e.preventDefault?.(); }
   }
   function endDrag() {
     if (startX.current == null) return;
     const w = deckRef.current?.offsetWidth || 1, d = drag, thr = Math.min(110, w * 0.16);
     const wasDrag = capturing.current;
-    startX.current = null; startY.current = null; capturing.current = false; setDrag(0);
+    startX.current = null; startY.current = null; capturing.current = false; vScroll.current = null; overHeader.current = false; setDrag(0);
     if (!wasDrag) return;                                 // a tap — let the click through
     if (d < -thr) go(idx + 1); else if (d > thr) go(idx - 1);
   }
@@ -509,6 +521,9 @@ const CSS = `
 .dv-shell button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .dv-shell :focus-visible{outline:2px solid var(--dv-gold-deep);outline-offset:3px;border-radius:8px}
 
+/* Header strip owns its own gestures (swipe pages stages, vertical drag forwards to content) — take
+   touch off native so the browser doesn't hijack the vertical drag before our JS forwards it (BUG #34). */
+.dv-top,.dv-jobbar,.dv-rail{touch-action:none}
 .dv-top{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;flex:0 0 auto}
 .dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px;color:var(--dv-ink);text-decoration:none;cursor:pointer}
 .dv-logo:hover{opacity:.7}.dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
