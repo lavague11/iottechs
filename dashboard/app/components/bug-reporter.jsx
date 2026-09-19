@@ -345,6 +345,9 @@ const CSS = `
 /* the modal FLOATS over the page — no dim, no blur, no filter on what's behind it. */
 .bugr-scrim{position:fixed;inset:0;z-index:2147483001;background:transparent;
   display:flex;align-items:flex-end;justify-content:flex-end;padding:16px}
+/* Collapsed (kept mounted while dictating): fully remove the overlay so the page is interactive again.
+   Needed because .bugr-scrim's display:flex would otherwise beat the [hidden] attribute's display:none. */
+.bugr-scrim[hidden]{display:none!important}
 .bugr-card{width:min(400px,94vw);background:#fff;color:#12151b;border-radius:16px;padding:16px;
   border:1px solid rgba(0,0,0,.08);box-shadow:0 12px 34px -10px rgba(0,0,0,.28),0 2px 8px -2px rgba(0,0,0,.12);
   font-family:system-ui,-apple-system,Segoe UI,sans-serif;animation:bugrIn .18s ease}
