@@ -115,10 +115,10 @@
   .wiz{flex:none;background:#fff;border-top:1px solid var(--line)}
   /* Quiet progress indicator (not a heavy wizard): thin baseline, gold underline on the active step. */
   .steps{display:flex;padding:8px 16px 0;gap:4px}
-  .steps .s{flex:1;text-align:center;font-size:10.5px;color:var(--muted);padding-bottom:8px;border-bottom:1.5px solid rgba(16,17,18,.08);letter-spacing:.03em;cursor:pointer;transition:color .12s,border-color .12s}
+  .steps .s{flex:1;text-align:center;font-size:10.5px;color:#454b52;padding-bottom:8px;border-bottom:1.5px solid rgba(16,17,18,.08);letter-spacing:.03em;cursor:pointer;transition:color .12s,border-color .12s;font-weight:600}
   .steps .s:hover{color:var(--ink)}
-  .steps .s.active{color:var(--ink);font-weight:600;border-color:var(--gold)}
-  .steps .s.done{color:var(--soft,#6f7686)}
+  .steps .s.active{color:var(--ink);font-weight:700;border-color:var(--gold)}
+  .steps .s.done{color:var(--ink)}
   .steps .s.done::before{content:"\2713  ";color:var(--gold)}
   .nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
   /* Compact location selector + bottom sheet (replaces the horizontal floor-tab scroller). */
@@ -589,6 +589,7 @@
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
     var DRAW_SRC="draw-floorplan.html?v=20260919-dock2"+(PID?"&project="+encodeURIComponent(PID):"");
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
+    var bgToolOpen=null;  // 'draw'|'satellite' while a build tool is actively open → persisted so a refresh reopens it
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
     var surveyWiz=document.getElementById("surveyWiz");
     var bgWiz=document.getElementById("bgWiz");
@@ -604,6 +605,7 @@
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
       sideCollapsed=true; applySideCollapsed();
+      bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
     function enterDraw(){ openBgTool(DRAW_SRC+"&floor="+curFloor, "draw"); }   // per-floor draft persistence
@@ -611,6 +613,7 @@
     function exitBg(committed){
       satFrame.style.display="none";
       surveyWiz.style.display="";   // restore the survey bar when leaving the build tool
+      bgToolOpen=null; queueSave();   // left the tool (committed or not) → don't reopen on next load
       if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
       else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
       else { document.getElementById("working").style.display="block"; }
@@ -1250,7 +1253,7 @@
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
-    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, sideCollapsed:sideCollapsed, allAngles:showAllAngles })); }catch(e){} reportHost(); }
+    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen })); }catch(e){} reportHost(); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
     document.getElementById("dimBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });   // never fall through to placement
     document.getElementById("dimBtn").addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); });
@@ -1391,6 +1394,8 @@
       loadFloor(curFloor); renderFloorTabs();
       goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
       if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
+      // Refresh mid-edit → reopen the build tool right where they left off (draw geometry is per-floor persisted).
+      if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ (st.bgTool==="draw"?enterDraw:enterBg)(); }
     }catch(e){ renderFloorTabs(); } }
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
