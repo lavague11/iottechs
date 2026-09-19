@@ -1179,6 +1179,10 @@
       if(m.cmd==="selectCid"){ var cd=null; for(var ci=0;ci<devices.length;ci++){ if(devices[ci].cid&&devices[ci].cid===m.cid){ cd=devices[ci]; break; } } if(cd){ if(curStep!==1) goStep(1); _suppressSelPost=true; select(cd.id); } return; }
       // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
       if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
+      // Rename by STABLE cid — the host relays a rename made in the mockup so the survey stays in sync
+      // (the name lives once; a rename anywhere shows everywhere). Current floor only; other floors were
+      // already updated server-side and re-hydrate on reload.
+      if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ rd.name=cap(String(m.name||"").trim())||cap(cat(rd.k).name); renderDevice(rd); renderPanel(); queueSave(); } return; }
       if(!d) return;
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
       if(m.cmd==="rename"){ d.name=cap(String(m.name||"").trim())||cap(cat(d.k).name); renderDevice(d); renderPanel(); queueSave(); }

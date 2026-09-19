@@ -50,10 +50,38 @@ export default function SystemPlanner({
       else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
       // The devices roster is lifted into the shell (shown on both tabs) — mirror the survey's live roster.
       else if (m.type === "iotSurveyDevices") { setRoster(Array.isArray(m.floors) ? m.floors : []); setCurFloor(m.curFloor || 0); }
+      // A rename made INSIDE the mockup (it already persisted to survey2 by cid) → relay to the survey
+      // iframe so the live map/Devices strip reflect it immediately, closing the sync loop both ways.
+      else if (m.type === "iotMockupRenamed" && m.cid) { post("Site Survey", { type: "iotSurveyCmd", cmd: "renameCid", project: accessId, cid: m.cid, name: m.name || "" }); }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, [accessId]);
+
+  // Bridge the survey's LIVE device roster (canonical by cid: name/tag/photo) into the CCTV mockup grid,
+  // so renaming a camera in the Devices strip (or on the survey map) updates the Views/mockup tiles
+  // IMMEDIATELY — no server round-trip, no stale positional name copy. The mockup's applyCameras keys off
+  // this same list, so a rename anywhere shows everywhere. Order matches getProjectCameras (floors→devices).
+  const liveCameras = useMemo(() => {
+    const out = [];
+    (roster || []).forEach((f, fi) => (Array.isArray(f?.devices) ? f.devices : []).forEach((d) => {
+      if (d && d.k === "cam") out.push({
+        id: d.cid || null, name: d.name || null, tag: d.tag || null,
+        photo: d.photo || null, photoName: d.photoName || null,
+        floor: d.floor != null ? d.floor : fi, di: d.di,
+      });
+    }));
+    return out;
+  }, [roster]);
+  const liveKey = useMemo(() => liveCameras.map((c) => `${c.id}:${c.name}`).join("|"), [liveCameras]);
+  useEffect(() => {
+    if (!liveCameras.length) return;
+    try {
+      const fr = rootRef.current && rootRef.current.querySelector('iframe[title="CCTV Mockup"]');
+      if (fr && fr.contentWindow) fr.contentWindow.postMessage({ type: "iotMockupCmd", cmd: "cameras", cameras: liveCameras }, "*");
+    } catch { /* iframe not ready — the next roster change re-sends */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKey]);
 
   // Load the survey placements + view photos once, for the walkthrough (same shape SystemVisualize used).
   const [sv, setSv] = useState(null);
