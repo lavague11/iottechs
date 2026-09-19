@@ -330,7 +330,7 @@
   .libUpBox svg{width:22px;height:22px;fill:none;stroke:var(--gold);stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   .libEmpty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:30px 10px}
   /* confirm + upload-source dialogs */
-  #confirmModal,#uploadPick{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
+  #confirmModal,#uploadPick{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}   /* above the location sheet (z-80) so a delete confirm is never hidden behind it */
   #confirmModal.on,#uploadPick.on{display:flex}
   .cfCard{width:min(340px,90%);background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px rgba(16,17,18,.3);padding:20px}
   .cfMsg{font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:18px}
@@ -341,7 +341,7 @@
   .cfYes{background:#d9534f;color:#fff;border-color:#d9534f}
   .cfYes:hover{background:#c9302c}
   /* add-floor import chooser — start a new floor from the previous one's background (± items) */
-  #floorModal{position:fixed;inset:0;z-index:21;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
+  #floorModal{position:fixed;inset:0;z-index:91;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.42)}
   #floorModal.on{display:flex}
   .cfCol{display:flex;flex-direction:column;gap:8px;margin-top:4px}
   .flOpt{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid var(--line);border-radius:10px;background:#fff;padding:11px 13px;cursor:pointer;font-family:inherit}
@@ -1336,7 +1336,7 @@
       var ren=document.createElement("button"); ren.textContent="Rename";
       var del=document.createElement("button"); del.className="fsDel"; del.textContent="Delete";
       ren.addEventListener("click",function(e){ e.stopPropagation(); bar.remove(); renameInSheet(row,f); });
-      del.addEventListener("click",function(e){ e.stopPropagation(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); buildFloorSheet(); }); });
+      del.addEventListener("click",function(e){ e.stopPropagation(); closeFloorSheet(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
       bar.appendChild(ren); bar.appendChild(del);
       row.parentNode.insertBefore(bar, row.nextSibling);
     }
