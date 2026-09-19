@@ -587,7 +587,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
-    var DRAW_SRC="draw-floorplan.html?v=20260919-dock"+(PID?"&project="+encodeURIComponent(PID):"");
+    var DRAW_SRC="draw-floorplan.html?v=20260919-dock2"+(PID?"&project="+encodeURIComponent(PID):"");
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
     var surveyWiz=document.getElementById("surveyWiz");
@@ -602,6 +602,7 @@
       pendingBgSource=source; ensureBgToolSrc(src);
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
+      surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
       sideCollapsed=true; applySideCollapsed();
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
@@ -609,6 +610,7 @@
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
+      surveyWiz.style.display="";   // restore the survey bar when leaving the build tool
       if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
       else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
       else { document.getElementById("working").style.display="block"; }

@@ -56,6 +56,8 @@
   .segb{border:0;background:transparent;color:var(--ink);font:600 13px var(--sans);padding:8px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
   .segb.on{background:var(--ink);color:#fff}
   .segb.locked{opacity:.4;pointer-events:none}
+  .segToggle{display:none;align-items:center;gap:8px;height:40px;padding:0 12px;border:0;border-radius:11px;background:var(--ink);color:#fff;font:600 13px var(--sans);cursor:pointer;flex:none;white-space:nowrap}
+  .segToggle svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
   .stools{display:inline-flex;align-items:center;gap:6px}
   .tb{display:flex;align-items:center;gap:7px;height:40px;padding:0 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);font:600 13px var(--sans);cursor:pointer}
   .tb.ico{width:40px;padding:0;justify-content:center}
@@ -91,7 +93,8 @@
     .histctl{left:10px;bottom:calc(78px + env(safe-area-inset-bottom))}
     .hb{width:44px;height:44px}
   }
-  @media(max-width:400px){ .tbar{gap:4px} .segb{padding:9px 8px;font-size:12px} .tb.ico{width:40px} .tb.use{padding:0 13px} .stools{gap:4px} }
+  @media(max-width:410px){ #modeSeg{display:none} .segToggle{display:inline-flex} }
+  @media(max-width:400px){ .tbar{gap:4px} .tb.ico{width:38px} .tb.use{padding:0 12px} .stools{gap:4px} .segToggle{padding:0 11px;gap:6px} }
 </style>
 </head>
 <body>
@@ -123,6 +126,11 @@
         <button class="segb on" id="tStructure" title="Structure — the building shell" aria-label="Structure">Structure</button>
         <button class="segb" id="tRoom" title="Draw rooms inside" aria-label="Room">Room</button>
       </div>
+      <!-- Narrow phones: the segmented control collapses to one toggle so the dock never clips Done. -->
+      <button class="segToggle" id="modeToggle" title="Switch mode" aria-label="Switch Structure / Room">
+        <span id="modeToggleName">Structure</span>
+        <svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4"/><path d="M21 7H7"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h14"/></svg>
+      </button>
       <span id="structTools" class="stools">
         <button class="tb ico on" id="tAdd" title="Add" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
@@ -246,6 +254,7 @@
 
   function setMode(m){ mode=m; $("tStructure").classList.toggle("on",m==="structure"); $("tRoom").classList.toggle("on",m==="room");
     $("tRoom").classList.toggle("locked", cells.size===0);
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : "Room";
     var edit = m==="structure";                     // Add/Erase are structure-only; the snap toggle stays in both
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
@@ -341,6 +350,8 @@
   function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; }
   $("tStructure").addEventListener("click", function(){ backToDraw(); setMode("structure"); });   // re-enter shell edit
   $("tRoom").addEventListener("click", function(){ if(cells.size===0){ setMode("structure"); return; } backToDraw(); setMode("room"); });
+  $("modeToggle").addEventListener("click", function(){ backToDraw();
+    if(mode==="structure"){ if(cells.size>0) setMode("room"); } else setMode("structure"); });
   $("tAdd").addEventListener("click", function(){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); cv.style.cursor="crosshair"; });
   $("tErase").addEventListener("click", function(){ structOp="erase"; $("tErase").classList.add("on"); $("tAdd").classList.remove("on"); cv.style.cursor="cell"; });
   // ONE snap toggle — tap flips ½ ↔ 1 (persists for the session).
