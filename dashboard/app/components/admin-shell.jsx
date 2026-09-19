@@ -190,7 +190,7 @@ function NewProjectModal({ onClose }) {
     // Strongly steer toward a picked, verified address — but if Places can't load, a second
     // Create keeps what was typed rather than trapping the user.
     if (f.address.trim() && !addrVerified && !addrWarned) {
-      setErr("Pick the address from the suggestions to store the full, verified location — or press Create again to keep what you typed.");
+      setErr("Pick a suggested address, or press Create again to use what you typed.");
       setAddrWarned(true);
       return;
     }
