@@ -121,6 +121,35 @@
   .steps .s.done{color:var(--soft,#6f7686)}
   .steps .s.done::before{content:"\2713  ";color:var(--gold)}
   .nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
+  /* Compact location selector + bottom sheet (replaces the horizontal floor-tab scroller). */
+  .floorSel{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 10px 0 11px;border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--ink);font:600 12.5px var(--sans);cursor:pointer}
+  .floorSel:hover{border-color:var(--ink)}
+  .floorSelIc{width:15px;height:15px;stroke:var(--muted);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .floorSelChev{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .floorSheet{position:fixed;inset:0;z-index:80;display:none}
+  .floorSheet.on{display:block}
+  .fsScrim{position:absolute;inset:0;background:rgba(16,17,18,.34)}
+  .fsPanel{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -10px 40px rgba(16,17,18,.24);padding:8px 14px calc(16px + env(safe-area-inset-bottom));max-height:76vh;display:flex;flex-direction:column;animation:fsUp .2s ease}
+  @keyframes fsUp{from{transform:translateY(100%)}to{transform:none}}
+  .fsGrab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:6px auto 8px}
+  .fsHead{display:flex;align-items:center;justify-content:space-between;font:800 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:2px 4px 10px}
+  .fsX{border:0;background:transparent;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 6px}
+  .fsList{overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+  .fsRow{display:flex;align-items:center;gap:10px;padding:13px 12px;border-radius:11px;cursor:pointer;color:var(--ink);font:600 14.5px var(--sans)}
+  .fsRow:hover,.fsRow.on{background:var(--soft)}
+  .fsRowName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fsCheck{width:18px;height:18px;stroke:var(--gold);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;flex:none;opacity:0}
+  .fsRow.on .fsCheck{opacity:1}
+  .fsMore{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;flex:none;line-height:0}
+  .fsMore:hover{background:rgba(16,17,18,.06);color:var(--ink)}
+  .fsMore svg{width:18px;height:18px;fill:currentColor}
+  .fsAdd{margin-top:8px;border:1px dashed var(--line);background:var(--soft);color:var(--ink);border-radius:12px;padding:13px;font:700 13.5px var(--sans);cursor:pointer}
+  .fsAdd:hover{border-color:var(--gold)}
+  .fsActions{display:flex;gap:8px;padding:2px 12px 8px}
+  .fsActions button{flex:1;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px;font:600 13px var(--sans);cursor:pointer;color:var(--ink)}
+  .fsActions button:hover{border-color:var(--ink)}
+  .fsActions .fsDel{color:#c4553d;border-color:#e3b4ab}
+  .fsRename{width:100%;border:1px solid var(--gold);border-radius:9px;padding:11px 12px;font:600 14.5px var(--sans);outline:none;color:var(--ink)}
   .floorTabs{display:flex;gap:6px;align-items:center;overflow-x:auto}
   .ftab{flex:none;background:transparent;border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--muted);cursor:pointer}
   .ftab:hover{background:rgba(16,17,18,.05)}
@@ -491,12 +520,24 @@
       <!-- Submit step removed: submit lives in the host's Planner footer (one submit surface). -->
     </div>
     <div class="nav">
-      <div class="floorTabs">
-        <button class="ftab on">Floor 1</button>
-      </div>
+      <button class="floorSel" id="floorSel" aria-haspopup="dialog" title="Change location">
+        <svg class="floorSelIc" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+        <span id="floorSelName">Floor 1</span>
+        <svg class="floorSelChev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
       <div class="hint" id="wizHint"></div>
       <button class="b lite" id="backBtn" style="display:none">Back</button>
-      <button class="b" id="nextBtn">Next</button>
+    </div>
+  </div>
+
+  <!-- Location bottom sheet — replaces the horizontal floor-tab scroller (one selector, grouped list). -->
+  <div class="floorSheet" id="floorSheet" aria-hidden="true">
+    <div class="fsScrim" id="fsScrim"></div>
+    <div class="fsPanel" role="dialog" aria-label="Select location">
+      <div class="fsGrab"></div>
+      <div class="fsHead"><span>Location</span><button class="fsX" id="fsX" aria-label="Close">&times;</button></div>
+      <div class="fsList" id="fsList"></div>
+      <button class="fsAdd" id="fsAdd">+ Add floor</button>
     </div>
   </div>
 
@@ -1261,31 +1302,49 @@
     function addFloor(){ snapFloor(); var prev=floors[curFloor];
       if(prev && prev.bg){ askFloorImport(prev.name, function(mode){ createFloor(mode==="none"?null:prev, mode==="bgitems"); }); }
       else createFloor(null, false); }
-    function renderFloorTabs(){ var tabs=document.querySelector(".floorTabs"); if(!tabs) return; tabs.innerHTML="";
-      floors.forEach(function(f,i){ var b=document.createElement("button"); b.className="ftab"+(i===curFloor?" on":"");
-        var nm=document.createElement("span"); nm.className="fnm"; nm.textContent=f.name; b.appendChild(nm);
-        b.addEventListener("click",function(){ switchFloor(i); });
-        if(!RO){
-          b.title="Double-click to rename";
-          b.addEventListener("dblclick",function(e){ e.stopPropagation(); e.preventDefault(); startFloorRename(nm,f); });
-          var x=document.createElement("span"); x.className="fdel"; x.innerHTML="&times;"; x.title="Delete floor";
-          x.addEventListener("click",function(e){ e.stopPropagation(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
-          b.appendChild(x); }
-        tabs.appendChild(b); });
-      if(!RO){ var add=document.createElement("button"); add.className="ftab add"; add.textContent="+"; add.title="Add floor"; add.addEventListener("click",addFloor); tabs.appendChild(add); }
+    // The selector shows the current location; the bottom sheet is the full picker (grouped + management).
+    function renderFloorTabs(){
+      var nm=document.getElementById("floorSelName");
+      if(nm) nm.textContent=(floors[curFloor]&&floors[curFloor].name)||("Floor "+(curFloor+1));
+      if(document.getElementById("floorSheet") && document.getElementById("floorSheet").classList.contains("on")) buildFloorSheet();
     }
-    // Inline-rename a floor: double-click swaps the label for an input; Enter/blur commits, Esc cancels.
-    function startFloorRename(nm,f){
-      var inp=document.createElement("input"); inp.className="fnm-edit"; inp.value=f.name;
-      nm.replaceWith(inp); inp.focus(); inp.select();
+    function buildFloorSheet(){
+      var list=document.getElementById("fsList"); if(!list) return; list.innerHTML="";
+      floors.forEach(function(f,i){
+        var row=document.createElement("div"); row.className="fsRow"+(i===curFloor?" on":"");
+        var name=document.createElement("span"); name.className="fsRowName"; name.textContent=f.name; row.appendChild(name);
+        var chk=document.createElementNS("http://www.w3.org/2000/svg","svg"); chk.setAttribute("class","fsCheck"); chk.setAttribute("viewBox","0 0 24 24"); chk.innerHTML='<path d="M20 6L9 17l-5-5"/>'; row.appendChild(chk);
+        row.addEventListener("click",function(){ if(i!==curFloor) switchFloor(i); closeFloorSheet(); });
+        if(!RO){ var more=document.createElement("button"); more.className="fsMore"; more.setAttribute("aria-label","Location options");
+          more.innerHTML='<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+          more.addEventListener("click",function(e){ e.stopPropagation(); openRowActions(row,f,i); }); row.appendChild(more); }
+        list.appendChild(row);
+      });
+    }
+    function clearRowActions(){ document.querySelectorAll("#fsList .fsActions").forEach(function(a){ a.remove(); }); }
+    function openRowActions(row,f,i){
+      var had = row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains("fsActions");
+      clearRowActions(); if(had) return;
+      var bar=document.createElement("div"); bar.className="fsActions";
+      var ren=document.createElement("button"); ren.textContent="Rename";
+      var del=document.createElement("button"); del.className="fsDel"; del.textContent="Delete";
+      ren.addEventListener("click",function(e){ e.stopPropagation(); bar.remove(); renameInSheet(row,f); });
+      del.addEventListener("click",function(e){ e.stopPropagation(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); buildFloorSheet(); }); });
+      bar.appendChild(ren); bar.appendChild(del);
+      row.parentNode.insertBefore(bar, row.nextSibling);
+    }
+    function renameInSheet(row,f){
+      var nameSpan=row.querySelector(".fsRowName"); if(!nameSpan) return;
+      var inp=document.createElement("input"); inp.className="fsRename"; inp.value=f.name;
+      nameSpan.replaceWith(inp); inp.focus(); inp.select();
       inp.addEventListener("click",function(e){ e.stopPropagation(); });
-      inp.addEventListener("dblclick",function(e){ e.stopPropagation(); });
       var done=false;
-      function commit(){ if(done) return; done=true; var v=inp.value.trim(); if(v) f.name=v; renderFloorTabs(); renderPanel(); queueSave(); }
-      inp.addEventListener("keydown",function(e){ e.stopPropagation();
-        if(e.key==="Enter"){ e.preventDefault(); commit(); } else if(e.key==="Escape"){ done=true; renderFloorTabs(); } });
+      function commit(){ if(done) return; done=true; var v=inp.value.trim(); if(v) f.name=v; renderFloorTabs(); buildFloorSheet(); renderPanel(); queueSave(); }
+      inp.addEventListener("keydown",function(e){ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); commit(); } else if(e.key==="Escape"){ done=true; buildFloorSheet(); } });
       inp.addEventListener("blur",commit);
     }
+    function openFloorSheet(){ if(RO) return; buildFloorSheet(); document.getElementById("floorSheet").classList.add("on"); }
+    function closeFloorSheet(){ var s=document.getElementById("floorSheet"); if(s){ s.classList.remove("on"); clearRowActions(); } }
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
       if(floors.length<=1){ floors=[{name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
       var wasCur=(curFloor===i);
@@ -1385,7 +1444,6 @@
 
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
-    var nextBtn=document.getElementById("nextBtn");
     var unsubConfirm=false, unsubTimer=null;   // second-tap confirm before an unsubmit
     function goStep(idx){
       idx=Math.max(0,Math.min(1,idx));   // 0 Background · 1 Setup (submit is in the host footer; clamps any stale Submit/4-step save)
@@ -1428,21 +1486,17 @@
       setHint("");   // no step instructions — the UI speaks for itself
       queueSave();
     }
-    // Submit now lives in the host's Planner footer (one submit surface). The wizard just walks
-    // Background → Setup: show "Next" only while a later step exists; hide the control on the last step.
-    function renderSubmitCtl(){
-      if(curStep>=1){ nextBtn.style.display="none"; return; }   // Setup is the last step — no in-tool submit
-      nextBtn.disabled=false; nextBtn.className="b"; nextBtn.textContent="Next"; nextBtn.style.display="";
-    }
+    // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup
+    // step tabs are the manual navigation. renderSubmitCtl kept as a no-op so existing call sites are safe.
+    function renderSubmitCtl(){}
     var backBtn=document.getElementById("backBtn");
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
     stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
-    // Walk the wizard; on the Submit step the same button submits, then flips to Awaiting approval,
-    // then (a confirming second tap) unsubmits.
-    nextBtn.addEventListener("click", function(){
-      // Only advances the wizard now (Background → Setup). Submitting happens in the host footer.
-      if(curStep<1){ save(); goStep(curStep+1); }
-    });
+    // Location selector → bottom sheet.
+    document.getElementById("floorSel").addEventListener("click", openFloorSheet);
+    document.getElementById("fsScrim").addEventListener("click", closeFloorSheet);
+    document.getElementById("fsX").addEventListener("click", closeFloorSheet);
+    document.getElementById("fsAdd").addEventListener("click", function(){ addFloor(); closeFloorSheet(); });
 
     restore();   // reopen the saved survey (all floors) for this project (if any)
   </script>
