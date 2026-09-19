@@ -119,9 +119,16 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
     if (!wasDrag) return;                                 // a tap — let the click through
     if (d < -thr) go(idx + 1); else if (d > thr) go(idx - 1);
   }
-  // ── wheel (horizontal) ──
+  // ── wheel ── horizontal pages stages; a vertical wheel over the HEADER (not already inside a scroll
+  // area) is forwarded to the active stage's content, so scrolling from the top strip works too (BUG #34).
   function onWheel(e) {
-    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      if (!e.target.closest(".dv-scroll")) {
+        const sc = deckRef.current?.querySelector('.dv-slide:not([aria-hidden="true"]) .dv-scroll');
+        if (sc && sc.scrollHeight > sc.clientHeight) { sc.scrollTop += e.deltaY; e.preventDefault(); }
+      }
+      return;
+    }
     e.preventDefault();
     if (wheelLock.current || Math.abs(e.deltaX) < 18) return;
     wheelLock.current = true; go(idx + (e.deltaX > 0 ? 1 : -1));
@@ -216,7 +223,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   }, [idx, seenLoaded, stages, seenKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={`dv-shell${compact ? " dv-compact" : ""}`} data-tint={cur.tint || "ink"}>
+    <div className={`dv-shell${compact ? " dv-compact" : ""}`} data-tint={cur.tint || "ink"}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
       {/* top bar */}
       <header className="dv-top">
         <a className="dv-logo" href="/go" title="IOT TECHS" aria-label="IOT TECHS home"><Wordmark height={16} /></a>
@@ -398,8 +406,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       </nav>
 
       {/* deck */}
-      <main className={`dv-deck${moved ? " moved" : ""}`} id="dv-deck" tabIndex={0} ref={deckRef}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
+      <main className={`dv-deck${moved ? " moved" : ""}`} id="dv-deck" tabIndex={0} ref={deckRef}>
         {stages.map((s, i) => (
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
             <div className={`dv-pane${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-wide" : ""}`}>
@@ -496,7 +503,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
 
 const CSS = `
 .dv-shell{--dv-ink:#101418;--dv-ink-soft:#3A4048;--dv-meta:#787D84;--dv-faint:#A1A6AC;--dv-paper:#F4F4F2;--dv-raise:#FBFBFA;--dv-line:#E4E4DF;--dv-line-soft:#EDEDE9;--dv-gold:#C9A96E;--dv-gold-deep:#A8842F;--dv-green:#2E7D5B;--dv-red:#C4553D;--dv-blue:#3E6C9E;--dv-e:cubic-bezier(.22,.9,.24,1);--dv-eo:cubic-bezier(.16,1,.3,1);
-  height:100dvh;display:flex;flex-direction:column;background:var(--dv-paper);color:var(--dv-ink);
+  height:100dvh;display:flex;flex-direction:column;background:var(--dv-paper);color:var(--dv-ink);touch-action:pan-y;
   font-family:var(--font-sans),"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
 .dv-shell .mono{font-family:var(--font-mono),"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .dv-shell button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
