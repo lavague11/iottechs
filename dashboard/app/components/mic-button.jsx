@@ -23,6 +23,7 @@ const LANGS = [
   { code: "pl-PL", label: "Polski", short: "PL" },
 ];
 const LS_KEY = "iot_dictation_lang";
+const SILENCE_MS = 180000;   // auto-stop dictation after 3 min with no speech
 function defaultLang() {
   try { const saved = localStorage.getItem(LS_KEY); if (saved && LANGS.some((l) => l.code === saved)) return saved; } catch { /* private mode */ }
   try { const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
@@ -43,10 +44,13 @@ export default function MicButton({ value = "", onChange, onActive, controlRef, 
   const baseRef = useRef("");          // finalized transcript so far (survives recognition restarts)
   const restartsRef = useRef([]);      // recent restart timestamps → guard against tight restart loops
   const skipPolishRef = useRef(false); // Send/Discard stop: host already has the text, don't polish/rewrite it
+  const silenceRef = useRef(null);     // auto-stop after prolonged silence so the mic never runs forever
   const speechOK = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   useEffect(() => { setLang(defaultLang()); }, []);
-  useEffect(() => () => { wantsRef.current = false; try { recRef.current?.stop(); } catch { /* noop */ } }, []);
+  useEffect(() => () => { wantsRef.current = false; clearTimeout(silenceRef.current); try { recRef.current?.stop(); } catch { /* noop */ } }, []);
+  // Restart the 3-min no-speech countdown; fires a normal (polishing) stop so a forgotten mic can't run on.
+  function armSilence() { clearTimeout(silenceRef.current); silenceRef.current = setTimeout(() => { if (wantsRef.current) stopDictation(); }, SILENCE_MS); }
   // Tell the host whether the mic is doing anything (recording or polishing) so it can keep the report
   // mounted while collapsed and blink its launcher — dictation survives clicking outside (BUG feedback).
   useEffect(() => { onActive?.(listening || polishing); /* eslint-disable-next-line */ }, [listening, polishing]);
@@ -81,6 +85,7 @@ export default function MicButton({ value = "", onChange, onActive, controlRef, 
     const rec = new SR();
     rec.lang = langRef.current; rec.interimResults = true; rec.continuous = true;
     rec.onresult = (ev) => {
+      armSilence();                          // any speech (even interim) resets the 3-min timer
       let finalT = "", interim = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const t = ev.results[i][0].transcript;
@@ -105,7 +110,7 @@ export default function MicButton({ value = "", onChange, onActive, controlRef, 
     try { rec.start(); setListening(true); } catch { /* an instance is already starting */ }
   }
   function finishSession() {
-    setListening(false);
+    setListening(false); clearTimeout(silenceRef.current);
     if (skipPolishRef.current) { skipPolishRef.current = false; gotSpeechRef.current = false; return; }   // host owns the text (Send/Discard)
     const finalText = tidy(baseRef.current); onChange?.(finalText);
     if (gotSpeechRef.current) { gotSpeechRef.current = false; polish(finalText); }
@@ -125,6 +130,7 @@ export default function MicButton({ value = "", onChange, onActive, controlRef, 
     baseRef.current = valRef.current ? valRef.current.replace(/\s+$/, "") + " " : "";
     restartsRef.current = [];
     startRec();
+    armSilence();   // arm once; only real speech (onresult) resets it — browser auto-restarts do not
   }
   // Let the host stop the session cleanly on Send/Discard without owning the recognition instance.
   if (controlRef) controlRef.current = { stop: stopDictation, isActive: () => wantsRef.current || listening };
