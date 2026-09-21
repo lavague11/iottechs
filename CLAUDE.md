@@ -83,3 +83,37 @@ for a project this size the overhead isn't worth it.
 
 - Run tests after code changes when the project has them for the affected area
 - Verify the build succeeds before committing
+
+## Model routing
+
+Route each task to the cheapest model that can do it correctly — don't use one model for everything.
+
+- **Opus** — architecture & DB-schema decisions, debugging where the cause isn't known yet, anything
+  touching auth / payments / permissions / role-visibility, refactors spanning many files, and
+  reviewing a plan before it runs.
+- **Sonnet** — the default: features from a clear spec, editing existing components, writing tests,
+  fixing bugs with a known cause, turning audit reports into issue lists.
+- **Haiku** — renames, copy & label edits, formatting, boilerplate scaffolding, file moves,
+  mechanical find-and-replace.
+
+Plan on Opus, execute on Sonnet. Don't let the expensive model do the mechanical typing.
+
+## Subagents
+
+Defined in `.claude/agents/*.md`. These are **available for delegation, not a mandatory pipeline** —
+the "Working style — solo by default" rule above still wins. Reach for one only when a subtask is
+genuinely independent, large enough to justify the overhead, or explicitly requested.
+
+| Agent | Job | Model |
+|---|---|---|
+| `spec-writer`   | Turn a rough ask / voice note into a full spec (surfaces, roles, data, flows, edge cases) before any code | opus |
+| `db-schema`     | node:sqlite tables, the `db.js` ensure-column migration pattern, relationships, server-side access control | opus |
+| `code-reviewer` | Review a diff before it lands — correctness, security/role-visibility, house conventions | opus |
+| `ui-auditor`    | Run/interpret `dashboard/scripts/audit.mjs`; produce a fix list | sonnet |
+| `bug-triage`    | Turn audit output into paste-ready `/bugs` entries | sonnet |
+| `test-writer`   | Write tests against a spec or existing behavior | sonnet |
+| `docs-keeper`   | Keep this file, `/dev` conventions, and READMEs current | haiku |
+
+**Stack note for all agents:** this repo is **Next.js (App Router, SWC — no Babel) + node:sqlite**
+(`dashboard/lib/db.js`), **not** Supabase. Access control is **server-side** (role checks, server-action
+guards, `sanitize*` payload stripping), not Postgres RLS.
