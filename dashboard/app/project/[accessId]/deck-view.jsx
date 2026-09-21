@@ -724,10 +724,10 @@ const CSS = `
 .dv-deck input,.dv-deck textarea,.dv-deck [contenteditable]{-webkit-user-select:text;user-select:text}
 .dv-slide{position:absolute;top:0;left:0;height:100%;width:100%;will-change:transform,opacity}
 .dv-pane{height:100%;display:flex;flex-direction:column;overflow:hidden}
-.dv-pane-head,.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
+.dv-scroll,.dv-advance{width:100%;max-width:840px;margin-left:auto;margin-right:auto}
 /* A merged stage page (wide) uses the FULL deck width, not the 840px reading column — the stage
    title and the content both span edge-to-edge (with page padding). */
-.dv-pane.dv-wide .dv-pane-head,.dv-pane.dv-wide .dv-scroll,.dv-pane.dv-wide .dv-advance,.dv-scroll.dv-scroll--wide{max-width:100%}
+.dv-pane.dv-wide .dv-scroll,.dv-pane.dv-wide .dv-advance,.dv-scroll.dv-scroll--wide{max-width:100%}
 .dv-solo--wide{margin:0}
 /* Stacked merged sections: each tool is a full-width, near-full-height panel — the whole tool, not a
    little card. You scroll the page from one to the next. */
@@ -754,10 +754,6 @@ const CSS = `
 .cx-merged--flow .prop-wrap{margin:0!important}
 .cx-merged--flow .prop-wrap>.pcv-root,
 .cx-merged--flow .prop-wrap>.prop-card{border:none!important;border-radius:0!important;box-shadow:none!important;background:transparent!important}
-.dv-pane-head{padding:26px 30px 18px;display:flex;align-items:flex-start;gap:14px}
-.dv-stage-name{font-size:24px;font-weight:600;letter-spacing:-.03em}
-.dv-flag{margin-left:auto;display:inline-flex;align-items:center;height:25px;padding:0 11px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;font-family:var(--font-mono),"JetBrains Mono",monospace}
-.f-pending{background:#EEF3F8;color:var(--dv-blue)}.f-reviewing,.f-finalizing{background:#FBF4E6;color:var(--dv-gold-deep)}.f-complete{background:#E9F3ED;color:var(--dv-green)}.f-locked{background:rgba(16,20,24,.04);color:var(--dv-faint)}
 .dv-scroll{flex:1;overflow-y:auto;padding:2px 20px 16px;scrollbar-width:none}
 .dv-scroll::-webkit-scrollbar{width:0;height:0;display:none}
 
@@ -835,11 +831,11 @@ const CSS = `
 .dv-hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:35;font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dv-faint);transition:opacity .5s}
 .dv-deck.moved .dv-hint{opacity:0}
 
-.dv-slide[aria-hidden="false"] .dv-pane-head>*,.dv-slide[aria-hidden="false"] .dv-tool{animation:dvrise .55s var(--dv-eo) both}
+.dv-slide[aria-hidden="false"] .dv-tool{animation:dvrise .55s var(--dv-eo) both}
 .dv-slide[aria-hidden="false"] .dv-tool:nth-child(2){animation-delay:.06s}.dv-slide[aria-hidden="false"] .dv-tool:nth-child(3){animation-delay:.12s}
 @keyframes dvrise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-@media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0;flex-wrap:nowrap;gap:8px}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-pane-head{padding:20px 16px 14px}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
+@media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0;flex-wrap:nowrap;gap:8px}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
   /* Phone: the status chip rides on the SAME line as the name (was wrapping to its own line, too
      big). Hide the redundant project-code pill (it's in the drawer) to free the room, and shrink the
      chip so it fits snugly next to a truncating name. */
