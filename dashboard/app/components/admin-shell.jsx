@@ -174,7 +174,9 @@ const NP_SERVICES = [
 function NewProjectModal({ onClose }) {
   const r = useRouter();
   const [kind, setKind] = useState("cctv");   // cctv (standard install) | adt (monitoring)
-  const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", service: "Security Cameras / CCTV", message: "" });
+  // propertyType defaults to commercial (the normal IOT TECHS job) — a compact toggle, never a
+  // mandatory extra question that slows creation. Easily switched to residential when appropriate.
+  const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", service: "Security Cameras / CCTV", propertyType: "commercial", message: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
@@ -261,7 +263,17 @@ function NewProjectModal({ onClose }) {
                 <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
               </div>
               <div className="np-f"><label>Service Address {addrVerified ? <span className="np-verified">✓ Verified</span> : <span className="np-opt">pick from the list</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" /></div>
-              <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
+              <div className="np-row2">
+                <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
+                <div className="np-f"><label>Property</label>
+                  <div className="np-seg" role="radiogroup" aria-label="Property type">
+                    {[["commercial", "Commercial"], ["residential", "Residential"]].map(([k, t]) => (
+                      <button type="button" key={k} role="radio" aria-checked={f.propertyType === k}
+                        className={`np-seg-b${f.propertyType === k ? " on" : ""}`} onClick={() => set("propertyType", k)}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
               <div className="np-f"><label>Notes <span className="np-opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}
               <button className="np-submit" type="submit" disabled={busy}>{busy ? "Creating…" : "Create Project"}</button>
@@ -817,6 +829,9 @@ const CSS = `
 .apx .np-f label{font-size:.82rem;font-weight:600}
 .apx .np-opt{font-weight:400;color:var(--muted)}
 .apx .np-verified{font-weight:700;color:#2f7d5a;font-size:.72rem;letter-spacing:.02em}
+.apx .np-seg{display:flex;gap:4px;padding:4px;background:var(--bg-soft,#f4f2ec);border:1px solid var(--line,#e4e0d8);border-radius:12px}
+.apx .np-seg-b{flex:1;padding:8px 6px;border:none;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:.82rem;cursor:pointer;transition:.15s}
+.apx .np-seg-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
 .apx .np-submit{flex:1;width:100%;padding:12px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
 .apx .np-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}

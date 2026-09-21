@@ -6,6 +6,7 @@ import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 import { survey2HasData } from "../../../lib/tool-data";
+import PropertyToggle from "../../components/property-type";
 
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
@@ -16,7 +17,7 @@ const WIDGET_VERSION = "20260921-3";
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false, noRoster = false }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false, noRoster = false, propertyType = null, canEditProperty = false, onPropertyChange }) {
   const readOnly = view === "customer" || customerView;
   // Build gate — the empty survey editor is a big surface; staff see a Build button first (matching
   // the Mockup), so a skipped survey isn't an eyesore and Consulting reads as building the system. A
@@ -141,6 +142,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           {readOnly ? "Customer view" : "Live survey editor"}
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
+        {/* Same canonical Residential/Commercial value as the Project Header — a change here updates
+            the whole project (not just the survey). Read-only for viewers without edit permission. */}
+        {propertyType && (
+          <span className="ss-embed-ptype">
+            <PropertyToggle value={propertyType} editable={!!canEditProperty} onChange={onPropertyChange} />
+          </span>
+        )}
         {showEditor && (fs ? (
           <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>

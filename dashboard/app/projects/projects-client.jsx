@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { ProjectTypeIcon } from "../components/project-type";
+import { propertyTypeLabel } from "../../lib/spec";
 import { adtStatusMeta } from "../../lib/adt";
 import { archiveProjectAction } from "./actions";
 
@@ -71,7 +72,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
 
   const visible = projects
     .filter((p) => matches(p, filter))
-    .filter((p) => !q || p.customer.toLowerCase().includes(q) || (p.service || "").toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q) || p.access_id.toLowerCase().includes(q));
+    .filter((p) => !q || p.customer.toLowerCase().includes(q) || (p.service || "").toLowerCase().includes(q) || (p.property_type || "").toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q) || p.access_id.toLowerCase().includes(q));
 
   const counts = Object.fromEntries(TABS.map(([k]) => [k, projects.filter((p) => matches(p, k)).length]));
 
@@ -100,7 +101,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                 <span className="cav">{initials(p.customer)}</span>
                 <div className="c-main">
                   <div className="c-name">{p.customer}</div>
-                  <div className="c-contact">{p.service}{p.address ? ` · ${p.address}` : ""}</div>
+                  <div className="c-contact">{p.service} · {propertyTypeLabel(p.property_type)}{p.address ? ` · ${p.address}` : ""}</div>
                   <div className="c-addr mono" style={{ fontSize: ".72rem" }}>{p.access_id}{p.tech ? ` · ${p.tech}` : ""}{p.date ? ` · ${p.date}` : ""}</div>
                 </div>
                 <div className="c-chips">

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AddressAutocomplete from "../../components/address-autocomplete";
 import { Wordmark } from "../../components/brand";
+import PropertyToggle from "../../components/property-type";
 import { skipOutsideClose } from "../../../lib/outside-click";
 
 /*
@@ -277,6 +278,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <h1 className="dv-title">{customer.name}</h1>
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
+        )}
+        {customer?.propertyType && (
+          <span className="dv-ptype" data-stop>
+            <PropertyToggle value={customer.propertyType} editable={!!customer.canEditProperty} onChange={customer.onPropertyChange} />
+          </span>
         )}
         {statusChip && (() => {
           const chip = statusChip, d = chip.detail;
@@ -637,6 +643,9 @@ const CSS = `
 .dv-compact .dv-jobbar{padding-top:8px}
 .dv-compact .dv-title{font-size:18px}
 .dv-compact .dv-code{display:none}
+.dv-ptype{flex:0 0 auto;display:inline-flex;align-items:center;margin-right:2px}
+.dv-compact .dv-ptype{display:none}   /* §9 — compact header keeps name/workflow/progress only */
+@media (max-width:760px){.dv-ptype .ptype-ro{font-size:.68rem}}
 .dv-compact .dv-rail{padding-top:9px;padding-bottom:9px}
 .dv-compact .dv-lab .nm{display:none}
 .dv-compact .dv-readout .cap{display:none}

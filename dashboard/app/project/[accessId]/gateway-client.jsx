@@ -5,7 +5,7 @@ import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -1797,6 +1797,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // When admin/manager pick a preview role, render the stage content as that role instead.
   const cView = (previewRole && ["admin","manager"].includes(view)) ? previewRole : view;
   const cell = cellFor(viewingStage, cView);
+  // Canonical Residential/Commercial — one editor + one change path, shared by the Project Header and
+  // the Site Survey. A change updates localProj so every mounted surface reflects it with no reload.
+  const canEditProperty = ["admin", "manager", "sales"].includes(cView) && !previewRole;
+  const onPropertyChange = async (val) => {
+    const r = await setPropertyTypeAction(lp.access_id, val);
+    if (r?.ok) setLocalProj((p) => ({ ...p, property_type: r.propertyType }));
+    return r;
+  };
   // A completed project is locked: its stage tools go read-only so a closed job can't be
   // silently re-edited. Admin/manager can Reopen from the Completion panel to make changes.
   const locked = !!lp.completed_at;
@@ -2238,6 +2246,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                    propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange}
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has || surveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
@@ -2635,6 +2644,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       service_code: lp.service_code || "",
       serviceOptions: ["admin", "manager"].includes(cView) && !previewRole ? SERVICE_CATALOG.map((s) => ({ code: s.code, label: s.label })) : null,
       onServiceChange: async (code) => { const r = await setProjectServiceAction(lp.access_id, code); if (r?.ok) setLocalProj((p) => ({ ...p, service_code: r.code, service: serviceCodeLabel(r.code) })); return r; },
+      // Residential / Commercial — canonical project attribute (separate from the service line). Shown
+      // to every authorized viewer; editable by the office (admin/manager/sales). The change updates
+      // localProj, so the header + the survey indicator both reflect it instantly (no reload).
+      propertyType: lp.property_type || "commercial",
+      canEditProperty,
+      onPropertyChange,
     };
     // Job Log entries derived from the proposal's own state (not stage_acceptances / project_events),
     // so the proposal signature and each relocation/removal request show up — including ones made
@@ -3385,6 +3400,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 view={view}
                 customerView={!!previewRole}
                 noApproval
+                propertyType={lp.property_type || "commercial"}
+                canEditProperty={canEditProperty}
+                onPropertyChange={onPropertyChange}
                 customerName={lp.contact_name || lp.customer}
                 onHasData={setSurveyHasLocal}
                 submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}
@@ -4530,6 +4548,8 @@ const PV_CSS = `
 .pvx .ss-embed{display:flex;flex-direction:column;gap:8px}
 .pvx .ss-embed-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .pvx .ss-embed-tag{font-size:.78rem;color:var(--muted);font-weight:600}
+.pvx .ss-embed-ptype{margin-right:auto;color:var(--muted);--pop-bg:var(--card,#fff);--pop-fg:var(--ink,#0B0F1A)}
+.syp .ss-embed-ptype{margin-right:0}
 .pvx .ss-embed-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none}
 .pvx .ss-embed-open:hover{border-color:var(--gold);color:var(--gold-deep)}
 /* Default height is only a pre-measure fallback — the mockup iframe posts its real content height and

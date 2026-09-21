@@ -162,6 +162,29 @@ export const PROJECT_TYPES = {
   C: "Service Call",
 };
 
+// ---- Property type — the ENVIRONMENT a project lives in (NOT the service line). ----------------
+// Answers "where / what kind of property?" (Commercial | Residential) — a first-class, canonical
+// project attribute, entirely separate from serviceType (Cameras / ADT / POS / …, the service_code)
+// and from customer/account type. New projects default to commercial (the normal IOT TECHS job).
+// The single source of truth is the projects.property_type column; every module reads this same value.
+export const PROPERTY_TYPES = { commercial: "Commercial", residential: "Residential" };
+export const DEFAULT_PROPERTY_TYPE = "commercial";
+
+// Any stored/typed variant → the one canonical value. Never persist "Commercial"/"business"/"home"/
+// "res"/etc. — normalize on the way in and out so the whole app compares against exactly two strings.
+export function normalizePropertyType(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return DEFAULT_PROPERTY_TYPE;
+  if (/^res|home|house|dwelling|apartment|condo|residence/.test(s)) return "residential";
+  if (/^com|business|office|retail|enterprise|industrial/.test(s))  return "commercial";
+  return PROPERTY_TYPES[s] ? s : DEFAULT_PROPERTY_TYPE;
+}
+export function propertyTypeLabel(v) { return PROPERTY_TYPES[normalizePropertyType(v)]; }
+// Read from a project row (row carries either the raw `property_type` or the decorated `propertyType`).
+export function projectPropertyType(p) { return normalizePropertyType(p?.propertyType ?? p?.property_type); }
+export function isResidentialProject(p) { return projectPropertyType(p) === "residential"; }
+export function isCommercialProject(p)  { return projectPropertyType(p) === "commercial"; }
+
 // ---- Roles. Vendor is kept per the resolved spec decision. ----
 export const ROLES = [
   { key: "admin",    label: "Admin",       code: "AD" },

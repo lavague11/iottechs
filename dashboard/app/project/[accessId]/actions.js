@@ -1,8 +1,8 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService } from "../../../lib/db";
-import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel } from "../../../lib/spec";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType } from "../../../lib/db";
+import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
@@ -303,6 +303,27 @@ export async function setProjectServiceAction(accessId, code) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, code: res.code };
+}
+
+// Set the project's canonical Residential/Commercial classification. ONE source of truth — whatever
+// surface makes the change (Project Header, Site Survey, Settings…) routes through here, so every
+// module reads the same value. Editing is office-level (admin/manager/sales); tech + customer are
+// read-only. Logs a single audit event on a real change.
+export async function setPropertyTypeAction(accessId, value) {
+  // Accept a real login session OR a project-scoped PIN grant (getAnyTok) — same as stage moves —
+  // so any legitimately-authorized office viewer can correct the classification.
+  const tok = await getAnyTok();
+  if (!tok) return { error: "Please unlock the project first." };
+  if (!["admin", "manager", "sales"].includes(tok.role)) return { error: "Read-only for your role." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const res = setProjectPropertyType(accessId, value);
+  if (!res.ok) return res;
+  if (res.changed) {
+    logProjectEvent(accessId, { kind: "change", label: `Project classification changed to ${propertyTypeLabel(res.propertyType)}`, actor: tok.name || tok.email || tok.role });
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/project/${accessId}`);
+  }
+  return { ok: true, propertyType: res.propertyType };
 }
 
 // `viewRole` is display-only legacy — the role that authorizes the move comes from the

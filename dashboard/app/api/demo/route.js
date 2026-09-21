@@ -19,6 +19,7 @@ export async function POST(request) {
     const address = String(body.address || "").trim();
     const service = String(body.service || "").trim();
     const company = String(body.company || "").trim();
+    const propertyType = String(body.propertyType || "").trim();   // commercial (default) | residential
     if (!name && !email && !phone) {
       return Response.json({ ok: false, error: "Missing fields." }, { status: 400 });
     }
@@ -27,7 +28,7 @@ export async function POST(request) {
     // password" instead of walking them into the create-password step and rejecting there.
     const existingUser = (email ? getUserByEmail(email) : null) || (phone ? getUserByPhone(phone) : null);
     const existingAccount = !!(existingUser && userHasPassword(existingUser.id));
-    const { accessId, customerPin } = createLeadProject(name, email || null, phone || null, address, service, company || null);
+    const { accessId, customerPin } = createLeadProject(name, email || null, phone || null, address, service, company || null, propertyType || null);
 
     // Auto-create customer account if doesn't exist
     let accountCreated = false;

@@ -3,7 +3,7 @@ import { mkdirSync, copyFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
-import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText } from "./spec.js";
+import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount } from "./tool-data.js";
 import { optionTotals } from "./proposal.js";
@@ -226,6 +226,10 @@ function init() {
   // JSON array of customer-facing "X has been published" pop-ups already shown, so each published
   // item (survey / mockup / proposal vN) celebrates exactly once.
   if (!cols.includes("announced_seen"))     db.exec("ALTER TABLE projects ADD COLUMN announced_seen TEXT");
+  // Residential / Commercial — the property ENVIRONMENT (separate from service_code / project_type).
+  // ONE canonical value read by every module. New + legacy rows default to 'commercial' (the normal
+  // IOT TECHS job); a constant DEFAULT backfills existing rows without a destructive guess.
+  if (!cols.includes("property_type"))      db.exec("ALTER TABLE projects ADD COLUMN property_type TEXT DEFAULT 'commercial'");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -2176,6 +2180,9 @@ const decorate = (r) => ({
   ...r,
   stageLabel: stageLabel(r.stage),
   service: SERVICE_CODES[r.service_code] || r.service_code,
+  // Canonical Residential/Commercial — normalized so every consumer compares against exactly two
+  // values (legacy rows / odd variants collapse to the default 'commercial').
+  property_type: normalizePropertyType(r.property_type),
 });
 
 export function getAllJobs() {
@@ -2770,9 +2777,11 @@ export function createCustomerUser(name, email, phone) {
   } catch (_) {}
 }
 
-export function createLeadProject(name, email, phone, address, service, company) {
+export function createLeadProject(name, email, phone, address, service, company, propertyType) {
   const normalEmail = email ? String(email).trim().toLowerCase() : null;
   const normalPhone = phone ? String(phone).trim() : null;
+  // Property environment — defaults to commercial (normal IOT TECHS job) when the caller doesn't say.
+  const propType = normalizePropertyType(propertyType);
 
   // Upsert user
   let user = normalEmail
@@ -2821,12 +2830,12 @@ export function createLeadProject(name, email, phone, address, service, company)
   db.prepare(`
     INSERT INTO projects
       (access_id, customer, address, service_code, project_type, category, stage, status,
-       contact_name, contact_email, contact_phone, source, customer_pin, date, company_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       contact_name, contact_email, contact_phone, source, customer_pin, date, company_name, property_type)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     accessId, customerLabel, address || "", svc, "A", "open",
     "inquiry", "New", name || "Customer", normalEmail, normalPhone,
-    "external", pin, today, companyName
+    "external", pin, today, companyName, propType
   );
 
   return { userId: user.id, accessId, customerPin: pin };
@@ -2896,6 +2905,19 @@ export function setProjectService(accessId, code) {
   if (!proj) return { error: "Project not found." };
   db.prepare("UPDATE projects SET service_code = ? WHERE access_id = ? COLLATE NOCASE").run(c, String(accessId));
   return { ok: true, code: c, from: proj.service_code };
+}
+
+// Set a project's canonical Residential/Commercial classification (the ONE source of truth every
+// module reads). Value is normalized so we never store an inconsistent variant. Returns the change
+// (no-op reported too, so callers can skip a redundant audit event).
+export function setProjectPropertyType(accessId, value) {
+  const v = normalizePropertyType(value);
+  const proj = db.prepare("SELECT id, property_type FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId));
+  if (!proj) return { error: "Project not found." };
+  const from = normalizePropertyType(proj.property_type);
+  if (from === v) return { ok: true, propertyType: v, from, changed: false };
+  db.prepare("UPDATE projects SET property_type = ? WHERE access_id = ? COLLATE NOCASE").run(v, String(accessId));
+  return { ok: true, propertyType: v, from, changed: true };
 }
 
 // Bulk backfill from a pasted/CSV list. rows: [{name,phone,email,address,system,installDate,value,notes}].

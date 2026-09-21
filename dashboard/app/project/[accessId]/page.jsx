@@ -92,6 +92,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     service:         p.service,          // decorated by db.js (SERVICE_CODES lookup)
     service_code:    p.service_code,
     project_type:    p.project_type,
+    property_type:   p.property_type,   // canonical Residential/Commercial (visible to authorized viewers)
     stage:           p.stage,
     value:           p.value,
     cameras:         p.cameras,
