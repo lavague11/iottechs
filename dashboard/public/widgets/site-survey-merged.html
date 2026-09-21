@@ -588,7 +588,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
-    var DRAW_SRC="draw-floorplan.html?v=20260921-cells"+(PID?"&project="+encodeURIComponent(PID):"");
+    var DRAW_SRC="draw-floorplan.html?v=20260921-svg"+(PID?"&project="+encodeURIComponent(PID):"");
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     var bgToolOpen=null;  // 'draw'|'satellite' while a build tool is actively open → persisted so a refresh reopens it
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
@@ -663,14 +663,22 @@
     // the satellite tool posts its finished image here (its own "Use" button)
     window.addEventListener("message", function(ev){
       if(!ev.data || ev.data.type!=="satellite-capture-result") return;
-      applyBackground(ev.data.dataUrl);
+      applyBackground(ev.data.dataUrl, false, ev.data.vector);
     });
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
     // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
-    function applyBackground(dataUrl, skipSave){
+    function applyBackground(dataUrl, skipSave, vector){
       if(!dataUrl){ finishBackground(null, skipSave); return; }
+      // VECTOR plan (SVG from the draw tool): keep it as-is — never rasterize it. An SVG background scales
+      // crisply at any zoom (paths + real text), and it's small enough to store inline. (BUG: blurry plan.)
+      if(vector || dataUrl.indexOf("data:image/svg")===0){
+        var sv=new Image();
+        function svDone(){ if(!skipSave) saveToLibrary(dataUrl,"floorplan"); finishBackground(dataUrl, skipSave); }
+        sv.onload=function(){ sceneAspect=(sv.naturalWidth/sv.naturalHeight)||sceneAspect||1; svDone(); };
+        sv.onerror=svDone; sv.src=dataUrl; return;
+      }
       var im=new Image();
       im.onload=function(){
         sceneAspect=(im.naturalWidth/im.naturalHeight)||1;   // anchor the plate to this photo's shape
@@ -709,7 +717,7 @@
     function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
       var img=document.getElementById("stageImg");
-      if(dataUrl){ img.style.background=""; img.style.backgroundImage="url("+dataUrl+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
+      if(dataUrl){ img.style.background=""; img.style.backgroundImage='url("'+dataUrl+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
@@ -895,7 +903,7 @@
     function ensureLoupe(){ if(loupeEl) return loupeEl; loupeEl=document.createElement("div"); loupeEl.id="loupe"; loupeEl.innerHTML='<div class="lxh"></div>'; document.body.appendChild(loupeEl); return loupeEl; }
     function showLoupe(fx,fy){ if(!bgData) return; var lp=ensureLoupe(); var sr=document.getElementById("scene").getBoundingClientRect();
       if(!sr.width||!sr.height) return; var L=124, Z=2.3, u=(fx-sr.left)/sr.width, v=(fy-sr.top)/sr.height;   // scene is sized to the image aspect → clean uniform magnify
-      lp.style.backgroundImage="url("+bgData+")"; lp.style.backgroundRepeat="no-repeat";
+      lp.style.backgroundImage='url("'+bgData+'")'; lp.style.backgroundRepeat="no-repeat";
       lp.style.backgroundSize=(sr.width*Z)+"px "+(sr.height*Z)+"px";
       lp.style.backgroundPosition=(L/2 - u*sr.width*Z)+"px "+(L/2 - v*sr.height*Z)+"px";
       var left=Math.max(6, Math.min(fx-L/2, window.innerWidth-L-6)), top=fy-L-26; if(top<6) top=fy+26;   // above the fingertip, flip below if no room
@@ -1266,7 +1274,7 @@
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
       devices.push(d); mountDevice(d); }
-    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage="url("+bgData+")"; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
+    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage='url("'+bgData+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
     // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned
     // at % of #scene) always anchor to the same spot on the image on every screen (iPhone/iPad/desktop),
     // and the whole photo shows with blank space AROUND the plate (never inside it → no floating icons,

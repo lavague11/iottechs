@@ -361,6 +361,30 @@
     return c; }
   function hasSketch(){ return cells.size>0 || rooms.length>0; }
 
+  // ---- VECTOR export: the drawn plan as an SVG data URL. This is what Done hands back, so the finished
+  // plan stays perfectly crisp at any zoom (paths + real <text>, never a rasterized bitmap). ----
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function sketchSVG(){
+    var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
+    var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
+    var x0=bb.x-m, y0=bb.y-m, vw=bb.w+2*m, vh=bb.h+2*m;
+    var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
+    var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
+    o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="#ffffff"/>');
+    var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+    if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');
+    rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
+      var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+      o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
+      var rp=""; edgesOf(set).forEach(function(s){ rp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
+      if(rp) o.push('<path d="'+rp+'" fill="none" stroke="#111" stroke-width="'+swR+'" stroke-linecap="round" stroke-linejoin="round"/>'); });
+    var sp=""; boundaryEdges().forEach(function(s){ sp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
+    if(sp) o.push('<path d="'+sp+'" fill="none" stroke="#111" stroke-width="'+swS+'" stroke-linecap="round" stroke-linejoin="round"/>');
+    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var b2=cellsBBoxPx(r.cells||[]);
+      o.push('<text x="'+(b2.x+b2.w/2)+'" y="'+(b2.y+b2.h/2)+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); });
+    o.push("</svg>");
+    return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
+
   // ---- enhance: sketch → real floor plan via /api/enhance (mode=floorplan) ----
   function scanOn(on){ $("scan").classList.toggle("on",on); }
   function msg(m){ var el=$("msg"); if(!m){ el.classList.remove("on"); return; } el.textContent=m; el.classList.add("on"); }
@@ -422,8 +446,10 @@
   // floor background AND saves it to the shared library (same contract the satellite tool uses).
   $("tDone").addEventListener("click", function(){ if(busy) return;
     if(!hasSketch()){ msg("Block out the structure, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
-    var url=enhancedURL || sketchPNG().toDataURL("image/png");
-    try{ parent.postMessage({type:"satellite-capture-result", dataUrl:url}, "*"); }catch(e){} });
+    // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
+    // at any zoom in the survey (no rasterization on the display path).
+    if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL}, "*"); }catch(e){} }
+    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true}, "*"); }catch(e){} } });
 
   restore();                                        // resume this floor's saved structure/rooms
   try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
