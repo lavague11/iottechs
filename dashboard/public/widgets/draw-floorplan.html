@@ -371,6 +371,9 @@
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
     o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="#ffffff"/>');
+    // subtle vector grid (same FULL spacing as the editor) — part of the one SVG scene, crisp at any zoom
+    o.push('<defs><pattern id="pg" width="'+FULL+'" height="'+FULL+'" patternUnits="userSpaceOnUse"><path d="M '+FULL+' 0 H 0 V '+FULL+'" fill="none" stroke="#eceae4" stroke-width="0.8"/></pattern></defs>');
+    o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="url(#pg)"/>');
     var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
