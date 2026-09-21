@@ -17,11 +17,13 @@ export const MASTER_ORDER = [
 export const AUTO_STAGES = new Set(["inquiry", "site_survey", "proposal", "approval_deposit", "payment"]);
 
 export const STAGE_FLOW = {
+  // A survey that was explicitly skipped (projects.survey_skipped_at — monitoring/ADT, phone-quoted
+  // work) satisfies both Consulting requirements, so those jobs don't jam at the first seam.
   inquiry: [
-    { label: "Survey appointment scheduled", who: "internal", check: (p) => !!p.date },
+    { label: "Survey appointment scheduled", who: "internal", check: (p) => !!p.date || !!p.survey_skipped },
   ],
   site_survey: [
-    { label: "Customer accepted the site survey", who: "customer", check: (p) => !!p.survey_accepted },
+    { label: "Customer accepted the site survey", who: "customer", check: (p) => !!p.survey_accepted || !!p.survey_skipped },
   ],
   proposal: [
     { label: "Proposal submitted to customer", who: "internal", check: (p) => ["sent", "changes_requested", "accepted", "declined"].includes(p.proposal_status) },

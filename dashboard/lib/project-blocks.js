@@ -81,6 +81,5 @@ export const ROLE_NOTES = {
 export const FINDINGS = [
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Sales sees NOTHING in the Install phase — no branch exists." },
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Vendor & Readonly roles have no render branch on the project page at all." },
-  { tag: "MISSING",   cls: "rm-i-missing",   text: "No 'survey skipped' path — an A/B project with no accepted survey hard-locks Proposal. Monitoring/ADT jobs only avoid it by living in their own flow." },
   { tag: "TRIM",      cls: "rm-i-trim",      text: "Only 10 of the 16 requirement-steps are check-backed; the other 6 (install-appointment confirm, install ×2, QC ×2, completion docs) are advisory and never gate." },
 ];

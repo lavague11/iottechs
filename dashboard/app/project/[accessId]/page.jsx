@@ -88,6 +88,8 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     service_code:    p.service_code,
     project_type:    p.project_type,
     property_type:   p.property_type,   // canonical Residential/Commercial (visible to authorized viewers)
+    survey_skipped_at: p.survey_skipped_at || null,   // explicit "no survey for this job" (gate fact)
+    survey_skipped_by: p.survey_skipped_by || null,
     stage:           p.stage,
     value:           p.value,
     cameras:         p.cameras,

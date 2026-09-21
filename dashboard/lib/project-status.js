@@ -43,7 +43,7 @@ export function phaseHeadline(stageKey) {
 // stage/label carries the story (scheduling, install), and the remaining facts aren't all present
 // here, so adding them would risk a false ✓ (e.g. install_date falls back to the survey date).
 export function statusMilestones(f = {}) {
-  const raw = [["Site survey", !!f.survey_done]];
+  const raw = [["Site survey", !!f.survey_done || !!f.survey_skipped]];
   if (f.mockup_has || f.mockup_done || f.mockup_submitted) raw.push(["Mockup", !!f.mockup_done]);
   raw.push(["Proposal accepted", f.proposal_status === "accepted"]);
   raw.push(["Agreement signed", !!f.proposal_signed]);

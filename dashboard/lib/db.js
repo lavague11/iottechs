@@ -230,6 +230,11 @@ function init() {
   // ONE canonical value read by every module. New + legacy rows default to 'commercial' (the normal
   // IOT TECHS job); a constant DEFAULT backfills existing rows without a destructive guess.
   if (!cols.includes("property_type"))      db.exec("ALTER TABLE projects ADD COLUMN property_type TEXT DEFAULT 'commercial'");
+  // Explicit "no site survey for this job" (monitoring/ADT, phone-quoted service work). Satisfies the
+  // survey-appointment + survey-approval requirements so the project doesn't jam in Consulting.
+  // Admin/manager only; reversible (NULL = not skipped); who/when kept for the audit trail.
+  if (!cols.includes("survey_skipped_at"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_at TEXT");
+  if (!cols.includes("survey_skipped_by"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_by TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -2371,6 +2376,7 @@ export function buildStageFacts(accessId) {
     // Satisfied when every tool WITH data has a current (unvoided) approval; nothing to
     // approve → satisfied (customer can sail straight through).
     survey_accepted: surveyStageSatisfied(accessId),
+    survey_skipped: !!p.survey_skipped_at,
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
     // Signed ONLY while the signature still binds to the current content — a signed proposal that
@@ -2994,6 +3000,21 @@ export function setProjectPropertyType(accessId, value) {
   if (from === v) return { ok: true, propertyType: v, from, changed: false };
   db.prepare("UPDATE projects SET property_type = ? WHERE access_id = ? COLLATE NOCASE").run(v, String(accessId));
   return { ok: true, propertyType: v, from, changed: true };
+}
+
+// Mark / unmark the site survey as deliberately skipped. Returns { ok, skipped, changed }.
+export function setSurveySkipped(accessId, skip, byName) {
+  const proj = db.prepare("SELECT id, survey_skipped_at FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId));
+  if (!proj) return { error: "Project not found." };
+  const was = !!proj.survey_skipped_at;
+  if (was === !!skip) return { ok: true, skipped: was, changed: false };
+  if (skip) {
+    db.prepare("UPDATE projects SET survey_skipped_at = datetime('now','localtime'), survey_skipped_by = ? WHERE access_id = ? COLLATE NOCASE")
+      .run(String(byName || "").slice(0, 120) || null, String(accessId));
+  } else {
+    db.prepare("UPDATE projects SET survey_skipped_at = NULL, survey_skipped_by = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  }
+  return { ok: true, skipped: !!skip, changed: true };
 }
 
 // Bulk backfill from a pasted/CSV list. rows: [{name,phone,email,address,system,installDate,value,notes}].

@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -320,6 +320,26 @@ export async function setPropertyTypeAction(accessId, value) {
     revalidatePath(`/project/${accessId}`);
   }
   return { ok: true, propertyType: res.propertyType };
+}
+
+// Skip (or un-skip) the site survey for a job that never gets one. Admin/manager only — it waives a
+// customer sign-off, so it's logged as an override. Auto-advances out of Consulting when the skip
+// clears the last requirement; un-skipping never rewinds the stage (lock advancement, don't retro-lock).
+export async function skipSurveyAction(accessId, skip) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can skip the survey." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const who = tok.name || tok.email || tok.role;
+  const res = setSurveySkipped(accessId, !!skip, who);
+  if (!res.ok) return res;
+  let stage = getJobByAccessId(accessId)?.stage || null;
+  if (res.changed) {
+    logProjectEvent(accessId, { kind: skip ? "override" : "change", label: skip ? "Site survey skipped — no survey for this job" : "Site survey skip reversed", actor: who });
+    if (skip) { try { stage = maybeAutoAdvance(accessId) || stage; } catch { /* keep current */ } }
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/project/${accessId}`);
+  }
+  return { ok: true, skipped: res.skipped, stage };
 }
 
 // `viewRole` is display-only legacy — the role that authorizes the move comes from the

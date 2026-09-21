@@ -5,7 +5,7 @@ import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -1760,6 +1760,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [closeSaving,    setCloseSaving]    = useState(false);
   const [closeErr,       setCloseErr]       = useState("");
   const [showArchive,    setShowArchive]    = useState(false);   // per-project archive confirm
+  const [showSkipSurvey, setShowSkipSurvey] = useState(false);   // skip / un-skip survey confirm
+  const [skipBusy,       setSkipBusy]       = useState(false);
   const [archiving,      setArchiving]      = useState(false);
   const [attention,      setAttention]      = useState(!!project.needs_attention);
   const [attentionNote,  setAttentionNote]  = useState(project.attention_note || "");
@@ -1839,8 +1841,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const proposalAccepted = (proposalData?.accepted_options?.length > 0) || proposalData?.status === "accepted";
   const custFacts = {
     appt_date:         lp.date,
+    date:              lp.date,           // stage-flow's inquiry check reads `date` (same name as buildStageFacts)
     survey_ok:         surveyOk,
     survey_accepted:   lp.survey_accepted,
+    survey_skipped:    !!lp.survey_skipped_at,
     survey_submitted:  !!acceptances?.submit_site_survey,
     proposal_status:   proposalAccepted ? "accepted" : (proposalData?.status || lp.proposal_status || ""),
     proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
@@ -2206,6 +2210,28 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // page — only the outer chrome changes (top bar · job bar · swipeable stage deck).
   // Wired stage-by-stage: Consulting is real; the other phases scaffold in as we port.
   // ─────────────────────────────────────────────────────────────────────────────
+  // Skip / restore the site survey — shared by both layouts (••• menu in the deck, legacy page too).
+  const skipSurveyDialog = (
+    <ConfirmDialog
+      open={showSkipSurvey}
+      title={lp.survey_skipped_at ? "Restore the site survey?" : "Skip the site survey?"}
+      message={lp.survey_skipped_at
+        ? <>The survey requirement comes back. The project stays where it is — nothing rewinds.</>
+        : <>Waives the survey appointment and the customer’s survey approval for this job. Logged as an override; you can restore it later.</>}
+      confirmLabel={lp.survey_skipped_at ? "Restore" : "Skip"}
+      busy={skipBusy}
+      onConfirm={async () => {
+        setSkipBusy(true);
+        const r = await skipSurveyAction(lp.access_id, !lp.survey_skipped_at);
+        setSkipBusy(false); setShowSkipSurvey(false);
+        if (r?.error) { showLiveToast(r.error); return; }
+        setLocalProj((pp) => ({ ...pp, survey_skipped_at: r.skipped ? new Date().toISOString() : null }));
+        if (r.stage) syncStage(r.stage);
+      }}
+      onCancel={() => setShowSkipSurvey(false)}
+    />
+  );
+
   if (deckMode) {
     // Merge a stage's tools into ONE full-width, always-open page: heavy (full-height) tools get a
     // 74vh framed panel with inner scroll; compact cards flow at natural height. Nothing to click to
@@ -2313,7 +2339,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           return [all[1], all[0]].map((t) => ({ ...t, node: null }));
         }
         return [{ name: "Consulting", label: "Consulting", wide: true,
-          state: all.every((t) => !t.state || t.state === "done") && all.some((t) => t.state) ? "done" : "active",
+          state: custFacts.survey_skipped || (all.every((t) => !t.state || t.state === "done") && all.some((t) => t.state)) ? "done" : "active",
           node: (
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
             planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
@@ -2555,6 +2581,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const f = custFacts;
       const pos = i < curPhaseIdx ? "APPROVED" : i === curPhaseIdx ? "WORKING" : "UPCOMING";
       if (pk === "ph_survey") {
+        if (f.survey_skipped) return "APPROVED";   // explicitly waived — reads settled for everyone
         const hasData = f.survey_has || f.mockup_has;
         if (!hasData) return "UPCOMING";
         const approved = (!f.survey_has || f.survey_done) && (!f.mockup_has || f.mockup_done);
@@ -2739,6 +2766,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         openToolSignal={deckOpenSignal}
         menu={[
           ...(cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []),
+          // Waive the survey for jobs that never get one (monitoring/ADT, phone-quoted). Low-frequency → lives here.
+          ...(["admin", "manager"].includes(cView) && !previewRole
+            ? [{ label: lp.survey_skipped_at ? "Restore survey" : "Skip survey", onClick: () => setShowSkipSurvey(true) }] : []),
           ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
         ]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
@@ -2765,6 +2795,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         </div>
       )}
+      {skipSurveyDialog}
       </>
     );
   }
@@ -3814,6 +3845,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           </div>
         </div>
       )}
+      {skipSurveyDialog}
       <ConfirmDialog
         open={!!pendingMove}
         title={pendingMove ? `Set step to ${stageLabel(pendingMove.stageKey)}?` : ""}
