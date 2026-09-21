@@ -14,6 +14,7 @@ import {
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
+  customerOwnsProjectAccount,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload, seedTechPricingMap } from "../../../lib/proposal";
 import { survey2CameraCount } from "../../../lib/tool-data";
@@ -39,8 +40,9 @@ async function getSessionRole() {
 
 function customerOwnsProject(tok, accessId) {
   if (tok?.viaPin) return String(tok.accessId) === String(accessId);  // PIN is project-scoped
-  const proj = getJobByAccessId(accessId);
-  return proj && String(proj.contact_email || "").toLowerCase() === String(tok.email || "").toLowerCase();
+  // Canonical rule (email OR account phone) — same one the page loader uses, so a customer who was
+  // granted the view (e.g. matched by phone) is never rejected here as "Not your project".
+  return customerOwnsProjectAccount(accessId, { userId: tok?.id, email: tok?.email });
 }
 
 async function revalidate(accessId) {

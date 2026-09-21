@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -60,15 +60,10 @@ async function resolveSessionView(project, previewRole, previewToken) {
     if (user.role && user.role !== "customer") {
       return pinView || LOGIN_VIEW[user.role] || null;
     }
-    // Customer session — owns the project when their email OR phone matches the contact.
-    // (The session token only carries id/role/email, so pull the row for the phone.)
-    const row = user.id ? getUserById(user.id) : null;
-    const emailOwns = user.email && project.contact_email &&
-      String(user.email).trim().toLowerCase() === String(project.contact_email).trim().toLowerCase();
-    const digits = (s) => String(s || "").replace(/\D/g, "");
-    const phoneOwns = digits(row?.phone).length >= 7 &&
-      digits(row?.phone) === digits(project.contact_phone);
-    if (emailOwns || phoneOwns) return "customer";
+    // Customer session — canonical ownership (email OR account phone). This is the SAME rule the
+    // proposal actions and customer APIs use, so the loader can never grant the view while the writes
+    // reject it as "Not your project" (that mismatch was the bug).
+    if (customerOwnsProjectAccount(project.access_id, { userId: user.id, email: user.email })) return "customer";
     return pinView; // logged-in customer who unlocked someone else's project with its PIN
   }
   return pinView;   // PIN-only visitor — survives reloads and navigation

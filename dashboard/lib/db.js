@@ -2548,6 +2548,31 @@ export function getCustomerUserForProject(project) {
   return null;
 }
 
+// ---- Canonical customer→project ownership -------------------------------------------------------
+// ONE ownership rule, reused by the project-page loader, the proposal actions, and the customer APIs
+// so they can never disagree (the "Not your project" banner on a fully-rendered proposal came from two
+// checks — page = email OR phone, proposal = email only — reaching opposite verdicts). This schema
+// links a customer to a project by CONTACT IDENTITY (there is no user_id FK): the account owns the
+// project when its verified email OR its phone matches the project's stored contact. Returns a reason
+// code (spec-style) for logging — never surface these raw to the customer.
+//   opts: { userId?, email? } — a logged-in account (userId preferred; email as a fallback signal).
+export function resolveCustomerOwnership(accessId, { userId = null, email = null } = {}) {
+  const proj = getJobByAccessId(accessId);
+  if (!proj) return { owner: false, reason: "PROJECT_NOT_FOUND" };
+  const row = userId ? getUserById(userId) : null;
+  const digits = (s) => String(s || "").replace(/\D/g, "");
+  const acctEmail = String(email || row?.email || "").trim().toLowerCase();
+  const projEmail = String(proj.contact_email || "").trim().toLowerCase();
+  const acctPhone = digits(row?.phone);
+  const projPhone = digits(proj.contact_phone);
+  if (acctEmail && projEmail && acctEmail === projEmail) return { owner: true, reason: "OWNER_EMAIL" };
+  if (acctPhone.length >= 7 && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
+  if (!acctEmail && !acctPhone)                            return { owner: false, reason: "NO_CUSTOMER_LINK" };
+  return { owner: false, reason: "CUSTOMER_MISMATCH" };
+}
+// Boolean convenience — the same canonical rule.
+export function customerOwnsProjectAccount(accessId, opts) { return resolveCustomerOwnership(accessId, opts).owner; }
+
 // True when the account already has a password set — registration must never overwrite it
 // (that would let anyone take over an existing account by "registering" with its email).
 export function userHasPassword(userId) {

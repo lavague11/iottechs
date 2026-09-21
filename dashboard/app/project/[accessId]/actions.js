@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, buildStageFacts, getProjectAssignments } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -216,10 +216,9 @@ export async function confirmInfoAction(accessId, fields) {
   const tok = await getAnyTok();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer") {
-    const proj = getJobByAccessId(accessId);
-    if (!proj || (tok.viaPin ? String(tok.accessId) !== String(accessId)
-                             : String(proj.contact_email || "").toLowerCase() !== String(tok.email || "").toLowerCase()))
-      return { error: "Not your project." };
+    const ok = tok.viaPin ? String(tok.accessId) === String(accessId)
+                          : customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+    if (!ok) return { error: "Not your project." };
   } else if (!["admin", "manager", "sales", "tech"].includes(tok.role)) {
     return { error: "Unauthorized." };
   }
@@ -235,10 +234,9 @@ export async function markTourSeenAction(accessId) {
   const tok = await getAnyTok();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer") {
-    const proj = getJobByAccessId(accessId);
-    if (!proj || (tok.viaPin ? String(tok.accessId) !== String(accessId)
-                             : String(proj.contact_email || "").toLowerCase() !== String(tok.email || "").toLowerCase()))
-      return { error: "Not your project." };
+    const ok = tok.viaPin ? String(tok.accessId) === String(accessId)
+                          : customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+    if (!ok) return { error: "Not your project." };
   } else if (!["admin", "manager", "sales", "tech"].includes(tok.role)) {
     return { error: "Unauthorized." };
   }
@@ -250,10 +248,9 @@ export async function markAnnouncementSeenAction(accessId, key) {
   const tok = await getAnyTok();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer") {
-    const proj = getJobByAccessId(accessId);
-    if (!proj || (tok.viaPin ? String(tok.accessId) !== String(accessId)
-                             : String(proj.contact_email || "").toLowerCase() !== String(tok.email || "").toLowerCase()))
-      return { error: "Not your project." };
+    const ok = tok.viaPin ? String(tok.accessId) === String(accessId)
+                          : customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+    if (!ok) return { error: "Not your project." };
   } else if (!["admin", "manager", "sales", "tech"].includes(tok.role)) {
     return { error: "Unauthorized." };
   }
@@ -270,8 +267,7 @@ export async function updateProjectInfoAction(accessId, fields) {
   const tok = await parseToken(raw.trim());
   if (!tok?.role) return { error: "Not authenticated." };
   if (tok.role === "customer") {
-    const proj = getJobByAccessId(accessId);
-    if (!proj || String(proj.contact_email||"").toLowerCase() !== String(tok.email||"").toLowerCase())
+    if (!customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email }))
       return { error: "Not your project." };
   } else if (!["admin","manager","sales","tech"].includes(tok.role)) {
     return { error: "Unauthorized." };

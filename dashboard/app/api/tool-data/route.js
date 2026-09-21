@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount } from "../../../lib/db";
 
 // Plain REST twin of getToolDataAction/saveToolDataAction (proposal-actions.js), used ONLY by
 // tool-sync.js and survey-approve.jsx's flushDraft — the two callers that move the mockup/survey
@@ -22,8 +22,7 @@ async function getSessionRole() {
 
 function customerOwnsProject(tok, accessId) {
   if (tok?.viaPin) return String(tok.accessId) === String(accessId);
-  const proj = getJobByAccessId(accessId);
-  return proj && String(proj.contact_email || "").toLowerCase() === String(tok.email || "").toLowerCase();
+  return customerOwnsProjectAccount(accessId, { userId: tok?.id, email: tok?.email });  // canonical (email OR phone)
 }
 
 async function canReadProject(tok, accessId) {
