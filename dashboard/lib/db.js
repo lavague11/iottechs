@@ -6,7 +6,7 @@ import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount } from "./tool-data.js";
-import { optionTotals } from "./proposal.js";
+import { optionTotals, proposalFingerprint } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -1102,6 +1102,11 @@ function init() {
   if (!propCols.includes("tech_signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_name TEXT");    // technician who accepted the work order
   if (!propCols.includes("tech_signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_at TEXT");
   if (!propCols.includes("tech_signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN tech_signature_data TEXT");
+  // Signature binding: the content fingerprint captured at sign time + a frozen JSON snapshot of the
+  // exact payload that was signed. `proposal_signed` is only satisfied while signed_fingerprint still
+  // matches the live payload; a signed version's PDF renders from signed_payload (the exact artifact).
+  if (!propCols.includes("signed_fingerprint"))  db.exec("ALTER TABLE proposals ADD COLUMN signed_fingerprint TEXT");
+  if (!propCols.includes("signed_payload"))      db.exec("ALTER TABLE proposals ADD COLUMN signed_payload TEXT");
   // Work order: the office finalizes the auto-created work order (payout reviewed) before a tech
   // can accept it. Null until finalized; stamped with the finalizer's name + timestamp.
   if (!propCols.includes("wo_finalized_at"))     db.exec("ALTER TABLE proposals ADD COLUMN wo_finalized_at TEXT");
@@ -2368,7 +2373,12 @@ export function buildStageFacts(accessId) {
     survey_accepted: surveyStageSatisfied(accessId),
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
-    proposal_signed: !!prop?.signed_name,
+    // Signed ONLY while the signature still binds to the current content — a signed proposal that
+    // drifted (fingerprint no longer matches) is treated as unsigned, so the gate can't stay green on
+    // a document that no longer exists as signed. Legacy signatures (pre-binding, no fingerprint stored)
+    // fall back to name-only so they aren't retroactively invalidated.
+    proposal_signed: !!prop?.signed_name && (!prop?.signed_fingerprint ||
+      prop.signed_fingerprint === proposalFingerprint(prop.payload, prop.tax_rate, prop.deposit_pct)),
     tech_accepted: !!prop?.tech_signed_name,
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
     deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
@@ -5185,7 +5195,7 @@ export function getActiveProposal(accessId) {
   return r ? { ...r, created_by_name: resolvePreparerName(r.created_by_name) } : null;
 }
 export function getProposalHistory(accessId) {
-  return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at FROM proposals WHERE project_access_id=? ORDER BY version DESC")
+  return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at, created_by_name, signed_name, signed_at, signed_fingerprint FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
 }
 
@@ -5284,13 +5294,21 @@ export function setWorkOrderFinalized(accessId, on, byName) {
   return getActiveProposal(accessId);
 }
 // Clone the sent/changes_requested version into a new editable draft; supersede the old row.
-export function reviseProposal(accessId, byName) {
+// Mint the next version: clone payload → v+1 (a fresh unsigned DRAFT), mark the old row superseded.
+// This is the ONE "mint → void → re-lock" primitive — the new draft carries no signature/acceptance,
+// so every downstream gate that trusted the old signature re-locks automatically. The signed row stays
+// immutable in history. opts.note seeds the new draft's change_note (what the customer/admin wants
+// changed); opts.carryFlags carries the customer's per-line request flags forward for the author.
+// Returns { proposal, fromVersion, wasSigned } so the caller can log who/when/from-which-version.
+export function reviseProposal(accessId, byName, opts = {}) {
   const cur = getActiveProposal(accessId);
-  if (!cur || cur.status === "draft") return cur;
-  db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name) VALUES (?,?,?,?,?,?)")
-    .run(String(accessId), cur.version + 1, cur.payload, cur.tax_rate, cur.deposit_pct, byName || null);
+  if (!cur || cur.status === "draft") return { proposal: cur, fromVersion: cur?.version || null, wasSigned: false };
+  const note  = opts.note != null ? String(opts.note).slice(0, 2000) : (cur.change_note || null);
+  const flags = opts.carryFlags ? (cur.customer_flags || null) : null;
+  db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name, change_note, customer_flags) VALUES (?,?,?,?,?,?,?,?)")
+    .run(String(accessId), cur.version + 1, cur.payload, cur.tax_rate, cur.deposit_pct, byName || null, note, flags);
   db.prepare("UPDATE proposals SET status='superseded', updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
-  return getActiveProposal(accessId);
+  return { proposal: getActiveProposal(accessId), fromVersion: cur.version, wasSigned: !!cur.signed_name };
 }
 // Accepting and declining are tracked as two INDEPENDENT per-option sets so a customer can
 // accept Option A while declining Option B without one undoing the other:
@@ -5380,8 +5398,11 @@ export function setProposalCustomerFlags(accessId, flags, note) {
 export function signProposal(accessId, name, signatureData) {
   const cur = getActiveProposal(accessId);
   if (!cur || cur.status !== "accepted") return null;
-  db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, updated_at=datetime('now','localtime') WHERE id=?")
-    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, cur.id);
+  // Bind the signature to EXACTLY what was signed: capture the content fingerprint + freeze a snapshot
+  // of the payload. Any later drift of the signed row voids the gate; the PDF renders from the snapshot.
+  const fp = proposalFingerprint(cur.payload, cur.tax_rate, cur.deposit_pct);
+  db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, cur.id);
   return getActiveProposal(accessId);
 }
 // Technician accepts the (customer-accepted) work order: records the tech's signature on the
@@ -5429,7 +5450,7 @@ export function deleteProjectPayment(accessId, id, actor) {
 export function voidProposalSignature(accessId) {
   const cur = getActiveProposal(accessId);
   if (!cur) return null;
-  db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, signed_fingerprint=NULL, signed_payload=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
   return getActiveProposal(accessId);
 }
 // Admin/manager correction: void the technician's work-order signature (which is also their

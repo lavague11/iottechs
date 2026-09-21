@@ -613,6 +613,34 @@ export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value:
   return { sub: r2(sub), discount: r2(disc), pcpCredit: r2(credit), tax: r2(tax), grand: r2(grand), deposit: r2(grand * (+depositPct || 0) / 100) };
 }
 
+// ---- Signature binding: content fingerprint of a proposal --------------------------------------
+// A signature must bind to EXACTLY what was signed. We hash a "meaning" projection of the proposal —
+// the customer-visible scope + money terms (option/service/item names, quantities, prices, waived
+// flags, discount, PCP credit, tax %, deposit %) — and store it with the signature. If the signed
+// row ever drifts, the recomputed hash no longer matches and the gate treats the signature as void.
+// This mirrors the survey/mockup fingerprint (lib/tool-data.js) exactly.
+// INTERNAL-ONLY fields (cost, techPrice) are deliberately EXCLUDED, so an internal pricing tweak can
+// never invalidate a customer's signature — only a change to what the customer actually agreed to.
+function _fpStable(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(_fpStable).join(",") + "]";
+  return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + _fpStable(v[k])).join(",") + "}";
+}
+function _fpHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h |= 0; }
+  return (h >>> 0).toString(36);
+}
+const _fpItem = (it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0, w: !!it?.waived,
+  s: (it?.sub || []).map((x) => ({ n: x?.name || "", q: +x?.qty || 0, p: +x?.price || 0 })) });
+const _fpSvc = (s) => ({ n: s?.name || "", items: (s?.items || []).map(_fpItem) });
+const _fpOpt = (o) => ({ n: o?.name || "", disc: o?.discount ?? null, pcp: o?.pcpCredit ?? 0, svc: (o?.services || []).map(_fpSvc) });
+export function proposalFingerprint(payload, taxRate = 0, depositPct = 0) {
+  let pl; try { pl = typeof payload === "string" ? JSON.parse(payload || "{}") : (payload || {}); } catch { pl = {}; }
+  const meaning = { opts: (pl.options || []).map(_fpOpt), tax: +taxRate || 0, dep: +depositPct || 0, terms: pl.terms ?? pl.paymentPlan ?? null };
+  return _fpHash(_fpStable(meaning));
+}
+
 // ---- Canonical project financial summary (ONE source of truth) --------------------------------
 // Every stage (Proposal, Approval/Deposit, Record-a-Payment, Closeout, invoices) must derive its
 // money from THIS so a project can never show two different totals. An addendum is an AMENDMENT, so
@@ -740,6 +768,9 @@ export function cameraNameOverrides(services, roster, { byPosition = false } = {
 export function sanitizeProposal(row, role) {
   if (!row) return null;
   const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+  // Frozen snapshot of exactly what was signed (null until signed). Sanitized per role like `payload`,
+  // and used by the PDF so a signed version downloads as the exact signed artifact, not a re-render.
+  const signedPayloadRaw = row.signed_payload ? (() => { try { return typeof row.signed_payload === "string" ? JSON.parse(row.signed_payload) : row.signed_payload; } catch { return null; } })() : null;
   let customerFlags = {};
   try { customerFlags = row.customer_flags ? JSON.parse(row.customer_flags) : {}; } catch { customerFlags = {}; }
   const base = {
@@ -756,8 +787,9 @@ export function sanitizeProposal(row, role) {
     accepted_options: (() => { try { return JSON.parse(row.accepted_options || "[]"); } catch { return []; } })(),
     declined_options: (() => { try { return JSON.parse(row.declined_options || "{}"); } catch { return {}; } })(),
     declined_reason: row.declined_reason,
+    signed_fingerprint: row.signed_fingerprint || null,
   };
-  if (COST_ROLES.has(role)) return { ...base, payload };
+  if (COST_ROLES.has(role)) return { ...base, payload, signedPayload: signedPayloadRaw };
   // Technician: the work order builds out as soon as the office SENDS the proposal to the customer
   // — the tech can see the full proposed scope and accept it, without waiting on the customer. Once
   // the customer accepts an option, the WO narrows to just the accepted option(s). Drafts (never
@@ -794,10 +826,10 @@ export function sanitizeProposal(row, role) {
       })),
     })),
   });
-  if (role === "sales") return { ...base, payload: stripCost(payload) };
+  if (role === "sales") return { ...base, payload: stripCost(payload), signedPayload: signedPayloadRaw ? stripCost(signedPayloadRaw) : null };
   // customer / everyone else: drafts are invisible beyond their existence
   if (!CUSTOMER_VISIBLE_STATUS.has(row.status)) return { status: "draft", version: row.version };
-  return { ...base, payload: stripCost(payload) };
+  return { ...base, payload: stripCost(payload), signedPayload: signedPayloadRaw ? stripCost(signedPayloadRaw) : null };
 }
 
 // ---- Validation (system boundary for writes) --------------------------------

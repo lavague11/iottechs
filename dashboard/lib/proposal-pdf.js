@@ -12,6 +12,9 @@ const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US",
 // Both are appended after the priced options — the mockup photos and the pinned site-survey floor
 // plans — so the customer's downloaded proposal carries the visual context, not just the numbers.
 export function downloadProposalPdf(p, meta = {}, attachments = {}) {
+  // A SIGNED proposal downloads as the EXACT signed artifact — render from the frozen snapshot the
+  // signature is bound to (and the signed date below), never a live re-render of the current payload.
+  if (p && p.signed_at && p.signedPayload) p = { ...p, payload: p.signedPayload };
   const { customerName, customerAddress, customerPhone, customerEmail } = meta;
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
@@ -37,7 +40,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const dueOn = (days) => { const d = new Date(payBaseDate); d.setDate(d.getDate() + (+days || 0)); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
 
   const propNum = "PROP-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1);
-  const propDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  // Date the SIGNED date once signed (a fixed artifact), else today's issue date.
+  const propDate = (p.signed_at ? new Date(String(p.signed_at).replace(" ", "T")) : new Date())
+    .toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   function drawHeader() {
     doc.setFillColor(...SLATE);

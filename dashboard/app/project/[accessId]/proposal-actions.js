@@ -157,9 +157,16 @@ export async function emailProposalAction(accessId) {
 export async function reviseProposalAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
-  const row = reviseProposal(accessId, actorName(tok));
+  const before = getActiveProposal(accessId);
+  // Superseding a SIGNED version breaks a signature — admin/manager only (managers may, per the
+  // open-override decision); sales can revise unsigned drafts but not break a signed agreement.
+  if (before?.signed_name && !["admin", "manager"].includes(tok.role))
+    return { error: "Only Admin & Manager can supersede a signed proposal." };
+  const res = reviseProposal(accessId, actorName(tok));
+  if (before?.signed_name)
+    logProjectEvent(accessId, { kind: "supersede", label: `Proposal v${res.fromVersion} superseded → v${res.proposal?.version} (signature voided, re-authoring)`, actor: actorName(tok) });
   await revalidate(accessId);
-  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+  return { ok: true, proposal: sanitizeProposal(res.proposal, tok.role) };
 }
 
 // Accept (toggle) an option. When accepting (not un-accepting), the client also passes the
@@ -218,6 +225,16 @@ export async function requestChangesAction(accessId, note) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const before = getActiveProposal(accessId);
+  // A SIGNED proposal is frozen: requesting a modification mints a fresh unsigned version (mint → void
+  // → re-lock) rather than mutating the signed row. The signed version stays immutable in history; the
+  // customer never authors prices — the request note carries to the new draft for admin to author.
+  if (before?.signed_name) {
+    const res = reviseProposal(accessId, actorName(tok), { note });
+    logProjectEvent(accessId, { kind: "supersede", label: `${tok.role === "customer" ? "Customer requested a modification" : "Modification requested"} — signed proposal v${res.fromVersion} superseded; new version awaiting authoring`, actor: actorName(tok) });
+    await revalidate(accessId);
+    return { ok: true, superseded: true, proposal: sanitizeProposal(res.proposal, tok.role) };
+  }
   const row = requestProposalChanges(accessId, note);
   if (!row) return { error: "Proposal isn't open for change requests." };
   await revalidate(accessId);
@@ -234,6 +251,16 @@ export async function submitProposalFlagsAction(accessId, flags, note) {
     for (const f of Object.values(flags)) {
       if (!f || !["remove", "change"].includes(f.type)) return { error: "Bad flag." };
     }
+  }
+  const before = getActiveProposal(accessId);
+  // Signed → freeze: stamp the requested line flags, then mint a fresh unsigned version carrying them
+  // (mint → void → re-lock). The signed version stays immutable; admin authors the new draft.
+  if (before?.signed_name) {
+    setProposalCustomerFlags(accessId, flags || {}, note);
+    const res = reviseProposal(accessId, actorName(tok), { note, carryFlags: true });
+    logProjectEvent(accessId, { kind: "supersede", label: `Customer requested a modification — signed proposal v${res.fromVersion} superseded; new version awaiting authoring`, actor: actorName(tok) });
+    await revalidate(accessId);
+    return { ok: true, superseded: true, proposal: sanitizeProposal(res.proposal, tok.role) };
   }
   const row = setProposalCustomerFlags(accessId, flags || {}, note);
   if (!row) return { error: "Proposal isn't open for change requests." };
@@ -426,8 +453,10 @@ export async function deletePaymentAction(accessId, id) {
 export async function voidProposalSignatureAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can void a signature." };
+  const before = getActiveProposal(accessId);
   const row = voidProposalSignature(accessId);
   if (!row) return { error: "No proposal to void." };
+  logProjectEvent(accessId, { kind: "override", label: `Customer signature voided on proposal v${before?.version || "?"}`, actor: actorName(tok) });
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
