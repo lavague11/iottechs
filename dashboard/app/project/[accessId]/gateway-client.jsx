@@ -4562,8 +4562,6 @@ const PV_CSS = `
 .pvx .ss-embed{display:flex;flex-direction:column;gap:8px}
 .pvx .ss-embed-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .pvx .ss-embed-tag{font-size:.78rem;color:var(--muted);font-weight:600}
-.pvx .ss-embed-ptype{margin-right:auto;color:var(--muted);--pop-bg:var(--card,#fff);--pop-fg:var(--ink,#0B0F1A)}
-.syp .ss-embed-ptype{margin-right:0}
 .pvx .ss-embed-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none}
 .pvx .ss-embed-open:hover{border-color:var(--gold);color:var(--gold-deep)}
 /* Default height is only a pre-measure fallback — the mockup iframe posts its real content height and
