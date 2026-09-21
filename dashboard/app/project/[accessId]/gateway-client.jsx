@@ -2325,7 +2325,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const tools = [];
         if (["admin", "manager", "sales", "customer", "tech"].includes(cView)) {
           tools.push({ name: "Proposal", label: "Proposal builder", heavy: true,
-            state: (proposalAccepted || proposalData?.status === "sent") ? "done" : "active",   // green once submitted or accepted
+            // Office/customer: green once submitted or accepted. Tech: this phase is THEIR acceptance of
+            // the work order (bar label "Accept"), so it tracks tech_signed_name, not the proposal's status.
+            state: cView === "tech"
+              ? (proposalData?.tech_signed_name ? "done" : "active")
+              : (proposalAccepted || proposalData?.status === "sent") ? "done" : "active",
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {cView === "tech" && <TechProjectBoard project={lp} />}
