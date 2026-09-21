@@ -176,10 +176,21 @@
   window.addEventListener("resize", fitCanvas);
   function fontFam(){ return getComputedStyle(document.body).fontFamily; }
 
-  function px(r){ return {x:r.x*W(), y:r.y*H(), w:r.w*W(), h:r.h*H()}; }
-  function inRect(x,y,r){ var p=px(r); return x>=p.x&&x<=p.x+p.w&&y>=p.y&&y<=p.y+p.h; }
-  function roomHit(x,y){ for(var i=rooms.length-1;i>=0;i--){ if(inRect(x,y,rooms[i])) return rooms[i]; } return null; }
   function rel(e){ var r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+  // Rooms are grid-cell sets in the SAME coordinate space as the structure, so a room can only ever occupy
+  // cells the structure occupies (ROOM ⊆ STRUCTURE). Hit-test / bbox / boundary all derive from those cells.
+  function cellAt(x,y){ return [Math.floor(x/HALF), Math.floor(y/HALF)]; }
+  function roomHit(x,y){ var cc=cellAt(x,y), k=key(cc[0],cc[1]); for(var i=rooms.length-1;i>=0;i--){ if((rooms[i].cells||[]).indexOf(k)>=0) return rooms[i]; } return null; }
+  // Boundary edges of an arbitrary cell set (interior partitions + the room's share of the exterior wall).
+  function edgesOf(set){ var e=[]; set.forEach(function(k){ var a=k.split(","),c=+a[0],r=+a[1],x=c*HALF,y=r*HALF;
+    if(!set.has(key(c,r-1))) e.push([x,y,x+HALF,y]);
+    if(!set.has(key(c,r+1))) e.push([x,y+HALF,x+HALF,y+HALF]);
+    if(!set.has(key(c-1,r))) e.push([x,y,x,y+HALF]);
+    if(!set.has(key(c+1,r))) e.push([x+HALF,y,x+HALF,y+HALF]); }); return e; }
+  function cellsBBoxPx(arr){ if(!arr||!arr.length) return {x:0,y:0,w:0,h:0};
+    var mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9; arr.forEach(function(k){ var a=k.split(","),c=+a[0],r=+a[1];
+      mnx=Math.min(mnx,c*HALF); mny=Math.min(mny,r*HALF); mxx=Math.max(mxx,c*HALF+HALF); mxy=Math.max(mxy,r*HALF+HALF); });
+    return {x:mnx,y:mny,w:mxx-mnx,h:mxy-mny}; }
 
   // ---- grid math ----
   function key(c,r){ return c+","+r; }
@@ -210,14 +221,17 @@
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
     var e=boundaryEdges(); ctx.strokeStyle="#111"; ctx.lineWidth=3.5; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke(); }
-  function drawRoom(r,on){ var p=px(r);
-    ctx.fillStyle= on ? "rgba(185,138,46,.10)" : "rgba(16,17,18,.035)";
-    ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2;
-    ctx.fillRect(p.x,p.y,p.w,p.h); ctx.strokeRect(p.x,p.y,p.w,p.h);
-    var name=(r.label||"").trim();
+  function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;
+    ctx.fillStyle= on ? "rgba(185,138,46,.14)" : "rgba(16,17,18,.05)";
+    set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
+    var e=edgesOf(set); ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke();
+    var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
     ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(name||"Tap to name", p.x+p.w/2, p.y+p.h/2, Math.max(20,p.w-12)); }
+    ctx.fillText(name||"Tap to name", bb.x+bb.w/2, bb.y+bb.h/2, Math.max(20,bb.w-12)); }
+  // Room drag → the cells inside the drag rect that ALSO belong to the structure (the clamp that keeps rooms inside).
+  function roomDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return has(cr[0],cr[1]); }); }
   function drawPreview(){
     if(dragging && mode==="structure" && startPt && dragCur){
       var list=dragCells(startPt,dragCur);
@@ -230,13 +244,25 @@
       var s=step(), x=Math.floor(hoverPt.x/s)*s, y=Math.floor(hoverPt.y/s)*s;   // snapped cursor
       ctx.strokeStyle="rgba(185,138,46,.75)"; ctx.lineWidth=1.5; ctx.strokeRect(x+0.5,y+0.5,s-1,s-1);
     }
-    if(mode==="room" && draft){ var p=px(draft); ctx.setLineDash([6,5]); ctx.strokeStyle="#b98a2e"; ctx.lineWidth=2;
-      ctx.strokeRect(p.x,p.y,p.w,p.h); ctx.setLineDash([]); }
+    if(mode==="room" && dragging && startPt && dragCur){   // preview is ALREADY clamped to the structure
+      var rl=roomDragCells(startPt,dragCur);
+      ctx.fillStyle="rgba(185,138,46,.32)";
+      rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
+    }
   }
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawPreview(); }
+
+  // Enforce ROOM ⊆ STRUCTURE: keep only room cells the structure still occupies. Also migrates any legacy
+  // normalized-rect rooms ({x,y,w,h}) into structure-clamped cells. Run on load and after every structure edit.
+  function reconcileRooms(){ rooms=(rooms||[]).map(function(r){
+      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"" };
+      if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
+        return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"" }; }
+      return { cells:[], label:(r&&r.label)||"" };
+    }).filter(function(r){ return r.cells.length>0; }); }
 
   // ---- per-floor persistence ----
   function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:rooms})); }catch(e){} }
@@ -269,12 +295,10 @@
     if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap a room → name it
-    closeLabel(); sel=null; startPt=pt; dragging=true; draft={x:snapV(pt.x)/W(),y:snapV(pt.y)/H(),w:0,h:0}; });
+    closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
     if(!dragging){ if(mode==="structure") redraw(); return; }
-    if(mode==="structure"){ dragCur=pt; redraw(); return; }
-    var x0=snapV(Math.min(startPt.x,pt.x)), y0=snapV(Math.min(startPt.y,pt.y)), x1=snapV(Math.max(startPt.x,pt.x)), y1=snapV(Math.max(startPt.y,pt.y));
-    draft={x:x0/W(),y:y0/H(),w:(x1-x0)/W(),h:(y1-y0)/H()}; redraw(); });
+    dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
   cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
     if(mode==="structure"){
       var wasEmpty=cells.size===0, list=dragCells(startPt,dragCur||startPt), changed=false;
@@ -282,16 +306,21 @@
         if(structOp==="erase"){ if(cells.delete(k)) changed=true; }
         else if(!cells.has(k)){ cells.add(k); changed=true; } });
       startPt=dragCur=null;
-      if(changed){ pushHist(); if(wasEmpty && cells.size){ setMode("room"); return; } }   // first footprint → Room
+      if(changed){ reconcileRooms(); pushHist(); if(wasEmpty && cells.size){ setMode("room"); return; } }   // first footprint → Room; re-clip rooms after any edit
       updateTools(); redraw(); return;
     }
-    var p=px(draft||{x:0,y:0,w:0,h:0});
-    if(draft && p.w>12 && p.h>12){ var shape={x:draft.x,y:draft.y,w:draft.w,h:draft.h,label:""}; rooms.push(shape); sel=shape; draft=null; pushHist(); redraw(); openLabel(shape); }
-    else { draft=null; redraw(); } });
+    // ROOM: only the cells the drag covers that ALSO belong to the structure become the room (ROOM ⊆ STRUCTURE).
+    var rl=roomDragCells(startPt,dragCur||startPt); startPt=dragCur=null;
+    if(rl.length){ var rk=rl.map(function(cr){ return key(cr[0],cr[1]); });
+      // a cell belongs to one room — take these cells away from any other room they overlapped
+      rooms.forEach(function(o){ o.cells=(o.cells||[]).filter(function(k){ return rk.indexOf(k)<0; }); });
+      rooms=rooms.filter(function(o){ return (o.cells||[]).length>0; });
+      var shape={cells:rk, label:""}; rooms.push(shape); sel=shape; pushHist(); redraw(); openLabel(shape); }
+    else { redraw(); } });
   cv.addEventListener("pointerleave", function(){ hoverPt=null; if(!dragging) redraw(); });
 
   // ---- label popover (rooms only; the structure shell needs no name) ----
-  function openLabel(r){ var pop=$("labelPop"), p=px(r), sr=stage.getBoundingClientRect();
+  function openLabel(r){ var pop=$("labelPop"), p=cellsBBoxPx(r.cells||[]), sr=stage.getBoundingClientRect();
     var left=Math.max(8, Math.min(sr.width-270, p.x+p.w/2-131)), top=Math.max(8, Math.min(sr.height-170, p.y+p.h/2-20));
     pop.style.left=left+"px"; pop.style.top=top+"px"; pop.classList.add("on");
     var chips=$("lpChips"); chips.innerHTML=""; ROOM_CHIPS.forEach(function(c){ var b=document.createElement("button"); b.className="chip"; b.textContent=c;
@@ -303,20 +332,32 @@
     $("lpDone").onclick=closeLabel; }
   function closeLabel(){ $("labelPop").classList.remove("on"); persist(); }   // capture labels + undo/redo state
 
-  // ---- render the current plan to a padded SQUARE png (sent to AI + used if not enhanced) ----
-  function sketchPNG(){ var S=1024, c=document.createElement("canvas"); c.width=S; c.height=S; var g=c.getContext("2d");
-    g.fillStyle="#ffffff"; g.fillRect(0,0,S,S);
-    var aw=W(), ah=H(), scale=Math.min((S-40)/aw,(S-40)/ah), dw=aw*scale, dh=ah*scale, ox=(S-dw)/2, oy=(S-dh)/2;
-    // structure: subtle fill + bold derived perimeter
-    g.fillStyle="rgba(0,0,0,.04)";
-    cells.forEach(function(k){ var a=k.split(","); g.fillRect(ox+ +a[0]*HALF*scale, oy+ +a[1]*HALF*scale, HALF*scale, HALF*scale); });
-    var e=boundaryEdges(); g.strokeStyle="#111"; g.lineWidth=7; g.lineCap="round"; g.lineJoin="round";
-    g.beginPath(); e.forEach(function(s){ g.moveTo(ox+s[0]*scale,oy+s[1]*scale); g.lineTo(ox+s[2]*scale,oy+s[3]*scale); }); g.stroke();
-    // rooms
-    rooms.forEach(function(r){ var q={x:ox+r.x*aw*scale, y:oy+r.y*ah*scale, w:r.w*aw*scale, h:r.h*ah*scale};
-      g.fillStyle="rgba(0,0,0,.04)"; g.fillRect(q.x,q.y,q.w,q.h);
-      g.strokeStyle="#111"; g.lineWidth=3; g.strokeRect(q.x,q.y,q.w,q.h);
-      var name=(r.label||"").trim(); if(name){ g.fillStyle="#111"; g.font="600 22px sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(name, q.x+q.w/2, q.y+q.h/2, Math.max(30,q.w-16)); } });
+  // ---- render the current plan to a TIGHTLY-CROPPED png at the plan's real aspect (sent to AI + dropped
+  // as the floor background). Cropping to the geometry bbox — not a padded square — is what makes the Done
+  // result fill the frame the same way the editor does (no tiny plan floating in white). ----
+  function planCells(){ var arr=Array.from(cells); rooms.forEach(function(r){ (r.cells||[]).forEach(function(k){ arr.push(k); }); }); return arr; }
+  function sketchPNG(){
+    var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
+    var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));      // ~6% margin, min one half-cell
+    var worldW=bb.w+2*m, worldH=bb.h+2*m, sc=1200/Math.max(worldW,worldH), cellPx=HALF*sc;
+    var c=document.createElement("canvas"); c.width=Math.max(1,Math.round(worldW*sc)); c.height=Math.max(1,Math.round(worldH*sc));
+    var g=c.getContext("2d"); g.fillStyle="#ffffff"; g.fillRect(0,0,c.width,c.height);
+    var ox=(m-bb.x)*sc, oy=(m-bb.y)*sc;                              // bbox origin → margin
+    g.lineCap="round"; g.lineJoin="round";
+    // structure fill
+    g.fillStyle="rgba(0,0,0,.04)"; cells.forEach(function(k){ var a=k.split(","); g.fillRect(ox+ +a[0]*HALF*sc, oy+ +a[1]*HALF*sc, cellPx, cellPx); });
+    // rooms: fill + interior partition walls
+    rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
+      g.fillStyle="rgba(0,0,0,.045)"; set.forEach(function(k){ var a=k.split(","); g.fillRect(ox+ +a[0]*HALF*sc, oy+ +a[1]*HALF*sc, cellPx, cellPx); });
+      var re=edgesOf(set); g.strokeStyle="#111"; g.lineWidth=Math.max(2,cellPx*0.16);
+      g.beginPath(); re.forEach(function(s){ g.moveTo(ox+s[0]*sc,oy+s[1]*sc); g.lineTo(ox+s[2]*sc,oy+s[3]*sc); }); g.stroke(); });
+    // structure exterior perimeter (bold) LAST so shared walls read as one strong wall
+    var e=boundaryEdges(); g.strokeStyle="#111"; g.lineWidth=Math.max(4,cellPx*0.3);
+    g.beginPath(); e.forEach(function(s){ g.moveTo(ox+s[0]*sc,oy+s[1]*sc); g.lineTo(ox+s[2]*sc,oy+s[3]*sc); }); g.stroke();
+    // labels
+    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var bb2=cellsBBoxPx(r.cells||[]);
+      g.fillStyle="#111"; g.font="600 "+Math.max(13,Math.round(cellPx*0.62))+"px sans-serif"; g.textAlign="center"; g.textBaseline="middle";
+      g.fillText(name, ox+(bb2.x+bb2.w/2)*sc, oy+(bb2.y+bb2.h/2)*sc, Math.max(30,bb2.w*sc-12)); });
     return c; }
   function hasSketch(){ return cells.size>0 || rooms.length>0; }
 
@@ -387,9 +428,10 @@
   restore();                                        // resume this floor's saved structure/rooms
   try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
   applySnapUI();
-  hist=[snapshot()]; hi=0;                           // baseline history on the restored state
-  setMode(cells.size ? "room" : "structure");        // existing structure → continue with rooms
-  fitCanvas();
+  fitCanvas();                                       // size the canvas first → W()/H() valid for migration
+  reconcileRooms();                                  // migrate legacy rect rooms + clip every room to the structure
+  hist=[snapshot()]; hi=0;                           // baseline history on the reconciled state
+  setMode(cells.size ? "room" : "structure");        // existing structure → continue with rooms (calls redraw)
   updateTools();
 </script>
 </body>
