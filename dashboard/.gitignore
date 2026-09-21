@@ -1,3 +1,7 @@
 
 # Self-hosted face models (fetch-face-models.mjs) — COMMITTED so Render serves them
 # same-origin (fast first scan). Regenerate with: node scripts/fetch-face-models.mjs
+
+# Playwright UI audit (scripts/audit.mjs) — generated artifacts, never committed
+auth.json
+/audit/
