@@ -1,8 +1,8 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType } from "../../../lib/db";
-import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel } from "../../../lib/spec";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, buildStageFacts, getProjectAssignments } from "../../../lib/db";
+import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
@@ -345,8 +345,23 @@ export async function setStage(accessId, viewRole, stageKey) {
   }
 
   const changed = p.stage !== stageKey;
+  // Admin override is ALLOWED (never a silent bypass): if this forward move jumps PAST an unmet
+  // enforceable requirement, record it on the activity log with who + when + what was bypassed.
+  let overrideNote = null;
+  const toIdx0 = MASTER_ORDER.indexOf(stageKey), fromIdx0 = MASTER_ORDER.indexOf(p.stage);
+  if (changed && toIdx0 > fromIdx0) {
+    try {
+      const facts = buildStageFacts(accessId);
+      const assigns = getProjectAssignments(accessId) || [];
+      if (!canAdvanceTo(stageKey, facts, assigns, p.project_type, p.stage)) {
+        const blocker = phaseGate(facts, assigns, p.project_type, p.stage).blocker;
+        overrideNote = blocker ? blocker.label : "an unmet requirement";
+      }
+    } catch { /* if facts can't build, don't block the move — just skip the note */ }
+  }
   const updated = updateStage(accessId, stageKey);
   if (!updated) return { ok: false, error: "Could not update the project." };
+  if (overrideNote) logProjectEvent(accessId, { kind: "override", label: `Step set to ${stageLabel(stageKey)} — bypassed: ${overrideNote}`, actor: tok.name || tok.email || tok.role });
   // If this was a FORWARD move, let the spine chain any now-satisfied auto stages — e.g. closing QC
   // moves the job to `payment`, which then advances itself to `completion` the moment the final
   // balance is $0. Forward-only, so a deliberate rewind by an admin is never undone.

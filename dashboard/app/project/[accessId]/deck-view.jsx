@@ -28,7 +28,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
@@ -406,6 +406,16 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       )}
 
       {/* rail */}
+      {/* Persistent gate banner — the current step + the single thing blocking advancement. Reads from
+          the SAME phaseGate the stepper uses (one source of truth), so it can never disagree. */}
+      {gateBanner && (
+        <div className="dv-gate" role="status" data-stop>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span className="dv-gate-step">{gateBanner.step}</span>
+          <span className="dv-gate-sep">·</span>
+          <span className="dv-gate-reason">{gateBanner.reason}</span>
+        </div>
+      )}
       <nav className="dv-rail">
         <div className="dv-track">
           {stages.map((s, i) => {
@@ -413,7 +423,10 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             const doneRatio = s.tools ? (s.tools.filter((t) => t.state === "done").length / Math.max(1, s.tools.length)) : 1;
             const fill = done ? 100 : current ? Math.max(18, doneRatio * 100) : 0;
             return (
-              <button key={i} className={`dv-seg${done ? " done" : ""}${current ? " current" : ""}`} onClick={() => go(i)}>
+              // A locked (not-yet-reachable) phase stays visible but greyed; clicking still peeks it
+              // read-only (per the chosen model) while the banner + tooltip give the specific reason.
+              <button key={i} className={`dv-seg${done ? " done" : ""}${current ? " current" : ""}${s.locked ? " locked" : ""}`} onClick={() => go(i)}
+                title={s.locked ? s.lockReason : undefined} aria-label={s.locked ? `${s.name} — locked. ${s.lockReason}` : s.name}>
                 <div className="dv-bar"><i style={{ width: fill + "%", background: current ? "var(--dv-gold)" : "var(--dv-ink)" }} /></div>
                 <div className="dv-lab"><span className={`dv-beacon m-${markOf(s, i)}`} /><b>{done ? "✓" : i + 1}</b><span className="nm">{s.name}</span></div>
               </button>
@@ -651,6 +664,20 @@ const CSS = `
 .dv-compact .dv-readout .cap{display:none}
 .dv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}
 .dv-seg{flex:1;text-align:left;min-width:0;padding-top:6px}
+/* Locked (not-yet-reachable) phase: greyed, still visible + clickable (peek). */
+.dv-seg.locked{opacity:.4}
+.dv-seg.locked:hover{opacity:.62}
+.dv-seg.locked .dv-bar i{background:var(--dv-line) !important}
+/* Persistent gate banner — the single blocker, above the stepper, every role. */
+.dv-gate{flex:0 0 auto;display:flex;align-items:center;gap:7px;margin:0 24px;padding:7px 12px;
+  border-radius:9px;background:color-mix(in srgb, var(--dv-gold) 12%, transparent);
+  color:var(--dv-ink-soft);font-size:12px;line-height:1.3;min-width:0}
+.dv-gate svg{flex:0 0 auto;color:var(--dv-gold);opacity:.85}
+.dv-gate-step{font-weight:700;color:var(--dv-ink);white-space:nowrap}
+.dv-gate-sep{opacity:.4}
+.dv-gate-reason{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-compact .dv-gate{padding-top:4px;padding-bottom:4px;font-size:11px}
+@media (max-width:760px){.dv-gate{margin:0 14px}}
 .dv-bar{height:2px;border-radius:99px;background:var(--dv-line);overflow:hidden;position:relative}
 .dv-bar i{position:absolute;inset:0;width:0;border-radius:99px;transition:width .7s var(--dv-eo)}
 .dv-lab{margin-top:9px;display:flex;align-items:center;gap:7px;font-family:var(--font-mono),"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .25s}

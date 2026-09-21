@@ -65,3 +65,24 @@ export function nextStageOf(stageKey) {
   const i = MASTER_ORDER.indexOf(stageKey);
   return i >= 0 && i < MASTER_ORDER.length - 1 ? MASTER_ORDER[i + 1] : null;
 }
+
+// ENFORCEABLE unmet requirements: only the ones backed by a real check() and currently failing.
+// Manual-judgement requirements (no check — install checklist, QC sign-off, completion docs) are
+// advisory and NEVER hard-lock a stage. This is what the phase gate locks on (Phase-1 scope), so it
+// stays distinct from missingReqs() (which also lists the manual reqs for the "next step" to-do text).
+export function blockingReqs(stageKey, facts, assignments) {
+  return (STAGE_FLOW[stageKey] || [])
+    .filter((req) => req.check && !req.check(facts, assignments || []))
+    .map((req) => ({ label: req.label, who: req.who || "internal" }));
+}
+
+// Walk `order` forward from `fromIdx` (the project's current stage); a stage is passable only when
+// its enforceable requirements are met. Returns the furthest stage index the project may occupy —
+// i.e. it stops AT the first stage with an unmet enforceable requirement. Never regresses below
+// `fromIdx`, so a project already legitimately at a later stage is not retro-locked (this is the
+// "lock advancement, don't retro-lock" rule).
+export function gateThroughIndex(facts, assignments, order = MASTER_ORDER, fromIdx = 0) {
+  let idx = Math.max(0, fromIdx);
+  while (idx + 1 < order.length && blockingReqs(order[idx], facts, assignments).length === 0) idx++;
+  return idx;
+}

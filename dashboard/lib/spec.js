@@ -1,5 +1,6 @@
 // Spec-aligned constants from the IOT App Revamp Build Spec (v1.0).
 // Pure data — safe to import from both server and client components.
+import { blockingReqs, gateThroughIndex } from "./stage-flow.js";
 
 // ---- 9-stage project lifecycle ----
 // OPEN: Inquiry → Site Survey → Proposal → Approval & Deposit
@@ -79,6 +80,46 @@ export function phasesForType(type) {
 // Master lifecycle stage → its 4-phase key (for the "current" bar marker + co-render grouping).
 export const masterToPhaseKey = (masterKey) =>
   (PHASES.find((p) => p.members.includes(masterKey)) || PHASES[0]).key;
+
+// ---- ONE canonical phase gate — the single source of truth for step lock state + reason. --------
+// Both the stepper AND the status banner read from this, so they can never disagree. A phase is
+// UNLOCKED only when the project can legitimately have advanced into it: every earlier applicable
+// stage's *enforceable* (check-backed) requirement is met. Gating runs FORWARD from the project's
+// current stage, so a phase the project already occupies is never re-locked (lock advancement, don't
+// retro-lock — the Phase-1 rollout rule). Manual sign-offs (install/QC/completion) don't hard-lock.
+//   facts        — the same fact object the to-do strip uses (project client-side / buildStageFacts server-side)
+//   assignments  — project access roster (for tech-assigned checks)
+//   type         — project_type (A/B/C) → which stages/phases apply
+//   currentStage — the project's current master stage key (projects.stage)
+// Returns { phases:[{key,label,unlocked,reason}], furthestPhaseKey, blocker, reachedStage }.
+export function phaseGate(facts, assignments = [], type = "A", currentStage = null) {
+  const phases = phasesForType(type);
+  const order = phases.flatMap((p) => p.members);                 // applicable master stages, in order
+  const curIdx = Math.max(0, order.indexOf(currentStage));        // -1 (unknown) → treat as start
+  const throughIdx = gateThroughIndex(facts, assignments, order, curIdx); // furthest passable stage index
+  const stuckKey = order[throughIdx];
+  const blocker = blockingReqs(stuckKey, facts, assignments)[0] || null;   // {label,who} | null when fully clear
+  const out = phases.map((p) => {
+    const startIdx = order.indexOf(p.members[0]);
+    const unlocked = startIdx <= throughIdx;
+    return { key: p.key, label: p.label, unlocked, reason: unlocked ? null : gateReason(blocker) };
+  });
+  return { phases: out, furthestPhaseKey: masterToPhaseKey(stuckKey), blocker, reachedStage: stuckKey };
+}
+// Human, specific lock reason from the blocking requirement (never a generic "locked").
+export function gateReason(blocker) {
+  if (!blocker) return null;
+  const who = blocker.who === "customer" ? "the customer" : "the team";
+  return `Waiting on ${who}: ${blocker.label}`;
+}
+// Convenience for server-side enforcement: may the project move INTO `targetStage` yet?
+export function canAdvanceTo(targetStage, facts, assignments = [], type = "A", currentStage = null) {
+  const g = phaseGate(facts, assignments, type, currentStage);
+  const order = phasesForType(type).flatMap((p) => p.members);
+  const tIdx = order.indexOf(targetStage);
+  const throughIdx = order.indexOf(g.reachedStage);
+  return tIdx <= throughIdx;   // target is within the currently-passable range
+}
 
 // Gateway access rules (spec §03). PINs map to view types, not accounts.
 // Login roles resolve to their own view; login ALWAYS wins over a PIN.

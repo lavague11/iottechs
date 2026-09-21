@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
+import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
@@ -2575,9 +2575,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         default:         return "todo";                                  // upcoming — white
       }
     };
+    // ONE canonical phase gate — the stepper AND the banner read from this, so they can't disagree.
+    // Locks a phase only when the project can't yet have advanced into it (an earlier enforceable
+    // sign-off is missing); seeds from the real current stage so a project is never re-locked below
+    // where it already is. Peek is still allowed (clicking a locked phase surfaces the reason, opens read-only).
+    const gate = phaseGate(floorFacts, localAssignments, lp.project_type, projectStage);
     const deckStages = phaseList.map((p, i) => {
       const next = phaseList[i + 1];
       const isComplete = p.key === "ph_complete";
+      const gph = gate.phases.find((g) => g.key === p.key);
+      const locked = !!gph && !gph.unlocked;
+      const lockReason = gph?.reason || null;
       // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion — but a
       // phase that isn't actually finished never reads 100% (that would paint its dot green early).
       const pct = isComplete
@@ -2606,6 +2614,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // The Consulting walkthrough now lives INSIDE the System Planner (its ▶ Walkthrough action),
         // so it's no longer a separate intro slot — one walkthrough entry, not two.
         advance: (next && !isComplete) ? { to: next.label, ready: p.key === vPhase && canAdv, reason: "Advance from the current stage" } : null,
+        locked, lockReason,
       };
     });
     // Customer readout % — based on ITEMS actually approved/paid, not the stage index, so it advances
@@ -2712,6 +2721,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         canAdvance={canAdv}
         customer={deckCustomer}
         statusChip={statusChip}
+        gateBanner={gate.blocker ? { reason: gateReason(gate.blocker), step: phaseLabelOf(masterToPhaseKey(projectStage)) } : null}
         progressPct={custProgressPct}
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
