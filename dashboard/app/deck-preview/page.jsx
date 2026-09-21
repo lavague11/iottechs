@@ -3,10 +3,12 @@ import { useState } from "react";
 import DeckView from "../project/[accessId]/deck-view";
 import SiteSurveyWidget from "../project/[accessId]/site-survey-widget";
 import MockupWidget from "../project/[accessId]/mockup-widget";
+import { PHASES } from "../../lib/spec";
 
 // Standalone preview of the redesigned project deck (Consulting wired with the real tool set).
 // Sample data only — no API. Lets us review the shell + one stage before porting into the gateway.
-const STAGES = [
+// Slide names/pills come from the canonical PHASES so this sample can't drift from the real bar.
+const SAMPLE = [
   { name: "Consulting", pill: "Pending", pct: 13, turn: "customer", tint: "blue",
     need: "Customer to accept the site survey",
     advance: { to: "Proposal", ready: false, reason: "Waiting on customer to accept" },
@@ -59,6 +61,7 @@ const STAGES = [
       </div>
     ) },
 ];
+const STAGES = PHASES.map((p, i) => ({ ...(SAMPLE[i] || {}), name: p.label, pill: SAMPLE[i]?.pill || p.status }));
 
 const CUSTOMER = {
   code: "ASC0031", name: "Abdul",

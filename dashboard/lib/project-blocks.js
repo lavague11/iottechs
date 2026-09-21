@@ -30,37 +30,34 @@ export const ROLES = [
   { key: "customer", label: "Customer",   color: "#3257ff" },
 ];
 
+// Mirrors deckToolsFor() in gateway-client.jsx (the deck is the live project page). Scheduling is no
+// longer a tool card (it lives on the contact action bar + header chip) and Shipment Tracking is
+// archived, so neither appears here. Re-synced 2026-09-21.
 export const PHASE_BLOCKS = {
+  // Consulting = the System Planner (survey map + camera views), one workspace for every role.
   ph_survey: [
-    { name: "Your Information",            access: { customer: "edit" } },
-    { name: "Schedule Appointment",        access: { customer: "edit" } },
-    { name: "Survey Scheduling & Notes",   access: { admin: "edit", manager: "edit", sales: "edit", tech: "issue" } },
-    { name: "Site Survey",                 access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit" } },
-    { name: "Mockups",                     access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit" } },
+    { name: "Site Survey",                 access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view" } },
+    { name: "Mockups",                     access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view" } },
   ],
   ph_proposal: [
-    { name: "Proposal Views",              access: { admin: "view", manager: "view", sales: "view" } },
-    { name: "Proposal Builder",            access: { admin: "edit", manager: "edit", sales: "edit" } },
-    { name: "Proposal · accept / decline", access: { customer: "edit" } },
+    { name: "Proposal",                    access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit" } },
     { name: "Tech Board",                  access: { tech: "view" } },
-    { name: "Work Order",                  access: { tech: "edit" } },
-    { name: "Approval & Deposit",          access: { admin: "edit", manager: "edit" } },
-    { name: "Make Your Deposit",           access: { customer: "edit" } },
+    { name: "Approval & Deposit",          access: { admin: "edit", manager: "edit", customer: "edit" } },
+    { name: "Create Work Order",           access: { admin: "edit", manager: "edit" } },
   ],
   ph_install: [
-    { name: "Install Scheduling",          access: { admin: "edit", manager: "edit", customer: "view" } },
-    { name: "Shipment Tracking",           access: { admin: "edit", manager: "edit", customer: "view" } },
-    { name: "Equipment / Work Order",      access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
-    { name: "Job-Site Add-ons",            access: { admin: "edit", manager: "edit", tech: "view", customer: "view" } },
-    { name: "Tech Pricing",                access: { admin: "edit", manager: "edit" } },
+    { name: "Addendum",                    access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
+    { name: "Work Order",                  access: { admin: "edit", manager: "edit", tech: "edit" } },
+    { name: "Project Ready",               access: { customer: "view" } },
+    { name: "Set Up Your Phone",           access: { customer: "view" } },
   ],
-  // Step 4 — Closeout: System QR handover, QC, final payment.
+  // Step 4 — Closeout: Activation QR handover, final payment, internal QC.
   ph_wrap: [
-    { name: "System QR",                   access: { admin: "view", manager: "view", tech: "view" } },
-    { name: "QC Checklist",                access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view" } },
+    { name: "System QR",                   access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
     { name: "Final Payment",               access: { admin: "edit", manager: "edit", customer: "edit" } },
+    { name: "Quality Control",             access: { admin: "edit", manager: "edit", sales: "view", tech: "edit" } },
   ],
-  // Step 5 — Completion: read-only "all done" wrap-up (certificate / warranty / welcome guide).
+  // Step 5 — Completion: read-only "all done" wrap-up (certificate / warranty / payout).
   ph_complete: [
     { name: "Completion / Wrap-up",        access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view" } },
   ],
@@ -77,14 +74,13 @@ export function blocksForRole(phaseKey, role) {
 export const ROLE_NOTES = {
   manager: "Identical to Admin — no manager-specific restriction exists in code.",
   sales:   "Blind in the Install phase — no render branch. Loses the job once it's being built.",
-  tech:    "Over-exposed in Consulting — sees office intake tools it shouldn't.",
+  tech:    "Work Order stays locked until the tech has accepted it AND it's install day.",
 };
 
 // Audit findings shown in the dark panel.
 export const FINDINGS = [
-  { tag: "REMOVE",    cls: "rm-i-remove",    text: "Dead 5-phase code (CUSTOMER_PHASES) — 0 usages, superseded by the 4-phase bar (2026-07-13)." },
-  { tag: "TRIM",      cls: "rm-i-trim",      text: "Tech sees office intake tools (Survey Scheduling & Notes) in Consulting." },
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Sales sees NOTHING in the Install phase — no branch exists." },
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Vendor & Readonly roles have no render branch on the project page at all." },
-  { tag: "REDUNDANT", cls: "rm-i-redundant", text: "Proposal phase stacks two heavy money panels (Proposal Builder + Approval & Deposit)." },
+  { tag: "MISSING",   cls: "rm-i-missing",   text: "No 'survey skipped' path — an A/B project with no accepted survey hard-locks Proposal. Monitoring/ADT jobs only avoid it by living in their own flow." },
+  { tag: "TRIM",      cls: "rm-i-trim",      text: "Only 10 of the 16 requirement-steps are check-backed; the other 6 (install-appointment confirm, install ×2, QC ×2, completion docs) are advisory and never gate." },
 ];

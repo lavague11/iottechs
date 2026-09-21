@@ -2024,11 +2024,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lp.info_confirmed_at, lp.tour_seen_at, cView, previewRole]);
 
-  // Every role now sees the unified 4-phase bar (view-merge, 2026-07-13). The backend still runs all
-  // 9 stages — these dots are phase GROUPS, and browsing/gating still resolves to real master keys.
-  // The current-dot marker maps the master projectStage into its phase.
+  // Every role now sees the unified 5-phase bar (view-merge 2026-07-13, split to 5 on 07-15). The
+  // backend still runs all 9 stages — these dots are phase GROUPS, and browsing/gating still resolves
+  // to real master keys. The current-dot marker maps the master projectStage into its phase.
   const masterStages    = stagesForType(project.project_type);   // the real per-type master lifecycle
-  const phaseList       = phasesForType(project.project_type);   // the 4 phases present for this type
+  const phaseList       = phasesForType(project.project_type);   // the phases present for this type (5; 4 for a Service Call)
   // The bar renders phases for everyone; technicians get their own wording for the same dots
   // (Survey → Accept → Install → Completion) since their phase-2 job is accepting the work order.
   const stageList       = cView === "tech"
@@ -2219,7 +2219,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const t = (list || []).filter((x) => x && x.node);
       if (!t.length) return null;
       const allDocs = t.every((x) => !MAP_TOOLS.includes(x.name));
-      return [{ name, label: name, wide: true, node: (
+      // The merged card inherits its completion from the cards it wraps, so the footer's "N of M"
+      // counts the same thing for a merged (admin) list as for the raw (tech) list.
+      const tracked = t.filter((x) => x.state);
+      const state = !tracked.length ? undefined : tracked.every((x) => x.state === "done") ? "done" : "active";
+      return [{ name, label: name, wide: true, state, node: (
         <div className={`cx-merged${allDocs ? " cx-merged--flow" : ""}`}>
           {t.map((x, k) => (
             <section className="cx-sec" key={x.name || k}>
@@ -2308,7 +2312,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (cView === "customer" && !hasSurvey && !hasViews) {
           return [all[1], all[0]].map((t) => ({ ...t, node: null }));
         }
-        return [{ name: "Consulting", label: "Consulting", wide: true, node: (
+        return [{ name: "Consulting", label: "Consulting", wide: true,
+          state: all.every((t) => !t.state || t.state === "done") && all.some((t) => t.state) ? "done" : "active",
+          node: (
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
             planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
             hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams}

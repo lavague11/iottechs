@@ -1,17 +1,13 @@
 // Spec-aligned constants from the IOT App Revamp Build Spec (v1.0).
 // Pure data — safe to import from both server and client components.
-import { blockingReqs, gateThroughIndex } from "./stage-flow.js";
+import { blockingReqs, gateThroughIndex, MASTER_ORDER } from "./stage-flow.js";
 
 // ---- 9-stage project lifecycle ----
 // OPEN: Inquiry → Site Survey → Proposal → Approval & Deposit
 // IN_PROGRESS: Schedule → Install → QC
 // CLOSED: Payment → Completion
-export const STATUS_BUCKETS = {
-  OPEN:        ["inquiry", "site_survey", "proposal", "approval_deposit"],
-  IN_PROGRESS: ["schedule", "install", "qc"],
-  CLOSED:      ["payment", "completion"],
-};
-
+// Labels/buckets live here; the gate walks stage-flow.js MASTER_ORDER. The two must agree key-for-key
+// (checked below at module load) — this is the one place the lifecycle order is allowed to be typed twice.
 export const STAGES = [
   { key: "inquiry",          label: "Inquiry",            short: "Inquiry",   bucket: "OPEN" },
   { key: "site_survey",      label: "Site Survey",        short: "Survey",    bucket: "OPEN" },
@@ -25,6 +21,10 @@ export const STAGES = [
   { key: "payment",          label: "Payment",            short: "Payment",   bucket: "CLOSED" },
   { key: "completion",       label: "Completion",         short: "Completion",bucket: "CLOSED" },
 ];
+
+if (STAGES.map((s) => s.key).join(",") !== MASTER_ORDER.join(",")) {
+  throw new Error("spec.js STAGES and stage-flow.js MASTER_ORDER disagree on the lifecycle order");
+}
 
 export const stageLabel      = (key) => STAGES.find((s) => s.key === key)?.label || key;
 export const stageShortLabel = (key) => STAGES.find((s) => s.key === key)?.short || stageLabel(key);
@@ -40,14 +40,6 @@ const TYPE_STAGES = {
 export function stagesForType(type) {
   return (TYPE_STAGES[type] || TYPE_STAGES.A).map((k) => STAGES.find((s) => s.key === k));
 }
-
-// Technician's 4-stage view — different labels than the master lifecycle.
-export const TECH_STAGES = [
-  { key: "proposal", label: "Work Order Created" },
-  { key: "install",  label: "Install" },
-  { key: "qc",       label: "QC" },
-  { key: "payment",  label: "Payout" },
-];
 
 // ---- Unified 5-phase view — shown to EVERY role (2026-07-13; split to 5 on 2026-07-15). ----
 // The backend still runs all 9 stages (auto-advance, requirements, history all unchanged); this is
@@ -77,7 +69,7 @@ export function phasesForType(type) {
     .filter((p) => p.members.length > 0)
     .map((p) => ({ ...p, primary: p.members.includes(p.primary) ? p.primary : p.members[p.members.length - 1] }));
 }
-// Master lifecycle stage → its 4-phase key (for the "current" bar marker + co-render grouping).
+// Master lifecycle stage → its phase key (for the "current" bar marker + co-render grouping).
 export const masterToPhaseKey = (masterKey) =>
   (PHASES.find((p) => p.members.includes(masterKey)) || PHASES[0]).key;
 

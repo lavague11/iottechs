@@ -22,9 +22,12 @@ import { skipOutsideClose } from "../../../lib/outside-click";
     roleLabel    string for the top-right role pill (e.g. "Admin view")
 */
 // Per-stage tool completion — drives the footer "N of M complete" / "Ready to advance".
+// Only cards that carry a `state` are countable; stateless cards (a merged wrapper without one,
+// an add-ons panel, a guide) are neither done nor pending, so they must not inflate the denominator.
 const stageProgress = (s) => {
-  const total = (s.tools || []).length;
-  const done = (s.tools || []).filter((t) => t.state === "done").length;
+  const tracked = (s.tools || []).filter((t) => t && t.state);
+  const total = tracked.length;
+  const done = tracked.filter((t) => t.state === "done").length;
   return { done, total, allDone: total > 0 && done === total };
 };
 

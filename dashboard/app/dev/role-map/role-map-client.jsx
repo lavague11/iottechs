@@ -22,10 +22,13 @@ const PHASE_DATA = PHASES.map((p) => ({
   status: p.status,
   stages: p.members.map(stageLabel).join(" + "),
   steps: p.members.reduce((n, m) => n + (STAGE_FLOW[m]?.length || 0), 0),
+  // Only check()-backed steps actually gate advancement; the rest are advisory to-do text.
+  gated: p.members.reduce((n, m) => n + (STAGE_FLOW[m] || []).filter((r) => r.check).length, 0),
   color: PHASE_COLORS[p.key] || "#C9A96E",
 }));
 const TOTAL_STAGES = PHASES.reduce((n, p) => n + p.members.length, 0);
 const TOTAL_STEPS  = PHASE_DATA.reduce((n, p) => n + p.steps, 0);
+const TOTAL_GATED  = PHASE_DATA.reduce((n, p) => n + p.gated, 0);
 
 const ACTION_META = {
   edit:  { label: "Can act / edit", cls: "rm-a-edit",  ic: "✎" },
@@ -45,7 +48,7 @@ export default function RoleMapClient({ user, alerts }) {
           <div>
             <div className="rm-kicker">DEV · REFERENCE MAP · LIVE</div>
             <h1 className="rm-title">Role &amp; Flow Map</h1>
-            <p className="rm-sub">What each role sees under the progress bar, phase by phase. The bar is <b>{PHASE_DATA.length} phases</b> covering <b>{TOTAL_STAGES} backend stages</b> and <b>{TOTAL_STEPS} requirement-steps</b>. This map reads the app's own config — it updates itself.</p>
+            <p className="rm-sub">What each role sees under the progress bar, phase by phase. The bar is <b>{PHASE_DATA.length} phases</b> covering <b>{TOTAL_STAGES} backend stages</b> and <b>{TOTAL_STEPS} requirement-steps</b> ({TOTAL_GATED} gate advancement). This map reads the app's own config — it updates itself.</p>
           </div>
           <Link href="/dev" className="rm-back">← Dev Roadmap</Link>
         </div>
@@ -59,7 +62,7 @@ export default function RoleMapClient({ user, alerts }) {
                 <div className="rm-pchip-name">{p.name} <span className="rm-pchip-tech">tech: {p.tech}</span></div>
                 <div className="rm-pchip-meta">{p.stages}</div>
               </div>
-              <span className="rm-pchip-steps">{p.steps} steps</span>
+              <span className="rm-pchip-steps">{p.steps} steps · {p.gated} gated</span>
             </div>
           ))}
         </div>
