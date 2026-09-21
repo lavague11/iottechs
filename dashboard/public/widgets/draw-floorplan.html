@@ -20,17 +20,17 @@
   @media(max-width:640px){ #hint{top:54px;max-width:calc(100vw - 32px)} #homeLogo{opacity:.5;transform:scale(.85);transform-origin:top left} }
 
   /* label popover for the selected shape */
-  #labelPop{position:absolute;z-index:8;display:none;flex-direction:column;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.22);padding:12px;width:262px}
+  /* Compact intelligent room-name combobox — input is the primary control; ≤5 ranked suggestions. */
+  #labelPop{position:absolute;z-index:9;display:none;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.24);padding:6px;width:248px;max-width:calc(100vw - 24px)}
   #labelPop.on{display:flex}
-  #labelPop .chips{display:flex;flex-wrap:wrap;gap:6px}
-  #labelPop .chip{border:1px solid var(--line);background:var(--soft);border-radius:99px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink)}
-  #labelPop .chip:hover{border-color:var(--gold);color:var(--gold)}
-  #labelPop input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:14px;outline:none;color:var(--ink)}
-  #labelPop input:focus{border-color:var(--ink)}
-  #labelPop .lpRow{display:flex;gap:8px;justify-content:space-between}
-  #labelPop .lpRow button{border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--line)}
-  #labelPop .lpDel{background:#fff;color:#c4553d;border-color:#e3b4ab}
-  #labelPop .lpDone{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #labelPop input{width:100%;box-sizing:border-box;border:0;border-radius:8px;padding:9px 10px;font:inherit;font-size:15px;font-weight:600;outline:none;color:var(--ink);background:var(--soft)}
+  #labelPop input::placeholder{color:#9aa0a6;font-weight:500}
+  #labelPop .lplist{display:flex;flex-direction:column;margin-top:4px}
+  #labelPop .lplist:empty{margin-top:0}
+  #labelPop .lpopt{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #labelPop .lpopt:hover,#labelPop .lpopt.active{background:var(--soft)}
+  #labelPop .lpopt.custom{color:var(--gold);font-weight:600}
+  #labelPop .lpopt .lpk{margin-left:auto;font-size:11px;color:#9aa0a6;font-weight:600}
 
   #preview{position:absolute;inset:0;background:#fff;display:none;z-index:9}
   #preview.show{display:block}
@@ -104,9 +104,8 @@
     <canvas id="cv"></canvas>
     <div id="hint"></div>
     <div id="labelPop">
-      <div class="chips" id="lpChips"></div>
-      <input id="lpInput" type="text" autocomplete="off">
-      <div class="lpRow"><button class="lpDel" id="lpDel">Delete</button><button class="lpDone" id="lpDone">Done</button></div>
+      <input id="lpInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Name room">
+      <div class="lplist" id="lpList"></div>
     </div>
 
     <div id="preview"><img id="prevImg" alt="floor plan">
@@ -141,6 +140,7 @@
         <div class="moremenu" id="moreMenu">
           <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> Enhance</button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
+          <button id="mDeleteRoom" class="danger" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteRoomTxt">Delete room</span></button>
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
         </div>
       </div>
@@ -148,9 +148,14 @@
     </div>
   </div>
 
+<script src="room-taxonomy.js?v=20260921-rooms"></script>
 <script>
   var _qs=new URLSearchParams(location.search);
   var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0";
+  // Context for intelligent room-name suggestions: canonical propertyType + business context
+  // (customer/company + service line). Threaded down from the project via the survey shell.
+  var PROP=(_qs.get("prop")||"").toLowerCase()==="residential"?"residential":"commercial";
+  var BIZ=_qs.get("biz")||"";
   // Per-floor draft: the structure/room geometry is stored per (project, floor) so re-opening Draw for a
   // floor resumes exactly where it was left. The floor's rendered background image stays the survey's own.
   var LSK = PID ? ("iot_struct_"+PID+"_"+FLOOR) : null;
@@ -166,7 +171,6 @@
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
   var enhancedURL=null, enhancedOnce=false, busy=false;
-  var ROOM_CHIPS=["Living Room","Kitchen","Bathroom","Bedroom","Master Bedroom","Dining","Garage","Office","Hallway","Closet","Laundry","Basement"];
 
   function fitCanvas(){ var r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
     cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
@@ -258,10 +262,11 @@
   // Enforce ROOM ⊆ STRUCTURE: keep only room cells the structure still occupies. Also migrates any legacy
   // normalized-rect rooms ({x,y,w,h}) into structure-clamped cells. Run on load and after every structure edit.
   function reconcileRooms(){ rooms=(rooms||[]).map(function(r){
-      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"" };
+      var sem=(r&&r.semanticType)||"";
+      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"", semanticType:sem };
       if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
-        return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"" }; }
-      return { cells:[], label:(r&&r.label)||"" };
+        return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem }; }
+      return { cells:[], label:(r&&r.label)||"", semanticType:sem };
     }).filter(function(r){ return r.cells.length>0; }); }
 
   // ---- per-floor persistence ----
@@ -319,18 +324,64 @@
     else { redraw(); } });
   cv.addEventListener("pointerleave", function(){ hoverPt=null; if(!dragging) redraw(); });
 
-  // ---- label popover (rooms only; the structure shell needs no name) ----
-  function openLabel(r){ var pop=$("labelPop"), p=cellsBBoxPx(r.cells||[]), sr=stage.getBoundingClientRect();
-    var left=Math.max(8, Math.min(sr.width-270, p.x+p.w/2-131)), top=Math.max(8, Math.min(sr.height-170, p.y+p.h/2-20));
-    pop.style.left=left+"px"; pop.style.top=top+"px"; pop.classList.add("on");
-    var chips=$("lpChips"); chips.innerHTML=""; ROOM_CHIPS.forEach(function(c){ var b=document.createElement("button"); b.className="chip"; b.textContent=c;
-      b.addEventListener("click",function(){ r.label=c; $("lpInput").value=c; redraw(); }); chips.appendChild(b); });
-    var inp=$("lpInput"); inp.value=r.label||""; inp.placeholder="Room name — e.g. Kitchen"; setTimeout(function(){ inp.focus(); },30);
-    inp.oninput=function(){ r.label=inp.value; redraw(); };
-    inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); closeLabel(); } };
-    $("lpDel").onclick=function(){ rooms=rooms.filter(function(x){return x!==r;}); sel=null; closeLabel(); pushHist(); redraw(); };
-    $("lpDone").onclick=closeLabel; }
-  function closeLabel(){ $("labelPop").classList.remove("on"); persist(); }   // capture labels + undo/redo state
+  // ---- intelligent room-name combobox (rooms only; the structure shell needs no name) ----
+  // Type → 3–5 context-ranked suggestions → Enter / click / click-away saves; Escape cancels.
+  // Title Case is applied automatically; the label renders as plain canvas text once saved (no input chrome).
+  var lpRoom=null, lpOrig="", lpActive=-1, lpOpts=[], lpTC=(window.IOTRooms&&IOTRooms.titleCase)||function(s){return String(s||"").trim();};
+  function otherRoomNames(r){ var out=[]; rooms.forEach(function(x){ if(x!==r){ var n=(x.label||"").trim(); if(n) out.push(n); } }); return out; }
+  // Collision-aware placement: keep the popup inside the viewport and clear of the bottom toolbar/keyboard.
+  function positionLabel(r){
+    var pop=$("labelPop"), sr=stage.getBoundingClientRect(), p=cellsBBoxPx(r.cells||[]);
+    pop.style.left="0px"; pop.style.top="0px"; pop.classList.add("on");   // measure at natural size
+    var pw=pop.offsetWidth||248, ph=pop.offsetHeight||120, GUT=12;
+    var tb=$("tbar").getBoundingClientRect(), reserveBottom=(sr.bottom-tb.top)+14;   // never under the dock
+    var cx=sr.left+p.x+p.w/2, roomTop=sr.top+p.y, roomBot=sr.top+p.y+p.h;
+    var left=Math.max(GUT, Math.min(window.innerWidth-pw-GUT, cx-pw/2));
+    var below=roomBot+8, above=roomTop-ph-8;
+    var maxTop=window.innerHeight-reserveBottom-ph;
+    var top;
+    if(below<=maxTop) top=below;                 // prefer below the room
+    else if(above>=GUT) top=above;               // else above it
+    else top=Math.max(GUT, maxTop);              // else clamp above the dock
+    pop.style.left=(left-sr.left)+"px"; pop.style.top=(top-sr.top)+"px";
+  }
+  function renderLabelOpts(){
+    var inp=$("lpInput"), list=$("lpList"), q=inp.value;
+    lpRoom.label=lpTC(q); redraw();                                        // live Title Case preview (not persisted yet)
+    var sug=(window.IOTRooms?IOTRooms.suggest({query:q,propertyType:PROP,biz:BIZ,existingNames:otherRoomNames(lpRoom),limit:5}):[]);
+    lpOpts=[]; var tc=lpTC(q), seen={};
+    sug.forEach(function(s){ if(seen[s.label.toLowerCase()])return; seen[s.label.toLowerCase()]=1; lpOpts.push({label:s.label, sem:s.semanticType, custom:false}); });
+    if(tc && !seen[tc.toLowerCase()]) lpOpts.unshift({label:tc, sem:(window.IOTRooms?IOTRooms.semanticFor(tc):"custom"), custom:true}); // always allow the exact typed name
+    lpOpts=lpOpts.slice(0,5);
+    list.innerHTML="";
+    lpOpts.forEach(function(o,i){ var b=document.createElement("div"); b.className="lpopt"+(o.custom?" custom":"")+(i===lpActive?" active":"");
+      b.innerHTML=(o.custom?('Use “'+esc(o.label)+'”'):esc(o.label))+(o.custom?'<span class="lpk">Enter</span>':'');
+      b.addEventListener("pointerdown",function(ev){ ev.preventDefault(); commitLabel(o); });
+      list.appendChild(b); });
+  }
+  function setActive(i){ lpActive=i; var kids=$("lpList").children; for(var k=0;k<kids.length;k++) kids[k].classList.toggle("active",k===lpActive); }
+  // Picking a suggestion mirrors it into the input, then finishLabel reads the input as the single source
+  // of truth (so a chosen suggestion isn't overwritten by the half-typed text).
+  function commitLabel(o){ if(o) $("lpInput").value=lpTC(o.label); finishLabel(true); }
+  function openLabel(r){ lpRoom=r; lpOrig=r.label||""; lpActive=-1;
+    var inp=$("lpInput"); inp.value=lpOrig;
+    positionLabel(r);
+    inp.oninput=function(){ lpActive=-1; renderLabelOpts(); };
+    inp.onkeydown=function(e){
+      if(e.key==="Enter"){ e.preventDefault(); commitLabel(lpActive>=0?lpOpts[lpActive]:null); }
+      else if(e.key==="Escape"){ e.preventDefault(); lpRoom.label=lpOrig; redraw(); finishLabel(false); }
+      else if(e.key==="ArrowDown"){ e.preventDefault(); if(lpOpts.length) setActive((lpActive+1)%lpOpts.length); }
+      else if(e.key==="ArrowUp"){ e.preventDefault(); if(lpOpts.length) setActive((lpActive-1+lpOpts.length)%lpOpts.length); } };
+    renderLabelOpts();
+    setTimeout(function(){ inp.focus(); inp.select(); },30);
+  }
+  // Click-away (or Done/Enhance) saves the currently-typed value if it changed. Escape uses finishLabel(false).
+  function closeLabel(){ if($("labelPop").classList.contains("on")) finishLabel(true); }
+  function finishLabel(save){ var pop=$("labelPop"); if(!pop.classList.contains("on")) return; pop.classList.remove("on");
+    if(save && lpRoom){ var name=lpTC($("lpInput").value); lpRoom.label=name; lpRoom.semanticType=name?(window.IOTRooms?IOTRooms.semanticFor(name):"custom"):""; }
+    var changed=lpRoom && (lpRoom.label||"")!==lpOrig; lpRoom=null; redraw(); persist();
+    if(save && changed) pushHist();
+  }
 
   // ---- render the current plan to a TIGHTLY-CROPPED png at the plan's real aspect (sent to AI + dropped
   // as the floor background). Cropping to the geometry bbox — not a padded square — is what makes the Done
@@ -395,10 +446,11 @@
     if(!hasSketch()){ msg("Block out the structure first, then rooms."); setTimeout(function(){msg("");},2400); return; }
     var w=$("mClean"); busy=true; w.classList.add("busy"); scanOn(true); $("preview").classList.add("show"); $("hint").style.display="none"; closeLabel();
     $("tUndo").style.display="inline-flex";   // Undo now dismisses the Enhance preview → back to the drawing
-    var labels=[];
-    rooms.forEach(function(r){ var n=(r.label||"").trim(); if(n) labels.push(n); });
+    var labels=[], meta=[];
+    rooms.forEach(function(r){ var n=(r.label||"").trim(); if(n){ labels.push(n); meta.push({name:n, type:r.semanticType||"custom"}); } });
     sketchPNG().toBlob(function(blob){
       var fd=new FormData(); fd.append("image",blob,"sketch.png"); fd.append("mode","floorplan");
+      if(meta.length) fd.append("roomsMeta", JSON.stringify(meta));   // name + semanticType → richer AI generation (§40)
       if(labels.length) fd.append("labels",labels.join(", ")); if(revision) fd.append("revision",revision);
       fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
         var img=new Image(); img.onload=function(){ enhancedURL="data:image/png;base64,"+d.b64; $("prevImg").src=enhancedURL;
@@ -416,7 +468,7 @@
 
   // ---- toolbar ----
   function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); enhancedURL=null; enhancedOnce=false; updateTools(); redraw(); return true; } return false; }
-  function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; }
+  function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; var dr=$("mDeleteRoomTxt"); if(dr) dr.textContent="Delete room"; }
   $("tStructure").addEventListener("click", function(){ backToDraw(); setMode("structure"); });   // re-enter shell edit
   $("tRoom").addEventListener("click", function(){ if(cells.size===0){ setMode("structure"); return; } backToDraw(); setMode("room"); });
   $("modeToggle").addEventListener("click", function(){ backToDraw();
@@ -436,8 +488,14 @@
     if(e.key==="Escape"){ if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(backToDraw()) return; if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(busy) return; if(e.shiftKey){ redo(); } else if(!backToDraw()){ undo(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="y"||e.key==="Y")){ e.preventDefault(); redo(); } });
-  // More menu (secondary tools) — toggle + outside-close.
-  $("tMore").addEventListener("click", function(e){ e.stopPropagation(); $("moreMenu").classList.toggle("on"); });
+  // More menu (secondary tools) — toggle + outside-close. "Delete room" appears only with a room selected
+  // (naming is for naming; deletion lives here per the redesign).
+  $("tMore").addEventListener("click", function(e){ e.stopPropagation();
+    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)); $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; }
+    $("moreMenu").classList.toggle("on"); });
+  $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
+    if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
+    rooms=rooms.filter(function(x){return x!==sel;}); sel=null; finishLabel(false); closeMore(); pushHist(); redraw(); });
   document.addEventListener("click", function(e){ if(!$("moreMenu").contains(e.target) && e.target!==$("tMore") && !$("tMore").contains(e.target)) closeMore(); });
   $("mClean").addEventListener("click", function(){ if(busy) return; closeMore();
     if(enhancedOnce){ $("revBox").classList.contains("on")?closeRev():openRev(); return; } enhance(""); });

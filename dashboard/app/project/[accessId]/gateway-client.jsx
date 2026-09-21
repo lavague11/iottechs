@@ -1805,6 +1805,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (r?.ok) setLocalProj((p) => ({ ...p, property_type: r.propertyType }));
     return r;
   };
+  // Business context for the Draw tool's intelligent room-name suggestions (customer/company + service
+  // line → vertical detection, e.g. "Crazy Cars … Mechanic" → automotive rooms). Read-only signal.
+  const bizContext = [lp.customer, lp.company_name, lp.service].filter(Boolean).join(" · ");
   // A completed project is locked: its stage tools go read-only so a closed job can't be
   // silently re-edited. Admin/manager can Reopen from the Completion panel to make changes.
   const locked = !!lp.completed_at;
@@ -2246,7 +2249,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
                   <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
-                    propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange}
+                    propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has || surveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
                     onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
@@ -3403,6 +3406,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 propertyType={lp.property_type || "commercial"}
                 canEditProperty={canEditProperty}
                 onPropertyChange={onPropertyChange}
+                bizContext={bizContext}
                 customerName={lp.contact_name || lp.customer}
                 onHasData={setSurveyHasLocal}
                 submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}

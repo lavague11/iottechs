@@ -570,6 +570,11 @@
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
     var PID = new URLSearchParams(location.search).get("project") || "";
+    // Context for intelligent room naming in the Draw tool: canonical propertyType + business context.
+    // biz is stable (customer + service) so it rides the URL; propertyType is mutable (the header toggle),
+    // so the parent posts it in (iotSurveyContext) and we forward the latest value when opening Draw.
+    var SURVEY_BIZ = new URLSearchParams(location.search).get("biz") || "";
+    var SURVEY_PROP = (new URLSearchParams(location.search).get("prop")||"").toLowerCase()==="residential" ? "residential" : "commercial";
     var RO = new URLSearchParams(location.search).get("ro")==="1";   // customer read-only view
     if(RO) document.body.classList.add("ro");
     // Embedded in the project deck: the deck already shows the brand, job, address + status, so the
@@ -588,7 +593,10 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
-    var DRAW_SRC="draw-floorplan.html?v=20260921-enh"+(PID?"&project="+encodeURIComponent(PID):"");
+    function drawSrc(){ return "draw-floorplan.html?v=20260921-rooms"
+      +(PID?"&project="+encodeURIComponent(PID):"")
+      +"&prop="+encodeURIComponent(SURVEY_PROP)
+      +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     var bgToolOpen=null;  // 'draw'|'satellite' while a build tool is actively open → persisted so a refresh reopens it
     function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
@@ -609,7 +617,7 @@
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
-    function enterDraw(){ openBgTool(DRAW_SRC+"&floor="+curFloor, "draw"); }   // per-floor draft persistence
+    function enterDraw(){ openBgTool(drawSrc()+"&floor="+curFloor, "draw"); }   // per-floor draft persistence
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
@@ -1396,6 +1404,11 @@
     // after an edit invalidates a prior submission.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.project!==PID||m.type!=="iotSurveySubmitState") return;
       submitted=!!m.submitted; approved=!!m.approved; setStatus(); if(curStep===2) goStep(2); });
+    // Canonical propertyType (and biz) for room-name suggestions — the parent posts the latest; we keep it
+    // so the NEXT time Draw opens it uses the current value (no iframe remount, no lost survey state).
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.project!==PID||m.type!=="iotSurveyContext") return;
+      if(m.propertyType) SURVEY_PROP = String(m.propertyType).toLowerCase()==="residential" ? "residential" : "commercial";
+      if(typeof m.biz==="string" && m.biz) SURVEY_BIZ = m.biz; });
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)

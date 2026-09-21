@@ -11,13 +11,13 @@ import PropertyToggle from "../../components/property-type";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20260921-4";
+const WIDGET_VERSION = "20260921-5";
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
 // multi-floor, areas/rooms, proposal export — lives in that widget. We pass the project
 // id so it auto-saves to localStorage per-project, and ?ro=1 for the read-only customer view.
-export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false, noRoster = false, propertyType = null, canEditProperty = false, onPropertyChange }) {
+export default function SiteSurveyWidget({ accessId, view, customerView, customerName, noApproval, onHasData, onSubmit, onUnsubmit, submitted = false, approved = false, hasData = false, noRoster = false, propertyType = null, canEditProperty = false, onPropertyChange, bizContext = "" }) {
   const readOnly = view === "customer" || customerView;
   // Build gate — the empty survey editor is a big surface; staff see a Build button first (matching
   // the Mockup), so a skipped survey isn't an eyesore and Consulting reads as building the system. A
@@ -46,7 +46,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // disturb existing "survey" data / downstream consumers while the redesign is wired up.
   // ?v — bump WIDGET_VERSION whenever public/widgets/site-survey-merged.html changes, so browsers (esp.
   // iOS Safari, which caches iframe HTML hard) fetch the new widget instead of serving a stale cached one.
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}&v=${WIDGET_VERSION}`;
+  // biz = business context for intelligent room-name suggestions (stable per project → safe in the URL;
+  // it never changes mid-session, so it won't remount the iframe). propertyType is mutable and is sent
+  // via postMessage instead (see pushContext).
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.
@@ -100,6 +103,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     try { frameRef.current?.contentWindow?.postMessage({ type: "iotSurveySubmitState", project: accessId, submitted: !!submitted, approved: !!approved }, "*"); } catch { /* frame gone */ }
   }, [accessId, submitted, approved]);
   useEffect(() => { pushSubmitState(); }, [pushSubmitState]);
+
+  // Canonical propertyType → the survey shell (which forwards it to the Draw tool's room-name suggestions).
+  // Sent by message, not URL, so changing the classification never remounts the iframe / loses survey state.
+  const pushContext = useCallback(() => {
+    try { frameRef.current?.contentWindow?.postMessage({ type: "iotSurveyContext", project: accessId, propertyType: propertyType || "commercial", biz: bizContext || "" }, "*"); } catch { /* frame gone */ }
+  }, [accessId, propertyType, bizContext]);
+  useEffect(() => { pushContext(); }, [pushContext]);
 
   // On a phone in landscape the inline frame is cramped and awkward to edit, so auto-expand to the
   // full-screen overlay (the same one the ⛶ button gives). Rotating back to portrait collapses it —
@@ -173,7 +183,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           src={src}
           title="Site Survey"
           allow="geolocation"
-          onLoad={pushSubmitState}
+          onLoad={() => { pushSubmitState(); pushContext(); }}
         />
       ) : (
         <BuildGate onBuild={() => setBuilt(true)}
