@@ -139,7 +139,7 @@
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
         <div class="moremenu" id="moreMenu">
-          <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> Clean up</button>
+          <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> Enhance</button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
         </div>
@@ -394,6 +394,7 @@
   function enhance(revision){
     if(!hasSketch()){ msg("Block out the structure first, then rooms."); setTimeout(function(){msg("");},2400); return; }
     var w=$("mClean"); busy=true; w.classList.add("busy"); scanOn(true); $("preview").classList.add("show"); $("hint").style.display="none"; closeLabel();
+    $("tUndo").style.display="inline-flex";   // Undo now dismisses the Enhance preview → back to the drawing
     var labels=[];
     rooms.forEach(function(r){ var n=(r.label||"").trim(); if(n) labels.push(n); });
     sketchPNG().toBlob(function(blob){
@@ -414,7 +415,7 @@
   $("revIn").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runRev(); } else if(e.key==="Escape") closeRev(); });
 
   // ---- toolbar ----
-  function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); enhancedURL=null; enhancedOnce=false; } }
+  function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); enhancedURL=null; enhancedOnce=false; updateTools(); redraw(); return true; } return false; }
   function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; }
   $("tStructure").addEventListener("click", function(){ backToDraw(); setMode("structure"); });   // re-enter shell edit
   $("tRoom").addEventListener("click", function(){ if(cells.size===0){ setMode("structure"); return; } backToDraw(); setMode("room"); });
@@ -427,11 +428,13 @@
     b.textContent = half ? "½" : "1"; b.title = lbl; b.setAttribute("aria-label", lbl); }
   $("tSnap").addEventListener("click", function(){ snap = snap===0.5 ? 1 : 0.5; applySnapUI();
     try{ localStorage.setItem("iot_struct_snap", String(snap)); }catch(e){} redraw(); });
-  $("tUndo").addEventListener("click", function(){ if(!busy) undo(); });
+  // Undo: while the Enhance preview is up, the first Undo dismisses it (back to the drawing) — the
+  // enhance overlay isn't a cells/rooms edit, so plain undo() couldn't reach it; that left it stuck.
+  $("tUndo").addEventListener("click", function(){ if(busy) return; if(backToDraw()) return; undo(); });
   $("tRedo").addEventListener("click", function(){ if(!busy) redo(); });
   document.addEventListener("keydown", function(e){
-    if(e.key==="Escape"){ if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
-    else if((e.ctrlKey||e.metaKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); e.shiftKey?redo():undo(); }
+    if(e.key==="Escape"){ if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(backToDraw()) return; if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
+    else if((e.ctrlKey||e.metaKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(busy) return; if(e.shiftKey){ redo(); } else if(!backToDraw()){ undo(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="y"||e.key==="Y")){ e.preventDefault(); redo(); } });
   // More menu (secondary tools) — toggle + outside-close.
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); $("moreMenu").classList.toggle("on"); });
