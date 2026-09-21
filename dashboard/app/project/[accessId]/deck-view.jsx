@@ -279,11 +279,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
         )}
-        {customer?.propertyType && (
-          <span className="dv-ptype" data-stop>
-            <PropertyToggle value={customer.propertyType} editable={!!customer.canEditProperty} onChange={customer.onPropertyChange} />
-          </span>
-        )}
+        {/* Property (Residential/Commercial) lives in the info card below — it's site metadata, not a
+            workflow control, so it no longer competes with the title + Status here. */}
         {statusChip && (() => {
           const chip = statusChip, d = chip.detail;
           // Customer read-only status — a calm badge showing the real human state, no caret/popover/jump.
@@ -381,12 +378,27 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
               </div>
             ) : (
               <>
-                {(customer.fields || []).map((f, i) => (
-                  <div className="dv-field" key={i}><dt>{f.k}</dt><dd>
-                    {f.href ? <a className="dv-flink" href={f.href} target={f.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">{f.v}</a> : f.v}
-                    {f.sub && (f.subHref ? <small><a className="dv-flink" href={f.subHref}>{f.sub}</a></small> : <small>{f.sub}</small>)}
-                  </dd></div>
-                ))}
+                {/* Property (Residential/Commercial) — site metadata, placed just before Email. Same
+                    canonical propertyType + editor as before; relocated out of the crowded title row. */}
+                {(() => {
+                  const propEl = customer.propertyType ? (
+                    <div className="dv-field dv-field-prop" key="prop"><dt>Property</dt><dd>
+                      <PropertyToggle value={customer.propertyType} editable={!!customer.canEditProperty} onChange={customer.onPropertyChange} />
+                    </dd></div>
+                  ) : null;
+                  const field = (f, i) => (
+                    <div className="dv-field" key={i}><dt>{f.k}</dt><dd>
+                      {f.href ? <a className="dv-flink" href={f.href} target={f.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">{f.v}</a> : f.v}
+                      {f.sub && (f.subHref ? <small><a className="dv-flink" href={f.subHref}>{f.sub}</a></small> : <small>{f.sub}</small>)}
+                    </dd></div>
+                  );
+                  const fields = customer.fields || [];
+                  const out = [];
+                  let placed = false;
+                  fields.forEach((f, i) => { if (propEl && !placed && /email/i.test(f.k)) { out.push(propEl); placed = true; } out.push(field(f, i)); });
+                  if (propEl && !placed) out.push(propEl);   // no Email field → Property at the end
+                  return out;
+                })()}
                 {(customer.actions?.length > 0 || customer.canEdit) && (
                   <div className="dv-cust-actions">
                     {(customer.actions || []).map((a, i) => a.href
@@ -656,9 +668,14 @@ const CSS = `
 .dv-compact .dv-jobbar{padding-top:8px}
 .dv-compact .dv-title{font-size:18px}
 .dv-compact .dv-code{display:none}
-.dv-ptype{flex:0 0 auto;display:inline-flex;align-items:center;margin-right:2px}
-.dv-compact .dv-ptype{display:none}   /* §9 — compact header keeps name/workflow/progress only */
-@media (max-width:760px){.dv-ptype .ptype-ro{font-size:.68rem}}
+/* Property field inside the info card — the toggle reads as neutral metadata (icon + word + chevron),
+   matching the other values; not a bordered/coloured pill. */
+.dv-field-prop dd{display:flex}
+.dv-field-prop{--pop-bg:var(--dv-raise,#fff);--pop-fg:var(--dv-ink,#0B0F1A)}
+.dv-field-prop .ptype-ro,.dv-field-prop .ptype-btn{font-size:13.5px;font-weight:600;color:var(--dv-ink);opacity:1}
+.dv-field-prop .ptype-btn{border:0;background:transparent;padding:2px 0;border-radius:6px}
+.dv-field-prop .ptype-btn:hover:not(:disabled){opacity:.65;background:transparent}
+.dv-field-prop .ptype-ic{opacity:.7}
 .dv-compact .dv-rail{padding-top:9px;padding-bottom:9px}
 .dv-compact .dv-lab .nm{display:none}
 .dv-compact .dv-readout .cap{display:none}

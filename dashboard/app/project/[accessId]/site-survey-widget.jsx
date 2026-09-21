@@ -6,7 +6,6 @@ import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
 import { seedToolData, startToolAutosync } from "./tool-sync";
 import { survey2HasData } from "../../../lib/tool-data";
-import PropertyToggle from "../../components/property-type";
 
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
@@ -152,13 +151,9 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           {readOnly ? "Customer view" : "Live survey editor"}
           {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
         </span>
-        {/* Same canonical Residential/Commercial value as the Project Header — a change here updates
-            the whole project (not just the survey). Read-only for viewers without edit permission. */}
-        {propertyType && (
-          <span className="ss-embed-ptype">
-            <PropertyToggle value={propertyType} editable={!!canEditProperty} onChange={onPropertyChange} />
-          </span>
-        )}
+        {/* The visible Residential/Commercial control lives once, in the project info card. The survey
+            still RECEIVES propertyType (for room-name suggestions) via props/postMessage — no toggle here,
+            so the page shows one property indicator, not two. */}
         {showEditor && (fs ? (
           <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
