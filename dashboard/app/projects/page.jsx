@@ -13,6 +13,7 @@ const slim = (j) => ({
   date:       j.date,
   category:   j.category,
   project_type: j.project_type,
+  property_type: j.property_type,   // canonical Residential/Commercial (decorated → normalized)
   created_at: j.created_at || null,
 });
 
@@ -23,6 +24,7 @@ const slimAdt = (a) => ({
   access_id:  a.adt_id,
   customer:   a.name || "ADT account",
   service:    (a.property_type === "commercial" ? "Commercial" : "Residential") + " · ADT Monitoring",
+  property_type: a.property_type,   // for search parity (the label already shows in `service` above)
   address:    a.address || "",
   stage:      ADT_STAGE[a.stage] || "adt_applied",
   status:     a.status || "submitted",

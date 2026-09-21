@@ -101,7 +101,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                 <span className="cav">{initials(p.customer)}</span>
                 <div className="c-main">
                   <div className="c-name">{p.customer}</div>
-                  <div className="c-contact">{p.service} · {propertyTypeLabel(p.property_type)}{p.address ? ` · ${p.address}` : ""}</div>
+                  <div className="c-contact">{p.service}{p.kind !== "adt" ? ` · ${propertyTypeLabel(p.property_type)}` : ""}{p.address ? ` · ${p.address}` : ""}</div>
                   <div className="c-addr mono" style={{ fontSize: ".72rem" }}>{p.access_id}{p.tech ? ` · ${p.tech}` : ""}{p.date ? ` · ${p.date}` : ""}</div>
                 </div>
                 <div className="c-chips">
