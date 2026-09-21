@@ -459,7 +459,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
       <style>{ICL_CSS}</style>
       <div className="icl-head">
         <div className="icl-head-l">
-          {!embedded && <span className="icl-title">Installation Work Order</span>}
+          {!embedded && <span className="icl-title">Work Order</span>}
           <span className="icl-sub">{customerName || "Customer"}{customerAddress ? ` · ${customerAddress}` : ""}</span>
         </div>
         <div className="icl-head-r">

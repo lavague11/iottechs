@@ -2215,7 +2215,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // fixed frame left ~300px of dead grey below it — so it flows like a document. Everything else
     // (documents) also flows full length so the whole page scrolls once.
     const MAP_TOOLS = ["Site Survey"];
-    const mergedPage = (name, list) => {
+    const mergedPage = (name, list, opts = {}) => {
       const t = (list || []).filter((x) => x && x.node);
       if (!t.length) return null;
       const allDocs = t.every((x) => !MAP_TOOLS.includes(x.name));
@@ -2223,9 +2223,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <div className={`cx-merged${allDocs ? " cx-merged--flow" : ""}`}>
           {t.map((x, k) => (
             <section className="cx-sec" key={x.name || k}>
-              {/* The FIRST section's label just echoes the stage title above it — drop it. Later
-                  sections keep their label so they read as distinct panels. */}
-              {k > 0 && <div className="cx-sec-h">{x.name}</div>}
+              {/* Later sections always show their content label. The FIRST section shows its label only
+                  when the caller asks (opts.labelFirst) AND it isn't just the stage name repeated — e.g.
+                  Install leads with "Addendum" (a real panel name, shown); Proposal/Closeout keep their
+                  first section unlabeled (it either echoes the stage or is self-describing). */}
+              {(k > 0 || (opts.labelFirst && x.name !== name)) && <div className="cx-sec-h">{x.name}</div>}
               {MAP_TOOLS.includes(x.name) ? <div className="cx-sec-frame"><ScrollActivate>{x.node}</ScrollActivate></div> : x.node}
             </section>
           ))}
@@ -2404,12 +2406,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Job-site add-ons on top — a job-site change order is the thing staff/tech reach for first when
         // something on site differs from the proposal. Staff/tech always; customer only once one exists.
         if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
-          tools.push({ name: "Job-Site Add-ons", label: "Add-ons",
+          tools.push({ name: "Addendum", label: "Add-ons",
             node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {
-          tools.push({ name: "Installation Work Order", label: "Install checklist", heavy: !techLocked, state: installDone ? "done" : "active",
+          tools.push({ name: "Work Order", label: "Install checklist", heavy: !techLocked, state: installDone ? "done" : "active",
             node: techLocked
               ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard">
                   {!woAccepted ? (<>
@@ -2476,7 +2478,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return [{ name: "Install", label: "Install", wide: true, node: merged }];
           }
         }
-        if (["admin", "manager"].includes(cView)) return mergedPage("Install", tools) || tools;
+        if (["admin", "manager"].includes(cView)) return mergedPage("Install", tools, { labelFirst: true }) || tools;
         return tools;
       }
       if (pk === "ph_wrap") {
@@ -3592,7 +3594,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 </FlowStep>
               ) : (
                 <>
-                  <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
+                  <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Work Order" completable bare>
                     <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
                   </FlowStep>
                   <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
@@ -3630,7 +3632,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             canComplete={shipStatus.count > 0} cantHint="Add a tracking number first" bare>
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
           <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
@@ -3667,7 +3669,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
           )}
-          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Installation Work Order" completable bare>
+          <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Work Order" completable bare>
             <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="customer" readOnly onProgress={(p) => setInstallDone(!!p.allDone)} />
           </FlowStep>
           {/* Job-Site Add-ons — hidden until the office submits a change order for them to approve. */}

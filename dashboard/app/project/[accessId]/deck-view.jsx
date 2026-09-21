@@ -454,11 +454,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           <div className="dv-slide" key={i} style={slideStyle(i)} aria-hidden={i !== idx}>
             <div className={`dv-pane${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-wide" : ""}`}>
               <div onScroll={i === idx ? onDeckScroll : undefined} className={`dv-scroll${(s.wide || (s.tools?.length === 1 && s.tools[0].node && !s.tools[0].heavy && s.tools[0].wide)) ? " dv-scroll--wide" : ""}`}>
-                {/* The stage header scrolls WITH the content — not a frozen bar covering the page. */}
-                <div className="dv-pane-head">
-                  <div className="dv-stage-name">{s.name}</div>
-                  <span className={`dv-flag f-${(s.pill || "").toLowerCase()}`}>{s.pill}</span>
-                </div>
+                {/* No per-stage page heading and no status flag here: the lifecycle bar already names the
+                    stage and the header STATUS shows its state, so this band was just empty space. */}
                 {s.intro && <div className="dv-intro" data-stop>{s.intro}</div>}
                 {s.completion ? s.completion : (
                   (() => {
