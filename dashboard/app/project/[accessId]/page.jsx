@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -207,6 +207,20 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project.days_in_stage = Number.isFinite(ms) ? Math.max(0, Math.floor((Date.now() - ms) / 86400000)) : null;
   }
   ensureBaseAccess(p.access_id); // auto-grant managers + inquiry customer (once each, removable)
+
+  // Verified-email repair: once an authenticated customer is confirmed as an IDENTITY owner (email /
+  // phone / roster — NOT a mere PIN unlock of someone else's project), persist the canonical user_id
+  // link on the access roster so future auth is ID-based and survives a contact-email edit. Idempotent
+  // + ambiguity-guarded in repairCustomerLink; gating on resolveCustomerOwnership().owner keeps a PIN
+  // visitor from ever being written in as the project's customer.
+  if (initialView === "customer" && currentUser?.id) {
+    try {
+      if (resolveCustomerOwnership(p.access_id, { userId: currentUser.id, email: currentUser.email }).owner) {
+        const rep = repairCustomerLink(p.access_id, { userId: currentUser.id, email: currentUser.email, name: currentUser.name });
+        if (rep.repaired) logProjectEvent(p.access_id, { kind: "link", label: "Customer account linked to project", actor: currentUser.name || currentUser.email || "Customer" });
+      }
+    } catch { /* repair is best-effort — never block the page */ }
+  }
 
   // ---- Proposal: server-sanitized per role — cost/margin never reach non-admin/manager browsers.
   // No session (PIN gate ahead) ships the customer-safe variant; staff builders re-fetch on mount.

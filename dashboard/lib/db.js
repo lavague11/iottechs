@@ -2567,11 +2567,52 @@ export function resolveCustomerOwnership(accessId, { userId = null, email = null
   const projPhone = digits(proj.contact_phone);
   if (acctEmail && projEmail && acctEmail === projEmail) return { owner: true, reason: "OWNER_EMAIL" };
   if (acctPhone.length >= 7 && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
+  // Explicit access roster — an admin-shared or inquiry-granted customer (a canonical, PERSISTED link,
+  // by user_id once repaired, else by the email it was granted under). Survives a later contact edit.
+  try {
+    const grants = db.prepare("SELECT user_id, user_email FROM project_assignments WHERE project_access_id=? COLLATE NOCASE AND role='customer'").all(String(accessId));
+    for (const g of grants) {
+      if (userId && g.user_id != null && Number(g.user_id) === Number(userId)) return { owner: true, reason: "EXPLICIT_ACCESS" };
+      if (acctEmail && String(g.user_email || "").trim().toLowerCase() === acctEmail) return { owner: true, reason: "EXPLICIT_ACCESS" };
+    }
+  } catch { /* roster read failed → fall through to mismatch */ }
   if (!acctEmail && !acctPhone)                            return { owner: false, reason: "NO_CUSTOMER_LINK" };
   return { owner: false, reason: "CUSTOMER_MISMATCH" };
 }
 // Boolean convenience — the same canonical rule.
 export function customerOwnsProjectAccount(accessId, opts) { return resolveCustomerOwnership(accessId, opts).owner; }
+
+// Verified-email repair (spec §5/§15). Once a customer is AUTHORIZED for a project, persist a canonical
+// user_id link on the access roster so future authorization is ID-based and survives a later
+// contact-email edit. Call ONLY after ownership is confirmed. Safe by construction:
+//   • only links the already-authorized account, matched to its OWN verified email;
+//   • never overwrites a row already linked to a different account (no account takeover);
+//   • never acts when the email is ambiguous (matches multiple roster rows);
+//   • idempotent — a no-op once linked, so it can run on every authorized page load.
+// Returns { repaired, reason } for logging (BACKFILLED_USER_ID | ADDED_ROSTER_ROW | ALREADY_LINKED |
+// AMBIGUOUS | LINKED_TO_OTHER | NO_USER | NO_EMAIL).
+export function repairCustomerLink(accessId, { userId = null, email = null, name = null } = {}) {
+  if (!userId) return { repaired: false, reason: "NO_USER" };
+  const acctEmail = String(email || getUserById(userId)?.email || "").trim().toLowerCase();
+  if (!acctEmail) return { repaired: false, reason: "NO_EMAIL" };
+  // Already linked by id on this project? nothing to do.
+  const byId = db.prepare("SELECT id FROM project_assignments WHERE project_access_id=? COLLATE NOCASE AND user_id=?").get(String(accessId), Number(userId));
+  if (byId) return { repaired: false, reason: "ALREADY_LINKED" };
+  // Customer roster rows granted under this account's verified email.
+  const rows = db.prepare("SELECT id, user_id FROM project_assignments WHERE project_access_id=? COLLATE NOCASE AND role='customer' AND LOWER(TRIM(user_email))=?").all(String(accessId), acctEmail);
+  if (rows.length > 1) return { repaired: false, reason: "AMBIGUOUS" };            // never guess
+  if (rows.length === 1) {
+    const g = rows[0];
+    if (g.user_id == null) { db.prepare("UPDATE project_assignments SET user_id=? WHERE id=?").run(Number(userId), g.id); return { repaired: true, reason: "BACKFILLED_USER_ID" }; }
+    return { repaired: false, reason: Number(g.user_id) === Number(userId) ? "ALREADY_LINKED" : "LINKED_TO_OTHER" };
+  }
+  // No roster row under this email yet (e.g. a phone-matched customer who signed up with a different
+  // email). Persist a NEW canonical link ONLY when the account genuinely owns by identity (email/phone)
+  // — a self-check so a mis-call can never write a non-owner in as the project's customer.
+  if (!resolveCustomerOwnership(accessId, { userId: Number(userId), email: acctEmail }).owner) return { repaired: false, reason: "NOT_OWNER" };
+  addProjectAssignment(accessId, { userId: Number(userId), userName: name || getUserById(userId)?.name || null, userEmail: acctEmail, role: "customer", grantedBy: null });
+  return { repaired: true, reason: "ADDED_ROSTER_ROW" };
+}
 
 // True when the account already has a password set — registration must never overwrite it
 // (that would let anyone take over an existing account by "registering" with its email).
