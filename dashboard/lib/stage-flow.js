@@ -19,11 +19,12 @@ export const AUTO_STAGES = new Set(["inquiry", "site_survey", "proposal", "appro
 export const STAGE_FLOW = {
   // A survey that was explicitly skipped (projects.survey_skipped_at — monitoring/ADT, phone-quoted
   // work) satisfies both Consulting requirements, so those jobs don't jam at the first seam.
+  // `waiver` is documentation for the Role & Flow Map: the alternative fact that also satisfies the check.
   inquiry: [
-    { label: "Survey appointment scheduled", who: "internal", check: (p) => !!p.date || !!p.survey_skipped },
+    { label: "Survey appointment scheduled", who: "internal", waiver: "survey skipped", check: (p) => !!p.date || !!p.survey_skipped },
   ],
   site_survey: [
-    { label: "Customer accepted the site survey", who: "customer", check: (p) => !!p.survey_accepted || !!p.survey_skipped },
+    { label: "Customer accepted the site survey", who: "customer", waiver: "survey skipped", check: (p) => !!p.survey_accepted || !!p.survey_skipped },
   ],
   proposal: [
     { label: "Proposal submitted to customer", who: "internal", check: (p) => ["sent", "changes_requested", "accepted", "declined"].includes(p.proposal_status) },

@@ -24,6 +24,13 @@ const PHASE_DATA = PHASES.map((p) => ({
   steps: p.members.reduce((n, m) => n + (STAGE_FLOW[m]?.length || 0), 0),
   // Only check()-backed steps actually gate advancement; the rest are advisory to-do text.
   gated: p.members.reduce((n, m) => n + (STAGE_FLOW[m] || []).filter((r) => r.check).length, 0),
+  // Gate-out text, straight from the enforceable requirements (a `waiver` is the fact that also clears it).
+  gate: (() => {
+    const reqs = p.members.flatMap((m) => (STAGE_FLOW[m] || []).filter((r) => r.check));
+    if (!reqs.length) return null;
+    const waivers = [...new Set(reqs.map((r) => r.waiver).filter(Boolean))];
+    return { conds: reqs.map((r) => r.label), waiver: waivers.length ? `or ${waivers.join(" / ")}` : null };
+  })(),
   color: PHASE_COLORS[p.key] || "#C9A96E",
 }));
 const TOTAL_STAGES = PHASES.reduce((n, p) => n + p.members.length, 0);
@@ -107,6 +114,15 @@ export default function RoleMapClient({ user, alerts }) {
                     );
                   })}
                 </div>
+                <div className="rm-col-gate">
+                  <span className="rm-col-gate-k">Gate out</span>
+                  {p.gate ? (
+                    <>
+                      {p.gate.conds.map((c) => <span key={c} className="rm-col-gate-c">{c}</span>)}
+                      {p.gate.waiver && <span className="rm-col-gate-w">{p.gate.waiver}</span>}
+                    </>
+                  ) : <span className="rm-col-gate-c">Terminal — nothing gates out</span>}
+                </div>
                 <div className="rm-col-count">{blocks.length} block{blocks.length === 1 ? "" : "s"}</div>
               </div>
             );
@@ -143,14 +159,15 @@ const CSS = `
 .rm-back{flex-shrink:0;font-size:.82rem;font-weight:700;color:#5b6275;text-decoration:none;border:1px solid #e6e8ee;border-radius:9px;padding:8px 14px;background:#fff}
 .rm-back:hover{border-color:#C9A96E;color:#b08f4f}
 
-.rm-phasestrip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
-.rm-pchip{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e6e8ee;border-top:3px solid var(--c);border-radius:12px;padding:11px 13px}
+.rm-phasestrip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+.rm-pchip{display:flex;align-items:center;gap:10px;min-width:0;background:#fff;border:1px solid #e6e8ee;border-top:3px solid var(--c);border-radius:12px;padding:11px 13px}
 .rm-pnum{width:24px;height:24px;flex-shrink:0;border-radius:50%;background:var(--c);color:#fff;display:grid;place-items:center;font-size:.78rem;font-weight:800}
 .rm-pchip-body{flex:1;min-width:0}
 .rm-pchip-name{font-size:.86rem;font-weight:800;color:#0e1320}
 .rm-pchip-tech{font-size:.62rem;font-weight:700;color:#8a93a8;text-transform:uppercase;letter-spacing:.03em;margin-left:4px}
 .rm-pchip-meta{font-size:.7rem;color:#6f7686;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rm-pchip-steps{flex-shrink:0;font-size:.62rem;font-weight:800;color:var(--c);background:color-mix(in srgb,var(--c) 12%,#fff);border-radius:100px;padding:3px 9px;white-space:nowrap}
+@media(max-width:1180px){.rm-pchip-steps{white-space:normal;text-align:center;line-height:1.25}}
 
 .rm-rolebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .rm-roletab{height:38px;padding:0 18px;border:1px solid #e6e8ee;border-radius:100px;background:#fff;color:#5b6275;font-size:.86rem;font-weight:800;cursor:pointer;font-family:inherit;transition:all .12s}
@@ -165,7 +182,7 @@ const CSS = `
 
 .rm-note{background:#fef3c7;border:1px solid #f2d98a;color:#8a5a00;font-size:.82rem;font-weight:600;border-radius:10px;padding:10px 14px;margin-bottom:16px}
 
-.rm-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start;margin-bottom:26px}
+.rm-flow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start;margin-bottom:26px}
 .rm-col{background:#f6f7f9;border:1px solid #e6e8ee;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
 .rm-col-head{display:flex;align-items:center;gap:8px;padding:11px 13px;background:#fff;border-bottom:1px solid #eef0f4;border-top:3px solid var(--c)}
 .rm-col-num{width:22px;height:22px;border-radius:50%;background:var(--c);color:#fff;display:grid;place-items:center;font-size:.74rem;font-weight:800}
@@ -181,6 +198,10 @@ const CSS = `
 .rm-a-issue .rm-block-ic{background:#fdeaea;color:#d23c3c}
 .rm-dim{opacity:.4}
 .rm-empty{font-size:.78rem;color:#a1a7b3;font-style:italic;padding:14px 6px;text-align:center;border:1px dashed #d9dce4;border-radius:9px}
+.rm-col-gate{display:flex;flex-direction:column;gap:3px;padding:9px 11px;border-top:1px solid #eef0f4;background:#fff}
+.rm-col-gate-k{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a93a8;margin-bottom:2px}
+.rm-col-gate-c{font-size:.74rem;font-weight:600;color:#2c3347;line-height:1.3}
+.rm-col-gate-w{font-size:.7rem;font-weight:700;color:#b08f4f;font-style:italic}
 .rm-col-count{font-size:.66rem;font-weight:700;color:#8a93a8;text-align:center;padding:8px;border-top:1px solid #eef0f4}
 
 .rm-findings{background:#0e1320;border-radius:14px;padding:6px 4px}
