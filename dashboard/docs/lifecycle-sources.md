@@ -11,7 +11,7 @@ Investigation 2026-09-21 (read-only at the time); resolution shipped 2026-09-21/
 | `4c369c2` | **Survey-skip gate:** `projects.survey_skipped_at/_by`; fact `survey_skipped` satisfies both Consulting requirements in `STAGE_FLOW`; deck ••• "Skip survey / Restore survey" (admin/manager, two-step confirm, logged `override`/`change`); skip auto-advances, restore never rewinds. Also fixed a client/server fact-name mismatch: `custFacts` now carries `date` (stage-flow's inquiry check), not only `appt_date`. | **M6**, plus a bug not in the original report |
 | `c6eb6ba` | Role map renders a per-phase **GATE OUT** block from `STAGE_FLOW`'s check-backed requirements; requirements may declare a `waiver` (Consulting → "or survey skipped"). Phase strip + flow grids are 5 columns (were 4 for a 5-phase bar). | M2 (visibility of enforceable vs advisory) |
 | `b1499fb` | Static briefing re-synced to the live model and checked in at `docs/role-flow-map.html`. | D17 |
-| `ee38599` | `/dev` links the briefing; admin-only route `/dev/role-map/static` serves it. | — |
+| `ee38599` | `/dev` links the briefing; admin-only route `/dev/docs/<name>` serves it (and this report) — `.html` as-is, `.md` rendered. | — |
 
 Still open by design: Phase-2 facts for install-complete + joint QC sign-off (6 advisory steps); Sales has no Install branch; Vendor/Readonly have no render branch.
 
@@ -46,7 +46,7 @@ Still open by design: Phase-2 facts for install-complete + joint QC sign-off (6 
 | D14 | `stageFloorFacts` / `statusMilestones` | L2 / L3-ish | `lib/project-status.js:17,45` | 5 milestones | Site survey · [Mockup] · Proposal accepted · Agreement signed · Deposit paid | 2026-08 |
 | D15 | `PHASE_BLOCKS` | L1-keyed **tool block** list (not lifecycle) | `lib/project-blocks.js:33` | 5 phases / 21 blocks | hand-maintained mirror of the deck's tool cards per role | was stale vs. deck (listed Shipment Tracking, Install Scheduling, "Proposal Views") → **re-synced `8510c71`** to Addendum / Work Order / Project Ready / Set Up Your Phone etc. |
 | D16 | `STAGES` (sample) | L1 sample data | `app/deck-preview/page.jsx:9` | 5 | now `SAMPLE` + `STAGES = PHASES.map(...)` — names/pills derive from D1 (`8510c71`) | preview-only page |
-| D17 | `MODEL` | L1 + L3 counts, static | `docs/role-flow-map.html` (was `~/Downloads`) | 5 phases, steps 2/6/4/3/1 = 16, gated 2/6/1/1/0 = 10 | hand-maintained snapshot, re-synced + checked in `b1499fb`; served admin-only at `/dev/role-map/static` (`ee38599`) | dated in its footer (2026-09-22) |
+| D17 | `MODEL` | L1 + L3 counts, static | `docs/role-flow-map.html` (was `~/Downloads`) | 5 phases, steps 2/6/4/3/1 = 16, gated 2/6/1/1/0 = 10 | hand-maintained snapshot, re-synced + checked in `b1499fb`; served admin-only at `/dev/docs/role-flow-map.html` | dated in its footer (2026-09-22) |
 | D18 | `STAGE_FOR_STATUS`, `OLD_TO_NEW` | L2 migration maps | `lib/db.js:48, :286` | — | legacy status → master key | 2026-07-10 |
 | D19 | `custSteps` | customer % item list (L3-ish, item-based) | `gateway-client.jsx:2624` | 5–7 (conditional) | [survey] [mockup] accepted · signed · deposit · balance · completed | `a518293` 2026-08-25 |
 | D20 | Hardcoded key subsets | L2 subsets | `app/project/[accessId]/page.jsx:144` (PRE_APPROVAL 3), `app/sales/page.jsx:33,41`, `app/tech/page.jsx:15`, `app/projects/projects-client.jsx:52`, `gateway-client.jsx:2434` | 2–5 each | filter/branch arrays over D3 keys | various |
@@ -64,7 +64,7 @@ DB: `projects.stage` is free TEXT holding a D4 key; no CHECK/enum. `stage_histor
 | Deck footer "N of M complete" | **L4 — UI tool cards** (not lifecycle) | `deckToolsFor(pk)` output | `stageProgress`: `total = tools.length`, `done = state==="done"`; **admin/manager lists pass through `mergedPage()` → 1 stateless card** | Admin Install **0 of 1**, Tech Install **0 of 2**, Consulting 0 of 1 (all roles) | `deck-view.jsx:25-29, 499-518`; `gateway-client.jsx:2218-2236, 2481-2482` |
 | Deck readout % (top) | customer: item-based; others: coarse | D19 `custSteps` (customer) else slide `pct` | `filter(Boolean).length / length` | 0–100 in 1/5–1/7 steps | `gateway-client.jsx:2624-2633`; `deck-view.jsx:448` |
 | Role & Flow Map (/dev/role-map) | L1 + L2 + L3 | D1 `PHASES`, D6 `STAGE_FLOW`, D15 `PHASE_BLOCKS` | `PHASES.length`; `Σ members.length`; `Σ STAGE_FLOW[m].length` | **5 · 9 · 16** | `app/dev/role-map/role-map-client.jsx:18-28` |
-| Static role-flow-map.html | L1 + L3 | D17 hand-typed | none | 5 · 9 · 16 (10 gated) | `docs/role-flow-map.html` via `/dev/role-map/static` |
+| Static role-flow-map.html | L1 + L3 | D17 hand-typed | none | 5 · 9 · 16 (10 gated) | `docs/role-flow-map.html` via `/dev/docs/role-flow-map.html` |
 | Role map GATE OUT block (new, `c6eb6ba`) | L3 (enforceable only) | D6 `STAGE_FLOW` | `filter(r => r.check)` labels + `waiver` | per phase: 2 / 6 / 1 / 1 / terminal | `role-map-client.jsx` `gate:` |
 | Header status pill word | L1 | D1 `status` via `phaseStatusWord(masterToPhaseKey(stage))` | lookup; D11 maps 4 words | 1 word | `gateway-client.jsx:1369`; `lib/project-status.js:35` |
 | Gate banner (`.dv-gate`) + locked rail segments | L1 lock, L3 reason | `phaseGate(floorFacts, assignments, type, stage)` → D2 + D6 (`blockingReqs`, check-backed only) | walks D4 order forward from current stage | 5 lock flags + 1 reason | `lib/spec.js:95-114`; `deck-view.jsx` `.dv-gate` |

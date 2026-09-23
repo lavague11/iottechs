@@ -474,7 +474,8 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
           <h1>Development <em>Roadmap</em></h1>
           <p className="dv-sub">Your build tracker for the platform. Check items off as they ship — completed work sinks to the bottom.</p>
           <Link href="/dev/role-map" className="dv-map-link">🗺 Role &amp; Flow Map — who sees what, per step</Link>
-          <a href="/dev/role-map/static" className="dv-map-link" target="_blank" rel="noopener" title="Static briefing with reasoning + handoff chains (docs/role-flow-map.html)">Briefing ↗</a>
+          <a href="/dev/docs/role-flow-map.html" className="dv-map-link" target="_blank" rel="noopener" title="Static briefing with reasoning + handoff chains (docs/role-flow-map.html)">Briefing ↗</a>
+          <a href="/dev/docs/lifecycle-sources.md" className="dv-map-link" target="_blank" rel="noopener" title="Where every phase / stage / step count comes from, and what shipped (docs/lifecycle-sources.md)">Lifecycle trace ↗</a>
         </div>
 
         {/* Progress */}
