@@ -16,7 +16,8 @@ import {
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
   customerOwnsProjectAccount,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload, seedTechPricingMap } from "../../../lib/proposal";
+import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint } from "../../../lib/proposal";
+import { can } from "../../../lib/roles";
 import { survey2CameraCount } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady } from "../../../lib/email";
@@ -250,6 +251,9 @@ export async function requestChangesAction(accessId, note) {
 // nothing was ever signed.
 export async function getProposalDiffAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };
+  const tok = await getSessionRole();
+  // The diff carries retail prices and totals — never for a technician (or a vendor).
+  if (!can(tok?.role, "customer.financials.view")) return { ok: true, diff: null };
   const cur = getActiveProposal(accessId);
   if (!cur || cur.signed_name) return { ok: true, diff: null };
   const { getLatestSignedVersion } = await import("../../../lib/db");
@@ -276,7 +280,6 @@ export async function signAddendumAction(accessId, addendumId, sign) {
   if (!a) return { error: "Add-on not found." };
   if (a.needsPricing) return { error: "This add-on hasn't been priced yet." };
   if (a.status === "voided") return { error: "This add-on was voided." };
-  const { addendumFingerprint } = await import("../../../lib/proposal");
   const at = new Date().toISOString();
   const wasResign = !!a.signedFingerprint;
   Object.assign(a, { status: "approved", signedName: name, signedAt: at, signatureData: sign?.data || null, signedFingerprint: addendumFingerprint(a), resignRequired: undefined,
@@ -298,17 +301,32 @@ async function reconcileAddendumWrite(accessId, data, tok) {
   if (!list) return data;
   let stored = {}; try { stored = JSON.parse(getToolData(accessId, "addendum")?.data || "{}"); } catch { stored = {}; }
   const prevById = new Map((stored.addendums || []).map((a) => [a.id, a]));
-  const { addendumFingerprint } = await import("../../../lib/proposal");
   const at = new Date().toISOString();
   const who = actorName(tok);
+  const office = ["admin", "manager"].includes(tok.role);
+  const mayPrice = can(tok.role, "addendum.price");
   const needsSig = [];
   for (const a of list) {
     const prev = prevById.get(a.id);
-    // Non-office roles may never flip an add-on to approved or alter a stored signature.
-    if (!["admin", "manager"].includes(tok.role) && prev && (a.status !== prev.status || a.signedFingerprint !== prev.signedFingerprint || a.signedName !== prev.signedName)) {
-      Object.assign(a, { status: prev.status, signedName: prev.signedName, signedAt: prev.signedAt, signatureData: prev.signatureData, signedFingerprint: prev.signedFingerprint });
+    // Non-office roles may never flip an add-on to approved or alter a stored signature — and a
+    // brand-new add-on from them can't arrive pre-signed.
+    if (!office) {
+      if (prev) Object.assign(a, { status: prev.status, signedName: prev.signedName, signedAt: prev.signedAt, signatureData: prev.signatureData, signedFingerprint: prev.signedFingerprint, resignRequired: prev.resignRequired });
+      else Object.assign(a, { status: "pending", signedName: undefined, signedAt: undefined, signatureData: undefined, signedFingerprint: undefined });
     }
-    if (a.status === "approved" && a.signedFingerprint && a.signedFingerprint !== addendumFingerprint(a)) {
+    // Pricing is admin/manager only: other writers keep the stored prices (or land unpriced).
+    if (!mayPrice) {
+      const prevItems = new Map(((prev && prev.items) || []).map((it) => [it.id, it]));
+      a.items = (a.items || []).map((it) => { const p = prevItems.get(it.id); return p ? { ...it, price: p.price, techPay: p.techPay } : { ...it, price: 0, techPay: 0 }; });
+      a.discount = prev ? prev.discount : 0;
+      if (!prev || prev.needsPricing) a.needsPricing = true;
+    }
+    // Signed content drifted? A fingerprinted approval compares to its own hash; a legacy approval
+    // (no fingerprint) compares against what was stored — either way it drops to re-sign.
+    const drifted = a.status === "approved" && (a.signedFingerprint
+      ? a.signedFingerprint !== addendumFingerprint(a)
+      : !!prev && prev.status === "approved" && addendumFingerprint(prev) !== addendumFingerprint(a));
+    if (drifted) {
       Object.assign(a, { status: "pending", resignRequired: true, history: [...(a.history || []), { verb: "changed", at, by: who }] });
       logProjectEvent(accessId, { kind: "change", label: `Add-on changed after signing · ${a.title || "Job-site add-on"} — customer must re-sign`, actor: who });
       needsSig.push(a);
@@ -591,7 +609,7 @@ export async function trackPackageAction(accessId, number, carrier, force = fals
 // Rate library — internal only (rates are technician payout figures, never shown to customers).
 export async function getRatesAction(accessId, techName) {
   const tok = await getSessionRole();
-  if (!tok || tok.role === "customer") return { ok: false };
+  if (!tok || !can(tok.role, "install.pay.view")) return { ok: false };   // the rate book is payout data
   if (!(await canReadProject(accessId))) return { ok: false };
   return { ok: true, book: getRateBook(), defaults: DEFAULT_RATES, effective: getEffectiveRates(techName || null) };
 }
@@ -607,7 +625,11 @@ export async function getAcceptancesAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false, acceptances: {}, toolMeta: null };
   // toolMeta = per-tool { has, fingerprint } so the client knows which tools need approval and
   // whether a prior approval was voided by a later change (accepted fingerprint ≠ current).
-  return { ok: true, acceptances: getStageAcceptances(accessId), toolMeta: getToolMeta(accessId) };
+  const tok = await getSessionRole();
+  const meta = getToolMeta(accessId);
+  // A vendor's scope is shipment tracking: no device inventory, QC state or install progress.
+  const toolMeta = tok?.role === "vendor" ? { tracking: meta.tracking } : meta;
+  return { ok: true, acceptances: tok?.role === "vendor" ? {} : getStageAcceptances(accessId), toolMeta };
 }
 
 // ---- Browser-tool data backup: survey / mockup / schedule ----
@@ -617,20 +639,30 @@ export async function getAcceptancesAction(accessId) {
 // customer pull tech payout data out of the install/addendum blobs (and the crew list) even though
 // the UI hid it. The wire itself has to be clean, so the payload is filtered here.
 function sanitizeToolRead(tool, role, saved) {
-  if (!saved?.data || (role !== "customer" && role !== "tech")) return saved;
+  if (!saved?.data) return saved;
+  // Server-side stripping by capability (lib/roles.js), never by UI: the payout side of a blob only
+  // reaches roles with install.pay.view / addendum.payout.view; retail only addendum.retail.view.
+  const seePayout = can(role, "addendum.payout.view"), seeRetail = can(role, "addendum.retail.view"), seeInstallPay = can(role, "install.pay.view");
+  if (seePayout && seeRetail && seeInstallPay && role !== "customer") return saved;
   try {
     if (tool === "addendum") {
       const j = JSON.parse(saved.data);
       j.addendums = (j.addendums || []).map((a) => {
         const out = { ...a, items: (a.items || []).map((it) => {
           const c = { ...it };
-          if (role === "customer") delete c.techPay;   // customer never sees the tech payout
-          if (role === "tech") delete c.price;         // tech never sees the retail price
+          if (!seePayout) delete c.techPay;   // customer + sales never see the tech payout
+          if (!seeRetail) delete c.price;     // tech never sees the retail price
           return c;
         }) };
-        if (role === "tech") delete out.discount;
+        if (!seeRetail) delete out.discount;
         return out;
       });
+      return { ...saved, data: JSON.stringify(j) };
+    }
+    if (tool === "install" && role !== "customer" && !seeInstallPay) {
+      // Sales (and any other no-pay role): progress + notes + history, never the money side.
+      const j = JSON.parse(saved.data);
+      delete j.payouts; delete j.payoutOverride; delete j.dayLogs; delete j.requests; delete j.estHours;
       return { ...saved, data: JSON.stringify(j) };
     }
     if (tool === "install" && role === "customer") {
@@ -680,7 +712,7 @@ export async function saveToolDataAction(accessId, tool, data) {
   // checklist = office + the technician doing the work.
   const editors = tool === "schedule" ? ["admin", "manager", "sales", "customer"]
     : tool === "install" ? ["admin", "manager", "tech"]
-    : tool === "addendum" ? ["admin", "manager", "sales", "customer"]  // office builds, customer approves
+    : tool === "addendum" ? ["admin", "manager", "sales", "tech", "customer"]  // office builds/prices, tech logs work (unpriced), customer approves
     : tool === "receiving" ? ["admin", "manager", "sales", "tech"]     // office/tech mark gear received
     : tool === "tracking" ? ["admin", "manager", "vendor"]              // office + the supplying vendor record shipments
     : tool === "techs" ? ["admin", "manager"]                          // crew assignment — admin/manager only, not sales
@@ -718,6 +750,8 @@ function mergeCustomerAddendumWrite(accessId, data) {
     if (inc.signedName != null) out.signedName = String(inc.signedName).slice(0, 200);
     if (inc.signedAt != null) out.signedAt = String(inc.signedAt).slice(0, 40);
     if (inc.signatureData != null) out.signatureData = String(inc.signatureData).slice(0, 500000);
+    // Bind the approval to the stored content, so a later price change voids it (same as signAddendumAction).
+    if (inc.status === "approved") { out.signedFingerprint = addendumFingerprint(out); out.resignRequired = undefined; out.history = [...(a.history || []), { verb: a.signedFingerprint ? "re-signed" : "approved", at: new Date().toISOString(), by: out.signedName || "Customer" }]; }
     return out;
   });
   return JSON.stringify({ ...stored, addendums: merged });

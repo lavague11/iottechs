@@ -51,21 +51,28 @@ async function toJpeg(buf, name, type) {
 }
 
 // Uploads are staff-only (surveyors/office). Customers view but never upload.
-async function principalName() {
+// Returns { name, role, accessId } — accessId is set for a project-PIN grant (the upload is then
+// scoped to that project); role "applicant" is a hiring candidate (never a project upload).
+async function principal() {
   const user = await getSessionUser();
-  if (user?.id) return user.name || user.role || "staff";
+  if (user?.id) return { name: user.name || user.role || "staff", role: user.role, accessId: null };
   const jar = await cookies();
   const acc = jar.get("iot_access")?.value;
   const at = acc ? await parseAccessToken(acc) : null;
-  if (at?.role && at.role !== "customer") return at.role;   // tech/staff via PIN
+  if (at?.role && at.role !== "customer") return { name: at.role, role: at.role, accessId: at.accessId };   // tech/staff via PIN
   const appTok = jar.get("iot_app")?.value;                 // a hiring candidate uploading their own compliance docs
   const ap = appTok ? await parseSvcToken(appTok) : null;
-  if (ap?.svcId) return `applicant:${ap.svcId}`;
+  if (ap?.svcId) return { name: `applicant:${ap.svcId}`, role: "applicant", accessId: null, appId: ap.svcId };
   return null;
 }
+async function principalName() { return (await principal())?.name || null; }
+// Media kinds that count toward something (install photos gate a lifecycle step) must be declared.
+const PROJECT_KINDS = new Set(["install", "install-issue", "survey-view", "survey", "camera", "device", "mockup", "bug", "note", "site"]);
+const UPLOAD_ROLES = new Set(["admin", "manager", "sales", "tech"]);
 
 export async function POST(req) {
-  const who = await principalName();
+  const p = await principal();
+  const who = p?.name || null;
   if (!who) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
 
   let form;
@@ -75,6 +82,18 @@ export async function POST(req) {
   const file = form.get("file");
   const projectAccessId = form.get("project") || null;
   const kind = form.get("kind") || null;
+  // Project scoping: an applicant never uploads to a project; a PIN grant only to ITS project; a
+  // declared kind only (kind "install" feeds a lifecycle fact). Readonly/vendor never upload.
+  if (projectAccessId) {
+    if (p.role === "applicant") {
+      // A candidate's compliance docs are keyed by THEIR application id and a compliance:* kind only.
+      if (String(projectAccessId) !== String(p.appId) || !/^compliance:/.test(String(kind || ""))) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
+    } else {
+      if (!UPLOAD_ROLES.has(p.role)) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
+      if (p.accessId && String(p.accessId).toUpperCase() !== String(projectAccessId).toUpperCase()) return Response.json({ ok: false, error: "not your project" }, { status: 403 });
+      if (kind && !PROJECT_KINDS.has(String(kind))) return Response.json({ ok: false, error: "unknown kind" }, { status: 400 });
+    }
+  }
   if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
     return Response.json({ ok: false, error: "no file" }, { status: 400 });
   }

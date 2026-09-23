@@ -98,8 +98,10 @@ export function installAppointmentConfirmed(raw) {
     const isInstall = ev?.kind === "install" || (!ev?.kind && /install/i.test(String(ev?.title || "")));
     if (!isInstall) return false;
     if (ev.confirmed_at) return true;
+    // The CUSTOMER's RSVP only — a technician confirming their own attendance doesn't satisfy a
+    // requirement whose owner is the customer. A record without a role is the legacy customer entry.
     const confs = ev.confirmations && typeof ev.confirmations === "object" ? Object.values(ev.confirmations) : [];
-    return confs.some((c) => !c?.status || c.status === "going");
+    return confs.some((c) => (c?.role || "customer") === "customer" && (!c?.status || c.status === "going"));
   });
 }
 export function toolFingerprint(tool, raw) {

@@ -42,6 +42,11 @@ test("7: RSVP fact reads server-recorded confirmations only", () => {
   const survey = JSON.stringify({ events: [{ id: 1, kind: "survey", confirmed_at: "2026-01-01" }] });
   assert.equal(installAppointmentConfirmed(going), true);
   assert.equal(installAppointmentConfirmed(declined), false);
+  // A technician confirming their own attendance is not the customer's confirmation.
+  const techOnly = JSON.stringify({ events: [{ id: 1, kind: "install", confirmations: { "t@iot.com": { role: "tech", name: "Devon" } } }] });
+  const custRole = JSON.stringify({ events: [{ id: 1, kind: "install", confirmations: { "c@x.com": { role: "customer", name: "Ada" } } }] });
+  assert.equal(installAppointmentConfirmed(techOnly), false);
+  assert.equal(installAppointmentConfirmed(custRole), true);
   assert.equal(installAppointmentConfirmed(legacy), true);
   assert.equal(installAppointmentConfirmed(survey), false);
   assert.equal(installAppointmentConfirmed(null), false);
@@ -101,6 +106,13 @@ test("9/10: per-item QC — open flag blocks the device, editing one device chan
   assert.notEqual(fp(a, "cam1"), fp(b, "cam1"));
   assert.equal(fp(a, "cam2"), fp(b, "cam2"));        // untouched device keeps its acceptance
   assert.equal(b.find((x) => x.id === "cam1").pass, false);
+  // Un-installing a step after sign-off voids that device's acceptance too (install state is in the meaning).
+  const c = qcItemStates(proposal, JSON.stringify(qc), JSON.stringify({ steps: { cam2: 5 } }), []);
+  assert.notEqual(fp(a, "cam2"), fp(c, "cam2"));
+  // Approved add-on devices are QC-able (and must pass) — a signed add-on that isn't ticked blocks allPass.
+  const add = JSON.stringify({ addendums: [{ id: "a1", status: "approved", title: "Extra", discount: 0, items: [{ id: "x1", name: "Extra cam", type: "camera", qty: 1, price: 200 }] }] });
+  assert.equal(qcProgress(proposal, JSON.stringify(qc), null, [], add).allPass, false);
+  assert.ok(qcItemStates(proposal, JSON.stringify(qc), null, [], add).some((x) => x.id === "x1#0"));
 });
 
 test("11: proposal diff is structured (added / changed / removed / totals), never raw", () => {

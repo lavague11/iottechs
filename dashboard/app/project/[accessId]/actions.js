@@ -334,7 +334,19 @@ async function issueTok(accessId) {
   const tok = await getAnyTok();
   if (!tok) return { error: "Please unlock the project first." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  // A logged-in technician is scoped to the jobs they're on: the access roster, the work-order crew,
+  // or the tech who accepted the work order. (PIN techs are scoped by the PIN itself above.)
+  if (tok.role === "tech" && !tok.viaPin && !(await techOnProject(accessId, tok))) return { error: "Not your project." };
   return { tok };
+}
+async function techOnProject(accessId, tok) {
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  const roster = getProjectAssignments(accessId);
+  if (roster.some((a) => a.role === "tech" && ((tok.id != null && Number(a.user_id) === Number(tok.id)) || (tok.email && norm(a.user_email) === norm(tok.email))))) return true;
+  const { getToolData, getActiveProposal } = await import("../../../lib/db");
+  try { const crew = JSON.parse(getToolData(accessId, "techs")?.data || "{}").names || []; if (crew.some((n) => norm(n) === norm(tok.name))) return true; } catch {}
+  const prop = getActiveProposal(accessId);
+  return !!(prop?.tech_signed_name && norm(prop.tech_signed_name) === norm(tok.name));
 }
 export async function listInstallIssuesAction(accessId) {
   const { tok, error } = await issueTok(accessId);
@@ -385,7 +397,11 @@ export async function installIssueAction(accessId, id, action, { assignTo } = {}
       break;
     }
     case "fixed": {
-      const mine = tok.role === "tech" && cur.assigned_to && String(cur.assigned_to).trim().toLowerCase() === String(tok.name || "").trim().toLowerCase();
+      // The assignee by user id when we have one (display names can collide); name only as a fallback
+      // for crew entered by name with no matching account.
+      const mine = tok.role === "tech" && (cur.assigned_to_id != null
+        ? Number(cur.assigned_to_id) === Number(tok.id)
+        : !!cur.assigned_to && String(cur.assigned_to).trim().toLowerCase() === String(tok.name || "").trim().toLowerCase());
       if (!(mine || adj)) return { error: "Only the assigned technician can mark this fixed." };
       if (cur.status !== "NEEDS_REWORK") return { error: "Nothing assigned to fix." };
       patch = { status: "NEEDS_REVIEW", fixed_by: who, fixed_at: now() };

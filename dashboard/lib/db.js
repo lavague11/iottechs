@@ -2409,12 +2409,13 @@ export function buildStageFacts(accessId) {
     survey_accepted: surveyStageSatisfied(accessId),
     survey_skipped: !!p.survey_skipped_at,
     // Phase-2 facts: work order fully closed out; QC passed + both sign-offs current.
+    // ONE getToolMeta per facts build (it hashes the survey/mockup blobs — never call it twice).
     ...(() => { const m = getToolMeta(accessId); return {
       install_done: m.install.allDone && m.install.openIssues === 0,
       install_photos: m.media.installPhotos > 0,
       install_confirmed: m.schedule.installConfirmed,
+      ...qcSignoffFacts(accessId, m),
     }; })(),
-    ...qcSignoffFacts(accessId),
     completion_docs: !!p.completed_at,
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
@@ -5859,10 +5860,10 @@ export function getToolMeta(accessId) {
   const qcRow = getToolData(accessId, "qc");
   const inst = installProgress(prop, installRow?.data, addRow?.data);
   const issuesOpen = openInstallIssues(accessId);
-  const qc = qcProgress(prop, qcRow?.data, installRow?.data, issuesOpen);
+  const qc = qcProgress(prop, qcRow?.data, installRow?.data, issuesOpen, addRow?.data);
   // Per-item QC states (Phase 3): each carries its own fingerprint so a per-device acceptance binds
-  // to exactly that device's checks — editing one device voids only its acceptance.
-  const qcItems = qcItemStates(prop, qcRow?.data, installRow?.data, issuesOpen).map(({ meaning, ...it }) => ({ ...it, fingerprint: toolFingerprint("qc_item", meaning) }));
+  // to exactly that device's identity/install state/checks — editing one device voids only its acceptance.
+  const qcItems = qcItemStates(prop, qcRow?.data, installRow?.data, issuesOpen, addRow?.data).map(({ meaning, ...it }) => ({ ...it, fingerprint: toolFingerprint("qc_item", meaning) }));
   return {
     survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data),
       cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)

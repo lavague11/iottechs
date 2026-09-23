@@ -51,6 +51,7 @@ export const weightedInc = (type, stepIdx, payout, wpay) => {
 // labor sub-bundle, the recorder, and any plain equipment that isn't a labor line. The two
 // checklists historically kept slightly different "labor" regexes — both are preserved here so the
 // server derives exactly the list each surface shows.
+import { addendumSignatureCurrent } from "./proposal.js";
 export const INSTALL_LABOR_RX = /(cat6 drop|termination|mounting|programming|waterproof|cabling|tuning|wire run|setup|\blabor\b)/i;
 export const QC_LABOR_RX      = /drop|cable|run|termination|mount|management|program|setup|labor|install|per diem|test|tone|waterproof/i;
 const parseJson = (v) => { if (v == null) return null; if (typeof v === "object") return v; try { return JSON.parse(v); } catch { return null; } };
@@ -77,16 +78,21 @@ export function installItemsFromProposal(proposal, laborRx = INSTALL_LABOR_RX) {
 }
 // Work-order completion from the persisted "install" blob (+ approved add-ons from "addendum"):
 // every line item — derived, add-on, custom — sits at its last step. Mirrors the checklist's own math.
+// Approved (and still fingerprint-current) add-on lines, expanded by quantity — the same list the
+// work order installs and QC verifies.
+export function approvedAddonItems(addendumRaw) {
+  return ((parseJson(addendumRaw) || {}).addendums || []).filter((a) => addendumSignatureCurrent(a))
+    .flatMap((a) => (a.items || []).flatMap((it) => {
+      const qty = Math.max(1, +it.qty || 1);
+      return Array.from({ length: qty }, (_, n) => ({ id: `${it.id}#${n}`, name: qty > 1 ? `${it.name} #${n + 1}` : it.name, type: it.type || "equip", addon: true }));
+    }));
+}
 export function installProgress(proposal, installRaw, addendumRaw) {
   const d = parseJson(installRaw) || {};
   const removed = Array.isArray(d.removed) ? d.removed : [];
   const custom = Array.isArray(d.custom) ? d.custom : [];
   const steps = d.steps || {};
-  const addons = ((parseJson(addendumRaw) || {}).addendums || []).filter((a) => a?.status === "approved")
-    .flatMap((a) => (a.items || []).flatMap((it) => {
-      const qty = Math.max(1, +it.qty || 1);
-      return Array.from({ length: qty }, (_, n) => ({ id: `${it.id}#${n}`, type: it.type || "equip" }));
-    }));
+  const addons = approvedAddonItems(addendumRaw);
   const items = [...installItemsFromProposal(proposal).filter((i) => !removed.includes(i.id)), ...addons.filter((a) => !removed.includes(a.id)), ...custom];
   const total = items.reduce((a, it) => a + stepsFor(it.type).length, 0);
   const done  = items.reduce((a, it) => a + Math.min(steps[it.id] || 0, stepsFor(it.type).length), 0);
@@ -121,25 +127,30 @@ export const QC_CHECKS = {
 export const qcChecksFor = (type) => QC_CHECKS[type] || QC_CHECKS.equip;
 // `openIssues` = open install issue flags (Phase 1): a device with an unresolved flag cannot pass QC
 // until the flag is resolved or dismissed — one canonical status, no second "disputed" state.
-export function qcItemStates(proposal, qcRaw, installRaw, openIssues = []) {
+// QC covers every installed device: the proposal's lines PLUS approved add-on lines (same list
+// the work order installs), minus lines the office removed from the work order.
+export function qcItemStates(proposal, qcRaw, installRaw, openIssues = [], addendumRaw = null) {
   const d = parseJson(qcRaw) || {};
   const checks = d.checks || {};
   const inst = parseJson(installRaw) || {};
   const steps = inst.steps || {};
-  return installItemsFromProposal(proposal, QC_LABOR_RX).map((it) => {
+  const removed = Array.isArray(inst.removed) ? inst.removed : [];
+  const list = [...installItemsFromProposal(proposal, QC_LABOR_RX), ...approvedAddonItems(addendumRaw)].filter((i) => !removed.includes(i.id));
+  return list.map((it) => {
     const flagged = openIssues.filter((i) => i.target_id === it.id).length;
     const ticked = qcChecksFor(it.type).every((c) => checks[it.id]?.[c]);
+    const installed = Math.min(steps[it.id] || 0, stepsFor(it.type).length) >= stepsFor(it.type).length;
     return {
-      id: it.id, name: it.name, type: it.type,
-      installed: Math.min(steps[it.id] || 0, stepsFor(it.type).length) >= stepsFor(it.type).length,
+      id: it.id, name: it.name, type: it.type, installed,
       ticked, openIssues: flagged, pass: ticked && flagged === 0,
-      // What a per-item acceptance binds to: this item's checks + issue note. Hash it upstream.
-      meaning: { checks: checks[it.id] || {}, issue: (d.issues || {})[it.id] || "" },
+      // What a per-item acceptance binds to: the device's identity, its install state, its checks
+      // and its issue note — rename it, un-install a step, or change a check and the acceptance voids.
+      meaning: { n: it.name || "", t: it.type, inst: installed, checks: checks[it.id] || {}, issue: (d.issues || {})[it.id] || "" },
     };
   });
 }
-export function qcProgress(proposal, qcRaw, installRaw = null, openIssues = []) {
-  const items = qcItemStates(proposal, qcRaw, installRaw, openIssues);
+export function qcProgress(proposal, qcRaw, installRaw = null, openIssues = [], addendumRaw = null) {
+  const items = qcItemStates(proposal, qcRaw, installRaw, openIssues, addendumRaw);
   const passed = items.filter((it) => it.pass).length;
   return { items: items.length, passed, allPass: items.length > 0 && passed === items.length };
 }
