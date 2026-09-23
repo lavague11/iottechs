@@ -5,7 +5,7 @@ import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
-import { toolHasData, toolFingerprint, survey2CameraCount } from "./tool-data.js";
+import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
@@ -2409,8 +2409,13 @@ export function buildStageFacts(accessId) {
     survey_accepted: surveyStageSatisfied(accessId),
     survey_skipped: !!p.survey_skipped_at,
     // Phase-2 facts: work order fully closed out; QC passed + both sign-offs current.
-    install_done: (() => { const i = getToolMeta(accessId).install; return i.allDone && i.openIssues === 0; })(),
+    ...(() => { const m = getToolMeta(accessId); return {
+      install_done: m.install.allDone && m.install.openIssues === 0,
+      install_photos: m.media.installPhotos > 0,
+      install_confirmed: m.schedule.installConfirmed,
+    }; })(),
     ...qcSignoffFacts(accessId),
+    completion_docs: !!p.completed_at,
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
     // Signed ONLY while the signature still binds to the current content — a signed proposal that
@@ -5851,7 +5856,9 @@ export function getToolMeta(accessId) {
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },
-    schedule: { count: schedCount },
+    schedule: { count: schedCount, installConfirmed: installAppointmentConfirmed(schedRow?.data) },
+    // Install photos = media rows tagged kind "install" (issue photos / survey shots don't count).
+    media: { installPhotos: countProjectMedia(accessId, "install") },
     // Open issue flags overlay the claim: any unresolved flag blocks final install completion
     // (there is no blocking/informational distinction in the schema — every flag counts).
     install: { has: !!installRow, ...inst, openIssues: openInstallIssues(accessId).length },
@@ -5859,6 +5866,19 @@ export function getToolMeta(accessId) {
     qc: { has: !!qcRow, ...qc, fingerprint: qcRow ? toolFingerprint("qc", qcRow.data) : null },
   };
 }
+// ---- Project media by kind (install photos etc.) ----
+export function countProjectMedia(accessId, kind) {
+  return db.prepare("SELECT COUNT(*) AS n FROM media WHERE project_access_id=? AND kind=? AND (voided IS NULL OR voided=0)").get(String(accessId), String(kind)).n;
+}
+export function listProjectMedia(accessId, kind) {
+  return db.prepare("SELECT id, kind, w, h, created_by, created_at FROM media WHERE project_access_id=? AND kind=? AND (voided IS NULL OR voided=0) ORDER BY created_at DESC")
+    .all(String(accessId), String(kind)).map((r) => ({ ...r }));
+}
+// Archive, never delete — a voided photo stays on disk for audit but stops counting.
+export function voidProjectMedia(id, accessId) {
+  return db.prepare("UPDATE media SET voided=1 WHERE id=? AND project_access_id=?").run(String(id), String(accessId)).changes > 0;
+}
+
 // ---- Install issue flags ----
 export const INSTALL_ISSUE_OPEN = new Set(["NEEDS_REVIEW", "NEEDS_REWORK"]);
 export function listInstallIssues(accessId) {

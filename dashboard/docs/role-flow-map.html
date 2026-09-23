@@ -144,7 +144,7 @@
     <div class="eyebrow">DEV · REFERENCE MAP · LIVE MODEL</div>
     <div class="title-row">
       <h1>Role &amp; Flow Map</h1>
-      <span class="desc">What each role sees under the progress bar, phase by phase — now with the <b>reasoning</b> behind every step and the <b>handoff chain</b> across roles. <b>5 phases · 9 backend stages · 16 requirement-steps (13 gate advancement).</b> Edit the <b>MODEL</b> object to add or remove steps.</span>
+      <span class="desc">What each role sees under the progress bar, phase by phase — now with the <b>reasoning</b> behind every step and the <b>handoff chain</b> across roles. <b>5 phases · 9 backend stages · 16 requirement-steps (16 gate advancement).</b> Edit the <b>MODEL</b> object to add or remove steps.</span>
     </div>
     <div class="roletabs" id="roletabs" role="group" aria-label="Role"></div>
     <div class="legend">
@@ -238,8 +238,8 @@ const MODEL = [
   },
   {
     id:"install", n:3, name:"Install", color:"var(--p3)", pc:"#2f6fc0",
-    stage:"TECH: INSTALL", steps:4, gated:2, tag:"Fulfillment + Install",
-    gate:{cond:"Technician <b>accepted</b> the work order <b>AND</b> install checklist <b>complete</b> (every line item at its last step — derived server-side from the work order). Photos uploaded is <b>advisory</b>.", ok:true,
+    stage:"TECH: INSTALL", steps:4, gated:4, tag:"Fulfillment + Install",
+    gate:{cond:"Technician <b>accepted</b> the work order → customer <b>confirmed</b> the install appointment (server-recorded RSVP) → install checklist <b>complete</b> with <b>no open issue flags</b> → install <b>photos</b> uploaded (media kind install).", ok:true,
           note:"Fixed 2026-09-21: the footer's 'N of M complete' counted UI tool cards, and the admin's merged Install page collapsed to one stateless card ('0 of 1') while the tech's raw list counted a stateless Add-ons card ('0 of 2'). The merged card now inherits state from its children and only stateful cards count — every role reads the same figure."},
     blocks:[
       {name:"Addendum", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
@@ -250,7 +250,7 @@ const MODEL = [
       {name:"Work Order", perm:{admin:"act",manager:"act",tech:"act"},
         owner:"Technician executes · Admin oversees",
         why:"The install checklist / claim ledger — the heart of the whole system. Each line item is a staged progression (Cable Dropped → Managed → Terminated → Mounted → Online), and each stage is a pay event. Techs mark how far they got, which claims those stages onto their sheet. Locked for the tech until the work order is accepted AND it's install day.",
-        cross:"<b>Sales sees nothing here</b> — no branch exists. <b>Customer never sees it</b> — it's an internal ops document. Tech pricing lives inside it (admin-only rate library); the tech sees the resulting pay, not the values.",
+        cross:"<b>Sales sees nothing here</b> — no branch exists. <b>Customer never sees it</b> — it's an internal ops document. Tech pricing lives inside it (admin-only rate library); the tech sees the resulting pay, not the values. <b>Issue flags</b> (flag beside Rates / Show pay): any tech can flag another tech's work → Needs Review → the office assigns rework / resolves / dismisses; the claim stays in history, the flag overlays it. Per-item ownership: first claim owns the item; a second tech sees 'X is working on this' and must take over explicitly.",
         tag:null},
       {name:"Project Ready", perm:{customer:"read"},
         owner:"System",
@@ -302,8 +302,8 @@ const MODEL = [
   },
   {
     id:"completion", n:5, name:"Completion", color:"var(--p5)", pc:"#1f8f8f",
-    stage:"TECH: COMPLETION", steps:1, gated:0, tag:"Completion",
-    gate:{cond:"Terminal state — nothing gates out of here.", ok:true,
+    stage:"TECH: COMPLETION", steps:1, gated:1, tag:"Completion",
+    gate:{cond:"Terminal state — nothing gates out of here. Its one step (completion documents) is backed by the completed_at stamp.", ok:true,
           note:"Completion is terminal for the original agreement. A post-completion addendum does NOT re-lock the parent — it's a new signed version scoped only to its own line items."},
     blocks:[
       {name:"Completion / Wrap-up", perm:{admin:"act",manager:"act",sales:"read",tech:"read",customer:"read"},
@@ -321,7 +321,7 @@ const MODEL = [
 const FINDINGS = [
   {tag:"missing", text:"Sales sees nothing in the Install phase — no branch exists.", fix:"Decide what Sales needs at install (likely read-only status) and add the branch."},
   {tag:"missing", text:"Vendor & Readonly roles have no render branch on the project page at all.", fix:"Readonly is a view-everything-act-nothing role; Vendor needs a surface only if shipment tracking comes back."},
-  {tag:"trim", text:"13 of the 16 requirement-steps are check-backed; the other 3 (install-appointment confirm, install photos, completion docs) are advisory and never gate — none has a data source yet.", fix:"Give each a fact (appointment RSVP, photo upload, certificate issued) and add a check()."}
+  {tag:"trim", text:"All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos and the completion stamp joined the gate. Issue flags (Needs Review / Needs Rework) block install completion until resolved or dismissed.", fix:"Nothing outstanding on the gate side; per-item dual QC signatures are the next build."}
 ];
 
 /* ---------- render ---------- */

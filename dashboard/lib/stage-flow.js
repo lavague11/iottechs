@@ -38,13 +38,14 @@ export const STAGE_FLOW = {
   ],
   schedule: [
     { label: "Technician accepted the work order", who: "internal", check: (p, a) => !!(p.tech_accepted || p.tech || (a || []).some((x) => x.role === "tech")) },
-    { label: "Customer confirmed the install appointment", who: "customer" },
+    // Server-recorded RSVP on the install event (schedule blob confirmations / confirmed_at).
+    { label: "Customer confirmed the install appointment", who: "customer", check: (p) => !!p.install_confirmed },
   ],
-  // Phase 2 (2026-09-22): the work order + QC sign-offs are real server facts now (db.getToolMeta /
-  // qcSignoffFacts), so they gate. Photos + completion docs are still advisory (no data source).
+  // Every requirement is check-backed now (2026-09-23): work order + issue flags, install photos
+  // (media kind "install"), the QC sign-offs and the completion stamp are all real server facts.
   install: [
     { label: "Install checklist completed", who: "internal", check: (p) => !!p.install_done },
-    { label: "Install photos uploaded", who: "internal" },
+    { label: "Install photos uploaded", who: "internal", check: (p) => !!p.install_photos },
   ],
   qc: [
     { label: "Manager QC approved", who: "internal", check: (p) => !!p.qc_manager_approved },
@@ -54,7 +55,8 @@ export const STAGE_FLOW = {
     { label: "Final balance paid", who: "customer", check: (p) => !!p.final_balance_paid },
   ],
   completion: [
-    { label: "Completion documents generated", who: "internal" },
+    // projects.completed_at is the certificate/warranty issuance stamp (CompletionPanel "Mark complete").
+    { label: "Completion documents generated", who: "internal", check: (p) => !!p.completion_docs },
   ],
 };
 

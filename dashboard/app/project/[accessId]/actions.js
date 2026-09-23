@@ -417,6 +417,26 @@ export async function installIssueAction(accessId, id, action, { assignTo } = {}
   return { ok: true, issue, issues: listInstallIssues(accessId) };
 }
 
+// ---- Install photos (media kind "install") — the `install_photos` lifecycle fact ----
+export async function listInstallPhotosAction(accessId) {
+  const { tok, error } = await issueTok(accessId);
+  if (error) return { ok: false, error, photos: [] };
+  if (!["admin", "manager", "sales", "tech"].includes(tok.role)) return { ok: false, error: "Internal only.", photos: [] };
+  const { listProjectMedia } = await import("../../../lib/db");
+  return { ok: true, photos: listProjectMedia(accessId, "install") };
+}
+export async function voidInstallPhotoAction(accessId, mediaId) {
+  const { tok, error } = await issueTok(accessId);
+  if (error) return { error };
+  if (!ISSUE_ADJUDICATORS.has(tok.role)) return { error: "Only admin or manager can void a photo." };
+  const { voidProjectMedia } = await import("../../../lib/db");
+  if (!voidProjectMedia(mediaId, accessId)) return { error: "Photo not found." };
+  logProjectEvent(accessId, { kind: "change", label: "Install photo voided", actor: issueActor(tok) });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true };
+}
+
 // Skip (or un-skip) the site survey for a job that never gets one. Admin/manager only — it waives a
 // customer sign-off, so it's logged as an override. Auto-advances out of Consulting when the skip
 // clears the last requirement; un-skipping never rewinds the stage (lock advancement, don't retro-lock).

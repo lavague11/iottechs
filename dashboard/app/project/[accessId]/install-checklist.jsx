@@ -9,6 +9,7 @@ import {
   CAMERA_STEP_PAY, POS_STEP_PAY, itemWorkState, issueOpen, ISSUE_STATES,
 } from "../../../lib/install-checklist-model";
 import { IssueFlag, IssueSheet, HistorySheet, ISSUE_CSS } from "./install-issues";
+import { InstallPhotos, InstallPhotosButton, PHOTOS_CSS } from "./install-photos";
 import { listInstallIssuesAction } from "./actions";
 
 // Install work order + live status. List style: each line has a tappable progress ring (advance
@@ -45,6 +46,8 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const [issues, setIssues] = useState([]);
   const [issueSheet, setIssueSheet] = useState(null);   // null | { target }
   const [histOpen, setHistOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const [photoCount, setPhotoCount] = useState(0);
   useEffect(() => {
     if (isCustomer) return;
     let live = true;
@@ -493,7 +496,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
 
   return (
     <div className={`icl-root${allDone ? " done" : ""}`}>
-      <style>{ICL_CSS}{ISSUE_CSS}</style>
+      <style>{ICL_CSS}{ISSUE_CSS}{PHOTOS_CSS}</style>
       {issueSheet && (
         <IssueSheet accessId={accessId} role={role} userName={userName} issues={issues} items={items} crew={crew}
           initialTarget={issueSheet.target} onClose={() => setIssueSheet(null)} onChange={onIssuesChange} />
@@ -516,6 +519,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
               {showPrice ? "$ Hide pay" : "$ Show pay"}
             </button>
           )}
+          {!isCustomer && <InstallPhotosButton count={photoCount} open={photosOpen} onClick={() => setPhotosOpen((v) => !v)} />}
           {!isCustomer && <IssueFlag count={openIssues.length} onClick={() => setIssueSheet({ target: null })} title={openIssues.length ? "Issues" : "Report issue"} />}
           {!isCustomer && (
             <button type="button" className="iss-flagbtn" onClick={() => setHistOpen(true)} title="History" aria-label="History">
@@ -528,6 +532,13 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
           </div>
         </div>
       </div>
+
+      {/* Install photos — mounted (hidden) so the count is live; expands under the header on tap. */}
+      {!isCustomer && (
+        <div style={{ display: photosOpen ? "block" : "none" }}>
+          <InstallPhotos accessId={accessId} role={role} canEdit={canEdit} onChange={(list) => { setPhotoCount(list.length); onIssues?.(); }} />
+        </div>
+      )}
 
       {/* Assigned crew — internal only (never shown to the customer). Office can add/remove. */}
       {!isCustomer && (crew.length > 0 || canAssignCrew) && (

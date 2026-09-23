@@ -238,7 +238,8 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // agrees with the server even when that role doesn't render the work order / QC tools.
   { const f = buildStageFacts(p.access_id) || {};
     project.install_done = !!f.install_done; project.qc_passed = !!f.qc_passed;
-    project.qc_manager_approved = !!f.qc_manager_approved; project.qc_customer_signed = !!f.qc_customer_signed; }
+    project.qc_manager_approved = !!f.qc_manager_approved; project.qc_customer_signed = !!f.qc_customer_signed;
+    project.install_photos = !!f.install_photos; project.install_confirmed = !!f.install_confirmed; project.completion_docs = !!f.completion_docs; }
   let assignments    = getProjectAssignments(p.access_id).map(r=>({...r}));
   // The access roster carries each grantee's email — including the customer's. A tech must never
   // receive the customer's contact channel, so null it out of the customer rows for tech views.

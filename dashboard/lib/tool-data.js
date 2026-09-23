@@ -87,6 +87,21 @@ export function toolHasData(tool, raw) {
   if (tool === "mockup") return mockupHasData(raw);
   return !!parse(raw);
 }
+// ---- Schedule blob: is the INSTALL appointment confirmed? (server-recorded RSVPs only) --------------
+// An install event = kind "install" (the scheduler tags it) or, for legacy rows, a title mentioning
+// install. Confirmed = at least one attendee whose recorded RSVP is "going" (a bare confirmation
+// record counts as going, as does the legacy customer confirmed_at flag). Never UI/local state.
+export function installAppointmentConfirmed(raw) {
+  const d = parse(raw);
+  const events = Array.isArray(d?.events) ? d.events : [];
+  return events.some((ev) => {
+    const isInstall = ev?.kind === "install" || (!ev?.kind && /install/i.test(String(ev?.title || "")));
+    if (!isInstall) return false;
+    if (ev.confirmed_at) return true;
+    const confs = ev.confirmations && typeof ev.confirmations === "object" ? Object.values(ev.confirmations) : [];
+    return confs.some((c) => !c?.status || c.status === "going");
+  });
+}
 export function toolFingerprint(tool, raw) {
   const d = parse(raw);
   if (d == null) return null;
