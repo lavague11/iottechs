@@ -2559,11 +2559,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             state: (custFacts.qc_manager_approved && custFacts.qc_customer_signed) ? "done" : "active",
             node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
               readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
-              signoff={qcSignoff} onSaved={refreshAcceptances} /></div> });
+              signoff={qcSignoff} onSaved={refreshAcceptances} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+              onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} /></div> });
         } else if (toolMeta?.qc?.allPass || acceptances?.qc_customer) {
           // Customer: the walkthrough confirmation appears only once every device has passed QC.
           tools.push({ name: "Walkthrough", label: "Walkthrough",
-            node: <div style={pad}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role="customer" readOnly signoff={qcSignoff} /></div> });
+            node: <div style={pad}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role="customer" readOnly signoff={qcSignoff}
+              meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} /></div> });
         }
         // Customer: MERGE Closeout into one full-width page — Final Payment then the Activation QR
         // handover (once it exists). Both flow FULL LENGTH (documents, not maps): one page scroll,

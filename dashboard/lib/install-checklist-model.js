@@ -119,10 +119,27 @@ export const QC_CHECKS = {
   equip:  ["Working"],
 };
 export const qcChecksFor = (type) => QC_CHECKS[type] || QC_CHECKS.equip;
-export function qcProgress(proposal, qcRaw) {
+// `openIssues` = open install issue flags (Phase 1): a device with an unresolved flag cannot pass QC
+// until the flag is resolved or dismissed — one canonical status, no second "disputed" state.
+export function qcItemStates(proposal, qcRaw, installRaw, openIssues = []) {
   const d = parseJson(qcRaw) || {};
   const checks = d.checks || {};
-  const items = installItemsFromProposal(proposal, QC_LABOR_RX);
-  const passed = items.filter((it) => qcChecksFor(it.type).every((c) => checks[it.id]?.[c])).length;
+  const inst = parseJson(installRaw) || {};
+  const steps = inst.steps || {};
+  return installItemsFromProposal(proposal, QC_LABOR_RX).map((it) => {
+    const flagged = openIssues.filter((i) => i.target_id === it.id).length;
+    const ticked = qcChecksFor(it.type).every((c) => checks[it.id]?.[c]);
+    return {
+      id: it.id, name: it.name, type: it.type,
+      installed: Math.min(steps[it.id] || 0, stepsFor(it.type).length) >= stepsFor(it.type).length,
+      ticked, openIssues: flagged, pass: ticked && flagged === 0,
+      // What a per-item acceptance binds to: this item's checks + issue note. Hash it upstream.
+      meaning: { checks: checks[it.id] || {}, issue: (d.issues || {})[it.id] || "" },
+    };
+  });
+}
+export function qcProgress(proposal, qcRaw, installRaw = null, openIssues = []) {
+  const items = qcItemStates(proposal, qcRaw, installRaw, openIssues);
+  const passed = items.filter((it) => it.pass).length;
   return { items: items.length, passed, allPass: items.length > 0 && passed === items.length };
 }

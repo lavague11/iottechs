@@ -276,7 +276,7 @@ const MODEL = [
     id:"closeout", n:4, name:"Closeout", color:"var(--p4)", pc:"#2f9e6b",
     stage:"TECH: CLOSEOUT", steps:3, gated:3, tag:"QC + Payment",
     gate:{cond:"Every device <b>passed QC</b> → <b>manager approved</b> → <b>customer confirmed the walkthrough</b> → <b>final balance paid</b>.", ok:true,
-          note:"Phase 2 (2026-09-22): both sign-offs are server facts (stage_acceptances qc_manager / qc_customer) bound to the QC checklist's fingerprint — change a check after signing and the sign-off reads void until re-signed. Per-item dual signatures are still a future build; today it is one approval + one confirmation over the whole passed list."},
+          note:"Phase 2 (2026-09-22): both sign-offs are server facts (stage_acceptances qc_manager / qc_customer) bound to the QC checklist's fingerprint — change a check after signing and the sign-off reads void until re-signed. Per-item acceptance is live too (same primitive, one fingerprint per device); the whole-list sign-offs remain what gates Closeout."},
     blocks:[
       {name:"System QR", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
         owner:"Technician uploads · Customer receives",
@@ -291,8 +291,8 @@ const MODEL = [
       {name:"Quality Control", perm:{admin:"act",manager:"act",sales:"read",tech:"act"},
         owner:"Technician + Manager · internal",
         why:"The adjudication of the claim ledger. Improper work is stripped and reassigned to whoever fixes it. Not shown to the customer (their phone-setup guide moved to Install).",
-        cross:"<b>Two sign-offs</b>: the manager approves, the customer confirms the walkthrough (their card in Closeout, shown only once every device passes). Both bound to the checklist fingerprint.",
-        tag:{cls:"addenda",text:"Per-item dual signatures — future build"}}
+        cross:"<b>Two sign-offs</b>: the manager approves, the customer confirms the walkthrough (their card in Closeout, shown only once every device passes) — both bound to the checklist fingerprint. <b>Per device</b> too: each item carries Installed / QC Approved / Customer Confirmed chips; a per-item acceptance binds to that device's own fingerprint, and a device with an open install flag can't pass QC until it's cleared.",
+        tag:{cls:"newbuild",text:"Per-item dual acceptance — live"}}
     ],
     handoff:[
       {role:"tech", action:"Walk QC item by item", sign:true},
@@ -321,7 +321,7 @@ const MODEL = [
 const FINDINGS = [
   {tag:"missing", text:"Sales sees nothing in the Install phase — no branch exists.", fix:"Decide what Sales needs at install (likely read-only status) and add the branch."},
   {tag:"missing", text:"Vendor & Readonly roles have no render branch on the project page at all.", fix:"Readonly is a view-everything-act-nothing role; Vendor needs a surface only if shipment tracking comes back."},
-  {tag:"trim", text:"All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos and the completion stamp joined the gate. Issue flags (Needs Review / Needs Rework) block install completion until resolved or dismissed.", fix:"Nothing outstanding on the gate side; per-item dual QC signatures are the next build."}
+  {tag:"trim", text:"All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos and the completion stamp joined the gate. Issue flags (Needs Review / Needs Rework) block install completion until resolved or dismissed.", fix:"Nothing outstanding on the gate side."}
 ];
 
 /* ---------- render ---------- */

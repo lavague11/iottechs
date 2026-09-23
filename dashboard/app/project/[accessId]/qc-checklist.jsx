@@ -57,10 +57,40 @@ export function QcSignoff({ accessId, role, meta, acceptances, preview, onChange
   );
 }
 
-export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange, embedded = false, signoff = null, onSaved = null }) {
+// Per-item acceptance (Phase 3): "qc_item:<id>:manager|customer" keys in the same acceptance store,
+// each bound to that device's own fingerprint (meta.list[i].fingerprint). Optional — the whole-list
+// sign-offs remain the gate; per-item is for important or disputed devices.
+function ItemChips({ it, acc, role, preview, busy, onSign }) {
+  if (!it) return null;
+  const cur = (k) => { const a = acc?.[`qc_item:${it.id}:${k}`]; return !!(a && a.fingerprint === it.fingerprint && it.pass); };
+  const mgr = cur("manager"), cust = cur("customer");
+  const mine = role === "customer" ? "customer" : ["admin", "manager"].includes(role) ? "manager" : null;
+  const canSign = mine && it.pass && !it.openIssues && !(mine === "manager" ? mgr : cust);
+  return (
+    <div className="qc-chips">
+      <span className={`qc-chip${it.installed ? " on" : ""}`} title="Installed">Installed</span>
+      <span className={`qc-chip${mgr ? " on" : ""}`} title="QC approved">QC Approved</span>
+      <span className={`qc-chip${cust ? " on" : ""}`} title="Customer confirmed">Customer Confirmed</span>
+      {it.openIssues > 0 && <span className="qc-chip flag" title="Open install issue">Issue</span>}
+      {canSign && !preview && <button type="button" className="qc-chip-btn" disabled={busy} onClick={() => onSign(`qc_item:${it.id}:${mine}`)}>{mine === "customer" ? "Confirm" : "Approve"}</button>}
+    </div>
+  );
+}
+
+export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange, embedded = false, signoff = null, onSaved = null, meta = null, acceptances = null, onSignoff = null, preview = false }) {
   const isCustomer = role === "customer";
   const canEdit = !readOnly && ["admin", "manager", "tech"].includes(role);
   const canAdvance = !readOnly && ["admin", "manager"].includes(role);
+  const [itemBusy, setItemBusy] = useState(false);
+  const itemMeta = (id) => (meta?.list || []).find((x) => x.id === id);
+  async function signItem(stage) {
+    if (itemBusy) return;
+    setItemBusy(true); setErr(null);
+    const r = await acceptStageAction(accessId, stage, true);
+    setItemBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    onSignoff?.(r.acceptances, r.stage);
+  }
 
   // Derive the installed items from the accepted option (cameras, recorder, other equipment).
   const items = installItemsFromProposal(proposal, QC_LABOR_RX);
@@ -164,6 +194,7 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
                   );
                 })}
               </div>
+              {meta?.list && <ItemChips it={itemMeta(it.id)} acc={acceptances} role={role} preview={preview} busy={itemBusy} onSign={signItem} />}
               {!isCustomer && (open || issue) && (
                 <div className="qc-issue">
                   {canEdit ? (
@@ -243,6 +274,13 @@ const QC_CSS = `
 .qc-advance:hover:not(:disabled){filter:brightness(1.12)}
 .qc-advance:disabled{opacity:.6;cursor:default}
 .qc-done-note{text-align:center;font-size:.84rem;font-weight:600;color:var(--dv-green,#2E7D5B);padding:6px}
+/* Per-item status chips */
+.qc-chips{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.qc-chip{font-size:.62rem;font-weight:700;letter-spacing:.02em;border-radius:100px;padding:2px 8px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-faint,#A1A6AC)}
+.qc-chip.on{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
+.qc-chip.flag{background:#fbe9e6;color:var(--dv-red,#C4553D)}
+.qc-chip-btn{height:24px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);border-radius:100px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
+.qc-chip-btn:disabled{opacity:.5;cursor:default}
 /* Sign-offs */
 .qcs{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-top:10px}
 .qcs-row{display:flex;align-items:center;gap:10px;min-height:30px}

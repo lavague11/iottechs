@@ -6,7 +6,7 @@ import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
-import { installProgress, qcProgress } from "./install-checklist-model.js";
+import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
@@ -5849,7 +5849,11 @@ export function getToolMeta(accessId) {
   const installRow = getToolData(accessId, "install");
   const qcRow = getToolData(accessId, "qc");
   const inst = installProgress(prop, installRow?.data, addRow?.data);
-  const qc = qcProgress(prop, qcRow?.data);
+  const issuesOpen = openInstallIssues(accessId);
+  const qc = qcProgress(prop, qcRow?.data, installRow?.data, issuesOpen);
+  // Per-item QC states (Phase 3): each carries its own fingerprint so a per-device acceptance binds
+  // to exactly that device's checks — editing one device voids only its acceptance.
+  const qcItems = qcItemStates(prop, qcRow?.data, installRow?.data, issuesOpen).map(({ meaning, ...it }) => ({ ...it, fingerprint: toolFingerprint("qc_item", meaning) }));
   return {
     survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data),
       cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)
@@ -5861,9 +5865,9 @@ export function getToolMeta(accessId) {
     media: { installPhotos: countProjectMedia(accessId, "install") },
     // Open issue flags overlay the claim: any unresolved flag blocks final install completion
     // (there is no blocking/informational distinction in the schema — every flag counts).
-    install: { has: !!installRow, ...inst, openIssues: openInstallIssues(accessId).length },
+    install: { has: !!installRow, ...inst, openIssues: issuesOpen.length },
     // fingerprint = the QC checklist's content, so a sign-off is void the moment a check is changed.
-    qc: { has: !!qcRow, ...qc, fingerprint: qcRow ? toolFingerprint("qc", qcRow.data) : null },
+    qc: { has: !!qcRow, ...qc, fingerprint: qcRow ? toolFingerprint("qc", qcRow.data) : null, list: qcItems },
   };
 }
 // ---- Project media by kind (install photos etc.) ----

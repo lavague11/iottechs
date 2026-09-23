@@ -18,7 +18,9 @@ Investigation 2026-09-21 (read-only at the time); resolution shipped 2026-09-21/
 | *Ledger P1* (2026-09-23) | **Install issue flags + claimed work.** `install_issues` table (server-owned state machine NEEDS_REVIEW → NEEDS_REWORK → RESOLVED / DISMISSED; reopen), actions in `actions.js` with the role matrix (tech/manager/admin report; admin/manager assign, resolve, dismiss, reopen; assigned tech marks fixed), events + notifications. `install_done` now also requires **zero open flags**. Per-item responsible tech (`owners` in the install blob), explicit take-over, crew = WO signer ∪ office additions. UI: flag + History beside Rates / Show pay, per-row flag, drawer/bottom sheet. | new |
 | *Ledger P2* (2026-09-23) | **The last 3 facts.** `install_confirmed` (schedule blob: install event with a server-recorded "going" RSVP or `confirmed_at`), `install_photos` (media rows kind `install`, voidable; work-order Photos strip uploads them), `completion_docs` (`completed_at`). `STAGE_FLOW` is now **16 of 16 check-backed**. | closes the "still open" list |
 
-Still open by design: per-item dual QC signatures (P3); Sales has no Install branch and Vendor/Readonly have no render branch (P5).
+| *Ledger P3* (2026-09-23) | **Per-item dual QC acceptance.** `getToolMeta().qc.list` = per device {installed, ticked, openIssues, pass, fingerprint}; acceptance keys `qc_item:<id>:manager` / `qc_item:<id>:customer` in the same `stage_acceptances` store, bound to that device's own fingerprint (editing one device voids only its acceptances). A device with an open install flag cannot pass QC (one canonical status). `acceptStageAction` enforces signer role + pass + no-open-issue. UI: compact chips Installed / QC Approved / Customer Confirmed (+ Issue) per item, one-word Approve / Confirm for the right role. QC notifications: office approval → customer "confirm your walkthrough"; customer confirmation → office. Whole-list sign-offs remain the gate (no config says otherwise). | closes P3 |
+
+Still open by design: Sales has no Install branch and Vendor/Readonly have no render branch (P5).
 
 ## Headline answers
 

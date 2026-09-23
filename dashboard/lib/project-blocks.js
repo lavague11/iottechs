@@ -81,5 +81,5 @@ export const ROLE_NOTES = {
 export const FINDINGS = [
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Sales sees NOTHING in the Install phase — no branch exists." },
   { tag: "MISSING",   cls: "rm-i-missing",   text: "Vendor & Readonly roles have no render branch on the project page at all." },
-  { tag: "TRIM",      cls: "rm-i-trim",      text: "All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos (media kind \"install\") and the completion stamp joined the gate. Per-item dual QC signatures remain a future build." },
+  { tag: "TRIM",      cls: "rm-i-trim",      text: "All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos (media kind \"install\") and the completion stamp joined the gate. Per-item QC acceptance (manager + customer, per device, own fingerprint) is live; the whole-list sign-offs remain the gate." },
 ];

@@ -7,7 +7,7 @@ import {
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
-  getStageAcceptances, acceptStage, unacceptStage, updateStage,
+  getStageAcceptances, notifyRoles, createNotification, getCustomerUserForProject, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
   getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, requestNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
@@ -754,27 +754,47 @@ export async function acceptStageAction(accessId, stage, on = true) {
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   // QC sign-offs (Phase 2): the manager approves, the customer confirms the walkthrough — each bound
   // to the QC checklist's fingerprint, and only once every device passes. Nobody signs for the other.
+  // Per-item QC (Phase 3): "qc_item:<deviceId>:manager|customer" — same primitive, bound to THAT
+  // device's checks; a device with an open install issue cannot be accepted until it's cleared.
   const QC_SIGNERS = { qc_manager: ["admin", "manager"], qc_customer: ["customer"] };
-  if (!["site_survey", "mockup"].includes(stage) && !QC_SIGNERS[stage]) return { error: "Bad stage." };
-  if (QC_SIGNERS[stage] && !QC_SIGNERS[stage].includes(tok.role)) return { error: "Not your sign-off." };
+  const itemM = /^qc_item:([^:]+):(manager|customer)$/.exec(String(stage || ""));
+  const signerKey = itemM ? `qc_${itemM[2]}` : stage;
+  if (!["site_survey", "mockup"].includes(stage) && !QC_SIGNERS[signerKey]) return { error: "Bad stage." };
+  if (QC_SIGNERS[signerKey] && !QC_SIGNERS[signerKey].includes(tok.role)) return { error: "Not your sign-off." };
   // Capture the CURRENT data fingerprint server-side so a later change voids this approval.
   const meta = getToolMeta(accessId);
-  let fp;
+  let fp, itemName = null;
   if (stage === "site_survey") fp = meta.survey.fingerprint;
   else if (stage === "mockup") fp = meta.mockup.fingerprint;
-  else {
+  else if (itemM) {
+    const it = (meta.qc.list || []).find((x) => x.id === itemM[1]);
+    if (!it) return { error: "Device not found." };
+    if (on && it.openIssues) return { error: "Resolve the open issue on this device first." };
+    if (on && !it.pass) return { error: "This device hasn't passed QC yet." };
+    fp = it.fingerprint; itemName = it.name;
+  } else {
     if (on && !meta.qc.allPass) return { error: "Every device must pass QC first." };
     fp = meta.qc.fingerprint;
   }
   const acceptances = on
     ? acceptStage(accessId, stage, actorName(tok), fp)
     : unacceptStage(accessId, stage);
-  if (QC_SIGNERS[stage]) {
+  if (QC_SIGNERS[signerKey]) {
+    const isCust = signerKey === "qc_customer";
+    const what = itemName ? `QC on ${itemName}` : "QC";
     logProjectEvent(accessId, {
-      kind: on ? (stage === "qc_customer" ? "sign" : "approve") : "change",
-      label: stage === "qc_customer" ? `QC walkthrough ${on ? "confirmed by the customer" : "confirmation withdrawn"}` : `QC ${on ? "approved" : "approval withdrawn"}`,
+      kind: on ? (isCust ? "sign" : "approve") : "change",
+      label: isCust ? `${itemName ? what : "QC walkthrough"} ${on ? "confirmed by the customer" : "confirmation withdrawn"}` : `${what} ${on ? "approved" : "approval withdrawn"}`,
       actor: actorName(tok),
     });
+    // QC needs attention: the office approving nudges the customer to confirm; a customer
+    // confirmation lands on the office desk. Canonical notification store, nothing new.
+    if (on) {
+      try {
+        if (isCust) notifyRoles(["admin", "manager"], { type: "qc", title: "Customer confirmed QC", body: `${actorName(tok)} confirmed ${itemName ? itemName : "the walkthrough"} (${accessId}).`, link: `/project/${accessId}` });
+        else { const cu = getCustomerUserForProject(accessId); if (cu?.id) createNotification({ user_id: cu.id, type: "qc", title: "Please confirm your walkthrough", body: `${itemName ? itemName + " passed QC" : "Every device passed QC"} — confirm in your project.`, link: `/project/${accessId}` }); }
+      } catch {}
+    }
   }
   const newStage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
