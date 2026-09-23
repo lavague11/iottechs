@@ -682,6 +682,7 @@ export async function saveToolDataAction(accessId, tool, data) {
     : tool === "install" ? ["admin", "manager", "tech"]
     : tool === "addendum" ? ["admin", "manager", "sales", "customer"]  // office builds, customer approves
     : tool === "receiving" ? ["admin", "manager", "sales", "tech"]     // office/tech mark gear received
+    : tool === "tracking" ? ["admin", "manager", "vendor"]              // office + the supplying vendor record shipments
     : tool === "techs" ? ["admin", "manager"]                          // crew assignment — admin/manager only, not sales
     : tool === "qc" ? ["admin", "manager", "tech"]                     // office + installing tech run QC
     : ["admin", "manager", "sales"];

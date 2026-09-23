@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { getToolDataAction, saveToolDataAction, trackPackageAction } from "./proposal-actions";
 import ReceivingChecklist from "./receiving-checklist";
 import { Wordmark } from "../../components/brand";
+import { can } from "../../../lib/roles";
 
 // Fulfillment-stage panel. For the customer it's the "what happens next" page right after
 // their deposit: the next appointment, the equipment timeline (1–2 days processing, 3–5 days
@@ -241,7 +242,7 @@ function CinematicTracking({ tracking }) {
 
 // ---- Panel --------------------------------------------------------------------------------
 export default function ShipmentTracking({ accessId, role, preview, proposal, onStatus }) {
-  const isStaff = ["admin", "manager"].includes(role);
+  const isStaff = can(role, "tracking.edit");   // office + the vendor may record shipments
   // Shipments — a project's equipment usually arrives in several boxes. Record shape:
   // { shipments: [{number, carrier, status, eta, note}, …] } (legacy single-object records
   // are normalized into a one-element list on load).

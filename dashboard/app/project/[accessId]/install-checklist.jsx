@@ -11,6 +11,7 @@ import {
 import { IssueFlag, IssueSheet, HistorySheet, ISSUE_CSS } from "./install-issues";
 import { InstallPhotos, InstallPhotosButton, PHOTOS_CSS } from "./install-photos";
 import { listInstallIssuesAction } from "./actions";
+import { can } from "../../../lib/roles";
 
 // Install work order + live status. List style: each line has a tappable progress ring (advance
 // a step), undo, and a note. It's also a builder for the office/tech — add & delete line items,
@@ -38,9 +39,9 @@ const newId = () => `c${Date.now().toString(36)}${_cid++}`;
 
 export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, onIssues, staffUsers = [], embedded = false }) {
   const isCustomer = role === "customer";
-  const canEdit  = !readOnly && !isCustomer;   // tech / admin / manager may mark + add + delete
-  const canPrice = !isCustomer;                // can SEE pricing (tech + office)
-  const canEditPay = canEdit && role !== "tech"; // can CHANGE pay amounts — office only, never tech
+  const canEdit  = !readOnly && can(role, "install.edit");     // tech / admin / manager may mark + add + delete
+  const canPrice = can(role, "install.pay.view");              // payout figures (never sales, never customer)
+  const canEditPay = canEdit && can(role, "install.pay.edit"); // office only, never tech
 
   // Issue flags (server-owned; see install-issues.jsx). Loaded for every internal viewer.
   const [issues, setIssues] = useState([]);

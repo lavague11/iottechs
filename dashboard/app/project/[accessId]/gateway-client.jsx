@@ -3,6 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
+import { can } from "../../../lib/roles";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
@@ -221,6 +222,8 @@ const ROLE_BAR = {
   customer: { c: "#4b6a9b", cd: "#37547e", glow: "rgba(75,106,155,.18)" },
   tech:     { c: "#2f7d5a", cd: "#245f45", glow: "rgba(47,125,90,.18)" },
   sales:    { c: "#7a5ea8", cd: "#5f4884", glow: "rgba(122,94,168,.18)" },
+  vendor:   { c: "#2f7d5a", cd: "#245f45", glow: "rgba(47,125,90,.18)" },
+  readonly: { c: "#6f7686", cd: "#4f5560", glow: "rgba(111,118,134,.18)" },
 };
 
 // ---- Notification bell ----
@@ -1813,6 +1816,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // A completed project is locked: its stage tools go read-only so a closed job can't be
   // silently re-edited. Admin/manager can Reopen from the Completion panel to make changes.
   const locked = !!lp.completed_at;
+  // Every mutation control off: previewing another role, a completed project, or the read-only role.
+  const viewOnly = !!previewRole || locked || cView === "readonly";
 
   // ---- Customer journey pointer ----
   // The customer's view follows THEIR outstanding to-do, not how far the office has pushed the
@@ -2275,6 +2280,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       ) }];
     };
     const deckToolsFor = (pk) => {
+      // Vendor: an explicit, narrow branch — shipment tracking only (their job), nothing else renders.
+      if (cView === "vendor") {
+        if (pk === "ph_install") return [{ name: "Shipment Tracking", label: "Tracking", state: shipStatus?.delivered ? "done" : "active",
+          node: <div style={{ padding: "16px 18px" }}><ShipmentTracking accessId={lp.access_id} role="vendor" preview={viewOnly} proposal={null} onStatus={setShipStatus} /></div> }];
+        return [{ name: phaseLabelOf(pk), label: "—", node: <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>Nothing for vendors in this step.</b></div></div> }];
+      }
       if (pk === "ph_survey") {
         // Server tool-meta + the widget's live "has data" signal → drives the Submit/Approve bar.
         const svMeta = toolMeta?.survey || { has: false };
@@ -2354,12 +2365,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
             planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
             hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams}
-            devReadOnly={cView === "customer"} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
+            devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }
       if (pk === "ph_proposal") {
         const tools = [];
-        if (["admin", "manager", "sales", "customer", "tech"].includes(cView)) {
+        if (["admin", "manager", "sales", "customer", "tech", "readonly"].includes(cView)) {
           tools.push({ name: "Proposal", label: "Proposal builder", heavy: true,
             // Office/customer: green once submitted or accepted. Tech: this phase is THEIR acceptance of
             // the work order (bar label "Accept"), so it tracks tech_signed_name, not the proposal's status.
@@ -2425,12 +2436,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return [{ name: "Proposal", label: "Proposal", wide: true, node: merged }];
           }
         }
-        if (["admin", "manager"].includes(cView) && tools.length) return mergedPage("Proposal", tools) || tools;
+        if (["admin", "manager", "readonly"].includes(cView) && tools.length) return mergedPage("Proposal", tools) || tools;
         return tools.length ? tools : [{ name: "Proposal", label: "—" }];
       }
       if (pk === "ph_install") {
         const tools = [];
-        const staff = ["admin", "manager"].includes(cView);
+        const staff = ["admin", "manager", "readonly"].includes(cView);   // readonly renders like the office, every control off
         const pad = { padding: "16px 18px" };
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
         // Install scheduling moved to the contact action bar + the header chip (openSchedule) — no tool card.
@@ -2451,9 +2462,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const techLocked = cView === "tech" && !(woAccepted && dOpen);
         // Job-site add-ons on top — a job-site change order is the thing staff/tech reach for first when
         // something on site differs from the proposal. Staff/tech always; customer only once one exists.
-        if (staff || cView === "tech" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
+        // Sales gets the add-ons read-only (status + line items; the component hides payout for them).
+        if (staff || cView === "tech" || cView === "sales" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Addendum", label: "Add-ons",
-            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
+            node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={viewOnly} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {
@@ -2469,7 +2481,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   )}
                 </div></div>
               : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
-                  role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)}
+                  role={cView} readOnly={viewOnly || !can(cView, "install.edit")} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)}
                   onIssues={() => refreshAcceptances()} staffUsers={staffUsers} /></div> });
         }
         // Customer: the calm post-approval home — Approved → Preparing → Installation Confirmed. This
@@ -2525,7 +2537,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return [{ name: "Install", label: "Install", wide: true, node: merged }];
           }
         }
-        if (["admin", "manager"].includes(cView)) return mergedPage("Install", tools, { labelFirst: true }) || tools;
+        // Sales: READ-ONLY Install page (status, line items, add-ons, issue state) — no pay, no edits.
+        if (["admin", "manager", "readonly", "sales"].includes(cView)) return mergedPage("Install", tools, { labelFirst: true }) || tools;
         return tools;
       }
       if (pk === "ph_wrap") {
@@ -2535,9 +2548,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
         // Closeout order: the device/Activation QR upload sits at the TOP (techs upload it here and
         // shouldn't have to scroll past the whole QC checklist), then Final Payment, then internal QC.
-        if (["admin", "manager", "tech"].includes(cView)) {
+        if (["admin", "manager", "tech", "readonly"].includes(cView)) {
           tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
-            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} /></div> });
+            node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly={viewOnly} /></div> });
         } else if (cView === "customer" && lp.system_qr) {
           // Customer only sees the Activation QR once it actually exists — no empty stub.
           tools.push({ name: "System QR", label: "Activation QR",
@@ -2558,7 +2571,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
             state: (custFacts.qc_manager_approved && custFacts.qc_customer_signed) ? "done" : "active",
             node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
-              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+              readOnly={viewOnly} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
               signoff={qcSignoff} onSaved={refreshAcceptances} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
               onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} /></div> });
         } else if (toolMeta?.qc?.allPass || acceptances?.qc_customer) {
@@ -2586,7 +2599,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>
           ) }];
         }
-        if (["admin", "manager"].includes(cView)) return mergedPage("Closeout", tools) || tools;
+        if (["admin", "manager", "readonly"].includes(cView)) return mergedPage("Closeout", tools) || tools;
         return tools;
       }
       return [{ name: `${phaseLabelOf(pk)} tools`, label: "Ports next" }];
@@ -2698,15 +2711,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       code: lp.access_id,
       name: lp.customer,
       statusText: stageShortLabel(barMarker),
+      // A vendor gets the job-site address (delivery) and nothing personal — no name, phone or email.
       fields: [
-        lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null },
+        can(cView, "customer.contact.view") && lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null },
         lp.address && { k: "Job site", v: lp.address, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lp.address)}` },
-        lp.contact_email && { k: "Email", v: lp.contact_email, href: `mailto:${lp.contact_email}` },
+        can(cView, "customer.contact.view") && lp.contact_email && { k: "Email", v: lp.contact_email, href: `mailto:${lp.contact_email}` },
       ].filter(Boolean),
       actions: [
-        lp.contact_phone && { label: "Call", icon: DVI.call, href: `tel:${lp.contact_phone}`,
+        can(cView, "customer.contact.view") && lp.contact_phone && { label: "Call", icon: DVI.call, href: `tel:${lp.contact_phone}`,
           onClick: () => { if (!previewRole && cView !== "customer") logCallAction(lp.access_id, lp.customer); } },
-        lp.contact_email && { label: "Message", icon: DVI.mail, href: `mailto:${lp.contact_email}` },
+        can(cView, "customer.contact.view") && lp.contact_email && { label: "Message", icon: DVI.mail, href: `mailto:${lp.contact_email}` },
         { label: "Directions", icon: DVI.dir, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lp.address || "")}` },
         // Scheduling is internal only — the customer never books; dispatch assigns and the status reflects it.
         cView !== "customer" && { label: "Schedule", icon: DVI.cal, onClick: (e) => { e.preventDefault(); openSchedule(schedKindNow); } },
@@ -2801,7 +2815,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}
         onPreviewRole={onPreviewRole}
-        previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales"] : []}
+        previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
         onLock={onReAuth}
       />
       {schedModal && (
@@ -3662,7 +3676,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               ) : (
                 <>
                   <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Work Order" completable bare>
-                    <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
+                    <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role="tech" readOnly={viewOnly} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
                   </FlowStep>
                   <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
                     <InstallAddendum accessId={lp.access_id} role="tech" readOnly customerName={lp.contact_name || lp.customer} />
@@ -3700,10 +3714,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             <ShipmentTracking accessId={lp.access_id} role={cView} preview={!!previewRole} proposal={proposalData} onStatus={setShipStatus} />
           </FlowStep>
           <FlowStep n={1} total={2} status={installDone ? "done" : "active"} color="#C9A96E" required title="Work Order" completable bare>
-            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
+            <InstallChecklist accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address} role={cView} readOnly={viewOnly} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} />
           </FlowStep>
           <FlowStep n={2} total={2} status="open" color="#C9A96E" title="Job-Site Add-ons" completable bare>
-            <InstallAddendum accessId={lp.access_id} role={cView} readOnly={!!previewRole || locked} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
+            <InstallAddendum accessId={lp.access_id} role={cView} readOnly={viewOnly} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
           </FlowStep>
         </div>
         </AccordionProvider>

@@ -28,6 +28,8 @@ export const ROLES = [
   { key: "sales",    label: "Sales",      color: "#7c3aed" },
   { key: "tech",     label: "Technician", color: "#1c8a45" },
   { key: "customer", label: "Customer",   color: "#3257ff" },
+  { key: "vendor",   label: "Vendor",     color: "#2f7d5a" },
+  { key: "readonly", label: "Read-only",  color: "#6f7686" },
 ];
 
 // Mirrors deckToolsFor() in gateway-client.jsx (the deck is the live project page). Scheduling is no
@@ -36,30 +38,33 @@ export const ROLES = [
 export const PHASE_BLOCKS = {
   // Consulting = the System Planner (survey map + camera views), one workspace for every role.
   ph_survey: [
-    { name: "Site Survey",                 access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view" } },
-    { name: "Mockups",                     access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view" } },
+    { name: "Site Survey",                 access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view", readonly: "view" } },
+    { name: "Mockups",                     access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view", readonly: "view" } },
   ],
   ph_proposal: [
-    { name: "Proposal",                    access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit" } },
+    { name: "Proposal",                    access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit", readonly: "view" } },
     { name: "Tech Board",                  access: { tech: "view" } },
-    { name: "Approval & Deposit",          access: { admin: "edit", manager: "edit", customer: "edit" } },
+    { name: "Approval & Deposit",          access: { admin: "edit", manager: "edit", customer: "edit", readonly: "view" } },
     { name: "Create Work Order",           access: { admin: "edit", manager: "edit" } },
   ],
+  // Sales reads Install (status, line items, add-ons, issue state) — never pay, rates or edits.
+  // Vendor sees shipment tracking only. Readonly sees the office layout with every control off.
   ph_install: [
-    { name: "Addendum",                    access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
-    { name: "Work Order",                  access: { admin: "edit", manager: "edit", tech: "edit" } },
+    { name: "Addendum",                    access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", customer: "view", readonly: "view" } },
+    { name: "Work Order",                  access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", readonly: "view" } },
+    { name: "Shipment Tracking",           access: { vendor: "edit" } },
     { name: "Project Ready",               access: { customer: "view" } },
     { name: "Set Up Your Phone",           access: { customer: "view" } },
   ],
   // Step 4 — Closeout: Activation QR handover, final payment, internal QC.
   ph_wrap: [
-    { name: "System QR",                   access: { admin: "edit", manager: "edit", tech: "edit", customer: "view" } },
+    { name: "System QR",                   access: { admin: "edit", manager: "edit", tech: "edit", customer: "view", readonly: "view" } },
     { name: "Final Payment",               access: { admin: "edit", manager: "edit", customer: "edit" } },
-    { name: "Quality Control",             access: { admin: "edit", manager: "edit", sales: "view", tech: "edit" } },
+    { name: "Quality Control",             access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", readonly: "view" } },
   ],
   // Step 5 — Completion: read-only "all done" wrap-up (certificate / warranty / payout).
   ph_complete: [
-    { name: "Completion / Wrap-up",        access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view" } },
+    { name: "Completion / Wrap-up",        access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view", readonly: "view" } },
   ],
 };
 
@@ -72,14 +77,15 @@ export function blocksForRole(phaseKey, role) {
 
 // Per-role caveats surfaced above the flow.
 export const ROLE_NOTES = {
-  manager: "Identical to Admin — no manager-specific restriction exists in code.",
-  sales:   "Blind in the Install phase — no render branch. Loses the job once it's being built.",
-  tech:    "Work Order stays locked until the tech has accepted it AND it's install day.",
+  manager:  "Identical to Admin — no manager-specific restriction exists in code.",
+  sales:    "Install is read-only: status, line items, add-ons and issue state — no payout, rates, edits or dispute actions.",
+  tech:     "Work Order stays locked until the tech has accepted it AND it's install day.",
+  vendor:   "Shipment tracking only, plus the job-site address. No contact details, no money, no other steps.",
+  readonly: "The office layout with every control off — nothing here mutates (server actions reject the role too).",
 };
 
 // Audit findings shown in the dark panel.
 export const FINDINGS = [
-  { tag: "MISSING",   cls: "rm-i-missing",   text: "Sales sees NOTHING in the Install phase — no branch exists." },
-  { tag: "MISSING",   cls: "rm-i-missing",   text: "Vendor & Readonly roles have no render branch on the project page at all." },
+  { tag: "MISSING",   cls: "rm-i-missing",   text: "Final Payment is not rendered for the read-only role (the payment panel is a mutation surface); everything else is." },
   { tag: "TRIM",      cls: "rm-i-trim",      text: "All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos (media kind \"install\") and the completion stamp joined the gate. Per-item QC acceptance (manager + customer, per device, own fingerprint) is live; the whole-list sign-offs remain the gate." },
 ];

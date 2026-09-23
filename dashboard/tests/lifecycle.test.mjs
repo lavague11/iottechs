@@ -132,7 +132,23 @@ test("12: addendum fingerprint — customer price/qty voids the acceptance, tech
 test("15: PHASE_BLOCKS keys match the canonical phases and never name a retired tool", () => {
   assert.deepEqual(Object.keys(PHASE_BLOCKS), PHASES.map((p) => p.key));
   const names = Object.values(PHASE_BLOCKS).flat().map((b) => b.name);
-  for (const retired of ["Shipment Tracking", "Install Scheduling", "Proposal Views", "Survey Scheduling & Notes"]) assert.ok(!names.includes(retired), retired);
+  for (const retired of ["Install Scheduling", "Proposal Views", "Survey Scheduling & Notes"]) assert.ok(!names.includes(retired), retired);
+  // Shipment Tracking survives only as the vendor's block.
+  const trk = Object.values(PHASE_BLOCKS).flat().find((b) => b.name === "Shipment Tracking");
+  assert.deepEqual(Object.keys(trk.access), ["vendor"]);
+});
+
+test("13/14: role × capability map — sales reads Install, readonly and vendor mutate nothing", async () => {
+  const { can, ROLE_KEYS, CAPS } = await import("../lib/roles.js");
+  assert.equal(can("sales", "install.view"), true);
+  for (const c of ["install.edit", "install.pay.view", "install.pay.edit", "issue.report", "issue.adjudicate", "addendum.payout.view", "stage.move"]) assert.equal(can("sales", c), false, c);
+  for (const c of Object.keys(CAPS).filter((k) => /\.(edit|report|adjudicate|move|sign|build|price)/.test(k))) assert.equal(can("readonly", c), false, c);
+  for (const c of Object.keys(CAPS).filter((k) => k !== "tracking.view" && k !== "tracking.edit")) assert.equal(can("vendor", c), false, c);
+  assert.equal(can("vendor", "tracking.edit"), true);
+  assert.equal(can("customer", "addendum.sign"), true);
+  assert.equal(can("tech", "addendum.sign"), false);
+  assert.equal(ROLE_KEYS.length, 7);
+  assert.throws(() => can("admin", "nope"));
 });
 
 test("survey skip satisfies both Consulting requirements; gateThroughIndex walks forward", () => {

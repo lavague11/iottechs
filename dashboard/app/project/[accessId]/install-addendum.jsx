@@ -4,6 +4,7 @@ import { titleCase } from "../../../lib/proposal";
 import { getToolDataAction, saveToolDataAction, signAddendumAction } from "./proposal-actions";
 import { logAddendumAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import { can } from "../../../lib/roles";
 
 // On-site addendum builder. Things change on the job (customer wants 3 more cameras) — the office
 // builds an addendum right on the install page: extra line items with a customer price (and tech
@@ -24,10 +25,10 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const isTech = role === "tech";
   // The technician can create an on-site add-on too, but only logs the WORK — pricing (customer charge
   // + payout) stays office-controlled, so a tech never sets or sees retail (project role rule #4).
-  const canBuild = !readOnly && ["admin", "manager", "sales", "tech"].includes(role);
-  const canVoid = !readOnly && ["admin", "manager"].includes(role); // admin/manager can void an addendum
-  const showRetail = !isTech;   // tech never sees the customer (retail) price — only their payout
-  const showPayout = !isCustomer; // office + tech see the tech payout; the customer never does
+  const canBuild = !readOnly && can(role, "addendum.build");
+  const canVoid = !readOnly && can(role, "addendum.price");      // admin/manager can void an addendum
+  const showRetail = can(role, "addendum.retail.view");          // tech never sees the customer (retail) price — only their payout
+  const showPayout = can(role, "addendum.payout.view");          // office + tech see the tech payout; customer + sales never do
 
   const [addendums, setAddendums] = useState([]);
   const [building, setBuilding] = useState(false);

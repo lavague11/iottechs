@@ -176,7 +176,9 @@ const ROLES = [
   {id:"manager",  name:"Manager",    color:"#5a6472"},
   {id:"sales",    name:"Sales",      color:"#b07a2a"},
   {id:"tech",     name:"Technician", color:"#2f6fc0"},
-  {id:"customer", name:"Customer",   color:"#2f9e6b"}
+  {id:"customer", name:"Customer",   color:"#2f9e6b"},
+  {id:"vendor",   name:"Vendor",     color:"#1f8f8f"},
+  {id:"readonly", name:"Read-only",  color:"#8a929e"}
 ];
 
 const MODEL = [
@@ -186,12 +188,12 @@ const MODEL = [
     gate:{cond:"Survey appointment <b>scheduled</b> <b>AND</b> customer <b>accepted</b> the site survey — <b>or survey skipped</b>.", ok:true,
           note:"The skip is real now (2026-09-21): projects.survey_skipped_at, set from the deck ••• menu (Skip survey / Restore survey, admin + manager only, logged as an override). It satisfies BOTH Consulting requirements, so monitoring/ADT and phone-quoted jobs don't jam at the first seam. Skipping auto-advances; restoring never rewinds."},
     blocks:[
-      {name:"Site Survey", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"read"},
+      {name:"Site Survey", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"read",readonly:"read"},
         owner:"Admin / Manager / Sales capture · Technician + Customer read",
         why:"The on-site capture inside the System Planner: measurements, aerial/satellite plan, camera positions, device photos. This is the raw material everything downstream is priced and built from. Scheduling is no longer a tool card — it lives on the contact action bar and the header chip.",
         cross:"Becomes the <b>technician's site briefing</b> at install — same data, read-only, so the crew shows up knowing where every camera goes. The <b>customer</b> reads it and approves; their only write is a comment.",
         tag:null},
-      {name:"Mockups", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"read"},
+      {name:"Mockups", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"read",readonly:"read"},
         owner:"Admin / Manager / Sales",
         why:"Proposed camera placements rendered so the customer can see the plan before paying for it (the Planner's Views mode). Turns a survey into something a customer can say yes to.",
         cross:"<b>Customer</b> views these to understand what they're buying; feeds directly into the proposal.",
@@ -208,7 +210,7 @@ const MODEL = [
     gate:{cond:"Proposal <b>sent</b> → customer <b>accepted an option</b> → <b>signed</b> (latest version, content-bound) → deposit <b>submitted</b> → deposit <b>confirmed</b>.", ok:true,
           note:"All six are check-backed — this is the most enforced phase. A signature binds to a content fingerprint; editing a signed proposal mints a new version and re-locks everything downstream. Seen live: signed but parked waiting on the deposit — the gate holding correctly."},
     blocks:[
-      {name:"Proposal", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"act"},
+      {name:"Proposal", perm:{admin:"act",manager:"act",sales:"act",tech:"read",customer:"act",readonly:"read"},
         owner:"Admin / Manager / Sales build + price · Customer accepts / declines · Tech reads",
         why:"Where the priced agreement is assembled from the survey and mockups, and where the customer accepts an option and signs. One merged page for the office (proposal + approval & deposit together), one for the customer.",
         cross:"The <b>technician's</b> copy of this phase is their <b>Accept</b> step: the card reads done only once they've accepted the work order (tech_signed_name), not when the proposal is sent.",
@@ -218,7 +220,7 @@ const MODEL = [
         why:"The tech's job-scope board rendered above the read-only proposal: what the job is, what's assigned, what it pays.",
         cross:"Read-only context so the tech accepts against a real picture of the work.",
         tag:null},
-      {name:"Approval & Deposit", perm:{admin:"act",manager:"act",customer:"act"},
+      {name:"Approval & Deposit", perm:{admin:"act",manager:"act",customer:"act",readonly:"read"},
         owner:"Customer acts · Admin / Manager record",
         why:"The customer signs the agreement and pays the deposit; the office confirms the receipt. The signature binds to a specific version + content hash — not 'the document' — so editing it afterward voids the acceptance and re-locks everything downstream. Before re-signing a revised proposal the customer sees a structured What changed (added / changed / removed / new total), then Review & Sign; the earlier signed version stays on record and a paid deposit carries forward.",
         cross:"This is the <b>customer's signature point</b>. Sign + confirmed deposit is the gate into Install.",
@@ -242,15 +244,20 @@ const MODEL = [
     gate:{cond:"Technician <b>accepted</b> the work order → customer <b>confirmed</b> the install appointment (server-recorded RSVP) → install checklist <b>complete</b> with <b>no open issue flags</b> → install <b>photos</b> uploaded (media kind install).", ok:true,
           note:"Fixed 2026-09-21: the footer's 'N of M complete' counted UI tool cards, and the admin's merged Install page collapsed to one stateless card ('0 of 1') while the tech's raw list counted a stateless Add-ons card ('0 of 2'). The merged card now inherits state from its children and only stateful cards count — every role reads the same figure."},
     blocks:[
-      {name:"Addendum", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
+      {name:"Addendum", perm:{admin:"act",manager:"act",sales:"read",tech:"act",customer:"read",readonly:"read"},
         owner:"Tech raises · Admin prices · Customer signs",
         why:"Job-site add-ons, on top of the page because it's what staff and techs reach for first when something on site differs from the proposal. The tech pre-fills a line item (unpriced); admin sets the price; it goes to the customer as a signed addendum and drops back onto the work order as a task. The customer only sees it once one exists.",
         cross:"Bidirectional: <b>customer</b> can raise one too. Payout is per task, not to the assigned tech. Techs don't sign addenda — the customer does, and the signature binds to the add-on's fingerprint (title / items / discount): an office edit after signing drops it to 'Changed — re-sign' with its history kept.",
         tag:{cls:"addenda",text:"Addendum flow — own mini signature chain"}},
-      {name:"Work Order", perm:{admin:"act",manager:"act",tech:"act"},
+      {name:"Work Order", perm:{admin:"act",manager:"act",sales:"read",tech:"act",readonly:"read"},
         owner:"Technician executes · Admin oversees",
         why:"The install checklist / claim ledger — the heart of the whole system. Each line item is a staged progression (Cable Dropped → Managed → Terminated → Mounted → Online), and each stage is a pay event. Techs mark how far they got, which claims those stages onto their sheet. Locked for the tech until the work order is accepted AND it's install day.",
-        cross:"<b>Sales sees nothing here</b> — no branch exists. <b>Customer never sees it</b> — it's an internal ops document. Tech pricing lives inside it (admin-only rate library); the tech sees the resulting pay, not the values. <b>Issue flags</b> (flag beside Rates / Show pay): any tech can flag another tech's work → Needs Review → the office assigns rework / resolves / dismisses; the claim stays in history, the flag overlays it. Per-item ownership: first claim owns the item; a second tech sees 'X is working on this' and must take over explicitly.",
+        cross:"<b>Sales reads it</b> — status and line items, never payout, rates or edits. <b>Customer never sees it</b> — it's an internal ops document. Tech pricing lives inside it (admin-only rate library); the tech sees the resulting pay, not the values. <b>Issue flags</b> (flag beside Rates / Show pay): any tech can flag another tech's work → Needs Review → the office assigns rework / resolves / dismisses; the claim stays in history, the flag overlays it. Per-item ownership: first claim owns the item; a second tech sees 'X is working on this' and must take over explicitly.",
+        tag:null},
+      {name:"Shipment Tracking", perm:{vendor:"act"},
+        owner:"Vendor",
+        why:"The supplying vendor's only surface: record shipments and delivery status for this job. The drawer shows them the job-site address and nothing personal.",
+        cross:"Archived for staff and customers (owner, 2026-09-04); lives on as the <b>vendor</b> branch.",
         tag:null},
       {name:"Project Ready", perm:{customer:"read"},
         owner:"System",
@@ -278,7 +285,7 @@ const MODEL = [
     gate:{cond:"Every device <b>passed QC</b> → <b>manager approved</b> → <b>customer confirmed the walkthrough</b> → <b>final balance paid</b>.", ok:true,
           note:"Phase 2 (2026-09-22): both sign-offs are server facts (stage_acceptances qc_manager / qc_customer) bound to the QC checklist's fingerprint — change a check after signing and the sign-off reads void until re-signed. Per-item acceptance is live too (same primitive, one fingerprint per device); the whole-list sign-offs remain what gates Closeout."},
     blocks:[
-      {name:"System QR", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
+      {name:"System QR", perm:{admin:"act",manager:"act",tech:"act",customer:"read",readonly:"read"},
         owner:"Technician uploads · Customer receives",
         why:"The activation QR that onboards the customer into the app to see their cameras. Sits at the top of Closeout so techs don't scroll past the whole QC checklist to upload it. The customer only sees it once it exists.",
         cross:"Shared surface — the handoff from installed hardware to a working system the customer can actually use.",
@@ -288,7 +295,7 @@ const MODEL = [
         why:"The customer pays the remaining balance. Partial payment leaves closeout incomplete — the gate won't clear.",
         cross:"The one enforced Closeout fact. Auto-advances to Completion once the balance hits $0.",
         tag:null},
-      {name:"Quality Control", perm:{admin:"act",manager:"act",sales:"read",tech:"act"},
+      {name:"Quality Control", perm:{admin:"act",manager:"act",sales:"read",tech:"act",readonly:"read"},
         owner:"Technician + Manager · internal",
         why:"The adjudication of the claim ledger. Improper work is stripped and reassigned to whoever fixes it. Not shown to the customer (their phone-setup guide moved to Install).",
         cross:"<b>Two sign-offs</b>: the manager approves, the customer confirms the walkthrough (their card in Closeout, shown only once every device passes) — both bound to the checklist fingerprint. <b>Per device</b> too: each item carries Installed / QC Approved / Customer Confirmed chips; a per-item acceptance binds to that device's own fingerprint, and a device with an open install flag can't pass QC until it's cleared.",
@@ -306,7 +313,7 @@ const MODEL = [
     gate:{cond:"Terminal state — nothing gates out of here. Its one step (completion documents) is backed by the completed_at stamp.", ok:true,
           note:"Completion is terminal for the original agreement. A post-completion addendum does NOT re-lock the parent — it's a new signed version scoped only to its own line items."},
     blocks:[
-      {name:"Completion / Wrap-up", perm:{admin:"act",manager:"act",sales:"read",tech:"read",customer:"read"},
+      {name:"Completion / Wrap-up", perm:{admin:"act",manager:"act",sales:"read",tech:"read",customer:"read",readonly:"read"},
         owner:"System issues · Customer + Tech receive",
         why:"Certificate and warranty issued to the customer; final payout settled for the technician — the ledger closes and the bonus resolves (piece-rate earned minus per-diem drawn, plus the vehicle/tools uplift).",
         cross:"<b>Customer</b> gets the certificate; <b>technician</b> sees the final payout. Both chains settle here.",
@@ -319,8 +326,7 @@ const MODEL = [
 ];
 
 const FINDINGS = [
-  {tag:"missing", text:"Sales sees nothing in the Install phase — no branch exists.", fix:"Decide what Sales needs at install (likely read-only status) and add the branch."},
-  {tag:"missing", text:"Vendor & Readonly roles have no render branch on the project page at all.", fix:"Readonly is a view-everything-act-nothing role; Vendor needs a surface only if shipment tracking comes back."},
+  {tag:"missing", text:"Final Payment is not rendered for the read-only role (the payment panel is a mutation surface); everything else is.", fix:"Add a read-only payment summary if auditors need it."},
   {tag:"trim", text:"All 16 requirement-steps are check-backed (2026-09-23): appointment RSVP, install photos and the completion stamp joined the gate. Issue flags (Needs Review / Needs Rework) block install completion until resolved or dismissed.", fix:"Nothing outstanding on the gate side."}
 ];
 

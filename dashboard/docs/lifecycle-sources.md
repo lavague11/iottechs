@@ -24,7 +24,9 @@ Investigation 2026-09-21 (read-only at the time); resolution shipped 2026-09-21/
 
 Tests: `npm test` (node --test) — `tests/lifecycle.test.mjs` covers the ledger's matrix items 1–3, 5–12, 15 plus forward-only gating and the survey skip.
 
-Still open by design: Sales has no Install branch and Vendor/Readonly have no render branch (P5).
+| *Ledger P5* (2026-09-23) | **Role / visibility.** `lib/roles.js` — one role × capability map (`can(role, cap)`, 7 roles incl. vendor + readonly) used by the deck, the work order, add-ons and tracking. Sales: read-only Install (Work Order without pay/rates/quick-fill, Add-ons without payout, issue state visible, no actions). Vendor: an explicit branch — Shipment Tracking only (can record shipments; `tracking` blob writers now admin/manager/vendor), job-site address only in the drawer (no name/phone/email), "Nothing for vendors in this step" elsewhere. Readonly: the office layout with every control off (`viewOnly` = preview ∨ completed ∨ readonly; Final Payment not rendered). Admin/manager can preview vendor + readonly. Role map lists all 7 roles. | closes P5 |
+
+Nothing left open from the ledger's P1–P5.
 
 ## Headline answers
 

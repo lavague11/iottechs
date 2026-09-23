@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "TZ=America/New_York next start",
     "start:local": "next start -p 3100",
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.5",
