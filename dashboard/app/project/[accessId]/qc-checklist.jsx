@@ -1,52 +1,69 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, cloneElement } from "react";
 import { titleCase } from "../../../lib/proposal";
-import { getToolDataAction, saveToolDataAction } from "./proposal-actions";
+import { getToolDataAction, saveToolDataAction, acceptStageAction } from "./proposal-actions";
 import { setStage } from "./actions";
+import { installItemsFromProposal, QC_LABOR_RX, qcChecksFor as checksFor } from "../../../lib/install-checklist-model";
 
 // Quality-control checklist for the QC stage. The office (or the installing tech) verifies each
 // installed device works before the job closes. Items come from the accepted proposal — same list
-// the install checklist worked from. When every item passes, admin/manager can advance to Completion.
-// Stored in the "qc" tool record. The customer sees a read-only pass summary; no pricing anywhere.
+// the install checklist worked from, derived by the shared model so the server gate counts the same
+// devices. Stored in the "qc" tool record. The customer sees a read-only pass summary; no pricing.
+// Two sign-offs close it (Phase 2): manager approval + customer walkthrough confirmation, each bound
+// to the checklist's fingerprint (server-side, stage_acceptances) — see <QcSignoff>.
 
-// Standard checks per device type. An item passes QC only when ALL of its checks are ticked.
-const CHECKS = {
-  camera: ["Online", "Angle OK", "Recording", "Night Vision"],
-  nvr:    ["Powered On", "Recording", "Remote Access"],
-  pos:    ["Online", "Recording"],
-  equip:  ["Working"],
-};
-const checksFor = (type) => CHECKS[type] || CHECKS.equip;
+const fmtWhen = (t) => { try { return new Date(String(t).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric" }); } catch { return ""; } };
 
-const LABOR_RX = /drop|cable|run|termination|mount|management|program|setup|labor|install|per diem|test|tone|waterproof/i;
+// The two QC sign-offs. `meta` = toolMeta.qc { allPass, fingerprint }, `acceptances` = the project's
+// stage_acceptances map. Renders nothing until QC has passed (or a sign-off already exists), then one
+// line per signer: ✓ with who/when, "Edited — re-approve" when the checklist changed after signing,
+// a single action button for the role whose turn it is, or an "awaiting" state for everyone else.
+export function QcSignoff({ accessId, role, meta, acceptances, preview, onChange, localAllPass = false }) {
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState(null);
+  // `localAllPass` = the checklist's live state (the server meta lags the debounced save by ~½s).
+  const allPass = !!(meta?.allPass || localAllPass);
+  const mgr = acceptances?.qc_manager, cust = acceptances?.qc_customer;
+  if (!allPass && !mgr && !cust) return null;
+  const current = (a) => !!(allPass && a && a.fingerprint === meta?.fingerprint);
+  const isOffice = ["admin", "manager"].includes(role), isCustomer = role === "customer";
+  async function sign(stage) {
+    if (busy || preview) return;
+    setBusy(stage); setErr(null);
+    const r = await acceptStageAction(accessId, stage, true);
+    setBusy(null);
+    if (r?.error) { setErr(r.error); return; }
+    onChange?.(r.acceptances, r.stage);
+  }
+  const row = (key, a, label, mine, verb) => {
+    const ok = current(a);
+    const stale = !!a && !ok;
+    return (
+      <div className={`qcs-row${ok ? " ok" : ""}`} key={key}>
+        <span className="qcs-dot">{ok ? "✓" : ""}</span>
+        <span className="qcs-lbl">{label}</span>
+        {ok ? <span className="qcs-meta">{a.by || ""}{a.at ? ` · ${fmtWhen(a.at)}` : ""}</span>
+          : mine && allPass ? <button type="button" className="qcs-btn" disabled={!!busy || preview} onClick={() => sign(key)}>{busy === key ? "…" : stale ? `Re-${verb.toLowerCase()}` : verb}</button>
+          : <span className="qcs-meta">{stale ? "Edited — re-sign" : "Awaiting"}</span>}
+      </div>
+    );
+  };
+  return (
+    <div className="qcs">
+      {row("qc_manager", mgr, "Manager", isOffice, "Approve")}
+      {row("qc_customer", cust, "Customer walkthrough", isCustomer, "Confirm")}
+      {err && <div className="qc-err">{err}</div>}
+    </div>
+  );
+}
 
-export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange, embedded = false }) {
+export default function QCChecklist({ accessId, proposal, customerName, role, readOnly, userName, onStageChange, embedded = false, signoff = null, onSaved = null }) {
   const isCustomer = role === "customer";
   const canEdit = !readOnly && ["admin", "manager", "tech"].includes(role);
   const canAdvance = !readOnly && ["admin", "manager"].includes(role);
 
   // Derive the installed items from the accepted option (cameras, recorder, other equipment).
-  const items = (() => {
-    const out = [];
-    const opt = proposal?.payload?.options?.find((o) => o.id === proposal.selected_option) || proposal?.payload?.options?.[0];
-    (opt?.services || []).forEach((s) => {
-      (s.items || []).forEach((it) => {
-        const hasSub = (it.sub || []).length > 0;
-        if (s.key === "camera" && hasSub) { out.push({ id: it.id, name: it.name, type: "camera" }); return; }
-        if ((s.key === "toast" || s.key === "pos") && hasSub) { out.push({ id: it.id, name: it.name, type: "pos" }); return; }
-        if (/\bnvr\b|recorder/i.test(it.name)) { out.push({ id: it.id, name: it.name, type: "nvr" }); return; }
-        if (!hasSub && !LABOR_RX.test(it.name)) { out.push({ id: it.id, name: it.name, type: "equip" }); }
-      });
-    });
-    // One recorder only — collapse a stale double-NVR to the highest channel count.
-    const nvrs = out.filter((e) => e.type === "nvr");
-    if (nvrs.length > 1) {
-      const chanOf = (n) => { const m = String(n).match(/(\d+)\s*-?\s*channel/i); return m ? +m[1] : 0; };
-      const best = nvrs.reduce((a, b) => (chanOf(b.name) > chanOf(a.name) ? b : a));
-      return out.filter((e) => e.type !== "nvr" || e === best);
-    }
-    return out;
-  })();
+  const items = installItemsFromProposal(proposal, QC_LABOR_RX);
 
   const [checks, setChecks] = useState({}); // { itemId: { checkName: true } }
   const [issues, setIssues] = useState({}); // { itemId: "issue note" }
@@ -71,7 +88,8 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
     if (first.current) { first.current = false; return; }
     if (!canEdit) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveToolDataAction(accessId, "qc", JSON.stringify({ checks, issues })), 500);
+    // After the save lands, let the page re-read the server meta (pass state + fingerprint drive the gate + sign-offs).
+    saveTimer.current = setTimeout(() => saveToolDataAction(accessId, "qc", JSON.stringify({ checks, issues })).then(() => onSaved?.()).catch(() => {}), 500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checks, issues]);
 
@@ -163,6 +181,8 @@ export default function QCChecklist({ accessId, proposal, customerName, role, re
 
       {err && <div className="qc-err">{err}</div>}
 
+      {signoff && cloneElement(signoff, { localAllPass: allPass })}
+
       {allPass ? (
         canAdvance ? (
           <button type="button" className="qc-advance" disabled={advancing} onClick={advance}>
@@ -223,5 +243,14 @@ const QC_CSS = `
 .qc-advance:hover:not(:disabled){filter:brightness(1.12)}
 .qc-advance:disabled{opacity:.6;cursor:default}
 .qc-done-note{text-align:center;font-size:.84rem;font-weight:600;color:var(--dv-green,#2E7D5B);padding:6px}
+/* Sign-offs */
+.qcs{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-top:10px}
+.qcs-row{display:flex;align-items:center;gap:10px;min-height:30px}
+.qcs-dot{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:1.5px solid var(--dv-line,#E4E4DF);background:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:#fff}
+.qcs-row.ok .qcs-dot{background:var(--dv-green,#2E7D5B);border-color:var(--dv-green,#2E7D5B)}
+.qcs-lbl{flex:1;min-width:0;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418)}
+.qcs-meta{font-size:.78rem;color:var(--dv-meta,#787D84)}
+.qcs-btn{height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
+.qcs-btn:disabled{opacity:.6;cursor:default}
 .qc-pending-note{text-align:center;font-size:.8rem;color:var(--dv-faint,#A1A6AC);padding:2px}
 `;

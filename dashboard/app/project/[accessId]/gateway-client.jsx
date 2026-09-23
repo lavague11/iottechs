@@ -29,7 +29,7 @@ import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
 import SystemQrTool      from "./system-qr-tool";
-import QCChecklist       from "./qc-checklist";
+import QCChecklist, { QcSignoff } from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
@@ -1839,6 +1839,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     }
   }, [bothToolsSubmitted, cView, previewRole]);
   const proposalAccepted = (proposalData?.accepted_options?.length > 0) || proposalData?.status === "accepted";
+  // A QC sign-off counts only while every device passes AND it still matches the checklist's fingerprint.
+  const qcSignedCurrent = (key) => !!(toolMeta?.qc?.allPass && acceptances?.[key] && acceptances[key].fingerprint === toolMeta.qc.fingerprint);
   const custFacts = {
     appt_date:         lp.date,
     date:              lp.date,           // stage-flow's inquiry check reads `date` (same name as buildStageFacts)
@@ -1846,6 +1848,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     survey_accepted:   lp.survey_accepted,
     survey_skipped:    !!lp.survey_skipped_at,
     survey_submitted:  !!acceptances?.submit_site_survey,
+    // Phase-2 facts: live from the loaded acceptances/tool meta once they're in, else the server snapshot.
+    install_done:        !!lp.install_done || installDone,
+    qc_passed:           acceptLoaded ? !!toolMeta?.qc?.allPass : !!lp.qc_passed,
+    qc_manager_approved: acceptLoaded ? qcSignedCurrent("qc_manager")  : !!lp.qc_manager_approved,
+    qc_customer_signed:  acceptLoaded ? qcSignedCurrent("qc_customer") : !!lp.qc_customer_signed,
     proposal_status:   proposalAccepted ? "accepted" : (proposalData?.status || lp.proposal_status || ""),
     proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
     deposit_submitted: lp.deposit_submitted,
@@ -2447,7 +2454,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
         if (cView !== "customer") {
-          tools.push({ name: "Work Order", label: "Install checklist", heavy: !techLocked, state: installDone ? "done" : "active",
+          tools.push({ name: "Work Order", label: "Install checklist", heavy: !techLocked, state: custFacts.install_done ? "done" : "active",
             node: techLocked
               ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard">
                   {!woAccepted ? (<>
@@ -2538,10 +2545,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               customerAddress={lp.address} customerPhone={lp.contact_phone} customerEmail={lp.contact_email} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
         }
         // Quality control is internal (the customer's phone-setup guide now lives in Install).
+        // Sign-off control shared by the internal checklist footer and the customer's walkthrough card.
+        const qcSignoff = (
+          <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+            onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+        );
         if (cView !== "customer") {
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
+            state: (custFacts.qc_manager_approved && custFacts.qc_customer_signed) ? "done" : "active",
             node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
-              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} /></div> });
+              readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
+              signoff={qcSignoff} onSaved={refreshAcceptances} /></div> });
+        } else if (toolMeta?.qc?.allPass || acceptances?.qc_customer) {
+          // Customer: the walkthrough confirmation appears only once every device has passed QC.
+          tools.push({ name: "Walkthrough", label: "Walkthrough",
+            node: <div style={pad}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role="customer" readOnly signoff={qcSignoff} /></div> });
         }
         // Customer: MERGE Closeout into one full-width page — Final Payment then the Activation QR
         // handover (once it exists). Both flow FULL LENGTH (documents, not maps): one page scroll,
@@ -2549,10 +2567,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         if (cView === "customer") {
           const pay = tools.find((t) => t.name === "Final Payment");
           const qr = tools.find((t) => t.name === "System QR");
+          const walk = tools.find((t) => t.name === "Walkthrough");
           const wsecs = [];
           // Activation QR at the TOP of Closeout (owner) — it's what the customer scans to set up, so
-          // it leads; the final-payment panel follows.
+          // it leads; the walkthrough confirmation (once QC passes) and the final-payment panel follow.
           if (qr) wsecs.push(["Activation QR", qr.node]);
+          if (walk) wsecs.push(["Walkthrough", walk.node]);
           if (pay) wsecs.push(["Final Payment", pay.node]);
           if (wsecs.length) return [{ name: "Closeout", label: "Closeout", wide: true, node: (
             <div className="cx-merged cx-merged--flow">

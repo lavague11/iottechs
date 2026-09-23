@@ -40,13 +40,15 @@ export const STAGE_FLOW = {
     { label: "Technician accepted the work order", who: "internal", check: (p, a) => !!(p.tech_accepted || p.tech || (a || []).some((x) => x.role === "tech")) },
     { label: "Customer confirmed the install appointment", who: "customer" },
   ],
+  // Phase 2 (2026-09-22): the work order + QC sign-offs are real server facts now (db.getToolMeta /
+  // qcSignoffFacts), so they gate. Photos + completion docs are still advisory (no data source).
   install: [
-    { label: "Install checklist completed", who: "internal" },
+    { label: "Install checklist completed", who: "internal", check: (p) => !!p.install_done },
     { label: "Install photos uploaded", who: "internal" },
   ],
   qc: [
-    { label: "Manager QC approved", who: "internal" },
-    { label: "Customer walkthrough / acceptance signed", who: "customer" },
+    { label: "Manager QC approved", who: "internal", check: (p) => !!p.qc_manager_approved },
+    { label: "Customer walkthrough / acceptance signed", who: "customer", check: (p) => !!p.qc_customer_signed },
   ],
   payment: [
     { label: "Final balance paid", who: "customer", check: (p) => !!p.final_balance_paid },

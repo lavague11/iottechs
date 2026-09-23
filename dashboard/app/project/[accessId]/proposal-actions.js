@@ -752,13 +752,30 @@ export async function acceptStageAction(accessId, stage, on = true) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
-  if (!["site_survey", "mockup"].includes(stage)) return { error: "Bad stage." };
+  // QC sign-offs (Phase 2): the manager approves, the customer confirms the walkthrough — each bound
+  // to the QC checklist's fingerprint, and only once every device passes. Nobody signs for the other.
+  const QC_SIGNERS = { qc_manager: ["admin", "manager"], qc_customer: ["customer"] };
+  if (!["site_survey", "mockup"].includes(stage) && !QC_SIGNERS[stage]) return { error: "Bad stage." };
+  if (QC_SIGNERS[stage] && !QC_SIGNERS[stage].includes(tok.role)) return { error: "Not your sign-off." };
   // Capture the CURRENT data fingerprint server-side so a later change voids this approval.
   const meta = getToolMeta(accessId);
-  const fp = stage === "site_survey" ? meta.survey.fingerprint : meta.mockup.fingerprint;
+  let fp;
+  if (stage === "site_survey") fp = meta.survey.fingerprint;
+  else if (stage === "mockup") fp = meta.mockup.fingerprint;
+  else {
+    if (on && !meta.qc.allPass) return { error: "Every device must pass QC first." };
+    fp = meta.qc.fingerprint;
+  }
   const acceptances = on
     ? acceptStage(accessId, stage, actorName(tok), fp)
     : unacceptStage(accessId, stage);
+  if (QC_SIGNERS[stage]) {
+    logProjectEvent(accessId, {
+      kind: on ? (stage === "qc_customer" ? "sign" : "approve") : "change",
+      label: stage === "qc_customer" ? `QC walkthrough ${on ? "confirmed by the customer" : "confirmation withdrawn"}` : `QC ${on ? "approved" : "approval withdrawn"}`,
+      actor: actorName(tok),
+    });
+  }
   const newStage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage: newStage, acceptances };

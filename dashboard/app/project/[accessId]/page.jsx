@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -234,6 +234,11 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   project.deposit_recorded = getProjectPayments(p.access_id).some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"); // ≥1 CONFIRMED payment
   project.tech_accepted = !!proposalRow?.tech_signed_name;              // technician accepted the work order
   project.survey_accepted = surveyStageSatisfied(p.access_id); // data-aware: only tools with data need a current approval
+  // Phase-2 gate facts (server-derived, same names as buildStageFacts) so every role's client gate
+  // agrees with the server even when that role doesn't render the work order / QC tools.
+  { const f = buildStageFacts(p.access_id) || {};
+    project.install_done = !!f.install_done; project.qc_passed = !!f.qc_passed;
+    project.qc_manager_approved = !!f.qc_manager_approved; project.qc_customer_signed = !!f.qc_customer_signed; }
   let assignments    = getProjectAssignments(p.access_id).map(r=>({...r}));
   // The access roster carries each grantee's email — including the customer's. A tech must never
   // receive the customer's contact channel, so null it out of the customer rows for tech views.

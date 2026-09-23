@@ -6,6 +6,7 @@ import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount } from "./tool-data.js";
+import { installProgress, qcProgress } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
@@ -2377,6 +2378,9 @@ export function buildStageFacts(accessId) {
     // approve → satisfied (customer can sail straight through).
     survey_accepted: surveyStageSatisfied(accessId),
     survey_skipped: !!p.survey_skipped_at,
+    // Phase-2 facts: work order fully closed out; QC passed + both sign-offs current.
+    install_done: getToolMeta(accessId).install.allDone,
+    ...qcSignoffFacts(accessId),
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
     // Signed ONLY while the signature still binds to the current content — a signed proposal that
@@ -5804,6 +5808,13 @@ export function getToolMeta(accessId) {
   const schedRow = getToolData(accessId, "schedule");
   let schedCount = 0;
   try { const s = JSON.parse(schedRow?.data || "{}"); schedCount = (Array.isArray(s.events) ? s.events : []).length; } catch { /* bad blob */ }
+  // Install work order + QC checklist, derived server-side from their blobs against the active
+  // proposal (same pure model the components use) — these are the Phase-2 gate facts.
+  const prop = getActiveProposal(accessId);
+  const installRow = getToolData(accessId, "install");
+  const qcRow = getToolData(accessId, "qc");
+  const inst = installProgress(prop, installRow?.data, addRow?.data);
+  const qc = qcProgress(prop, qcRow?.data);
   return {
     survey: { has: toolHasData(surveyTool, surveyRow?.data), fingerprint: toolFingerprint(surveyTool, surveyRow?.data),
       cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)
@@ -5811,7 +5822,16 @@ export function getToolMeta(accessId) {
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },
     schedule: { count: schedCount },
+    install: { has: !!installRow, ...inst },
+    // fingerprint = the QC checklist's content, so a sign-off is void the moment a check is changed.
+    qc: { has: !!qcRow, ...qc, fingerprint: qcRow ? toolFingerprint("qc", qcRow.data) : null },
   };
+}
+// QC sign-offs: both must be current (fingerprint matches the checklist as it stands) AND every
+// device must pass — an approval recorded on a checklist that later regressed doesn't count.
+export function qcSignoffFacts(accessId, meta = getToolMeta(accessId), acc = getStageAcceptances(accessId)) {
+  const cur = (key) => !!(meta.qc.allPass && acc[key] && acc[key].fingerprint === meta.qc.fingerprint);
+  return { qc_passed: meta.qc.allPass, qc_manager_approved: cur("qc_manager"), qc_customer_signed: cur("qc_customer") };
 }
 // The survey stage is satisfied when every tool that HAS data has a current (fingerprint-matching)
 // approval. No data on either tool → nothing to approve → satisfied.

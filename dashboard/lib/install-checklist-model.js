@@ -45,3 +45,65 @@ export const weightedInc = (type, stepIdx, payout, wpay) => {
   if (w) { const sum = w.reduce((a, b) => a + b, 0) || 1; return (w[stepIdx] || 0) / sum * payout; }
   const steps = stepsFor(type).length; return steps ? payout / steps : 0;
 };
+
+// ---- Installed-item derivation (shared by the work order, the QC checklist AND the server gate) ----
+// Which proposal lines are physical devices to install / verify: cameras + POS lines that carry a
+// labor sub-bundle, the recorder, and any plain equipment that isn't a labor line. The two
+// checklists historically kept slightly different "labor" regexes — both are preserved here so the
+// server derives exactly the list each surface shows.
+export const INSTALL_LABOR_RX = /(cat6 drop|termination|mounting|programming|waterproof|cabling|tuning|wire run|setup|\blabor\b)/i;
+export const QC_LABOR_RX      = /drop|cable|run|termination|mount|management|program|setup|labor|install|per diem|test|tone|waterproof/i;
+const parseJson = (v) => { if (v == null) return null; if (typeof v === "object") return v; try { return JSON.parse(v); } catch { return null; } };
+export function installItemsFromProposal(proposal, laborRx = INSTALL_LABOR_RX) {
+  const payload = parseJson(proposal?.payload);
+  const opt = payload?.options?.find((o) => o.id === proposal?.selected_option) || payload?.options?.[0];
+  const out = [];
+  (opt?.services || []).forEach((s) => {
+    (s.items || []).forEach((it) => {
+      const hasSub = (it.sub || []).length > 0;
+      if (s.key === "camera" && hasSub) { out.push({ id: it.id, name: it.name, type: "camera" }); return; }
+      if ((s.key === "toast" || s.key === "pos") && hasSub) { out.push({ id: it.id, name: it.name, type: "pos" }); return; }
+      if (/\bnvr\b|recorder/i.test(it.name)) { out.push({ id: it.id, name: it.name, type: "nvr" }); return; }
+      if (!hasSub && !laborRx.test(it.name)) out.push({ id: it.id, name: it.name, type: "equip" });
+    });
+  });
+  const nvrs = out.filter((e) => e.type === "nvr");
+  if (nvrs.length > 1) {   // one recorder only — collapse a stale double-NVR to the highest channel count
+    const chanOf = (n) => { const m = String(n).match(/(\d+)\s*-?\s*channel/i); return m ? +m[1] : 0; };
+    const best = nvrs.reduce((a, b) => (chanOf(b.name) > chanOf(a.name) ? b : a));
+    return out.filter((e) => e.type !== "nvr" || e === best);
+  }
+  return out;
+}
+// Work-order completion from the persisted "install" blob (+ approved add-ons from "addendum"):
+// every line item — derived, add-on, custom — sits at its last step. Mirrors the checklist's own math.
+export function installProgress(proposal, installRaw, addendumRaw) {
+  const d = parseJson(installRaw) || {};
+  const removed = Array.isArray(d.removed) ? d.removed : [];
+  const custom = Array.isArray(d.custom) ? d.custom : [];
+  const steps = d.steps || {};
+  const addons = ((parseJson(addendumRaw) || {}).addendums || []).filter((a) => a?.status === "approved")
+    .flatMap((a) => (a.items || []).flatMap((it) => {
+      const qty = Math.max(1, +it.qty || 1);
+      return Array.from({ length: qty }, (_, n) => ({ id: `${it.id}#${n}`, type: it.type || "equip" }));
+    }));
+  const items = [...installItemsFromProposal(proposal).filter((i) => !removed.includes(i.id)), ...addons.filter((a) => !removed.includes(a.id)), ...custom];
+  const total = items.reduce((a, it) => a + stepsFor(it.type).length, 0);
+  const done  = items.reduce((a, it) => a + Math.min(steps[it.id] || 0, stepsFor(it.type).length), 0);
+  return { items: items.length, total, done, allDone: total > 0 && done === total };
+}
+// QC: standard checks per device type; an item passes only when ALL of its checks are ticked.
+export const QC_CHECKS = {
+  camera: ["Online", "Angle OK", "Recording", "Night Vision"],
+  nvr:    ["Powered On", "Recording", "Remote Access"],
+  pos:    ["Online", "Recording"],
+  equip:  ["Working"],
+};
+export const qcChecksFor = (type) => QC_CHECKS[type] || QC_CHECKS.equip;
+export function qcProgress(proposal, qcRaw) {
+  const d = parseJson(qcRaw) || {};
+  const checks = d.checks || {};
+  const items = installItemsFromProposal(proposal, QC_LABOR_RX);
+  const passed = items.filter((it) => qcChecksFor(it.type).every((c) => checks[it.id]?.[c])).length;
+  return { items: items.length, passed, allPass: items.length > 0 && passed === items.length };
+}

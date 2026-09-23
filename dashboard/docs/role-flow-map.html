@@ -144,7 +144,7 @@
     <div class="eyebrow">DEV · REFERENCE MAP · LIVE MODEL</div>
     <div class="title-row">
       <h1>Role &amp; Flow Map</h1>
-      <span class="desc">What each role sees under the progress bar, phase by phase — now with the <b>reasoning</b> behind every step and the <b>handoff chain</b> across roles. <b>5 phases · 9 backend stages · 16 requirement-steps (10 gate advancement).</b> Edit the <b>MODEL</b> object to add or remove steps.</span>
+      <span class="desc">What each role sees under the progress bar, phase by phase — now with the <b>reasoning</b> behind every step and the <b>handoff chain</b> across roles. <b>5 phases · 9 backend stages · 16 requirement-steps (13 gate advancement).</b> Edit the <b>MODEL</b> object to add or remove steps.</span>
     </div>
     <div class="roletabs" id="roletabs" role="group" aria-label="Role"></div>
     <div class="legend">
@@ -161,7 +161,7 @@
   <div class="spine" id="spine"></div>
   <div id="bands"></div>
   <div class="findings" id="findings"></div>
-  <p class="foot">Single live model. Fuses the config-driven role map with the lifecycle briefing. Mirrors dashboard/lib/spec.js (PHASES), stage-flow.js (STAGE_FLOW) and project-blocks.js (PHASE_BLOCKS) as of 2026-09-22. Edit <code>MODEL</code> to change steps — the whole map re-renders from it.</p>
+  <p class="foot">Single live model. Fuses the config-driven role map with the lifecycle briefing. Mirrors dashboard/lib/spec.js (PHASES), stage-flow.js (STAGE_FLOW) and project-blocks.js (PHASE_BLOCKS) as of 2026-09-22 (Phase 2 sign-offs included). Edit <code>MODEL</code> to change steps — the whole map re-renders from it.</p>
 </div>
 
 <script>
@@ -238,8 +238,8 @@ const MODEL = [
   },
   {
     id:"install", n:3, name:"Install", color:"var(--p3)", pc:"#2f6fc0",
-    stage:"TECH: INSTALL", steps:4, gated:1, tag:"Fulfillment + Install",
-    gate:{cond:"Technician <b>accepted</b> the work order. (Install checklist complete + photos uploaded are <b>advisory</b> — listed, never enforced.)", ok:true,
+    stage:"TECH: INSTALL", steps:4, gated:2, tag:"Fulfillment + Install",
+    gate:{cond:"Technician <b>accepted</b> the work order <b>AND</b> install checklist <b>complete</b> (every line item at its last step — derived server-side from the work order). Photos uploaded is <b>advisory</b>.", ok:true,
           note:"Fixed 2026-09-21: the footer's 'N of M complete' counted UI tool cards, and the admin's merged Install page collapsed to one stateless card ('0 of 1') while the tech's raw list counted a stateless Add-ons card ('0 of 2'). The merged card now inherits state from its children and only stateful cards count — every role reads the same figure."},
     blocks:[
       {name:"Addendum", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
@@ -274,9 +274,9 @@ const MODEL = [
   },
   {
     id:"closeout", n:4, name:"Closeout", color:"var(--p4)", pc:"#2f9e6b",
-    stage:"TECH: CLOSEOUT", steps:3, gated:1, tag:"QC + Payment",
-    gate:{cond:"<b>Final balance paid</b>. (Manager QC approved + customer walkthrough signed are <b>advisory</b> — listed, never enforced.)", ok:true,
-          note:"The joint item-by-item QC sign-off is still the ONLY genuinely new build in the rollout. Until it exists as a server-side fact it can't gate; today Closeout is enforced by money alone."},
+    stage:"TECH: CLOSEOUT", steps:3, gated:3, tag:"QC + Payment",
+    gate:{cond:"Every device <b>passed QC</b> → <b>manager approved</b> → <b>customer confirmed the walkthrough</b> → <b>final balance paid</b>.", ok:true,
+          note:"Phase 2 (2026-09-22): both sign-offs are server facts (stage_acceptances qc_manager / qc_customer) bound to the QC checklist's fingerprint — change a check after signing and the sign-off reads void until re-signed. Per-item dual signatures are still a future build; today it is one approval + one confirmation over the whole passed list."},
     blocks:[
       {name:"System QR", perm:{admin:"act",manager:"act",tech:"act",customer:"read"},
         owner:"Technician uploads · Customer receives",
@@ -291,8 +291,8 @@ const MODEL = [
       {name:"Quality Control", perm:{admin:"act",manager:"act",sales:"read",tech:"act"},
         owner:"Technician + Manager · internal",
         why:"The adjudication of the claim ledger. Improper work is stripped and reassigned to whoever fixes it. Not shown to the customer (their phone-setup guide moved to Install).",
-        cross:"<b>Two signatures</b> (tech + customer, per item) is the spec; today it's an internal checklist with no server-side sign-off fact.",
-        tag:{cls:"newbuild",text:"NEW BUILD — joint QC sign-off capture"}}
+        cross:"<b>Two sign-offs</b>: the manager approves, the customer confirms the walkthrough (their card in Closeout, shown only once every device passes). Both bound to the checklist fingerprint.",
+        tag:{cls:"addenda",text:"Per-item dual signatures — future build"}}
     ],
     handoff:[
       {role:"tech", action:"Walk QC item by item", sign:true},
@@ -321,7 +321,7 @@ const MODEL = [
 const FINDINGS = [
   {tag:"missing", text:"Sales sees nothing in the Install phase — no branch exists.", fix:"Decide what Sales needs at install (likely read-only status) and add the branch."},
   {tag:"missing", text:"Vendor & Readonly roles have no render branch on the project page at all.", fix:"Readonly is a view-everything-act-nothing role; Vendor needs a surface only if shipment tracking comes back."},
-  {tag:"trim", text:"Only 10 of the 16 requirement-steps are check-backed; the other 6 (install-appointment confirm, install ×2, QC ×2, completion docs) are advisory and never gate.", fix:"Phase 2: persist install-complete + joint QC sign-off as server-side facts so Install → Closeout → Completion gate on work, not just money."}
+  {tag:"trim", text:"13 of the 16 requirement-steps are check-backed; the other 3 (install-appointment confirm, install photos, completion docs) are advisory and never gate — none has a data source yet.", fix:"Give each a fact (appointment RSVP, photo upload, certificate issued) and add a check()."}
 ];
 
 /* ---------- render ---------- */
