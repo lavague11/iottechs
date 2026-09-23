@@ -79,6 +79,14 @@ for a project this size the overhead isn't worth it.
 - Keep audits and "check everything" sweeps scoped to what was asked — open-ended forensic digs
   are expensive and should be an explicit, deliberate request, not a default response to a bug report.
 
+## Lifecycle, roles and deck tools — the single sources
+
+- **Phases / stages / steps:** `dashboard/lib/spec.js` `PHASES` (5) · `dashboard/lib/stage-flow.js` `MASTER_ORDER` (9, asserted equal to `STAGES`) and `STAGE_FLOW` (16 requirement-steps, all `check()`-backed). The gate is `phaseGate()`; facts come from `db.buildStageFacts` / `getToolMeta` and the client must use the same field names. Trace + resolution log: `dashboard/docs/lifecycle-sources.md`.
+- **Who may do what:** `dashboard/lib/roles.js` `can(role, cap)` — 7 roles (admin, manager, sales, tech, customer, vendor, readonly). Components read it; server actions enforce it. Don't add `role === "..."` comparisons in JSX.
+- **Which deck card a role sees:** `dashboard/lib/deck-tools.js` `DECK_TOOLS` + `sees(role, phase, name)`. `PHASE_BLOCKS` (role map) IS this object; `deckToolsFor()` gates through `sees()`; `npm test` fails if a card is gated by hand.
+- **Sign-offs and flags:** everything binds to a content fingerprint in `stage_acceptances` (survey, mockup, QC whole-list + per item) or on the row (`proposals.signed_fingerprint`, addendum `signedFingerprint`); install issue flags live in `install_issues` (server-owned state machine, NEEDS_REVIEW → NEEDS_REWORK → RESOLVED | DISMISSED).
+- Tests: `npm test` (node --test, `dashboard/tests/`).
+
 ## Build & Test
 
 - Run tests after code changes when the project has them for the affected area
