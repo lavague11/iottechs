@@ -163,8 +163,11 @@ export async function reviseProposalAction(accessId) {
   if (before?.signed_name && !["admin", "manager"].includes(tok.role))
     return { error: "Only Admin & Manager can supersede a signed proposal." };
   const res = reviseProposal(accessId, actorName(tok));
-  if (before?.signed_name)
+  if (before?.signed_name) {
     logProjectEvent(accessId, { kind: "supersede", label: `Proposal v${res.fromVersion} superseded → v${res.proposal?.version} (signature voided, re-authoring)`, actor: actorName(tok) });
+    // Signature invalidated by a proposal change — tell the customer (canonical notification store).
+    try { const cu = getCustomerUserForProject(accessId); if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal changed", body: `Version ${res.fromVersion} was revised; you'll be asked to review the changes and sign again (${accessId}).`, link: `/project/${accessId}` }); } catch {}
+  }
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(res.proposal, tok.role) };
 }
@@ -239,6 +242,85 @@ export async function requestChangesAction(accessId, note) {
   if (!row) return { error: "Proposal isn't open for change requests." };
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
+}
+
+// Diff before re-sign (ledger P4): the latest SIGNED version vs the current draft, as structured
+// Added / Changed / Removed + money terms. Role-safe (cost never appears in the diff — it only
+// carries names, qty, price, discount, tax, deposit). Null when the current version is signed or
+// nothing was ever signed.
+export async function getProposalDiffAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false };
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.signed_name) return { ok: true, diff: null };
+  const { getLatestSignedVersion } = await import("../../../lib/db");
+  const prev = getLatestSignedVersion(accessId);
+  if (!prev || prev.id === cur.id) return { ok: true, diff: null };
+  const { proposalDiff } = await import("../../../lib/proposal");
+  return { ok: true, diff: proposalDiff(prev, cur), fromVersion: prev.version, toVersion: cur.version, signedBy: prev.signed_name, signedAt: prev.signed_at };
+}
+
+// Customer signs an addendum (ledger P4) — a server action, not a blob write: the customer only,
+// on their own project; the acceptance binds to the add-on's fingerprint (title / items / discount)
+// so a later office edit voids it until re-signed. Technicians never sign addenda; admin prices.
+export async function signAddendumAction(accessId, addendumId, sign) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Not authenticated." };
+  if (tok.role !== "customer") return { error: "The customer signs add-ons." };
+  if (!customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const name = String(sign?.name || "").trim();
+  if (!name) return { error: "Type your name to sign." };
+  const rec = getToolData(accessId, "addendum");
+  let d; try { d = JSON.parse(rec?.data || "{}"); } catch { d = {}; }
+  const list = Array.isArray(d.addendums) ? d.addendums : [];
+  const a = list.find((x) => x.id === addendumId);
+  if (!a) return { error: "Add-on not found." };
+  if (a.needsPricing) return { error: "This add-on hasn't been priced yet." };
+  if (a.status === "voided") return { error: "This add-on was voided." };
+  const { addendumFingerprint } = await import("../../../lib/proposal");
+  const at = new Date().toISOString();
+  const wasResign = !!a.signedFingerprint;
+  Object.assign(a, { status: "approved", signedName: name, signedAt: at, signatureData: sign?.data || null, signedFingerprint: addendumFingerprint(a), resignRequired: undefined,
+    history: [...(a.history || []), { verb: wasResign ? "re-signed" : "approved", at, by: name }] });
+  saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
+  const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
+  logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, actor: name });
+  try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch {}
+  await revalidate(accessId);
+  return { ok: true, addendums: list };
+}
+
+// Office writes to the addendum blob pass through here: an approved add-on whose customer-visible
+// content changed drops back to pending (re-sign required) and keeps its history; a newly priced
+// add-on notifies the customer that a signature is needed. Nothing here rewrites a signature.
+async function reconcileAddendumWrite(accessId, data, tok) {
+  let incoming; try { incoming = JSON.parse(data); } catch { return data; }
+  const list = Array.isArray(incoming?.addendums) ? incoming.addendums : null;
+  if (!list) return data;
+  let stored = {}; try { stored = JSON.parse(getToolData(accessId, "addendum")?.data || "{}"); } catch { stored = {}; }
+  const prevById = new Map((stored.addendums || []).map((a) => [a.id, a]));
+  const { addendumFingerprint } = await import("../../../lib/proposal");
+  const at = new Date().toISOString();
+  const who = actorName(tok);
+  const needsSig = [];
+  for (const a of list) {
+    const prev = prevById.get(a.id);
+    // Non-office roles may never flip an add-on to approved or alter a stored signature.
+    if (!["admin", "manager"].includes(tok.role) && prev && (a.status !== prev.status || a.signedFingerprint !== prev.signedFingerprint || a.signedName !== prev.signedName)) {
+      Object.assign(a, { status: prev.status, signedName: prev.signedName, signedAt: prev.signedAt, signatureData: prev.signatureData, signedFingerprint: prev.signedFingerprint });
+    }
+    if (a.status === "approved" && a.signedFingerprint && a.signedFingerprint !== addendumFingerprint(a)) {
+      Object.assign(a, { status: "pending", resignRequired: true, history: [...(a.history || []), { verb: "changed", at, by: who }] });
+      logProjectEvent(accessId, { kind: "change", label: `Add-on changed after signing · ${a.title || "Job-site add-on"} — customer must re-sign`, actor: who });
+      needsSig.push(a);
+    } else if (a.status === "pending" && !a.needsPricing && (!prev || prev.needsPricing || prev.status !== "pending")) {
+      a.history = [...(a.history || []), { verb: prev ? "sent" : "created", at, by: who }];
+      needsSig.push(a);
+    }
+  }
+  if (needsSig.length) {
+    try { const cu = getCustomerUserForProject(accessId); if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Add-on needs your signature", body: `${needsSig.map((a) => a.title || "Job-site add-on").join(", ")} (${accessId}).`, link: `/project/${accessId}` }); } catch {}
+  }
+  return JSON.stringify(incoming);
 }
 
 // Per-line customer revision flags: { itemId: { type:"remove"|"change", note } }. Customer (own
@@ -614,6 +696,8 @@ export async function saveToolDataAction(accessId, tool, data) {
   if (tool === "addendum" && tok.role === "customer") {
     payload = mergeCustomerAddendumWrite(accessId, data);
     if (payload == null) return { error: "Bad payload." };
+  } else if (tool === "addendum") {
+    payload = await reconcileAddendumWrite(accessId, data, tok);
   }
   const saved = saveToolData(accessId, tool, payload, actorName(tok));
   return { ok: true, saved: { updated_at: saved.updated_at } };

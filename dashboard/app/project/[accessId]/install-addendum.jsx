@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { titleCase } from "../../../lib/proposal";
-import { getToolDataAction, saveToolDataAction } from "./proposal-actions";
+import { getToolDataAction, saveToolDataAction, signAddendumAction } from "./proposal-actions";
 import { logAddendumAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
 
@@ -103,13 +103,16 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   // Un-void: a voided addendum returns to pending (if never signed) or approved (if it had been signed).
   const unvoidAddendum = (id) => persist(addendums.map((a) => (a.id === id ? { ...a, status: a.signedName ? "approved" : "pending", voidedAt: undefined } : a)));
 
-  // ---- Approval (customer) ----
-  function approve(sign) {
-    const a = addendums.find((x) => x.id === signId);
-    persist(addendums.map((x) => (x.id === signId ? { ...x, status: "approved", signedName: sign.name, signedAt: new Date().toISOString(), signatureData: sign.data } : x)));
-    if (a) logAddendumAction(accessId, { verb: "approved", title: a.title, amount: custTotal(a) }).catch(() => {});   // Job Log
+  // ---- Approval (customer) — a server action: binds the signature to the add-on's fingerprint. ----
+  async function approve(sign) {
+    setBusy(true);
+    const r = await signAddendumAction(accessId, signId, sign);
+    setBusy(false);
+    if (r?.error) { setSignErr(r.error); return; }
+    setAddendums(r.addendums || addendums);
     setSignId(null);
   }
+  const [signErr, setSignErr] = useState(null);
 
   const pending = addendums.filter((a) => a.status === "pending");
   if (!canBuild && addendums.length === 0) return null; // customer/tech see nothing until one exists
@@ -131,7 +134,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
           <div key={a.id} className={`adn-card ${a.status}`}>
             <div className="adn-card-hd">
               <span className="adn-card-title">{a.title}</span>
-              <span className={`adn-badge ${a.needsPricing && a.status === "pending" ? "pending" : a.status}`}>{a.status === "approved" ? "✓ Approved" : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : a.needsPricing ? "Needs pricing" : "Pending approval"}</span>
+              <span className={`adn-badge ${a.needsPricing && a.status === "pending" ? "pending" : a.status}`}>{a.status === "approved" ? "✓ Approved" : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : a.needsPricing ? "Needs pricing" : a.resignRequired ? "Changed — re-sign" : "Pending approval"}</span>
             </div>
             <div className="adn-items">
               {(a.items || []).map((it) => (
@@ -175,9 +178,10 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
               {a.status === "pending" && isCustomer && !a.needsPricing && (
                 <button type="button" className="adn-approve" disabled={readOnly} title={readOnly ? "The customer signs here" : undefined}
                         onClick={() => !readOnly && setSignId(a.id)}>
-                  {readOnly ? "Customer signs here" : "Approve & Sign"}
+                  {readOnly ? "Customer signs here" : a.resignRequired ? "Review & Sign" : "Approve & Sign"}
                 </button>
               )}
+              {signErr && signId == null && <span className="adn-void-note">{signErr}</span>}
               {confirm && confirm.id === a.id ? (
                 <span className="adn-confirm">
                   {confirm.action === "delete" ? "Delete this add-on?" : "Void this add-on?"}

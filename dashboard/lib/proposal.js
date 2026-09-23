@@ -641,6 +641,59 @@ export function proposalFingerprint(payload, taxRate = 0, depositPct = 0) {
   return _fpHash(_fpStable(meaning));
 }
 
+// ---- Structured diff between a signed version and the current one (ledger P4) -----------------
+// Compares the customer-visible MEANING (same fields the fingerprint hashes) — never rendered HTML.
+// Items match by id, else by service + name. Output is what the customer reads before re-signing:
+// per option Added / Changed / Removed, plus the money terms that moved.
+function _diffItems(o) {
+  const m = new Map();
+  (o?.services || []).forEach((s) => (s.items || []).forEach((it) => {
+    const key = it?.id || `${s?.name || ""}|${it?.name || ""}`;
+    const subSum = (it?.sub || []).reduce((a, x) => a + (+x?.qty || 0) * (+x?.price || 0), 0);
+    m.set(key, { name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
+  }));
+  return m;
+}
+export function proposalDiff(prev, cur) {
+  const parse = (p) => { try { return typeof p === "string" ? JSON.parse(p || "{}") : (p || {}); } catch { return {}; } };
+  const pp = parse(prev?.payload), cp = parse(cur?.payload);
+  const ids = [...new Set([...(pp.options || []).map((o) => o.id), ...(cp.options || []).map((o) => o.id)])];
+  const options = [];
+  let any = false;
+  for (const id of ids) {
+    const po = (pp.options || []).find((o) => o.id === id), co = (cp.options || []).find((o) => o.id === id);
+    if (!po || !co) { any = true; options.push({ id, name: (co || po)?.name || `Option ${id}`, optionAdded: !po, optionRemoved: !co, added: [], removed: [], changed: [] }); continue; }
+    const a = _diffItems(po), b = _diffItems(co);
+    const added = [], removed = [], changed = [];
+    for (const [k, v] of b) if (!a.has(k)) added.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of a) if (!b.has(k)) removed.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of a) { const w = b.get(k); if (!w) continue;
+      if (v.qty !== w.qty || v.price !== w.price || v.waived !== w.waived || v.subSum !== w.subSum)
+        changed.push({ name: w.name, svc: w.svc, from: { qty: v.qty, price: v.price, waived: v.waived }, to: { qty: w.qty, price: w.price, waived: w.waived } }); }
+    const discFrom = po.discount ?? null, discTo = co.discount ?? null;
+    const disc = JSON.stringify(discFrom) !== JSON.stringify(discTo) ? { from: discFrom, to: discTo } : null;
+    const pcp = (+po.pcpCredit || 0) !== (+co.pcpCredit || 0) ? { from: +po.pcpCredit || 0, to: +co.pcpCredit || 0 } : null;
+    if (added.length || removed.length || changed.length || disc || pcp) any = true;
+    const tf = optionTotals(po, prev?.tax_rate, pp.discount, prev?.deposit_pct, pp.pcp_credit).grand;
+    const tt = optionTotals(co, cur?.tax_rate, cp.discount, cur?.deposit_pct, cp.pcp_credit).grand;
+    options.push({ id, name: co.name || `Option ${id}`, added, removed, changed, discount: disc, pcp, total: { from: r2(tf), to: r2(tt) } });
+  }
+  const tax = (+prev?.tax_rate || 0) !== (+cur?.tax_rate || 0) ? { from: +prev?.tax_rate || 0, to: +cur?.tax_rate || 0 } : null;
+  const deposit = (+prev?.deposit_pct || 0) !== (+cur?.deposit_pct || 0) ? { from: +prev?.deposit_pct || 0, to: +cur?.deposit_pct || 0 } : null;
+  if (tax || deposit) any = true;
+  return { any, options, tax, deposit };
+}
+
+// ---- Addendum fingerprint (ledger P4): what the customer agreed to on a change order ------------
+// Title, the customer-visible line items (name/qty/price) and the discount. techPay is internal and
+// excluded — a payout tweak never voids the customer's acceptance; a price/qty change does.
+export function addendumFingerprint(a) {
+  const meaning = { t: a?.title || "", d: +a?.discount || 0, items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
+  return _fpHash(_fpStable(meaning));
+}
+// An approved addendum counts only while its content still matches what was signed.
+export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
+
 // ---- Canonical project financial summary (ONE source of truth) --------------------------------
 // Every stage (Proposal, Approval/Deposit, Record-a-Payment, Closeout, invoices) must derive its
 // money from THIS so a project can never show two different totals. An addendum is an AMENDMENT, so

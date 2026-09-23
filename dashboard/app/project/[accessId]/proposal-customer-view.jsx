@@ -5,7 +5,36 @@ import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { exportMockupImages } from "../../../lib/mockup-export";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction } from "./proposal-actions";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction } from "./proposal-actions";
+
+// What changed since the customer last signed (ledger P4) — structured, never raw JSON. Rendered
+// above the acceptance box only when the current version supersedes a signed one.
+function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
+  if (!diff?.any) return null;
+  const $ = (n) => fmtMoney ? fmtMoney(n) : "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+  const line = (it, cls) => <li key={cls + it.name + it.svc} className={`pcv-diff-li ${cls}`}><span>{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span><b>{$(it.qty * it.price)}</b></li>;
+  return (
+    <div className="pcv-diff">
+      <div className="pcv-section-hd">What changed <span className="pcv-diff-v">v{fromVersion} → v{toVersion}</span></div>
+      {diff.options.map((o) => (
+        <div key={o.id} className="pcv-diff-opt">
+          {diff.options.length > 1 && <div className="pcv-diff-opt-h">{o.name}{o.optionAdded ? " — new" : o.optionRemoved ? " — removed" : ""}</div>}
+          {o.added?.length > 0 && <ul className="pcv-diff-list"><li className="pcv-diff-k">Added</li>{o.added.map((it) => line(it, "add"))}</ul>}
+          {o.changed?.length > 0 && <ul className="pcv-diff-list"><li className="pcv-diff-k">Changed</li>{o.changed.map((c) => (
+            <li key={"chg" + c.name + c.svc} className="pcv-diff-li chg"><span>{c.name}</span><b>{c.from.qty !== c.to.qty ? `×${c.from.qty} → ×${c.to.qty}` : ""}{c.from.price !== c.to.price ? ` ${$(c.from.price)} → ${$(c.to.price)}` : ""}{c.from.waived !== c.to.waived ? (c.to.waived ? " waived" : " no longer waived") : ""}</b></li>
+          ))}</ul>}
+          {o.removed?.length > 0 && <ul className="pcv-diff-list"><li className="pcv-diff-k">Removed</li>{o.removed.map((it) => line(it, "rm"))}</ul>}
+          {o.discount && <div className="pcv-diff-li"><span>Discount</span><b>changed</b></div>}
+          {o.pcp && <div className="pcv-diff-li"><span>PCP credit</span><b>{o.pcp.from}% → {o.pcp.to}%</b></div>}
+          {o.total && o.total.from !== o.total.to && <div className="pcv-diff-total"><span>Total</span><b><s>{$(o.total.from)}</s> {$(o.total.to)}</b></div>}
+        </div>
+      ))}
+      {diff.tax && <div className="pcv-diff-li"><span>Tax</span><b>{diff.tax.from}% → {diff.tax.to}%</b></div>}
+      {diff.deposit && <div className="pcv-diff-li"><span>Deposit</span><b>{diff.deposit.from}% → {diff.deposit.to}%</b></div>}
+      <div className="pcv-diff-note">Your earlier signature{signedAt ? ` (${fmtSignStamp(signedAt)})` : ""} stays on record for v{fromVersion}. Any deposit already paid carries forward.</div>
+    </div>
+  );
+}
 import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
 import SystemWalkthrough from "./system-walkthrough";
@@ -362,6 +391,16 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     setDeclineOpen(false);
     showToast(`Option ${opt.id} declined`);
   }
+  // Diff before re-sign: fetched only when this version is unsigned and a previous one was signed.
+  const [diffInfo, setDiffInfo] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!p || p.signed_name || (p.version || 1) < 2) { setDiffInfo(null); return; }
+    getProposalDiffAction(accessId).then((r) => { if (live) setDiffInfo(r?.ok && r.diff?.any ? r : null); }).catch(() => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessId, p?.id, p?.version, p?.signed_name]);
+
   async function submitRequest() {
     if (preview || busy || !note.trim()) return;
     setBusy(true); setErr(null);
@@ -748,6 +787,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
+      {diffInfo && !locked && <ProposalDiff diff={diffInfo.diff} fromVersion={diffInfo.fromVersion} toVersion={diffInfo.toVersion} signedAt={diffInfo.signedAt} />}
       <div className="pcv-section-hd">{locked ? "Accepted" : "Accept, Request Change, or Decline"}</div>
       <div className="pcv-accept-box">
         {reviseMode ? (
@@ -781,7 +821,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                     {optAccepted ? `Remove Option ${opt.id}` : (
                       <>
                         <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                        Approve &amp; Sign
+                        {diffInfo ? "Review & Sign" : "Approve & Sign"}
                       </>
                     )}
                   </button>
@@ -878,6 +918,20 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
 }
 
 const PCV_CSS = `
+/* Diff before re-sign */
+.pcv-diff{margin:0 0 4px}
+.pcv-diff-v{font-weight:500;color:var(--dv-meta,#787D84);margin-left:6px}
+.pcv-diff-opt{padding:8px 22px 0}
+.pcv-diff-opt-h{font-size:.82rem;font-weight:700;margin:6px 0 2px}
+.pcv-diff-list{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.pcv-diff-k{font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-top:4px}
+.pcv-diff-li{display:flex;justify-content:space-between;gap:12px;font-size:.86rem;padding:5px 10px;border-radius:8px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF)}
+.pcv-diff-li.add{border-left:3px solid var(--dv-green,#2E7D5B)}
+.pcv-diff-li.rm{border-left:3px solid var(--dv-red,#C4553D);text-decoration:line-through;color:var(--dv-meta,#787D84)}
+.pcv-diff-li.chg{border-left:3px solid var(--dv-gold,#C9A96E)}
+.pcv-diff-total{display:flex;justify-content:space-between;font-size:.95rem;font-weight:700;padding:8px 10px 2px}
+.pcv-diff-total s{color:var(--dv-meta,#787D84);font-weight:500;margin-right:6px}
+.pcv-diff-note{font-size:.76rem;color:var(--dv-meta,#787D84);padding:6px 22px 0}
 .pcv-root{background:var(--dv-paper,#F4F4F2);border-radius:14px;border:1px solid var(--dv-line,#E4E4DF);overflow:hidden;
   box-shadow:0 1px 2px rgba(16,20,24,.04);
   font-family:var(--font-sans,inherit)}

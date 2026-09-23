@@ -496,7 +496,8 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
 
   return (
     <div className={`icl-root${allDone ? " done" : ""}`}>
-      <style>{ICL_CSS}{ISSUE_CSS}{PHOTOS_CSS}</style>
+      {/* One string child — three adjacent text nodes hydrate differently from the SSR'd single text node. */}
+      <style>{ICL_CSS + ISSUE_CSS + PHOTOS_CSS}</style>
       {issueSheet && (
         <IssueSheet accessId={accessId} role={role} userName={userName} issues={issues} items={items} crew={crew}
           initialTarget={issueSheet.target} onClose={() => setIssueSheet(null)} onChange={onIssuesChange} />

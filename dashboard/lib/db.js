@@ -7,7 +7,7 @@ import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalize
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint } from "./proposal.js";
+import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -5254,6 +5254,14 @@ export function getActiveProposal(accessId) {
   ).get(String(accessId));
   return r ? { ...r, created_by_name: resolvePreparerName(r.created_by_name) } : null;
 }
+// The most recent version the customer actually SIGNED (frozen snapshot) — what a re-sign is
+// compared against. Null when nothing was ever signed.
+export function getLatestSignedVersion(accessId) {
+  const r = db.prepare(
+    "SELECT id, version, status, tax_rate, deposit_pct, signed_name, signed_at, signed_fingerprint, signed_payload, payload FROM proposals WHERE project_access_id=? AND signed_name IS NOT NULL ORDER BY version DESC, id DESC LIMIT 1"
+  ).get(String(accessId));
+  return r ? { ...r, payload: r.signed_payload || r.payload } : null;
+}
 export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at, created_by_name, signed_name, signed_at, signed_fingerprint FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
@@ -5739,7 +5747,8 @@ export function deleteBugDraft(owner) {
 export function getApprovedAddons(accessId) {
   const rec = getToolData(accessId, "addendum");
   let list = [];
-  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "approved"); } catch { list = []; }
+  // Approved AND still matching the signed content (fingerprint) — an edited add-on drops out until re-signed.
+  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && addendumSignatureCurrent(a)); } catch { list = []; }
   const each = list.map((a) => {
     const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
     const discount = +a.discount || 0;
