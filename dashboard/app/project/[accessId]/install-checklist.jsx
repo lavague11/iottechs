@@ -6,8 +6,10 @@ import RateLibrary from "./rate-library";
 import { ICL_CSS } from "./install-checklist.css.js";
 import {
   stepsFor, colorFor, money, fmtLogTime, estHoursFor, weightedInc,
-  CAMERA_STEP_PAY, POS_STEP_PAY,
+  CAMERA_STEP_PAY, POS_STEP_PAY, itemWorkState, issueOpen, ISSUE_STATES,
 } from "../../../lib/install-checklist-model";
+import { IssueFlag, IssueSheet, HistorySheet, ISSUE_CSS } from "./install-issues";
+import { listInstallIssuesAction } from "./actions";
 
 // Install work order + live status. List style: each line has a tappable progress ring (advance
 // a step), undo, and a note. It's also a builder for the office/tech — add & delete line items,
@@ -33,11 +35,25 @@ const CAMERA_BULK = [
 let _cid = 0;
 const newId = () => `c${Date.now().toString(36)}${_cid++}`;
 
-export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, staffUsers = [], embedded = false }) {
+export default function InstallChecklist({ accessId, proposal, customerName, customerAddress, role, readOnly, userName, onProgress, onIssues, staffUsers = [], embedded = false }) {
   const isCustomer = role === "customer";
   const canEdit  = !readOnly && !isCustomer;   // tech / admin / manager may mark + add + delete
   const canPrice = !isCustomer;                // can SEE pricing (tech + office)
   const canEditPay = canEdit && role !== "tech"; // can CHANGE pay amounts — office only, never tech
+
+  // Issue flags (server-owned; see install-issues.jsx). Loaded for every internal viewer.
+  const [issues, setIssues] = useState([]);
+  const [issueSheet, setIssueSheet] = useState(null);   // null | { target }
+  const [histOpen, setHistOpen] = useState(false);
+  useEffect(() => {
+    if (isCustomer) return;
+    let live = true;
+    listInstallIssuesAction(accessId).then((r) => { if (live && r?.ok) setIssues(r.issues || []); }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId, isCustomer]);
+  const onIssuesChange = (next) => { setIssues(next || []); onIssues?.(next || []); };
+  const openIssues = issues.filter(issueOpen);
+  const issuesFor = (id) => issues.filter((i) => i.target_id === id);
 
   // Camera location names carried down from the Site Survey (the "Front Door" / "Back Lot" labels the
   // office set on the plan), in placement order. The work order pre-fills each camera with its survey
@@ -100,6 +116,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const [reqDraft, setReqDraft] = useState({ name: "", type: "equip", note: "", tech: "" });
   const [reqPrice, setReqPrice] = useState({}); // admin's price entry per pending request {id: $}
   const [stepLog, setStepLog] = useState([]); // audit log: who completed which step + when
+  const [owners, setOwners] = useState({});   // per-item responsible tech {id: name} — set on first claim, changed only by an explicit take-over
   const [eodDate, setEodDate] = useState(""); // chosen End-of-Day date (preset to today on mount)
   const [logOpen, setLogOpen] = useState(false);
   const [rates, setRates] = useState(DEFAULT_RATES); // effective rates for the assigned tech
@@ -121,7 +138,9 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     return () => { live = false; };
   }, [accessId]);
   const canAssignCrew = !readOnly && ["admin", "manager"].includes(role);
-  const crew = crewList != null ? crewList : (assignedTech ? [assignedTech] : []);
+  // ONE source for "who's on this job": the technician who accepted the work order is always crew,
+  // plus whoever the office added — so "accepted" and "Not yet assigned" can never contradict.
+  const crew = [...new Set([...(assignedTech ? [assignedTech] : []), ...(crewList || [])])];
   const staffTechNames = [...new Set(staffUsers.filter((u) => u.role === "tech" && u.name).map((u) => u.name))];
   async function persistCrew(next) { setCrewList(next); if (!readOnly) await saveToolDataAction(accessId, "techs", JSON.stringify({ names: next })); }
   function addCrew(name) {
@@ -150,7 +169,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
         const d = JSON.parse(r.saved.data);
         setSteps(d.steps || {}); setNotes(d.notes || {}); setCustom(d.custom || []); setRemoved(d.removed || []);
         setPayouts(d.payouts || {}); setEstHours(d.estHours ?? null);
-        setPayoutOverride(d.payoutOverride ?? null); setDayLogs(d.dayLogs || []); setRequests(d.requests || []); setStepLog(d.stepLog || []);
+        setPayoutOverride(d.payoutOverride ?? null); setDayLogs(d.dayLogs || []); setRequests(d.requests || []); setStepLog(d.stepLog || []); setOwners(d.owners || {});
       } catch { /* bad blob */ }
     }).catch(() => {});
     return () => { live = false; };
@@ -176,9 +195,9 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     if (first.current) { first.current = false; return; }
     if (isCustomer) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { saveToolDataAction(accessId, "install", JSON.stringify({ steps, notes, custom, removed, payouts, estHours, payoutOverride, dayLogs, requests, stepLog })); }, 500);
+    saveTimer.current = setTimeout(() => { saveToolDataAction(accessId, "install", JSON.stringify({ steps, notes, custom, removed, payouts, estHours, payoutOverride, dayLogs, requests, stepLog, owners })); }, 500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, notes, custom, removed, payouts, estHours, payoutOverride, dayLogs, requests, stepLog]);
+  }, [steps, notes, custom, removed, payouts, estHours, payoutOverride, dayLogs, requests, stepLog, owners]);
 
   const items = [...derived.filter(d => !removed.includes(d.id)), ...addonItems.filter(a => !removed.includes(a.id)), ...custom];
   // Undo: snapshot the full editable state before each change; the header Undo pops it back.
@@ -205,6 +224,16 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     const add = [];
     for (let c = from; c < to; c++) add.push({ item: item.id, name: item.name, type: item.type, stepIdx: c, step: labels[c], by: actor, at: nowISO() });
     setStepLog(l => [...l, ...add]);
+    // First claim on an unowned item makes this person its responsible tech (quick fills included).
+    setOwners(o => (o[item.id] ? o : { ...o, [item.id]: actor }));
+  };
+  // Another tech is mid-way on this item → say so; ownership only changes by an explicit take-over.
+  const ownerOf = (item) => owners[item.id] || null;
+  const someoneElse = (item) => { const o = ownerOf(item); const done = Math.min(steps[item.id] || 0, stepsFor(item.type).length); return o && o !== actor && done > 0 && done < stepsFor(item.type).length ? o : null; };
+  const takeOver = (item) => {
+    const from = ownerOf(item);
+    setOwners(o => ({ ...o, [item.id]: actor }));
+    setStepLog(l => [...l, { item: item.id, name: item.name, type: item.type, takeover: true, from, by: actor, at: nowISO() }]);
   };
   // Remove log entries for an item at/after a step index (a step was undone / reset).
   const logRevert = (itemId, fromStep) => setStepLog(l => l.filter(e => !(e.item === itemId && e.stepIdx >= fromStep)));
@@ -388,6 +417,9 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
     const nm = titleCase(item.name);
     const noteOpen = editNote === item.id;
     const confirming = confirmDel === item.id;
+    // Claimed-work state: the step count is the tech's claim; an open flag overlays it, never erases it.
+    const wstate = itemWorkState(done, stepList.length, issuesFor(item.id));
+    const overlay = wstate === "NEEDS_REVIEW" || wstate === "NEEDS_REWORK" ? wstate : null;
     return (
       <div key={item.id} className={`icl-row${complete ? " done" : ""}`} style={{ "--icl-c": color }}>
         <div className="icl-main">
@@ -395,7 +427,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
             <ProgressRing done={done} total={stepList.length} color={color} complete={complete} />
           </button>
           <div className="icl-info">
-            <span className="icl-name">{nm}</span>
+            <span className="icl-name">{nm}{overlay && <span className={`icl-wstate ${overlay.toLowerCase()}`}>{ISSUE_STATES[overlay]}</span>}</span>
             <span className={`icl-step${complete ? " done" : ""}`}>
               {complete ? "✓ Complete" : done === 0 ? <>Next: <b>{stepList[done]}</b></> : <><span className="icl-step-done">{stepList[done - 1]} ✓</span> · Next: <b>{stepList[done]}</b></>}
             </span>
@@ -414,6 +446,11 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
             );
           })()}
           <div className="icl-acts">
+            {!isCustomer && ["admin", "manager", "tech"].includes(role) && !readOnly && (
+              <button type="button" className="icl-rowflag" title="Report issue" aria-label={`Report issue on ${nm}`} onClick={() => setIssueSheet({ target: { kind: "item", id: item.id } })}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 22V4a1 1 0 0 1 1-1h11l-1 4 1 4H5"/></svg>
+              </button>
+            )}
             {/* Notes are internal — hidden from the customer's view-only progress. */}
             {!isCustomer && (
             <button type="button" className={`icl-noteb${note ? " has" : ""}`} title={note ? "Edit note" : "Add note"} onClick={() => setEditNote(noteOpen ? null : item.id)}>
@@ -456,7 +493,12 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
 
   return (
     <div className={`icl-root${allDone ? " done" : ""}`}>
-      <style>{ICL_CSS}</style>
+      <style>{ICL_CSS}{ISSUE_CSS}</style>
+      {issueSheet && (
+        <IssueSheet accessId={accessId} role={role} userName={userName} issues={issues} items={items} crew={crew}
+          initialTarget={issueSheet.target} onClose={() => setIssueSheet(null)} onChange={onIssuesChange} />
+      )}
+      {histOpen && <HistorySheet stepLog={stepLog} issues={issues} onClose={() => setHistOpen(false)} />}
       <div className="icl-head">
         <div className="icl-head-l">
           {!embedded && <span className="icl-title">Work Order</span>}
@@ -472,6 +514,12 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
           {canPrice && (
             <button type="button" className={`icl-pricebtn${showPrice ? " on" : ""}`} onClick={() => setShowPrice(v => !v)} title="Show technician payout">
               {showPrice ? "$ Hide pay" : "$ Show pay"}
+            </button>
+          )}
+          {!isCustomer && <IssueFlag count={openIssues.length} onClick={() => setIssueSheet({ target: null })} title={openIssues.length ? "Issues" : "Report issue"} />}
+          {!isCustomer && (
+            <button type="button" className="iss-flagbtn" onClick={() => setHistOpen(true)} title="History" aria-label="History">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             </button>
           )}
           <div className="icl-progress">
@@ -733,11 +781,15 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
               <button type="button" className="icl-stepmodal-x" onClick={() => setStepPick(null)}>✕</button>
               <div className="icl-stepmodal-name">{titleCase(it.name)}</div>
               <div className="icl-stepmodal-h">How far did you get?</div>
-              <button type="button" className={`icl-steppop-opt${done === 0 ? " on" : ""}`} onClick={() => setStepTo(it, 0)}>
+              {/* Someone else is mid-way on this item: say so, and only hand it over on an explicit tap. */}
+              {someoneElse(it) && (
+                <div className="icl-owner"><b>{someoneElse(it)}</b> is working on this. <button type="button" className="iss-btn quiet" onClick={() => takeOver(it)}>Take over</button></div>
+              )}
+              <button type="button" className={`icl-steppop-opt${done === 0 ? " on" : ""}`} disabled={!!someoneElse(it)} onClick={() => setStepTo(it, 0)}>
                 <span className="icl-steppop-n">—</span>Not started
               </button>
               {list.map((s, i) => (
-                <button type="button" key={i} className={`icl-steppop-opt${done >= i + 1 ? " reached" : ""}${done === i + 1 ? " on" : ""}`} onClick={() => setStepTo(it, i + 1)}>
+                <button type="button" key={i} className={`icl-steppop-opt${done >= i + 1 ? " reached" : ""}${done === i + 1 ? " on" : ""}`} disabled={!!someoneElse(it)} onClick={() => setStepTo(it, i + 1)}>
                   <span className="icl-steppop-n">{i + 1}</span>{s}{done >= i + 1 && <span className="icl-steppop-chk">✓</span>}
                 </button>
               ))}

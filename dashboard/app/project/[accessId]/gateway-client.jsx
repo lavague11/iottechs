@@ -2466,7 +2466,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   )}
                 </div></div>
               : <div style={fill}><InstallChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
-                  role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)} staffUsers={staffUsers} /></div> });
+                  role={cView} readOnly={!!previewRole || locked} userName={currentUser?.name || currentUser?.email || ""} onProgress={(p) => setInstallDone(!!p.allDone)}
+                  onIssues={() => refreshAcceptances()} staffUsers={staffUsers} /></div> });
         }
         // Customer: the calm post-approval home — Approved → Preparing → Installation Confirmed. This
         // is where scheduling used to be; the customer never books, they just see the state move itself.

@@ -1258,6 +1258,36 @@ function init() {
       by_name           TEXT
     )
   `);
+  // Install issue flags (Phase 1, 2026-09-23): a flag raised against the work order, one line item or
+  // one of its steps. Overlays the technician's completion claim (which stays in the install blob's
+  // stepLog) — it never erases it. Server-owned so the state machine and who-may-do-what are enforced
+  // here, not in the browser. States: NEEDS_REVIEW → NEEDS_REWORK → RESOLVED | DISMISSED (reopen → NEEDS_REVIEW).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS install_issues (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      target_kind       TEXT NOT NULL,                -- order | item | step
+      target_id         TEXT,                         -- line-item id (item/step); NULL for the whole order
+      step_idx          INTEGER,                      -- step index within the item (step only)
+      target_label      TEXT,                         -- human name captured at report time (items can be renamed/removed)
+      reason            TEXT NOT NULL,
+      note              TEXT,
+      media_id          TEXT,                         -- optional photo (media table)
+      status            TEXT NOT NULL DEFAULT 'NEEDS_REVIEW',
+      raised_by         TEXT,
+      raised_by_id      INTEGER,
+      raised_role       TEXT,
+      assigned_to       TEXT,                         -- technician name (matches the work order crew)
+      assigned_to_id    INTEGER,
+      fixed_by          TEXT,
+      fixed_at          TEXT,
+      closed_by         TEXT,
+      closed_at         TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      updated_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_install_issues_project ON install_issues(project_access_id, status)`);
   db.exec("CREATE INDEX IF NOT EXISTS idx_stage_trans ON stage_transitions(project_access_id, id)");
   // Backfill: seed a transition for every project's CURRENT stage so aging has a start point on
   // day one. The true historical entry time is unknown, so we estimate with the project's start
@@ -2379,7 +2409,7 @@ export function buildStageFacts(accessId) {
     survey_accepted: surveyStageSatisfied(accessId),
     survey_skipped: !!p.survey_skipped_at,
     // Phase-2 facts: work order fully closed out; QC passed + both sign-offs current.
-    install_done: getToolMeta(accessId).install.allDone,
+    install_done: (() => { const i = getToolMeta(accessId).install; return i.allDone && i.openIssues === 0; })(),
     ...qcSignoffFacts(accessId),
     proposal_status: prop?.status || null,
     proposal_version: prop?.version || 1,
@@ -5822,11 +5852,51 @@ export function getToolMeta(accessId) {
     tracking: { count: trkCount, delivered: trkDelivered },
     addendum: { count: addCount },
     schedule: { count: schedCount },
-    install: { has: !!installRow, ...inst },
+    // Open issue flags overlay the claim: any unresolved flag blocks final install completion
+    // (there is no blocking/informational distinction in the schema — every flag counts).
+    install: { has: !!installRow, ...inst, openIssues: openInstallIssues(accessId).length },
     // fingerprint = the QC checklist's content, so a sign-off is void the moment a check is changed.
     qc: { has: !!qcRow, ...qc, fingerprint: qcRow ? toolFingerprint("qc", qcRow.data) : null },
   };
 }
+// ---- Install issue flags ----
+export const INSTALL_ISSUE_OPEN = new Set(["NEEDS_REVIEW", "NEEDS_REWORK"]);
+export function listInstallIssues(accessId) {
+  return db.prepare("SELECT * FROM install_issues WHERE project_access_id=? ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
+}
+export function getInstallIssue(id) {
+  const r = db.prepare("SELECT * FROM install_issues WHERE id=?").get(Number(id));
+  return r ? { ...r } : null;
+}
+export function openInstallIssues(accessId) {
+  return db.prepare("SELECT * FROM install_issues WHERE project_access_id=? AND status IN ('NEEDS_REVIEW','NEEDS_REWORK') ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
+}
+export function createInstallIssue(accessId, { targetKind, targetId, stepIdx, targetLabel, reason, note, mediaId, by, byId, role }) {
+  const info = db.prepare(`
+    INSERT INTO install_issues (project_access_id, target_kind, target_id, step_idx, target_label, reason, note, media_id, raised_by, raised_by_id, raised_role)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+  `).run(String(accessId), String(targetKind), targetId != null ? String(targetId) : null, stepIdx != null ? Number(stepIdx) : null,
+    String(targetLabel || "").slice(0, 160) || null, String(reason || "Other").slice(0, 40), String(note || "").slice(0, 1000) || null,
+    mediaId ? String(mediaId) : null, by || null, byId != null ? Number(byId) : null, role || null);
+  return getInstallIssue(info.lastInsertRowid);
+}
+// Patch an issue's mutable fields (status / assignment / fixed / closed). Callers enforce the matrix.
+export function updateInstallIssue(id, patch) {
+  const allowed = ["status", "assigned_to", "assigned_to_id", "fixed_by", "fixed_at", "closed_by", "closed_at", "note"];
+  const keys = Object.keys(patch || {}).filter((k) => allowed.includes(k));
+  if (!keys.length) return getInstallIssue(id);
+  db.prepare(`UPDATE install_issues SET ${keys.map((k) => `${k}=?`).join(", ")}, updated_at=datetime('now','localtime') WHERE id=?`)
+    .run(...keys.map((k) => patch[k] ?? null), Number(id));
+  return getInstallIssue(id);
+}
+// Technician user by display name (the work order stores crew by name) — for targeted notifications.
+export function findTechUserByName(name) {
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return null;
+  const r = db.prepare("SELECT id, name, email, role FROM users WHERE role='tech' AND LOWER(TRIM(name))=? AND (disabled IS NULL OR disabled != 1)").get(n);
+  return r ? { ...r } : null;
+}
+
 // QC sign-offs: both must be current (fingerprint matches the checklist as it stands) AND every
 // device must pass — an approval recorded on a checklist that later regressed doesn't count.
 export function qcSignoffFacts(accessId, meta = getToolMeta(accessId), acc = getStageAcceptances(accessId)) {

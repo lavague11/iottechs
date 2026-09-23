@@ -322,6 +322,101 @@ export async function setPropertyTypeAction(accessId, value) {
   return { ok: true, propertyType: res.propertyType };
 }
 
+// ---- Install issue flags (Phase 1) ----------------------------------------------------------------
+// A flag overlays a technician's completion claim; it never rewrites it. The state machine and the
+// who-may-do-what live HERE (server), the browser only renders. Roles: tech / manager / admin report;
+// admin + manager adjudicate (assign rework, resolve, dismiss, reopen); the assigned tech marks fixed.
+// "Lead" in the spec maps to manager — there is no lead role in this app.
+const ISSUE_REPORTERS = new Set(["tech", "manager", "admin"]);
+const ISSUE_ADJUDICATORS = new Set(["admin", "manager"]);
+const issueActor = (tok) => tok.name || tok.email || (tok.role === "tech" ? "Technician" : tok.role);
+async function issueTok(accessId) {
+  const tok = await getAnyTok();
+  if (!tok) return { error: "Please unlock the project first." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  return { tok };
+}
+export async function listInstallIssuesAction(accessId) {
+  const { tok, error } = await issueTok(accessId);
+  if (error) return { ok: false, error, issues: [] };
+  if (!["admin", "manager", "sales", "tech"].includes(tok.role)) return { ok: false, error: "Internal only.", issues: [] };
+  const { listInstallIssues } = await import("../../../lib/db");
+  return { ok: true, issues: listInstallIssues(accessId) };
+}
+export async function reportInstallIssueAction(accessId, { targetKind, targetId, stepIdx, targetLabel, reason, note, mediaId } = {}) {
+  const { tok, error } = await issueTok(accessId);
+  if (error) return { error };
+  if (!ISSUE_REPORTERS.has(tok.role)) return { error: "Only technicians and the office can flag install work." };
+  if (!["order", "item", "step"].includes(targetKind)) return { error: "Pick what the issue is about." };
+  if (targetKind !== "order" && !targetId) return { error: "Pick the line item." };
+  const { createInstallIssue, listInstallIssues, notifyRoles } = await import("../../../lib/db");
+  const { ISSUE_REASONS } = await import("../../../lib/install-checklist-model");
+  const why = ISSUE_REASONS.includes(reason) ? reason : "Other";
+  const who = issueActor(tok);
+  const issue = createInstallIssue(accessId, { targetKind, targetId, stepIdx, targetLabel, reason: why, note, mediaId, by: who, byId: tok.id ?? null, role: tok.role });
+  const where = targetKind === "order" ? "the work order" : (targetLabel || "a line item");
+  logProjectEvent(accessId, { kind: "issue", label: `Install issue flagged on ${where} — ${why}`, actor: who });
+  try { notifyRoles(["admin", "manager"], { type: "install-issue", title: "Install issue reported", body: `${who} flagged ${where} (${accessId}) — ${why}.`, link: `/project/${accessId}` }, tok.id ?? null); } catch {}
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, issue, issues: listInstallIssues(accessId) };
+}
+// One transition per call: assign | fixed | resolve | dismiss | reopen. Every step is an event.
+export async function installIssueAction(accessId, id, action, { assignTo } = {}) {
+  const { tok, error } = await issueTok(accessId);
+  if (error) return { error };
+  const { getInstallIssue, updateInstallIssue, listInstallIssues, notifyRoles, createNotification, findTechUserByName } = await import("../../../lib/db");
+  const cur = getInstallIssue(id);
+  if (!cur || String(cur.project_access_id).toUpperCase() !== String(accessId).toUpperCase()) return { error: "Issue not found." };
+  const who = issueActor(tok);
+  const adj = ISSUE_ADJUDICATORS.has(tok.role);
+  const now = () => new Date().toISOString().slice(0, 19).replace("T", " ");
+  let patch = null, label = "", kind = "issue";
+  const target = cur.target_kind === "order" ? "the work order" : (cur.target_label || "a line item");
+  switch (action) {
+    case "assign": {
+      if (!adj) return { error: "Only admin or manager can assign rework." };
+      const name = String(assignTo || "").trim();
+      if (!name) return { error: "Choose a technician." };
+      const u = findTechUserByName(name);
+      patch = { status: "NEEDS_REWORK", assigned_to: name, assigned_to_id: u?.id ?? null, fixed_by: null, fixed_at: null };
+      label = `Rework assigned to ${name} — ${target}`; kind = "rework";
+      if (u) try { createNotification({ user_id: u.id, type: "install-rework", title: "Rework assigned", body: `${target} (${accessId}) — ${cur.reason}.`, link: `/project/${accessId}` }); } catch {}
+      break;
+    }
+    case "fixed": {
+      const mine = tok.role === "tech" && cur.assigned_to && String(cur.assigned_to).trim().toLowerCase() === String(tok.name || "").trim().toLowerCase();
+      if (!(mine || adj)) return { error: "Only the assigned technician can mark this fixed." };
+      if (cur.status !== "NEEDS_REWORK") return { error: "Nothing assigned to fix." };
+      patch = { status: "NEEDS_REVIEW", fixed_by: who, fixed_at: now() };
+      label = `Rework marked fixed — ${target}`; kind = "rework";
+      try { notifyRoles(["admin", "manager"], { type: "install-rework", title: "Rework fixed — verify", body: `${who} fixed ${target} (${accessId}).`, link: `/project/${accessId}` }, tok.id ?? null); } catch {}
+      break;
+    }
+    case "resolve":
+    case "dismiss": {
+      if (!adj) return { error: "Only admin or manager can close an issue." };
+      if (!["NEEDS_REVIEW", "NEEDS_REWORK"].includes(cur.status)) return { error: "Already closed." };
+      patch = { status: action === "resolve" ? "RESOLVED" : "DISMISSED", closed_by: who, closed_at: now() };
+      label = `Install issue ${action === "resolve" ? "resolved" : "dismissed"} — ${target}`; kind = action === "resolve" ? "resolve" : "dismiss";
+      break;
+    }
+    case "reopen": {
+      if (!adj) return { error: "Only admin or manager can reopen an issue." };
+      if (!["RESOLVED", "DISMISSED"].includes(cur.status)) return { error: "Already open." };
+      patch = { status: "NEEDS_REVIEW", closed_by: null, closed_at: null };
+      label = `Install issue reopened — ${target}`; kind = "issue";
+      break;
+    }
+    default: return { error: "Unknown action." };
+  }
+  const issue = updateInstallIssue(id, patch);
+  logProjectEvent(accessId, { kind, label, actor: who });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, issue, issues: listInstallIssues(accessId) };
+}
+
 // Skip (or un-skip) the site survey for a job that never gets one. Admin/manager only — it waives a
 // customer sign-off, so it's logged as an override. Auto-advances out of Consulting when the skip
 // clears the last requirement; un-skipping never rewinds the stage (lock advancement, don't retro-lock).

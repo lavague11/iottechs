@@ -92,6 +92,25 @@ export function installProgress(proposal, installRaw, addendumRaw) {
   const done  = items.reduce((a, it) => a + Math.min(steps[it.id] || 0, stepsFor(it.type).length), 0);
   return { items: items.length, total, done, allDone: total > 0 && done === total };
 }
+// ---- Install issue flags (Phase 1) — canonical vocabulary shared by the UI and the server actions ----
+export const ISSUE_REASONS = ["Incomplete", "Poor workmanship", "Wrong location", "Wrong device", "Damaged", "Failed test", "Missing material", "Blocked", "Other"];
+export const ISSUE_STATES = {
+  NEEDS_REVIEW: "Needs Review",
+  NEEDS_REWORK: "Needs Rework",
+  RESOLVED:     "Resolved",
+  DISMISSED:    "Dismissed",
+};
+export const issueOpen = (i) => i && (i.status === "NEEDS_REVIEW" || i.status === "NEEDS_REWORK");
+// Claimed-work display state for one line item: the step count is the technician's claim; an open
+// flag overlays it without erasing it. VERIFIED arrives with per-item QC (Phase 3).
+export function itemWorkState(done, max, itemIssues = []) {
+  const open = itemIssues.filter(issueOpen);
+  if (open.some((i) => i.status === "NEEDS_REWORK")) return "NEEDS_REWORK";
+  if (open.length) return "NEEDS_REVIEW";
+  if (max > 0 && done >= max) return "COMPLETE";
+  return done > 0 ? "IN_PROGRESS" : "NOT_STARTED";
+}
+
 // QC: standard checks per device type; an item passes only when ALL of its checks are ticked.
 export const QC_CHECKS = {
   camera: ["Online", "Angle OK", "Recording", "Night Vision"],
