@@ -1045,12 +1045,12 @@ const PCV_CSS = `
   cursor:pointer;text-align:left;font-family:inherit;transition:background .12s}
 .pcv-fold-hd:hover{background:var(--dv-paper,#F4F4F2)}
 .pcv-fold-hd.done{border-left-color:var(--dv-green,#2E7D5B)}
-.pcv-fold-ic{flex-shrink:0;width:30px;height:30px;border-radius:8px;background:rgba(201,169,110,.12);color:var(--dv-gold-deep,#A8842F);display:grid;place-items:center}
+.pcv-fold-ic{flex-shrink:0;width:30px;height:30px;border-radius:8px;background:rgba(201,169,110,.12);color:var(--dv-gold-text,#8A6A1F);display:grid;place-items:center}
 .pcv-fold-hd.done .pcv-fold-ic{background:rgba(46,125,91,.08);color:var(--dv-green,#2E7D5B)}
 .pcv-fold-title{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-fold-chip{flex-shrink:0;white-space:nowrap;font-size:.68rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84);
   background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;padding:3px 9px}
-.pcv-fold-chip.ok{color:var(--dv-gold-deep,#A8842F);background:rgba(201,169,110,.10);border-color:rgba(201,169,110,.30)}
+.pcv-fold-chip.ok{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.10);border-color:rgba(201,169,110,.30)}
 .pcv-fold-chip.done{color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-color:rgba(46,125,91,.28)}
 .pcv-fold-chev{margin-left:auto;flex-shrink:0;font-size:.72rem;color:var(--dv-faint,#A1A6AC)}
 .pcv-hd-lbl{display:inline}
@@ -1075,7 +1075,7 @@ const PCV_CSS = `
 .pcv-row.expandable:hover{background:rgba(201,169,110,.08)}
 .pcv-rownum{text-align:center;color:var(--dv-meta,#787D84);font-size:.74rem}
 .pcv-rowdesc{display:flex;align-items:center;gap:5px;min-width:0}
-.pcv-chev{font-size:.68rem;color:var(--dv-gold-deep,#A8842F);flex-shrink:0}
+.pcv-chev{font-size:.68rem;color:var(--dv-gold-text,#8A6A1F);flex-shrink:0}
 .r{text-align:right}
 .b{font-weight:600}
 .pcv-svc-note{padding:4px 10px;font-size:.72rem;color:var(--dv-meta,#787D84);white-space:pre-wrap}
@@ -1084,7 +1084,7 @@ const PCV_CSS = `
 .pcv-subtotal-row.main{margin-top:4px}
 .pcv-grand{margin:6px 22px 0;background:var(--dv-ink,#101418);display:flex;justify-content:space-between;
   padding:12px 14px;font-size:.92rem;font-weight:600;color:#fff}
-.pcv-grand span:last-child{color:var(--dv-gold,#C9A96E);font-size:1.05rem}
+.pcv-grand span:last-child{color:var(--dv-gold-text,#8A6A1F);font-size:1.05rem}
 
 .pcv-loc-box{margin:0 22px}
 .pcv-loc-list{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-size:.8rem;color:var(--dv-ink,#101418);padding:10px 4px 0}
@@ -1097,7 +1097,7 @@ const PCV_CSS = `
 .pcv-pay-row{display:grid;grid-template-columns:1.5fr 1.2fr 50px 110px;gap:6px;padding:8px 10px;font-size:.8rem;
   color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2);border-bottom:1px solid var(--dv-line-soft,#EDEDE9);align-items:center}
 .pcv-pay-row.first{background:rgba(201,169,110,.08);border-left:3px solid var(--dv-gold,#C9A96E)}
-.pcv-pay-row.first .pcv-pay-phase{color:var(--dv-gold-deep,#A8842F);font-weight:600}
+.pcv-pay-row.first .pcv-pay-phase{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
 .pcv-pay-phase{display:flex;flex-direction:column;font-weight:600}
 .pcv-pay-phase em{font-style:normal;font-size:.68rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pcv-pay-due{font-weight:600;color:var(--dv-ink-soft,#3A4048)}
@@ -1110,7 +1110,7 @@ const PCV_CSS = `
 .pcv-pcp-amt{color:var(--dv-green,#2E7D5B);font-weight:600}
 .pcv-pcp-sub{font-size:.8rem;color:var(--dv-meta,#787D84);margin-top:3px;line-height:1.45;max-width:460px}
 .pcv-pcp-badge{flex-shrink:0;font-size:.68rem;font-weight:500;letter-spacing:.03em;text-transform:uppercase;padding:4px 11px;border-radius:100px;white-space:nowrap}
-.pcv-pcp-badge.pending{color:var(--dv-gold-deep,#A8842F);background:rgba(201,169,110,.10);border:1px solid rgba(201,169,110,.30)}
+.pcv-pcp-badge.pending{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.10);border:1px solid rgba(201,169,110,.30)}
 .pcv-pcp-badge.ok{color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border:1px solid rgba(46,125,91,.28)}
 .pcv-pcp-terms{margin:12px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
 .pcv-pcp-terms li{font-size:.79rem;color:var(--dv-ink-soft,#3A4048);line-height:1.4}
@@ -1151,7 +1151,7 @@ const PCV_CSS = `
 .pcv-btn:disabled{opacity:.5;cursor:default}
 .pcv-textarea{border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:10px 12px;
   font-size:.82rem;font-family:inherit;outline:none;resize:vertical}
-.pcv-textarea:focus{border-color:var(--dv-gold,#C9A96E)}
+.pcv-textarea:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 
 .pcv-footer{margin-top:20px;background:var(--dv-paper,#F4F4F2);border-top:1px solid var(--dv-line,#E4E4DF);color:var(--dv-faint,#A1A6AC);
   font-size:.7rem;text-align:center;padding:12px 22px}
@@ -1189,13 +1189,13 @@ const PCV_CSS = `
 .pcv-row-wrap{position:relative}
 .pcv-row.revising{cursor:pointer}
 .pcv-row.revising:hover{background:rgba(201,169,110,.08)}
-.pcv-flagdot{color:var(--dv-gold-deep,#A8842F);font-size:.8rem;flex-shrink:0}
+.pcv-flagdot{color:var(--dv-gold-text,#8A6A1F);font-size:.8rem;flex-shrink:0}
 .pcv-row.flagged.flag-remove .pcv-rowdesc{color:var(--dv-red,#C4553D)}
 .pcv-row.flagged.flag-remove{background:rgba(196,85,61,.08)}
 .pcv-row.flagged.flag-change{background:rgba(201,169,110,.10)}
 .pcv-flag-chip{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:100px;font-size:.64rem;font-weight:500;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-flag-chip.remove{background:var(--dv-red,#C4553D);color:#fff}
-.pcv-flag-chip.change{background:rgba(201,169,110,.14);color:var(--dv-gold-deep,#A8842F)}
+.pcv-flag-chip.change{background:rgba(201,169,110,.14);color:var(--dv-gold-text,#8A6A1F)}
 
 .pcv-linemenu{position:absolute;z-index:40;left:34px;top:calc(100% - 2px);width:min(300px,80vw);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 1px 2px rgba(16,20,24,.04);padding:12px;display:flex;flex-direction:column;gap:9px}
 .pcv-linemenu-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -1203,7 +1203,7 @@ const PCV_CSS = `
 .pcv-linemenu-x{border:none;background:none;color:var(--dv-meta,#787D84);font-size:.9rem;line-height:1;cursor:pointer;padding:2px 4px;border-radius:6px}
 .pcv-linemenu-x:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418)}
 .pcv-linemenu-note{border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);padding:8px 10px;font-size:.78rem;font-family:inherit;outline:none;resize:vertical}
-.pcv-linemenu-note:focus{border-color:var(--dv-gold,#C9A96E)}
+.pcv-linemenu-note:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pcv-linemenu-actions{display:flex;gap:7px;flex-wrap:wrap}
 .pcv-lm-btn{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;color:var(--dv-meta,#787D84)}
 .pcv-lm-btn.change{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
@@ -1214,7 +1214,7 @@ const PCV_CSS = `
 /* Per-line request control — a quiet ✕ that files a request (never a real delete); flips to ↩ once set. */
 .pcv-x{margin-left:auto;flex-shrink:0;width:22px;height:22px;border-radius:6px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-red,#C4553D);font-size:.8rem;font-weight:500;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;transition:background .12s,border-color .12s}
 .pcv-x:hover{background:rgba(196,85,61,.08);border-color:var(--dv-red,#C4553D)}
-.pcv-x.on{background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.40);color:var(--dv-gold-deep,#A8842F)}
+.pcv-x.on{background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.40);color:var(--dv-gold-text,#8A6A1F)}
 
 .pcv-accept-actions{display:flex;gap:10px;flex-wrap:wrap}
 .pcv-accept-actions .pcv-select{flex:1;min-width:200px}

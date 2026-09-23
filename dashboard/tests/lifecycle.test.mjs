@@ -129,7 +129,24 @@ test("12: addendum fingerprint — customer price/qty voids the acceptance, tech
   assert.equal(addendumSignatureCurrent({ id: "legacy", status: "approved", items: [] }), true);    // pre-binding rows honored
 });
 
-test("15: PHASE_BLOCKS keys match the canonical phases and never name a retired tool", () => {
+test("15: the deck tool manifest is THE source — PHASE_BLOCKS derives from it, the page gates on it", async () => {
+  const { DECK_TOOLS, sees } = await import("../lib/deck-tools.js");
+  const { ROLE_KEYS } = await import("../lib/roles.js");
+  assert.strictEqual(PHASE_BLOCKS, DECK_TOOLS);                        // same object, not a copy
+  for (const list of Object.values(DECK_TOOLS)) for (const t of list) for (const r of Object.keys(t.access)) assert.ok(ROLE_KEYS.includes(r), `${t.name}: ${r}`);
+  // Every manifest tool that the page pushes conditionally must ask sees() — grep the source so a
+  // hand-written role check can't creep back in. (Site Survey / Mockups / Completion are unconditional.)
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
+  const unconditional = new Set(["Site Survey", "Mockups", "Completion / Wrap-up"]);
+  for (const [phase, list] of Object.entries(DECK_TOOLS)) for (const t of list) {
+    if (unconditional.has(t.name)) continue;
+    assert.ok(src.includes(`sees(cView, "${phase}", "${t.name}")`), `gateway must gate "${t.name}" through sees()`);
+  }
+  assert.equal(sees("sales", "ph_install", "Work Order"), true);
+  assert.equal(sees("customer", "ph_install", "Work Order"), false);
+  assert.equal(sees("vendor", "ph_install", "Shipment Tracking"), true);
+  assert.equal(sees("admin", "ph_install", "Shipment Tracking"), false);
   assert.deepEqual(Object.keys(PHASE_BLOCKS), PHASES.map((p) => p.key));
   const names = Object.values(PHASE_BLOCKS).flat().map((b) => b.name);
   for (const retired of ["Install Scheduling", "Proposal Views", "Survey Scheduling & Notes"]) assert.ok(!names.includes(retired), retired);
@@ -149,6 +166,17 @@ test("13/14: role × capability map — sales reads Install, readonly and vendor
   assert.equal(can("tech", "addendum.sign"), false);
   assert.equal(ROLE_KEYS.length, 7);
   assert.throws(() => can("admin", "nope"));
+});
+
+test("16: the draw tool hands the survey a vector plan (SVG scene), raster only after AI enhance", async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../public/widgets/draw-floorplan.html", import.meta.url), "utf8");
+  // One SVG scene: structure (boundary path), rooms (edges), labels (<text>) and the grid pattern.
+  const svgFn = html.slice(html.indexOf("function sketchSVG()"), html.indexOf("// ---- enhance"));
+  for (const part of ['<svg xmlns="http://www.w3.org/2000/svg"', "boundaryEdges()", "edgesOf(set)", "<text x=", '<pattern id="pg"', "data:image/svg+xml"]) assert.ok(svgFn.includes(part), part);
+  // The finish hand-off posts the SVG (vector:true) unless an AI-enhanced raster exists.
+  assert.ok(html.includes('dataUrl:sketchSVG(), vector:true'));
+  assert.ok(html.includes("if(enhancedURL){ try{ parent.postMessage({type:\"satellite-capture-result\", dataUrl:enhancedURL}"));
 });
 
 test("survey skip satisfies both Consulting requirements; gateThroughIndex walks forward", () => {

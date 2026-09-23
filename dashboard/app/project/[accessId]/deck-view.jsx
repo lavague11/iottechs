@@ -545,7 +545,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
 }
 
 const CSS = `
-.dv-shell{--dv-ink:#101418;--dv-ink-soft:#3A4048;--dv-meta:#787D84;--dv-faint:#A1A6AC;--dv-paper:#F4F4F2;--dv-raise:#FBFBFA;--dv-line:#E4E4DF;--dv-line-soft:#EDEDE9;--dv-gold:#C9A96E;--dv-gold-deep:#A8842F;--dv-green:#2E7D5B;--dv-red:#C4553D;--dv-blue:#3E6C9E;--dv-e:cubic-bezier(.22,.9,.24,1);--dv-eo:cubic-bezier(.16,1,.3,1);
+.dv-shell{--dv-ink:#101418;--dv-ink-soft:#3A4048;--dv-meta:#787D84;--dv-faint:#A1A6AC;--dv-paper:#F4F4F2;--dv-raise:#FBFBFA;--dv-line:#E4E4DF;--dv-line-soft:#EDEDE9;--dv-gold:#C9A96E;--dv-gold-deep:#A8842F;--dv-gold-text:#8A6A1F;--dv-green:#2E7D5B;--dv-red:#C4553D;--dv-blue:#3E6C9E;--dv-e:cubic-bezier(.22,.9,.24,1);--dv-eo:cubic-bezier(.16,1,.3,1);
   height:100dvh;display:flex;flex-direction:column;background:var(--dv-paper);color:var(--dv-ink);touch-action:pan-y;
   font-family:var(--font-sans),"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
 .dv-shell .mono{font-family:var(--font-mono),"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -642,7 +642,7 @@ const CSS = `
 .dv-field dd{font-size:13.5px;color:var(--dv-ink);line-height:1.5}
 .dv-field dd small{display:block;color:var(--dv-meta);font-size:12px;margin-top:2px}
 .dv-flink{color:inherit;text-decoration:none;cursor:pointer;transition:color .12s}
-.dv-flink:hover{color:var(--dv-gold-deep,#A8842F);text-decoration:underline}
+.dv-flink:hover{color:var(--dv-gold-text,#8A6A1F);text-decoration:underline}
 .dv-cust-actions{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1;padding-top:4px;border-top:1px solid var(--dv-line-soft)}
 .dv-mini{display:inline-flex;align-items:center;gap:7px;height:31px;padding:0 12px;border-radius:9px;border:1px solid var(--dv-line);font-size:12.5px;font-weight:500;color:var(--dv-ink-soft);background:var(--dv-paper);text-decoration:none}
 .dv-mini:hover{border-color:var(--dv-ink);color:var(--dv-ink)}
@@ -654,7 +654,7 @@ const CSS = `
 .dv-cust-edit{grid-column:1/-1;display:flex;flex-direction:column;gap:7px}
 .dv-cl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta);font-weight:600;margin-top:4px}
 .dv-ci{height:36px;border:1px solid var(--dv-line);border-radius:8px;background:var(--dv-raise);color:var(--dv-ink);padding:0 11px;font-size:13.5px;font-family:inherit;outline:none;width:100%}
-.dv-ci:focus{border-color:var(--dv-gold)}
+.dv-ci:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .dv-crow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dv-cust-edit .dv-cust-actions{border-top:none;padding-top:6px}
 
@@ -689,7 +689,7 @@ const CSS = `
 .dv-gate{flex:0 0 auto;display:flex;align-items:center;gap:7px;margin:0 24px;padding:7px 12px;
   border-radius:9px;background:color-mix(in srgb, var(--dv-gold) 12%, transparent);
   color:var(--dv-ink-soft);font-size:12px;line-height:1.3;min-width:0}
-.dv-gate svg{flex:0 0 auto;color:var(--dv-gold);opacity:.85}
+.dv-gate svg{flex:0 0 auto;color:var(--dv-gold-text,#8A6A1F);opacity:.85}
 .dv-gate-step{font-weight:700;color:var(--dv-ink);white-space:nowrap}
 .dv-gate-sep{opacity:.4}
 .dv-gate-reason{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -826,7 +826,7 @@ const CSS = `
 .dv-reason{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dv-faint)}
 .dv-reason svg{color:var(--dv-gold-deep)}.dv-reason.ok{color:var(--dv-green)}
 .dv-log-btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--dv-line);color:var(--dv-meta);font-size:13px;font-weight:500;transition:border-color .14s,color .14s}
-.dv-log-btn:hover{border-color:var(--dv-gold);color:var(--dv-gold-deep)}
+.dv-log-btn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-deep)}
 .dv-adv-btn{margin-left:auto;display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-radius:12px;font-size:14px;font-weight:500;transition:transform .16s}
 .dv-advance.ready .dv-adv-btn{background:var(--dv-ink);color:#fff}.dv-advance.ready .dv-adv-btn:hover{transform:translateY(-1px)}
 .dv-advance.gated .dv-adv-btn{background:transparent;border:1px solid var(--dv-line);color:var(--dv-faint);cursor:not-allowed}

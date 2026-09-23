@@ -306,8 +306,8 @@ const PWO_CSS = `
 .pwo-contact{font-size:.7rem;color:rgba(255,255,255,.55)}
 .pwo-hd-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .pwo-doctag{font-size:.72rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--dv-gold,#C9A96E);border-bottom:1px solid var(--dv-gold,#C9A96E);padding-bottom:2px}
-.pwo-pill{background:rgba(201,169,110,.16);color:var(--dv-gold,#C9A96E);font-size:.66rem;font-weight:500;letter-spacing:.03em;
+  color:var(--dv-gold-text,#8A6A1F);border-bottom:1px solid var(--dv-gold,#C9A96E);padding-bottom:2px}
+.pwo-pill{background:rgba(201,169,110,.16);color:var(--dv-gold-text,#8A6A1F);font-size:.66rem;font-weight:500;letter-spacing:.03em;
   text-transform:uppercase;padding:4px 12px;border-radius:100px}
 .pwo-hd-meta{font-size:.7rem;color:rgba(255,255,255,.55)}
 .pwo-empty{color:var(--dv-meta,#787D84);font-size:.86rem;padding:30px 22px;text-align:center}
@@ -321,7 +321,7 @@ const PWO_CSS = `
 .pwo-opt-tabs{margin:0 22px 6px;display:flex;gap:8px;flex-wrap:wrap}
 .pwo-opt-tab{position:relative;height:32px;padding:0 15px;border-radius:8px;border:1px solid var(--dv-line,#E4E4DF);
   background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:500;cursor:pointer;font-family:inherit}
-.pwo-opt-tab:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-ink,#101418)}
+.pwo-opt-tab:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
 .pwo-opt-tab.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pwo-opt-tab-dot{position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--dv-gold,#C9A96E)}
 
@@ -340,7 +340,7 @@ const PWO_CSS = `
 .pwo-row.expandable:hover{background:rgba(46,125,91,.08)}
 .pwo-rownum{text-align:center;color:var(--dv-meta,#787D84);font-size:.74rem}
 .pwo-rowdesc{display:flex;align-items:center;gap:5px;min-width:0}
-.pwo-chev{font-size:.68rem;color:var(--dv-gold,#C9A96E);flex-shrink:0}
+.pwo-chev{font-size:.68rem;color:var(--dv-gold-text,#8A6A1F);flex-shrink:0}
 .pwo-row .r{text-align:right}
 .pwo-row .b{font-weight:600}
 .pwo-svc-note{padding:4px 10px;font-size:.72rem;color:var(--dv-meta,#787D84);white-space:pre-wrap}
@@ -356,7 +356,7 @@ const PWO_CSS = `
   border-top:1px solid var(--dv-green,#2E7D5B);padding:8px 10px;font-size:.8rem;font-weight:600;color:var(--dv-ink-soft,#3A4048)}
 .pwo-grand{margin:6px 22px 0;background:var(--dv-ink,#101418);border-top:2px solid var(--dv-gold,#C9A96E);display:flex;justify-content:space-between;
   padding:12px 14px;font-size:.92rem;font-weight:600;color:var(--dv-paper,#F4F4F2)}
-.pwo-grand span:last-child{color:var(--dv-gold,#C9A96E);font-size:1.05rem}
+.pwo-grand span:last-child{color:var(--dv-gold-text,#8A6A1F);font-size:1.05rem}
 .pwo-fineprint{margin:6px 22px 0;font-size:.7rem;color:var(--dv-meta,#787D84);font-style:italic}
 .pwo-footer{margin-top:20px;background:var(--dv-ink,#101418);border-top:2px solid var(--dv-gold,#C9A96E);color:rgba(255,255,255,.55);
   font-size:.7rem;text-align:center;padding:12px 22px}
@@ -371,7 +371,7 @@ const PWO_CSS = `
 .pwo-preview-note{font-size:.72rem;color:var(--dv-meta,#787D84)}
 .pwo-assigned-other{font-size:.82rem;color:var(--dv-meta,#787D84);line-height:1.5}
 .pwo-assigned-other b{color:var(--dv-ink,#101418);font-weight:600}
-.pwo-request-btn{height:44px;padding:0 22px;border:1px solid var(--dv-gold,#C9A96E);border-radius:9px;background:transparent;color:var(--dv-gold-deep,#A8842F);font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pwo-request-btn{height:44px;padding:0 22px;border:1px solid var(--dv-gold,#C9A96E);border-radius:9px;background:transparent;color:var(--dv-gold-text,#8A6A1F);font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pwo-request-btn:hover{background:rgba(201,169,110,.08)}
 .pwo-request-btn:disabled{opacity:.5;cursor:default}
 .pwo-req-sent{font-size:.82rem;font-weight:600;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border:1px solid rgba(46,125,91,.28);border-radius:8px;padding:9px 12px}

@@ -69,6 +69,6 @@ const TPB_CSS = `
 .tpb-lbl{font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .tpb-cell b{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tpb-dir{font-size:.72rem;color:var(--dv-blue,#3E6C9E);text-decoration:none;margin-top:1px}
-.tpb-dir:hover{color:var(--dv-gold-deep,#A8842F)}
+.tpb-dir:hover{color:var(--dv-gold-text,#8A6A1F)}
 .tpb-foot{margin-top:12px;font-size:.72rem;color:var(--dv-faint,#A1A6AC);border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-top:10px}
 `;

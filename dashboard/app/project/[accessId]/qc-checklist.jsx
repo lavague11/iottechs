@@ -267,7 +267,7 @@ const QC_CSS = `
 .qc-add-issue{align-self:flex-start;background:none;border:none;color:var(--dv-faint,#A1A6AC);font-size:.74rem;font-weight:500;cursor:pointer;font-family:inherit;padding:0}
 .qc-add-issue:hover{color:var(--dv-red,#C4553D)}
 .qc-issue-in{width:100%;height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 10px;font-size:.82rem;font-family:inherit;background:#fff;color:var(--dv-ink,#101418);outline:none}
-.qc-issue-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.qc-issue-in:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .qc-issue-ro{font-size:.82rem;color:var(--dv-red,#C4553D);font-style:italic}
 .qc-err{font-size:.82rem;color:var(--dv-red,#C4553D);background:#fbe9e6;border:1px solid #e3b4ab;border-radius:8px;padding:8px 10px}
 .qc-advance{height:44px;border:none;border-radius:10px;background:var(--dv-ink,#101418);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit}

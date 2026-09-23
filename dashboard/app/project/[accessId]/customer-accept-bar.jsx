@@ -53,7 +53,7 @@ const CAB_CSS = `
 .cab-sub{font-size:.78rem;color:var(--dv-meta,#787D84)}
 .cab-rows{display:flex;flex-direction:column;gap:8px}
 .cab-row{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-paper,#F4F4F2);padding:11px 13px;cursor:pointer;font-family:inherit}
-.cab-row:hover:not(:disabled){border-color:var(--dv-gold,#C9A96E)}
+.cab-row:hover:not(:disabled){border-color:var(--dv-gold-text,#8A6A1F)}
 .cab-row.on{border-color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08)}
 .cab-row:disabled{opacity:.6;cursor:default}
 .cab-check{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:1px solid var(--dv-line,#E4E4DF);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:500;color:#fff;background:var(--dv-raise,#FBFBFA)}

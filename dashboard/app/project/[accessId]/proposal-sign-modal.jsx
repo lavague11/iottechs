@@ -109,7 +109,7 @@ const PSM_CSS = `
 .psm-field{flex:1 1 200px;min-width:170px}
 .psm-field label{display:block;font-size:.62rem;letter-spacing:.05em;color:var(--dv-meta,#787D84);font-weight:600;margin-bottom:5px;text-transform:uppercase}
 .psm-field input{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:11px 12px;font-size:.9rem;color:var(--ink);background:var(--dv-raise,#FBFBFA);font-family:inherit;outline:none}
-.psm-field input:focus{border-color:var(--dv-gold,#C9A96E)}
+.psm-field input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .psm-preview{height:100px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-paper,#F4F4F2);display:flex;align-items:center;justify-content:center;margin-top:14px;overflow:hidden}
 .psm-preview span{font-size:3rem;color:var(--dv-ink,#101418);line-height:1;padding:0 16px;white-space:nowrap}
 .psm-preview .psm-ph{font-family:inherit;font-size:.82rem;color:var(--dv-faint,#A1A6AC);font-style:italic}

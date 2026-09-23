@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { can } from "../../../lib/roles";
+import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
@@ -2282,7 +2283,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     const deckToolsFor = (pk) => {
       // Vendor: an explicit, narrow branch — shipment tracking only (their job), nothing else renders.
       if (cView === "vendor") {
-        if (pk === "ph_install") return [{ name: "Shipment Tracking", label: "Tracking", state: shipStatus?.delivered ? "done" : "active",
+        if (pk === "ph_install" && sees(cView, "ph_install", "Shipment Tracking")) return [{ name: "Shipment Tracking", label: "Tracking", state: shipStatus?.delivered ? "done" : "active",
           node: <div style={{ padding: "16px 18px" }}><ShipmentTracking accessId={lp.access_id} role="vendor" preview={viewOnly} proposal={null} onStatus={setShipStatus} /></div> }];
         return [{ name: phaseLabelOf(pk), label: "—", node: <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard"><b>Nothing for vendors in this step.</b></div></div> }];
       }
@@ -2370,7 +2371,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       }
       if (pk === "ph_proposal") {
         const tools = [];
-        if (["admin", "manager", "sales", "customer", "tech", "readonly"].includes(cView)) {
+        if (sees(cView, "ph_proposal", "Proposal")) {
           tools.push({ name: "Proposal", label: "Proposal builder", heavy: true,
             // Office/customer: green once submitted or accepted. Tech: this phase is THEIR acceptance of
             // the work order (bar label "Accept"), so it tracks tech_signed_name, not the proposal's status.
@@ -2379,7 +2380,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               : (proposalAccepted || proposalData?.status === "sent") ? "done" : "active",
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
-                {cView === "tech" && <TechProjectBoard project={lp} />}
+                {sees(cView, "ph_proposal", "Tech Board") && <TechProjectBoard project={lp} />}
                 <ProposalPanel embedded accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
                   defaultService={proposalServiceForCode(lp.service_code)}
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
@@ -2390,7 +2391,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div></AccordionProvider>
             ) });
         }
-        if (["admin", "manager", "customer"].includes(cView)) {
+        if (sees(cView, "ph_proposal", "Approval & Deposit")) {
           tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
             // Done once signed AND the deposit is recorded by the office (green); until then it's the
             // open step (yellow). The stale acceptances.approval_deposit flag was never set.
@@ -2405,7 +2406,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div></AccordionProvider>
             ) });
         }
-        if (["admin", "manager"].includes(cView) && proposalData?.payload?.options?.length > 0) {
+        if (sees(cView, "ph_proposal", "Create Work Order") && proposalData?.payload?.options?.length > 0) {
           tools.push({ name: "Create Work Order", label: "Work order", state: workOrders?.length ? "done" : undefined,
             node: (
               <div style={{ padding: "16px 18px" }}>
@@ -2463,12 +2464,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Job-site add-ons on top — a job-site change order is the thing staff/tech reach for first when
         // something on site differs from the proposal. Staff/tech always; customer only once one exists.
         // Sales gets the add-ons read-only (status + line items; the component hides payout for them).
-        if (staff || cView === "tech" || cView === "sales" || (cView === "customer" && toolMeta?.addendum?.count > 0)) {
+        if (sees(cView, "ph_install", "Addendum") && (cView !== "customer" || toolMeta?.addendum?.count > 0)) {
           tools.push({ name: "Addendum", label: "Add-ons",
             node: <div style={pad}><InstallAddendum accessId={lp.access_id} role={cView} readOnly={viewOnly} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} embedded /></div> });
         }
         // The installation work order / checklist is an internal ops document — never shown to the customer.
-        if (cView !== "customer") {
+        if (sees(cView, "ph_install", "Work Order")) {
           tools.push({ name: "Work Order", label: "Install checklist", heavy: !techLocked, state: custFacts.install_done ? "done" : "active",
             node: techLocked
               ? <div className="pvx" style={{ padding: 24 }}><div className="pv-lockcard">
@@ -2486,7 +2487,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         // Customer: the calm post-approval home — Approved → Preparing → Installation Confirmed. This
         // is where scheduling used to be; the customer never books, they just see the state move itself.
-        if (cView === "customer") {
+        if (sees(cView, "ph_install", "Project Ready")) {
           const iAppt = pickAppt("install");
           const fmtT = (t) => { const [h, m] = String(t || "").split(":").map(Number); return Number.isNaN(h) ? "" : new Date(2000, 0, 1, h, m || 0).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); };
           const prFacts = { ...custFacts, install_date: iAppt?.date || null };
@@ -2499,7 +2500,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in.
-        if (cView === "customer") {
+        if (sees(cView, "ph_install", "Set Up Your Phone")) {
           tools.push({ name: "Set Up Your Phone", label: "App setup",
             node: (
               <div style={pad}>
@@ -2548,7 +2549,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         const fill = { height: "100%", overflow: "auto", padding: "16px 18px" };
         // Closeout order: the device/Activation QR upload sits at the TOP (techs upload it here and
         // shouldn't have to scroll past the whole QC checklist), then Final Payment, then internal QC.
-        if (["admin", "manager", "tech", "readonly"].includes(cView)) {
+        if (sees(cView, "ph_wrap", "System QR") && cView !== "customer") {
           tools.push({ name: "System QR", label: "Activation QR", state: lp.system_qr ? "done" : "active",
             node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly={viewOnly} /></div> });
         } else if (cView === "customer" && lp.system_qr) {
@@ -2556,7 +2557,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           tools.push({ name: "System QR", label: "Activation QR",
             node: <div style={pad}><SystemQrTool embedded accessId={lp.access_id} customerName={cust} systemQr={lp.system_qr} readOnly /></div> });
         }
-        if (["admin", "manager", "customer"].includes(cView)) {
+        if (sees(cView, "ph_wrap", "Final Payment")) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
             node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
               customerAddress={lp.address} customerPhone={lp.contact_phone} customerEmail={lp.contact_email} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
@@ -2567,14 +2568,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
             onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
         );
-        if (cView !== "customer") {
+        if (sees(cView, "ph_wrap", "Quality Control")) {
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
             state: (custFacts.qc_manager_approved && custFacts.qc_customer_signed) ? "done" : "active",
             node: <div style={fill}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role={cView}
               readOnly={viewOnly} userName={currentUser?.name || currentUser?.email || ""} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }}
               signoff={qcSignoff} onSaved={refreshAcceptances} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
               onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} /></div> });
-        } else if (toolMeta?.qc?.allPass || acceptances?.qc_customer) {
+        } else if (sees(cView, "ph_wrap", "Walkthrough") && (toolMeta?.qc?.allPass || acceptances?.qc_customer)) {
           // Customer: the walkthrough confirmation appears only once every device has passed QC.
           tools.push({ name: "Walkthrough", label: "Walkthrough",
             node: <div style={pad}><QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer} role="customer" readOnly signoff={qcSignoff}

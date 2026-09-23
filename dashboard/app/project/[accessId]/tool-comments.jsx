@@ -134,11 +134,11 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
         @keyframes tcpop{from{transform:scale(.96);opacity:.5}to{transform:scale(1);opacity:1}}
         .tc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
         .tc-anchor{display:inline-flex;align-items:center;gap:7px;font-size:.9rem;font-weight:700;color:var(--dv-ink,#101418)}
-        .tc-anchor svg{color:var(--dv-gold-deep,#8a6d2f)}
+        .tc-anchor svg{color:var(--dv-gold-text,#8A6A1F)}
         .tc-x{border:none;background:none;color:var(--dv-meta,#787D84);font-size:16px;cursor:pointer;line-height:1;padding:4px}
         .tc-row{display:flex;gap:8px}
         .tc-in{flex:1;min-width:0;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:0 12px;font-size:.84rem;font-family:inherit;outline:none;background:var(--dv-paper,#F4F4F2)}
-        .tc-in:focus{border-color:var(--dv-gold,#C9A96E);background:var(--dv-raise,#FBFBFA)}
+        .tc-in:focus{border-color:var(--dv-gold-text,#8A6A1F);background:var(--dv-raise,#FBFBFA)}
         .tc-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
         .tc-btn:disabled{opacity:.5;cursor:default}
         .tc-preview{font-size:.74rem;color:var(--dv-meta,#787D84)}
@@ -146,7 +146,7 @@ export default function ToolComments({ accessId, scope, role, preview, anchor, o
         .tc-thread{margin-top:10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);padding:12px 14px}
         .tc-thread-lbl{font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);margin-bottom:9px}
         .tc-group+.tc-group{margin-top:10px;padding-top:10px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
-        .tc-group-h{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-gold-deep,#8a6d2f);margin-bottom:5px}
+        .tc-group-h{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-gold-text,#8A6A1F);margin-bottom:5px}
         .tc-note{display:flex;align-items:baseline;gap:9px;font-size:.82rem;padding:3px 0}
         .tc-who{font-weight:600;color:var(--dv-meta,#787D84);flex-shrink:0}
         .tc-who.cust{color:var(--dv-blue,#3E6C9E)}

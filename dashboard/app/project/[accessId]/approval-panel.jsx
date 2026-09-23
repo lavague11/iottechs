@@ -673,7 +673,7 @@ const APV_CSS = `
 .apv-th-status.due{background:#fbe9e6;color:var(--dv-red,#C4553D)}
 .apv-empty{padding:34px 22px;text-align:center;color:var(--dv-meta,#787D84);font-size:.86rem}
 .apv-gate{display:flex;gap:14px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;padding:18px 20px;margin:18px 0}
-.apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:var(--dv-paper,#F4F4F2);color:var(--dv-gold-deep,#A8842F);display:grid;place-items:center}
+.apv-gate-ic{width:40px;height:40px;flex-shrink:0;border-radius:10px;background:var(--dv-paper,#F4F4F2);color:var(--dv-gold-text,#8A6A1F);display:grid;place-items:center}
 .apv-gate-body{flex:1;min-width:0}
 .apv-gate-hd{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left}
 .apv-gate-title{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-meta,#787D84)}
@@ -710,7 +710,7 @@ const APV_CSS = `
 .apv-sign-form{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 
 .apv-input{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
-.apv-input:focus{border-color:var(--dv-gold,#C9A96E)}
+.apv-input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .apv-input.num{text-align:right}
 select.apv-input{cursor:pointer}
 .apv-btn{height:38px;padding:0 18px;border:none;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -726,15 +726,15 @@ select.apv-input{cursor:pointer}
 .apv-payact{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin-top:6px}
 .apv-chip-btn{flex:1 1 auto;min-width:130px;height:42px;padding:0 16px;border-radius:9px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);
   font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
-.apv-chip-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
-.apv-chip-btn.on{border-color:var(--dv-gold,#C9A96E);background:#fbf6ec;color:var(--dv-gold-deep,#A8842F)}
+.apv-chip-btn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
+.apv-chip-btn.on{border-color:var(--dv-gold-text,#8A6A1F);background:#fbf6ec;color:var(--dv-gold-text,#8A6A1F)}
 .apv-chip-btn.on{border-color:var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff}
 
 .apv-pay-list{display:flex;flex-direction:column;gap:6px}
 .apv-pay-row{display:grid;grid-template-columns:auto auto 1fr auto auto auto;gap:10px;align-items:center;font-size:.8rem;padding:7px 0;border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
 .apv-pay-src{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:100px}
 .apv-pay-src.staff{background:rgba(62,108,158,.1);color:var(--dv-blue,#3E6C9E)}
-.apv-pay-src.customer{background:rgba(201,169,110,.16);color:var(--dv-gold-deep,#A8842F)}
+.apv-pay-src.customer{background:rgba(201,169,110,.16);color:var(--dv-gold-text,#8A6A1F)}
 .apv-pay-amt{font-weight:600;color:var(--ink)}
 .apv-pay-meta{color:var(--muted)}
 .apv-pay-when{color:var(--dv-faint,#A1A6AC);font-size:.72rem}
@@ -744,15 +744,15 @@ select.apv-input{cursor:pointer}
 .apv-pay-yes{height:24px;padding:0 10px;border-radius:100px;border:none;background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
 .apv-pay-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:500;cursor:pointer;font-family:inherit}
 .apv-void-btn{margin-left:auto;height:22px;padding:0 10px;border-radius:100px;border:1px solid rgba(196,85,61,.3);background:transparent;color:var(--red);font-size:.66rem;font-weight:500;cursor:pointer;font-family:inherit}
-.apv-void-confirm{margin-left:auto;display:inline-flex;gap:6px;align-items:center;font-size:.72rem;color:var(--dv-gold-deep,#A8842F)}
+.apv-void-confirm{margin-left:auto;display:inline-flex;gap:6px;align-items:center;font-size:.72rem;color:var(--dv-gold-text,#8A6A1F)}
 .apv-void-yes{height:24px;padding:0 10px;border-radius:100px;border:none;background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
 .apv-void-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:500;cursor:pointer;font-family:inherit}
 .apv-pay-row.pending{background:rgba(201,169,110,.08);border-radius:8px;padding-left:8px;padding-right:8px}
-.apv-pay-pending{display:inline-block;padding:1px 8px;border-radius:100px;background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-deep,#A8842F);font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+.apv-pay-pending{display:inline-block;padding:1px 8px;border-radius:100px;background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-text,#8A6A1F);font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
 .apv-pay-ok{height:26px;padding:0 11px;border-radius:100px;border:none;background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:transform .12s}
 .apv-pay-ok:hover{transform:translateY(-1px)}
 .apv-pay-total{display:flex;justify-content:space-between;font-size:.86rem;font-weight:700;color:var(--ink);padding-top:8px}
-.apv-pay-total.pending{font-size:.76rem;color:var(--dv-gold-deep,#A8842F);padding-top:2px}
+.apv-pay-total.pending{font-size:.76rem;color:var(--dv-gold-text,#8A6A1F);padding-top:2px}
 .apv-pay-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .apv-pay-form .apv-input.num{width:110px}
 .apv-pay-form .apv-input:not(.num):not(select){flex:1;min-width:130px}
@@ -761,12 +761,12 @@ select.apv-input{cursor:pointer}
 .apv-pay-card{gap:16px}
 .apv-inv-row{display:flex;justify-content:flex-end;margin-top:-4px}
 .apv-inv-btn{height:34px;padding:0 15px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
-.apv-inv-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.apv-inv-btn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .apv-bal{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
   background:var(--dv-ink,#101418);border-radius:12px;padding:16px 18px;color:#fff}
 .apv-bal.paid{background:#12321f}
 .apv-bal-main{display:flex;flex-direction:column;gap:2px}
-.apv-bal-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-gold,#C9A96E)}
+.apv-bal-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-gold-text,#8A6A1F)}
 .apv-bal.paid .apv-bal-lbl{color:#7fe0ab}
 .apv-bal-amt{font-size:1.9rem;font-weight:700;line-height:1;letter-spacing:-.01em}
 .apv-bal-side{display:flex;flex-direction:column;gap:3px;text-align:right;font-size:.78rem;color:#aab0bd}

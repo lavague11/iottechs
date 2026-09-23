@@ -26,7 +26,9 @@ Tests: `npm test` (node --test) — `tests/lifecycle.test.mjs` covers the ledger
 
 | *Ledger P5* (2026-09-23) | **Role / visibility.** `lib/roles.js` — one role × capability map (`can(role, cap)`, 7 roles incl. vendor + readonly) used by the deck, the work order, add-ons and tracking. Sales: read-only Install (Work Order without pay/rates/quick-fill, Add-ons without payout, issue state visible, no actions). Vendor: an explicit branch — Shipment Tracking only (can record shipments; `tracking` blob writers now admin/manager/vendor), job-site address only in the drawer (no name/phone/email), "Nothing for vendors in this step" elsewhere. Readonly: the office layout with every control off (`viewOnly` = preview ∨ completed ∨ readonly; Final Payment not rendered). Admin/manager can preview vendor + readonly. Role map lists all 7 roles. | closes P5 |
 
-Nothing left open from the ledger's P1–P5.
+| *Ledger P6* (2026-09-23) | **6A** `lib/deck-tools.js` is THE deck tool manifest (phase → tool → role access); `PHASE_BLOCKS` is now `DECK_TOOLS` itself and `deckToolsFor()` gates every conditional card through `sees(cView, phase, name)` — test 15 asserts identity, role validity, and greps the page source so a hand-written role check can't return. **6B** `--dv-gold-text:#8A6A1F` (≈4.9:1 on the deck's paper/white; `--dv-gold` #C9A96E was 2.2:1) — every `color:` use of gold on the deck's light surfaces now reads it; fills, borders and gold-on-ink untouched. **6C** the Bug Report detail already matched the profile (Review / Prompt / Context, Copy text / image / all with selective checklist, platform, route, error, graceful "Image copy unsupported") — verified, no change. **6D** the draw tool already hands the survey a single vector SVG scene (structure, rooms, labels, grid) on finish and only rasterizes after an AI Enhance; devices are survey-layer vectors on top. Test 16 pins the SVG scene + hand-off. A canvas→SVG *editor* rewrite was judged high-regression / low-gain (the editing surface is transient; the artifact is already vector) and left as-is. | closes P6 |
+
+Nothing left open from the ledger's P1–P6.
 
 ## Headline answers
 

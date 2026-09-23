@@ -71,7 +71,7 @@ export default function SurveyComments({ accessId, role, preview }) {
         .svc-lbl{font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);margin-bottom:9px}
         .svc-row{display:flex;gap:8px}
         .svc-in{flex:1;min-width:0;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:0 12px;font-size:.84rem;font-family:inherit;outline:none;background:var(--dv-paper,#F4F4F2)}
-        .svc-in:focus{border-color:var(--dv-gold,#C9A96E);background:var(--dv-raise,#FBFBFA)}
+        .svc-in:focus{border-color:var(--dv-gold-text,#8A6A1F);background:var(--dv-raise,#FBFBFA)}
         .svc-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:transform .12s}
         .svc-btn:hover:not(:disabled){transform:translateY(-1px)}
         .svc-btn:disabled{opacity:.5;cursor:default}

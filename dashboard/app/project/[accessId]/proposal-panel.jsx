@@ -47,12 +47,12 @@ const PROP_CSS = `
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
 .pvx .prop-eye{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer;font-family:inherit}
-.pvx .prop-eye:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-eye:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-eye-n{font-size:.78rem;font-weight:800;color:var(--dv-ink,#101418)}
-.pvx .prop-gear:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-fp{position:relative}
 .pvx .prop-fp-btn{height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;font-family:inherit;padding:0 12px;outline:none;cursor:pointer}
-.pvx .prop-fp-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-fp-btn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-fp-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:260px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 10px 30px rgba(16,20,24,.12);padding:8px;display:flex;flex-direction:column;gap:2px}
 .pvx .prop-fp-opt{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);cursor:pointer}
 .pvx .prop-fp-opt:hover{background:var(--dv-paper,#F4F4F2)}
@@ -69,7 +69,7 @@ const PROP_CSS = `
 .pvx .prop-cflag-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:8px;flex-shrink:0}
 .pvx .prop-cflag{padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:600;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .pvx .prop-cflag.remove{background:#fbe9e6;color:var(--dv-red,#C4553D)}
-.pvx .prop-cflag.change{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-cflag.change{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-cflag-btn{border:1px solid var(--dv-line,#E4E4DF);background:#fff;border-radius:6px;font-size:.6rem;font-weight:600;padding:2px 7px;cursor:pointer;font-family:inherit}
 .pvx .prop-cflag-btn.done{color:var(--dv-green,#2E7D5B);border-color:#cfe6d8}
 .pvx .prop-cflag-btn.done:hover{background:#e9f3ed}
@@ -83,7 +83,7 @@ const PROP_CSS = `
 .pvx .prop-sent-dot{width:7px;height:7px;border-radius:50%;background:var(--dv-green,#2E7D5B);flex:0 0 auto;align-self:center}
 .pvx .prop-sent-lbl{color:var(--dv-green,#2E7D5B);font-weight:700}
 .pvx .prop-sent-seg{color:var(--dv-meta,#787D84);font-weight:500;white-space:nowrap}
-.pvx .prop-status.changes{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-status.changes{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-status.accepted{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
 .pvx .prop-note-strip{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink-soft,#3A4048);font-size:.78rem;font-weight:500;padding:9px 12px;border-radius:9px}
 .pvx .prop-tabs{display:flex;gap:6px;flex-wrap:wrap}
@@ -100,47 +100,47 @@ const PROP_CSS = `
 .pvx .prop-svc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-svc-name{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
-.pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-sysrow{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
 .pvx .prop-sysrow + .prop-sysrow{padding-top:12px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-sys-field{display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-sys-field select,.pvx .prop-sys-field input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none}
 .pvx .prop-sys-field input{width:58px;text-align:center}
-.pvx .prop-sys-field select:focus,.pvx .prop-sys-field input:focus{border-color:var(--dv-gold,#C9A96E)}
-.pvx .prop-sys-hint{font-size:.72rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-sys-field select:focus,.pvx .prop-sys-field input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-sys-hint{font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-nvr-warn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-nvr-warn-msg{font-size:.78rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-nvr-warn-msg{font-size:.78rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-nvr-up{height:28px;padding:0 12px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-nvr-up:hover{filter:brightness(1.12)}
 .pvx .prop-nvr-cancel{height:28px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pvx .prop-nvr-cancel:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-nvr-cancel:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-sys-field input:disabled{opacity:.45}
 .pvx .prop-slots{display:flex;gap:10px;flex-wrap:wrap}
 .pvx .prop-slot{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
 .pvx .prop-slot-lbl{font-size:.6rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-slot select{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418)}
-.pvx .prop-slot select:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-slot select:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-slot-name{width:100%;box-sizing:border-box;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
-.pvx .prop-slot-name:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-slot-name:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 /* Bays beyond the selected NVR's capacity — visible but locked, not just hidden */
 .pvx .prop-slot-locked{opacity:.45}
 .pvx .prop-slot-locked select{background:var(--dv-paper,#F4F4F2);cursor:not-allowed}
 .pvx .prop-slot-locked .prop-slot-lbl{color:var(--dv-meta,#787D84)}
-.pvx .prop-slot-cost{font-size:.7rem;font-weight:600;color:var(--dv-gold-deep,#A8842F)}
-.pvx .prop-slot-price{width:100%;box-sizing:border-box;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.74rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);font-family:inherit;outline:none;padding:0 6px;background:#fff}
-.pvx .prop-slot-price:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-slot-cost{font-size:.7rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-slot-price{width:100%;box-sizing:border-box;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);font-family:inherit;outline:none;padding:0 6px;background:#fff}
+.pvx .prop-slot-price:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-slot-price:disabled{opacity:.6;border-color:transparent;background:transparent;padding-right:0}
 .pvx .prop-slot-costin{width:100%;box-sizing:border-box;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.68rem;font-weight:500;color:var(--dv-meta,#787D84);font-family:inherit;outline:none;padding:0 6px;background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-slot-costin:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-slot-costin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.85rem;cursor:pointer;padding:2px 6px}
 .pvx .prop-svc-gear{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:#fff;color:var(--dv-meta,#787D84);cursor:pointer;flex-shrink:0}
-.pvx .prop-svc-gear:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-svc-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x:hover{color:var(--dv-red,#C4553D)}
 .pvx .prop-item{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;align-items:center;padding:7px 12px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-item.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-item input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;width:100%;box-sizing:border-box}
-.pvx .prop-item input:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-item input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-item input.num{text-align:right}
 .pvx .prop-item input:not(.num){text-transform:capitalize}
 .pvx .prop-item-nametext{flex:1;min-width:0;height:30px;display:flex;align-items:center;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;padding:0 8px;border:1px solid transparent;border-radius:7px}
@@ -155,19 +155,19 @@ const PROP_CSS = `
 .pvx .prop-name-opt.mine:hover{background:var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-name-opt-name{flex:1;font-weight:600;color:var(--dv-ink,#101418);text-transform:none}
 .pvx .prop-name-opt-svc{font-size:.66rem;font-weight:600;color:var(--dv-meta,#787D84);text-transform:uppercase;letter-spacing:.03em}
-.pvx .prop-name-opt-price{font-size:.76rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);flex-shrink:0}
+.pvx .prop-name-opt-price{font-size:.76rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);flex-shrink:0}
 /* No number-spinner arrows anywhere in the proposal — they look cramped in tight cells */
 .pvx .prop-wrap input[type=number]::-webkit-outer-spin-button,
 .pvx .prop-wrap input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .pvx .prop-wrap input[type=number]{-moz-appearance:textfield;appearance:textfield}
-.pvx .prop-chev{background:none;border:none;padding:0 2px;color:var(--dv-gold-deep,#A8842F);font-size:.72rem;cursor:pointer;flex-shrink:0;font-family:inherit}
-.pvx .prop-chev:hover{color:var(--dv-gold,#C9A96E)}
+.pvx .prop-chev{background:none;border:none;padding:0 2px;color:var(--dv-gold-text,#8A6A1F);font-size:.72rem;cursor:pointer;flex-shrink:0;font-family:inherit}
+.pvx .prop-chev:hover{color:var(--dv-gold-text,#8A6A1F)}
 /* Sub-item (expanded camera breakdown) rows: zebra + hover, like the blocks */
 .pvx .prop-item.sub{background:var(--dv-paper,#F4F4F2);border-top:1px solid var(--dv-line-soft,#EDEDE9);transition:background .12s}
 .pvx .prop-item.sub.alt{background:var(--dv-raise,#FBFBFA)}
 .pvx .prop-item.sub:hover,.pvx .prop-item.sub.alt:hover{background:var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--dv-meta,#787D84)}
-.pvx .prop-item.sub input:focus{border-color:var(--dv-gold,#C9A96E);background:#fff}
+.pvx .prop-item.sub input:focus{border-color:var(--dv-gold-text,#8A6A1F);background:#fff}
 .pvx .prop-item.sub .prop-line-total{color:var(--dv-meta,#787D84);font-weight:500}
 .pvx .prop-block{border-left:3px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Drag-to-reorder line items */
@@ -181,7 +181,7 @@ const PROP_CSS = `
 .pvx .prop-slot-x{margin-left:6px;border:none;background:transparent;color:var(--dv-red,#C4553D);font-size:.68rem;cursor:pointer;padding:0;opacity:.65}
 .pvx .prop-slot-x:hover{opacity:1}
 .pvx .prop-add-slot{align-self:flex-end;height:32px;padding:0 12px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:1px}
-.pvx .prop-add-slot:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-add-slot:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-camask{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-gold,#C9A96E);border-radius:9px;padding:4px 8px 4px 12px}
 .pvx .prop-camask input{width:56px;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;padding:0 8px;font-size:.82rem;font-family:inherit;text-align:center}
 .pvx .prop-camask-go{height:28px;padding:0 12px;border:none;border-radius:6px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
@@ -207,7 +207,7 @@ const PROP_CSS = `
 .pvx .prop-item.prop-parent .prop-line-total{font-weight:600;color:var(--dv-ink,#101418)}
 /* Hover + active-edit highlight so it's obvious which block/row you're working on */
 .pvx .prop-block:hover{background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-block:focus-within{background:var(--dv-line-soft,#EDEDE9);border-left-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-block:focus-within{background:var(--dv-line-soft,#EDEDE9);border-left-color:var(--dv-gold-text,#8A6A1F)}
 /* Outdoor placement — red name text (an <input>'s value can't be partially colored, so the
    whole name goes red rather than just the "(O)" suffix) */
 .pvx .prop-subadd{padding:4px 12px 8px 30px;background:var(--dv-paper,#F4F4F2)}
@@ -217,7 +217,7 @@ const PROP_CSS = `
 /* Price = the breakdown toggle. Reads as the price (no button chrome), with a subtle chevron that
    flips when expanded, and a comfortable tap area around it. */
 .pvx button.prop-price-toggle{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;background:none;border:none;font:inherit;font-weight:600;color:var(--dv-ink,#101418);cursor:pointer;padding:4px 0 4px 10px;margin:-4px 0;min-height:30px;border-radius:8px}
-.pvx button.prop-price-toggle:hover{color:var(--dv-gold-deep,#A8842F)}
+.pvx button.prop-price-toggle:hover{color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-price-chev{opacity:.42;transition:transform .18s,opacity .15s;flex-shrink:0}
 .pvx button.prop-price-toggle:hover .prop-price-chev{opacity:.85}
 .pvx button.prop-price-toggle.open .prop-price-chev{transform:rotate(180deg);opacity:.7}
@@ -225,7 +225,7 @@ const PROP_CSS = `
 .pvx .prop-item-x:hover{color:var(--dv-red,#C4553D)}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
-.pvx .prop-exist-tog:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-ink,#101418)}
+.pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
 .pvx .prop-exist-tog.on{background:#eaf5ee;border-color:#bfe0cc;color:#2E7D5B}
 .pvx .prop-exist-tag{flex:0 0 auto;margin-left:8px;padding:2px 9px;border-radius:100px;background:#eaf5ee;color:#2E7D5B;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
 .pvx .prop-cols{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;padding:6px 12px 2px;font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
@@ -237,50 +237,50 @@ const PROP_CSS = `
 .pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:none;border-radius:999px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-preset-chip:hover{filter:brightness(1.12)}
 .pvx .prop-preset-edit{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pvx .prop-preset-edit:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-preset-edit:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-addbar select{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;max-width:240px}
 .pvx .prop-mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pvx .prop-mini:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-mini:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-mini.gold{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-mini.gold:hover{filter:brightness(1.12)}
 .pvx .prop-mini:disabled{opacity:.45;cursor:default}
 .pvx .prop-svc-note{padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);font-size:.74rem;color:var(--dv-meta,#787D84);white-space:pre-wrap}
 .pvx .prop-waiver{width:100%;margin-top:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;background:var(--dv-paper,#F4F4F2);overflow:hidden}
 .pvx .prop-waiver-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 14px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
-.pvx .prop-waiver-head .prop-chev{color:var(--dv-gold-deep,#A8842F)}
-.pvx .prop-waiver-count{margin-left:auto;font-size:.72rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);background:var(--dv-line-soft,#EDEDE9);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px 9px}
+.pvx .prop-waiver-head .prop-chev{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-waiver-count{margin-left:auto;font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);background:var(--dv-line-soft,#EDEDE9);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px 9px}
 .pvx .prop-waiver-body{border-top:1px solid var(--dv-line,#E4E4DF);padding:10px 14px;display:flex;flex-direction:column;gap:3px}
 .pvx .prop-waiver-bulk{display:flex;gap:8px;margin-bottom:6px}
 .pvx .prop-waiver-bulk button{height:26px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-meta,#787D84);font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pvx .prop-waiver-bulk button:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-waiver-bulk button:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-waiver-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:.82rem}
 .pvx .prop-waiver-row:hover{background:var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-waiver-row.on .prop-waiver-name{text-decoration:line-through;color:var(--dv-meta,#787D84)}
-.pvx .prop-waiver-row input{width:16px;height:16px;accent-color:var(--dv-gold-deep,#A8842F);cursor:pointer}
+.pvx .prop-waiver-row input{width:16px;height:16px;accent-color:var(--dv-gold-text,#8A6A1F);cursor:pointer}
 .pvx .prop-waiver-name{flex:1;min-width:0;font-weight:600;color:var(--dv-ink,#101418);display:flex;align-items:baseline;gap:8px}
 .pvx .prop-waiver-svc{font-size:.68rem;font-weight:600;color:var(--dv-meta,#787D84);text-transform:uppercase;letter-spacing:.03em}
 .pvx .prop-waiver-amt{font-weight:600;white-space:nowrap;color:var(--dv-ink,#101418)}
-.pvx .prop-waiver-row.on .prop-waiver-amt{color:var(--dv-gold-deep,#A8842F);text-decoration:none}
+.pvx .prop-waiver-row.on .prop-waiver-amt{color:var(--dv-gold-text,#8A6A1F);text-decoration:none}
 .pvx .prop-totals{display:flex;flex-direction:column;gap:9px;width:100%;margin-top:10px;border-top:1px solid var(--dv-line,#E4E4DF);padding-top:12px}
 .pvx .prop-trow{display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;min-height:28px}
 .pvx .prop-trow b{color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
 .pvx .prop-total-big b{font-variant-numeric:tabular-nums}
 .pvx .prop-adj{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pvx .prop-minus{color:var(--dv-green,#2E7D5B);white-space:nowrap}
-.pvx .prop-trow-addon span{color:var(--dv-gold-deep,#A8842F)}
-.pvx .prop-plus{color:var(--dv-gold-deep,#A8842F);font-weight:700;white-space:nowrap}
+.pvx .prop-trow-addon span{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-plus{color:var(--dv-gold-text,#8A6A1F);font-weight:700;white-space:nowrap}
 .pvx .prop-total-big{display:flex;justify-content:space-between;align-items:baseline;gap:18px;margin:6px 0;padding:14px 16px;border-radius:12px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-total-big span{font-size:.9rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.pvx .prop-total-big b{font-size:1.7rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);letter-spacing:-.01em}
+.pvx .prop-total-big b{font-size:1.7rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);letter-spacing:-.01em}
 .pvx .prop-plan-terms{font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.4;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:8px 12px;margin:-2px 0 2px}
 /* Uniform preset buttons + input across Discount / PCP / Tax / Payment-plan rows.
    Same height, same min-width, centered — inputs flush right so every row lines up. */
 .pvx .prop-adj{gap:7px}
 .pvx .prop-tax-btn,.pvx .prop-plan-btn{height:30px;min-width:54px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.73rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
-.pvx .prop-tax-btn:hover,.pvx .prop-plan-btn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-tax-btn:hover,.pvx .prop-plan-btn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-tax-btn.on,.pvx .prop-plan-btn.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-trow .tin{width:72px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;text-align:right;padding:0 8px;font-size:.76rem;font-weight:600;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
-.pvx .prop-trow .tin:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-trow .tin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 /* Payment plan: label above, the four presets on ONE line (each flexes to fit) */
 .pvx .prop-plan-row2{display:flex;flex-direction:column;gap:8px;min-height:28px;margin-bottom:2px}
 .pvx .prop-plan-lbl{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500}
@@ -301,21 +301,21 @@ const PROP_CSS = `
 .pvx .prop-cplan-step b{min-width:14px;text-align:center;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
 .pvx .prop-cplan-cad{margin-left:auto;position:relative}
 .pvx .prop-cplan-gear{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink-soft,#3A4048);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
-.pvx .prop-cplan-gear:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.pvx .prop-cplan-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-cplan-gear svg{opacity:.7}
 .pvx .prop-cplan-cadmenu{position:absolute;top:30px;right:0;z-index:20;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;box-shadow:0 10px 28px rgba(16,20,24,.14);padding:4px;display:flex;flex-direction:column;min-width:130px}
 .pvx .prop-cplan-cadmenu button{text-align:left;height:30px;padding:0 10px;border:none;background:transparent;border-radius:6px;color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;cursor:pointer;font-family:inherit}
 .pvx .prop-cplan-cadmenu button:hover{background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-deep,#A8842F);font-weight:700}
+.pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-text,#8A6A1F);font-weight:700}
 .pvx .prop-cplan-row{display:flex;align-items:center;gap:6px}
 .pvx .prop-cplan-n{width:18px;height:18px;flex-shrink:0;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center}
 .pvx .prop-cplan-row .tin{width:44px;flex-shrink:0;padding:0 5px}
 .pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.72rem;margin-left:-2px;flex-shrink:0}
 .pvx .prop-cplan-date{position:relative;flex:1 1 auto;min-width:66px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 6px;font-size:.72rem;font-weight:600;color:var(--dv-ink,#101418);background:#fff;cursor:pointer;white-space:nowrap}
-.pvx .prop-cplan-date:hover{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-date:hover{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-cplan-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
 .pvx .prop-cplan-amt{flex-shrink:0;display:inline-flex;align-items:center;gap:1px;height:30px;padding:0 7px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;white-space:nowrap}
-.pvx .prop-cplan-amt:focus-within{border-color:var(--dv-gold,#C9A96E)}
+.pvx .prop-cplan-amt:focus-within{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-cplan-amt-s{color:var(--dv-meta,#787D84);font-size:.74rem}
 .pvx .prop-cplan-amtin{width:52px;border:none;outline:none;background:transparent;text-align:right;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;font-family:inherit;padding:0}
 .pvx .prop-cplan-amtin::-webkit-outer-spin-button,.pvx .prop-cplan-amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}

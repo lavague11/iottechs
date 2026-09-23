@@ -321,11 +321,11 @@ const ADN_CSS = `
 .adn-item{display:flex;justify-content:space-between;gap:10px;font-size:.84rem;color:var(--dv-ink-soft,#3A4048)}
 .adn-item-name{font-weight:600;color:var(--dv-ink,#101418)}
 .adn-item-price{font-weight:600;font-variant-numeric:tabular-nums}
-.adn-item-tech{color:var(--dv-gold-deep,#A8842F);font-weight:500}
+.adn-item-tech{color:var(--dv-gold-text,#8A6A1F);font-weight:500}
 .adn-card-ft{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-top:9px}
 .adn-ct{font-size:.86rem;color:var(--dv-ink-soft,#3A4048)}
 .adn-ct b{font-size:.98rem;color:var(--dv-ink,#101418);font-weight:600}
-.adn-tt{color:var(--dv-gold-deep,#A8842F)}
+.adn-tt{color:var(--dv-gold-text,#8A6A1F)}
 .adn-sign{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .adn-sign img{height:34px;max-width:150px;object-fit:contain}
 .adn-sign em{font-size:.74rem;color:var(--dv-meta,#787D84);font-style:normal}
@@ -337,16 +337,16 @@ const ADN_CSS = `
 .adn-root .adn-c-yes{height:30px;padding:0 12px;border:none;border-radius:8px;background:var(--dv-red,#C4553D);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-c-no{height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-newbtn{margin-top:6px;height:42px;width:100%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);border-radius:10px;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-newbtn:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.adn-newbtn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .adn-builder{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2);padding:14px;margin-top:6px;display:flex;flex-direction:column;gap:12px}
 /* One deliberate form: every control is a labeled field so the workflow reads top to bottom
    (title → item → type/qty → customer/tech price → add item/discount → total → create). */
 .adn-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .adn-flbl{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.adn-flbl-tech{color:var(--dv-gold-deep,#A8842F)}
+.adn-flbl-tech{color:var(--dv-gold-text,#8A6A1F)}
 .adn-b-title,.adn-b-name,.adn-b-type,.adn-b-qty{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;background:#fff;color:var(--dv-ink,#101418);width:100%}
 .adn-b-title{font-weight:600}
-.adn-b-title:focus,.adn-b-name:focus,.adn-b-type:focus,.adn-b-qty:focus{border-color:var(--dv-gold,#C9A96E)}
+.adn-b-title:focus,.adn-b-name:focus,.adn-b-type:focus,.adn-b-qty:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .adn-b-qty{text-align:center;padding:0 6px}
 .adn-b-items{display:flex;flex-direction:column;gap:14px}
 .adn-lineitem{display:flex;flex-direction:column;gap:10px}
@@ -360,22 +360,22 @@ const ADN_CSS = `
 .adn-frow .adn-fld-price{flex:1 1 0}
 /* Currency belongs to the input: one bordered box, $ inside, number right-aligned. No loose $. */
 .adn-money{display:flex;align-items:center;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;padding-left:10px;gap:1px}
-.adn-money:focus-within{border-color:var(--dv-gold,#C9A96E)}
-.adn-money.tech:focus-within{border-color:var(--dv-gold-deep,#A8842F)}
+.adn-money:focus-within{border-color:var(--dv-gold-text,#8A6A1F)}
+.adn-money.tech:focus-within{border-color:var(--dv-gold-text,#8A6A1F)}
 .adn-cur{color:var(--dv-meta,#787D84);font-weight:600;font-size:.86rem;flex:0 0 auto}
 .adn-money input{flex:1 1 0;min-width:0;height:100%;border:none;background:transparent;text-align:right;padding:0 10px 0 2px;font-size:.9rem;font-family:inherit;color:var(--dv-ink,#101418);outline:none;font-variant-numeric:tabular-nums}
-.adn-money.tech .adn-cur{color:var(--dv-gold-deep,#A8842F)}
+.adn-money.tech .adn-cur{color:var(--dv-gold-text,#8A6A1F)}
 .adn-b-x{width:26px;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-red,#C4553D);cursor:pointer;font-size:.72rem;flex:0 0 auto}
 .adn-b-act{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .adn-b-additem{height:38px;padding:0 15px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-b-additem:hover{border-color:var(--dv-gold,#C9A96E);border-style:solid;color:var(--dv-gold-deep,#A8842F)}
+.adn-b-additem:hover{border-color:var(--dv-gold-text,#8A6A1F);border-style:solid;color:var(--dv-gold-text,#8A6A1F)}
 .adn-b-disc{flex:0 0 auto}
 .adn-b-disc .adn-money{width:118px}
 /* Final action area: Total leads, Create is the clear primary, Cancel is quiet. */
 .adn-b-final{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:13px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .adn-b-totalblock{display:flex;flex-direction:column;gap:2px;margin-right:auto}
 .adn-b-note{margin-right:auto;max-width:60%;font-size:.72rem;line-height:1.35;color:var(--dv-meta,#787D84)}
-.adn-b-editing{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-gold-deep,#A8842F);margin-bottom:-2px}
+.adn-b-editing{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-gold-text,#8A6A1F);margin-bottom:-2px}
 .adn-b-tval{font-size:1.15rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;line-height:1}
 /* .adn-root prefix beats the deck's ".dv-shell button" background reset so the primary button
    actually reads as a filled button, not plain text. */

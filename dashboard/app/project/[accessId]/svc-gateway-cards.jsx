@@ -252,7 +252,7 @@ const CSS = `
 .pvx .svg-modal{width:100%;max-width:440px;background:var(--bg);border-radius:18px;padding:26px 24px;position:relative;box-shadow:var(--shadow-modal);max-height:88vh;overflow-y:auto}
 .pvx .svg-x{position:absolute;top:12px;right:14px;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;width:30px;height:30px;border-radius:8px}
 .pvx .svg-x:hover{background:var(--bg-soft);color:var(--ink)}
-.pvx .svg-tag{display:inline-block;font-size:var(--fs-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-gold-deep,#A8842F);background:rgba(201,169,110,.16);padding:4px 11px;border-radius:var(--r-pill);margin-bottom:10px}
+.pvx .svg-tag{display:inline-block;font-size:var(--fs-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.16);padding:4px 11px;border-radius:var(--r-pill);margin-bottom:10px}
 .pvx .svg-modal h3{font-family:inherit;font-weight:600;font-size:1.2rem;margin:0 0 8px;line-height:1.25}
 .pvx .svg-sub{color:var(--muted);font-size:var(--fs-lg);margin:0 0 14px}
 .pvx .svg-pick{width:100%;display:flex;flex-direction:column;gap:2px;text-align:left;padding:13px 15px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);cursor:pointer;font-family:inherit;margin-bottom:9px;transition:border-color .12s,background .12s}

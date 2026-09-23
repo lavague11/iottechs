@@ -46,7 +46,7 @@ const CSS = `
 .pann-x:hover{background:var(--dv-line,#E4E4DF);color:var(--dv-ink,#101418)}
 .pann-burst{width:64px;height:64px;margin:6px auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0B0F1A;background:linear-gradient(180deg,#F0DCB2,var(--dv-gold,#C9A96E));box-shadow:0 8px 22px rgba(201,169,110,.5);animation:pannpop .5s cubic-bezier(.2,.85,.3,1.4) .08s both}
 @keyframes pannpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
-.pann-kick{font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dv-gold-deep,#9A7B43)}
+.pann-kick{font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dv-gold-text,#8A6A1F)}
 .pann-title{font-size:1.32rem;font-weight:800;color:var(--dv-ink,#101418);letter-spacing:-.01em;margin-top:5px}
 .pann-body{font-size:.92rem;color:var(--dv-meta,#787D84);line-height:1.5;margin-top:8px}
 .pann-go{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A;font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit;transition:.15s}

@@ -119,7 +119,7 @@ const RCV_CSS = `
 .rcv-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .rcv-title{display:block;font-size:.94rem;font-weight:600;color:var(--dv-ink,#101418)}
 .rcv-sub{font-size:.76rem;color:var(--dv-meta,#787D84)}
-.rcv-badge{background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-deep,#A8842F);font-weight:600;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}
+.rcv-badge{background:rgba(201,169,110,.16);border:1px solid rgba(201,169,110,.42);color:var(--dv-gold-text,#8A6A1F);font-weight:600;font-size:.76rem;border-radius:100px;padding:5px 12px;white-space:nowrap}
 .rcv-badge.done{background:rgba(46,125,91,.08);border-color:rgba(46,125,91,.30);color:var(--dv-green,#2E7D5B)}
 .rcv-list{display:flex;flex-direction:column;gap:7px}
 .rcv-row{display:flex;align-items:center;gap:11px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:9px 12px}
@@ -139,7 +139,7 @@ const RCV_CSS = `
 .rcv-bar-fill{height:100%;background:var(--dv-green,#2E7D5B)}
 .rcv-ft{font-size:.76rem;color:var(--dv-meta,#787D84);font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .rcv-reset{height:26px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;border-radius:7px;color:var(--dv-red,#C4553D);font-size:.72rem;font-weight:500;cursor:pointer;font-family:inherit}
-.rcv-reset-confirm{display:inline-flex;gap:6px;align-items:center;color:var(--dv-gold-deep,#A8842F)}
+.rcv-reset-confirm{display:inline-flex;gap:6px;align-items:center;color:var(--dv-gold-text,#8A6A1F)}
 .rcv-reset-yes{height:24px;padding:0 9px;border:none;border-radius:6px;background:var(--dv-red,#C4553D);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
 .rcv-reset-no{height:24px;padding:0 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:500;cursor:pointer;font-family:inherit}
 `;

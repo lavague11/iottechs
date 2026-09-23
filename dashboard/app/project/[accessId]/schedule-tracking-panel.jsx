@@ -283,6 +283,9 @@ export default function ShipmentTracking({ accessId, role, preview, proposal, on
   // The tracker only appears once a real tracking number exists. Staff (not previewing) always see
   // it so they can paste one in; the customer sees nothing until a package is actually posted.
   const showTracking = shipments.length > 0 || (isStaff && !preview);
+  // Previewing a role that would see the paste-and-go input (staff / vendor) with no packages yet:
+  // say so instead of rendering an empty card.
+  const previewEmpty = !showTracking && isStaff && preview;
 
   async function saveShipments(list) {
     if (busy || preview) return false;
@@ -361,6 +364,7 @@ export default function ShipmentTracking({ accessId, role, preview, proposal, on
     <div className="stp-root">
       <style>{STP_CSS}</style>
       {/* Tracking — only rendered once a real number exists (or for staff, who can add one) */}
+      {previewEmpty && <div className="stp-pkgcount" style={{ padding: "4px 2px" }}>No packages yet</div>}
       {showTracking && (<>
       {(shipments.length > 1 || (isStaff && !preview)) && (
         <div className="stp-track-topbar">
@@ -485,7 +489,7 @@ const STP_CSS = `
 .stp-track-topbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:8px}
 .stp-pkgcount{margin-right:auto;font-size:.72rem;font-weight:600;letter-spacing:.03em;color:var(--dv-meta,#787D84)}
 .stp-addmini{height:26px;padding:0 12px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.72rem;font-weight:600;letter-spacing:.03em;cursor:pointer;font-family:inherit}
-.stp-addmini:hover{border-color:var(--dv-gold,#C9A96E);filter:brightness(1.12)}
+.stp-addmini:hover{border-color:var(--dv-gold-text,#8A6A1F);filter:brightness(1.12)}
 @keyframes stpPulse{0%,100%{opacity:.2;transform:translateY(0)}45%{opacity:1;transform:translateY(-7px)}}
 @keyframes stpNow{0%,100%{box-shadow:0 0 0 3px rgba(46,125,91,.18)}50%{box-shadow:0 0 0 6px rgba(46,125,91,.05)}}
 
@@ -495,7 +499,7 @@ const STP_CSS = `
 @keyframes stpShimmer{0%,100%{opacity:.45}50%{opacity:1}}
 .stp-track-wait span{font-size:.8rem;color:var(--dv-ink-soft,#3A4048)}
 .stp-input{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
-.stp-input:focus{border-color:var(--dv-gold,#C9A96E)}
+.stp-input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .stp-btn{height:38px;padding:0 18px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .stp-btn:hover{filter:brightness(1.12)}
 .stp-btn:disabled{opacity:.45;cursor:default}
@@ -506,14 +510,14 @@ const STP_CSS = `
 
 .stp-quickadd{display:flex;gap:6px;align-items:center}
 .stp-quickadd-in{height:30px;width:180px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:0 10px;font-size:.78rem;font-family:ui-monospace,Consolas,monospace;outline:none}
-.stp-quickadd-in:focus{border-color:var(--dv-gold,#C9A96E)}
+.stp-quickadd-in:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .stp-quickadd-btn{height:30px;padding:0 13px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .stp-quickadd-btn:hover{filter:brightness(1.12)}
 .stp-quickadd-btn:disabled{opacity:.45;cursor:default}
 .stp-quick-carrier{flex-shrink:0;font-size:.64rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);border-radius:100px;padding:4px 10px}
 .stp-pkgs{display:flex;gap:8px;flex-wrap:wrap}
 .stp-pkg{display:flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
-.stp-pkg:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.stp-pkg:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .stp-pkg.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .stp-pkg.done .stp-pkg-n{background:var(--dv-green,#2E7D5B);color:#fff}
 .stp-pkg-n{width:18px;height:18px;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);display:flex;align-items:center;justify-content:center;font-size:.64rem;font-weight:600}
@@ -523,7 +527,7 @@ const STP_CSS = `
 .stp-shiprow .stp-input{flex:1;min-width:120px;height:34px;font-family:ui-monospace,Consolas,monospace;font-size:.78rem}
 .stp-shiprow .stp-btn{height:34px;padding:0 14px;font-size:.76rem}
 .stp-mini{height:28px;padding:0 12px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit}
-.stp-mini:hover{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-deep,#A8842F)}
+.stp-mini:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .stp-liverow{display:flex;align-items:center;gap:9px}
 .stp-livedot{width:9px;height:9px;border-radius:50%;background:var(--dv-faint,#A1A6AC);flex-shrink:0}
 .stp-livedot.ok{background:var(--dv-green,#2E7D5B);box-shadow:0 0 0 3px rgba(46,125,91,.16);animation:stpNow 1.8s ease-in-out infinite}
@@ -605,10 +609,10 @@ const STP_CSS = `
 .cin-stages{position:relative;height:16px;margin:10px 18px 0}
 .cin-stage{position:absolute;font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;color:#4A5478;font-weight:500;white-space:nowrap;transition:color .5s ease}
 .cin-stage.on{color:#5FB88A}
-.cin-stage.now{color:var(--dv-gold,#C9A96E);font-weight:600}
+.cin-stage.now{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
 
 .cin-statusrow{padding:14px 18px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.cin-carrier{background:rgba(201,169,110,.12);border:1px solid rgba(201,169,110,.3);color:var(--dv-gold,#C9A96E);font-weight:600;font-size:10.5px;padding:7px 10px;border-radius:7px;flex-shrink:0}
+.cin-carrier{background:rgba(201,169,110,.12);border:1px solid rgba(201,169,110,.3);color:var(--dv-gold-text,#8A6A1F);font-weight:600;font-size:10.5px;padding:7px 10px;border-radius:7px;flex-shrink:0}
 .cin-status{display:flex;flex-direction:column;min-width:0}
 .cin-status-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#5B6486}
 .cin-status b{font-size:15px;font-weight:600;color:#F5F3EF;margin-top:1px}
@@ -619,7 +623,7 @@ const STP_CSS = `
 .cin-banner{margin:14px 18px;border-radius:10px;padding:12px 16px;text-align:center}
 .cin-banner.eta{background:linear-gradient(180deg,#1B2138,#151A2D);border:1px solid rgba(201,169,110,.22)}
 .cin-banner-lbl{display:block;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#5B6486}
-.cin-banner-date{font-size:18px;font-weight:700;margin-top:2px;color:var(--dv-gold,#C9A96E)}
+.cin-banner-date{font-size:18px;font-weight:700;margin-top:2px;color:var(--dv-gold-text,#8A6A1F)}
 .cin-banner.delivered{background:linear-gradient(180deg,#182A22,#131F1A);border:1px solid rgba(76,175,109,.3)}
 .cin-banner.delivered span{font-weight:600;font-size:14px;color:#5FB88A}
 .cin-note{margin:0 18px 14px;font-size:11.5px;color:#9AA1B4}

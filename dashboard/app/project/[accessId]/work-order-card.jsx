@@ -217,7 +217,7 @@ const WOC_CSS = `
 .woc-none{font-size:.82rem;color:var(--dv-meta,#787D84);margin-bottom:9px}
 .woc-assign{display:flex;gap:8px;flex-wrap:wrap}
 .woc-select{flex:1 1 auto;min-width:0;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);padding:0 11px;font-size:.82rem;font-family:inherit;outline:none}
-.woc-select:focus{border-color:var(--dv-gold,#C9A96E)}
+.woc-select:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .woc-add{height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .woc-add:hover{filter:brightness(1.12)}
 .woc-add:disabled{opacity:.5;cursor:default}

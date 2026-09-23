@@ -14,6 +14,8 @@
 // over-exposure). A role omitted from a block's `access` map simply doesn't see it.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { DECK_TOOLS } from "./deck-tools.js";
+
 export const PHASE_COLORS = {
   ph_survey:   "#C9A96E",
   ph_proposal: "#7c3aed",
@@ -32,41 +34,9 @@ export const ROLES = [
   { key: "readonly", label: "Read-only",  color: "#6f7686" },
 ];
 
-// Mirrors deckToolsFor() in gateway-client.jsx (the deck is the live project page). Scheduling is no
-// longer a tool card (it lives on the contact action bar + header chip) and Shipment Tracking is
-// archived, so neither appears here. Re-synced 2026-09-21.
-export const PHASE_BLOCKS = {
-  // Consulting = the System Planner (survey map + camera views), one workspace for every role.
-  ph_survey: [
-    { name: "Site Survey",                 access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view", readonly: "view" } },
-    { name: "Mockups",                     access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "view", readonly: "view" } },
-  ],
-  ph_proposal: [
-    { name: "Proposal",                    access: { admin: "edit", manager: "edit", sales: "edit", tech: "view", customer: "edit", readonly: "view" } },
-    { name: "Tech Board",                  access: { tech: "view" } },
-    { name: "Approval & Deposit",          access: { admin: "edit", manager: "edit", customer: "edit", readonly: "view" } },
-    { name: "Create Work Order",           access: { admin: "edit", manager: "edit" } },
-  ],
-  // Sales reads Install (status, line items, add-ons, issue state) — never pay, rates or edits.
-  // Vendor sees shipment tracking only. Readonly sees the office layout with every control off.
-  ph_install: [
-    { name: "Addendum",                    access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", customer: "view", readonly: "view" } },
-    { name: "Work Order",                  access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", readonly: "view" } },
-    { name: "Shipment Tracking",           access: { vendor: "edit" } },
-    { name: "Project Ready",               access: { customer: "view" } },
-    { name: "Set Up Your Phone",           access: { customer: "view" } },
-  ],
-  // Step 4 — Closeout: Activation QR handover, final payment, internal QC.
-  ph_wrap: [
-    { name: "System QR",                   access: { admin: "edit", manager: "edit", tech: "edit", customer: "view", readonly: "view" } },
-    { name: "Final Payment",               access: { admin: "edit", manager: "edit", customer: "edit" } },
-    { name: "Quality Control",             access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", readonly: "view" } },
-  ],
-  // Step 5 — Completion: read-only "all done" wrap-up (certificate / warranty / payout).
-  ph_complete: [
-    { name: "Completion / Wrap-up",        access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view", readonly: "view" } },
-  ],
-};
+// DERIVED from the deck tool manifest (lib/deck-tools.js) — the same object deckToolsFor() gates on,
+// so the map can't drift from the page. Edit the manifest, not this.
+export const PHASE_BLOCKS = DECK_TOOLS;
 
 // Blocks a role sees in a phase, with the access level flattened onto each.
 export function blocksForRole(phaseKey, role) {

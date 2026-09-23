@@ -227,7 +227,7 @@ export const ISSUE_CSS = `
 .iss-sel.wide{width:100%;height:38px}
 .iss-form{padding:14px;display:flex;flex-direction:column;gap:10px}
 .iss-ta{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:8px 10px;font-size:.86rem;font-family:inherit;resize:vertical;outline:none}
-.iss-ta:focus{border-color:var(--dv-gold,#C9A96E)}
+.iss-ta:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .iss-row{display:flex;align-items:center;gap:8px}
 .iss-spacer{flex:1}
 .iss-upl{cursor:pointer}

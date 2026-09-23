@@ -131,7 +131,7 @@ const RL_CSS = `
 .rl-x:hover{background:rgba(255,255,255,.18)}
 .rl-scopes{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:14px 18px 0}
 .rl-scope{height:32px;padding:0 13px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:500;cursor:pointer;font-family:inherit}
-.rl-scope:hover{border-color:var(--dv-gold,#C9A96E)}
+.rl-scope:hover{border-color:var(--dv-gold-text,#8A6A1F)}
 .rl-scope.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:var(--dv-gold,#C9A96E)}
 .rl-addtech{display:inline-flex;align-items:center;gap:0}
 .rl-addtech input{height:32px;border:1px solid var(--dv-line,#E4E4DF);border-right:none;border-radius:8px 0 0 8px;padding:0 10px;font-size:.76rem;font-family:inherit;outline:none;width:130px}

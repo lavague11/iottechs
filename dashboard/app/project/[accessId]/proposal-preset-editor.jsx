@@ -110,8 +110,8 @@ const PST_CSS = `
 .pvx .pst-card{border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(16,20,24,.04)}
 .pvx .pst-card-h{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--dv-paper,#F4F4F2);border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .pst-name-in{flex:1;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-raise,#FBFBFA);padding:0 10px;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);font-family:inherit;outline:none;min-width:0}
-.pvx .pst-name-in:focus{border-color:var(--dv-gold,#C9A96E)}
-.pvx .pst-card-total{font-size:.82rem;font-weight:600;color:var(--dv-gold-deep,#A8842F);white-space:nowrap}
+.pvx .pst-name-in:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .pst-card-total{font-size:.82rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);white-space:nowrap}
 .pvx .pst-del{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.9rem;cursor:pointer;flex-shrink:0;padding:2px 4px}
 .pvx .pst-del:hover{color:var(--dv-red,#C4553D)}
 .pvx .pst-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
@@ -119,7 +119,7 @@ const PST_CSS = `
 .pvx .pst-item-name{flex:1;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize}
 .pvx .pst-item-price{font-size:.78rem;font-weight:500;color:var(--dv-meta,#787D84);white-space:nowrap}
 .pvx .pst-qty{width:52px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-raise,#FBFBFA);text-align:right;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);font-family:inherit;outline:none;padding:0 7px}
-.pvx .pst-qty:focus{border-color:var(--dv-gold,#C9A96E)}
+.pvx .pst-qty:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .pst-item-x{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.85rem;cursor:pointer;flex-shrink:0}
 .pvx .pst-item-x:hover{color:var(--dv-red,#C4553D)}
 .pvx .pst-additem{padding:9px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:var(--dv-paper,#F4F4F2)}
