@@ -10,6 +10,9 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
+import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
+import { applyPrices } from "../../../lib/proposal-reuse";
+import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 
@@ -93,6 +96,19 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [syncConfirm, setSyncConfirm] = useState(false); // two-tap confirm for the destructive "Sync from survey" rebuild
   const [waiveOpen, setWaiveOpen] = useState(false);     // waiver tool panel
   const [bodyOpenState, setBodyOpen] = useState(true);   // whole-card collapse (matches the other proposal-phase cards)
+  // Reuse a previous proposal: the start strip on an empty draft, the post-copy pricing review,
+  // and the "use for another project" destination picker (see proposal-start.jsx).
+  const [startHidden, setStartHidden] = useState(false);
+  const [reviewDiffs, setReviewDiffs] = useState([]);
+  const [useForOpen, setUseForOpen] = useState(false);
+  const canReuse = can(role, "proposal.reuse");
+  const hasItems = payload.options.some((o) => (o.services || []).some((s) => (s.items || []).length));
+  function onReuseCreated(r) {
+    if (r?.proposal) adopt(r.proposal);
+    setReviewDiffs(Array.isArray(r?.review) ? r.review : []);
+    setStartHidden(true);
+    showToast(r?.source ? `Copied from ${r.source.accessId}` : "Draft created");
+  }
   const bodyOpen = embedded ? true : bodyOpenState;      // in the deck overlay the card is always open (no self-collapse)
 
   // Refresh with a role-appropriate copy on mount (covers PIN-resolved sessions that got
@@ -497,6 +513,12 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             {copied && <span className="prop-eye-n">Copied</span>}
           </button>
         );
+        // Reverse entry: this proposal as the starting point for ANOTHER project (same clone service).
+        const useFor = canReuse && meta?.id && hasItems && (
+          <button className="prop-eye" onClick={() => setUseForOpen(true)} title="Use for another project" aria-label="Use for another project">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        );
         const download = (
           <button className="prop-eye" disabled={dlBusy} onClick={handleDownload} title="Download the proposal PDF (with mockup & survey)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -514,7 +536,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{eye}{gear}{reviseBtn}{submitBtn}</div>;
+          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{useFor}{eye}{gear}{reviseBtn}{submitBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -527,6 +549,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
             </button>
             {shareBtn}
             {download}
+            {useFor}
             {eye}
             {gear}
             {reviseBtn}
@@ -542,6 +565,14 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       )}
       {err && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
+      {!readOnly && canReuse && !hasItems && !startHidden && (
+        <ProposalStart accessId={accessId} serviceKey={defaultService} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
+      )}
+      {!readOnly && reviewDiffs.length > 0 && (
+        <PricingReview diffs={reviewDiffs} onDismiss={() => setReviewDiffs([])}
+          onApply={(updates) => { if (Object.keys(updates).length) { setPayload((p) => applyPrices(p, updates)); setDirty(true); } }} />
+      )}
+      {useForOpen && meta?.id && <UseForAnother accessId={accessId} proposalId={meta.id} onClose={() => setUseForOpen(false)} />}
 
       {/* Option tabs — the active tab is inline-editable (the option name is merged in, no separate field). */}
       <div className="prop-tabs">

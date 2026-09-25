@@ -30,6 +30,8 @@ const CAPS = {
   "qc.sign.manager":     ["admin", "manager"],
   "qc.sign.customer":    ["customer"],
   "qc.view":             ["admin", "manager", "sales", "tech", "readonly"],
+  // Proposals
+  "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
   // Money / lifecycle
   "stage.move":          ["admin", "manager"],
   "customer.contact.view": ["admin", "manager", "sales", "tech", "readonly"], // name / phone / email

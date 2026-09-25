@@ -8,6 +8,7 @@ import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flo
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
+import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -1108,6 +1109,14 @@ function init() {
   if (!propCols.includes("tech_signed_name"))    db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_name TEXT");    // technician who accepted the work order
   if (!propCols.includes("tech_signed_at"))      db.exec("ALTER TABLE proposals ADD COLUMN tech_signed_at TEXT");
   if (!propCols.includes("tech_signature_data")) db.exec("ALTER TABLE proposals ADD COLUMN tech_signature_data TEXT");
+  // Provenance for "reuse previous proposal" (2026-09-25): where a draft was copied / imported from.
+  // Internal only — never shown to the customer. Nullable; no backfill.
+  if (!propCols.includes("copied_from_proposal_id")) db.exec("ALTER TABLE proposals ADD COLUMN copied_from_proposal_id INTEGER");
+  if (!propCols.includes("copied_from_project_id"))  db.exec("ALTER TABLE proposals ADD COLUMN copied_from_project_id TEXT");
+  if (!propCols.includes("copied_at"))               db.exec("ALTER TABLE proposals ADD COLUMN copied_at TEXT");
+  if (!propCols.includes("copied_by"))               db.exec("ALTER TABLE proposals ADD COLUMN copied_by TEXT");
+  if (!propCols.includes("import_source_media_id"))  db.exec("ALTER TABLE proposals ADD COLUMN import_source_media_id TEXT");
+  if (!propCols.includes("imported_at"))             db.exec("ALTER TABLE proposals ADD COLUMN imported_at TEXT");
   // Signature binding: the content fingerprint captured at sign time + a frozen JSON snapshot of the
   // exact payload that was signed. `proposal_signed` is only satisfied while signed_fingerprint still
   // matches the live payload; a signed version's PDF renders from signed_payload (the exact artifact).
@@ -5263,6 +5272,103 @@ export function getLatestSignedVersion(accessId) {
   ).get(String(accessId));
   return r ? { ...r, payload: r.signed_payload || r.payload } : null;
 }
+// ---- Reuse a previous proposal (clone / import) --------------------------------------------------
+export function getProposalById(id) {
+  const r = db.prepare("SELECT * FROM proposals WHERE id=?").get(Number(id));
+  return r ? { ...r } : null;
+}
+// Compact rows for the "Previous Project" picker: every project's latest non-superseded proposal,
+// same-customer first, filtered by q (customer / project id / address / service / proposal #).
+// No payload leaves this function — only counts and totals.
+export function listReusableProposals({ q = "", forAccessId = null, limit = 30 } = {}) {
+  const cur = forAccessId ? getJobByAccessId(forAccessId) : null;
+  const like = `%${String(q || "").trim()}%`;
+  const rows = db.prepare(`
+    SELECT p.access_id, p.customer, p.address, p.contact_email, p.contact_phone, p.service_code, p.property_type,
+           pr.id, pr.version, pr.status, pr.payload, pr.tax_rate, pr.deposit_pct, pr.accepted_options, pr.signed_name, pr.signed_at, pr.sent_at, pr.updated_at, pr.created_at
+      FROM proposals pr JOIN projects p ON p.access_id = pr.project_access_id
+     WHERE pr.status != 'superseded'
+       AND pr.id = (SELECT x.id FROM proposals x WHERE x.project_access_id = pr.project_access_id AND x.status != 'superseded' ORDER BY x.version DESC, x.id DESC LIMIT 1)
+       AND (? = '' OR p.customer LIKE ? OR p.access_id LIKE ? OR p.address LIKE ? OR p.service_code LIKE ? OR ('PROP-' || printf('%04d', pr.id)) LIKE ?)
+     ORDER BY COALESCE(pr.updated_at, pr.sent_at, pr.created_at) DESC LIMIT 200
+  `).all(String(q || "").trim(), like, like, like, like, like);
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  const digits = (s) => String(s || "").replace(/\D/g, "");
+  const sameCustomer = (r) => !!cur && r.access_id !== cur.access_id && (
+    (norm(r.customer) && norm(r.customer) === norm(cur.customer)) ||
+    (norm(r.contact_email) && norm(r.contact_email) === norm(cur.contact_email)) ||
+    (digits(r.contact_phone).length >= 7 && digits(r.contact_phone) === digits(cur.contact_phone)));
+  const out = rows.filter((r) => r.access_id !== (cur?.access_id || null)).map((r) => {
+    const s = summarizeProposalRow(r);
+    return { proposalId: r.id, accessId: r.access_id, customer: r.customer, address: r.address || "", service: r.service_code || null, propertyType: r.property_type || null,
+      status: s.status, version: s.version, items: s.items, total: s.total, signed: s.signed, date: s.date, sameCustomer: sameCustomer(r) };
+  });
+  out.sort((a, b) => (b.sameCustomer - a.sameCustomer) || String(b.date || "").localeCompare(String(a.date || "")));
+  return out.slice(0, limit);
+}
+// Preview for one source proposal (options, counts, plan) — still no full payload to the client.
+export function previewProposalForClone(proposalId) {
+  const row = getProposalById(proposalId);
+  if (!row) return null;
+  const proj = getJobByAccessId(row.project_access_id);
+  const addons = getApprovedAddons(row.project_access_id);
+  return { ...summarizeProposalRow(row), accessId: row.project_access_id, customer: proj?.customer || row.project_access_id, service: proj?.service_code || null,
+    address: proj?.address || "", addendums: addons.list.map((a) => ({ id: a.id, title: a.title, items: a.items.length, total: a.total })) };
+}
+// The canonical clone: a NEW draft on the destination project from a structured copy of the source.
+// The source row is never touched. Refuses when the destination already has a proposal with content
+// (revise that instead) — a clone must never silently replace someone's work.
+export function cloneProposal({ sourceProposalId, destAccessId, options = {}, actor, includeInternal = false }) {
+  const src = getProposalById(sourceProposalId);
+  if (!src) return { error: "Source proposal not found." };
+  const dest = getJobByAccessId(destAccessId);
+  if (!dest) return { error: "Destination project not found." };
+  if (String(src.project_access_id).toUpperCase() === String(destAccessId).toUpperCase()) return { error: "Choose a different project — this is the source." };
+  const existing = getActiveProposal(destAccessId);
+  if (existing && existing.status !== "draft") return { error: "This project already has a proposal — revise it instead." };
+  let addendumItems = [];
+  if (Array.isArray(options.addendumIds) && options.addendumIds.length) {
+    const addons = getApprovedAddons(src.project_access_id);
+    addendumItems = addons.list.filter((a) => options.addendumIds.includes(a.id)).flatMap((a) => a.items.map((it) => ({ name: it.name, qty: it.qty, price: it.price })));
+  }
+  const payload = clonePayload(src.payload, { ...options, includeInternal, addendumItems });
+  const json = JSON.stringify(payload);
+  const taxRate = options.includePaymentPlan === false ? 0 : (+src.tax_rate || 0);
+  const depositPct = options.includePaymentPlan === false ? 50 : (+src.deposit_pct || 50);
+  const stamp = { copied_from_proposal_id: src.id, copied_from_project_id: src.project_access_id, copied_by: actor || null };
+  if (existing) {   // an EMPTY draft (no line items) is replaced in place
+    let hasItems = false;
+    try { hasItems = (JSON.parse(existing.payload).options || []).some((o) => (o.services || []).some((s) => (s.items || []).length)); } catch {}
+    if (hasItems) return { error: "This project already has a draft with line items — copy into a blank draft." };
+    db.prepare("UPDATE proposals SET payload=?, tax_rate=?, deposit_pct=?, copied_from_proposal_id=?, copied_from_project_id=?, copied_by=?, copied_at=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?")
+      .run(json, taxRate, depositPct, stamp.copied_from_proposal_id, stamp.copied_from_project_id, stamp.copied_by, existing.id);
+  } else {
+    db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name, copied_from_proposal_id, copied_from_project_id, copied_by, copied_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now','localtime'))")
+      .run(String(destAccessId), 1, json, taxRate, depositPct, actor || null, stamp.copied_from_proposal_id, stamp.copied_from_project_id, stamp.copied_by);
+  }
+  logProjectEvent(destAccessId, { kind: "create", label: `Proposal created from ${src.project_access_id} (PROP-${String(src.id).padStart(4, "0")} v${src.version})`, actor: actor || null });
+  return { proposal: getActiveProposal(destAccessId), source: { proposalId: src.id, accessId: src.project_access_id, version: src.version } };
+}
+// Path B: a reviewed extraction becomes a fresh draft (same guard as the clone).
+export function createProposalFromImport({ destAccessId, payload, taxRate = 0, depositPct = 50, mediaId = null, actor }) {
+  const dest = getJobByAccessId(destAccessId);
+  if (!dest) return { error: "Project not found." };
+  const existing = getActiveProposal(destAccessId);
+  if (existing && existing.status !== "draft") return { error: "This project already has a proposal — revise it instead." };
+  const json = JSON.stringify(payload);
+  if (existing) {
+    let hasItems = false;
+    try { hasItems = (JSON.parse(existing.payload).options || []).some((o) => (o.services || []).some((s) => (s.items || []).length)); } catch {}
+    if (hasItems) return { error: "This project already has a draft with line items." };
+    db.prepare("UPDATE proposals SET payload=?, tax_rate=?, deposit_pct=?, import_source_media_id=?, imported_at=datetime('now','localtime'), copied_by=?, updated_at=datetime('now','localtime') WHERE id=?")
+      .run(json, +taxRate || 0, +depositPct || 50, mediaId, actor || null, existing.id);
+  } else {
+    db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name, import_source_media_id, imported_at, copied_by) VALUES (?,?,?,?,?,?,?,datetime('now','localtime'),?)")
+      .run(String(destAccessId), 1, json, +taxRate || 0, +depositPct || 50, actor || null, mediaId, actor || null);
+  }
+  logProjectEvent(destAccessId, { kind: "create", label: "Proposal created from an imported document", actor: actor || null });
+  return { proposal: getActiveProposal(destAccessId) };
+}
 export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at, created_by_name, signed_name, signed_at, signed_fingerprint FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
@@ -5577,7 +5683,7 @@ export function insertMedia({ id, projectAccessId, kind, mime, bytes, w, h, crea
   return id;
 }
 export function getMedia(id) {
-  return db.prepare("SELECT id, mime, bytes, voided FROM media WHERE id=?").get(String(id)) || null;
+  return db.prepare("SELECT id, project_access_id, kind, mime, bytes, voided FROM media WHERE id=?").get(String(id)) || null;
 }
 export function voidMedia(id) {
   db.prepare("UPDATE media SET voided=1 WHERE id=?").run(String(id));

@@ -85,6 +85,7 @@ for a project this size the overhead isn't worth it.
 - **Who may do what:** `dashboard/lib/roles.js` `can(role, cap)` — 7 roles (admin, manager, sales, tech, customer, vendor, readonly). Components read it; server actions enforce it. Don't add `role === "..."` comparisons in JSX.
 - **Which deck card a role sees:** `dashboard/lib/deck-tools.js` `DECK_TOOLS` + `sees(role, phase, name)`. `PHASE_BLOCKS` (role map) IS this object; `deckToolsFor()` gates through `sees()`; `npm test` fails if a card is gated by hand.
 - **Sign-offs and flags:** everything binds to a content fingerprint in `stage_acceptances` (survey, mockup, QC whole-list + per item) or on the row (`proposals.signed_fingerprint`, addendum `signedFingerprint`); install issue flags live in `install_issues` (server-owned state machine, NEEDS_REVIEW → NEEDS_REWORK → RESOLVED | DISMISSED).
+- **Starting a proposal from something else:** `db.cloneProposal` / `db.createProposalFromImport` are the only ways (pure half in `dashboard/lib/proposal-reuse.js`; UI in `proposal-start.jsx`; extraction route `app/api/proposal-import`). New draft, new ids, provenance columns, source never mutated. Never clone in frontend state or add a second editor.
 - Tests: `npm test` (node --test, `dashboard/tests/`).
 
 ## Build & Test
