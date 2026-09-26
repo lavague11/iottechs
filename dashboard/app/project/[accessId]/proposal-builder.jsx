@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
@@ -101,6 +102,16 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   const [startHidden, setStartHidden] = useState(false);
   const [reviewDiffs, setReviewDiffs] = useState([]);
   const [useForOpen, setUseForOpen] = useState(false);
+  // New Project → Import Proposal lands here with ?import=<mediaId>: the file is already uploaded and
+  // extracted, so the sheet opens straight on IMPORT REVIEW (candidate stashed in sessionStorage by
+  // the modal; if it's gone, the sheet re-runs extraction on the stored file).
+  const searchParams = useSearchParams();
+  const importId = searchParams?.get("import") || null;
+  const initialImport = useMemo(() => {
+    if (!importId || typeof window === "undefined") return null;
+    let stash = null; try { stash = JSON.parse(sessionStorage.getItem(`iot_import_${importId}`) || "null"); } catch {}
+    return { mediaId: importId, candidate: stash?.candidate || null, fileName: stash?.fileName || "" };
+  }, [importId]);
   const canReuse = can(role, "proposal.reuse");
   const hasItems = payload.options.some((o) => (o.services || []).some((s) => (s.items || []).length));
   function onReuseCreated(r) {
@@ -566,7 +577,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       {err && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
       {!readOnly && canReuse && !hasItems && !startHidden && (
-        <ProposalStart accessId={accessId} serviceKey={defaultService} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
+        <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
       )}
       {!readOnly && reviewDiffs.length > 0 && (
         <PricingReview diffs={reviewDiffs} onDismiss={() => setReviewDiffs([])}

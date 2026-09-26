@@ -45,14 +45,14 @@ const padEmg = (arr) => { const a = (Array.isArray(arr) ? arr : []).slice(0, 2).
 export default function AdtIntake({ prefill = null, existing = null, onSubmit = null, submitLabel = null, simple = false }) {
   const router = useRouter();
   const ex = existing;
-  const [propertyType, setPropertyType] = useState(ex?.property_type || null);
+  const [propertyType, setPropertyType] = useState(ex?.property_type || prefill?.propertyType || null);
   const [showTax, setShowTax] = useState(false);
   const [f, setF] = useState(() => {
     const comm = (ex?.property_type || "") === "commercial";
     // The prefilled account name is always a PERSON. For residential it fills Full name; for commercial
     // it seeds the contact first/last (the business name is NOT captured at signup, so it stays blank).
     const personName = ex ? (comm ? "" : (ex.name || "")) : (prefill?.name || "");
-    const business   = ex && comm ? (ex.name || "") : "";
+    const business   = ex && comm ? (ex.name || "") : (prefill?.company || "");
     const parts = String(ex ? (ex.contact_name || "") : (prefill?.name || "")).trim().split(/\s+/);
     return {
       name: personName,
@@ -62,7 +62,7 @@ export default function AdtIntake({ prefill = null, existing = null, onSubmit = 
       email: (ex ? ex.email : prefill?.email) || "",
       phone: (ex ? ex.phone : prefill?.phone) || "",
       address: (ex ? ex.address : prefill?.address) || "",
-      notes: ex ? (ex.notes || "") : "",
+      notes: ex ? (ex.notes || "") : (prefill?.notes || ""),
       taxId: ex ? (ex.tax_id || "") : "",
       verbalPassword: ex ? (ex.verbal_password || "") : "",
       dob: ex ? (ex.dob || "") : "",

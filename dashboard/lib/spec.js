@@ -162,6 +162,14 @@ export const SERVICE_CATALOG = [
   { code: "AS", label: "Alarm / Security System",     proposal: "alarm",  icon: "shield", match: /alarm|\badt\b|sensor|security system/i },
   { code: "MX", label: "Other",                       proposal: "custom", icon: "box",    match: /./ },
 ];
+// The ONE service list the New Project form offers: every catalog service plus ADT Monitoring, which
+// is its own module (adt_applications + the ADT deck) rather than a projects-table service code.
+// `module` says which shell a choice enters; the form never asks a separate "project kind".
+export const NEW_PROJECT_SERVICES = [
+  ...SERVICE_CATALOG.map((s) => ({ code: s.code, label: s.label, module: "project" })),
+  { code: "ADT", label: "ADT Monitoring", module: "adt" },
+];
+export const DEFAULT_NEW_PROJECT_SERVICE = "SC";
 // Aliases so the older stored codes / other-form keys still resolve to a catalog entry.
 const _CODE_ALIAS = { SS: "AU", WX: "NW", CX: "MX" };
 function _catalogByCode(code) {
@@ -213,6 +221,13 @@ export function normalizePropertyType(v) {
   return PROPERTY_TYPES[s] ? s : DEFAULT_PROPERTY_TYPE;
 }
 export function propertyTypeLabel(v) { return PROPERTY_TYPES[normalizePropertyType(v)]; }
+// New Project rule: a company strongly implies Commercial, so entering/selecting one auto-sets it —
+// unless the user has already chosen Property by hand (then their choice stands). Clearing the
+// company never flips to Residential: Commercial is the default, absence of a company means nothing.
+export function propertyAfterCompany(current, touched, company) {
+  if (touched) return normalizePropertyType(current);
+  return String(company || "").trim() ? "commercial" : normalizePropertyType(current);
+}
 // Read from a project row (row carries either the raw `property_type` or the decorated `propertyType`).
 export function projectPropertyType(p) { return normalizePropertyType(p?.propertyType ?? p?.property_type); }
 export function isResidentialProject(p) { return projectPropertyType(p) === "residential"; }

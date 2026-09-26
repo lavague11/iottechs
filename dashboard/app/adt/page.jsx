@@ -82,6 +82,13 @@ export default async function AdtPage({ searchParams }) {
       const projs = session.email ? getProjectsByContactEmail(session.email) : [];
       prefill = { name: u?.name || "", email: session.email || u?.email || "", phone: u?.phone || "", address: projs[0]?.address || "" };
     }
+    // Staff arriving from New Project (Service = ADT Monitoring) carry what they already typed —
+    // the ADT intake is that service's module, so nothing is re-entered.
+    if (!app && isStaff && sp && (sp.name || sp.company || sp.email || sp.phone || sp.address)) {
+      const s = (k) => String(sp[k] || "").slice(0, 200);
+      prefill = { name: s("name"), company: s("company"), email: s("email"), phone: s("phone"), address: s("address"),
+        propertyType: sp.property === "residential" ? "residential" : "commercial", notes: String(sp.notes || "").slice(0, 2000) };
+    }
   } catch { /* not signed in → blank + no dashboard button */ }
 
   return <AdtPortalClient app={app} prefill={prefill} quote={quote} dashboardHref={dashboardHref} isStaff={isStaff} />;

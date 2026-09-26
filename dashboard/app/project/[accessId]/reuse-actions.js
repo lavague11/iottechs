@@ -24,10 +24,12 @@ async function staffTok() {
 }
 const actor = (tok) => tok.name || tok.email || tok.role;
 
-export async function searchReusableProposalsAction(accessId, q) {
+// accessId may be null (New Project form — the project doesn't exist yet); `hint` groups same-customer rows.
+export async function searchReusableProposalsAction(accessId, q, hint = null) {
   const tok = await staffTok();
   if (!tok) return { ok: false, error: "Unauthorized.", rows: [] };
-  return { ok: true, rows: listReusableProposals({ q: String(q || "").slice(0, 80), forAccessId: accessId, limit: 30 }) };
+  const h = hint && typeof hint === "object" ? { customer: String(hint.customer || "").slice(0, 120), email: String(hint.email || "").slice(0, 120), phone: String(hint.phone || "").slice(0, 40) } : null;
+  return { ok: true, rows: listReusableProposals({ q: String(q || "").slice(0, 80), forAccessId: accessId || null, hint: h, limit: 30 }) };
 }
 export async function previewSourceProposalAction(proposalId) {
   const tok = await staffTok();

@@ -5,3 +5,4 @@
 # Playwright UI audit (scripts/audit.mjs) — generated artifacts, never committed
 auth.json
 /audit/
+test-results/

@@ -23,6 +23,16 @@ export async function POST(request) {
     if (!name && !email && !phone) {
       return Response.json({ ok: false, error: "Missing fields." }, { status: 400 });
     }
+    // Start from a previous proposal (New Project → Start From → Previous Project): staff only — the
+    // public inquiry form never carries it, and a forged one is simply ignored.
+    let startFrom = null;
+    if (body.startFrom && typeof body.startFrom === "object" && body.startFrom.sourceProposalId) {
+      const { getSessionUser } = await import("../../../lib/session");
+      const { can } = await import("../../../lib/roles");
+      const u = await getSessionUser();
+      if (!u?.id || !can(u.role, "proposal.reuse")) return Response.json({ ok: false, error: "Unauthorized." }, { status: 403 });
+      startFrom = { sourceProposalId: Number(body.startFrom.sourceProposalId), options: body.startFrom.options || {}, actor: u.name || u.email || u.role, includeInternal: !!body.startFrom.options?.includeInternal && can(u.role, "cost.view") };
+    }
     // Existing account = matched by email OR phone, and it already has a password. Detecting it
     // HERE (at info submit) lets the UI say "you already have an account — log in or reset your
     // password" instead of walking them into the create-password step and rejecting there.
@@ -42,9 +52,18 @@ export async function POST(request) {
       }
     }
 
+    // The copy happens HERE, after the project exists, through the one canonical clone service —
+    // the form's contact / company / address / property / service stay authoritative (the clone only
+    // brings proposal content). A clone failure never leaves a half-made project: report it, keep the project.
+    let cloned = null, cloneError = null;
+    if (startFrom) {
+      const { cloneProposal } = await import("../../../lib/db");
+      const res = cloneProposal({ sourceProposalId: startFrom.sourceProposalId, destAccessId: accessId, options: startFrom.options, actor: startFrom.actor, includeInternal: startFrom.includeInternal });
+      if (res.error) cloneError = res.error; else cloned = res.source;
+    }
     // A new project affects every list view — invalidate the cached pages so it shows up immediately.
     revalidatePath("/", "layout");
-    return Response.json({ ok: true, accessId, customerPin, name, existingAccount, accountCreated, userPin });
+    return Response.json({ ok: true, accessId, customerPin, name, existingAccount, accountCreated, userPin, cloned, cloneError });
   } catch (e) {
     console.error("demo error", e);
     return Response.json({ ok: false, error: "Server error." }, { status: 500 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { can } from "../../../lib/roles";
@@ -1548,12 +1549,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [proposalData, setProposalData] = useState(proposal);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
-  const stageParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("stage") : null);
+  // Read via useSearchParams, not window.location: on a client-side push (New Project → deck) the
+  // component renders BEFORE the router commits the new URL, so window.location still shows the old
+  // page and the deep link would be missed. useSearchParams reflects the URL being rendered.
+  const searchParams = useSearchParams();
+  const stageParamRef = useRef(searchParams?.get("stage") || null);
   // ?open=<tool> (share links) → auto-open that tool on the deck once it's loaded (e.g. open the
   // actual proposal document, not just land on the proposal step). Mapped to the deck tool name.
   // Captured in a ref so it survives the URL strip below — otherwise re-reading window.location after
   // we clean the URL would null it before DeckView gets a chance to open the tool.
-  const openToolParamRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("open") : null);
+  const openToolParamRef = useRef(searchParams?.get("open") || null);
   const openToolParam = openToolParamRef.current;
   const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment" };
   const openToolOnMount = openToolParam ? (OPEN_TOOL_NAMES[openToolParam.toLowerCase()] || null) : null;

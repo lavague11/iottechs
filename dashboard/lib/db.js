@@ -5280,8 +5280,10 @@ export function getProposalById(id) {
 // Compact rows for the "Previous Project" picker: every project's latest non-superseded proposal,
 // same-customer first, filtered by q (customer / project id / address / service / proposal #).
 // No payload leaves this function — only counts and totals.
-export function listReusableProposals({ q = "", forAccessId = null, limit = 30 } = {}) {
-  const cur = forAccessId ? getJobByAccessId(forAccessId) : null;
+// `hint` = { customer, email, phone } for a project that doesn't exist yet (New Project form), so
+// "From this customer" still groups correctly before creation.
+export function listReusableProposals({ q = "", forAccessId = null, hint = null, limit = 30 } = {}) {
+  const cur = forAccessId ? getJobByAccessId(forAccessId) : (hint && (hint.customer || hint.email || hint.phone) ? { access_id: null, customer: hint.customer, contact_email: hint.email, contact_phone: hint.phone } : null);
   const like = `%${String(q || "").trim()}%`;
   const rows = db.prepare(`
     SELECT p.access_id, p.customer, p.address, p.contact_email, p.contact_phone, p.service_code, p.property_type,

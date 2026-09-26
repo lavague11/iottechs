@@ -8,6 +8,8 @@ import { logoutAction } from "../login/actions";
 import AddressAutocomplete from "./address-autocomplete";
 import { TaglinePill, Wordmark } from "./brand";
 import EnrollBanner from "./enroll-banner";
+import { NEW_PROJECT_SERVICES, DEFAULT_NEW_PROJECT_SERVICE, propertyAfterCompany } from "../../lib/spec";
+import { ReusePicker } from "../project/[accessId]/proposal-start";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -166,20 +168,24 @@ function UserMenu({ user }) {
   );
 }
 
-const NP_SERVICES = [
-  "Security Cameras / CCTV", "Commercial Audio", "Networking & Cat6",
-  "Access Control / Door Entry", "NVR & Storage", "Toast / POS Cabling", "Other",
-];
-
+// New Project — three canonical decisions (who/where · service · property) plus an optional Start From.
+// ONE service field (NEW_PROJECT_SERVICES, the catalog + ADT Monitoring) decides the module: catalog
+// services create a project; ADT Monitoring hands the form to the ADT intake (its own record + deck)
+// prefilled — no separate "project kind" question anywhere.
 function NewProjectModal({ onClose }) {
   const r = useRouter();
-  const [kind, setKind] = useState("cctv");   // cctv (standard install) | adt (monitoring)
-  // propertyType defaults to commercial (the normal IOT TECHS job) — a compact toggle, never a
-  // mandatory extra question that slows creation. Easily switched to residential when appropriate.
-  const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", service: "Security Cameras / CCTV", propertyType: "commercial", message: "" });
+  const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", serviceCode: DEFAULT_NEW_PROJECT_SERVICE, propertyType: "commercial", message: "" });
+  const [propTouched, setPropTouched] = useState(false);   // Property picked by hand → company no longer auto-sets it
+  const [startFrom, setStartFrom] = useState("blank");     // blank | previous | import
+  const [pickOpen, setPickOpen] = useState(false);
+  const [source, setSource] = useState(null);              // { sourceProposalId, options, preview } from the picker
+  const [importFile, setImportFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+  const svc = NEW_PROJECT_SERVICES.find((s) => s.code === f.serviceCode) || NEW_PROJECT_SERVICES[0];
+  const setCompany = (v) => setF((p) => ({ ...p, company: v, propertyType: propertyAfterCompany(p.propertyType, propTouched, v) }));
+  const setProperty = (v) => { setPropTouched(true); set("propertyType", v); };
   // A verified address is one PICKED from Google's suggestions (full formatted_address), not
   // free-typed. Cleared the moment the field is edited by hand.
   const [addrVerified, setAddrVerified] = useState(false);
@@ -200,16 +206,40 @@ function NewProjectModal({ onClose }) {
       setAddrWarned(true);
       return;
     }
+    if (startFrom === "previous" && !source) { setErr("Pick the proposal to start from."); return; }
+    if (startFrom === "import" && !importFile) { setErr("Choose the file to import."); return; }
     setErr(""); setBusy(true);
+    // ADT Monitoring = its own module. Hand everything typed here to the ADT intake, prefilled.
+    if (svc.module === "adt") {
+      const q = new URLSearchParams({ name: f.name, company: f.company, email: f.email, phone: f.phone, address: f.address, property: f.propertyType, notes: f.message });
+      onClose(); r.push(`/adt?${q}`);
+      return;
+    }
     try {
-      const res = await fetch("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      const body = { name: f.name, company: f.company, email: f.email, phone: f.phone, address: f.address, service: svc.label, propertyType: f.propertyType, message: f.message,
+        startFrom: startFrom === "previous" && source ? { sourceProposalId: source.sourceProposalId, options: source.options } : null };
+      const res = await fetch("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
-      if (j.ok) setDone(j);
-      else setErr(j.error || "Could not create the project.");
+      if (!j.ok) { setErr(j.error || "Could not create the project."); setBusy(false); return; }
+      if (startFrom === "import" && importFile) {
+        // Project exists — now attach + extract the document and land straight on Import Review.
+        const fd = new FormData(); fd.append("file", importFile); fd.append("project", j.accessId);
+        const up = await fetch("/api/proposal-import", { method: "POST", body: fd }).then((x) => x.json()).catch(() => null);
+        if (up?.ok && up.mediaId) {
+          try { sessionStorage.setItem(`iot_import_${up.mediaId}`, JSON.stringify({ candidate: up.candidate || null, fileName: importFile.name })); } catch {}
+          onClose(); r.push(`/project/${j.accessId}?deck=1&stage=proposal&import=${up.mediaId}`);
+          return;
+        }
+        setDone({ ...j, importError: up?.error || "Couldn't read the document — start it from the project." });
+      } else if (j.cloned) {
+        onClose(); r.push(`/project/${j.accessId}?deck=1&stage=proposal`);
+        return;
+      } else setDone(j);
     } catch { setErr("Connection error."); }
     setBusy(false);
   }
   function finish() { onClose(); r.refresh(); }
+  const hint = { customer: f.company || f.name, email: f.email, phone: f.phone };
 
   return (
     <div className="np-overlay" onClick={(e) => { if (e.target.classList.contains("np-overlay")) onClose(); }}>
@@ -220,6 +250,7 @@ function NewProjectModal({ onClose }) {
             <div className="np-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
             <h2 className="np-h">Project created.</h2>
             <p className="np-p">A new inquiry has been opened for <b>{done.name || "the customer"}</b>.</p>
+            {(done.cloneError || done.importError) && <div className="np-err" style={{ marginBottom: 12 }}>{done.cloneError || done.importError}</div>}
             <div className="np-card">
               <div className="np-card-row"><span>Project ID</span><b className="np-mono">{done.accessId}</b></div>
               {done.customerPin && <div className="np-card-row"><span>Customer PIN</span><b className="np-pin">{done.customerPin}</b></div>}
@@ -234,50 +265,62 @@ function NewProjectModal({ onClose }) {
             <div className="np-head">
               <div className="np-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
               <h2 className="np-h">New Project</h2>
-              <p className="np-p">What kind of project is this?</p>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-              {[["cctv", "Security System", "Cameras, access, cabling — the standard install pipeline"],
-                ["adt", "ADT Monitoring", "Points-based ADT / SafeStreets monitoring account"]].map(([k, t, d]) => (
-                <button type="button" key={k} onClick={() => setKind(k)}
-                  style={{ textAlign: "left", padding: "13px 14px", borderRadius: 12, cursor: "pointer",
-                    border: `1.5px solid ${kind === k ? "#C9A96E" : "#e4e0d8"}`, background: kind === k ? "#fbf7ee" : "#fff" }}>
-                  <div style={{ fontSize: ".92rem", fontWeight: 800, color: "#0B0F1A" }}>{t}</div>
-                  <div style={{ fontSize: ".76rem", color: "#6f7686", marginTop: 3, lineHeight: 1.4 }}>{d}</div>
-                </button>
-              ))}
-            </div>
-            {kind === "adt" ? (
-              <div style={{ textAlign: "center", padding: "6px 0 4px" }}>
-                <p className="np-p" style={{ margin: "0 0 16px" }}>ADT accounts run their own intake — property type, equipment, emergency contacts, and preferred install times.</p>
-                <button type="button" className="np-submit" onClick={() => { onClose(); r.push("/adt"); }}>Open ADT intake →</button>
-              </div>
-            ) : (
             <form className="np-form" onSubmit={submit}>
               <div className="np-row2">
-                <div className="np-f"><label>Contact Name</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-                <div className="np-f"><label>Company <span className="np-opt">(optional)</span></label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={(v) => set("company", v)} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Start typing a business name…" /></div>
+                <div className="np-f"><label>Contact</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
+                <div className="np-f"><label>Company</label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={setCompany} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address, propertyType: propertyAfterCompany(f.propertyType, propTouched, p.name || f.company) })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Business name" /></div>
               </div>
               <div className="np-row2">
                 <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
                 <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
               </div>
-              <div className="np-f"><label>Service Address {addrVerified ? <span className="np-verified">✓ Verified</span> : <span className="np-opt">pick from the list</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" /></div>
+              <div className="np-f"><label>Service Address {addrVerified && <span className="np-verified">✓ Verified</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" /></div>
               <div className="np-row2">
-                <div className="np-f"><label>Service Needed</label><select className="apx-input" value={f.service} onChange={(e) => set("service", e.target.value)}>{NP_SERVICES.map((s) => <option key={s}>{s}</option>)}</select></div>
+                <div className="np-f"><label>Service</label>
+                  <select className="apx-input" value={f.serviceCode} onChange={(e) => set("serviceCode", e.target.value)} aria-label="Service">
+                    {NEW_PROJECT_SERVICES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+                  </select>
+                </div>
                 <div className="np-f"><label>Property</label>
                   <div className="np-seg" role="radiogroup" aria-label="Property type">
                     {[["commercial", "Commercial"], ["residential", "Residential"]].map(([k, t]) => (
                       <button type="button" key={k} role="radio" aria-checked={f.propertyType === k}
-                        className={`np-seg-b${f.propertyType === k ? " on" : ""}`} onClick={() => set("propertyType", k)}>{t}</button>
+                        className={`np-seg-b${f.propertyType === k ? " on" : ""}`} onClick={() => setProperty(k)}>{t}</button>
                     ))}
                   </div>
                 </div>
               </div>
-              <div className="np-f"><label>Notes <span className="np-opt">(optional)</span></label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
+              {svc.module === "project" && (
+                <div className="np-f"><label>Start From</label>
+                  <div className="np-row2" style={{ alignItems: "center" }}>
+                    <select className="apx-input" value={startFrom} onChange={(e) => { const v = e.target.value; setStartFrom(v); setSource(null); setImportFile(null); if (v === "previous") setPickOpen(true); }} aria-label="Start from">
+                      <option value="blank">Blank</option>
+                      <option value="previous">Previous Project</option>
+                      <option value="import">Import Proposal</option>
+                    </select>
+                    {startFrom === "previous" && (
+                      <button type="button" className="np-ghost np-src" onClick={() => setPickOpen(true)}>
+                        {source ? <><b>{source.preview.accessId}</b> · {source.preview.customer} · {source.preview.items} items</> : "Choose proposal"}
+                        {source && source.preview.service && String(source.preview.service).toUpperCase() !== f.serviceCode && <span className="np-opt"> · Different service</span>}
+                      </button>
+                    )}
+                    {startFrom === "import" && (
+                      <label className="np-ghost np-src">
+                        {importFile ? importFile.name : "Choose file"}
+                        <input type="file" accept="application/pdf,image/*" hidden onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="np-f"><label>Notes</label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}
-              <button className="np-submit" type="submit" disabled={busy}>{busy ? "Creating…" : "Create Project"}</button>
+              <button className="np-submit" type="submit" disabled={busy}>{busy ? (startFrom === "import" ? "Extracting…" : "Creating…") : svc.module === "adt" ? "Continue to ADT →" : "Create Project"}</button>
             </form>
+            {pickOpen && (
+              <ReusePicker accessId={null} hint={hint} serviceCode={f.serviceCode} selectOnly onClose={() => setPickOpen(false)}
+                onSelect={(s) => { setSource(s); setPickOpen(false); }} />
             )}
           </>
         )}
@@ -833,6 +876,8 @@ const CSS = `
 .apx .np-seg-b{flex:1;padding:8px 6px;border:none;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:.82rem;cursor:pointer;transition:.15s}
 .apx .np-seg-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
+.apx .np-src{display:flex;align-items:center;gap:4px;min-width:0;padding:10px 14px;font-size:.84rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .np-src b{font-family:Menlo,Consolas,monospace;font-size:.78rem}
 .apx .np-submit{flex:1;width:100%;padding:12px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
 .apx .np-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
 .apx .np-submit:disabled{opacity:.6;cursor:not-allowed}

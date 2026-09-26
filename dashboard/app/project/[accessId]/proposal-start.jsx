@@ -18,6 +18,7 @@ const STATUS = { draft: "Draft", sent: "Sent", accepted: "Accepted", changes_req
 const X = () => <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 const Sheet = ({ title, onClose, children, wide }) => (
   <div className="rp-veil" onClick={(e) => { if (e.target.classList.contains("rp-veil")) onClose?.(); }}>
+    <style>{RP_CSS}</style>
     <div className={`rp-sheet${wide ? " wide" : ""}`} role="dialog" aria-label={title}>
       <div className="rp-head"><span className="rp-title">{title}</span><button type="button" className="rp-x" onClick={onClose} aria-label="Close"><X /></button></div>
       {children}
@@ -25,8 +26,10 @@ const Sheet = ({ title, onClose, children, wide }) => (
   </div>
 );
 
-export function ProposalStart({ accessId, serviceKey, onCreated, onBlank }) {
+export function ProposalStart({ accessId, serviceKey, onCreated, onBlank, initialImport = null }) {
   const [mode, setMode] = useState(null);   // null | "previous" | "import"
+  // The ?import= hand-off opens the review after mount (never during SSR — the sheet is client-only).
+  useEffect(() => { if (initialImport?.mediaId) setMode("import"); }, [initialImport?.mediaId]);
   return (
     <div className="rp-start">
       <style>{RP_CSS}</style>
@@ -35,13 +38,17 @@ export function ProposalStart({ accessId, serviceKey, onCreated, onBlank }) {
       <button type="button" className="rp-start-btn" onClick={() => setMode("previous")}>Previous Project</button>
       <button type="button" className="rp-start-btn" onClick={() => setMode("import")}>Import Proposal</button>
       {mode === "previous" && <ReusePicker accessId={accessId} onClose={() => setMode(null)} onCreated={(r) => { setMode(null); onCreated?.(r); }} />}
-      {mode === "import" && <ImportSheet accessId={accessId} serviceKey={serviceKey} onClose={() => setMode(null)} onCreated={(r) => { setMode(null); onCreated?.(r); }} />}
+      {mode === "import" && <ImportSheet accessId={accessId} serviceKey={serviceKey} initial={initialImport} onClose={() => setMode(null)} onCreated={(r) => { setMode(null); onCreated?.(r); }} />}
     </div>
   );
 }
 
 // ---- Path A ----
-export function ReusePicker({ accessId, onClose, onCreated }) {
+// selectOnly: the New Project form uses the same picker BEFORE a project exists — the choice is
+// handed back (onSelect) and the clone happens server-side at Create Project. `hint` groups
+// "From this customer" for a project that isn't created yet; `serviceCode` drives the
+// "Different service" note.
+export function ReusePicker({ accessId = null, hint = null, serviceCode = null, selectOnly = false, onClose, onCreated, onSelect }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -51,9 +58,10 @@ export function ReusePicker({ accessId, onClose, onCreated }) {
   const timer = useRef(null);
   useEffect(() => {
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { searchReusableProposalsAction(accessId, q).then((r) => { if (r?.ok) setRows(r.rows || []); }); }, q ? 200 : 0);
+    timer.current = setTimeout(() => { searchReusableProposalsAction(accessId, q, hint).then((r) => { if (r?.ok) setRows(r.rows || []); }); }, q ? 200 : 0);
     return () => clearTimeout(timer.current);
-  }, [accessId, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessId, q, hint?.customer, hint?.email, hint?.phone]);
   async function choose(row) {
     setBusy(true); setErr(null);
     const r = await previewSourceProposalAction(row.proposalId);
@@ -64,12 +72,14 @@ export function ReusePicker({ accessId, onClose, onCreated }) {
     setPick({ ...r.preview, row });
   }
   async function copy() {
+    if (selectOnly) { onSelect?.({ sourceProposalId: pick.id, options: opts, preview: pick }); return; }
     setBusy(true); setErr(null);
     const r = await cloneProposalAction(accessId, { sourceProposalId: pick.id, options: opts });
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     onCreated?.(r);
   }
+  const differentService = !!(pick && serviceCode && pick.service && String(pick.service).toUpperCase() !== String(serviceCode).toUpperCase());
   const mine = rows.filter((r) => r.sameCustomer), others = rows.filter((r) => !r.sameCustomer);
   const rowEl = (r) => (
     <button type="button" key={r.proposalId} className="rp-row" disabled={busy} onClick={() => choose(r)}>
@@ -78,7 +88,6 @@ export function ReusePicker({ accessId, onClose, onCreated }) {
       <span className="rp-row-meta">{STATUS[r.status] || r.status}{r.date ? ` · ${when(r.date)}` : ""}<br />{r.items} items · {money(r.total)}</span>
     </button>
   );
-  const svcDiffers = pick && pick.service && pick.row?.service && false;   // service warning is computed by the caller's project; keep quiet here
   return (
     <Sheet title={pick ? "Copy from" : "Previous proposals"} onClose={onClose} wide>
       {err && <div className="rp-err">{err}</div>}
@@ -119,7 +128,8 @@ export function ReusePicker({ accessId, onClose, onCreated }) {
             ))}
           </div>
           <div className="rp-note">Signatures, approvals, payments and dates stay with the original.</div>
-          <div className="rp-actions"><button type="button" className="rp-btn primary" disabled={busy} onClick={copy}>{busy ? "…" : "Copy"}</button></div>
+          {differentService && <div className="rp-warn">Different service</div>}
+          <div className="rp-actions"><button type="button" className="rp-btn primary" disabled={busy} onClick={copy}>{busy ? "…" : selectOnly ? "Use" : "Copy"}</button></div>
         </div>
       )}
     </Sheet>
@@ -127,12 +137,15 @@ export function ReusePicker({ accessId, onClose, onCreated }) {
 }
 
 // ---- Path B ----
-export function ImportSheet({ accessId, serviceKey, onClose, onCreated }) {
-  const [phase, setPhase] = useState("upload");   // upload | extracting | review | creating
-  const [mediaId, setMediaId] = useState(null);
-  const [fileName, setFileName] = useState("");
-  const [cand, setCand] = useState(null);
+// `initial` = { mediaId, fileName, candidate? } when the file was already uploaded (New Project →
+// Import Proposal): the sheet opens straight on IMPORT REVIEW, re-running extraction if no candidate.
+export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial = null }) {
+  const [phase, setPhase] = useState(initial?.mediaId ? (initial.candidate ? "review" : "extracting") : "upload");   // upload | extracting | review | creating
+  const [mediaId, setMediaId] = useState(initial?.mediaId || null);
+  const [fileName, setFileName] = useState(initial?.fileName || "");
+  const [cand, setCand] = useState(initial?.candidate || null);
   const [err, setErr] = useState(null);
+  useEffect(() => { if (initial?.mediaId && !initial.candidate) retry(); /* eslint-disable-next-line */ }, []);
   async function upload(file) {
     if (!file) return;
     setFileName(file.name); setPhase("extracting"); setErr(null);
