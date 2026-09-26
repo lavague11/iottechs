@@ -12,8 +12,12 @@ import { normalizeCandidate } from "../../../lib/proposal-reuse";
 // the reviewed candidate (createProposalFromImportAction). Staff only; the key never leaves the server.
 export const runtime = "nodejs";
 
+// Extraction runs on OpenAI (Responses API: the PDF goes in as an input_file, a scan as an input_image),
+// with Claude as the fallback when OPENAI_API_KEY is missing. Model overridable from the vault.
+const OPENAI_URL = "https://api.openai.com/v1/responses";
+const OPENAI_MODEL = "gpt-5.4-mini";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const MAX_BYTES = 25 * 1024 * 1024;
 const PDF = "application/pdf";
 const IMAGE = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -42,13 +46,39 @@ function extractJson(text) {
   try { return JSON.parse(m[0]); } catch { return null; }
 }
 
-async function extract(bytes, mime, key) {
+async function extractOpenAI(bytes, mime, key, model) {
+  const data = Buffer.from(bytes).toString("base64");
+  const block = mime === PDF
+    ? { type: "input_file", filename: "proposal.pdf", file_data: `data:${PDF};base64,${data}` }
+    : { type: "input_image", image_url: `data:${mime};base64,${data}`, detail: "high" };
+  const res = await fetch(OPENAI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model,
+      input: [{ role: "user", content: [block, { type: "input_text", text: PROMPT }] }],
+      text: { format: { type: "json_object" } },
+      reasoning: { effort: "low" },
+      max_output_tokens: 6000,
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j?.error?.message || `upstream ${res.status}`);
+  const text = j?.output_text
+    || (Array.isArray(j?.output) ? j.output.flatMap((o) => o?.content || []).map((c) => c?.text || "").join("") : "");
+  const raw = extractJson(text);
+  if (!raw) throw new Error("unparsable");
+  return normalizeCandidate(raw);
+}
+
+async function extractClaude(bytes, mime, key) {
   const data = Buffer.from(bytes).toString("base64");
   const block = mime === PDF ? { type: "document", source: { type: "base64", media_type: PDF, data } } : { type: "image", source: { type: "base64", media_type: mime, data } };
   const res = await fetch(ANTHROPIC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 4000, messages: [{ role: "user", content: [block, { type: "text", text: PROMPT }] }] }),
+    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 4000, messages: [{ role: "user", content: [block, { type: "text", text: PROMPT }] }] }),
     signal: AbortSignal.timeout(120000),
   });
   const j = await res.json();
@@ -59,10 +89,19 @@ async function extract(bytes, mime, key) {
   return normalizeCandidate(raw);
 }
 
+// Which engine reads the document: OpenAI when its key is in the vault, else Claude. Never both.
+function engine() {
+  const openai = secretValue("OPENAI_API_KEY");
+  if (openai) return { name: "openai", key: openai, model: secretValue("OPENAI_IMPORT_MODEL") || OPENAI_MODEL };
+  const anthropic = secretValue("ANTHROPIC_API_KEY");
+  if (anthropic) return { name: "claude", key: anthropic, model: ANTHROPIC_MODEL };
+  return null;
+}
+
 export async function POST(req) {
   const user = await getSessionUser();
   if (!user?.id || !can(user.role, "proposal.reuse")) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
-  const key = secretValue("ANTHROPIC_API_KEY");
+  const eng = engine();
   const ct = req.headers.get("content-type") || "";
 
   let mediaId, bytes, mime, project;
@@ -91,10 +130,10 @@ export async function POST(req) {
     insertMedia({ id: mediaId, projectAccessId: project, kind: "proposal-import", mime, bytes: buf, w: null, h: null, createdBy: user.name || user.role });
     bytes = buf;
   }
-  if (!key) return Response.json({ ok: true, mediaId, candidate: null, error: "ANTHROPIC_API_KEY is not set — add it in Development ▸ API Keys, or start manually." });
+  if (!eng) return Response.json({ ok: true, mediaId, candidate: null, error: "OPENAI_API_KEY is not set — add it in Development ▸ API Keys, or start manually." });
   try {
-    const candidate = await extract(bytes, mime, key);
-    return Response.json({ ok: true, mediaId, candidate });
+    const candidate = eng.name === "openai" ? await extractOpenAI(bytes, mime, eng.key, eng.model) : await extractClaude(bytes, mime, eng.key);
+    return Response.json({ ok: true, mediaId, candidate, engine: eng.name, model: eng.model });
   } catch (e) {
     return Response.json({ ok: true, mediaId, candidate: null, error: `Couldn't read the document (${e?.message || e}).` });
   }
