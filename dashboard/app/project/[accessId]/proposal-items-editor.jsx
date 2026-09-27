@@ -87,6 +87,9 @@ function recommendedNvr(count) {
   return "NVR (32-Channel + 16-Port PoE)"; // largest; may need a second NVR beyond 32
 }
 const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
+// Audio system bar (Commercial Audio only): the amplifier is the head end — picked once, like the
+// NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
+const AMP_ADDON = "Rack & Mount";
 
 export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename }) {
   const flags = customerFlags || {};
@@ -117,6 +120,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // summary line via a "Done" button. Start collapsed when already configured (cleaner reopen).
   const [nvrDone, setNvrDone] = useState(() => (svc.items || []).some((it) => !it.sub && /^NVR/.test(it.name || "")));
   const [dispDone, setDispDone] = useState(() => (svc.items || []).some((it) => it.displaySlot != null));
+  const [ampDone, setAmpDone] = useState(() => (svc.items || []).some((it) => it.ampSlot === 1));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   void priceBookVersion; // referenced only to force a recompute of `catalog` above on save
 
@@ -221,7 +225,25 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const setDisplayField = (n, patch) => { const d = displayAt(n); if (d) patchItem(d.id, patch); };
   const setNvrField = (patch) => { if (nvrItem) patchItem(nvrItem.id, patch); };
   // NVR + slotted drives/displays live only in the system bar, not the editable item list.
-  const inSysbar = (it) => svc.key === "camera" && (it.slot != null || it.displaySlot != null || /^NVR/.test(it.name || ""));
+  const inSysbar = (it) => (svc.key === "camera" && (it.slot != null || it.displaySlot != null || /^NVR/.test(it.name || ""))) || (svc.key === "sound" && it.ampSlot != null);
+  // ---- Audio system bar: amplifier pick (+ price/cost) and the Rack & Mount add-on ----
+  const soundMode = svc.key === "sound";
+  const ampModels = soundMode ? catalog.filter((c) => /^Amplifier/i.test(c.name)) : [];
+  const ampItem = svc.items.find((it) => it.ampSlot === 1);
+  const rackItem = svc.items.find((it) => it.ampSlot === 2);
+  function pickAmp(name) {
+    const rest = svc.items.filter((it) => it.ampSlot !== 1 && (name || it.ampSlot !== 2));   // no amp → no rack either
+    if (!name) { patchItems(rest); return; }
+    const c = catalog.find((x) => x.name === name);
+    patchItems([...rest, { id: newItemId(), name, qty: 1, price: c ? c.price : priceOf(name, loadPriceBook()), cost: 0, ampSlot: 1 }]);
+  }
+  function setRack(on) {
+    const rest = svc.items.filter((it) => it.ampSlot !== 2);
+    if (!on) { patchItems(rest); return; }
+    const book = loadPriceBook();
+    patchItems([...rest, { id: newItemId(), name: displayNameOf(AMP_ADDON, book), qty: 1, price: priceOf(AMP_ADDON, book), cost: 0, ampSlot: 2 }]);
+  }
+  const setAmpField = (slot, patch) => { const it = svc.items.find((x) => x.ampSlot === slot); if (it) patchItem(it.id, patch); };
   function patchSub(pid, sid, patch) {
     patchItems(svc.items.map((it) => it.id === pid
       ? { ...it, sub: it.sub.map((x) => (x.id === sid ? { ...x, ...patch } : x)) }
@@ -306,6 +328,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     total: displaysTotal, edit: () => setDispDone(false),
     // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
     items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
+  const ampCollapsed = soundMode && ampDone && !!ampItem;
+  if (ampCollapsed) leadRows.push({ key: "amp", title: `Amp · ${ampItem.name}`,
+    sub: rackItem ? rackItem.name : "No rack", total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
+    items: [ampItem, ...(rackItem ? [rackItem] : [])].map((d) => ({ name: d.name, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
   const leadCount = leadRows.length;
   // Camera location blocks number AFTER the collapsed recording-system lines (1, 2, then cameras).
   const blockNumOf = {};
@@ -440,6 +466,44 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {/* First things first — the recording system: NVR model + a drive picker per HDD bay. NVR and
           Displays each sit on their own row (mobile-friendly). Prices/cost render below each picker. */}
+      {soundMode && !ampCollapsed && (
+        <div className="prop-sysbar">
+          <div className="prop-sysrow">
+            <div className="prop-slot">
+              <span className="prop-slot-lbl">Amp</span>
+              <select value={ampItem?.name || ""} onChange={(e) => pickAmp(e.target.value)} disabled={readOnly} aria-label="Amplifier">
+                <option value="">None</option>
+                {ampModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                {ampItem && !ampModels.some((m) => m.name === ampItem.name) && <option value={ampItem.name}>{ampItem.name}</option>}
+              </select>
+              {ampItem ? (
+                <>
+                  <input className="prop-slot-price" type="number" min="0" step="0.01" value={ampItem.price} disabled={readOnly} title="Price" onChange={(e) => setAmpField(1, { price: e.target.value })} />
+                  {showCost && <input className="prop-slot-costin" type="number" min="0" step="0.01" value={ampItem.cost ?? 0} disabled={readOnly} title="Internal cost" onChange={(e) => setAmpField(1, { cost: e.target.value })} />}
+                </>
+              ) : <span className="prop-slot-cost">—</span>}
+            </div>
+            {ampItem && (
+              <div className="prop-slots">
+                <div className="prop-slot">
+                  <span className="prop-slot-lbl">Rack</span>
+                  <select value={rackItem ? "on" : ""} onChange={(e) => setRack(e.target.value === "on")} disabled={readOnly} aria-label="Rack">
+                    <option value="">None</option>
+                    <option value="on">{displayNameOf(AMP_ADDON, loadPriceBook())}</option>
+                  </select>
+                  {rackItem ? (
+                    <>
+                      <input className="prop-slot-price" type="number" min="0" step="0.01" value={rackItem.price} disabled={readOnly} title="Price" onChange={(e) => setAmpField(2, { price: e.target.value })} />
+                      {showCost && <input className="prop-slot-costin" type="number" min="0" step="0.01" value={rackItem.cost ?? 0} disabled={readOnly} title="Internal cost" onChange={(e) => setAmpField(2, { cost: e.target.value })} />}
+                    </>
+                  ) : <span className="prop-slot-cost">—</span>}
+                </div>
+              </div>
+            )}
+            {ampItem && !readOnly && <button type="button" className="prop-sys-done" onClick={() => setAmpDone(true)}>Done</button>}
+          </div>
+        </div>
+      )}
       {showSysbar && (
         <div className="prop-sysbar">
           {showNvrPickers && <div className="prop-sysrow">

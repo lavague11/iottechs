@@ -68,13 +68,18 @@ export const PROPOSAL_CATALOG = {
     { name: "6TB Storage Drive",              price: 270, cost: 0 },
     { name: "8TB Storage Drive",              price: 360, cost: 0 },
   ],
+  // Commercial Audio (owner's rate sheet 2026-09-27). A ceiling speaker install is the "Ceiling Speaker"
+  // preset block: speaker $75 + wire run $150 + drill/mount/tune $75 = $300 per speaker. The amplifier
+  // is the system's head end (the sound service's NVR) with Rack & Mount as its add-on (its Display).
   sound: [
-    { name: "Ceiling Speaker",   price: 120, cost: 0 },
-    { name: "Surface Speaker",   price: 135, cost: 0 },
-    { name: "Speaker Wire Run",  price: 65,  cost: 0 },
-    { name: "Amplifier (4-zone)",price: 480, cost: 0 },
-    { name: "Volume Control",    price: 75,  cost: 0 },
-    { name: "Tuning & Setup",    price: 120, cost: 0 },
+    { name: "Ceiling Speaker",    price: 75,  cost: 0 },
+    { name: "Surface Speaker",    price: 135, cost: 0 },
+    { name: "Speaker Wire Run",   price: 150, cost: 0 },
+    { name: "Drill Mount Tune",   price: 75,  cost: 0 },
+    { name: "Amplifier (4-Zone)", price: 350, cost: 0 },
+    { name: "Rack & Mount",       price: 150, cost: 0 },
+    { name: "Volume Control",     price: 75,  cost: 0 },
+    { name: "Tuning & Setup",     price: 120, cost: 0 },
   ],
   // Toast POS — aligned to the Toast Equipment Cable Guide (docs/toast). Network core auto-seeds
   // (ISP + Pronto/Meraki + PoE switch); each WIRED device carries a Line Drop labor line (a new
@@ -156,6 +161,10 @@ export const DEFAULT_PRESETS = [
       { name: "Camera Waterproofing", qty: 1 },
     ],
   },
+  // Ceiling speaker install — one block per speaker, like a camera: the speaker + its wire run + the
+  // drill / mount / tune labor ($300 at the seed prices). The amplifier is NOT in the block — it is
+  // the system head end, picked once in the audio system bar (with Rack & Mount as its add-on).
+  { id: "ceiling-speaker", name: "Ceiling Speaker", service: "sound", items: [{ name: "Ceiling Speaker", qty: 1 }, { name: "Speaker Wire Run", qty: 1 }, { name: "Drill Mount Tune", qty: 1 }] },
   // Toast device blocks (per the Cable Guide). The DEVICE hardware is Toast/customer-provided, so we
   // bill LABOR only — each block header names the device and the sub-items are its Line Drop (+ a $50
   // Device Mounting for wall/ceiling items: Access Point, KDS). The Line Drop toggles to "Existing"
@@ -309,7 +318,7 @@ const SURVEY_KIND_MAP = {
   poe:    { service: "camera", name: "PoE Switch",           price: 140 },
   disp:   { service: "camera", name: "Display / Monitor",    price: 0 },
   spk:    { service: "sound",  name: "Speaker",              price: 120, locate: true },
-  amp:    { service: "sound",  name: "Amplifier (4-zone)",   price: 480 },
+  amp:    { service: "sound",  name: "Amplifier (4-Zone)",   price: 350 },
   aux:    { service: "sound",  name: "Audio Input",          price: 0 },
   // Per the Toast Equipment Cable Guide: Pronto/Meraki and ISP are Toast-managed / customer-
   // provided (no cable charge); every other Toast device is hardwired and gets a Cat6 Drop
