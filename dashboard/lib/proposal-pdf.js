@@ -2,6 +2,7 @@
 import { jsPDF, AcroFormTextField } from "jspdf";
 import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal.js";
 import { scopeMismatches } from "./survey2-model.js";
+import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -837,8 +838,13 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     for (const m of scopeMismatches(attachments.surveyFloors, renderOptions[0])) { console.warn("[proposal-pdf] scope mismatch — " + m); if (meta.__warnings) meta.__warnings.push("Scope mismatch — " + m); }
   }
 
-  if (meta.__return) return doc;
-  const baseName = (customerName || "Client").replace(/[^a-zA-Z0-9]/g, "_");
-  doc.save(`${baseName}_IOT-Techs_${detailed ? "Detailed_" : ""}Proposal.pdf`);
+  // Canonical filename (lib/doc-filename.js): identity - service - last4 - vN [- Detailed] [- Draft].
+  // The service word flips to "Low Voltage Systems" when the priced proposal spans several services.
+  const svcKeys = [...new Set(renderOptions.flatMap((o) => (o.services || []).filter((s) => (s.items || []).length).map((s) => s.key)))];
+  const fb = meta.fileBase || { identity: customerName || "Client", service: svcKeys.length === 1 ? ({ camera: "CCTV", sound: "Sound System", toast: "Toast POS", alarm: "Alarm System", access: "Access Control", wiring: "Low Voltage Wiring" })[svcKeys[0]] || "Custom System" : MULTI_SERVICE_LABEL, last4: meta.projectId ? String(meta.projectId).slice(-4) : "0000" };
+  const fileName = documentFilename(svcKeys.length > 1 ? { ...fb, service: MULTI_SERVICE_LABEL } : fb,
+    { type: detailed ? DOC.DETAILED_PROPOSAL : DOC.PROPOSAL, revision: p.version || 1, draft: p.status === "draft" });
+  if (meta.__return) { doc.__fileName = fileName; return doc; }
+  doc.save(fileName);
 }
 export const PDF_PAGE = { W: 612, H: 792, FOOTER_H: 30.24, SAFE_GAP: 14, BOTTOM: 792 - 30.24 - 14, TOP: 140.4 };

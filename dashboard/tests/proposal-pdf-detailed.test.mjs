@@ -95,3 +95,17 @@ test("a package priced on top of its components is flagged internally, never re-
   assert.match(det.warnings[0], /differs from package total/);
   assert.ok(det.texts.includes("$325.00"), "package total keeps the canonical value");
 });
+
+test("the renderer names the file canonically: identity - service - last4 - vN [- Detailed], multi-service → Low Voltage Systems", () => {
+  const fileBase = { identity: "Buck N Up Store", service: "Sound System", last4: "0046" };
+  const name = (p, mode) => downloadProposalPdf(p, { customerName: "Zain Farooq", fileBase, mode, __return: true }).__fileName;
+  const a = audioProposal(2); a.version = 4;
+  assert.equal(name(a, "standard"), "Buck N Up Store - Sound System - 0046 - v4.pdf");
+  assert.equal(name(a, "detailed"), "Buck N Up Store - Sound System - 0046 - v4 - Detailed.pdf");
+  assert.equal(name({ ...a, status: "draft" }, "standard"), "Buck N Up Store - Sound System - 0046 - v4 - Draft.pdf");
+  const c = cctvProposal();
+  const multi = { ...a, payload: { ...a.payload, options: [{ id: "A", name: "A", services: [...c.payload.options[0].services, ...a.payload.options[0].services] }] } };
+  assert.equal(name(multi, "standard"), "Buck N Up Store - Low Voltage Systems - 0046 - v4.pdf");
+  // No project base (legacy caller) → still a clean name from what is known.
+  assert.equal(downloadProposalPdf(a, { customerName: "Zain Farooq", projectId: "ASC0046", __return: true }).__fileName, "Zain Farooq - Sound System - 0046 - v4.pdf");
+});

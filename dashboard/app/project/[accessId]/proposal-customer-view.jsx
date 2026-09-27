@@ -70,7 +70,7 @@ const fmtPhone = (v) => {
   return v;
 };
 
-export default function ProposalCustomerView({ accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false, embedded = false }) {
+export default function ProposalCustomerView({ fileBase = null, accessId, proposal, preview, customerName, customerAddress, customerPhone, customerEmail, onAdvance, onStageSync, canVoid = false, embedded = false }) {
   const [p, setP] = useState(proposal);
   const [busy, setBusy] = useState(false);
   const [dlBusy, setDlBusy] = useState(false);             // building the PDF (survey rasterize can take a moment)
@@ -277,7 +277,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
-      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages, surveyFloors });
+      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
     } finally {
       setDlBusy(false);
     }

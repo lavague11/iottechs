@@ -1,5 +1,6 @@
 "use client";
 
+import { DOC, documentFilename, projectFileBase } from "../../../lib/doc-filename";
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import AdminShell from "../../components/admin-shell";
@@ -115,7 +116,7 @@ export default function QrLibraryClient({ user, alerts, codes = [] }) {
               {zoom.address ? ` · ${zoom.address}` : ""}{zoom.phone ? ` · ${zoom.phone}` : ""}
             </div>
             <div className="qrl-zoom-act">
-              <a className="qrl-dl" href={zoom.system_qr} download={`IOT-TECHS-QR-${zoom.access_id}.png`}>
+              <a className="qrl-dl" href={zoom.system_qr} download={documentFilename(projectFileBase(zoom), { type: DOC.SYSTEM_QR })}>
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
                 Download
               </a>

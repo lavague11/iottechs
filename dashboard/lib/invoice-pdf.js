@@ -1,5 +1,6 @@
 "use client";
 import { jsPDF } from "jspdf";
+import { DOC, documentFilename } from "./doc-filename.js";
 
 // Brand invoice for a project: what was charged (accepted proposal + approved add-ons), what's been
 // paid (each confirmed payment), and the balance due. The caller passes the already-computed money
@@ -155,5 +156,5 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
     doc.text("Complete payment ledger from the IOT TECHS payment tool.  ·  support@iot-techs.com", lm, 762);
   }
 
-  doc.save(`${invoiceNo || "Invoice"}.pdf`);
+  doc.save(documentFilename(meta.fileBase || { identity: customerName, service: "Custom System", last4: String(projectId || "").slice(-4) }, { type: DOC.INVOICE, invoiceNo }));
 }

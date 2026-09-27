@@ -1,5 +1,6 @@
 "use client";
 import { jsPDF } from "jspdf";
+import { DOC, documentFilename, projectFileBase } from "./doc-filename.js";
 
 // Certificate of Completion + warranty as a branded PDF — same visual language as the proposal
 // export (lib/proposal-pdf.js): slate side rail, ink header band, gold accents. One page.
@@ -97,6 +98,5 @@ export function downloadCompletionPdf(project, meta = {}) {
   doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
   doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", W / 2 + 18, H - 10.08, { align: "center" });
 
-  const safe = String(client).replace(/[^a-z0-9]+/gi, "_").slice(0, 40);
-  doc.save(`Certificate_of_Completion_${project.access_id || safe}.pdf`);
+  doc.save(documentFilename(projectFileBase(project), { type: DOC.COMPLETION }));
 }

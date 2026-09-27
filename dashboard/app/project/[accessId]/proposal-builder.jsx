@@ -62,7 +62,7 @@ function ensureSurveyCameraIds(accessId) {
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
-export default function ProposalBuilder({ accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService }) {
+export default function ProposalBuilder({ fileBase = null, accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
   const [dlBusy, setDlBusy] = useState(false);                // building the proposal PDF
   const [copied, setCopied] = useState(false);                // "Copied" flash after Share
@@ -370,7 +370,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       if (sv?.saved?.data) { plannerFloors = parseSurveyFloors(sv.saved.data); jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {})); }
       await Promise.all(jobs);
     } catch { /* download numbers-only on any fetch failure */ }
-    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages, surveyFloors: plannerFloors }); }
+    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors }); }
     finally { setDlBusy(false); }
   }
 

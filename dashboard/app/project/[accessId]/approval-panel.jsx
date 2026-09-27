@@ -49,7 +49,7 @@ function ToolHead({ icon, title, done, doneLabel, pendingLabel }) {
 // `embedded` = mounted inside the deck's full-screen overlay, which already shows the tool's
 // name in its bar. When embedded we drop our own collapse/title header (no second, redundant
 // title bar) and stay always-open. This is the standing convention for deck-embedded tools.
-export default function ApprovalPanel({ accessId, role, customerName, customerAddress, customerPhone, customerEmail, onStageChange, onBrowseStage, onOpenProposal, stage = "approval_deposit", embedded = false }) {
+export default function ApprovalPanel({ fileBase = null, accessId, role, customerName, customerAddress, customerPhone, customerEmail, onStageChange, onBrowseStage, onOpenProposal, stage = "approval_deposit", embedded = false }) {
   const isStaff = ["admin", "manager"].includes(role);
   const isCustomer = role === "customer";
   // The person who paid, by NAME. New entries stamp a real name; older/generic ones ("customer",
@@ -376,7 +376,7 @@ export default function ApprovalPanel({ accessId, role, customerName, customerAd
     ];
     downloadInvoicePdf(
       { customerName, customerAddress, customerPhone: fmtPhone(customerPhone), customerEmail,
-        projectId: accessId, depositPct: p.deposit_pct,
+        projectId: accessId, depositPct: p.deposit_pct, fileBase,
         invoiceNo: "INV-" + String(p.id || "0").padStart(4, "0") + "-v" + (p.version || 1), proposalNo: propNum },
       { lines, grandWithAddons, paidTotal, balance },
       payments,   // full ledger — page 1 lists confirmed receipts, page 2 the complete records

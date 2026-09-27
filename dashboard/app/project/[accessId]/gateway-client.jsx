@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { projectFileBase } from "../../../lib/doc-filename";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { can } from "../../../lib/roles";
@@ -1547,6 +1548,8 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 // ---- Resolved project view ----
 function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null }) {
   const [proposalData, setProposalData] = useState(proposal);
+  // One canonical filename base for every document this project downloads (lib/doc-filename.js).
+  const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
   // the SAME step. Consumed once; the customer re-center effect below skips its first run when set.
   // Read via useSearchParams, not window.location: on a client-side push (New Project → deck) the
@@ -2386,7 +2389,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {sees(cView, "ph_proposal", "Tech Board") && <TechProjectBoard project={lp} />}
-                <ProposalPanel embedded accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
                   defaultService={proposalServiceForCode(lp.service_code)}
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
@@ -2403,7 +2406,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             state: (custFacts.proposal_signed && custFacts.deposit_recorded) ? "done" : "active",
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
-                <ApprovalPanel accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
+                <ApprovalPanel fileBase={fileBase} accessId={lp.access_id} role={cView} stage="approval_deposit" embedded
                   customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                   onOpenProposal={() => openDeckTool("Proposal")}
@@ -2564,7 +2567,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         }
         if (sees(cView, "ph_wrap", "Final Payment")) {
           tools.push({ name: "Final Payment", label: "Payment", heavy: true,
-            node: <AccordionProvider><div style={fill}><ApprovalPanel accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
+            node: <AccordionProvider><div style={fill}><ApprovalPanel fileBase={fileBase} accessId={lp.access_id} role={cView} stage="payment" embedded customerName={lp.contact_name || lp.customer}
               customerAddress={lp.address} customerPhone={lp.contact_phone} customerEmail={lp.contact_email} onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)} /></div></AccordionProvider> });
         }
         // Quality control is internal (the customer's phone-setup guide now lives in Install).
@@ -3566,6 +3569,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           {/* Tech's "Work Order Created" page: general job overview above the work order itself */}
           {cView === "tech" && <TechProjectBoard project={lp} />}
           <ProposalPanel
+            fileBase={fileBase}
             accessId={lp.access_id}
             view={view}
             cView={cView}
@@ -3586,6 +3590,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
       {vPhase === "ph_proposal" && ["admin", "manager", "customer"].includes(cView) && (
         <ApprovalPanel
+          fileBase={fileBase}
           accessId={lp.access_id}
           role={cView}
           stage="approval_deposit"
@@ -3635,6 +3640,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       )}
       {vPhase === "ph_wrap" && ["admin", "manager", "customer"].includes(cView) && (
         <ApprovalPanel
+          fileBase={fileBase}
           accessId={lp.access_id}
           role={cView}
           stage="payment"

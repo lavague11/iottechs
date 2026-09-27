@@ -1,5 +1,6 @@
 "use client";
 
+import { DOC, documentFilename, projectFileBase } from "../../lib/doc-filename";
 import { useState, useEffect, useId, useRef } from "react";
 import UnlockPatternReveal from "./unlock-pattern-reveal";
 
@@ -458,7 +459,7 @@ function SystemPicker({ projects = [], onContinue, onBack, onUnlock, projectRef 
           <a
             className="gw-qr-card gw-qr-tap"
             href={proj.system_qr}
-            download={`IOT-TECHS-QR-${proj.access_id || "system"}.png`}
+            download={documentFilename(projectFileBase(proj), { type: DOC.SYSTEM_QR })}
             title="Tap to save"
           >
             <img className="gw-qr-img" src={proj.system_qr} alt="Your System QR code" draggable={false} />
@@ -526,7 +527,7 @@ function QrUnlock({ projectRef, onUnlock, onFound, onBack, onContinue }) {
 }
 
 function QrZoom({ proj, onClose }) {
-  const file = `IOT-TECHS-QR-${(proj.access_id || "system")}.png`;
+  const file = documentFilename(projectFileBase(proj), { type: DOC.SYSTEM_QR });
   return (
     <div className="gw-qrzoom-bg" onClick={(e) => { if (e.target.classList.contains("gw-qrzoom-bg")) onClose(); }}>
       <div className="gw-qrzoom">
@@ -589,7 +590,7 @@ function ShareQrPicker({ projects = [] }) {
   // No resolved system (public link, no login) → fall back to the animated QR filler.
   if (!proj) return <DeviceFrame art="qr" />;
 
-  const file = `IOT-TECHS-QR-${proj.access_id || "system"}.png`;
+  const file = documentFilename(projectFileBase(proj), { type: DOC.SYSTEM_QR });
   async function textIt() {
     try {
       const res = await fetch(proj.system_qr);
