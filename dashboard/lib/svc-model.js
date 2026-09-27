@@ -12,6 +12,9 @@
 //              rootCauses: [key], finding, recommendation, work: [key], outcome, notes }
 // One finding can cover many devices (four cameras dead on one PoE switch = one finding, four devices).
 
+export * from "./svc-status.js";
+import { SVC_STATUS_ALIAS, svcStatusIndex, svcStatusLabel } from "./svc-status.js";
+
 export const SVC_CALL_TYPES = ["Service Call", "Troubleshooting", "System Check", "Camera Repair", "NVR / DVR Repair", "Cabling Repair", "Network Repair", "Add-On Install", "Warranty Visit", "Other"];
 
 export const SVC_SYSTEMS = [
@@ -149,7 +152,11 @@ let _n = 0;
 export const newId = (p = "f") => `${p}${Date.now().toString(36)}${(_n++).toString(36)}`;
 
 export function emptyDiagnosis() {
-  return { callType: "Service Call", systems: [], devices: [], findings: [], visit: { arrival: null, departure: null, techs: [] }, billing: "repair", recommendations: "", internalNotes: "" };
+  return { callType: "Service Call", systems: [], devices: [], findings: [], deviceState: {}, narrative: { incident: "", summary: "", rootCause: "", recommendation: "" }, options: [],
+    visit: { arrival: null, departure: null, techs: [] }, billing: "repair", recommendations: "", internalNotes: "" };
+}
+export function emptyOption(type = "repair") {
+  return { id: newId("o"), title: type === "replace" ? "Full replacement" : type === "temporary" ? "Temporary repair" : type === "none" ? "No action" : type === "third_party" ? "Third-party resolution" : "Repair", type, description: "", bullets: [], costSource: "none", low: null, high: null, warranty: "", reliability: "", recommended: false };
 }
 export function emptyFinding(system = "cctv", deviceIds = []) {
   return { id: newId(), deviceIds, system, symptoms: [], observed: "", tests: [], rootCauses: [], finding: "", recommendation: "", work: [], outcome: "", notes: "" };
@@ -319,5 +326,173 @@ export function sanitizeDiagnosis(input) {
   doc.billing = SVC_BILLING.some((b) => b.key === input.billing) ? input.billing : "repair";
   doc.recommendations = str(input.recommendations, 1500);
   doc.internalNotes = str(input.internalNotes, 3000);
+  // Per-device state (status + the service module's short fields) — only for known devices.
+  const statusKeys = new Set(SVC_DEVICE_STATUS.map((x) => x.key));
+  doc.deviceState = {};
+  for (const [id, st] of Object.entries(input.deviceState && typeof input.deviceState === "object" ? input.deviceState : {})) {
+    if (!devIds.has(id) || !st || typeof st !== "object") continue;
+    const fields = {};
+    for (const [k, v] of Object.entries(st.fields && typeof st.fields === "object" ? st.fields : {})) if (/^[a-z]{2,16}$/.test(k) && v != null && String(v).trim()) fields[k] = str(v, 80);
+    doc.deviceState[id] = { status: statusKeys.has(st.status) ? st.status : "", fields };
+  }
+  const nv = input.narrative && typeof input.narrative === "object" ? input.narrative : {};
+  doc.narrative = { incident: str(nv.incident, 1500), summary: str(nv.summary, 800), rootCause: str(nv.rootCause, 1500), recommendation: str(nv.recommendation, 1000) };
+  const optTypes = new Set(SVC_OPTION_TYPES.map((o) => o.key)), costSources = new Set(["estimate", "proposal", "range", "none"]);
+  const num = (v) => (v === "" || v == null || Number.isNaN(+v) || +v < 0 ? null : Math.round(+v * 100) / 100);
+  doc.options = (Array.isArray(input.options) ? input.options : []).slice(0, 4).map((o) => ({
+    id: str(o?.id, 40) || newId("o"), title: str(o?.title, 80), type: optTypes.has(o?.type) ? o.type : "repair",
+    description: str(o?.description, 600), bullets: (Array.isArray(o?.bullets) ? o.bullets : []).slice(0, 8).map((b) => str(b, 160)).filter(Boolean),
+    costSource: costSources.has(o?.costSource) ? o.costSource : "none", low: num(o?.low), high: num(o?.high),
+    warranty: str(o?.warranty, 60), reliability: str(o?.reliability, 60), recommended: !!o?.recommended,
+  }));
+  if (doc.options.filter((o) => o.recommended).length > 1) doc.options.forEach((o, i) => { o.recommended = i === doc.options.findIndex((x) => x.recommended); });
   return doc;
 }
+
+// ---- Per-device status + cause category (report badges) --------------------------------------
+export const SVC_DEVICE_STATUS = [
+  { key: "OK",                short: "OK",       tone: "ok" },
+  { key: "FAILED",            short: "FAIL",     tone: "fail" },
+  { key: "DEGRADED",          short: "DEGRADED", tone: "warn" },
+  { key: "INTERMITTENT",      short: "INTERMIT", tone: "warn" },
+  { key: "RESTORED",          short: "RESTORED", tone: "ok" },
+  { key: "NEEDS_REPAIR",      short: "REPAIR",   tone: "warn" },
+  { key: "NEEDS_REPLACEMENT", short: "REPLACE",  tone: "fail" },
+  { key: "NOT_TESTED",        short: "—",        tone: "muted" },
+];
+const OUTCOME_TO_STATUS = { working: "OK", repaired: "RESTORED", replaced: "RESTORED", temporary: "DEGRADED", needs_repair: "NEEDS_REPAIR", needs_replace: "NEEDS_REPLACEMENT", parts: "NEEDS_REPAIR", return: "NEEDS_REPAIR", declined: "FAILED", no_fault: "OK", third_party: "DEGRADED", warranty: "NEEDS_REPAIR", unable: "FAILED" };
+export const SVC_CAUSE_CATEGORY = [
+  { key: "CABLE",           label: "Cable",           tone: "fail" },
+  { key: "CAMERA",          label: "Camera Fault",    tone: "ink" },
+  { key: "NVR_DVR",         label: "NVR Fault",       tone: "ink" },
+  { key: "HARD_DRIVE",      label: "Hard Drive",      tone: "ink" },
+  { key: "POWER",           label: "Power Fault",     tone: "warn" },
+  { key: "POE",             label: "PoE",             tone: "warn" },
+  { key: "NETWORK",         label: "Network",         tone: "slate" },
+  { key: "ISP",             label: "ISP",             tone: "slate" },
+  { key: "CONFIGURATION",   label: "Configuration",   tone: "slate" },
+  { key: "FIRMWARE",        label: "Firmware",        tone: "slate" },
+  { key: "PHYSICAL_DAMAGE", label: "Physical Damage", tone: "fail" },
+  { key: "ENVIRONMENTAL",   label: "Environmental",   tone: "slate" },
+  { key: "THIRD_PARTY",     label: "Third Party",     tone: "slate" },
+  { key: "CUSTOMER_CAUSED", label: "Customer Caused", tone: "slate" },
+  { key: "UNKNOWN",         label: "Unknown",         tone: "slate" },
+  { key: "RESTORED",        label: "Restored",        tone: "ok" },
+  { key: "UNAFFECTED",      label: "Unaffected",      tone: "ok" },
+];
+const CAUSE_TO_CATEGORY = { camera_hw: "CAMERA", nvr_hw: "NVR_DVR", hdd: "HARD_DRIVE", cable: "CABLE", termination: "CABLE", poe_port: "POE", poe_switch: "POE", power: "POWER", lan: "NETWORK", router: "NETWORK", isp: "ISP", cloud: "NETWORK", netconfig: "CONFIGURATION", credentials: "CONFIGURATION", firmware: "FIRMWARE", display: "CONFIGURATION", environment: "ENVIRONMENTAL", customer: "CUSTOMER_CAUSED", third_party: "THIRD_PARTY", unknown: "UNKNOWN" };
+export const causeCategoryOf = (rootCauseKey) => CAUSE_TO_CATEGORY[rootCauseKey] || null;
+export const CAUSE_CATEGORY_LABEL = Object.fromEntries(SVC_CAUSE_CATEGORY.map((c) => [c.key, c.label]));
+export const DEVICE_STATUS_META = Object.fromEntries(SVC_DEVICE_STATUS.map((d) => [d.key, d]));
+// Service modules define the short per-device columns; the shared regions stay the same.
+export const SVC_MODULE_FIELDS = {
+  cctv:    [["cable", "Cable"], ["power", "Power"], ["video", "Video"]],
+  nvr:     [["power", "Power"], ["storage", "Storage"], ["network", "Network"], ["recording", "Recording"]],
+  network: [["link", "Link"], ["ip", "IP"], ["internet", "Internet"], ["latency", "Latency"]],
+  power:   [["ac", "AC"], ["output", "Output"]],
+  access:  [["reader", "Reader"], ["lock", "Lock"], ["credential", "Credential"]],
+  alarm:   [["panel", "Panel"], ["sensor", "Sensor"], ["comm", "Comm"]],
+  audio:   [["source", "Source"], ["amp", "Amp"], ["zone", "Zone"]],
+};
+export const moduleFields = (system) => SVC_MODULE_FIELDS[system] || [];
+export const SVC_OPTION_TYPES = [
+  { key: "repair", label: "Repair" }, { key: "replace", label: "Replace" }, { key: "temporary", label: "Temporary repair" }, { key: "none", label: "No action" }, { key: "third_party", label: "Third-party resolution" },
+];
+const DIAG_BADGE = { cctv: "CCTV Diagnostic", nvr: "NVR Diagnostic", cabling: "Cabling Diagnostic", network: "Network Diagnostic", power: "Power Diagnostic", display: "Display Diagnostic", app: "Remote Viewing Diagnostic", access: "Access Control Diagnostic", alarm: "Alarm Diagnostic", audio: "Audio Diagnostic", other: "Service Diagnostic" };
+
+// One row per known device, derived from findings + per-device state. Never invents: a device with
+// no finding and no state is NOT_TESTED; a device in a finding inherits the finding's outcome status
+// and first root cause as its badge.
+export function deviceRows(doc) {
+  if (!doc) return [];
+  return (doc.devices || []).map((dv, i) => {
+    const f = (doc.findings || []).find((x) => (x.deviceIds || []).includes(dv.id)) || null;
+    const st = doc.deviceState?.[dv.id] || {};
+    const status = st.status || (f ? (OUTCOME_TO_STATUS[f.outcome] || (f.rootCauses?.length ? "FAILED" : "NOT_TESTED")) : "NOT_TESTED");
+    let cause = f?.rootCauses?.length ? causeCategoryOf(f.rootCauses[0]) : null;
+    if (!cause && (status === "RESTORED")) cause = "RESTORED";
+    if (!cause && status === "OK") cause = "UNAFFECTED";
+    return { n: i + 1, id: dv.id, label: dv.label, kind: dv.kind, status, fields: st.fields || {}, finding: f ? (f.finding || [f.symptoms.join(", "), f.observed].filter(Boolean).join(" — ")) : "", cause, system: f?.system || (doc.systems || [])[0] || "other" };
+  });
+}
+
+// Factual summary from the rows only ("6 of 8 non-operational · 3 cable · 2 camera · 2 unaffected").
+export function autoSummary(doc) {
+  const rows = deviceRows(doc);
+  if (!rows.length) return "";
+  const down = rows.filter((r) => ["FAILED", "NEEDS_REPLACEMENT", "NEEDS_REPAIR"].includes(r.status));
+  const degraded = rows.filter((r) => ["DEGRADED", "INTERMITTENT"].includes(r.status));
+  const restored = rows.filter((r) => r.status === "RESTORED");
+  const ok = rows.filter((r) => r.status === "OK");
+  const parts = [];
+  if (down.length) parts.push(`${down.length} of ${rows.length} non-operational`);
+  if (degraded.length) parts.push(`${degraded.length} degraded`);
+  const byCause = {};
+  for (const r of [...down, ...degraded]) if (r.cause && !["RESTORED", "UNAFFECTED"].includes(r.cause)) byCause[r.cause] = (byCause[r.cause] || 0) + 1;
+  for (const [k, n] of Object.entries(byCause).sort((a, b) => b[1] - a[1])) parts.push(`${n} ${CAUSE_CATEGORY_LABEL[k].toLowerCase()}`);
+  if (restored.length) parts.push(`${restored.length} restored on-site`);
+  if (ok.length) parts.push(`${ok.length} unaffected`);
+  return parts.join(" · ");
+}
+
+// Scope lines from a proposal payload (the accepted option, else the first): "8× Camera".
+export function proposalScopeLines(payload, acceptedOptions = null) {
+  const opts = payload?.options || [];
+  const acc = Array.isArray(acceptedOptions) && acceptedOptions.length ? opts.filter((o) => acceptedOptions.includes(o.id)) : opts.slice(0, 1);
+  const lines = [];
+  for (const o of acc) for (const svc of o.services || []) for (const it of svc.items || []) if (it?.name && !it.waived) lines.push(`${+it.qty > 1 ? `${it.qty}× ` : ""}${it.name}`);
+  return lines.slice(0, 20);
+}
+
+// ---- The document: regions rendered by svc-report.jsx and the PDF. Empty regions are omitted. ----
+//   proposal: { number, version, total, scope: [], fingerprint } | null   (linked PROP-xxxx, computed server-side)
+export function documentModel({ call, doc, invoice = null, payments = [], warranty = null, proposal = null, showCharges = true }) {
+  doc = doc || emptyDiagnosis();
+  const rows = deviceRows(doc);
+  const findings = doc.findings || [];
+  const items = invoice?.items || [];
+  const estTotal = items.reduce((s, r) => s + (+r.qty || 0) * (+r.price || 0), 0);
+  const hasEstimate = showCharges && doc.billing !== "warranty" && items.length > 0 && estTotal > 0;
+  const options = doc.options || [];
+  const type = doc.billing === "warranty" ? "Warranty Service Report"
+    : (options.length || hasEstimate || proposal) ? "Service Call Proposal"
+    : findings.length ? "Service Diagnostic" : "Service Call Report";
+  const badge = DIAG_BADGE[(findings[0]?.system) || (doc.systems || [])[0]] || null;
+  const status = SVC_STATUS_ALIAS[call.stage] || call.stage;
+  const signed = !!(call.tech_signed_at || call.customer_signed_at);
+  const draft = !signed && svcStatusIndex(status) < svcStatusIndex("findings_ready");
+  const regions = [];
+  const put = (key, title, body) => { if (body) regions.push({ key, title, ...body }); };
+
+  const incident = doc.narrative?.incident || [call.issue, ...findings.map((f) => f.observed)].filter(Boolean).join(" ");
+  put("INCIDENT", doc.billing === "warranty" ? "Reported Issue" : "Incident", incident ? { text: incident } : null);
+  const sys = rows[0]?.system || (doc.systems || [])[0] || "other";
+  const fields = moduleFields(sys);
+  put("EQUIPMENT_FINDINGS", `Per-${sys === "cctv" ? "Camera" : "Device"} Findings`, rows.length ? { columns: fields, rows } : null);
+  put("SUMMARY", "Summary", (doc.narrative?.summary || autoSummary(doc)) ? { text: doc.narrative?.summary || autoSummary(doc) } : null);
+  const rootCause = doc.narrative?.rootCause || findings.map((f) => f.finding).filter(Boolean).join(" ") || [...new Set(findings.flatMap((f) => f.rootCauses || []))].map((c) => CAUSE_LABEL[c]).join(", ");
+  put("ROOT_CAUSE", "Root Cause", rootCause ? { text: rootCause } : null);
+  const tests = findings.flatMap((f) => (f.tests || []).filter((t) => t.result && t.result !== "NOT TESTED").map((t) => `${TEST_LABEL[t.key] || t.key} — ${t.result}${t.note ? ` (${t.note})` : ""}`));
+  put("TESTS", "Diagnostic Tests", tests.length ? { lines: [...new Set(tests)] } : null);
+  const work = findings.flatMap((f) => [...(f.work || []).map((w) => WORK_LABEL[w] || w), f.notes].filter(Boolean)).filter((v, i, a) => a.indexOf(v) === i);
+  put("WORK_PERFORMED", "Work Performed", work.length ? { lines: work } : null);
+  const costOf = (o) => o.costSource === "estimate" && hasEstimate ? { text: money(estTotal), value: estTotal }
+    : o.costSource === "proposal" && proposal?.total != null ? { text: money(proposal.total), value: proposal.total }
+    : o.costSource === "range" && o.low != null && o.high != null ? { text: `${money(o.low)} – ${money(o.high)}`, value: null }
+    : { text: "—", value: null };
+  put("REPAIR_OPTIONS", options.length > 1 ? "Repair vs Replace" : "Option", options.length ? { options: options.map((o) => ({ ...o, cost: costOf(o) })) } : null);
+  put("COST_COMPARISON", "Cost Comparison", options.length > 1 ? { rows: options.map((o) => ({ title: o.title, description: o.description, cost: costOf(o).text, warranty: o.warranty || "—", reliability: o.reliability || "—", recommended: o.recommended })) } : null);
+  const rec = doc.narrative?.recommendation || doc.recommendations || options.find((o) => o.recommended)?.title || findings.map((f) => f.recommendation).filter(Boolean).join(" ");
+  put("RECOMMENDATION", "Recommendation", rec ? { text: rec, proposal: proposal ? { number: proposal.number, total: proposal.total } : null, estimateTotal: !proposal && hasEstimate ? estTotal : null } : null);
+  put("SCOPE", "Scope", proposal?.scope?.length ? { lines: proposal.scope, number: proposal.number } : hasEstimate ? { lines: items.map((r) => `${+r.qty > 1 ? `${r.qty}× ` : ""}${r.desc}`), number: null } : null);
+  const paid = payments.reduce((s, p) => s + (+p.amount || 0), 0);
+  put("CHARGES", doc.billing === "estimate" ? "Estimate" : "Charges", hasEstimate && !proposal ? { items, total: estTotal, paid, due: Math.max(0, estTotal - paid) } : doc.billing === "warranty" ? { text: "Warranty visit — no charge." } : null);
+  put("WARRANTY", "Warranty", warranty && warranty.status !== "unknown" ? { text: warranty.status === "in" ? `In warranty · until ${warranty.until}` : `Out of warranty · ended ${warranty.until}` } : null);
+  const isProposal = type === "Service Call Proposal";
+  put("ACCEPTANCE", "Acceptance", draft ? null : { text: isProposal ? `Signature acknowledges the findings above and authorizes IOT TECHS / La Vague Inc. to proceed${proposal ? ` under proposal ${proposal.number}` : hasEstimate ? " under the estimate above" : ""}.` : "Signature acknowledges the findings and work described above.", customer: { name: call.customer_signed_name, at: call.customer_signed_at }, tech: { name: call.tech_signed_name, at: call.tech_signed_at } });
+  const page2 = new Set(["REPAIR_OPTIONS", "COST_COMPARISON", "RECOMMENDATION", "SCOPE", "CHARGES", "WARRANTY", "ACCEPTANCE"]);
+  return { type, badge, status, statusLabel: svcStatusLabel(status), draft, refProposal: proposal?.number || null,
+    pages: [regions.filter((r) => !page2.has(r.key)), regions.filter((r) => page2.has(r.key))].filter((p) => p.length) };
+}
+const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export { money as svcMoney };

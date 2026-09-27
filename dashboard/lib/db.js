@@ -5,7 +5,8 @@ import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
-import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis } from "./svc-model.js";
+import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
+import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "./svc-status.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
@@ -521,6 +522,8 @@ function init() {
     ["customer_signed_name", "TEXT"], ["customer_signed_at", "TEXT"],
   ]) if (!svcCols.includes(col)) db.exec(`ALTER TABLE service_calls ADD COLUMN ${col} ${ddl}`);
   db.exec("CREATE INDEX IF NOT EXISTS idx_svc_customer ON service_calls(customer_id)");
+  // One-time normalization: the first TRACE release's stage keys → the canonical status keys.
+  for (const [from, to] of Object.entries(SVC_STATUS_ALIAS)) db.prepare("UPDATE service_calls SET stage = ? WHERE stage = ?").run(to, from);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS svc_invoices (
@@ -3624,20 +3627,10 @@ export function createTicket({ access_id, subject, priority, opened_by_id, opene
 // Service calls (TRACE) — Phase 1 data layer
 // ===========================================================================
 
-// The stage ladder for a service call, in order. Distinct from the project lifecycle.
-export const SVC_STAGES = [
-  { key: "submitted",  label: "Submitted" },
-  { key: "diagnosing", label: "Diagnosing" },
-  { key: "quoted",     label: "Quoted" },
-  { key: "scheduled",  label: "Scheduled" },
-  { key: "onsite",     label: "On-site" },
-  { key: "resolved",   label: "Resolved" },
-  { key: "billed",     label: "Billed" },
-  { key: "closed",     label: "Closed" },
-];
-export function svcStageLabel(key) {
-  return (SVC_STAGES.find((s) => s.key === key) || {}).label || key || "";
-}
+// The status ladder for a service call — the ONE canonical model (lib/svc-status.js), distinct from
+// the project lifecycle. `stage` stays the column name; keys are the canonical ones.
+export const SVC_STAGES = SVC_STATUSES;
+export function svcStageLabel(key) { return svcStatusLabel(key); }
 
 // SVC id from a counter — same base36 scheme as project ids, distinct prefix so it never reads as
 // a project. e.g. counter 1 -> "SVC0001", 42 -> "SVC0016".
@@ -3683,7 +3676,7 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
   );
   const id = Number(info.lastInsertRowid);
   const svcId = makeSvcId(id);
-  db.prepare("UPDATE service_calls SET svc_id = ? WHERE id = ?").run(svcId, id);
+  db.prepare("UPDATE service_calls SET svc_id = ?, stage = 'draft' WHERE id = ?").run(svcId, id);
 
   // Companion ticket so it flows through the existing ticket surfaces too.
   const ticketId = createTicket({
@@ -3703,6 +3696,16 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
 
 export function getServiceCall(svcId) {
   return decorateSvc(db.prepare("SELECT * FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId || "").trim()));
+}
+
+// Forward-only automatic status move (never backwards, never out of a closed state), logged.
+function svcAdvance(svcId, target, { actor_role = "system", actor_name = null } = {}) {
+  const cur = getServiceCall(svcId);
+  const next = cur && svcAutoAdvance(cur.stage, target);
+  if (!next || next === cur.stage) return cur;
+  db.prepare("UPDATE service_calls SET stage = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(next, String(svcId));
+  logServiceCallEvent(svcId, { kind: "stage", detail: `${svcStatusLabel(cur.stage)} → ${svcStatusLabel(next)}`, actor_role, actor_name });
+  return getServiceCall(svcId);
 }
 
 // ---- Structured diagnosis (lib/svc-model.js) ---------------------------------------------------
@@ -3731,6 +3734,11 @@ export function saveSvcDiagnosis(svcId, input, { actor_role, actor_name } = {}) 
   db.prepare("UPDATE service_calls SET diagnosis = ?, diagnosis_updated_at = datetime('now','localtime'), call_type = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE")
     .run(JSON.stringify(doc), doc.callType || null, String(call.svc_id));
   if (!had) logServiceCallEvent(call.svc_id, { kind: "diagnostic", detail: "Diagnosis started", actor_role, actor_name });
+  // Status follows the facts: a diagnosis in progress → Diagnosing; any finding with an outcome →
+  // Findings Ready; a warranty visit with findings → Warranty. Forward-only.
+  const ready = doc.findings.some((f) => f.outcome);
+  if (doc.billing === "warranty" && ready) svcAdvance(call.svc_id, "warranty", { actor_role, actor_name });
+  else svcAdvance(call.svc_id, ready ? "findings_ready" : "diagnosing", { actor_role, actor_name });
   return { ok: true, doc };
 }
 
@@ -3741,7 +3749,22 @@ export function svcReportFingerprint(svcId) {
   const inv = getSvcInvoice(call.svc_id);
   const doc = getSvcDiagnosis(call.svc_id)?.doc || emptyDiagnosis();
   const { internalNotes, ...visible } = doc;   // internal notes are not part of what the customer signs
-  return createHash("sha256").update(stableJson({ svc: call.svc_id, issue: call.issue, doc: visible, items: inv?.items || [] })).digest("hex").slice(0, 24);
+  const prop = getSvcLinkedProposal(call);
+  return createHash("sha256").update(stableJson({ svc: call.svc_id, issue: call.issue, doc: visible, items: inv?.items || [], proposal: prop ? { id: prop.id, version: prop.version, fingerprint: prop.fingerprint } : null })).digest("hex").slice(0, 24);
+}
+
+// The proposal on the call's companion project (PROP-xxxx-vN) — pricing/acceptance stays there; the
+// service call stays the diagnostic record. Returns the compact shape the document model renders.
+export function getSvcLinkedProposal(call) {
+  if (!call?.svc_project_id) return null;
+  const p = getActiveProposal(call.svc_project_id);
+  if (!p) return null;
+  let payload = null; try { payload = JSON.parse(p.payload || "null"); } catch { payload = null; }
+  if (!payload?.options?.length) return null;
+  let accepted = null; try { accepted = p.accepted_options ? JSON.parse(p.accepted_options) : null; } catch { accepted = null; }
+  const opt = (Array.isArray(accepted) && accepted.length ? payload.options.find((o) => accepted.includes(o.id)) : null) || payload.options[0];
+  const t = optionTotals(opt, +p.tax_rate || 0, payload.discount, +p.deposit_pct || 0, payload.pcpCredit);
+  return { id: p.id, version: p.version, number: `PROP-${String(p.id).padStart(4, "0")}-v${p.version || 1}`, status: p.status, total: t.grand, scope: proposalScopeLines(payload, accepted), fingerprint: proposalFingerprint(payload, p.tax_rate, p.deposit_pct), signed: !!p.signed_name };
 }
 
 // Sign the report as the technician or the customer. Both bind to the current fingerprint; if the
@@ -3755,6 +3778,7 @@ export function signSvcReport(svcId, { who, name, actor_role, actor_name }) {
   const col = who === "tech" ? "tech" : "customer";
   db.prepare(`UPDATE service_calls SET ${col}_signed_name = ?, ${col}_signed_at = datetime('now','localtime'), report_fingerprint = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE`).run(n, fp, String(call.svc_id));
   logServiceCallEvent(call.svc_id, { kind: "resolved", detail: `Report signed by ${col === "tech" ? "technician" : "customer"} ${n}`, actor_role: actor_role || col, actor_name: actor_name || n });
+  if (col === "customer") svcAdvance(call.svc_id, "approved", { actor_role: actor_role || "customer", actor_name: actor_name || n });
   return { ok: true, fingerprint: fp };
 }
 export function unsignSvcReport(svcId, { actor_role, actor_name } = {}) {
@@ -3782,6 +3806,7 @@ export function createFollowUpServiceCall(svcId, { actor_role, actor_name } = {}
     call_type: call.call_type, customer_id: call.customer_id, follow_up_of: call.svc_id, actor_role, actor_name,
   });
   logServiceCallEvent(call.svc_id, { kind: "note", detail: `Follow-up ${next.svc_id} created`, actor_role, actor_name });
+  svcAdvance(call.svc_id, "follow_up", { actor_role, actor_name });
   return { ok: true, call: next };
 }
 
@@ -4588,8 +4613,8 @@ export function setServiceCallStage(svcId, stage, { actor_role, actor_name } = {
   if (!SVC_STAGES.some((s) => s.key === stage)) return null;
   const cur = getServiceCall(svcId);
   if (!cur) return null;
-  const extra = stage === "resolved" ? ", resolved_at = datetime('now','localtime')"
-              : stage === "closed"   ? ", closed_at = datetime('now','localtime')" : "";
+  const extra = ["completed", "warranty"].includes(stage) ? ", resolved_at = COALESCE(resolved_at, datetime('now','localtime')), closed_at = datetime('now','localtime')"
+              : stage === "canceled" ? ", closed_at = datetime('now','localtime')" : "";
   db.prepare(`UPDATE service_calls SET stage = ?, updated_at = datetime('now','localtime')${extra} WHERE svc_id = ? COLLATE NOCASE`).run(stage, String(svcId));
   logServiceCallEvent(svcId, { kind: "stage", detail: `${cur.stage} → ${stage}`, actor_role, actor_name });
   return getServiceCall(svcId);
@@ -4678,7 +4703,9 @@ export function saveSvcInvoice(svcId, { items, notes }, { actor_role, actor_name
     if (cur.signed_name || cur.status === "sent") return cur;
     db.prepare("UPDATE svc_invoices SET items=?, notes=?, updated_at=datetime('now','localtime') WHERE id=?")
       .run(JSON.stringify(clean), String(notes || "").slice(0, 500) || null, cur.id);
+    if (clean.length) svcAdvance(svcId, "estimate_ready", { actor_role, actor_name });
   } else {
+    if (clean.length) svcAdvance(svcId, "estimate_ready", { actor_role, actor_name });
     db.prepare("INSERT INTO svc_invoices (svc_id, items, notes) VALUES (?,?,?)")
       .run(String(svcId), JSON.stringify(clean), String(notes || "").slice(0, 500) || null);
   }
@@ -4689,6 +4716,7 @@ export function sendSvcInvoice(svcId, { actor_role, actor_name } = {}) {
   if (!cur || !cur.items.length) return null;
   db.prepare("UPDATE svc_invoices SET status='sent', sent_at=COALESCE(sent_at, datetime('now','localtime')), updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
   logServiceCallEvent(svcId, { kind: "quote", detail: `Invoice sent — $${cur.total.toFixed(2)}`, actor_role, actor_name });
+  svcAdvance(svcId, "sent", { actor_role, actor_name });
   return getSvcInvoice(svcId);
 }
 export function voidSvcInvoice(svcId, { actor_role, actor_name } = {}) {
@@ -4704,6 +4732,7 @@ export function signSvcInvoice(svcId, name) {
   db.prepare("UPDATE svc_invoices SET signed_name=?, signed_at=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?")
     .run(String(name || "").slice(0, 120), cur.id);
   logServiceCallEvent(svcId, { kind: "quote", detail: `Invoice approved & signed by ${String(name || "").slice(0, 120)}`, actor_role: "customer", actor_name: String(name || "").slice(0, 120) });
+  svcAdvance(svcId, "approved", { actor_role: "customer", actor_name: String(name || "").slice(0, 120) });
   return getSvcInvoice(svcId);
 }
 export function getSvcPayments(svcId) {

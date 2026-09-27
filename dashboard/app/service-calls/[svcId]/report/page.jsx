@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveServiceCallRef, getSvcDiagnosis, getSvcInvoice, getSvcPayments, getJobByAccessId, svcSignaturesCurrent } from "../../../../lib/db";
+import { resolveServiceCallRef, getSvcDiagnosis, getSvcInvoice, getSvcPayments, getJobByAccessId, svcSignaturesCurrent, getSvcLinkedProposal } from "../../../../lib/db";
 import { getSessionUser } from "../../../../lib/session";
 import { warrantyStatus } from "../../../../lib/svc-model";
 import SvcReport from "../svc-report";
@@ -23,6 +23,7 @@ export default async function ServiceCallReportPage({ params }) {
   return (
     <main style={{ padding: "16px", background: "#f4f4f2", minHeight: "100vh" }}>
       <SvcReport call={plain(safeCall)} doc={doc} invoice={plain(invoice)} payments={payments.map(plain)} warranty={warrantyStatus(project)}
+        proposal={canManage ? plain(getSvcLinkedProposal(call)) : null}
         backHref={`/service-calls/${call.svc_id}`} showCharges={canManage} signaturesCurrent={svcSignaturesCurrent(call)} />
     </main>
   );

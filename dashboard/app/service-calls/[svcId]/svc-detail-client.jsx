@@ -7,14 +7,11 @@ import AdminShell from "../../components/admin-shell";
 import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction, linkSvcProjectAction } from "../actions";
 import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 import SvcDiagnose from "./svc-diagnose";
+import { SVC_STEPS, SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel } from "../../../lib/svc-status";
 
 // Three steps, same as the customer tracker — the 8 internal stage keys stay in the DB, rolled
 // up here. Clicking a step sets its representative stage.
-const STEPS = [
-  { key: "submitted", label: "Submitted", stages: ["submitted"], set: "submitted" },
-  { key: "diagnosed", label: "Diagnosed", stages: ["diagnosing", "quoted", "scheduled", "onsite", "billed"], set: "diagnosing" },
-  { key: "solved", label: "Solved", stages: ["resolved", "closed"], set: "resolved" },
-];
+const STEPS = SVC_STEPS.map((st) => ({ key: st.key, label: st.label, stages: st.statuses, set: st.set }));
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Other" };
 const ROUTE = {
   solved: ["Resolved", "#1c8a45"], service: ["Book a service call", "#b3541e"],
@@ -46,7 +43,8 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const [note, setNote] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(true);
   const canManage = ["admin", "manager"].includes(user.role);
-  const stageIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(call.stage)));
+  const stageKey = SVC_STATUS_ALIAS[call.stage] || call.stage;
+  const stageIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(stageKey)));
   const pct = Math.round(((stageIdx + 1) / STEPS.length) * 100);
   const readoutLabel = STEPS[stageIdx]?.label || "Submitted";
   const priHot = ["urgent", "high"].includes(call.priority);
@@ -194,7 +192,13 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
               );
             })}
           </div>
-          <div className="svc-readout"><span className="svc-pct mono">{pct}%</span><span className="svc-readout-l">{readoutLabel}</span></div>
+          <div className="svc-readout"><span className="svc-pct mono">{pct}%</span>
+            {canManage ? (
+              <select className="svc-status-sel" value={stageKey} disabled={pending} onChange={(e) => setStage(e.target.value)} aria-label="Status">
+                {SVC_STATUSES.map((st) => <option key={st.key} value={st.key}>{st.label}</option>)}
+              </select>
+            ) : <span className="svc-readout-l">{svcStatusLabel(stageKey)}</span>}
+          </div>
         </div>
 
         <div className="svc-grid">
@@ -456,6 +460,7 @@ const CSS = `
 @keyframes svcBeacon{0%,100%{box-shadow:0 0 0 0 rgba(201,169,110,.55)}55%{box-shadow:0 0 0 4px rgba(201,169,110,0)}}
 .apx .svc-readout{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;line-height:1}
 .apx .svc-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.apx .svc-status-sel{margin-top:5px;border:none;background:none;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer;text-align:right;padding:0}
 .apx .svc-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
 .apx .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:820px){.apx .svc-grid{grid-template-columns:1fr}}

@@ -1,3 +1,4 @@
+import { svcIsOpen } from "../../lib/svc-status";
 import { redirect } from "next/navigation";
 import { getAllJobs, getCustomersWithStats, getActivityLog, getAllUsers, getInventoryStats, getTickets, listServiceCalls, listAdtApplications } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
@@ -36,9 +37,8 @@ export default async function DashboardPage() {
   const openReal = realTickets.filter((t) => t.status !== "closed" && t.status !== "resolved");
   const urgentTickets = openReal.filter((t) => t.priority === "urgent").length;
   // Service calls now come from the SVC entity (not project_type C). Open = not resolved/billed/closed.
-  const svcOpen = ["submitted","diagnosing","quoted","scheduled","onsite"];
   const svcCalls = listServiceCalls();
-  const openSvc = svcCalls.filter((c) => svcOpen.includes(c.stage));
+  const openSvc = svcCalls.filter((c) => svcIsOpen(c.stage));
   const urgentCalls = openSvc.filter((c) => ["urgent","high"].includes(c.priority)).length;
 
   const kpis = {

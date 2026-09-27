@@ -1,4 +1,5 @@
 "use client";
+import { svcIsOpen, svcStepIndex } from "../../lib/svc-status";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -452,7 +453,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
   // Projects that already have an OPEN service call — a customer may only have one open at a time
   // per project (a second request just adds noise to the same open ticket).
   const openSvcProjectIds = new Set(
-    serviceCalls.filter((c) => c.project_access_id && !["resolved", "closed"].includes(c.stage)).map((c) => c.project_access_id)
+    serviceCalls.filter((c) => c.project_access_id && svcIsOpen(c.stage)).map((c) => c.project_access_id)
   );
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
@@ -868,7 +869,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
               <div className="cp-sec-head"><h2>My Service Calls</h2></div>
               <div className="cp-proj-list">
                 {serviceCalls.map((c) => {
-                  const step = ["resolved", "closed"].includes(c.stage) ? 3 : c.stage === "submitted" ? 1 : 2;
+                  const step = svcStepIndex(c.stage) + 1;
                   const lbl  = step === 3 ? "Resolved" : step === 2 ? "Troubleshooting" : "Received";
                   return (
                     <div key={c.svc_id} className="cp-proj">

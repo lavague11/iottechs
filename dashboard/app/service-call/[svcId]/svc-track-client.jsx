@@ -1,4 +1,5 @@
 "use client";
+import { SVC_STEPS, SVC_STATUS_ALIAS } from "../../../lib/svc-status";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,12 +11,12 @@ import { saveCustomerDiagnosticAction, signSvcInvoiceAction } from "./actions";
 // The customer sees three plain steps — the office's 8 internal stages roll up into these. The
 // full workflow strip lives on the staff side; a customer just wants "where is this?".
 const STEPS = [
-  { key: "received", label: "Received", stages: ["submitted"] },
-  { key: "troubleshoot", label: "Troubleshooting", stages: ["diagnosing", "quoted", "scheduled", "onsite", "billed"] },
-  { key: "resolved", label: "Resolved", stages: ["resolved", "closed"] },
+  { key: "received", label: "Received", stages: SVC_STEPS[0].statuses },
+  { key: "troubleshoot", label: "Troubleshooting", stages: SVC_STEPS[1].statuses },
+  { key: "resolved", label: "Resolved", stages: SVC_STEPS[2].statuses },
 ];
 function stepIndexForStage(stage) {
-  const i = STEPS.findIndex((s) => s.stages.includes(stage));
+  const i = STEPS.findIndex((s) => s.stages.includes(SVC_STATUS_ALIAS[stage] || stage));
   return i === -1 ? 0 : i;
 }
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Issue" };

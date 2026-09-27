@@ -5,19 +5,13 @@ import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import NewServiceCall from "./new-svc";
 
-// Stage → pill class + short label, reusing the project stage-pill palette.
-const STAGE_PILL = {
-  submitted:  ["s-survey",   "Submitted"],
-  diagnosing: ["s-survey",   "Diagnosing"],
-  quoted:     ["s-proposal", "Quoted"],
-  scheduled:  ["s-install",  "Scheduled"],
-  onsite:     ["s-install",  "On-site"],
-  resolved:   ["s-qc",       "Resolved"],
-  billed:     ["s-qc",       "Billed"],
-  closed:     ["s-done",     "Closed"],
-};
+import { SVC_STATUSES, SVC_STATUS_ALIAS, svcIsOpen, svcStatusLabel } from "../../lib/svc-status";
+
+// Status → pill class, reusing the project stage-pill palette. One canonical model (lib/svc-status.js).
+const PILL_CLASS = { draft: "s-survey", scheduled: "s-install", on_site: "s-install", diagnosing: "s-survey", findings_ready: "s-proposal", estimate_ready: "s-proposal", sent: "s-proposal", approved: "s-qc", waiting_parts: "s-proposal", follow_up: "s-proposal", completed: "s-done", warranty: "s-done", canceled: "s-done" };
+const STAGE_PILL = Object.fromEntries(SVC_STATUSES.map((st) => [st.key, [PILL_CLASS[st.key] || "s-survey", st.label]]));
 const CATEGORY = { camera: "Camera", dropout: "Cutting out", nvr: "Recorder", other: "Other" };
-const OPEN = new Set(["submitted", "diagnosing", "quoted", "scheduled", "onsite"]);
+const OPEN = { has: (k) => svcIsOpen(k) };
 const URGENT = new Set(["urgent", "high"]);
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
@@ -70,7 +64,7 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
               <thead><tr><th>Call</th><th>Issue</th><th>Type</th><th>Stage</th><th>Priority</th><th>Tech</th><th></th></tr></thead>
               <tbody>
                 {visible.map((c) => {
-                  const [pcls, plabel] = STAGE_PILL[c.stage] || ["s-survey", c.stage];
+                  const [pcls, plabel] = STAGE_PILL[SVC_STATUS_ALIAS[c.stage] || c.stage] || ["s-survey", svcStatusLabel(c.stage)];
                   return (
                     <tr key={c.svc_id}>
                       <td>

@@ -103,13 +103,12 @@ test("bulk diagnosis → autosave/reload → estimate from the rate card → sig
   await expect(sd.getByRole("combobox", { name: "System" }).first()).toBeDisabled();
 
   await page.goto(svcUrl.replace(/\/?$/, "/report"));
-  const doc = page.locator(".sr-doc");
+  const doc = page.locator(".sr");
   await expect(doc).toContainText("Verify PoE — FAIL");
-  await expect(doc).toContainText("Root cause");
-  await expect(doc).toContainText("PoE switch");
-  await expect(doc).toContainText("Needs replacement");
-  await expect(doc).toContainText("On site");
-  await expect(doc).toContainText("2h 25m");
+  await expect(doc).toContainText("Root Cause");
+  await expect(doc).toContainText("PoE");
+  await expect(doc.locator(".sr-cam .st", { hasText: "REPLACE" }).first()).toBeVisible();   // per-device status from the outcome
+  await expect(doc).toContainText("On site 2h 25m");
   await expect(doc).toContainText("$460.00");
   await expect(doc).toContainText("Test Customer");
   await expect(doc).not.toContainText("Internal notes");
@@ -145,4 +144,107 @@ test("a warranty visit suggests no charges; ISP root cause suggests the visit on
   await sd.getByRole("combobox").first().selectOption("Warranty Visit");
   await sd.locator("select").nth(1).selectOption("warranty");
   await expect(sd.getByRole("button", { name: "Estimate" })).toHaveCount(0);   // nothing to bill
+});
+
+// ---- Generated document (GNZ-style): per-device table, badges, options, page two, empty regions ----
+async function createCall(page, issue) {
+  await page.goto("/service-calls");
+  await page.getByRole("button", { name: "+ Service Call" }).click();
+  const box = page.locator(".np-box");
+  await box.getByLabel("Search client").fill(CLIENT_QUERY);
+  await box.locator(".np-crow").first().click();
+  await expect(box.getByRole("combobox", { name: "System" }).locator("option")).not.toHaveCount(1);
+  await box.getByRole("combobox", { name: "System" }).selectOption({ index: 1 });
+  await box.getByPlaceholder("What's wrong?").fill(issue);
+  await box.getByRole("button", { name: "Create Call" }).click();
+  await page.waitForURL(/\/service-calls\/SVC/);
+  return page.url();
+}
+
+test("document: mixed OK/FAIL devices, cause badges, repair vs replace, cost comparison, two pages; draft has no acceptance", async ({ page }) => {
+  const url = await createCall(page, "E2E SVC: truck pulled the pole cable bundle");
+  const sd = page.locator(".sd");
+  // Draft: the document exists but carries a draft watermark and no acceptance region
+  await page.goto(url + "/report");
+  await expect(page.locator(".sr-page")).toHaveCount(1);
+  await expect(page.locator(".sr-page.draft")).toHaveCount(1);
+  await expect(page.locator(".sr-sec-t", { hasText: "Acceptance" })).toHaveCount(0);
+
+  await page.goto(url);
+  await chip(sd.locator(".sd-sec").first(), "Cameras / CCTV").click();
+  await sd.getByRole("button", { name: "+ Finding" }).click();
+  const fb = sd.locator(".sd-find-b");
+  const devs = fb.locator(".sd-step").nth(0).locator(".sd-chip");
+  await devs.nth(1).click(); await devs.nth(2).click();                      // two cameras in one cable finding
+  await chip(fb.locator(".sd-step").nth(1), "No video").click();
+  await chip(fb.locator(".sd-step").nth(3), "Cable").click();
+  await fb.getByPlaceholder("Finding").fill("Cables pulled from the pole bundle.");
+  const per = fb.locator(".sd-step", { has: page.locator(".sd-lab", { hasText: "Per device" }) });
+  await expect(per.locator(".sd-devrow")).toHaveCount(2);
+  await per.locator(".sd-devrow").nth(0).locator("select").selectOption("FAILED");
+  await per.locator(".sd-devrow").nth(0).getByPlaceholder("Cable").fill("Visible pull damage");
+  await per.locator(".sd-devrow").nth(1).locator("select").selectOption("RESTORED");
+  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("needs_replace");
+  await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
+  await expect(sd.locator(".sd-link")).toHaveText("Diagnostic");                // no money yet → diagnostic document
+
+  // Options: repair (range) vs replace (estimate total) → proposal
+  await page.locator(".sde-h").click();
+  await page.getByRole("button", { name: "+ Repair" }).click();
+  await page.getByRole("button", { name: "+ Replace" }).click();
+  const opts = page.locator(".sde-opt");
+  await opts.nth(0).getByRole("combobox", { name: "Cost" }).selectOption("range");
+  await opts.nth(0).getByRole("spinbutton", { name: "Low" }).fill("4800");
+  await opts.nth(0).getByRole("spinbutton", { name: "High" }).fill("5400");
+  await opts.nth(0).getByPlaceholder("Warranty").fill("None");
+  await opts.nth(1).getByRole("combobox", { name: "Cost" }).selectOption("estimate");
+  await opts.nth(1).getByPlaceholder("Warranty").fill("Full");
+  await expect(sd.locator(".sd-link")).toHaveText("Proposal");
+  await sd.getByRole("button", { name: "Estimate" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".svc-inv-total b")).toHaveText("$500.00");        // 150 + 50 + 2 × 150 cable rerun
+  await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
+
+  await page.goto(url + "/report");
+  await expect(page.locator(".sr-type")).toHaveText("Service Call Proposal");
+  await expect(page.locator(".sr-pill")).toHaveText("CCTV Diagnostic");
+  await expect(page.locator(".sr-page")).toHaveCount(2);
+  await expect(page.locator(".sr-page.draft")).toHaveCount(0);
+  const rows = page.locator(".sr-cam tbody tr");
+  await expect(rows.nth(1).locator(".st")).toHaveText("FAIL");
+  await expect(rows.nth(1)).toContainText("Visible pull damage");
+  await expect(rows.nth(1).locator(".sr-badge")).toHaveText("Cable");
+  await expect(rows.nth(2).locator(".st")).toHaveText("RESTORED");
+  await expect(rows.nth(0).locator(".st")).toHaveText("—");                    // untested stays untested
+  await expect(page.locator(".sr-summary")).toContainText("1 of");
+  await expect(page.locator(".sr-summary")).toContainText("1 cable");
+  await expect(page.locator(".sr-summary")).toContainText("1 restored on-site");
+  const p2 = page.locator(".sr-page").nth(1);
+  await expect(p2.locator(".sr-sec-t")).toHaveText(["Repair vs Replace", "Cost Comparison", "Recommendation", "Scope", "Charges", "Acceptance"]);
+  await expect(p2.locator(".sr-cost").first().locator("tbody tr").nth(0)).toContainText("$4,800.00 – $5,400.00");
+  await expect(p2.locator(".sr-cost").first().locator("tbody tr").nth(1)).toContainText("$500.00");
+  await expect(p2.locator(".sr-rec")).toContainText("Full replacement");
+  // Mobile preview still renders every region without horizontal page overflow
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".sr-page")).toHaveCount(2);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(2);
+});
+
+test("document: ISP-only call is a one-page diagnostic with no comparison, no charges beyond the visit", async ({ page }) => {
+  const url = await createCall(page, "E2E SVC: remote viewing down");
+  const sd = page.locator(".sd");
+  await chip(sd.locator(".sd-sec").first(), "Network / Internet").click();
+  await sd.getByRole("button", { name: "+ Finding" }).click();
+  const fb = sd.locator(".sd-find-b");
+  await chip(fb.locator(".sd-step").nth(1), "ISP offline").click();
+  await chip(fb.locator(".sd-step").nth(3), "ISP").click();
+  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("third_party");
+  await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
+  await page.goto(url + "/report");
+  await expect(page.locator(".sr-type")).toHaveText("Service Diagnostic");
+  await expect(page.locator(".sr-pill")).toHaveText("Network Diagnostic");
+  await expect(page.locator(".sr-sec-t", { hasText: "Cost Comparison" })).toHaveCount(0);
+  await expect(page.locator(".sr-sec-t", { hasText: "Charges" })).toHaveCount(0);
+  await expect(page.locator(".sr-sec-t", { hasText: "Root Cause" })).toHaveCount(1);
 });

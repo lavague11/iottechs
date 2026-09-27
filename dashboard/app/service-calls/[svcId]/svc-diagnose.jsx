@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { saveSvcDiagnosisAction, signSvcReportAction, unsignSvcReportAction, createFollowUpAction } from "../actions";
-import { SVC_CALL_TYPES, SVC_SYSTEMS, SVC_SYMPTOMS, SVC_ROOT_CAUSES, SVC_TESTS, SVC_WORK, SVC_OUTCOMES, SVC_BILLING, SYSTEM_LABEL, CAUSE_LABEL, OUTCOME_LABEL, emptyDiagnosis, emptyFinding, timeOnSite, suggestEstimate, needsFollowUp, newId } from "../../../lib/svc-model";
+import { SVC_CALL_TYPES, SVC_SYSTEMS, SVC_SYMPTOMS, SVC_ROOT_CAUSES, SVC_TESTS, SVC_WORK, SVC_OUTCOMES, SVC_BILLING, CAUSE_LABEL, OUTCOME_LABEL, emptyDiagnosis, emptyFinding, emptyOption, timeOnSite, suggestEstimate, needsFollowUp, newId, SVC_DEVICE_STATUS, SVC_OPTION_TYPES, moduleFields, deviceRows, autoSummary, documentModel } from "../../../lib/svc-model";
+import SvcDocumentEditor from "./svc-document-editor";
 
 // The diagnostic chain for one call, autosaved server-side (debounced). Progressive: devices →
 // system → symptoms → tests → root cause → work → outcome, one card per finding; one finding can
@@ -52,6 +53,7 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
   const onSite = timeOnSite(doc.visit.arrival, doc.visit.departure);
   const followUp = needsFollowUp(doc);
   const suggestions = useMemo(() => (canManage ? suggestEstimate(doc, rates) : []), [doc, rates, canManage]);
+  const docType = useMemo(() => documentModel({ call, doc, showCharges: false }).type, [call, doc]);
 
   const setF = (id, fn) => update((d) => { const f = d.findings.find((x) => x.id === id); if (f) fn(f); return d; });
   const toggle = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
@@ -75,7 +77,7 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
     <div className="panel svc-card sd">
       <div className="svc-card-h">Diagnosis
         <span className="sd-save">{saveErr ? <b className="sd-err">{saveErr}</b> : locked ? "Signed" : dirty ? "Saving…" : savedAt ? `Saved ${hhmm(savedAt)}` : ""}</span>
-        <Link href={`/service-calls/${call.svc_id}/report`} className="sd-link">Report</Link>
+        <Link href={`/service-calls/${call.svc_id}/report`} className="sd-link">{({ "Service Call Report": "Report", "Service Diagnostic": "Diagnostic", "Service Call Proposal": "Proposal", "Warranty Service Report": "Report" })[docType] || "Report"}</Link>
       </div>
 
       {locked && (
@@ -158,6 +160,22 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
                   <div className="sd-chips">{SVC_WORK.map((w) => <Chip key={w.key} on={f.work.includes(w.key)} onClick={() => setF(f.id, (x) => { x.work = toggle(x.work, w.key); })}>{w.label}</Chip>)}</div>
                   {(f.work.includes("other") || f.notes) && <input className="apx-input" placeholder="Notes" value={f.notes} onChange={(e) => setF(f.id, (x) => { x.notes = e.target.value; })} disabled={locked} />}
                 </div>
+                {f.deviceIds.length > 0 && (
+                  <div className="sd-step"><span className="sd-lab">Per device</span>
+                    <div className="sd-devrows">
+                      {f.deviceIds.map((id) => { const dv = doc.devices.find((d) => d.id === id); const st = doc.deviceState[id] || { status: "", fields: {} }; const cols = moduleFields(f.system); return (
+                        <div className="sd-devrow" key={id}>
+                          <b>{dv?.label || id}</b>
+                          <select className="apx-input" value={st.status} aria-label={`${dv?.label || id} status`} disabled={locked}
+                            onChange={(e) => update((d) => { d.deviceState[id] = { ...(d.deviceState[id] || { fields: {} }), status: e.target.value }; return d; })}>
+                            <option value="">Status</option>{SVC_DEVICE_STATUS.map((o) => <option key={o.key} value={o.key}>{o.key.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</option>)}
+                          </select>
+                          {cols.map(([k, l]) => <input key={k} className="apx-input" placeholder={l} value={st.fields?.[k] || ""} disabled={locked} aria-label={`${dv?.label || id} ${l}`}
+                            onChange={(e) => update((d) => { const cur = d.deviceState[id] || { status: "", fields: {} }; d.deviceState[id] = { ...cur, fields: { ...(cur.fields || {}), [k]: e.target.value } }; return d; })} />)}
+                        </div>); })}
+                    </div>
+                  </div>
+                )}
                 <div className="sd-step sd-out"><span className="sd-lab">Outcome</span>
                   <select className="apx-input" value={f.outcome} onChange={(e) => setF(f.id, (x) => { x.outcome = e.target.value; })} disabled={locked} aria-label="Outcome">
                     <option value="">—</option>{SVC_OUTCOMES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -175,6 +193,8 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
 
       <textarea className="apx-input sd-ta" rows={2} placeholder="Recommendations" value={doc.recommendations} onChange={(e) => update((d) => { d.recommendations = e.target.value; return d; })} disabled={locked} />
       <textarea className="apx-input sd-ta sd-internal" rows={2} placeholder="Internal notes" value={doc.internalNotes} onChange={(e) => update((d) => { d.internalNotes = e.target.value; return d; })} disabled={locked} title="Never on the customer report" />
+
+      <SvcDocumentEditor doc={doc} call={call} locked={locked} update={update} rates={rates} canManage={canManage} />
 
       {/* Actions */}
       <div className="sd-actions">
@@ -242,6 +262,11 @@ const CSS = `
 .apx .sd-del{width:36px;height:36px;border:none;border-radius:8px;background:none;color:var(--muted);cursor:pointer;display:grid;place-items:center;margin-left:auto}
 .apx .sd-del:hover{background:#fdecec;color:#c9382b}
 .apx .sd-out{flex-wrap:wrap}
+.apx .sd-devrows{display:flex;flex-direction:column;gap:6px}
+.apx .sd-devrow{display:grid;grid-template-columns:minmax(90px,1.2fr) 130px repeat(auto-fit,minmax(80px,1fr));gap:6px;align-items:center}
+.apx .sd-devrow b{font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apx .sd-devrow .apx-input{height:32px;padding:0 8px;font-size:.78rem}
+@media(max-width:640px){.apx .sd-devrow{grid-template-columns:1fr 1fr}.apx .sd-devrow b{grid-column:1/-1}}
 .apx .sd-ta{margin-top:10px;padding:9px 10px;font-size:.86rem;resize:vertical}
 .apx .sd-internal{background:#fbf8f0;border-style:dashed}
 .apx .sd-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
