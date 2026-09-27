@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { createLeadProject, getUserByEmail, getUserByPhone, createCustomerUser, userHasPassword } from "../../../lib/db";
+import { createLeadProject, getUserByEmail, getUserByPhone, createCustomerUser, userHasPassword, findDuplicateCustomer, getCustomerSummary } from "../../../lib/db";
 
 function capitalize(s) {
   return String(s || "").trim().split(/\s+/).map(w => w[0]?.toUpperCase() + w.slice(1).toLowerCase()).join(" ");
@@ -20,7 +20,29 @@ export async function POST(request) {
     const service = String(body.service || "").trim();
     const company = String(body.company || "").trim();
     const propertyType = String(body.propertyType || "").trim();   // commercial (default) | residential
-    if (!name && !email && !phone) {
+    // CRM client mode (New Project form). Staff only — the public inquiry form never sends it.
+    //   { mode: "existing", customerId }        → link the project to that customer, create nothing
+    //   { mode: "new", allowDuplicate?: bool }  → duplicate check by email/phone before creating one
+    // No `client` = public/lead behaviour: reuse the customer by email/phone, else create one.
+    let client = null, staff = null;
+    if (body.client && typeof body.client === "object") {
+      const { getSessionUser } = await import("../../../lib/session");
+      const { can } = await import("../../../lib/roles");
+      staff = await getSessionUser();
+      const mode = body.client.mode === "existing" ? "existing" : "new";
+      if (!staff?.id || !can(staff.role, mode === "existing" ? "customer.search" : "customer.create")) return Response.json({ ok: false, error: "Unauthorized." }, { status: 403 });
+      if (mode === "existing") {
+        const c = getCustomerSummary(body.client.customerId);
+        if (!c) return Response.json({ ok: false, error: "Client not found." }, { status: 404 });
+        client = { mode, customerId: c.id };
+      } else {
+        const allowDuplicate = !!body.client.allowDuplicate && can(staff.role, "customer.duplicate.override");
+        const dup = findDuplicateCustomer({ email, phone });
+        if (dup && !allowDuplicate) return Response.json({ ok: false, duplicate: dup, canOverride: can(staff.role, "customer.duplicate.override") }, { status: 409 });
+        client = { mode, allowDuplicate: allowDuplicate && !!dup };
+      }
+    }
+    if (!name && !email && !phone && !client) {
       return Response.json({ ok: false, error: "Missing fields." }, { status: 400 });
     }
     // Start from a previous proposal (New Project → Start From → Previous Project): staff only — the
@@ -38,12 +60,20 @@ export async function POST(request) {
     // password" instead of walking them into the create-password step and rejecting there.
     const existingUser = (email ? getUserByEmail(email) : null) || (phone ? getUserByPhone(phone) : null);
     const existingAccount = !!(existingUser && userHasPassword(existingUser.id));
-    const { accessId, customerPin } = createLeadProject(name, email || null, phone || null, address, service, company || null, propertyType || null);
+    let created;
+    try {
+      created = createLeadProject(name, email || null, phone || null, address, service, company || null, propertyType || null,
+        client?.mode === "existing" ? { customerId: client.customerId } : { allowDuplicate: !!client?.allowDuplicate });
+    } catch (e) {
+      return Response.json({ ok: false, error: e?.message || "Could not create the project." }, { status: 400 });
+    }
+    const { accessId, customerPin, userId } = created;
 
-    // Auto-create customer account if doesn't exist
+    // Auto-create customer account if doesn't exist (public/lead path only — a CRM pick or a checked
+    // new client already has exactly one row and must not get a second).
     let accountCreated = false;
     let userPin = getPin(phone);
-    if (!existingAccount && name) {
+    if (!client && !existingAccount && name) {
       try {
         createCustomerUser(name, email || null, phone || null);
         accountCreated = true;
@@ -63,7 +93,7 @@ export async function POST(request) {
     }
     // A new project affects every list view — invalidate the cached pages so it shows up immediately.
     revalidatePath("/", "layout");
-    return Response.json({ ok: true, accessId, customerPin, name, existingAccount, accountCreated, userPin, cloned, cloneError });
+    return Response.json({ ok: true, accessId, customerPin, customerId: userId ?? null, name, existingAccount, accountCreated, userPin, cloned, cloneError });
   } catch (e) {
     console.error("demo error", e);
     return Response.json({ ok: false, error: "Server error." }, { status: 500 });

@@ -4,6 +4,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, c
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
+import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
@@ -237,6 +238,10 @@ function init() {
   // Admin/manager only; reversible (NULL = not skipped); who/when kept for the audit trail.
   if (!cols.includes("survey_skipped_at"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_at TEXT");
   if (!cols.includes("survey_skipped_by"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_by TEXT");
+  // Canonical customer link (CRM): the `users` row (role customer) this project belongs to. One customer,
+  // many projects. Nullable + additive; contact_* stay as the project's historical contact snapshot.
+  if (!cols.includes("customer_id"))        db.exec("ALTER TABLE projects ADD COLUMN customer_id INTEGER");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_customer ON projects(customer_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -1400,10 +1405,59 @@ function init() {
     for (const a of TECH_SUPPORT_SEED) seedTech.run(a.title, a.body, a.category, a.pinned ? 1 : 0, "IOT TECHS");
   }
 
+  // Link every project to its canonical customer row (idempotent: only rows still unlinked).
+  linkProjectsToCustomers(db);
+
   // One-time backfill: correct timestamps written while the server ran in UTC (see below).
   shiftTimestampsToEastern(db, path.join(dir, "dashboard.db"));
 
   return db;
+}
+
+// Customer link backfill. For each project without customer_id: match a customer user by normalized
+// email, then by phone; when the project has neither identifier (legacy imports), one customer row per
+// exact `customer` label is created — the same grouping the CRM profile page already uses. Never merges
+// on name where a phone/email exists. Runs on every boot but only touches unlinked rows.
+function linkProjectsToCustomers(db) {
+  const need = db.prepare("SELECT id, customer, contact_name, contact_email, contact_phone FROM projects WHERE customer_id IS NULL ORDER BY id").all();
+  if (!need.length) return;
+  const users = db.prepare("SELECT id, name, email, phone FROM users WHERE role='customer'").all();
+  const byEmail = new Map(), byPhone = new Map(), byLabel = new Map();
+  for (const u of users) {
+    const e = normalizeEmail(u.email), p = phoneKey(u.phone);
+    if (e && !byEmail.has(e)) byEmail.set(e, u.id);
+    if (p && !byPhone.has(p)) byPhone.set(p, u.id);
+    if (!e && !p && u.name && !byLabel.has(u.name.toLowerCase())) byLabel.set(u.name.toLowerCase(), u.id);
+  }
+  const ins = db.prepare("INSERT OR IGNORE INTO users (name, email, phone, password_hash, role) VALUES (?,?,?,?,'customer')");
+  const link = db.prepare("UPDATE projects SET customer_id=? WHERE id=?");
+  db.exec("BEGIN");
+  try {
+    for (const r of need) {
+      const e = normalizeEmail(r.contact_email), p = phoneKey(r.contact_phone);
+      let id = (e && byEmail.get(e)) || (p && byPhone.get(p)) || null;
+      if (!id) {
+        const label = String(r.contact_name || r.customer || "Customer").trim() || "Customer";
+        if (!e && !p) id = byLabel.get(label.toLowerCase()) || null;
+        if (!id) {
+          const pw = hashPw(p.length >= 7 ? p : "customer");
+          const info = ins.run(label, e || null, r.contact_phone ? String(r.contact_phone).trim() : null, pw);
+          id = info.changes ? Number(info.lastInsertRowid) : null;
+          if (!id) {
+            // Unique clash on a raw-formatted email/phone the maps didn't catch — resolve by the same key.
+            const row = (e && db.prepare("SELECT id FROM users WHERE LOWER(email)=?").get(e)) || null;
+            id = row?.id || null;
+          }
+        }
+      }
+      if (!id) continue;
+      if (e && !byEmail.has(e)) byEmail.set(e, id);
+      if (p && !byPhone.has(p)) byPhone.set(p, id);
+      if (!e && !p) { const l = String(r.contact_name || r.customer || "").toLowerCase(); if (l && !byLabel.has(l)) byLabel.set(l, id); }
+      link.run(id, r.id);
+    }
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); console.warn("[crm-link] backfill failed", err?.message || err); }
 }
 
 // One-time data repair. Production rows were written while the server OS was UTC, where SQLite's
@@ -2630,6 +2684,7 @@ export function resolveCustomerOwnership(accessId, { userId = null, email = null
   const projEmail = String(proj.contact_email || "").trim().toLowerCase();
   const acctPhone = digits(row?.phone);
   const projPhone = digits(proj.contact_phone);
+  if (userId && proj.customer_id != null && Number(proj.customer_id) === Number(userId)) return { owner: true, reason: "OWNER_ID" };
   if (acctEmail && projEmail && acctEmail === projEmail) return { owner: true, reason: "OWNER_EMAIL" };
   if (acctPhone.length >= 7 && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
   // Explicit access roster — an admin-shared or inquiry-granted customer (a canonical, PERSISTED link,
@@ -2908,28 +2963,32 @@ export function createCustomerUser(name, email, phone) {
   } catch (_) {}
 }
 
-export function createLeadProject(name, email, phone, address, service, company, propertyType) {
+// opts.customerId — an EXISTING customer (users.id) chosen in the New Project form: the project is
+// linked to that row and no customer is created or edited (name/email/phone given are the project's
+// contact snapshot only). opts.allowDuplicate — an authorized user chose "Create new anyway" after the
+// duplicate warning: skip the email/phone reuse and insert a distinct customer row.
+export function createLeadProject(name, email, phone, address, service, company, propertyType, opts = {}) {
   const normalEmail = email ? String(email).trim().toLowerCase() : null;
   const normalPhone = phone ? String(phone).trim() : null;
   // Property environment — defaults to commercial (normal IOT TECHS job) when the caller doesn't say.
   const propType = normalizePropertyType(propertyType);
 
-  // Upsert user
-  let user = normalEmail
-    ? db.prepare("SELECT * FROM users WHERE LOWER(email) = ?").get(normalEmail)
-    : null;
-  if (!user && normalPhone) {
-    const d = normalPhone.replace(/\D/g, "");
-    user = db.prepare("SELECT * FROM users WHERE REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-','') = ?").get(d);
-  }
+  // Existing customer (CRM pick) wins; otherwise reuse by strong identifier (email, then phone).
+  let user = opts.customerId ? db.prepare("SELECT * FROM users WHERE id=? AND role='customer'").get(Number(opts.customerId)) : null;
+  if (opts.customerId && !user) throw new Error("Customer not found.");
+  if (!user && !opts.allowDuplicate) user = findCustomerByIdentity(normalEmail, normalPhone);
   if (!user) {
     const digits = normalPhone ? normalPhone.replace(/\D/g, "") : null;
     const initialPw = digits && digits.length >= 7 ? digits : "customer";
     // No password_set here — this is a lead-capture placeholder, not the customer's chosen
     // password. userHasPassword() stays false so registration can still write their real one.
+    // A deliberate duplicate must not collide with the UNIQUE email/phone: only the identifiers that
+    // are free are stored on the new row (the project keeps the full contact snapshot regardless).
+    const insEmail = opts.allowDuplicate && normalEmail && db.prepare("SELECT id FROM users WHERE LOWER(email)=?").get(normalEmail) ? null : normalEmail;
+    const insPhone = opts.allowDuplicate && normalPhone && getUserByPhone(normalPhone) ? null : normalPhone;
     const info = db.prepare(
       "INSERT OR IGNORE INTO users (name, username, email, phone, password_hash, role) VALUES (?,?,?,?,?,?)"
-    ).run(name || "Customer", usernameFromEmail(normalEmail), normalEmail, normalPhone, hashPw(initialPw), "customer");
+    ).run(name || "Customer", usernameFromEmail(insEmail), insEmail, insPhone, hashPw(initialPw), "customer");
     user = info.lastInsertRowid
       ? db.prepare("SELECT * FROM users WHERE id = ?").get(Number(info.lastInsertRowid))
       : normalEmail
@@ -2961,15 +3020,85 @@ export function createLeadProject(name, email, phone, address, service, company,
   db.prepare(`
     INSERT INTO projects
       (access_id, customer, address, service_code, project_type, category, stage, status,
-       contact_name, contact_email, contact_phone, source, customer_pin, date, company_name, property_type)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       contact_name, contact_email, contact_phone, source, customer_pin, date, company_name, property_type, customer_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     accessId, customerLabel, address || "", svc, "A", "open",
     "inquiry", "New", name || "Customer", normalEmail, normalPhone,
-    "external", pin, today, companyName, propType
+    "external", pin, today, companyName, propType, user.id || null
   );
 
   return { userId: user.id, accessId, customerPin: pin };
+}
+
+// ---- CRM: customer identity ---------------------------------------------------------------------
+// The canonical customer is a users row (role customer). Identity = normalized email OR phone; a name
+// alone never identifies anyone (see lib/crm.js). Everything below is read-only except updateCustomerUser.
+
+// Strong-identifier lookup: email first, then phone (formatting-insensitive, "+1" tolerant).
+export function findCustomerByIdentity(email, phone) {
+  const e = normalizeEmail(email);
+  if (e) { const u = db.prepare("SELECT * FROM users WHERE LOWER(email)=? AND role='customer'").get(e); if (u) return u; }
+  const p = phoneKey(phone);
+  if (p) {
+    const rows = db.prepare("SELECT * FROM users WHERE role='customer' AND phone IS NOT NULL AND phone<>''").all();
+    const hit = rows.find((u) => phoneKey(u.phone) === p);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+const CUSTOMER_SUMMARY_SQL = `
+  SELECT u.id, u.name, u.email, u.phone,
+         (SELECT company_name FROM projects p WHERE p.customer_id=u.id AND company_name IS NOT NULL AND company_name<>'' ORDER BY p.id DESC LIMIT 1) AS company,
+         (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id) AS projects,
+         (SELECT service_code FROM projects p WHERE p.customer_id=u.id ORDER BY p.id DESC LIMIT 1) AS last_service,
+         (SELECT COALESCE(date, substr(created_at,1,10)) FROM projects p WHERE p.customer_id=u.id ORDER BY p.id DESC LIMIT 1) AS last_project_at
+  FROM users u WHERE u.role='customer'`;
+
+// Compact rows for the New Project "Existing client" search — ranked in lib/crm.js. Server-side only;
+// returns at most `limit` rows, never the whole table.
+export function searchCustomers(q, limit = 8) {
+  const term = String(q || "").trim();
+  if (term.length < 2) return [];
+  const like = `%${term}%`, digits = normalizePhone(term), likeDigits = digits.length >= 3 ? `%${digits}%` : null;
+  const rows = db.prepare(CUSTOMER_SUMMARY_SQL + `
+    AND (u.name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE
+         OR EXISTS (SELECT 1 FROM projects p WHERE p.customer_id=u.id AND p.company_name LIKE ? COLLATE NOCASE)
+         OR (? IS NOT NULL AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(u.phone,''),'(',''),')',''),'-',''),' ',''),'+','') LIKE ?))
+    ORDER BY u.id DESC LIMIT 60`).all(like, like, like, likeDigits, likeDigits || "");
+  return rankCustomers(term, rows).slice(0, limit);
+}
+
+// One customer with the counts the selected-client card shows, plus their previous job-site addresses.
+export function getCustomerSummary(id) {
+  const row = db.prepare(CUSTOMER_SUMMARY_SQL + " AND u.id=?").get(Number(id));
+  if (!row) return null;
+  const addresses = db.prepare("SELECT address, MAX(access_id) AS access_id FROM projects WHERE customer_id=? AND address IS NOT NULL AND address<>'' GROUP BY address ORDER BY MAX(id) DESC LIMIT 5").all(row.id);
+  return { ...row, addresses };
+}
+
+// Duplicate check for the "New client" path: the customer that already owns this email or phone.
+export function findDuplicateCustomer({ email, phone }) {
+  const u = findCustomerByIdentity(email, phone);
+  return u ? getCustomerSummary(u.id) : null;
+}
+
+// Explicit CRM edit (name / email / phone) — only from the "Update client record" affordance, never as a
+// side effect of typing into a project form. Refuses an email/phone another customer already owns.
+export function updateCustomerUser(id, { name, email, phone }) {
+  const u = db.prepare("SELECT * FROM users WHERE id=? AND role='customer'").get(Number(id));
+  if (!u) return { error: "Customer not found." };
+  const e = normalizeEmail(email) || null, p = phone ? String(phone).trim() : null;
+  const clash = findCustomerByIdentity(e, p);
+  if (clash && clash.id !== u.id) return { error: "Another client already has that email or phone." };
+  db.prepare("UPDATE users SET name=?, email=?, phone=? WHERE id=?").run(String(name || u.name).trim() || u.name, e, p, u.id);
+  return { ok: true };
+}
+
+// Every project of one customer, newest first (id-based — the canonical relationship).
+export function getProjectsForCustomerId(id) {
+  return db.prepare("SELECT * FROM projects WHERE customer_id=? ORDER BY id DESC").all(Number(id)).map(decorate);
 }
 
 // Field capture (tech, on-site): create a project from JUST a name + address for a legacy/pre-software
@@ -5283,10 +5412,10 @@ export function getProposalById(id) {
 // `hint` = { customer, email, phone } for a project that doesn't exist yet (New Project form), so
 // "From this customer" still groups correctly before creation.
 export function listReusableProposals({ q = "", forAccessId = null, hint = null, limit = 30 } = {}) {
-  const cur = forAccessId ? getJobByAccessId(forAccessId) : (hint && (hint.customer || hint.email || hint.phone) ? { access_id: null, customer: hint.customer, contact_email: hint.email, contact_phone: hint.phone } : null);
+  const cur = forAccessId ? getJobByAccessId(forAccessId) : (hint && (hint.customerId || hint.customer || hint.email || hint.phone) ? { access_id: null, customer_id: hint.customerId || null, customer: hint.customer, contact_email: hint.email, contact_phone: hint.phone } : null);
   const like = `%${String(q || "").trim()}%`;
   const rows = db.prepare(`
-    SELECT p.access_id, p.customer, p.address, p.contact_email, p.contact_phone, p.service_code, p.property_type,
+    SELECT p.access_id, p.customer, p.customer_id, p.address, p.contact_email, p.contact_phone, p.service_code, p.property_type,
            pr.id, pr.version, pr.status, pr.payload, pr.tax_rate, pr.deposit_pct, pr.accepted_options, pr.signed_name, pr.signed_at, pr.sent_at, pr.updated_at, pr.created_at
       FROM proposals pr JOIN projects p ON p.access_id = pr.project_access_id
      WHERE pr.status != 'superseded'
@@ -5297,6 +5426,7 @@ export function listReusableProposals({ q = "", forAccessId = null, hint = null,
   const norm = (s) => String(s || "").trim().toLowerCase();
   const digits = (s) => String(s || "").replace(/\D/g, "");
   const sameCustomer = (r) => !!cur && r.access_id !== cur.access_id && (
+    (cur.customer_id != null && r.customer_id != null && Number(r.customer_id) === Number(cur.customer_id)) ||   // canonical link first
     (norm(r.customer) && norm(r.customer) === norm(cur.customer)) ||
     (norm(r.contact_email) && norm(r.contact_email) === norm(cur.contact_email)) ||
     (digits(r.contact_phone).length >= 7 && digits(r.contact_phone) === digits(cur.contact_phone)));

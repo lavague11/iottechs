@@ -10,6 +10,9 @@ import { TaglinePill, Wordmark } from "./brand";
 import EnrollBanner from "./enroll-banner";
 import { NEW_PROJECT_SERVICES, DEFAULT_NEW_PROJECT_SERVICE, propertyAfterCompany } from "../../lib/spec";
 import { ReusePicker } from "../project/[accessId]/proposal-start";
+import { searchCustomersAction, customerSummaryAction, updateCustomerAction } from "./crm-actions";
+import { can } from "../../lib/roles";
+import { formatPhone, customerMeta } from "../../lib/crm";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -172,9 +175,37 @@ function UserMenu({ user }) {
 // ONE service field (NEW_PROJECT_SERVICES, the catalog + ADT Monitoring) decides the module: catalog
 // services create a project; ADT Monitoring hands the form to the ADT intake (its own record + deck)
 // prefilled — no separate "project kind" question anywhere.
-function NewProjectModal({ onClose }) {
+function NewProjectModal({ onClose, user = null }) {
   const r = useRouter();
   const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", serviceCode: DEFAULT_NEW_PROJECT_SERVICE, propertyType: "commercial", message: "" });
+  // CRM client: Existing (search + pick a canonical customer row; no customer is created) or New
+  // (typed contact; the server refuses a silent duplicate by email/phone). Staff default to Existing.
+  const canSearch = !!user && can(user.role, "customer.search");
+  const [clientMode, setClientMode] = useState(canSearch ? "existing" : "new");
+  const [client, setClient] = useState(null);            // selected customer summary (id, name, email, phone, company, projects, addresses…)
+  const [cq, setCq] = useState("");                      // client search text
+  const [cRows, setCRows] = useState([]);
+  const [editClient, setEditClient] = useState(false);   // reveal the contact fields for a picked client
+  const [updateRecord, setUpdateRecord] = useState(false); // …and write them back to the CRM row (explicit, admin/manager)
+  const [dup, setDup] = useState(null);                  // { duplicate, canOverride } from the server on the New path
+  const svcLabel = (code) => NEW_PROJECT_SERVICES.find((x) => x.code === code)?.label || code;
+  useEffect(() => {
+    if (clientMode !== "existing" || client || cq.trim().length < 2) { setCRows([]); return; }
+    const t = setTimeout(() => { searchCustomersAction(cq).then((res) => setCRows(res?.rows || [])).catch(() => setCRows([])); }, 250);
+    return () => clearTimeout(t);
+  }, [cq, clientMode, client]);
+  async function pickClient(id) {
+    const res = await customerSummaryAction(id).catch(() => null);
+    if (!res?.ok) { setErr("Couldn't load that client."); return; }
+    const c = res.customer;
+    setClient(c); setCRows([]); setCq(""); setDup(null); setEditClient(false); setUpdateRecord(false);
+    setF((p) => ({ ...p, name: c.name || "", company: c.company || "", email: c.email || "", phone: c.phone || "", propertyType: propertyAfterCompany(p.propertyType, propTouched, c.company || "") }));
+  }
+  function clearClient() {
+    setClient(null); setEditClient(false); setUpdateRecord(false);
+    setF((p) => ({ ...p, name: "", company: "", email: "", phone: "" }));
+  }
+  function switchMode(m) { setClientMode(m); setDup(null); if (m === "new") clearClient(); }
   const [propTouched, setPropTouched] = useState(false);   // Property picked by hand → company no longer auto-sets it
   const [startFrom, setStartFrom] = useState("blank");     // blank | previous | import
   const [pickOpen, setPickOpen] = useState(false);
@@ -197,8 +228,8 @@ function NewProjectModal({ onClose }) {
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(e, allowDuplicate = false) {
+    e?.preventDefault?.();
     // Strongly steer toward a picked, verified address — but if Places can't load, a second
     // Create keeps what was typed rather than trapping the user.
     if (f.address.trim() && !addrVerified && !addrWarned) {
@@ -208,7 +239,13 @@ function NewProjectModal({ onClose }) {
     }
     if (startFrom === "previous" && !source) { setErr("Pick the proposal to start from."); return; }
     if (startFrom === "import" && !importFile) { setErr("Choose the file to import."); return; }
+    if (clientMode === "existing" && !client) { setErr("Pick the client."); return; }
     setErr(""); setBusy(true);
+    // Explicit CRM write, and only then: the picked client's row changes ONLY through this switch.
+    if (client && editClient && updateRecord) {
+      const u = await updateCustomerAction(client.id, { name: f.name, email: f.email, phone: f.phone }).catch(() => null);
+      if (!u?.ok) { setErr(u?.error || "Couldn't update the client."); setBusy(false); return; }
+    }
     // ADT Monitoring = its own module. Hand everything typed here to the ADT intake, prefilled.
     if (svc.module === "adt") {
       const q = new URLSearchParams({ name: f.name, company: f.company, email: f.email, phone: f.phone, address: f.address, property: f.propertyType, notes: f.message });
@@ -217,9 +254,11 @@ function NewProjectModal({ onClose }) {
     }
     try {
       const body = { name: f.name, company: f.company, email: f.email, phone: f.phone, address: f.address, service: svc.label, propertyType: f.propertyType, message: f.message,
+        client: client ? { mode: "existing", customerId: client.id } : { mode: "new", allowDuplicate: !!allowDuplicate },
         startFrom: startFrom === "previous" && source ? { sourceProposalId: source.sourceProposalId, options: source.options } : null };
       const res = await fetch("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
+      if (!j.ok && j.duplicate) { setDup({ duplicate: j.duplicate, canOverride: !!j.canOverride }); setBusy(false); return; }
       if (!j.ok) { setErr(j.error || "Could not create the project."); setBusy(false); return; }
       if (startFrom === "import" && importFile) {
         // Project exists — now attach + extract the document and land straight on Import Review.
@@ -239,7 +278,7 @@ function NewProjectModal({ onClose }) {
     setBusy(false);
   }
   function finish() { onClose(); r.refresh(); }
-  const hint = { customer: f.company || f.name, email: f.email, phone: f.phone };
+  const hint = { customerId: client?.id || null, customer: f.company || f.name, email: f.email, phone: f.phone };
 
   return (
     <div className="np-overlay" onClick={(e) => { if (e.target.classList.contains("np-overlay")) onClose(); }}>
@@ -267,15 +306,78 @@ function NewProjectModal({ onClose }) {
               <h2 className="np-h">New Project</h2>
             </div>
             <form className="np-form" onSubmit={submit}>
-              <div className="np-row2">
-                <div className="np-f"><label>Contact</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
-                <div className="np-f"><label>Company</label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={setCompany} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address, propertyType: propertyAfterCompany(f.propertyType, propTouched, p.name || f.company) })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Business name" /></div>
+              {canSearch && (
+                <div className="np-f"><label>Client</label>
+                  <div className="np-seg" role="radiogroup" aria-label="Client">
+                    {[["existing", "Existing"], ["new", "New"]].map(([k, t]) => (
+                      <button type="button" key={k} role="radio" aria-checked={clientMode === k} className={`np-seg-b${clientMode === k ? " on" : ""}`} onClick={() => switchMode(k)}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {clientMode === "existing" && !client && (
+                <div className="np-f">
+                  <input className="apx-input" value={cq} onChange={(e) => setCq(e.target.value)} placeholder="Search name, phone, email, company…" aria-label="Search client" autoFocus />
+                  {cRows.length > 0 && (
+                    <div className="np-cres" role="listbox">
+                      {cRows.map((c) => (
+                        <button type="button" key={c.id} className="np-crow" role="option" onClick={() => pickClient(c.id)}>
+                          <div><b>{c.name}</b><span>{[c.phone && formatPhone(c.phone), c.email].filter(Boolean).join(" · ")}{c.company ? ` · ${c.company}` : ""}</span></div>
+                          <span>{customerMeta(c, svcLabel)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {cq.trim().length >= 2 && cRows.length === 0 && <div className="np-opt" style={{ fontSize: ".8rem", marginTop: 6 }}>No client · <button type="button" className="np-link" onClick={() => switchMode("new")}>New</button></div>}
+                </div>
+              )}
+              {client && (
+                <div className="np-csel" data-client-id={client.id}>
+                  <div>
+                    <b>{client.name}</b>
+                    <span>{[client.phone && formatPhone(client.phone), client.email].filter(Boolean).join(" · ")}</span>
+                    {client.company && <span>{client.company}</span>}
+                    {customerMeta(client, svcLabel) && <span>{customerMeta(client, svcLabel)}</span>}
+                  </div>
+                  <div className="np-cact">
+                    <Link href={`/customers/${encodeURIComponent(client.company || client.name)}`} target="_blank">Open</Link>
+                    {!editClient && <button type="button" onClick={() => setEditClient(true)}>Edit</button>}
+                    <button type="button" onClick={clearClient}>Change</button>
+                  </div>
+                </div>
+              )}
+              {(clientMode === "new" || editClient) && (
+                <>
+                  <div className="np-row2">
+                    <div className="np-f"><label>Contact</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
+                    <div className="np-f"><label>Company</label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={setCompany} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address, propertyType: propertyAfterCompany(f.propertyType, propTouched, p.name || f.company) })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Business name" /></div>
+                  </div>
+                  <div className="np-row2">
+                    <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
+                    <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
+                  </div>
+                  {editClient && user && can(user.role, "customer.edit") && (
+                    <label className="np-check-l"><input type="checkbox" checked={updateRecord} onChange={(e) => setUpdateRecord(e.target.checked)} /> Update client record</label>
+                  )}
+                </>
+              )}
+              {dup && (
+                <div className="np-dup" role="alert">
+                  <b>Existing client found</b>
+                  <div>{dup.duplicate.name} · {[dup.duplicate.phone && formatPhone(dup.duplicate.phone), dup.duplicate.email].filter(Boolean).join(" · ")}</div>
+                  <div className="np-cact" style={{ marginTop: 6 }}>
+                    <button type="button" onClick={() => { setClientMode("existing"); setDup(null); pickClient(dup.duplicate.id); }}>Use client</button>
+                    {dup.canOverride && <button type="button" onClick={(e) => { setDup(null); submit(e, true); }}>Create new anyway</button>}
+                  </div>
+                </div>
+              )}
+              <div className="np-f"><label>Service Address {addrVerified && <span className="np-verified">✓ Verified</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" />
+                {client?.addresses?.length > 0 && !addrVerified && (
+                  <div className="np-addr">
+                    {client.addresses.map((a) => <button type="button" key={a.address} className="np-chip" title={a.access_id} onClick={() => { verifiedRef.current = a.address; set("address", a.address); setAddrVerified(true); setAddrWarned(false); }}>{a.address}</button>)}
+                  </div>
+                )}
               </div>
-              <div className="np-row2">
-                <div className="np-f"><label>Email</label><input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
-                <div className="np-f"><label>Phone</label><input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
-              </div>
-              <div className="np-f"><label>Service Address {addrVerified && <span className="np-verified">✓ Verified</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" /></div>
               <div className="np-row2">
                 <div className="np-f"><label>Service</label>
                   <select className="apx-input" value={f.serviceCode} onChange={(e) => set("serviceCode", e.target.value)} aria-label="Service">
@@ -520,7 +622,7 @@ export default function AdminShell({ user, alerts, active, children }) {
       <EnrollBanner />
       {children}
 
-      {npOpen && <NewProjectModal onClose={() => setNpOpen(false)} />}
+      {npOpen && <NewProjectModal user={user} onClose={() => setNpOpen(false)} />}
 
       <footer>
         <div className="apx-wrap foot-inner">
@@ -878,6 +980,21 @@ const CSS = `
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
 .apx .np-src{display:flex;align-items:center;gap:4px;min-width:0;padding:10px 14px;font-size:.84rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .apx .np-src b{font-family:Menlo,Consolas,monospace;font-size:.78rem}
+.apx .np-cres{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px;background:#fff}
+.apx .np-crow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;border-top:1px solid var(--line);background:#fff;text-align:left;font-family:inherit;cursor:pointer;min-width:0}
+.apx .np-crow:first-child{border-top:none}.apx .np-crow:hover{background:var(--bg-soft,#f4f2ec)}
+.apx .np-crow>div{min-width:0}.apx .np-crow b{display:block;font-size:.86rem;color:var(--ink)}.apx .np-crow span{display:block;font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apx .np-crow>span{flex-shrink:0;text-align:right}
+.apx .np-csel{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg-soft,#f4f2ec)}
+.apx .np-csel>div{min-width:0}.apx .np-csel b{display:block;font-size:.9rem;color:var(--ink)}.apx .np-csel span{display:block;font-size:.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.apx .np-cact{display:flex;gap:12px;flex-shrink:0}
+.apx .np-cact a,.apx .np-cact button,.apx .np-link{background:none;border:none;padding:0;font:inherit;font-size:.78rem;font-weight:600;color:var(--ink);cursor:pointer;text-decoration:underline}
+.apx .np-addr{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.apx .np-chip{padding:4px 10px;border:1px solid var(--line);border-radius:100px;background:#fff;font-family:inherit;font-size:.76rem;color:var(--ink);cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apx .np-chip:hover{border-color:var(--ink)}
+.apx .np-dup{border:1px solid var(--line);border-left:3px solid var(--gold,#C9A96E);border-radius:10px;padding:10px 12px;font-size:.84rem;color:var(--ink)}
+.apx .np-dup b{display:block;margin-bottom:2px}
+.apx .np-check-l{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
 .apx .np-submit{flex:1;width:100%;padding:12px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
 .apx .np-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
 .apx .np-submit:disabled{opacity:.6;cursor:not-allowed}

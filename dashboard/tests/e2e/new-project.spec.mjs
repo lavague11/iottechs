@@ -5,10 +5,17 @@ import { test, expect } from "@playwright/test";
 const LOGIN = { email: process.env.E2E_EMAIL || "manager@iot-techs.com", password: process.env.E2E_PASSWORD || "password" };
 
 async function signIn(page) {
-  await page.goto("/login");
-  await page.getByPlaceholder("Email or phone number").fill(LOGIN.email);
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await page.getByPlaceholder("Password").fill(LOGIN.password);
+  for (let i = 0; i < 3; i++) { try { await page.goto("/login", { waitUntil: "domcontentloaded" }); break; } catch (e) { if (i === 2) throw e; await page.waitForTimeout(1500); } }
+  const who = page.getByPlaceholder("Email or phone number");
+  await who.waitFor({ state: "visible", timeout: 30000 });
+  await page.waitForTimeout(800);                                                  // let the form hydrate (dev server)
+  await who.fill(LOGIN.email);
+  const pw = page.getByPlaceholder("Password");
+  for (let i = 0; i < 3 && !(await pw.isVisible().catch(() => false)); i++) {   // a pre-hydration click is swallowed — press again
+    await page.getByRole("button", { name: /Continue/ }).click();
+    await pw.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+  }
+  await pw.fill(LOGIN.password);
   await page.getByRole("button", { name: /Sign In/ }).click();
   await page.waitForURL((u) => !/\/login/.test(u.pathname));   // role home varies (manager → /tickets)
   await page.goto("/dashboard");
@@ -17,9 +24,10 @@ async function openModal(page) {
   await page.getByRole("button", { name: /New Project/ }).first().click();
   const box = page.locator(".np-box");
   await expect(box).toBeVisible();
+  await box.getByRole("radio", { name: "New", exact: true }).click();          // these tests type a new client's details
   return box;
 }
-const property = (box) => box.locator(".np-seg-b.on");
+const property = (box) => box.locator('[aria-label="Property type"] .np-seg-b.on');
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 

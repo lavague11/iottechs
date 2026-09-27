@@ -36,6 +36,11 @@ const CAPS = {
   "stage.move":          ["admin", "manager"],
   "customer.contact.view": ["admin", "manager", "sales", "tech", "readonly"], // name / phone / email
   "customer.financials.view": ["admin", "manager", "sales", "customer", "readonly"],
+  // CRM (New Project → Existing / New client). Customers never search the CRM.
+  "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client
+  "customer.create":     ["admin", "manager", "sales"],                     // create a client with a project
+  "customer.edit":       ["admin", "manager"],                              // "Update client record" from the form
+  "customer.duplicate.override": ["admin", "manager"],                      // "Create new anyway" past a duplicate warning
   "cost.view":           ["admin", "manager"],
 };
 export const ROLE_KEYS = ["admin", "manager", "sales", "tech", "customer", "vendor", "readonly"];
