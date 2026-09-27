@@ -158,6 +158,10 @@ function init() {
   if (!uCols.includes("tech_cert"))    db.exec("ALTER TABLE users ADD COLUMN tech_cert TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
+  // Databases created before phone logins have `email TEXT UNIQUE NOT NULL`, so a phone-only customer
+  // (no email) could never get a users row — INSERT OR IGNORE silently dropped them and the project was
+  // left without an owner. Rebuild the table once with email nullable (ids, rows and indexes preserved).
+  relaxUsersEmailNotNull(db);
 
   // Seed staff — DO NOTHING if email already exists so admin edits are never overwritten
   const userStmt = db.prepare(
@@ -1412,6 +1416,40 @@ function init() {
   shiftTimestampsToEastern(db, path.join(dir, "dashboard.db"));
 
   return db;
+}
+
+// One-time schema repair: users.email NOT NULL → nullable. SQLite can't ALTER a constraint, so the
+// table is rebuilt in a transaction: same columns (read from PRAGMA), same ids, same rows, then the
+// partial unique indexes are recreated. Skipped when the column is already nullable.
+function relaxUsersEmailNotNull(db) {
+  const cols = db.prepare("PRAGMA table_info(users)").all();
+  const email = cols.find((c) => c.name === "email");
+  if (!email) return;
+  // The inline UNIQUE on email must survive the rebuild: the staff seed's ON CONFLICT(email) targets
+  // it, and a partial index (WHERE email IS NOT NULL) does not satisfy that clause.
+  const hasInlineUnique = db.prepare("PRAGMA index_list(users)").all()
+    .some((ix) => ix.origin === "u" && db.prepare(`PRAGMA index_info(${ix.name})`).all().map((c) => c.name).join() === "email");
+  if (!email.notnull && hasInlineUnique) return;
+  const def = (c) => {
+    let d = `${c.name} ${c.type || "TEXT"}`;
+    if (c.pk) d += " PRIMARY KEY AUTOINCREMENT";
+    else if (c.name === "email") d += " UNIQUE";                 // nullable: SQLite allows many NULLs under UNIQUE
+    else if (c.notnull) d += " NOT NULL";
+    if (c.dflt_value != null) d += ` DEFAULT ${/\(/.test(c.dflt_value) ? `(${c.dflt_value})` : c.dflt_value}`;   // expression defaults need parens
+    return d;
+  };
+  const names = cols.map((c) => c.name).join(", ");
+  db.exec("BEGIN");
+  try {
+    db.exec(`CREATE TABLE users_new (${cols.map(def).join(", ")})`);
+    db.exec(`INSERT INTO users_new (${names}) SELECT ${names} FROM users`);
+    db.exec("DROP TABLE users");
+    db.exec("ALTER TABLE users_new RENAME TO users");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
+    db.exec("COMMIT");
+    console.log("[users] email column is now nullable + UNIQUE (phone-only customers can have an account row)");
+  } catch (err) { db.exec("ROLLBACK"); console.warn("[users] email NOT NULL repair failed", err?.message || err); }
 }
 
 // Customer link backfill. For each project without customer_id: match a customer user by normalized
