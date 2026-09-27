@@ -16,6 +16,7 @@ import { applyPrices } from "../../../lib/proposal-reuse";
 import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
+import { parseSurveyFloors } from "../../../lib/survey2-model";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -355,7 +356,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
     if (dlBusy) return;
     setDlBusy(true);
     const p = { ...(meta || {}), payload, tax_rate: taxRate, deposit_pct: depositPct };
-    let mockupImages = [], surveyImages = [];
+    let mockupImages = [], surveyImages = [], plannerFloors = [];
     try {
       const [mk, sv] = await Promise.all([
         getToolDataAction(accessId, "mockup").catch(() => null),
@@ -366,10 +367,10 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       // A placed photo is either an inline data: URL or (normal path) a small /api/media URL — count both.
       try { const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null; hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.length > 0); } catch { /* bad blob */ }
       if (hasMockupPhoto && mk?.saved?.data) jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
-      if (sv?.saved?.data) jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
+      if (sv?.saved?.data) { plannerFloors = parseSurveyFloors(sv.saved.data); jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {})); }
       await Promise.all(jobs);
     } catch { /* download numbers-only on any fetch failure */ }
-    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages }); }
+    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages, surveyFloors: plannerFloors }); }
     finally { setDlBusy(false); }
   }
 

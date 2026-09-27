@@ -1,6 +1,7 @@
 "use client";
 import { jsPDF, AcroFormTextField } from "jspdf";
 import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal.js";
+import { scopeMismatches } from "./survey2-model.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -642,8 +643,16 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
   if (surveyImages.length) {
     currentSection = "Survey";
+    // Validation: every floor image must carry every planner device it holds (never a background-only
+    // page). A mismatch is surfaced internally — the survey is still printed, never silently trimmed.
+    surveyImages.forEach((f) => {
+      if (f.counts && f.counts.canonical !== f.counts.rendered) {
+        const msg = `Site survey "${f.name}": planner devices ${f.counts.canonical}, rendered ${f.counts.rendered}`;
+        console.error("[proposal-pdf] " + msg); if (meta.__warnings) meta.__warnings.push(msg);
+      }
+    });
     // Each floor on its own page. The header spans the SAME centered box as the image (symmetric
-    // margins) so they line up, and the plan is centered on both axes with a tight border.
+    // margins) so they line up; the plan is centred in what is left above the device list.
     surveyImages.forEach((f) => {
       let y = newPage();
       // Symmetric section header (matches the centered image box, not the asymmetric text column).
@@ -652,7 +661,12 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
       doc.text("SITE SURVEY" + (surveyImages.length > 1 && f.name ? " — " + f.name : ""), margin + 10, y + 14.4);
       y += 22 + 14;
-      const availH = (H - 46) - y;
+      // Device list under the plan: code → name, three columns, as many rows as fit; the image takes the rest.
+      const devs = Array.isArray(f.devices) ? f.devices : [];
+      const cols = 3, colW = availW / cols, lineH = 11;
+      const listRows = devs.length ? Math.ceil(devs.length / cols) : 0;
+      const listH = listRows ? listRows * lineH + 12 : 0;
+      const availH = (BOTTOM - listH) - y;
       const d = fit(f.img, availW - 2 * pad, availH - 2 * pad);
       if (!d) return;
       const imgX = margin + (availW - d.w) / 2;   // centered horizontally on the page
@@ -660,7 +674,20 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
       doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");   // border hugs the image
       try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image */ }
+      if (listRows) {
+        let ly = y + availH + 8;
+        doc.setFontSize(7.5); doc.setTextColor(...INK);
+        devs.forEach((dv, i) => {
+          const cx = margin + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
+          doc.setFont("helvetica", "bold"); doc.text(dv.code, cx, cy);
+          doc.setFont("helvetica", "normal"); doc.text(`${dv.label}${dv.kind && !new RegExp(dv.kind, "i").test(dv.label) ? ` · ${dv.kind}` : ""}`.slice(0, 40), cx + 22, cy);
+        });
+      }
     });
+  }
+  // Planner ↔ proposal scope check (internal, never alters either): 9 speakers placed vs 10 quoted.
+  if (attachments.surveyFloors) {
+    for (const m of scopeMismatches(attachments.surveyFloors, renderOptions[0])) { console.warn("[proposal-pdf] scope mismatch — " + m); if (meta.__warnings) meta.__warnings.push("Scope mismatch — " + m); }
   }
 
   if (meta.__return) return doc;

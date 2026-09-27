@@ -77,3 +77,26 @@ test("Payment Terms moves whole to the next page when the grand total lands near
   }
   assert.ok(moved > 0, "the sweep never exercised the move-to-next-page path");
 });
+
+// ---- Site Survey pages: device list under the plan, count validation, planner ↔ proposal scope check ----
+test("survey pages list every rendered device under the plan, flag a background-only page, and surface scope mismatches", () => {
+  // A 1×1 PNG stands in for the rasterized floor; the exporter's device list drives the legend.
+  const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const devices = Array.from({ length: 9 }, (_, i) => ({ code: `S${i + 1}`, label: `Speaker ${i + 1}`, kind: "Speaker", group: "sound" }));
+  const surveyImages = [{ name: "Exterior", img: PNG, devices, counts: { canonical: 9, rendered: 9 } }];
+  const surveyFloors = [{ name: "Exterior", bg: "x", devices: Array.from({ length: 9 }, (_, i) => ({ id: i, k: "spk", x: 10 + i * 8, y: 40 })) }];
+  const p = proposal(1);
+  p.payload.options[0].services = [{ key: "sound", label: "Sound System", items: Array.from({ length: 10 }, (_, i) => ({ id: `b${i}`, name: "Ceiling Speaker", qty: 1, price: 0, sub: [{ name: "Ceiling Speaker", qty: 1, price: 75 }] })) }];
+  const trace = [], warnings = [], footers = [];
+  downloadProposalPdf(p, { customerName: "Survey", __trace: trace, __warnings: warnings, __footers: footers, __return: true }, { surveyImages, surveyFloors });
+  const texts = trace.map((t) => t.text);
+  assert.ok(texts.includes("SITE SURVEY"));
+  for (let i = 1; i <= 9; i++) { assert.ok(texts.includes(`S${i}`), `code S${i}`); assert.ok(texts.includes(`Speaker ${i}`), `label ${i}`); }
+  assert.deepEqual(trace.filter((t) => t.y > PDF_PAGE.BOTTOM), [], "the device list stays above the footer");
+  assert.ok(footers.at(-1).startsWith("Survey | "), "survey page numbered in the Survey section");
+  assert.deepEqual(warnings, ["Scope mismatch — Planner speakers: 9 · proposal speakers: 10"]);
+  // A floor whose export lost devices is surfaced, never silently shipped.
+  const w2 = [];
+  downloadProposalPdf(p, { customerName: "Survey", __warnings: w2, __return: true }, { surveyImages: [{ name: "Exterior", img: PNG, devices: [], counts: { canonical: 9, rendered: 0 } }] });
+  assert.match(w2[0], /planner devices 9, rendered 0/);
+});

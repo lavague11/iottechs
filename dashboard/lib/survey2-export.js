@@ -1,25 +1,20 @@
 "use client";
+import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts } from "./survey2-model.js";
 
-// Rasterize the current Site Survey (the "survey2" merged tool) into one PNG per floor for the
-// proposal PDF — the SAME thing the customer sees in "Your System Layout": each floor background
-// with numbered gold camera markers. Canvas-based (no off-screen iframe like the legacy
-// survey-export), so it matches the on-screen layout exactly and can't hang on a widget load.
-// Returns [{ name, img: dataURL }] to match what proposal-pdf.js expects for surveyImages. Always
-// resolves — a bad/oversized floor is skipped, so the PDF download never fails because of the survey.
+// Rasterize the Site Survey (the "survey2" planner) into one PNG per floor for the proposal PDF —
+// the SAME floors, backgrounds and devices the planner shows, projected through the same geometry
+// (device x/y are percent of the background image; lib/survey2-model.js). Every device kind renders:
+// group-coloured marker with its code (C1, S1, …), the device name beside it while the plan is not
+// dense, and a coverage cone only for cone kinds that were actually aimed (cameras, motion sensors).
+// Returns [{ name, img, devices, counts }] — devices feed the legend / schedule in the PDF; counts
+// carry canonical vs rendered so the caller can refuse to ship a silently incomplete survey.
+// Always resolves — a bad/oversized floor is skipped, so the PDF download never fails because of it.
 export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !surveyData) return resolve([]);
-    let floors;
-    try {
-      const d = JSON.parse(surveyData);
-      // A floor's background is either an inline data: URL (offline fallback) or a small /api/media
-      // URL (the normal path — big aerials are uploaded so they don't blow the localStorage quota).
-      // Accept BOTH; both are same-origin so the canvas stays untainted for toDataURL.
-      floors = (d.floors || [])
-        .filter((f) => f && typeof f.bg === "string" && f.bg.length > 0)
-        .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x && x.k === "cam") }));
-    } catch { return resolve([]); }
+    const floors = parseSurveyFloors(surveyData);
     if (!floors.length) return resolve([]);
+    const all = surveyDevices(floors);
 
     const loadImg = (src) => new Promise((res) => {
       const im = new Image();
@@ -28,7 +23,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       im.src = src;
     });
 
-    Promise.all(floors.map(async (f) => {
+    Promise.all(floors.map(async (f, fi) => {
       const im = await loadImg(f.bg);
       if (!im || !im.naturalWidth) return null;
       const scale = Math.min(1, maxWidth / im.naturalWidth);
@@ -38,24 +33,62 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       if (!ctx) return null;
+      // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(im, 0, 0, W, H);
-      // Numbered gold camera markers — mirrors .pcv-layout-cam (gold disc, white ring, white number).
-      const r = Math.max(11, Math.round(W * 0.014));
-      f.cams.forEach((c, i) => {
-        const x = (+c.x || 0) / 100 * W;
-        const y = (+c.y || 0) / 100 * H;
+      const scene = surveyScene(floors, fi, W, H);
+      // Layer 2 — coverage cones (aimed cone kinds only; a speaker never gets a fake camera cone).
+      scene.cones.forEach((c) => {
+        const a0 = (c.aim - c.fov / 2) * Math.PI / 180, a1 = (c.aim + c.fov / 2) * Math.PI / 180;
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = "#b08f4f"; ctx.fill();
+        if (c.fov >= 359) ctx.arc(c.px, c.py, c.R, 0, Math.PI * 2);
+        else { ctx.moveTo(c.px, c.py); ctx.arc(c.px, c.py, c.R, a0, a1); ctx.closePath(); }
+        ctx.fillStyle = hexA(c.color, 0.22); ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = hexA(c.color, 0.6); ctx.stroke();
+      });
+      // Layer 3 — markers with their code; Layer 4 — name tags while the plan is readable.
+      const r = scene.r;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      scene.markers.forEach((d) => {
+        ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2);
+        ctx.fillStyle = d.color; ctx.fill();
         ctx.lineWidth = Math.max(1.5, r * 0.14); ctx.strokeStyle = "#fff"; ctx.stroke();
         ctx.fillStyle = "#fff";
-        ctx.font = `800 ${Math.round(r * 1.05)}px system-ui, "Segoe UI", sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(String(i + 1), x, y + 0.5);
+        ctx.font = `800 ${Math.round(r * (d.code.length > 2 ? 0.72 : 0.9))}px system-ui, "Segoe UI", sans-serif`;
+        ctx.fillText(d.code, d.px, d.py + 0.5);
+        if (scene.showNames && d.label) {
+          ctx.font = `700 ${Math.round(r * 0.85)}px system-ui, "Segoe UI", sans-serif`;
+          const tw = ctx.measureText(d.label).width, ph = Math.round(r * 1.1), pw = tw + r * 0.9;
+          const tx = Math.min(W - pw - 2, d.px + r + 4), ty = d.py - ph / 2;
+          ctx.fillStyle = "rgba(16,20,24,.86)";
+          roundRect(ctx, tx, ty, pw, ph, 4); ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+          ctx.fillText(d.label, tx + r * 0.45, d.py + 0.5);
+          ctx.textAlign = "center";
+        }
       });
       let img;
       try { img = cv.toDataURL("image/png"); } catch { return null; }
-      return { name: f.name, img };
-    })).then((out) => resolve(out.filter(Boolean)));
+      const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, kind: d.kindName, group: d.group }));
+      return { name: f.name, img, devices, counts: { canonical: floors[fi].devices.length, rendered: scene.count } };
+    })).then((out) => {
+      const done = out.filter(Boolean);
+      // Validation: what we drew must be what the planner holds. Never ship a background-only page quietly.
+      const canonical = Object.values(surveyCounts(floors)).reduce((s, n) => s + n, 0);
+      const rendered = done.reduce((s, f) => s + f.devices.length, 0);
+      if (done.length === floors.length && rendered !== canonical) console.error(`[survey export] planner devices ${canonical} ≠ rendered ${rendered}`);
+      resolve(done);
+    });
   });
+}
+
+function hexA(hex, a) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+  return m ? `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})` : `rgba(176,143,79,${a})`;
+}
+function roundRect(ctx, x, y, w, h, rad) {
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y); ctx.lineTo(x + w - rad, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad); ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad); ctx.quadraticCurveTo(x, y, x + rad, y); ctx.closePath();
 }

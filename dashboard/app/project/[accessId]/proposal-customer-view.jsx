@@ -4,6 +4,7 @@ import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
+import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction } from "./proposal-actions";
 
@@ -147,9 +148,11 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
     return () => { clearTimeout(t); clearTimeout(clear); };
   }, [focusCid, layoutBusy, survey2Raw]);
   const layoutFloors = useMemo(() => {
-    try { const d = JSON.parse(survey2Raw); return (d.floors || []).filter((f) => f.bg)
-      .map((f) => ({ name: f.name || "Floor", bg: f.bg, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
-    catch { return []; }
+    const floors = parseSurveyFloors(survey2Raw);
+    const devs = surveyDevices(floors);
+    return floors.map((f, fi) => ({ name: f.name, bg: f.bg, cams: (f.devices || []).filter((x) => x.k === "cam"),
+      // Every placed device (speakers, readers, APs…) for the plan view — same model as the PDF.
+      markers: devs.filter((d) => d.floor === fi && !d.annotation) }));
   }, [survey2Raw]);
   // With placed cameras, the interactive walkthrough replaces the static floor grid (it IS the map,
   // one camera at a time). Floor plans with no cameras still render as plain plans.
@@ -251,7 +254,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   async function handleDownload(mode = "standard") {
     if (dlBusy) return;
     setDlBusy(true);
-    let mockupImages = [], surveyImages = [];
+    let mockupImages = [], surveyImages = [], surveyFloors = [];
     try {
       const [mk, sv] = await Promise.all([
         getToolDataAction(accessId, "mockup").catch(() => null),
@@ -268,12 +271,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
         jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
       }
       if (sv?.saved?.data) {
+        surveyFloors = parseSurveyFloors(sv.saved.data);
         jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       }
       await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
-      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages });
+      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages, surveyFloors });
     } finally {
       setDlBusy(false);
     }
@@ -512,7 +516,11 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
                   {layoutFloors.length > 1 && <div className="pcv-layout-floor-nm">{f.name}</div>}
                   <div className="pcv-layout-plan">
                     <img src={f.bg} alt={f.name} loading="lazy" />
+                    {f.markers.map((m) => (
+                      <span className="pcv-layout-dev" key={m.code} style={{ left: `${m.x}%`, top: `${m.y}%`, background: m.color }} title={m.label} data-kind={m.k}>{m.code}</span>
+                    ))}
                   </div>
+                  {f.markers.length > 0 && <div className="pcv-layout-devlist">{f.markers.map((m) => <span key={m.code}><b>{m.code}</b> {m.label}</span>)}</div>}
                 </div>
               ))}
               {layoutPhotos.length > 0 && (
