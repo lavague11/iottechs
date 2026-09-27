@@ -40,7 +40,7 @@ test("TEST 1: no project-kind cards, one Service dropdown, Commercial selected",
   const options = await svc.locator("option").allTextContents();
   expect(options).toEqual(expect.arrayContaining(["Security Cameras / CCTV", "ADT Monitoring", "Toast / POS Cabling", "Access Control / Door Entry"]));
   await expect(property(box)).toHaveText("Commercial");
-  await expect(box.getByRole("combobox", { name: "Start from" })).toHaveValue("blank");
+  await expect(box.getByRole("combobox", { name: "Start from" })).toHaveValue("import");   // default; no file chosen = blank start
 });
 
 test("TEST 4/5: company auto-sets Commercial; a manual Residential survives later company edits", async ({ page }) => {

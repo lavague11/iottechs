@@ -207,7 +207,7 @@ function NewProjectModal({ onClose, user = null }) {
   }
   function switchMode(m) { setClientMode(m); setDup(null); if (m === "new") clearClient(); }
   const [propTouched, setPropTouched] = useState(false);   // Property picked by hand → company no longer auto-sets it
-  const [startFrom, setStartFrom] = useState("blank");     // blank | previous | import
+  const [startFrom, setStartFrom] = useState("import");    // import (default) | previous — nothing chosen = start blank
   const [pickOpen, setPickOpen] = useState(false);
   const [source, setSource] = useState(null);              // { sourceProposalId, options, preview } from the picker
   const [importFile, setImportFile] = useState(null);
@@ -237,8 +237,6 @@ function NewProjectModal({ onClose, user = null }) {
       setAddrWarned(true);
       return;
     }
-    if (startFrom === "previous" && !source) { setErr("Pick the proposal to start from."); return; }
-    if (startFrom === "import" && !importFile) { setErr("Choose the file to import."); return; }
     if (clientMode === "existing" && !client) { setErr("Pick the client."); return; }
     setErr(""); setBusy(true);
     // Explicit CRM write, and only then: the picked client's row changes ONLY through this switch.
@@ -397,9 +395,8 @@ function NewProjectModal({ onClose, user = null }) {
                 <div className="np-f"><label>Start From</label>
                   <div className="np-row2" style={{ alignItems: "center" }}>
                     <select className="apx-input" value={startFrom} onChange={(e) => { const v = e.target.value; setStartFrom(v); setSource(null); setImportFile(null); if (v === "previous") setPickOpen(true); }} aria-label="Start from">
-                      <option value="blank">Blank</option>
-                      <option value="previous">Previous Project</option>
                       <option value="import">Import Proposal</option>
+                      <option value="previous">Previous Project</option>
                     </select>
                     {startFrom === "previous" && (
                       <button type="button" className="np-ghost np-src" onClick={() => setPickOpen(true)}>
@@ -418,7 +415,7 @@ function NewProjectModal({ onClose, user = null }) {
               )}
               <div className="np-f"><label>Notes</label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
               {err && <div className="np-err">{err}</div>}
-              <button className="np-submit" type="submit" disabled={busy}>{busy ? (startFrom === "import" ? "Extracting…" : "Creating…") : svc.module === "adt" ? "Continue to ADT →" : "Create Project"}</button>
+              <button className="np-submit" type="submit" disabled={busy}>{busy ? (startFrom === "import" && importFile ? "Extracting…" : "Creating…") : svc.module === "adt" ? "Continue to ADT →" : "Create Project"}</button>
             </form>
             {pickOpen && (
               <ReusePicker accessId={null} hint={hint} serviceCode={f.serviceCode} selectOnly onClose={() => setPickOpen(false)}
