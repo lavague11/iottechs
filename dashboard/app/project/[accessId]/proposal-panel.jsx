@@ -242,7 +242,7 @@ const PROP_CSS = `
 .pvx .prop-dl{position:relative;display:inline-block}
 .pvx .prop-dl>summary{list-style:none}
 .pvx .prop-dl>summary::-webkit-details-marker{display:none}
-.pvx .prop-dl-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:150px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 10px 30px -12px rgba(16,20,24,.35);padding:4px;display:flex;flex-direction:column}
+.pvx .prop-dl-menu{position:absolute;left:0;bottom:calc(100% + 4px);z-index:20;min-width:150px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 10px 30px -12px rgba(16,20,24,.35);padding:4px;display:flex;flex-direction:column}
 .pvx .prop-dl-menu button{background:none;border:none;text-align:left;padding:8px 10px;border-radius:7px;font:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);cursor:pointer}
 .pvx .prop-dl-menu button:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
