@@ -3,7 +3,7 @@
 // package total and are never added again; no internal cost appears; pagination safeguards hold.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { downloadProposalPdf, PDF_PAGE } from "../lib/proposal-pdf.js";
+import { downloadProposalPdf, PDF_PAGE, serviceMetrics, scopeLines } from "../lib/proposal-pdf.js";
 
 let seq = 0;
 const block = (name, parts) => ({ id: `b${seq++}`, name, qty: 1, price: 0, sub: parts.map(([n, q, pr]) => ({ id: `s${seq++}`, name: n, qty: q, price: pr })) });
@@ -39,12 +39,16 @@ test("audio: standard stays concise; detailed adds a system summary and expands 
   assert.equal(count(std.texts, "SYSTEM SUMMARY"), 0);
   assert.equal(count(std.texts, "Ceiling Speaker"), 10);
   assert.equal(std.label, "SYSTEM PROPOSAL"); assert.equal(det.label, "DETAILED PROPOSAL");
-  assert.equal(count(det.texts, "10 × Ceiling Speaker"), 1, "the speaker hardware is implied by the package line, not repeated");
+  assert.equal(count(det.texts, "PREPARED FOR"), 0, "no client grid labels");
+  assert.equal(count(det.texts, "CLIENT NAME"), 1, "the only CLIENT NAME is the signature line");
+  assert.equal(count(det.texts, "ZAIN FAROOQ"), 1, "the client strip names the customer once");
 
   assert.ok(det.texts.includes("SYSTEM SUMMARY") && det.texts.includes("DETAILED SYSTEM BREAKDOWN"));
-  assert.ok(det.texts.includes("10 × Ceiling Speaker"));
-  assert.ok(has(det.texts, "1 × Amplifier (4-Zone)"));
-  assert.ok(det.texts.includes("10 × Speaker Wire Run"));
+  // Executive summary: metrics + scope + project summary, no "10 × …" raw lines
+  for (const needle of ["SOUND SYSTEM", "SPEAKERS", "AMPLIFIER", "ZONES", "INSTALLATION SCOPE", "Ceiling Speaker installations", "Speaker wire runs", "Mount / tune", "PROJECT SUMMARY", "FINAL"]) assert.ok(det.texts.includes(needle), needle);
+  assert.ok(!det.texts.some((t) => /^\d+ × /.test(t)), "no raw quantity list");
+  assert.deepEqual(serviceMetrics(p.payload.options[0].services[0]), [{ n: 10, label: "SPEAKERS" }, { n: 1, label: "AMPLIFIER" }, { n: 4, label: "ZONES" }]);
+  assert.deepEqual(scopeLines(p.payload.options[0].services[0]), [[10, "Ceiling Speaker installations"], [10, "Speaker wire runs"], [10, "Mount / tune"]]);
   assert.equal(count(det.texts, "Speaker Wire Run"), 10, "one component row per package");
   assert.equal(count(det.texts, "Drill Mount Tune"), 10);
   assert.equal(count(det.texts, "$300.00"), 20, "each package prints its unit and its total once (10 × 2), components never re-add it");
@@ -58,9 +62,10 @@ test("audio: standard stays concise; detailed adds a system summary and expands 
 
 test("cctv: named locations, Included for $0 components, recorder + storage in the summary, no internal cost", () => {
   const det = render(cctvProposal(), "detailed");
-  assert.ok(det.texts.includes("3 × Camera location"));
-  assert.ok(has(det.texts, "1 × NVR (8-Channel)"));
-  assert.ok(has(det.texts, "1 × 8TB Storage Drive"));
+  assert.deepEqual(serviceMetrics(cctvProposal().payload.options[0].services[0]), [{ n: 3, label: "CAMERAS" }, { n: 1, label: "NVR" }, { n: "8TB", label: "STORAGE" }]);
+  assert.ok(det.texts.includes("CAMERAS") && det.texts.includes("STORAGE") && det.texts.includes("8TB"));
+  assert.deepEqual(scopeLines(cctvProposal().payload.options[0].services[0]), [[3, "Camera installations"], [3, "Cat6 cable runs"], [3, "Terminations"], [3, "Camera mounts"], [3, "Programming / commissioning"]]);
+  assert.ok(!det.texts.includes("Camera location"), "no internal-sounding labels");
   for (const loc of ["Front Entrance", "Rear Lot", "Bay 1"]) assert.ok(det.texts.includes(loc), loc);
   assert.equal(count(det.texts, "Cat6 Drop"), 3);
   assert.equal(count(det.texts, "Included"), 3, "a $0 component reads Included");

@@ -12,6 +12,93 @@ const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US",
 // attachments (optional): { mockupPhotos: [dataURL...], surveyImages: [{name, img:dataURL}...] }.
 // Both are appended after the priced options — the mockup photos and the pinned site-survey floor
 // plans — so the customer's downloaded proposal carries the visual context, not just the numbers.
+// ---- Executive summary helpers (detailed mode) --------------------------------------------------
+// Headline counts per service from the actual items: packages (a camera location, a speaker install)
+// plus named head-end gear. Every value comes from the proposal; nothing is assumed.
+const qtyOf = (it) => Math.max(1, +it.qty || 1);
+const hasSub = (it) => (it.sub || []).length > 0;
+const plural = (n, one, many) => (n === 1 ? one : many);
+export function serviceMetrics(svc) {
+  const items = (svc.items || []).filter((it) => !it.waived);
+  const pk = items.filter(hasSub).reduce((n, it) => n + qtyOf(it), 0);
+  const count = (re) => items.filter((it) => !hasSub(it) && re.test(it.name || "")).reduce((n, it) => n + qtyOf(it), 0);
+  const tb = items.reduce((n, it) => { const m = /(\d+)\s*TB/i.exec(it.name || ""); return n + (m ? +m[1] * qtyOf(it) : 0); }, 0);
+  const zones = items.reduce((n, it) => { const m = /(\d+)-zone/i.exec(it.name || ""); return n + (m ? +m[1] * qtyOf(it) : 0); }, 0);
+  const out = [];
+  const add = (n, one, many) => { if (n > 0) out.push({ n, label: plural(+n, one, many) }); };
+  switch (svc.key) {
+    case "camera": {
+      add(pk + count(/^(4k )?(bullet|dome|turret)? ?camera$/i), "CAMERA", "CAMERAS");
+      add(count(/^NVR/i), "NVR", "NVRS");
+      if (tb) out.push({ n: `${tb}TB`, label: "STORAGE" });
+      add(count(/monitor|display|customer provided/i), "MONITOR", "MONITORS");
+      add(count(/poe switch/i), "POE SWITCH", "POE SWITCHES");
+      break;
+    }
+    case "sound": {
+      add(pk + count(/speaker$/i), "SPEAKER", "SPEAKERS");
+      add(count(/amplifier|\bamp\b/i), "AMPLIFIER", "AMPLIFIERS");
+      if (zones) out.push({ n: zones, label: "ZONES" });
+      add(count(/volume control/i), "VOLUME CONTROL", "VOLUME CONTROLS");
+      break;
+    }
+    case "access": {
+      add(pk + count(/strike|maglock|door controller/i), "DOOR", "DOORS");
+      add(count(/reader/i), "READER", "READERS");
+      add(count(/controller/i), "CONTROLLER", "CONTROLLERS");
+      break;
+    }
+    case "toast": {
+      add(pk, "DEVICE", "DEVICES");
+      add(count(/access point/i), "ACCESS POINT", "ACCESS POINTS");
+      add(count(/pos terminal|kiosk/i), "TERMINAL", "TERMINALS");
+      add(count(/printer/i), "PRINTER", "PRINTERS");
+      break;
+    }
+    case "alarm": {
+      add(pk + count(/sensor|motion|glass/i), "SENSOR", "SENSORS");
+      add(count(/keypad/i), "KEYPAD", "KEYPADS");
+      add(count(/panel/i), "PANEL", "PANELS");
+      break;
+    }
+    case "wiring": {
+      add(pk + count(/drop/i), "CABLE RUN", "CABLE RUNS");
+      add(count(/patch panel|rack/i), "RACK ITEM", "RACK ITEMS");
+      break;
+    }
+    default: {
+      add(pk, "PACKAGE", "PACKAGES");
+      add(items.filter((it) => !hasSub(it)).reduce((n, it) => n + qtyOf(it), 0), "ITEM", "ITEMS");
+    }
+  }
+  return out.slice(0, 5);
+}
+// Installation scope: one line per package kind ("5  Camera installations") then the aggregated
+// components across packages in customer language. A component named like its package is implied.
+const SCOPE_LABELS = {
+  "cat6 drop": "Cat6 cable runs", "cat6 termination": "Terminations", "camera mounting": "Camera mounts",
+  "camera programming": "Programming / commissioning", "camera waterproofing": "Weatherproofing",
+  "speaker wire run": "Speaker wire runs", "drill mount tune": "Mount / tune", "line drop": "Cable drops",
+  "line drop — existing": "Existing cable checks", "device mounting": "Device mounts", "keystone": "Keystone jacks",
+};
+export function scopeLines(svc) {
+  const packages = new Map(), parts = new Map();
+  (svc.items || []).forEach((it) => {
+    if (!hasSub(it) || it.waived) return;
+    const q = qtyOf(it);
+    const kind = svc.key === "camera" ? "Camera installations" : `${titleCase(it.name)} installations`;
+    packages.set(kind, (packages.get(kind) || 0) + q);
+    it.sub.forEach((x) => {
+      const n = String(x.name || "").trim(); if (!n) return;
+      const lc = n.toLowerCase();
+      if (lc === String(it.name || "").trim().toLowerCase() || (svc.key === "camera" && lc === "camera")) return;
+      const lbl = SCOPE_LABELS[lc] || (titleCase(n) + (/s$/i.test(n) ? "" : "s"));
+      parts.set(lbl, (parts.get(lbl) || 0) + (+x.qty || 1) * q);
+    });
+  });
+  return [...packages.entries(), ...parts.entries()].map(([txt, q]) => [q, txt]);
+}
+
 export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // A SIGNED proposal downloads as the EXACT signed artifact — render from the frozen snapshot the
   // signature is bound to (and the signed date below), never a live re-render of the current payload.
@@ -29,7 +116,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // Page geometry. The footer band is FOOTER_H tall and painted last on every page; BOTTOM is the
   // lowest point content may reach (footer + a safe gap). Every section measures its own height and
   // asks for room BEFORE drawing — nothing is ever painted under the footer or clipped.
-  const FOOTER_H = 30.24, SAFE_GAP = 14, BOTTOM = H - FOOTER_H - SAFE_GAP, TOP = 140.4;
+  // Detailed mode opens with a compact masthead (~35% shorter) so the reader reaches the system sooner.
+  const HEAD_H = detailed ? 80 : 122.4;
+  const FOOTER_H = 30.24, SAFE_GAP = 14, BOTTOM = H - FOOTER_H - SAFE_GAP, TOP = HEAD_H + 18;
   // Test/regression hook: meta.__trace collects every content text call as { page, y, text } (footer
   // and header chrome excluded via `chrome`); meta.__footers collects the footer page labels;
   // meta.__return returns the jsPDF document instead of saving a file.
@@ -82,9 +171,32 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.restoreGraphicsState();
 
     doc.setFillColor(...INK);
-    doc.rect(39.6, 0, W - 39.6, 122.4, "F");
+    doc.rect(39.6, 0, W - 39.6, HEAD_H, "F");
     doc.setFillColor(...GOLD);
     doc.rect(39.6, 0, W - 39.6, 3.24, "F");
+
+    if (detailed) {
+      // Compact editorial masthead: the brand dominates; the document type is metadata, not a headline.
+      doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.setTextColor(...WHITE);
+      doc.text("IOT TECHS", 61.2, 36);
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
+      doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 47, { charSpace: 1.2 });
+      doc.setFontSize(6.5); doc.setTextColor(150, 150, 150);
+      doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 61);
+      doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 70);
+      doc.setFontSize(7.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
+      doc.text("DETAILED PROPOSAL", W - 28.8, 33, { align: "right", charSpace: 1.4 });
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.4);
+      doc.line(W - 28.8 - 96, 37, W - 28.8, 37);
+      doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...WHITE);
+      doc.text(propNum, W - 28.8, 49, { align: "right" });
+      doc.setTextColor(170, 170, 170);
+      doc.text(propDate, W - 28.8, 59.5, { align: "right" });
+      doc.setFontSize(6.5); doc.setTextColor(...GOLD);
+      doc.text("SECURITY & LOW VOLTAGE", W - 28.8, 70, { align: "right", charSpace: 1 });
+      chrome = false;
+      return;
+    }
 
     doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...WHITE);
     doc.text("IOT TECHS", 61.2, 46.8);
@@ -253,7 +365,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     if (oi > 0) doc.addPage();
     drawHeader();
     drawFooter();
-    let y = 140.4;
+    let y = TOP;
 
     if (p.payload.options.length > 1) {
       doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
@@ -261,8 +373,23 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       y += 14.4;
     }
 
-    // Client info box
+    if (detailed) {
+      // One project-information strip: who, where, how to reach them. No repeated labels, no cells —
+      // the proposal number and date already sit in the masthead.
+      doc.setDrawColor(...GOLD); doc.setLineWidth(0.8); doc.line(lm, y, lm + rw, y);
+      doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+      doc.text(String(customerName || "Client TBD").toUpperCase(), lm, y + 20, { charSpace: 0.6 });
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55);
+      doc.text(customerAddress || "Address TBD", lm, y + 34);
+      const contact = [customerPhone, customerEmail].filter(Boolean).join("   ·   ");
+      if (contact) { doc.setFontSize(8); doc.setTextColor(74, 82, 112); doc.text(contact, lm, y + 47); }
+      y += contact ? 58 : 46;
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.4); doc.line(lm, y, lm + rw, y);
+      y += 12;
+    }
+    // Client info box (standard)
     const infoH = 64.8;
+    if (!detailed) {
     doc.setFillColor(...WHITE);
     doc.rect(lm, y, rw, infoH, "F");
     doc.setDrawColor(...GOLD); doc.setLineWidth(2);
@@ -298,57 +425,77 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setDrawColor(...GOLD); doc.setLineWidth(1);
     doc.line(lm, y, lm + rw, y);
     y += 7.2;
+    }
 
     const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
 
-    // Detailed: SYSTEM SUMMARY first — what the system is, in counts, per service, then the money.
-    // Derived from the structured items only (packages grouped by name, components aggregated).
+    // Detailed: EXECUTIVE SYSTEM SUMMARY — one coherent region: small gold label, per-service heading,
+    // headline metrics, installation scope, and a compact project summary on the right. Derived from
+    // the structured items only; no navy bars until the technical breakdown below.
     if (detailed) {
-      const groups = (opt.services || []).filter((svc) => svc.items?.length).map((svc) => {
-        const lines = new Map();
-        const add = (label, qty) => lines.set(label, (lines.get(label) || 0) + qty);
-        const parts = new Map();
-        svc.items.forEach((it) => {
-          const q = +it.qty || 1;
-          const hasSub = (it.sub || []).length > 0;
-          // Custom-named locations (survey cameras) collapse to one line per package kind.
-          const kind = hasSub && svc.key === "camera" ? "Camera location" : titleCase(it.name);
-          add(kind, q);
-          // Components aggregate across packages; a component named like its package (the speaker
-          // inside "Ceiling Speaker") is implied by the package line and not repeated.
-          if (hasSub) it.sub.forEach((x) => { const n = titleCase(x.name); if (n !== kind && n !== titleCase(it.name)) parts.set(n, (parts.get(n) || 0) + (+x.qty || 1) * q); });
-        });
-        return { label: svc.label, subtotal: svcSubtotal(svc), lines: [...lines.entries(), ...[...parts.entries()].map(([n, q]) => [n, q, true])] };
+      const MUTED = [74, 82, 112];
+      const label = (txt, x, yy) => { doc.setFontSize(6.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD_D); doc.text(txt, x, yy, { charSpace: 1.3 }); };
+      const groups = (opt.services || []).filter((svc) => svc.items?.length).map((svc) => ({ label: svc.label, metrics: serviceMetrics(svc), scope: scopeLines(svc) }));
+      const finRows = [["Project subtotal", "$" + money(t.sub)]];
+      if (t.discount > 0) finRows.push(["Discount", "-$" + money(t.discount)]);
+      if (t.pcpCredit > 0) finRows.push(["PCP credit", "-$" + money(t.pcpCredit)]);
+      if (t.tax > 0) finRows.push([`Sales tax (${p.tax_rate}%)`, "+$" + money(t.tax)]);
+      const finH = 12 + finRows.length * 13 + 8 + 18;
+      const groupH = (g) => 16 + (g.metrics.length ? 34 : 0) + (g.scope.length ? 14 + g.scope.length * 12 : 0) + 10;
+      y = ensureRoom(y, 14 + groupH(groups[0] || { metrics: [], scope: [] }));
+      label("SYSTEM SUMMARY", lm, y + 6);
+      doc.setDrawColor(...GOLD); doc.setLineWidth(0.5); doc.line(lm + 78, y + 4, lm + rw, y + 4);
+      y += 18;
+      const finX = lm + rw * 0.62, finW = rw * 0.38;
+      groups.forEach((g, gi) => {
+        y = ensureRoom(y, groupH(g) + (gi === groups.length - 1 ? Math.max(0, finH - (g.scope.length * 12)) : 0));
+        doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+        doc.text(g.label.toUpperCase(), lm, y + 10, { charSpace: 0.8 });
+        y += 16;
+        if (g.metrics.length) {
+          let mx = lm;
+          g.metrics.forEach((m) => {
+            doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+            doc.text(String(m.n), mx, y + 15);
+            const nw = doc.getTextWidth(String(m.n));
+            doc.setFontSize(6.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...MUTED);
+            doc.text(m.label, mx, y + 25, { charSpace: 1 });
+            mx += Math.max(nw, doc.getTextWidth(m.label) * 1.25) + 26;
+          });
+          y += 34;
+        }
+        const scopeTop = y;
+        if (g.scope.length) {
+          label("INSTALLATION SCOPE", lm, y + 6);
+          y += 14;
+          g.scope.forEach(([qty, txt]) => {
+            doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+            doc.text(String(qty), lm + 16, y + 8, { align: "right" });
+            doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55);
+            doc.text(txt, lm + 26, y + 8);
+            y += 12;
+          });
+        }
+        if (gi === groups.length - 1) {
+          // Project summary — aligned block on the right of the last service's scope; FINAL dominant.
+          let fy = scopeTop;
+          label("PROJECT SUMMARY", finX, fy + 6); fy += 14;
+          finRows.forEach(([l, a]) => {
+            doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...MUTED);
+            doc.text(l, finX, fy + 8); doc.text(a, finX + finW, fy + 8, { align: "right" }); fy += 13;
+          });
+          doc.setDrawColor(...INK); doc.setLineWidth(0.6); doc.line(finX, fy + 2, finX + finW, fy + 2); fy += 8;
+          doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+          doc.text("FINAL", finX, fy + 10, { charSpace: 1 });
+          doc.setFontSize(12.5); doc.setTextColor(...GOLD_D);
+          doc.text("$" + money(t.grand), finX + finW, fy + 10, { align: "right" });
+          fy += 18;
+          y = Math.max(y, fy);
+        }
+        y += 10;
       });
-      const totalsRows = 2 + (t.discount > 0 ? 1 : 0) + (t.pcpCredit > 0 ? 1 : 0) + (t.tax > 0 ? 1 : 0);
-      y = ensureRoom(y, 22 + 6 + (groups[0] ? 16 + groups[0].lines.length * 12 + 8 : 0));
-      y = sectionHeader("SYSTEM SUMMARY", y) + 6;
-      groups.forEach((g) => {
-        y = ensureRoom(y, 16 + g.lines.length * 12 + 8);
-        doc.setFillColor(...INK); doc.rect(lm, y, rw, 16, "F");
-        doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
-        doc.text(g.label.toUpperCase(), lm + 10, y + 11);
-        doc.text("$" + money(g.subtotal), lm + rw - 6, y + 11, { align: "right" });
-        y += 16 + 4;
-        g.lines.forEach(([name, qty, isPart]) => {
-          doc.setFontSize(8.5); doc.setFont("helvetica", isPart ? "normal" : "bold"); doc.setTextColor(...(isPart ? [74, 82, 112] : INK));
-          doc.text(`${qty} × ${name}`, lm + (isPart ? 26 : 10), y + 9);
-          y += 12;
-        });
-        y += 4;
-      });
-      y = ensureRoom(y, totalsRows * 14 + 8);
-      const line = (label, amt, strong) => {
-        doc.setFontSize(8.5); doc.setFont("helvetica", strong ? "bold" : "normal"); doc.setTextColor(...(strong ? INK : [74, 82, 112]));
-        doc.text(label, lm + rw - 90, y + 10, { align: "right" }); doc.text(amt, lm + rw - 6, y + 10, { align: "right" }); y += 14;
-      };
-      doc.setDrawColor(...SLATE); doc.setLineWidth(0.6); doc.line(lm + rw * 0.55, y, lm + rw, y);
-      line("Project subtotal", "$" + money(t.sub), false);
-      if (t.discount > 0) line("Discount", "-$" + money(t.discount), false);
-      if (t.pcpCredit > 0) line("PCP Credit", "-$" + money(t.pcpCredit), false);
-      if (t.tax > 0) line(`Sales tax (${p.tax_rate}%)`, "+$" + money(t.tax), false);
-      line("Final", "$" + money(t.grand), true);
-      y += 8;
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.4); doc.line(lm, y, lm + rw, y);
+      y += 12;
     }
 
     // Project cost breakdown — one section per service, one row per line item
@@ -383,10 +530,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
         y = tableRow(
-          String(lineNum), desc,
+          String(lineNum), detailed && it.waived ? titleCase(it.name) : desc,
           hasSub ? "1" : String(it.qty ?? 1),
-          "$" + money(hasSub ? gross : it.price),
-          "$" + money(it.waived ? gross : tot), y, !!it.waived
+          detailed && it.waived ? "—" : "$" + money(hasSub ? gross : it.price),
+          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed
         );
         if (showKids) {
           // Components explain the package total; a parent with its own price on top is flagged
