@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
+import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis } from "./svc-model.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
@@ -510,6 +511,16 @@ function init() {
   // Existing DBs predate the companion-project link — add the column in place.
   const svcCols = db.prepare("PRAGMA table_info(service_calls)").all().map((c) => c.name);
   if (!svcCols.includes("svc_project_id")) db.exec("ALTER TABLE service_calls ADD COLUMN svc_project_id TEXT");
+  // Structured diagnostic (one JSON document — the chain reported → equipment → tests → root cause →
+  // work → outcome; see lib/svc-model.js), the visit clock, billing mode, the canonical customer link,
+  // follow-up lineage, and the two report signatures bound to a fingerprint of the document + invoice.
+  for (const [col, ddl] of [
+    ["diagnosis", "TEXT"], ["diagnosis_updated_at", "TEXT"], ["call_type", "TEXT"],
+    ["customer_id", "INTEGER"], ["follow_up_of", "TEXT"],
+    ["report_fingerprint", "TEXT"], ["tech_signed_name", "TEXT"], ["tech_signed_at", "TEXT"],
+    ["customer_signed_name", "TEXT"], ["customer_signed_at", "TEXT"],
+  ]) if (!svcCols.includes(col)) db.exec(`ALTER TABLE service_calls ADD COLUMN ${col} ${ddl}`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_svc_customer ON service_calls(customer_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS svc_invoices (
@@ -3656,16 +3667,19 @@ export function getServiceCallEvents(svcId) {
 // Create a service call from an intake. Assigns the SVC id from the row's own autoincrement id
 // (guaranteed unique), sets the PIN to the last 4 of the contact phone (same rule as projects),
 // links a ticket, and logs the opening event.
-export function createServiceCall({ customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, actor_role, actor_name }) {
+export function createServiceCall({ customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, call_type = null, customer_id = null, follow_up_of = null, actor_role, actor_name }) {
+  // Canonical customer: the one passed in, else the linked project's, else whoever owns this email/phone.
+  const proj = project_access_id ? getJobByAccessId(project_access_id) : null;
+  const custId = customer_id || proj?.customer_id || findCustomerByIdentity(contact_email, contact_phone)?.id || null;
   const info = db.prepare(`
-    INSERT INTO service_calls (customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, customer_pin)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO service_calls (customer, contact_name, contact_email, contact_phone, address, project_access_id, issue, category, priority, customer_pin, call_type, customer_id, follow_up_of)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     String(customer || contact_name || "").trim() || null,
     contact_name || null, contact_email || null, contact_phone || null,
     address || null, project_access_id || null,
     String(issue || "").trim() || null, category || "other", priority || "medium",
-    phonePin(contact_phone)
+    phonePin(contact_phone), call_type || null, custId, follow_up_of || null
   );
   const id = Number(info.lastInsertRowid);
   const svcId = makeSvcId(id);
@@ -3689,6 +3703,94 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
 
 export function getServiceCall(svcId) {
   return decorateSvc(db.prepare("SELECT * FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId || "").trim()));
+}
+
+// ---- Structured diagnosis (lib/svc-model.js) ---------------------------------------------------
+// Known devices for a call: the linked project's survey cameras (their own tags/names) + the recorder.
+// A call with no linked system starts with an empty list; the tech adds devices by name.
+export function getSvcDevices(call) {
+  if (!call?.project_access_id) return [];
+  const { cameras } = getSvcCameras(call.project_access_id);
+  return devicesFromCameras(cameras);
+}
+
+export function getSvcDiagnosis(svcId) {
+  const r = db.prepare("SELECT diagnosis, diagnosis_updated_at FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId));
+  if (!r) return null;
+  let doc = null; try { doc = r.diagnosis ? JSON.parse(r.diagnosis) : null; } catch { doc = null; }
+  return { doc: doc ? sanitizeDiagnosis(doc) : null, updatedAt: r.diagnosis_updated_at || null };
+}
+
+// Autosave target. Sanitized at the boundary; a signed report is frozen (void the signatures to edit).
+export function saveSvcDiagnosis(svcId, input, { actor_role, actor_name } = {}) {
+  const call = getServiceCall(svcId);
+  if (!call) return { error: "Service call not found." };
+  if (call.customer_signed_at || call.tech_signed_at) return { error: "Report is signed — unsign to edit." };
+  const doc = sanitizeDiagnosis(input);
+  const had = !!call.diagnosis;
+  db.prepare("UPDATE service_calls SET diagnosis = ?, diagnosis_updated_at = datetime('now','localtime'), call_type = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE")
+    .run(JSON.stringify(doc), doc.callType || null, String(call.svc_id));
+  if (!had) logServiceCallEvent(call.svc_id, { kind: "diagnostic", detail: "Diagnosis started", actor_role, actor_name });
+  return { ok: true, doc };
+}
+
+// What a signature binds to: the diagnosis document + the invoice lines as they are right now.
+export function svcReportFingerprint(svcId) {
+  const call = getServiceCall(svcId);
+  if (!call) return null;
+  const inv = getSvcInvoice(call.svc_id);
+  const doc = getSvcDiagnosis(call.svc_id)?.doc || emptyDiagnosis();
+  const { internalNotes, ...visible } = doc;   // internal notes are not part of what the customer signs
+  return createHash("sha256").update(stableJson({ svc: call.svc_id, issue: call.issue, doc: visible, items: inv?.items || [] })).digest("hex").slice(0, 24);
+}
+
+// Sign the report as the technician or the customer. Both bind to the current fingerprint; if the
+// record changes afterwards the signatures are stale and the UI says so (svcSignaturesCurrent).
+export function signSvcReport(svcId, { who, name, actor_role, actor_name }) {
+  const call = getServiceCall(svcId);
+  if (!call) return { error: "Service call not found." };
+  const n = String(name || "").trim();
+  if (!n) return { error: "Name required." };
+  const fp = svcReportFingerprint(call.svc_id);
+  const col = who === "tech" ? "tech" : "customer";
+  db.prepare(`UPDATE service_calls SET ${col}_signed_name = ?, ${col}_signed_at = datetime('now','localtime'), report_fingerprint = ?, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE`).run(n, fp, String(call.svc_id));
+  logServiceCallEvent(call.svc_id, { kind: "resolved", detail: `Report signed by ${col === "tech" ? "technician" : "customer"} ${n}`, actor_role: actor_role || col, actor_name: actor_name || n });
+  return { ok: true, fingerprint: fp };
+}
+export function unsignSvcReport(svcId, { actor_role, actor_name } = {}) {
+  const call = getServiceCall(svcId);
+  if (!call) return { error: "Service call not found." };
+  db.prepare("UPDATE service_calls SET tech_signed_name = NULL, tech_signed_at = NULL, customer_signed_name = NULL, customer_signed_at = NULL, report_fingerprint = NULL, updated_at = datetime('now','localtime') WHERE svc_id = ? COLLATE NOCASE").run(String(call.svc_id));
+  logServiceCallEvent(call.svc_id, { kind: "note", detail: "Report signatures cleared for editing", actor_role, actor_name });
+  return { ok: true };
+}
+export function svcSignaturesCurrent(call) {
+  if (!call?.report_fingerprint) return false;
+  return svcReportFingerprint(call.svc_id) === call.report_fingerprint;
+}
+
+// A follow-up visit: same customer, project, address and system — new call, linked back to this one.
+export function createFollowUpServiceCall(svcId, { actor_role, actor_name } = {}) {
+  const call = getServiceCall(svcId);
+  if (!call) return { error: "Service call not found." };
+  const doc = getSvcDiagnosis(call.svc_id)?.doc;
+  const open = (doc?.findings || []).filter((f) => ["needs_repair", "needs_replace", "parts", "return"].includes(f.outcome));
+  const issue = open.length ? `Follow-up to ${call.svc_id}: ${open.map((f) => f.recommendation || f.finding).filter(Boolean).join("; ") || call.issue}` : `Follow-up to ${call.svc_id}: ${call.issue || ""}`;
+  const next = createServiceCall({
+    customer: call.customer, contact_name: call.contact_name, contact_email: call.contact_email, contact_phone: call.contact_phone,
+    address: call.address, project_access_id: call.project_access_id, issue: issue.slice(0, 500), category: call.category, priority: call.priority,
+    call_type: call.call_type, customer_id: call.customer_id, follow_up_of: call.svc_id, actor_role, actor_name,
+  });
+  logServiceCallEvent(call.svc_id, { kind: "note", detail: `Follow-up ${next.svc_id} created`, actor_role, actor_name });
+  return { ok: true, call: next };
+}
+
+// Service-call history by the canonical customer id (falls back to contact identity for older rows).
+export function listServiceCallsForCustomerId(customerId, { email, phone } = {}) {
+  const byId = db.prepare("SELECT * FROM service_calls WHERE customer_id = ? ORDER BY id DESC").all(Number(customerId)).map(decorateSvc);
+  if (!email && !phone) return byId;
+  const seen = new Set(byId.map((c) => c.svc_id));
+  return byId.concat(getServiceCallsForCustomer(email, phone).filter((c) => !seen.has(c.svc_id)));
 }
 
 // Every service call gets a COMPANION type-C project so it lives on the full project gateway —

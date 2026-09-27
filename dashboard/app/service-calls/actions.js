@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic, saveSvcInvoice, sendSvcInvoice, voidSvcInvoice, addSvcPayment, linkServiceCallProject } from "../../lib/db";
+import { setServiceCallStage, logServiceCallEvent, getServiceCall, assignServiceCallTech, addDiagnostic, saveSvcInvoice, sendSvcInvoice, voidSvcInvoice, addSvcPayment, linkServiceCallProject, saveSvcDiagnosis, signSvcReport, unsignSvcReport, createFollowUpServiceCall, createServiceCall, getJobByAccessId, getCustomerSummary } from "../../lib/db";
+import { can } from "../../lib/roles";
 
 async function requireStaff(roles = ["admin", "manager", "tech"]) {
   const user = await getSessionUser();
@@ -111,4 +112,71 @@ export async function assignSvcTechAction(svcId, techId, techName) {
   revalidatePath(`/service-calls/${svcId}`);
   revalidatePath("/service-calls");
   return { ok: true, call: r };
+}
+
+// ---- Structured diagnosis (lib/svc-model.js) — autosave target. Any staff on the call. ----
+export async function saveSvcDiagnosisAction(svcId, doc) {
+  const { user, error } = await requireStaff();
+  if (error) return { ok: false, error };
+  const r = saveSvcDiagnosis(svcId, doc, { actor_role: user.role, actor_name: user.name });
+  if (r.error) return { ok: false, error: r.error };
+  return { ok: true, savedAt: new Date().toISOString() };
+}
+
+// Signatures bind to the current report fingerprint (diagnosis + invoice lines).
+export async function signSvcReportAction(svcId, who, name) {
+  const { user, error } = await requireStaff();
+  if (error) return { ok: false, error };
+  const r = signSvcReport(svcId, { who: who === "tech" ? "tech" : "customer", name: who === "tech" ? (name || user.name) : name, actor_role: user.role, actor_name: user.name });
+  if (r.error) return { ok: false, error: r.error };
+  revalidatePath(`/service-calls/${svcId}`);
+  revalidatePath(`/service-call/${svcId}`);
+  return { ok: true };
+}
+export async function unsignSvcReportAction(svcId) {
+  const { user, error } = await requireStaff(["admin", "manager"]);
+  if (error) return { ok: false, error };
+  const r = unsignSvcReport(svcId, { actor_role: user.role, actor_name: user.name });
+  if (r.error) return { ok: false, error: r.error };
+  revalidatePath(`/service-calls/${svcId}`);
+  return { ok: true };
+}
+
+export async function createFollowUpAction(svcId) {
+  const { user, error } = await requireStaff();
+  if (error) return { ok: false, error };
+  const r = createFollowUpServiceCall(svcId, { actor_role: user.role, actor_name: user.name });
+  if (r.error) return { ok: false, error: r.error };
+  revalidatePath("/service-calls");
+  return { ok: true, svcId: r.call.svc_id };
+}
+
+// Staff "+ Service Call": from a customer (CRM id) and optionally one of their projects. The call
+// inherits the project's customer/contact/address/system; nothing is re-typed and no customer is created.
+export async function createServiceCallAction({ customerId, projectAccessId, issue, callType, priority, category }) {
+  const { user, error } = await requireStaff(["admin", "manager", "tech"]);
+  if (error) return { ok: false, error };
+  const text = String(issue || "").trim();
+  if (!text) return { ok: false, error: "Describe the issue." };
+  const proj = projectAccessId ? getJobByAccessId(projectAccessId) : null;
+  const cust = customerId ? getCustomerSummary(customerId) : null;
+  if (!proj && !cust) return { ok: false, error: "Pick a client or a project." };
+  if (proj && cust && proj.customer_id && Number(proj.customer_id) !== Number(cust.id)) return { ok: false, error: "That project belongs to another client." };
+  if (cust && !can(user.role, "customer.search")) return { ok: false, error: "Not authorized." };
+  const call = createServiceCall({
+    customer: proj?.customer || cust?.company || cust?.name,
+    contact_name: proj?.contact_name || cust?.name || null,
+    contact_email: proj?.contact_email || cust?.email || null,
+    contact_phone: proj?.contact_phone || cust?.phone || null,
+    address: proj?.address || null,
+    project_access_id: proj?.access_id || null,
+    issue: text.slice(0, 500),
+    category: ["camera", "dropout", "nvr", "other"].includes(category) ? category : "other",
+    priority: ["low", "medium", "high", "urgent"].includes(priority) ? priority : "medium",
+    call_type: callType || "Service Call",
+    customer_id: cust?.id || proj?.customer_id || null,
+    actor_role: user.role, actor_name: user.name,
+  });
+  revalidatePath("/service-calls");
+  return { ok: true, svcId: call.svc_id };
 }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
 import { setSvcStageAction, addSvcNoteAction, assignSvcTechAction, runStaffDiagnosticAction, saveSvcInvoiceAction, sendSvcInvoiceAction, voidSvcInvoiceAction, recordSvcPaymentAction, linkSvcProjectAction } from "../actions";
 import { SVC_TECH_ENTRIES, SVC_TECH_TREES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
+import SvcDiagnose from "./svc-diagnose";
 
 // Three steps, same as the customer tracker — the 8 internal stage keys stay in the DB, rolled
 // up here. Clicking a step sets its representative stage.
@@ -39,7 +40,7 @@ const EvIcon = ({ kind }) => (
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
-export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [], linkable = [] }) {
+export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [], linkable = [], diagnosis = null, diagnosisSavedAt = null, devices = [], warranty = null }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -124,6 +125,19 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
     setRows([...rows, { desc: rate.desc, qty: 1, price: rate.price }]);
   }
   function delRow(i) { setRows(rows.filter((_, n) => n !== i)); }
+  // Diagnosis → Estimate: suggested lines land on the invoice as editable rows (never auto-sent).
+  function addSuggested(lines) {
+    if (invLocked) return;
+    setRows((cur) => {
+      const next = cur.filter((r) => String(r.desc).trim());
+      for (const l of lines) {
+        const i = next.findIndex((r) => r.desc === l.desc);
+        if (i >= 0) next[i] = { ...next[i], qty: Math.max(+next[i].qty || 0, l.qty) };
+        else next.push({ desc: l.desc, qty: l.qty, price: l.price });
+      }
+      return next;
+    });
+  }
   function saveInv() { startTx(async () => { const r = await saveSvcInvoiceAction(call.svc_id, rows, invNotes); if (r?.ok) { setRows(r.invoice.items); router.refresh(); } }); }
   function sendInv() {
     startTx(async () => {
@@ -248,6 +262,9 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             ))}
           </div>
         </div>
+
+        {/* Structured diagnosis — the chain the report and the estimate are built from */}
+        <SvcDiagnose call={call} devices={devices} initialDoc={diagnosis} savedAt={diagnosisSavedAt} user={user} canManage={canManage} rates={rates} warranty={warranty} onEstimate={canManage ? addSuggested : null} />
 
         {/* Billing — admin/manager only. Invoice lifecycle: draft → sent → signed; void to re-bill. */}
         {canManage && (

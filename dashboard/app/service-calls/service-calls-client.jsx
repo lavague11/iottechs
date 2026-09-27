@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
+import NewServiceCall from "./new-svc";
 
 // Stage → pill class + short label, reusing the project stage-pill palette.
 const STAGE_PILL = {
@@ -23,6 +24,7 @@ function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[
 export default function ServiceCallsClient({ user, alerts, calls = [], initialFilter = "open" }) {
   const [tab, setTab] = useState(initialFilter);
   const [q, setQ] = useState("");
+  const [newOpen, setNewOpen] = useState(false);
 
   // A call not linked to one of our projects is about a new site / a system we didn't install —
   // a new-install (new-business) opportunity, not a warranty repair.
@@ -45,10 +47,11 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
   return (
     <AdminShell user={user} alerts={alerts} active="service-calls">
       <div className="apx-wrap">
-        <div className="page-head">
-          <h1>Service Calls</h1>
-          <div className="ph-sub">{counts.open} open · {counts.urgent} urgent</div>
+        <div className="page-head svc-page-head">
+          <div><h1>Service Calls</h1><div className="ph-sub">{counts.open} open · {counts.urgent} urgent</div></div>
+          <button className="np-submit svc-new-btn" onClick={() => setNewOpen(true)}>+ Service Call</button>
         </div>
+        {newOpen && <NewServiceCall onClose={() => setNewOpen(false)} />}
 
         <div className="sec-head svc-head">
           <div className="filters">
@@ -95,6 +98,8 @@ export default function ServiceCallsClient({ user, alerts, calls = [], initialFi
 }
 
 const CSS = `
+.apx .svc-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.apx .svc-new-btn{width:auto;flex:none;padding:10px 18px;font-size:.88rem}
 .apx .svc-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .apx .svc-panel{padding:0;overflow:hidden}
 .apx .svc-table{width:100%;border-collapse:collapse}

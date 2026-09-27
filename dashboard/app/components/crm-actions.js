@@ -1,6 +1,7 @@
 "use server";
 import { headers } from "next/headers";
-import { searchCustomers, getCustomerSummary, findDuplicateCustomer, updateCustomerUser } from "../../lib/db";
+import { searchCustomers, getCustomerSummary, findDuplicateCustomer, updateCustomerUser, getProjectsForCustomerId } from "../../lib/db";
+import { serviceCodeLabel } from "../../lib/spec";
 import { can } from "../../lib/roles";
 
 // CRM lookups for the New Project form — server actions. Staff with customer.search only; a customer
@@ -42,4 +43,13 @@ export async function updateCustomerAction(id, fields) {
   if (!(await staffTok("customer.edit"))) return { ok: false, error: "Unauthorized." };
   const r = updateCustomerUser(id, fields);
   return r.error ? { ok: false, error: r.error } : { ok: true };
+}
+
+// A client's systems (projects), newest first — the "+ Service Call" picker. Companion service
+// projects are excluded (a call never points at another call's shell).
+export async function customerProjectsAction(id) {
+  if (!(await staffTok("customer.search"))) return { ok: false, rows: [] };
+  const rows = getProjectsForCustomerId(id).filter((p) => p.project_type !== "C")
+    .map((p) => ({ access_id: p.access_id, service_code: p.service_code, service_label: serviceCodeLabel(p.service_code), address: p.address || "", stage: p.stage }));
+  return { ok: true, rows: plain(rows) };
 }
