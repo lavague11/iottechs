@@ -239,6 +239,12 @@ const PROP_CSS = `
 .pvx .prop-preset-edit{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-preset-edit:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-addbar select{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;max-width:240px}
+.pvx .prop-dl{position:relative;display:inline-block}
+.pvx .prop-dl>summary{list-style:none}
+.pvx .prop-dl>summary::-webkit-details-marker{display:none}
+.pvx .prop-dl-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:150px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 10px 30px -12px rgba(16,20,24,.35);padding:4px;display:flex;flex-direction:column}
+.pvx .prop-dl-menu button{background:none;border:none;text-align:left;padding:8px 10px;border-radius:7px;font:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);cursor:pointer}
+.pvx .prop-dl-menu button:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-mini:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-mini.gold{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}

@@ -248,7 +248,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
   // Build & download the PDF — rasterizes BOTH tools exactly as they render on screen: each mockup
   // page (iPhone frame + camera grid) and each site-survey floor plan (pinned). All best-effort: a
   // missing/empty tool just means fewer appendix pages, never a failed download.
-  async function handleDownload() {
+  async function handleDownload(mode = "standard") {
     if (dlBusy) return;
     setDlBusy(true);
     let mockupImages = [], surveyImages = [];
@@ -273,7 +273,7 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
       await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
-      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupImages, surveyImages });
+      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages });
     } finally {
       setDlBusy(false);
     }
@@ -434,10 +434,13 @@ export default function ProposalCustomerView({ accessId, proposal, preview, cust
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
           <span className="pcv-hd-lbl">{copied ? "Copied" : "Share"}</span>
         </button>
-        <button type="button" className="pcv-hd-ic" onClick={handleDownload} disabled={dlBusy} title="Download this proposal as a PDF" aria-label="Download PDF">
+        <details className="pcv-dl" onClick={(e) => { const b = e.target.closest("button[data-mode]"); if (b) { e.currentTarget.removeAttribute("open"); handleDownload(b.dataset.mode); } }}>
+          <summary className="pcv-hd-ic" title="Download this proposal as a PDF" aria-label="Download PDF">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
           <span className="pcv-hd-lbl">{dlBusy ? "…" : "PDF"}</span>
-        </button>
+        </summary>
+          <div className="pcv-dl-menu"><button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button><button type="button" data-mode="detailed" disabled={dlBusy}>Detailed PDF</button></div>
+        </details>
         <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
       </div>
 

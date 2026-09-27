@@ -1,6 +1,6 @@
 "use client";
 import { jsPDF, AcroFormTextField } from "jspdf";
-import { optionTotals, itemTotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal";
+import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -16,9 +16,32 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // signature is bound to (and the signed date below), never a live re-render of the current payload.
   if (p && p.signed_at && p.signedPayload) p = { ...p, payload: p.signedPayload };
   const { customerName, customerAddress, customerPhone, customerEmail } = meta;
+  // One document model, two renderings of the SAME proposal version: "standard" (the concise customer
+  // proposal) and "detailed" (system summary + every package expanded into its components). Same
+  // items, totals, payment terms and acceptance — only the level of detail differs.
+  const mode = meta.mode === "detailed" ? "detailed" : "standard";
+  const detailed = mode === "detailed";
+  if (meta.__trace) meta.__docLabel = detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL";   // header chrome is not traced
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
   const W = 612, H = 792;
+  // Page geometry. The footer band is FOOTER_H tall and painted last on every page; BOTTOM is the
+  // lowest point content may reach (footer + a safe gap). Every section measures its own height and
+  // asks for room BEFORE drawing — nothing is ever painted under the footer or clipped.
+  const FOOTER_H = 30.24, SAFE_GAP = 14, BOTTOM = H - FOOTER_H - SAFE_GAP, TOP = 140.4;
+  // Test/regression hook: meta.__trace collects every content text call as { page, y, text } (footer
+  // and header chrome excluded via `chrome`); meta.__footers collects the footer page labels;
+  // meta.__return returns the jsPDF document instead of saving a file.
+  let chrome = false;
+  if (meta.__trace || meta.__footers || meta.__return) {
+    const rawText = doc.text.bind(doc);
+    doc.text = (txt, x, y, opts) => {
+      const str = Array.isArray(txt) ? txt.join("\n") : String(txt);
+      if (chrome) { if (meta.__footers && /\| \d+$/.test(str)) meta.__footers.push(str); }
+      else if (meta.__trace) meta.__trace.push({ page: doc.getCurrentPageInfo().pageNumber, y, text: str });
+      return rawText(txt, x, y, opts);
+    };
+  }
   const INK = [11, 15, 26];
   const GOLD = [201, 169, 110];
   const GOLD_D = [160, 120, 64];
@@ -45,6 +68,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     .toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   function drawHeader() {
+    chrome = true;
     doc.setFillColor(...SLATE);
     doc.rect(0, 0, 39.6, H, "F");
     doc.setFillColor(...GOLD);
@@ -74,9 +98,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 90.72);
 
     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
-    doc.text("SYSTEM PROPOSAL", W - 28.8, 37.44, { align: "right" });
+    const docLabel = detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL";
+    doc.text(docLabel, W - 28.8, 37.44, { align: "right" });
     doc.setDrawColor(...GOLD); doc.setLineWidth(0.5);
-    doc.line(W - 28.8 - doc.getTextWidth("SYSTEM PROPOSAL"), 41.04, W - 28.8, 41.04);
+    doc.line(W - 28.8 - doc.getTextWidth(docLabel), 41.04, W - 28.8, 41.04);
 
     doc.setFillColor(...GOLD);
     doc.roundedRect(W - 180, 50.76, 151.2, 17.28, 2.88, 2.88, "F");
@@ -86,26 +111,32 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(170, 170, 170);
     doc.text(propDate, W - 28.8, 77.76, { align: "right" });
     doc.text("Proposal #: " + propNum, W - 28.8, 88.56, { align: "right" });
+    chrome = false;
   }
 
   function drawFooter() {
+    chrome = true;
     doc.setFillColor(...INK);
-    doc.rect(39.6, H - 30.24, W - 39.6, 30.24, "F");
+    doc.rect(39.6, H - FOOTER_H, W - 39.6, FOOTER_H, "F");
     doc.setFillColor(...GOLD);
-    doc.rect(39.6, H - 30.24, W - 39.6, 1.44, "F");
+    doc.rect(39.6, H - FOOTER_H, W - 39.6, 1.44, "F");
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
     doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential Proposal", W / 2 + 18, H - 10.08, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(currentSection + " | " + doc.getNumberOfPages(), W - 28.8, H - 10.08, { align: "right" });
+    chrome = false;
   }
 
   function newPage() {
     doc.addPage();
     drawHeader();
     drawFooter();
-    return 140.4;
+    return TOP;
   }
-  const ensureRoom = (y, need) => (y + need > H - 50 ? newPage() : y);
+  // Room check: `need` is the COMPLETE height of what is about to be drawn. Returns the y to draw at —
+  // unchanged when it fits above BOTTOM, else the top of a fresh page (so a block never straddles).
+  const ensureRoom = (y, need) => (y + need > BOTTOM ? newPage() : y);
+  const movedToNewPage = (before, after) => after < before;
 
   const sectionHeader = (title, yPos) => {
     doc.setFillColor(...SLATE);
@@ -136,15 +167,22 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // on-screen waived treatment). A single "$300.00" fits its column, so nothing overlaps the Unit
   // cell the way the old "$0.00 (waived $300.00)" string did.
   const RED = [192, 57, 43];
+  // A row is as tall as its wrapped description (one line = 18pt; each extra line adds 10pt), so a
+  // long name pushes what follows down instead of overprinting the next row or the footer.
+  const DESC_W = rw * 0.66, ROW_H = 18, LINE_H = 10;
+  const descLines = (desc) => { doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); return doc.splitTextToSize(String(desc), DESC_W); };
+  const rowHeight = (desc) => ROW_H + (descLines(desc).length - 1) * LINE_H;
   const tableRow = (num, desc, qty, unit, total, yPos, strike = false) => {
+    const lines = descLines(desc);
+    const h = ROW_H + (lines.length - 1) * LINE_H;
     const bg = rowIdx % 2 === 0 ? WHITE : MIST;
     doc.setFillColor(...bg);
-    doc.rect(lm, yPos, rw, 18, "F");
+    doc.rect(lm, yPos, rw, h, "F");
     doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.3);
-    doc.line(lm, yPos + 18, lm + rw, yPos + 18);
+    doc.line(lm, yPos + h, lm + rw, yPos + h);
     doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     doc.text(num, lm + 12, yPos + 12, { align: "center" });
-    doc.text(String(desc), lm + 22, yPos + 12, { maxWidth: rw * 0.66 });
+    lines.forEach((ln, i) => doc.text(ln, lm + 22, yPos + 12 + i * LINE_H));
     doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
     const price = (txt, x) => {
       doc.setTextColor(...(strike ? RED : INK));
@@ -159,7 +197,27 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     price(total, lm + rw - 6);
     doc.setTextColor(...INK);
     rowIdx++;
-    return yPos + 18;
+    return yPos + h;
+  };
+
+  // Detailed mode: a package's components, indented under their parent. They EXPLAIN the parent
+  // total (itemTotal already sums them) and are never added to any subtotal again. A $0 component
+  // reads "Included".
+  const CHILD_H = 15;
+  const childRow = (desc, qty, unit, amount, yPos) => {
+    doc.setFillColor(...WHITE);
+    doc.rect(lm, yPos, rw, CHILD_H, "F");
+    doc.setDrawColor(236, 232, 224); doc.setLineWidth(0.3);
+    doc.line(lm + 22, yPos + CHILD_H, lm + rw, yPos + CHILD_H);
+    doc.setFontSize(7.8); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
+    doc.text("·", lm + 26, yPos + 10.5);
+    doc.text(doc.splitTextToSize(String(desc), DESC_W - 20)[0], lm + 34, yPos + 10.5);
+    doc.text(String(qty), lm + rw * 0.72, yPos + 10.5, { align: "center" });
+    const inc = !(+amount > 0);
+    doc.text(inc ? "" : "$" + money(unit), lm + rw * 0.86, yPos + 10.5, { align: "right" });
+    doc.text(inc ? "Included" : "$" + money(amount), lm + rw - 6, yPos + 10.5, { align: "right" });
+    doc.setTextColor(...INK);
+    return yPos + CHILD_H;
   };
 
   const subtotalRow = (label, amount, yPos) => {
@@ -240,16 +298,72 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.line(lm, y, lm + rw, y);
     y += 7.2;
 
+    const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
+
+    // Detailed: SYSTEM SUMMARY first — what the system is, in counts, per service, then the money.
+    // Derived from the structured items only (packages grouped by name, components aggregated).
+    if (detailed) {
+      const groups = (opt.services || []).filter((svc) => svc.items?.length).map((svc) => {
+        const lines = new Map();
+        const add = (label, qty) => lines.set(label, (lines.get(label) || 0) + qty);
+        const parts = new Map();
+        svc.items.forEach((it) => {
+          const q = +it.qty || 1;
+          const hasSub = (it.sub || []).length > 0;
+          // Custom-named locations (survey cameras) collapse to one line per package kind.
+          const kind = hasSub && svc.key === "camera" ? "Camera location" : titleCase(it.name);
+          add(kind, q);
+          // Components aggregate across packages; a component named like its package (the speaker
+          // inside "Ceiling Speaker") is implied by the package line and not repeated.
+          if (hasSub) it.sub.forEach((x) => { const n = titleCase(x.name); if (n !== kind && n !== titleCase(it.name)) parts.set(n, (parts.get(n) || 0) + (+x.qty || 1) * q); });
+        });
+        return { label: svc.label, subtotal: svcSubtotal(svc), lines: [...lines.entries(), ...[...parts.entries()].map(([n, q]) => [n, q, true])] };
+      });
+      const totalsRows = 2 + (t.discount > 0 ? 1 : 0) + (t.pcpCredit > 0 ? 1 : 0) + (t.tax > 0 ? 1 : 0);
+      y = ensureRoom(y, 22 + 6 + (groups[0] ? 16 + groups[0].lines.length * 12 + 8 : 0));
+      y = sectionHeader("SYSTEM SUMMARY", y) + 6;
+      groups.forEach((g) => {
+        y = ensureRoom(y, 16 + g.lines.length * 12 + 8);
+        doc.setFillColor(...INK); doc.rect(lm, y, rw, 16, "F");
+        doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
+        doc.text(g.label.toUpperCase(), lm + 10, y + 11);
+        doc.text("$" + money(g.subtotal), lm + rw - 6, y + 11, { align: "right" });
+        y += 16 + 4;
+        g.lines.forEach(([name, qty, isPart]) => {
+          doc.setFontSize(8.5); doc.setFont("helvetica", isPart ? "normal" : "bold"); doc.setTextColor(...(isPart ? [74, 82, 112] : INK));
+          doc.text(`${qty} × ${name}`, lm + (isPart ? 26 : 10), y + 9);
+          y += 12;
+        });
+        y += 4;
+      });
+      y = ensureRoom(y, totalsRows * 14 + 8);
+      const line = (label, amt, strong) => {
+        doc.setFontSize(8.5); doc.setFont("helvetica", strong ? "bold" : "normal"); doc.setTextColor(...(strong ? INK : [74, 82, 112]));
+        doc.text(label, lm + rw - 90, y + 10, { align: "right" }); doc.text(amt, lm + rw - 6, y + 10, { align: "right" }); y += 14;
+      };
+      doc.setDrawColor(...SLATE); doc.setLineWidth(0.6); doc.line(lm + rw * 0.55, y, lm + rw, y);
+      line("Project subtotal", "$" + money(t.sub), false);
+      if (t.discount > 0) line("Discount", "-$" + money(t.discount), false);
+      if (t.pcpCredit > 0) line("PCP Credit", "-$" + money(t.pcpCredit), false);
+      if (t.tax > 0) line(`Sales tax (${p.tax_rate}%)`, "+$" + money(t.tax), false);
+      line("Final", "$" + money(t.grand), true);
+      y += 8;
+    }
+
     // Project cost breakdown — one section per service, one row per line item
-    // (a camera/Toast block collapses to its own all-in total, same as the on-screen view)
-    y = sectionHeader("PROJECT COST BREAKDOWN", y) + 4;
+    // (a camera/Toast block collapses to its own all-in total, same as the on-screen view;
+    // the detailed rendering lists each package's components underneath it)
+    y = sectionHeader(detailed ? "DETAILED SYSTEM BREAKDOWN" : "PROJECT COST BREAKDOWN", y) + 4;
     y = tableHeader(y);
     rowIdx = 0;
     let lineNum = 1;
 
     (opt.services || []).forEach((svc) => {
       if (!svc.items?.length) return;
-      y = ensureRoom(y, 60);
+      // Service band + its first row travel together (a heading is never orphaned above the footer).
+      const first = svc.items[0];
+      { const ny = ensureRoom(y, 16 + rowHeight(titleCase(first.name) + (first.waived ? "  — Waived" : "")) + 4);
+        if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
       doc.setFillColor(...INK);
       doc.rect(lm, y, rw, 16, "F");
       doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
@@ -259,25 +373,38 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       let secTotal = 0;
       svc.items.forEach((it) => {
         // Hard page break every 12 line items (owner rule) — re-draw the column header on the new page.
-        if (lineNum > 1 && (lineNum - 1) % 12 === 0) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
-        else y = ensureRoom(y, 30);
+        const desc = titleCase(it.name) + (it.waived ? "  — Waived" : "");
+        const hasSub = (it.sub || []).length > 0;
+        const showKids = detailed && hasSub && !it.waived;
+        if (lineNum > 1 && (lineNum - 1) % 12 === 0 && !detailed) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
+        else { const ny = ensureRoom(y, rowHeight(desc) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
         const tot = itemTotal(it);
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
-        const hasSub = (it.sub || []).length > 0;
         y = tableRow(
-          String(lineNum), titleCase(it.name) + (it.waived ? "  — Waived" : ""),
+          String(lineNum), desc,
           hasSub ? "1" : String(it.qty ?? 1),
           "$" + money(hasSub ? gross : it.price),
           "$" + money(it.waived ? gross : tot), y, !!it.waived
         );
+        if (showKids) {
+          // Components explain the package total; a parent with its own price on top is flagged
+          // (internally) as not fully explained — pricing is never altered here.
+          const kidsSum = it.sub.reduce((s2, x) => s2 + (+x.qty || 1) * (+x.price || 0), 0);
+          if (meta.__warnings && Math.abs(kidsSum - tot) > 0.005) meta.__warnings.push(`${propNum} ${desc}: component breakdown ($${money(kidsSum)}) differs from package total ($${money(tot)})`);
+          it.sub.forEach((x) => {
+            { const ny = ensureRoom(y, CHILD_H + 2); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
+            y = childRow(titleCase(x.name), x.qty ?? 1, x.price, (+x.qty || 1) * (+x.price || 0), y);
+          });
+          y += 2;
+        }
         lineNum++;
       });
+      y = ensureRoom(y, 22);
       y = subtotalRow(svc.label + " Subtotal", "$" + money(secTotal), y);
       y += 4;
     });
 
-    const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
     y = ensureRoom(y, 40);
     y += 4;
     y = subtotalRow("PROJECT SUBTOTAL", "$" + money(t.sub), y);
@@ -323,21 +450,8 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       y += 14;
     }
 
-    // Payment terms — split by the option's own deposit %
-    y += 14.4;
-    y = ensureRoom(y, 60);
-    y = sectionHeader("PAYMENT TERMS", y) + 4;
-    doc.setFillColor(...SLATE);
-    doc.rect(lm, y, rw, 20, "F");
-    doc.setDrawColor(...GOLD); doc.setLineWidth(1);
-    doc.line(lm, y + 20, lm + rw, y + 20);
-    doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
-    doc.text("Phase", lm + 10, y + 13);
-    doc.text("Due date", lm + rw * 0.28, y + 13);
-    doc.text("%", lm + rw * 0.75, y + 13, { align: "right" });
-    doc.text("Amount", lm + rw - 6, y + 13, { align: "right" });
-    y += 20;
-
+    // Payment terms — ONE block (heading, schedule, methods, plan terms, tax note). Its full height is
+    // measured first; if it would run into the footer the whole block moves to the next page.
     const depositPct = +p.deposit_pct || 50;
     const finalPct = 100 - depositPct;
     const payPlan = p.payload.payment_plan || "custom";
@@ -356,6 +470,23 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
           ["Deposit", dueOn(0), depositPct + "%", "$" + money(t.grand * depositPct / 100)],
           ["Final", dueOn(30), finalPct + "%", "$" + money(t.grand * finalPct / 100)],
         ];
+    const planTerms = PAYMENT_PLANS[payPlan]?.terms;
+    doc.setFontSize(8); doc.setFont("helvetica", "bold");
+    const termLines = planTerms ? doc.splitTextToSize(planTerms, rw) : [];
+    const termsH = termLines.length ? termLines.length * LINE_H + 2 : 0;
+    const payH = 22 + 4 + 20 + payments.length * 20 + 7.2 + 12 + termsH + 10 + 4;
+    { const ny = ensureRoom(y + 14.4, payH); y = movedToNewPage(y + 14.4, ny) ? ny : y + 14.4; }
+    y = sectionHeader("PAYMENT TERMS", y) + 4;
+    doc.setFillColor(...SLATE);
+    doc.rect(lm, y, rw, 20, "F");
+    doc.setDrawColor(...GOLD); doc.setLineWidth(1);
+    doc.line(lm, y + 20, lm + rw, y + 20);
+    doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
+    doc.text("Phase", lm + 10, y + 13);
+    doc.text("Due date", lm + rw * 0.28, y + 13);
+    doc.text("%", lm + rw * 0.75, y + 13, { align: "right" });
+    doc.text("Amount", lm + rw - 6, y + 13, { align: "right" });
+    y += 20;
     payments.forEach(([phase, trigger, pct, amt], i) => {
       const bg = i % 2 === 0 ? [255, 251, 242] : MIST;
       doc.setFillColor(...bg);
@@ -381,18 +512,19 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     doc.text("Zelle (preferred), Certified Check, Cash, Card, Wire", lm + mLbl, y);
     y += 12;
-    const planTerms = PAYMENT_PLANS[payPlan]?.terms;
-    if (planTerms) {
+    if (termLines.length) {
       doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-      doc.text(doc.splitTextToSize(planTerms, rw), lm, y);
-      y += 12;
+      termLines.forEach((ln, i) => doc.text(ln, lm, y + i * LINE_H));
+      y += termsH;
     }
-    doc.setFontSize(7.5); doc.setFont("helvetica", "oblique"); doc.setTextColor(74, 82, 112);
+    doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(74, 82, 112);
     doc.text("Price subject to applicable sales tax. Proposal valid 7 days from issue.", lm, y);
+    y += 4;
 
-    // Acceptance / signature
-    y = ensureRoom(y, 130);
-    y += 21.6;
+    // Acceptance / signature — one block (heading, instruction, name/date/total box, signature,
+    // prepared-by); moves whole to the next page rather than splitting the signature fields.
+    const acceptH = 22 + 7.2 + 14.4 + 72 + 6;
+    { const ny = ensureRoom(y + 21.6, acceptH); y = movedToNewPage(y + 21.6, ny) ? ny : y + 21.6; }
     y = sectionHeader("ACCEPTANCE OF PROPOSAL", y) + 7.2;
     doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
     doc.text("By signing below, the client agrees to all terms, scope, and pricing outlined in this proposal.", lm, y);
@@ -531,6 +663,8 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     });
   }
 
+  if (meta.__return) return doc;
   const baseName = (customerName || "Client").replace(/[^a-zA-Z0-9]/g, "_");
-  doc.save(`${baseName}_IOT-Techs_Proposal.pdf`);
+  doc.save(`${baseName}_IOT-Techs_${detailed ? "Detailed_" : ""}Proposal.pdf`);
 }
+export const PDF_PAGE = { W: 612, H: 792, FOOTER_H: 30.24, SAFE_GAP: 14, BOTTOM: 792 - 30.24 - 14, TOP: 140.4 };

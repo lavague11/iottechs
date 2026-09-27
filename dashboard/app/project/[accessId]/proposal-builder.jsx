@@ -351,7 +351,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
   }
   // Download the same brand PDF the customer gets — built from the CURRENT edits (payload + tax +
   // deposit merged onto the server row), with the mockup photos and survey floor plans appended.
-  async function handleDownload() {
+  async function handleDownload(mode = "standard") {
     if (dlBusy) return;
     setDlBusy(true);
     const p = { ...(meta || {}), payload, tax_rate: taxRate, deposit_pct: depositPct };
@@ -369,7 +369,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
       if (sv?.saved?.data) jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       await Promise.all(jobs);
     } catch { /* download numbers-only on any fetch failure */ }
-    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail }, { mockupImages, surveyImages }); }
+    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode }, { mockupImages, surveyImages }); }
     finally { setDlBusy(false); }
   }
 
@@ -531,7 +531,7 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
           </button>
         );
         const download = (
-          <button className="prop-eye" disabled={dlBusy} onClick={handleDownload} title="Download the proposal PDF (with mockup & survey)">
+          <button className="prop-eye" disabled={dlBusy} onClick={() => handleDownload("standard")} title="Download the proposal PDF (with mockup & survey)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         );
@@ -801,9 +801,13 @@ export default function ProposalBuilder({ accessId, role, initial, onProposalCha
 
       {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save */}
       <div className="prop-actions">
-        <button type="button" className="prop-mini" disabled={dlBusy} onClick={handleDownload} title="Download the proposal PDF (with mockup & survey)">
-          {dlBusy ? "Preparing…" : "⭳ Download"}
-        </button>
+        <details className="prop-dl" onClick={(e) => { const b = e.target.closest("button[data-mode]"); if (b) { e.currentTarget.removeAttribute("open"); handleDownload(b.dataset.mode); } }}>
+          <summary className="prop-mini" title="Download the proposal PDF (with mockup & survey)">{dlBusy ? "Preparing…" : "⭳ Download"}</summary>
+          <div className="prop-dl-menu">
+            <button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button>
+            <button type="button" data-mode="detailed" disabled={dlBusy} title="Every package expanded into its components, with a system summary">Detailed PDF</button>
+          </div>
+        </details>
         {!readOnly ? (
           <>
             <span className={`prop-savestat${busy || dirty ? " saving" : ""}`}>
