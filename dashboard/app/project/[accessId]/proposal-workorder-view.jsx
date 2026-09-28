@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { workOrderScope } from "../../../lib/workorder-scope";
+import { downloadWorkOrderPdf } from "../../../lib/workorder-pdf";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
 import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
@@ -21,7 +23,7 @@ function itemNameNode(name, outdoor) {
 // internal labor/equipment doc: every line is valued at its TECH price (set by admin at the
 // install stage), never the customer price. Server strips customer price/cost before this ever
 // reaches a tech (see sanitizeProposal role "tech"); this component only ever reads techPrice.
-export default function ProposalWorkOrderView({ accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null, canVoid = false }) {
+export default function ProposalWorkOrderView({ fileBase = null, accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null, canVoid = false }) {
   const [fetched, setFetched] = useState(null);
   const p = fetched || proposal;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
@@ -90,38 +92,12 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
   //   ② Equipment — what to load on the truck (aggregated device counts)
   //   ③ Labor — the work itself, with payout rates
   // Labor is matched by task name; note "mounting" ≠ "Monitor + Mount" (that's equipment).
-  const LABOR_RX = /(cat6 drop|termination|mounting|programming|waterproof|cabling|tuning|wire run|setup|\blabor\b)/i;
-  const locations = [];
-  const equipMap = new Map();
-  const laborMap = new Map();
-  const bump = (map, name, qty, techPrice) => {
-    const key = titleCase(String(name || "").replace(/\s*·\s*Slot \d+$/, ""));
-    const cur = map.get(key) || { name: key, qty: 0, sum: 0, rate: +techPrice || 0 };
-    cur.qty += qty;
-    cur.sum += qty * (+techPrice || 0);
-    if (+techPrice) cur.rate = +techPrice;
-    map.set(key, cur);
-  };
-  (opt.services || []).forEach((s) => {
-    (s.items || []).forEach((it) => {
-      const subs = it.sub || [];
-      if (subs.length) {
-        locations.push({
-          id: it.id, name: it.name, outdoor: it.outdoor, svc: s.label, color: serviceColor(s.key),
-          gear: subs.filter((x) => !LABOR_RX.test(x.name)).map((x) => titleCase(x.name)).join(", "),
-        });
-        subs.forEach((x) => bump(LABOR_RX.test(x.name) ? laborMap : equipMap, x.name, +x.qty || 0, x.techPrice));
-      } else {
-        bump(LABOR_RX.test(it.name) ? laborMap : equipMap, it.name, +(it.qty ?? 1) || 0, it.techPrice);
-      }
-    });
-  });
-  const equipment = [...equipMap.values()];
-  const labor = [...laborMap.values()];
-  const equipHasPay = equipment.some((e) => e.sum > 0);
+  // Shared with the Work Order PDF (lib/workorder-scope.js) so the sheet and the file never disagree.
+  const scope = workOrderScope(opt);
+  const { locations, equipment, labor, laborSum, equipHasPay } = scope;
   const eqRate = (n) => (equipHasPay ? rate(n) : "—");
-  const laborSum = labor.reduce((a, l) => a + l.sum, 0);
-  const svcNotes = (opt.services || []).map((s) => s.note).filter(Boolean);
+  const svcNotes = scope.notes;
+  const downloadWO = () => downloadWorkOrderPdf(p, { fileBase, customerName, customerAddress, techName: assignedTech?.name || p.tech_signed_name || null, optionId: opt.id });
 
   return (
     <div className="pwo-root">
@@ -138,6 +114,9 @@ export default function ProposalWorkOrderView({ accessId, proposal, preview, cus
           <span className="pwo-pill">Technician Copy</span>
           {woDate && <span className="pwo-hd-meta">{woDate}</span>}
           <span className="pwo-hd-meta">{woNum}</span>
+          <button type="button" className="pwo-dl" onClick={downloadWO} title="Download this work order as a PDF" aria-label="Download PDF">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M6 11l6 6 6-6M4 21h16" /></svg>
+          </button>
         </div>
       </div>
 
@@ -325,6 +304,8 @@ const PWO_CSS = `
 .pwo-opt-tab.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pwo-opt-tab-dot{position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--dv-gold,#C9A96E)}
 
+.pwo-dl{margin-left:10px;width:30px;height:30px;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:transparent;color:var(--dv-paper,#F4F4F2);display:inline-grid;place-items:center;cursor:pointer}
+.pwo-dl:hover{background:rgba(255,255,255,.12)}
 .pwo-section-hd{margin:18px 22px 0;background:var(--dv-ink-soft,#3A4048);color:var(--dv-paper,#F4F4F2);font-size:.76rem;font-weight:500;
   letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:4px solid var(--dv-gold,#C9A96E)}
 .pwo-table{margin:0 22px}

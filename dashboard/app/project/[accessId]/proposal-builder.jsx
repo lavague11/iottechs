@@ -17,6 +17,7 @@ import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors } from "../../../lib/survey2-model";
+import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -64,7 +65,8 @@ function ensureSurveyCameraIds(accessId) {
 // margin strip — and the server strips cost from their reads AND writes regardless.
 export default function ProposalBuilder({ fileBase = null, accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
-  const [dlBusy, setDlBusy] = useState(false);                // building the proposal PDF
+  const [dlBusy, setDlBusy] = useState(false);
+  const [dlError, setDlError] = useState("");                // building the proposal PDF
   const [copied, setCopied] = useState(false);                // "Copied" flash after Share
   const [meta, setMeta] = useState(initial || null);          // server row (status, version, sent_at…)
   // A brand-new proposal opens scoped to the project's service (Toast job → Toast tab), so it always
@@ -353,6 +355,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // Download the same brand PDF the customer gets — built from the CURRENT edits (payload + tax +
   // deposit merged onto the server row), with the mockup photos and survey floor plans appended.
   async function handleDownload(mode = "standard") {
+    setDlError("");
     if (dlBusy) return;
     setDlBusy(true);
     const p = { ...(meta || {}), payload, tax_rate: taxRate, deposit_pct: depositPct };
@@ -370,7 +373,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       if (sv?.saved?.data) { plannerFloors = parseSurveyFloors(sv.saved.data); jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {})); }
       await Promise.all(jobs);
     } catch { /* download numbers-only on any fetch failure */ }
-    try { downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors }); }
+    try {
+      if (mode === "survey") {
+        // Site Survey on its own: the planner's floors with every device, named "… - Site Survey.pdf".
+        const out = downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
+        if (!out) setDlError("No site survey on this project yet.");
+      } else downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors });
+    }
     finally { setDlBusy(false); }
   }
 
@@ -807,8 +816,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <div className="prop-dl-menu">
             <button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button>
             <button type="button" data-mode="detailed" disabled={dlBusy} title="Every package expanded into its components, with a system summary">Detailed PDF</button>
+            <button type="button" data-mode="survey" disabled={dlBusy} title="The planner's floors with every device">Site Survey PDF</button>
           </div>
         </details>
+        {dlError && <span className="prop-dl-err" role="alert" onAnimationEnd={() => setDlError("")}>{dlError}</span>}
         {!readOnly ? (
           <>
             <span className={`prop-savestat${busy || dirty ? " saving" : ""}`}>

@@ -5,6 +5,7 @@ import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
+import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction } from "./proposal-actions";
 
@@ -277,7 +278,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       await Promise.all(jobs);
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
-      downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
+      if (mode === "survey") downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
+      else downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
     } finally {
       setDlBusy(false);
     }
@@ -443,7 +445,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
           <span className="pcv-hd-lbl">{dlBusy ? "…" : "PDF"}</span>
         </summary>
-          <div className="pcv-dl-menu"><button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button><button type="button" data-mode="detailed" disabled={dlBusy}>Detailed PDF</button></div>
+          <div className="pcv-dl-menu"><button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button><button type="button" data-mode="detailed" disabled={dlBusy}>Detailed PDF</button><button type="button" data-mode="survey" disabled={dlBusy}>Site Survey PDF</button></div>
         </details>
         <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
       </div>
