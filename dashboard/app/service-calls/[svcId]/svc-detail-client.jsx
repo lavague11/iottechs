@@ -265,7 +265,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             {diagnostics.length === 0 ? (
               <div className="svc-empty">No diagnostic run yet.</div>
             ) : diagnostics.map((d) => (
-              <details className="svc-diag" key={d.id}>
+              <details className="svc-diag" key={d.id} open>
                 <summary>
                   <span className={`svc-mode svc-mode-${d.mode}`}>{d.mode === "tech" ? "Tech" : "Customer"}</span>
                   <span className="svc-diag-title">{d.outcome?.title || d.outcome?.route || "Diagnostic"}</span>
@@ -478,7 +478,7 @@ const CSS = `
 .apx .svc-pct{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
 .apx .svc-status-sel{margin-top:5px;border:none;background:none;font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);cursor:pointer;text-align:right;padding:0}
 .apx .svc-readout-l{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
-.apx .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.apx .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start}
 @media(max-width:820px){.apx .svc-grid{grid-template-columns:1fr}}
 .apx .svc-card{padding:16px 18px}
 .apx .svc-card-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -522,7 +522,8 @@ const CSS = `
 /* runner modal */
 .apx-ov,.svc-ov{position:fixed;inset:0;background:rgba(14,19,32,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
 .svc-ov *{box-sizing:border-box}
-.svc-run{width:100%;max-width:470px;background:#fff;border-radius:18px;padding:26px 24px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);max-height:90vh;overflow-y:auto;color:var(--ink)}
+.svc-run{width:100%;max-width:470px;height:min(500px,90vh);background:#fff;border-radius:18px;padding:26px 24px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);overflow-y:auto;color:var(--ink);display:flex;flex-direction:column}
+.svc-run-pick,.svc-run-q,.svc-run-out{flex:1;display:flex;flex-direction:column;min-height:0}
 .svc-run-hback{position:absolute;top:13px;left:15px;background:none;border:none;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:8px}
 .svc-run-hback:hover{color:var(--ink);background:var(--bg-soft,#f4f4f2)}
 .svc-run-logstate{font-size:.82rem;font-weight:600;color:#1c8a45;margin-bottom:4px;min-height:18px}
@@ -538,6 +539,7 @@ const CSS = `
 .svc-run-entry-h{font-size:.8rem;color:var(--muted)}
 .svc-run-hint{background:#eef1ff;color:#2540c0;border-radius:10px;padding:9px 13px;font-size:.82rem;margin:0 0 14px;font-weight:600}
 .svc-run-opts{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.svc-run-back{margin-top:auto}
 .svc-run-opt{width:100%;text-align:left;padding:14px 15px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;font-size:.94rem;font-weight:600;transition:border-color .15s,background .15s}
 .svc-run-opt:hover{border-color:#C9A96E;background:#fdfaf2}
 .svc-run-back{margin-top:14px;background:none;border:none;color:var(--muted);font-size:.84rem;cursor:pointer;font-family:inherit;font-weight:600;padding:0}
