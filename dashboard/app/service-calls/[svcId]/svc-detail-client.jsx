@@ -61,6 +61,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const [dStarted, setDStarted] = useState(null);
   const [dSaved, setDSaved] = useState(false);
   const [dSaving, setDSaving] = useState(false);
+  const [viewDiag, setViewDiag] = useState(null);   // a logged report opened in a modal (not inline)
 
   const cur = trail.length ? trail[trail.length - 1] : null;
   const curNode = cur ? SVC_TECH_TREES[cur.tree].nodes[cur.node] : null;
@@ -265,22 +266,12 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
             {diagnostics.length === 0 ? (
               <div className="svc-empty">No diagnostic run yet.</div>
             ) : diagnostics.map((d) => (
-              <details className="svc-diag" key={d.id} open>
-                <summary>
-                  <span className={`svc-mode svc-mode-${d.mode}`}>{d.mode === "tech" ? "Tech" : "Customer"}</span>
-                  <span className="svc-diag-title">{d.outcome?.title || d.outcome?.route || "Diagnostic"}</span>
-                  <span className="svc-diag-when">{fmt(d.completed || d.created_at)}</span>
-                </summary>
-                <div className="svc-diag-body">
-                  {d.outcome?.action && <p className="svc-diag-action">{d.outcome.action}</p>}
-                  <ol className="svc-steps">
-                    {(d.steps || []).map((s, i) => (
-                      <li key={i}><span className="svc-q">{s.question}</span><span className="svc-a">{s.answer}</span></li>
-                    ))}
-                  </ol>
-                  {d.speed_test && <div className="svc-speed">Speed: {d.speed_test.down}↓ / {d.speed_test.up}↑ Mbps · {d.speed_test.ping}ms</div>}
-                </div>
-              </details>
+              <button type="button" className="svc-diag-row" key={d.id} onClick={() => setViewDiag(d)}>
+                <span className={`svc-mode svc-mode-${d.mode}`}>{d.mode === "tech" ? "Tech" : "Customer"}</span>
+                <span className="svc-diag-title">{d.outcome?.title || d.outcome?.route || "Diagnostic"}</span>
+                <span className="svc-diag-when">{fmt(d.completed || d.created_at)}</span>
+                <svg className="svc-diag-chev" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
             ))}
           </div>
         </div>
@@ -438,6 +429,27 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
         </div>
       )}
 
+      {/* A logged diagnostic report — opened in a modal so the list stays compact and the page never grows. */}
+      {viewDiag && (
+        <div className="svc-ov" onClick={(e) => { if (e.target === e.currentTarget) setViewDiag(null); }}>
+          <div className="svc-diag-modal">
+            <button className="svc-run-x" onClick={() => setViewDiag(null)} aria-label="Close">✕</button>
+            <div className="svc-diag-modal-h">
+              <span className={`svc-mode svc-mode-${viewDiag.mode}`}>{viewDiag.mode === "tech" ? "Tech" : "Customer"}</span>
+              <span className="svc-diag-when">{fmt(viewDiag.completed || viewDiag.created_at)}</span>
+            </div>
+            <h2 className="svc-diag-modal-t">{viewDiag.outcome?.title || viewDiag.outcome?.route || "Diagnostic"}</h2>
+            {viewDiag.outcome?.action && <p className="svc-diag-action">{viewDiag.outcome.action}</p>}
+            <ol className="svc-steps">
+              {(viewDiag.steps || []).map((s, i) => (
+                <li key={i}><span className="svc-q">{s.question}</span><span className="svc-a">{s.answer}</span></li>
+              ))}
+            </ol>
+            {viewDiag.speed_test && <div className="svc-speed">Speed: {viewDiag.speed_test.down}↓ / {viewDiag.speed_test.up}↑ Mbps · {viewDiag.speed_test.ping}ms</div>}
+          </div>
+        </div>
+      )}
+
       <style>{CSS}</style>
     </AdminShell>
   );
@@ -492,16 +504,19 @@ const CSS = `
 .apx .svc-dl a:hover{text-decoration:underline}
 .apx .svc-assign{height:32px;padding:0 8px;font-size:.84rem;max-width:180px}
 .apx .svc-empty{color:var(--muted);font-size:.86rem;padding:8px 0}
-.apx .svc-diag{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
-.apx .svc-diag summary{display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer;list-style:none;font-size:.86rem}
-.apx .svc-diag summary::-webkit-details-marker{display:none}
+.apx .svc-diag-row{width:100%;display:flex;align-items:center;gap:10px;padding:11px 13px;margin-bottom:8px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font-family:inherit;font-size:.86rem;text-align:left}
+.apx .svc-diag-row:hover{border-color:#C9A96E}
+.apx .svc-diag-chev{color:var(--muted);flex-shrink:0}
 .apx .svc-mode{font-size:.68rem;font-weight:800;text-transform:uppercase;padding:2px 8px;border-radius:20px}
 .apx .svc-mode-customer{color:#2f5fbf;background:#e6eefc}
 .apx .svc-mode-tech{color:#1c8a45;background:#e7f6ec}
-.apx .svc-diag-title{font-weight:700;flex:1}
-.apx .svc-diag-when{color:var(--muted);font-size:.76rem}
-.apx .svc-diag-body{padding:0 13px 13px;border-top:1px solid var(--line)}
+.apx .svc-diag-title{font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apx .svc-diag-when{color:var(--muted);font-size:.76rem;flex-shrink:0}
 .apx .svc-diag-action{font-size:.85rem;color:var(--ink);margin:10px 0}
+.svc-diag-modal{width:100%;max-width:480px;max-height:85vh;overflow-y:auto;background:#fff;border-radius:18px;padding:30px 24px 24px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);color:var(--ink)}
+.svc-diag-modal *{box-sizing:border-box}
+.apx .svc-diag-modal-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.apx .svc-diag-modal-t{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.2rem;margin:0 0 4px}
 .apx .svc-steps{margin:6px 0 0;padding-left:18px;font-size:.83rem}
 .apx .svc-steps li{margin-bottom:6px}
 .apx .svc-q{color:var(--muted);display:block}
