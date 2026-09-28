@@ -160,7 +160,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                         else cmd({ cmd: "select", id: d.id });   // non-camera or submitted → highlight on plan
                       };
                       return (
-                        <div key={d.id ?? i} className="sd-card"
+                        <div key={d.id ?? i} className={`sd-card${menuOpen ? " menu-open" : ""}`}
                           onMouseEnter={() => cmd({ cmd: "hover", id: d.id })}
                           onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
                           <div className={`sd-tile${isCam && d.photo ? " has" : ""}`} onClick={tapTile}
@@ -241,7 +241,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
       )}
 
       <style>{`
-        .sd-wrap{margin-top:12px;border:1px solid var(--line,#e6e2d9);border-radius:12px;background:var(--bg-soft,#faf8f4);overflow:hidden}
+        .sd-wrap{margin-top:12px;border:1px solid var(--line,#e6e2d9);border-radius:12px;background:var(--bg-soft,#faf8f4)}
         .sd-head{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink,#1a1a1a);text-align:left}
         .sd-chev{flex:none;transition:transform .15s;color:var(--muted,#6f7686)}.sd-chev.on{transform:rotate(90deg)}
         .sd-title{font-size:.82rem;font-weight:800;letter-spacing:.02em}
@@ -266,9 +266,10 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         /* Photo-first device grid: 2 columns on mobile, more where there's room. The photo IS the card. */
         .sd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
         @media(min-width:560px){.sd-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
-        .sd-card{border:1px solid var(--line,#e6e2d9);border-radius:11px;background:#fff;overflow:hidden;transition:border-color .13s,box-shadow .13s,transform .13s}
+        .sd-card{position:relative;border:1px solid var(--line,#e6e2d9);border-radius:11px;background:#fff;overflow:hidden;transition:border-color .13s,box-shadow .13s,transform .13s}
         .sd-card:hover{border-color:var(--gold,#c9a96e);box-shadow:0 4px 14px rgba(201,169,110,.18);transform:translateY(-1px)}
-        .sd-tile{position:relative;aspect-ratio:4/3;width:100%;background:var(--bg-soft,#f1eee7);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+        .sd-card.menu-open{overflow:visible;z-index:40}   /* let the ⋯ dropdown escape the card clip and sit above sibling cards */
+        .sd-tile{position:relative;aspect-ratio:4/3;width:100%;background:var(--bg-soft,#f1eee7);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;border-radius:11px 11px 0 0}
         .sd-img{width:100%;height:100%;object-fit:cover;display:block}
         .sd-badge{position:absolute;top:6px;left:6px;z-index:2;min-width:24px;height:20px;padding:0 6px;border-radius:6px;color:#fff;font-size:.66rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)}
         .sd-badge:hover{filter:brightness(1.08)}
