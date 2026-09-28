@@ -3717,6 +3717,19 @@ export function getSvcDevices(call) {
   return devicesFromCameras(cameras);
 }
 
+// The survey plan for the visual device picker: floor backgrounds + camera markers, with the SAME
+// device ids getSvcDevices produces (cam:<tag>) so tapping a marker toggles the exact finding device.
+export function getSvcSurveyMap(call) {
+  if (!call?.project_access_id) return { floors: [], markers: [] };
+  const { cameras, floors } = getSvcCameras(call.project_access_id);
+  const markers = cameras.map((c, i) => ({ id: `cam:${c.tag || i + 1}`, label: c.label, x: c.x, y: c.y, floor: c.floor || 0 }));
+  // Plan background: getSvcCameras only keeps small inline images, so take the real bg (usually an
+  // /api/media URL) straight from the survey blob, matched by floor index — the picker needs a plan.
+  let bgByFloor = [];
+  try { const sv = JSON.parse(getToolData(call.project_access_id, "survey")?.data || "null"); bgByFloor = (sv?.floors || []).map((f) => (typeof f?.B?.img === "string" ? f.B.img : (typeof f?.B?.imgSource === "string" ? f.B.imgSource : null))); } catch { bgByFloor = []; }
+  return { floors: floors.map((f, i) => ({ name: f.name, bg: bgByFloor[i] || f.img || null })), markers };
+}
+
 export function getSvcDiagnosis(svcId) {
   const r = db.prepare("SELECT diagnosis, diagnosis_updated_at FROM service_calls WHERE svc_id = ? COLLATE NOCASE").get(String(svcId));
   if (!r) return null;

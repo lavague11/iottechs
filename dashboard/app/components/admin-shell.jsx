@@ -974,6 +974,9 @@ const CSS = `
 .apx .np-seg{display:flex;gap:4px;padding:4px;background:var(--bg-soft,#f4f2ec);border:1px solid var(--line,#e4e0d8);border-radius:12px}
 .apx .np-seg-b{flex:1;padding:8px 6px;border:none;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:.82rem;cursor:pointer;transition:.15s}
 .apx .np-seg-b.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.apx .np-mf{position:relative}
+.apx .np-mf .apx-input{padding-right:34px}
+.apx .np-mf-mic{position:absolute;right:6px;top:6px;display:inline-flex}
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
 .apx .np-src{display:flex;align-items:center;gap:4px;min-width:0;padding:10px 14px;font-size:.84rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .apx .np-src b{font-family:Menlo,Consolas,monospace;font-size:.78rem}

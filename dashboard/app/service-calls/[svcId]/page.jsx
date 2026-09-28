@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments, ensureSvcProject, getAllJobs, getSvcDiagnosis, getSvcDevices, getJobByAccessId } from "../../../lib/db";
+import { resolveServiceCallRef, getServiceCallEvents, getDiagnostics, getStaffUsers, getSvcInvoice, getSvcPayments, ensureSvcProject, getAllJobs, getSvcDiagnosis, getSvcDevices, getSvcSurveyMap, getJobByAccessId } from "../../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../../lib/session";
 import { SVC_RATES } from "../../../lib/spec";
 import { warrantyStatus } from "../../../lib/svc-model";
@@ -7,8 +7,9 @@ import SvcDetailClient from "./svc-detail-client";
 
 // Service-call detail — the focused gateway for one call. Staff view for now (customer/tech PIN
 // gate lands in the next phase). Shows the stage strip, details, timeline, and diagnostic records.
-export default async function ServiceCallDetailPage({ params }) {
+export default async function ServiceCallDetailPage({ params, searchParams }) {
   const { svcId } = await params;
+  const sp = (await searchParams) || {};
   const user = await getSessionUser();
   if (!["admin", "manager", "tech"].includes(user.role)) redirect("/login");
 
@@ -38,6 +39,7 @@ export default async function ServiceCallDetailPage({ params }) {
   // Structured diagnosis + the devices the linked system knows about + warranty from the project record.
   const diagnosis = getSvcDiagnosis(call.svc_id);
   const devices   = getSvcDevices(call);
+  const surveyMap = getSvcSurveyMap(call);
   const linked    = call.project_access_id ? getJobByAccessId(call.project_access_id) : null;
   const warranty  = warrantyStatus(linked);
   // node:sqlite rows are null-prototype objects; plain-clone before crossing to the client component.
@@ -63,11 +65,13 @@ export default async function ServiceCallDetailPage({ params }) {
       techs={techs.map(plain)}
       invoice={plain(invoice)}
       payments={payments.map(plain)}
+      autoRun={sp.run === "1"}
       rates={canManage ? SVC_RATES : []}
       linkable={linkable.map(plain)}
       diagnosis={diagnosis?.doc ? JSON.parse(JSON.stringify(diagnosis.doc)) : null}
       diagnosisSavedAt={diagnosis?.updatedAt || null}
       devices={devices}
+      surveyMap={JSON.parse(JSON.stringify(surveyMap))}
       warranty={warranty}
     />
   );

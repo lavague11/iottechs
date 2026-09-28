@@ -21,6 +21,13 @@ async function signIn(page) {
   await page.getByRole("button", { name: /Sign In/ }).click();
   await page.waitForURL((u) => !/\/login/.test(u.pathname));
 }
+// Creating a call now lands with ?run=1 and auto-opens the TRACE runner overlay; close it to reach
+// the structured diagnosis panel underneath.
+async function dismissRunner(page) {
+  await page.waitForTimeout(600);   // the runner auto-opens on mount (?run=1)
+  const x = page.locator(".svc-run-x");
+  if (await x.isVisible().catch(() => false)) { await x.click(); await page.locator(".svc-run").waitFor({ state: "hidden", timeout: 5000 }).catch(() => {}); }
+}
 const chip = (scope, text) => scope.locator(".sd-chip", { hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(PASS|FAIL|NOT TESTED)?$`) });
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
@@ -35,9 +42,10 @@ test("create from an existing client + system: customer, address and equipment a
   await expect(sys).toBeVisible();
   await expect(sys.locator("option")).not.toHaveCount(1);                     // the client's systems load in
   await sys.selectOption({ index: 1 });
-  await box.getByPlaceholder("What's wrong?").fill("E2E SVC: cameras 2–5 offline");
+  await box.getByPlaceholder("What's the problem?").fill("E2E SVC: cameras 2–5 offline");
   await box.getByRole("button", { name: "Create Call" }).click();
   await page.waitForURL(/\/service-calls\/SVC/);
+  await dismissRunner(page);
   await expect(page.locator(".svc-hero h1")).not.toHaveText("—");
   await expect(page.locator(".svc-dl a.mono")).toBeVisible();                 // linked system
   await expect(page.locator(".sd-dev").first()).toBeVisible();                // equipment loaded from the survey
@@ -52,9 +60,10 @@ test("bulk diagnosis → autosave/reload → estimate from the rate card → sig
   await box.locator(".np-crow").first().click();
   await expect(box.getByRole("combobox", { name: "System" }).locator("option")).not.toHaveCount(1);
   await box.getByRole("combobox", { name: "System" }).selectOption({ index: 1 });
-  await box.getByPlaceholder("What's wrong?").fill("E2E SVC: cameras 2–5 offline");
+  await box.getByPlaceholder("What's the problem?").fill("E2E SVC: cameras 2–5 offline");
   await box.getByRole("button", { name: "Create Call" }).click();
   await page.waitForURL(/\/service-calls\/SVC/);
+  await dismissRunner(page);
   const svcUrl = page.url();
   const sd = page.locator(".sd");
 
@@ -117,6 +126,7 @@ test("bulk diagnosis → autosave/reload → estimate from the rate card → sig
   await page.goto(svcUrl);
   await sd.getByRole("button", { name: "Follow-up" }).click();
   await page.waitForURL((u) => /\/service-calls\/SVC/.test(u.pathname) && u.href !== svcUrl);
+  await dismissRunner(page);
   await expect(page.locator(".svc-hero-issue")).toContainText("Follow-up to SVC");
   await expect(page.locator(".sd-dev").first()).toBeVisible();
 });
@@ -129,9 +139,10 @@ test("a warranty visit suggests no charges; ISP root cause suggests the visit on
   await box.locator(".np-crow").first().click();
   await expect(box.getByRole("combobox", { name: "System" }).locator("option")).not.toHaveCount(1);
   await box.getByRole("combobox", { name: "System" }).selectOption({ index: 1 });
-  await box.getByPlaceholder("What's wrong?").fill("E2E SVC: app shows cameras offline");
+  await box.getByPlaceholder("What's the problem?").fill("E2E SVC: app shows cameras offline");
   await box.getByRole("button", { name: "Create Call" }).click();
   await page.waitForURL(/\/service-calls\/SVC/);
+  await dismissRunner(page);
   const sd = page.locator(".sd");
   await chip(sd.locator(".sd-sec").first(), "Network / Internet").click();
   await sd.getByRole("button", { name: "+ Finding" }).click();
@@ -155,9 +166,10 @@ async function createCall(page, issue) {
   await box.locator(".np-crow").first().click();
   await expect(box.getByRole("combobox", { name: "System" }).locator("option")).not.toHaveCount(1);
   await box.getByRole("combobox", { name: "System" }).selectOption({ index: 1 });
-  await box.getByPlaceholder("What's wrong?").fill(issue);
+  await box.getByPlaceholder("What's the problem?").fill(issue);
   await box.getByRole("button", { name: "Create Call" }).click();
   await page.waitForURL(/\/service-calls\/SVC/);
+  await dismissRunner(page);
   return page.url();
 }
 

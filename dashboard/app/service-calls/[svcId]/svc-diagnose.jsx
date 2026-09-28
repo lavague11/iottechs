@@ -6,6 +6,8 @@ import Link from "next/link";
 import { saveSvcDiagnosisAction, signSvcReportAction, unsignSvcReportAction, createFollowUpAction } from "../actions";
 import { SVC_CALL_TYPES, SVC_SYSTEMS, SVC_SYMPTOMS, SVC_ROOT_CAUSES, SVC_TESTS, SVC_WORK, SVC_OUTCOMES, SVC_BILLING, CAUSE_LABEL, OUTCOME_LABEL, emptyDiagnosis, emptyFinding, emptyOption, timeOnSite, suggestEstimate, needsFollowUp, newId, SVC_DEVICE_STATUS, SVC_OPTION_TYPES, moduleFields, deviceRows, autoSummary, documentModel } from "../../../lib/svc-model";
 import SvcDocumentEditor from "./svc-document-editor";
+import MicButton from "../../components/mic-button";
+import { SVC_PHOTO_CATEGORIES } from "../../../lib/svc-model";
 
 // The diagnostic chain for one call, autosaved server-side (debounced). Progressive: devices →
 // system → symptoms → tests → root cause → work → outcome, one card per finding; one finding can
@@ -18,7 +20,66 @@ const Chip = ({ on, children, onClick, tone = "", title }) => (
 const hhmm = (v) => { const s = String(v || ""); if (/Z$|[+-]\d\d:\d\d$/.test(s)) { const d = new Date(s); return Number.isNaN(d) ? s.slice(11, 16) : d.toTimeString().slice(0, 5); } return s.slice(11, 16); };
 const NEXT_RESULT = { undefined: "PASS", PASS: "FAIL", FAIL: "NOT TESTED", "NOT TESTED": undefined };
 
-export default function SvcDiagnose({ call, devices: knownDevices = [], initialDoc = null, savedAt: initialSavedAt = null, user, canManage = false, rates = [], warranty = null, onEstimate = null }) {
+// A text field (input or textarea) with the shared multilingual dictation mic docked in the corner —
+// the same MicButton the Bug Report tool uses. Speaking appends to whatever is typed.
+function MicField({ value, onValue, placeholder, disabled, textarea = false, rows = 2, title }) {
+  return (
+    <div className={`sd-mf${textarea ? " ta" : ""}`}>
+      {textarea
+        ? <textarea className="apx-input" rows={rows} placeholder={placeholder} value={value} disabled={disabled} title={title} onChange={(e) => onValue(e.target.value)} />
+        : <input className="apx-input" placeholder={placeholder} value={value} disabled={disabled} title={title} onChange={(e) => onValue(e.target.value)} />}
+      {!disabled && <span className="sd-mf-mic"><MicButton value={value} onChange={onValue} size={15} /></span>}
+    </div>
+  );
+}
+
+// Photos on the call — capture or attach, categorize, caption. Reuses /api/media (kind service-photo),
+// the same upload path as the Bug Report tool; stores { url, category, caption } on the diagnosis doc.
+function PhotoStrip({ photos, projectId, locked, onAdd, onPatch, onRemove }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(0);
+  async function pick(e) {
+    const files = [...(e.target.files || [])]; e.target.value = "";
+    for (const file of files) {
+      setBusy((n) => n + 1);
+      try {
+        const fd = new FormData(); fd.append("file", file, file.name || "photo.jpg"); fd.append("kind", "service-photo"); if (projectId) fd.append("project", projectId);
+        const j = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        if (j?.ok && j.url) onAdd({ url: j.url, category: "Other", caption: "" });
+      } finally { setBusy((n) => n - 1); }
+    }
+  }
+  return (
+    <div className="sd-photos">
+      <div className="sd-lab">Photos{busy > 0 ? " · uploading…" : ""}</div>
+      <div className="sd-photo-grid">
+        {(photos || []).map((ph, i) => (
+          <div className="sd-photo" key={ph.url + i}>
+            <img src={ph.url} alt={ph.caption || ph.category} loading="lazy" />
+            {!locked && <button type="button" className="sd-photo-x" aria-label="Remove photo" onClick={() => onRemove(i)}>×</button>}
+            {locked ? <span className="sd-photo-cap">{[ph.category, ph.caption].filter(Boolean).join(" — ")}</span> : (
+              <>
+                <select className="apx-input sd-photo-cat" value={ph.category} onChange={(e) => onPatch(i, { category: e.target.value })} aria-label="Photo category">
+                  {SVC_PHOTO_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+                <input className="apx-input sd-photo-capin" placeholder="Caption" value={ph.caption} onChange={(e) => onPatch(i, { caption: e.target.value })} />
+              </>
+            )}
+          </div>
+        ))}
+        {!locked && (
+          <button type="button" className="sd-photo-add" onClick={() => inputRef.current?.click()}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            <span>Photo</span>
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple hidden onChange={pick} />
+    </div>
+  );
+}
+
+export default function SvcDiagnose({ call, devices: knownDevices = [], surveyMap = null, initialDoc = null, savedAt: initialSavedAt = null, user, canManage = false, rates = [], warranty = null, onEstimate = null }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [doc, setDoc] = useState(() => {
@@ -35,6 +96,8 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
   const [dirty, setDirty] = useState(false);
   const [custName, setCustName] = useState(call.contact_name || "");
   const [newDev, setNewDev] = useState("");
+  const [pickFor, setPickFor] = useState(null);       // finding id whose devices the survey picker edits
+  const hasSurvey = !!(surveyMap && surveyMap.floors && surveyMap.floors.length && surveyMap.markers && surveyMap.markers.length);
   const locked = !!(call.tech_signed_at || call.customer_signed_at);
   const timer = useRef(null);
 
@@ -106,7 +169,7 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
       </div>
 
       {/* Equipment */}
-      <div className="sd-sec"><span className="sd-lab">Equipment</span>
+      <div className="sd-sec"><span className="sd-lab">Equipment{call.project_access_id ? <a className="sd-survey-link" href={`/project/${call.project_access_id}?deck=1&stage=survey`} target="_blank" rel="noreferrer">Open survey ↗</a> : null}</span>
         <div className="sd-chips">
           {doc.devices.map((dv) => <span key={dv.id} className={`sd-dev sd-dev-${dv.kind}`}>{dv.label}</span>)}
           {!locked && <span className="sd-adddev"><input className="apx-input" placeholder="+ Device" value={newDev} onChange={(e) => setNewDev(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDevice(); } }} /></span>}
@@ -132,12 +195,13 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
                       <button type="button" className="sd-mini" onClick={() => setF(f.id, (x) => { x.deviceIds = doc.devices.map((d) => d.id); })}>All</button>
                       <button type="button" className="sd-mini" onClick={() => setF(f.id, (x) => { x.deviceIds = []; })}>None</button>
                     </>}
+                    {hasSurvey && !locked && <button type="button" className="sd-mini sd-survey-btn" onClick={() => setPickFor(f.id)}>Pick on survey</button>}
                   </div>
                 </div>
                 <div className="sd-step"><span className="sd-lab">Symptom</span>
                   <select className="apx-input sd-sys" value={f.system} onChange={(e) => setF(f.id, (x) => { x.system = e.target.value; x.symptoms = []; x.tests = []; })} disabled={locked} aria-label="System">{SVC_SYSTEMS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</select>
                   <div className="sd-chips">{(SVC_SYMPTOMS[f.system] || []).map((s) => <Chip key={s} on={f.symptoms.includes(s)} onClick={() => setF(f.id, (x) => { x.symptoms = toggle(x.symptoms, s); })}>{s}</Chip>)}</div>
-                  {(f.symptoms.includes("Other") || f.observed) && <input className="apx-input" placeholder="Observed" value={f.observed} onChange={(e) => setF(f.id, (x) => { x.observed = e.target.value; })} disabled={locked} />}
+                  {(f.symptoms.includes("Other") || f.observed) && <MicField placeholder="Observed" value={f.observed} disabled={locked} onValue={(v) => setF(f.id, (x) => { x.observed = v; })} />}
                 </div>
                 <div className="sd-step"><span className="sd-lab">Tests</span>
                   <div className="sd-chips">
@@ -153,12 +217,12 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
                 </div>
                 <div className="sd-step"><span className="sd-lab">Root cause</span>
                   <div className="sd-chips">{SVC_ROOT_CAUSES.map((c) => <Chip key={c.key} on={f.rootCauses.includes(c.key)} tone="cause" onClick={() => setF(f.id, (x) => { x.rootCauses = toggle(x.rootCauses, c.key); })}>{c.label}</Chip>)}</div>
-                  <input className="apx-input" placeholder="Finding" value={f.finding} onChange={(e) => setF(f.id, (x) => { x.finding = e.target.value; })} disabled={locked} />
-                  <input className="apx-input" placeholder="Recommendation" value={f.recommendation} onChange={(e) => setF(f.id, (x) => { x.recommendation = e.target.value; })} disabled={locked} />
+                  <MicField placeholder="Finding" value={f.finding} disabled={locked} onValue={(v) => setF(f.id, (x) => { x.finding = v; })} />
+                  <MicField placeholder="Recommendation" value={f.recommendation} disabled={locked} onValue={(v) => setF(f.id, (x) => { x.recommendation = v; })} />
                 </div>
                 <div className="sd-step"><span className="sd-lab">Work</span>
                   <div className="sd-chips">{SVC_WORK.map((w) => <Chip key={w.key} on={f.work.includes(w.key)} onClick={() => setF(f.id, (x) => { x.work = toggle(x.work, w.key); })}>{w.label}</Chip>)}</div>
-                  {(f.work.includes("other") || f.notes) && <input className="apx-input" placeholder="Notes" value={f.notes} onChange={(e) => setF(f.id, (x) => { x.notes = e.target.value; })} disabled={locked} />}
+                  {(f.work.includes("other") || f.notes) && <MicField placeholder="Notes" value={f.notes} disabled={locked} onValue={(v) => setF(f.id, (x) => { x.notes = v; })} />}
                 </div>
                 {f.deviceIds.length > 0 && (
                   <div className="sd-step"><span className="sd-lab">Per device</span>
@@ -191,8 +255,13 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
       })}
       {!locked && <button type="button" className="svc-inv-add" onClick={addFinding}>+ Finding</button>}
 
-      <textarea className="apx-input sd-ta" rows={2} placeholder="Recommendations" value={doc.recommendations} onChange={(e) => update((d) => { d.recommendations = e.target.value; return d; })} disabled={locked} />
-      <textarea className="apx-input sd-ta sd-internal" rows={2} placeholder="Internal notes" value={doc.internalNotes} onChange={(e) => update((d) => { d.internalNotes = e.target.value; return d; })} disabled={locked} title="Never on the customer report" />
+      <MicField textarea placeholder="Recommendations" value={doc.recommendations} disabled={locked} onValue={(v) => update((d) => { d.recommendations = v; return d; })} />
+      <div className="sd-internal-wrap"><MicField textarea placeholder="Internal notes" value={doc.internalNotes} disabled={locked} title="Never on the customer report" onValue={(v) => update((d) => { d.internalNotes = v; return d; })} /></div>
+
+      <PhotoStrip photos={doc.photos} projectId={call.project_access_id} locked={locked}
+        onAdd={(ph) => update((d) => { d.photos = [...(d.photos || []), ph]; return d; })}
+        onPatch={(i, patch) => update((d) => { d.photos = (d.photos || []).map((x, n) => (n === i ? { ...x, ...patch } : x)); return d; })}
+        onRemove={(i) => update((d) => { d.photos = (d.photos || []).filter((_, n) => n !== i); return d; })} />
 
       <SvcDocumentEditor doc={doc} call={call} locked={locked} update={update} rates={rates} canManage={canManage} />
 
@@ -210,6 +279,38 @@ export default function SvcDiagnose({ call, devices: knownDevices = [], initialD
           </span>
         )}
       </div>
+
+      {pickFor && hasSurvey && (() => {
+        const f = doc.findings.find((x) => x.id === pickFor);
+        const sel = new Set(f?.deviceIds || []);
+        const toggle = (id) => setF(pickFor, (x) => { const set = new Set(x.deviceIds); set.has(id) ? set.delete(id) : set.add(id); x.deviceIds = [...set]; });
+        return (
+          <div className="svc-ov" onClick={(e) => { if (e.target === e.currentTarget) setPickFor(null); }}>
+            <div className="sd-pick">
+              <button type="button" className="sd-pick-x" onClick={() => setPickFor(null)} aria-label="Done">✕</button>
+              <h2>Tap the affected devices</h2>
+              {surveyMap.floors.map((fl, fi) => {
+                const marks = surveyMap.markers.filter((m) => (m.floor || 0) === fi);
+                if (!marks.length && surveyMap.floors.length > 1) return null;
+                return (
+                  <div className="sd-pick-floor" key={fi}>
+                    {surveyMap.floors.length > 1 && <div className="sd-pick-fl-nm">{fl.name}</div>}
+                    <div className="sd-pick-plan">
+                      {fl.bg ? <img src={fl.bg} alt={fl.name} /> : <div className="sd-pick-noimg">No floor image</div>}
+                      {marks.map((m) => (
+                        <button type="button" key={m.id} className={`sd-pick-dot${sel.has(m.id) ? " on" : ""}`} style={{ left: `${m.x}%`, top: `${m.y}%` }} title={m.label} onClick={() => toggle(m.id)}>
+                          {(doc.devices.find((d) => d.id === m.id)?.label || m.label || "").replace(/\s.*/, "").slice(0, 4) || "•"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="sd-pick-foot"><span>{(f?.deviceIds || []).length} selected</span><button type="button" className="svc-inv-btn gold" onClick={() => setPickFor(null)}>Done</button></div>
+            </div>
+          </div>
+        );
+      })()}
 
       <style>{CSS}</style>
     </div>
@@ -272,4 +373,34 @@ const CSS = `
 .apx .sd-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .apx .sd-sign{display:flex;gap:6px;align-items:center;margin-left:auto}
 .apx .sd-sign .apx-input{height:38px;width:170px;padding:0 10px;font-size:.84rem}
+
+.apx .sd-mf{position:relative}
+.apx .sd-mf .apx-input{padding-right:34px}
+.apx .sd-mf-mic{position:absolute;right:6px;top:6px;display:inline-flex}
+.apx .sd-internal-wrap .apx-input{background:#fbf8f0;border-style:dashed}
+.apx .sd-photos{margin-top:12px}
+.apx .sd-photo-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.apx .sd-photo{position:relative;width:132px;display:flex;flex-direction:column;gap:4px}
+.apx .sd-photo img{width:132px;height:96px;object-fit:cover;border-radius:9px;border:1px solid var(--line)}
+.apx .sd-photo-x{position:absolute;top:4px;right:4px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(16,20,24,.7);color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.apx .sd-photo-cat{height:28px;padding:0 6px;font-size:.72rem}
+.apx .sd-photo-capin{height:28px;padding:0 8px;font-size:.76rem}
+.apx .sd-photo-cap{font-size:.72rem;color:var(--muted)}
+.apx .sd-photo-add{width:132px;height:96px;border:1.5px dashed var(--line);border-radius:9px;background:none;color:var(--gold-deep,#b08f4f);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer}
+.apx .sd-photo-add:hover{border-color:#C9A96E;background:#fdfaf2}
+
+.apx .sd-survey-btn{color:var(--gold-deep,#b08f4f)}
+.apx .sd-survey-link{margin-left:10px;font-size:.72rem;font-weight:700;color:var(--gold-deep,#b08f4f);text-decoration:none;text-transform:none;letter-spacing:0}
+.apx .sd-survey-link:hover{text-decoration:underline}
+.sd-pick{width:100%;max-width:560px;max-height:90vh;overflow-y:auto;background:#fff;border-radius:18px;padding:24px 22px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);color:var(--ink)}
+.sd-pick-x{position:absolute;top:13px;right:15px;background:none;border:none;font-size:1.05rem;color:var(--muted);cursor:pointer;width:30px;height:30px;border-radius:8px}
+.sd-pick-x:hover{background:var(--bg-soft,#f4f4f2)}
+.sd-pick h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.2rem;margin:0 0 14px}
+.sd-pick-fl-nm{font-size:.78rem;font-weight:700;color:var(--muted);margin:10px 0 4px}
+.sd-pick-plan{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg-soft,#f4f4f2)}
+.sd-pick-plan img{display:block;width:100%}
+.sd-pick-noimg{padding:40px;text-align:center;color:var(--muted);font-size:.85rem}
+.sd-pick-dot{position:absolute;transform:translate(-50%,-50%);min-width:26px;height:26px;padding:0 6px;border-radius:13px;border:2px solid #fff;background:#5a6378;color:#fff;font-size:.66rem;font-weight:800;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.4)}
+.sd-pick-dot.on{background:var(--gold-deep,#b08f4f);outline:2px solid var(--gold,#C9A96E);outline-offset:1px}
+.sd-pick-foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:.84rem;color:var(--muted)}
 `;

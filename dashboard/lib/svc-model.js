@@ -134,6 +134,7 @@ export const SVC_OUTCOMES = [
   { key: "warranty",    label: "Warranty" },
   { key: "unable",      label: "Unable to diagnose" },
 ];
+export const SVC_PHOTO_CATEGORIES = ["Reported Issue", "Before", "Damage", "Cable Test", "NVR", "Camera", "Network", "Diagnostic Evidence", "Repair", "After", "Other"];
 export const SVC_BILLING = [
   { key: "repair",     label: "Repair performed" },
   { key: "diagnostic", label: "Diagnostic only" },
@@ -152,7 +153,7 @@ let _n = 0;
 export const newId = (p = "f") => `${p}${Date.now().toString(36)}${(_n++).toString(36)}`;
 
 export function emptyDiagnosis() {
-  return { callType: "Service Call", systems: [], devices: [], findings: [], deviceState: {}, narrative: { incident: "", summary: "", rootCause: "", recommendation: "" }, options: [],
+  return { callType: "Service Call", systems: [], devices: [], findings: [], deviceState: {}, narrative: { incident: "", summary: "", rootCause: "", recommendation: "" }, options: [], photos: [],
     visit: { arrival: null, departure: null, techs: [] }, billing: "repair", recommendations: "", internalNotes: "" };
 }
 export function emptyOption(type = "repair") {
@@ -276,6 +277,8 @@ export function reportSections(call, doc) {
   put("Work performed", findings.flatMap((f) => [...(f.work || []).map((w) => WORK_LABEL[w] || w), f.notes].filter(Boolean)).filter((v, i, a) => a.indexOf(v) === i));
   put("Outcome", findings.filter((f) => f.outcome).map((f) => `${f.deviceIds?.length ? deviceNames(doc, f.deviceIds) + " — " : ""}${OUTCOME_LABEL[f.outcome] || f.outcome}`));
   put("Recommendations", [doc.recommendations, ...findings.map((f) => f.recommendation)].filter((v, i, a) => v && a.indexOf(v) === i));
+  const photos = (doc.photos || []).filter((ph) => ph.url);
+  if (photos.length) S.push({ title: "Photos", photos: photos.map((ph) => ({ url: ph.url, label: [ph.category, ph.caption].filter(Boolean).join(" — ") })) });
   return S;
 }
 
@@ -346,6 +349,13 @@ export function sanitizeDiagnosis(input) {
     warranty: str(o?.warranty, 60), reliability: str(o?.reliability, 60), recommended: !!o?.recommended,
   }));
   if (doc.options.filter((o) => o.recommended).length > 1) doc.options.forEach((o, i) => { o.recommended = i === doc.options.findIndex((x) => x.recommended); });
+  // Photos on the call: each is a /api/media URL with an optional category and caption; a finding link
+  // ties one to a device group. Only known finding ids are kept.
+  const findingIds = new Set(doc.findings.map((f) => f.id));
+  doc.photos = (Array.isArray(input.photos) ? input.photos : []).slice(0, 40).map((ph) => ({
+    url: str(ph?.url, 300), category: SVC_PHOTO_CATEGORIES.includes(ph?.category) ? ph.category : "Other",
+    caption: str(ph?.caption, 120), findingId: findingIds.has(ph?.findingId) ? ph.findingId : null,
+  })).filter((ph) => /^(\/api\/media\/|https?:|data:image)/.test(ph.url));
   return doc;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/admin-shell";
@@ -37,7 +37,7 @@ const EvIcon = ({ kind }) => (
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
 function initials(name) { return (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
-export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [], linkable = [], diagnosis = null, diagnosisSavedAt = null, devices = [], warranty = null }) {
+export default function SvcDetailClient({ user, alerts, call, events = [], diagnostics = [], techs = [], invoice = null, payments = [], rates = [], linkable = [], diagnosis = null, diagnosisSavedAt = null, devices = [], warranty = null, surveyMap = null, autoRun = false }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
   const [note, setNote] = useState("");
@@ -67,6 +67,14 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
   const curIsFix = curNode && curNode.type === "fix";
 
   function openRun() { setRunOpen(true); setTrail([]); setDTitle(""); setDSaved(false); }
+  // Progressive intake: a call created from "+ Service Call" lands here with ?run=1 and drops the tech
+  // straight into "What's the fault?", not a passive overview. Strip the flag so a refresh stays put.
+  useEffect(() => {
+    if (!autoRun) return;
+    openRun();
+    try { const u = new URL(window.location.href); u.searchParams.delete("run"); window.history.replaceState({}, "", u.pathname + u.search); } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function pickTree(entry) {
     const tree = SVC_TECH_TREES[entry.key];
     const nodeId = entry.start || tree.root;
@@ -87,10 +95,14 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
     setTrail(t);
   }
   function runBack() { if (trail.length > 1) { const t = trail.slice(0, -1); t[t.length - 1] = { ...t[t.length - 1], answer: null }; setTrail(t); } }
+  const savedTrailRef = useRef(null);
   function saveRun() {
     if (!curIsFix) return;
-    setDSaving(true);
     const steps = trail.filter((s) => s.answer !== null).map((s) => ({ question: s.question, answer: s.answer }));
+    const sig = JSON.stringify([dTitle, curNode.route, curNode.title, steps]);
+    if (savedTrailRef.current === sig) return;   // already logged this exact outcome (guard the auto-fire)
+    savedTrailRef.current = sig;
+    setDSaving(true);
     const rec = { issue: dTitle, steps, outcome: { route: curNode.route, title: curNode.title, action: curNode.detail }, started: dStarted, completed: new Date().toISOString() };
     startTx(async () => {
       const r = await runStaffDiagnosticAction(call.svc_id, rec);
@@ -98,6 +110,12 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
       if (r?.ok) { setDSaved(true); router.refresh(); }
     });
   }
+  // Owner rule (BUG #41): always log the answer — never ask the tech to press "Log". Reaching an
+  // outcome node saves it automatically; the runner just confirms it was recorded.
+  useEffect(() => {
+    if (runOpen && curIsFix && !dSaved && !dSaving) saveRun();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOpen, curIsFix, cur && cur.node]);
 
   // ---- Billing (admin/manager only — the server never ships the invoice to a tech) ----
   // Smart default: every service call starts at Diagnostic + Roll out (the owner's rate card).
@@ -268,7 +286,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
         </div>
 
         {/* Structured diagnosis — the chain the report and the estimate are built from */}
-        <SvcDiagnose call={call} devices={devices} initialDoc={diagnosis} savedAt={diagnosisSavedAt} user={user} canManage={canManage} rates={rates} warranty={warranty} onEstimate={canManage ? addSuggested : null} />
+        <SvcDiagnose call={call} devices={devices} surveyMap={surveyMap} initialDoc={diagnosis} savedAt={diagnosisSavedAt} user={user} canManage={canManage} rates={rates} warranty={warranty} onEstimate={canManage ? addSuggested : null} />
 
         {/* Billing — admin/manager only. Invoice lifecycle: draft → sent → signed; void to re-bill. */}
         {canManage && (
@@ -377,6 +395,7 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
       {runOpen && (
         <div className="svc-ov" onClick={(e) => { if (e.target === e.currentTarget) setRunOpen(false); }}>
           <div className="svc-run">
+            <button className="svc-run-hback" onClick={() => { if (trail.length > 1) runBack(); else if (cur) openRun(); else setRunOpen(false); }} aria-label="Back">← Back</button>
             <button className="svc-run-x" onClick={() => setRunOpen(false)} aria-label="Close">✕</button>
             {!cur ? (
               <div className="svc-run-pick">
@@ -395,15 +414,12 @@ export default function SvcDetailClient({ user, alerts, call, events = [], diagn
                 <span className="svc-run-badge" style={{ color: (ROUTE[curNode.route] || [])[1], borderColor: ((ROUTE[curNode.route] || [])[1] || "#999") + "55" }}>{SVC_ROUTE_LABEL[curNode.route] || "Result"}</span>
                 <h2>{curNode.title}</h2>
                 <p className="svc-run-detail">{curNode.detail}</p>
-                {dSaved ? (
-                  <div className="svc-run-saved">✓ Logged to this call. <button className="svc-run-ghost" onClick={() => setRunOpen(false)}>Done</button></div>
-                ) : (
-                  <div className="svc-run-acts">
-                    {curNode.goto && <button className="svc-run-cont" onClick={() => jump(curNode.goto)}>Continue → {curNode.goto.tree} check</button>}
-                    <button className="svc-run-save" onClick={saveRun} disabled={dSaving}>{dSaving ? "Logging…" : "Log this check"}</button>
-                    <button className="svc-run-ghost" onClick={openRun}>Start over</button>
-                  </div>
-                )}
+                <div className="svc-run-acts">
+                  <div className="svc-run-logstate">{dSaving ? "Logging…" : dSaved ? "✓ Logged to this call automatically" : ""}</div>
+                  {curNode.goto && <button className="svc-run-cont" onClick={() => jump(curNode.goto)}>Continue → {curNode.goto.tree} check</button>}
+                  <button className="svc-run-save" onClick={openRun}>+ Another issue</button>
+                  <button className="svc-run-ghost" onClick={() => setRunOpen(false)}>Done</button>
+                </div>
               </div>
             ) : (
               <div className="svc-run-q">
@@ -507,9 +523,13 @@ const CSS = `
 .apx-ov,.svc-ov{position:fixed;inset:0;background:rgba(14,19,32,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
 .svc-ov *{box-sizing:border-box}
 .svc-run{width:100%;max-width:470px;background:#fff;border-radius:18px;padding:26px 24px;position:relative;box-shadow:0 30px 80px -30px rgba(14,19,32,.5);max-height:90vh;overflow-y:auto;color:var(--ink)}
+.svc-run-hback{position:absolute;top:13px;left:15px;background:none;border:none;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:8px}
+.svc-run-hback:hover{color:var(--ink);background:var(--bg-soft,#f4f4f2)}
+.svc-run-logstate{font-size:.82rem;font-weight:600;color:#1c8a45;margin-bottom:4px;min-height:18px}
 .svc-run-x{position:absolute;top:13px;right:15px;background:none;border:none;font-size:1.05rem;color:var(--muted);cursor:pointer;width:30px;height:30px;border-radius:8px}
 .svc-run-x:hover{background:var(--bg-soft,#f4f4f2)}
 .svc-run-tag,.svc-run-step{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-deep,#b08f4f);background:#f8f0e0;padding:4px 11px;border-radius:20px;margin-bottom:10px}
+.svc-run{padding-top:34px}
 .svc-run h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.3rem;margin:0 0 8px;line-height:1.2}
 .svc-run-sub{color:var(--muted);font-size:.9rem;margin:0 0 16px}
 .svc-run-entry{width:100%;display:flex;flex-direction:column;gap:2px;text-align:left;padding:14px 15px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;margin-bottom:9px;transition:border-color .15s,background .15s}

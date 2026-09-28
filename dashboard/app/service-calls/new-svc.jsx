@@ -7,6 +7,7 @@ import { createServiceCallAction } from "./actions";
 import { formatPhone, customerMeta } from "../../lib/crm";
 import { SVC_CALL_TYPES } from "../../lib/svc-model";
 import { serviceCodeLabel } from "../../lib/spec";
+import MicButton from "../components/mic-button";
 
 // Staff "+ Service Call": pick the client (CRM search), then one of their systems (projects) so the
 // call inherits customer, contact, address and equipment. Nothing is re-typed; no customer is created.
@@ -40,7 +41,7 @@ export default function NewServiceCall({ onClose, initialCustomer = null, initia
     startTx(async () => {
       const res = await createServiceCallAction({ customerId: client.id, projectAccessId: project || null, issue, callType, priority });
       if (!res?.ok) { setErr(res?.error || "Could not create the call."); return; }
-      onClose?.(); r.push(`/service-calls/${res.svcId}`);
+      onClose?.(); r.push(`/service-calls/${res.svcId}?run=1`);   // land straight in the guided diagnostic
     });
   }
 
@@ -84,7 +85,9 @@ export default function NewServiceCall({ onClose, initialCustomer = null, initia
             <div className="np-f"><label>Priority</label>
               <select className="apx-input" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Priority">{["low", "medium", "high", "urgent"].map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}</select></div>
           </div>
-          <div className="np-f"><label>Issue</label><textarea className="apx-input" rows={2} value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="What's wrong?" required /></div>
+          <div className="np-f"><label>Issue</label>
+            <div className="np-mf"><textarea className="apx-input" rows={2} value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="What's the problem?" required /><span className="np-mf-mic"><MicButton value={issue} onChange={setIssue} size={15} /></span></div>
+          </div>
           {err && <div className="np-err">{err}</div>}
           <button className="np-submit" type="submit" disabled={pending}>{pending ? "Creating…" : "Create Call"}</button>
         </form>
