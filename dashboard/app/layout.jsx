@@ -30,12 +30,14 @@ export const metadata = {
   },
 };
 
-// device-width at 1× (never disable pinch-zoom — accessibility). interactiveWidget resizes the
-// layout viewport when the on-screen keyboard opens, so bottom-anchored UI sits above it (BUG #42).
+// device-width at 1× (never disable pinch-zoom — accessibility). We deliberately do NOT set
+// interactiveWidget=resizes-content: on iPhone that shrank the layout viewport when the keyboard
+// opened, which made a portrait phone read as "landscape" and auto-fullscreened the site survey on
+// every text tap (BUG #42 follow-up). The keyboard overlaying is fine; the 16px input rule is what
+// actually stops the zoom/shift.
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({ children }) {

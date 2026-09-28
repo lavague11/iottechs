@@ -116,14 +116,25 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // inline view (their landscape viewport is tall enough).
   const autoFsRef = useRef(false);
   useEffect(() => {
-    const mq = window.matchMedia("(orientation: landscape) and (max-height: 600px)");
+    // A genuine landscape phone — judged by the PHYSICAL device orientation (screen.orientation),
+    // never by viewport height. The old height-based media query fired when the keyboard shrank a
+    // portrait viewport, auto-fullscreening the survey on every text tap and hiding the field.
+    const isLandscapePhone = () => {
+      const ot = window.screen?.orientation?.type;
+      const landscape = ot ? ot.startsWith("landscape") : window.matchMedia("(orientation: landscape)").matches;
+      const short = Math.min(window.screen?.width || 9999, window.screen?.height || 9999) <= 600;   // phone-class, from the device, not the viewport
+      const touch = window.matchMedia("(pointer: coarse)").matches;
+      return landscape && short && touch;
+    };
     const sync = () => {
-      if (mq.matches) setFs((cur) => { if (!cur) autoFsRef.current = true; return true; });
+      if (isLandscapePhone()) setFs((cur) => { if (!cur) autoFsRef.current = true; return true; });
       else if (autoFsRef.current) { autoFsRef.current = false; setFs(false); }
     };
     sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
+    const oc = window.screen?.orientation;
+    oc?.addEventListener?.("change", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => { oc?.removeEventListener?.("change", sync); window.removeEventListener("orientationchange", sync); };
   }, []);
 
   // Full-screen overlay: lock page scroll + Esc to exit.
