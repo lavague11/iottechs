@@ -30,6 +30,12 @@ export default async function GuidePage({ params, searchParams }) {
   const ref = String(sp?.project || "").trim();
   const tok = String(sp?.t || "").trim();
 
+  // The app password is "Cam" + the project ZIP. Resolve it from the project's address whenever we
+  // know which project this is (BUG #38) — the ZIP comes from the address, not the sensitive system
+  // QR, so it can show even before the QR is unlocked, instead of the "Cam + your ZIP" placeholder.
+  let projectZip = "";
+  if (ref) { const j = getJobByAccessId(ref); projectZip = (String(j?.address || "").match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || ""; }
+
   // Signed-in visitors get sent back into the app when they finish; a visitor on a texted link
   // has no dashboard to return to, so they get the standalone finish card instead.
   const sessionTok = (await cookies()).get("iot_session")?.value;
@@ -77,6 +83,7 @@ export default async function GuidePage({ params, searchParams }) {
       flow={guide.flow}
       projects={projects}
       projectRef={ref}
+      projectZip={projectZip}
       loggedIn={loggedIn}
     />
   );

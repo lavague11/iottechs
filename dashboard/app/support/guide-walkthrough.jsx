@@ -8,7 +8,7 @@ import UnlockPatternReveal from "./unlock-pattern-reveal";
 // QR?) BEFORE any phone appears, then the phone-framed steps. Each step shows a real screenshot
 // (step.image) if present, otherwise an animated scene (step.art). Generic — any guide article
 // renders through this; the intro questions are specific to the mobile-app setup by design.
-export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, loggedIn = false, onUnlock, onClose }) {
+export default function GuideWalkthrough({ title = "Setup Guide", intro, steps = [], flow = {}, projects = [], projectRef, projectZip = "", loggedIn = false, onUnlock, onClose }) {
   // Which extra screens this guide uses. A plain how-to guide turns them all off and is just steps.
   const askPlatform = !!flow.askPlatform;
   const needsSystemFlag = !!flow.needsSystem;
@@ -55,7 +55,9 @@ export default function GuideWalkthrough({ title = "Setup Guide", intro, steps =
     return () => mq.removeEventListener?.("change", apply);
   }, []);
   // App password = "Cam" + the system's ZIP, so we can get in during the first week of tuning.
-  const zip = system?.zip || (projects || []).find((p) => p.zip)?.zip || "";
+  // When the guide is opened from a specific project (?project=), that project's own ZIP — resolved
+  // from its address server-side — is authoritative for the password, ahead of any auto-picked system.
+  const zip = projectZip || system?.zip || (projects || []).find((p) => p.zip)?.zip || "";
   const password = zip ? `Cam${zip}` : "Cam + your ZIP";
 
   const go = (n) => { setDir(n > i ? 1 : -1); setI(Math.max(0, Math.min(total - 1, n))); };
