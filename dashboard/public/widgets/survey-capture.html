@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <title>Site Survey — Capture</title>
 <style>
   /* reference minimal system: white ground, ink, hairlines, black pills */
@@ -141,6 +141,8 @@
   #promptBox .row{display:flex;gap:8px;align-items:center}
   #promptBox .row .spacer{flex:1}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
 

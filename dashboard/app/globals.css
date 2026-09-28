@@ -914,3 +914,14 @@ td .val, .val { color: var(--tech); font-weight: bold; }
 
 /* Google Places Autocomplete dropdown — above modal overlays (z-index 200). */
 .pac-container{z-index:100000 !important;border-radius:10px;box-shadow:0 12px 32px rgba(14,19,32,.18);font-family:inherit}
+
+/* iOS auto-zooms the page when a focused field renders below 16px, which shifts the layout
+   sideways and buries the field behind the keyboard (BUG #42). Force 16px on phones so tapping
+   any text box stays put. Applies to every form control across the app; checkboxes/radios/
+   ranges/colors are unaffected by font-size and left alone. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea,
+  [contenteditable] { font-size: 16px !important; }
+}

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <title>IOT TECHS — CCTV Mockup</title>
 <style>
   :root{--gold:#C9A96E;--ink:#1A1A1A;--line:#d9dce1;--soft:#ECEEF1;--green:#2a9d54}
@@ -148,6 +148,8 @@
   .cvlbcap{color:#fff;font-size:15px;font-weight:bold;letter-spacing:.06em}
   @media(max-width:680px){.cvg.cols3,.cvg.cols4{grid-template-columns:repeat(2,1fr)}}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
 <div class="topbar">

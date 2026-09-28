@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>ADT Tool · IOT TECHS</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
@@ -281,6 +281,8 @@ body.embed .sticky{border-radius:0}
 body.ro .step,body.ro .rate button,body.ro #search,body.ro .chkbox,body.ro #cGiven,body.ro #cGivenRep,body.ro .qb,body.ro [data-bs]{pointer-events:none;opacity:.85}
 body.ro .step input,body.ro .rate input{background:#f4f1ea}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
 

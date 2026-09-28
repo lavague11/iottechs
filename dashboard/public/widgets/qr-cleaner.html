@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <title>IOT TECHS — QR Cleaner</title>
 <style>
   :root{ --ink:#0B0F1A; --slate:#2C3347; --cream:#FAF8F4; --gold:#C9A96E; --gray:#8A8F9C; }
@@ -77,6 +77,8 @@
     border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:8px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
 

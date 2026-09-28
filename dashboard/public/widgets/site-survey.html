@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <title>Site Survey — Camera & Device Placement</title>
 <style>
   :root{
@@ -304,6 +304,8 @@
   .ss-panel{display:none;margin-top:8px;border:1px solid var(--slate-line);border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.18);}
   .ss-widget.open .ss-panel{display:block;}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
 <div class="wrap">

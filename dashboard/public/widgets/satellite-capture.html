@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <title>Satellite Capture</title>
 <style>
   :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--r:10px;
@@ -202,6 +202,8 @@
   /* Google Places autocomplete dropdown — above everything */
   .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
 </style>
+<style id="ios-zoom-fix">/* BUG #42: iOS zooms + shifts the page when a focused field is under 16px. Keep tapping a text box from moving the screen on iPhone. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,[contenteditable]{font-size:16px!important}}</style>
 </head>
 <body>
   <div class="head">

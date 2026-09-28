@@ -30,6 +30,14 @@ export const metadata = {
   },
 };
 
+// device-width at 1× (never disable pinch-zoom — accessibility). interactiveWidget resizes the
+// layout viewport when the on-screen keyboard opens, so bottom-anchored UI sits above it (BUG #42).
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
+
 export default async function RootLayout({ children }) {
   // Error-context capture runs for staff only — read the session token here and gate the probe.
   let staff = false;
