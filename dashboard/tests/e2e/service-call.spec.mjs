@@ -1,6 +1,9 @@
 // Service call — structured diagnostic chain, e2e. Creates a call from the staff modal for a client
-// with a surveyed system, diagnoses four cameras as one PoE-switch finding, generates the estimate,
+// with a surveyed system, diagnoses four cameras as one PoE-switch issue, generates the estimate,
 // signs, and checks the report. Calls it creates carry the issue prefix "E2E SVC" for cleanup.
+//
+// The diagnosis UI is progressive-disclosure: at rest each field is a compact row and the choices open
+// in a selector sheet (.sd-sel) only when the row is tapped — so this drives sheets, not pill walls.
 import { test, expect } from "@playwright/test";
 
 const LOGIN = { email: process.env.E2E_EMAIL || "manager@iot-techs.com", password: process.env.E2E_PASSWORD || "password" };
@@ -28,7 +31,34 @@ async function dismissRunner(page) {
   const x = page.locator(".svc-run-x");
   if (await x.isVisible().catch(() => false)) { await x.click(); await page.locator(".svc-run").waitFor({ state: "hidden", timeout: 5000 }).catch(() => {}); }
 }
-const chip = (scope, text) => scope.locator(".sd-chip", { hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(PASS|FAIL|NOT TESTED)?$`) });
+
+// --- New-UI diagnosis helpers (each field opens a .sd-sel sheet) ---------------------------------
+const issueBody = (sd) => sd.locator(".sd-issue-b");
+async function addIssue(sd) { await sd.getByRole("button", { name: "+ Issue", exact: true }).click(); await sd.locator(".sd-issue-b").first().waitFor(); }
+async function pick(page, opener, option, { multi = false } = {}) {
+  await opener.click();
+  const sh = page.locator(".sd-sel");
+  await sh.waitFor({ state: "visible" });
+  await sh.getByRole("button", { name: option, exact: true }).click();
+  if (multi) await sh.getByRole("button", { name: "Done", exact: true }).click();
+  await sh.waitFor({ state: "hidden" });
+}
+async function addTest(page, sd, name) {
+  await sd.getByRole("button", { name: "Tests", exact: true }).click();
+  const sh = page.locator(".sd-sel");
+  await sh.waitFor({ state: "visible" });
+  await sh.getByRole("button", { name, exact: true }).click();   // adds the test (NOT TESTED) and closes
+  await sh.waitFor({ state: "hidden" });
+}
+async function pickDevices(page, sd, indices) {
+  await issueBody(sd).getByRole("button", { name: "Affected", exact: true }).click();
+  const sh = page.locator(".sd-sel");
+  await sh.waitFor({ state: "visible" });
+  const optb = sh.locator(".sd-sel-opt");
+  for (const i of indices) await optb.nth(i).click();
+  await sh.getByRole("button", { name: "Done", exact: true }).click();
+  await sh.waitFor({ state: "hidden" });
+}
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 
@@ -67,30 +97,30 @@ test("bulk diagnosis → autosave/reload → estimate from the rate card → sig
   const svcUrl = page.url();
   const sd = page.locator(".sd");
 
-  // Chain: system → finding → four devices → symptom → tests → root cause → outcome
-  await chip(sd.locator(".sd-sec").first(), "Cameras / CCTV").click();
-  await sd.getByRole("button", { name: "+ Finding" }).click();
-  const fb = sd.locator(".sd-find-b");
-  const devs = fb.locator(".sd-step").nth(0).locator(".sd-chip");
-  const n = await devs.count();
-  for (let i = 1; i < Math.min(n, 5); i++) await devs.nth(i).click();         // cameras 2..5 (skip the first)
-  await chip(fb.locator(".sd-step").nth(1), "Offline").click();
-  await chip(fb.locator(".sd-step").nth(2), "Camera direct-connect").click();           // PASS
-  await chip(fb.locator(".sd-step").nth(2), "Verify PoE").click();                      // PASS
-  await chip(fb.locator(".sd-step").nth(2), "Verify PoE").click();                      // FAIL
-  await expect(fb.locator(".sd-chip.r-FAIL")).toHaveCount(1);
-  await chip(fb.locator(".sd-step").nth(3), "PoE switch").click();
-  await fb.getByPlaceholder("Recommendation").fill("Replace 8-port PoE switch.");
-  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("needs_replace");
+  // Chain: issue → four devices → symptom → tests → root cause → outcome
+  await addIssue(sd);
+  await pickDevices(page, sd, [1, 2, 3, 4]);                                   // cameras 2..5 (skip the first)
+  await pick(page, issueBody(sd).getByRole("button", { name: "Symptom", exact: true }), "Offline", { multi: true });
+  await addTest(page, sd, "Camera direct-connect");
+  await sd.locator(".sd-test-r").nth(0).click();                              // NOT TESTED → PASS
+  await addTest(page, sd, "Verify PoE");
+  await sd.locator(".sd-test-r").nth(1).click();                             // → PASS
+  await sd.locator(".sd-test-r").nth(1).click();                             // → FAIL
+  await expect(sd.locator(".sd-test-r.r-FAIL")).toHaveCount(1);
+  await pick(page, issueBody(sd).getByRole("button", { name: "Root cause", exact: true }), "PoE switch", { multi: true });
+  await issueBody(sd).getByPlaceholder(/Recommendation/).fill("Replace 8-port PoE switch.");
+  await pick(page, issueBody(sd).getByRole("button", { name: "Outcome", exact: true }), "Needs replacement");
+  await sd.locator(".sd-more").click();                                       // reveal Type / Billing / manual times
   await sd.locator('input[type="time"]').nth(0).fill("09:15");
   await sd.locator('input[type="time"]').nth(1).fill("11:40");
-  await expect(sd.locator(".sd-f em")).toHaveText("2h 25m");                  // time on site computed
+  await expect(sd.locator(".sd-visit-t em")).toContainText("2h 25m");         // time on site computed
   await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 }); // autosaved server-side
-  await expect(sd.locator(".sd-find-h b")).toContainText("Offline · PoE switch · Needs replacement");
+  await expect(sd.locator(".sd-issue-sum").first()).toContainText("Offline");
+  await expect(sd.locator(".sd-issue-sum").first()).toContainText("Needs replacement");
 
   // Reload: the diagnosis comes back from the server
   await page.reload();
-  await expect(sd.locator(".sd-find-h b")).toContainText("PoE switch · Needs replacement");
+  await expect(sd.locator(".sd-issue-sum").first()).toContainText("PoE switch");
   await expect(sd.getByRole("button", { name: "Follow-up" })).toBeVisible();
 
   // Estimate: base visit + the switch (no camera hardware), priced by the office
@@ -109,7 +139,7 @@ test("bulk diagnosis → autosave/reload → estimate from the rate card → sig
   await sd.locator(".sd-sign input").fill("Test Customer");
   await sd.getByRole("button", { name: "Sign · customer" }).click();
   await expect(sd.locator(".sd-locked")).toContainText("customer Test Customer");
-  await expect(sd.getByRole("combobox", { name: "System" }).first()).toBeDisabled();
+  await expect(sd.locator(".sd-fr").first()).toBeDisabled();                  // locked: fields no longer editable
 
   await page.goto(svcUrl.replace(/\/?$/, "/report"));
   const doc = page.locator(".sr");
@@ -144,16 +174,16 @@ test("a warranty visit suggests no charges; ISP root cause suggests the visit on
   await page.waitForURL(/\/service-calls\/SVC/);
   await dismissRunner(page);
   const sd = page.locator(".sd");
-  await chip(sd.locator(".sd-sec").first(), "Network / Internet").click();
-  await sd.getByRole("button", { name: "+ Finding" }).click();
-  const fb = sd.locator(".sd-find-b");
-  await chip(fb.locator(".sd-step").nth(1), "ISP offline").click();
-  await chip(fb.locator(".sd-step").nth(3), "ISP").click();
-  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("third_party");
+  await addIssue(sd);
+  await pick(page, issueBody(sd).getByRole("button", { name: "System", exact: true }), "Network / Internet");
+  await pick(page, issueBody(sd).getByRole("button", { name: "Symptom", exact: true }), "ISP offline", { multi: true });
+  await pick(page, issueBody(sd).getByRole("button", { name: "Root cause", exact: true }), "ISP", { multi: true });
+  await pick(page, issueBody(sd).getByRole("button", { name: "Outcome", exact: true }), "Third-party / ISP issue");
   await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
   await expect(sd.getByRole("button", { name: "Estimate" })).toHaveAttribute("title", "1× Diagnostic, 1× Roll out");
-  await sd.getByRole("combobox").first().selectOption("Warranty Visit");
-  await sd.locator("select").nth(1).selectOption("warranty");
+  await sd.locator(".sd-more").click();
+  await sd.locator(".sd-meta select").nth(0).selectOption("Warranty Visit");
+  await sd.locator(".sd-meta select").nth(1).selectOption("warranty");
   await expect(sd.getByRole("button", { name: "Estimate" })).toHaveCount(0);   // nothing to bill
 });
 
@@ -183,20 +213,18 @@ test("document: mixed OK/FAIL devices, cause badges, repair vs replace, cost com
   await expect(page.locator(".sr-sec-t", { hasText: "Acceptance" })).toHaveCount(0);
 
   await page.goto(url);
-  await chip(sd.locator(".sd-sec").first(), "Cameras / CCTV").click();
-  await sd.getByRole("button", { name: "+ Finding" }).click();
-  const fb = sd.locator(".sd-find-b");
-  const devs = fb.locator(".sd-step").nth(0).locator(".sd-chip");
-  await devs.nth(1).click(); await devs.nth(2).click();                      // two cameras in one cable finding
-  await chip(fb.locator(".sd-step").nth(1), "No video").click();
-  await chip(fb.locator(".sd-step").nth(3), "Cable").click();
-  await fb.getByPlaceholder("Finding").fill("Cables pulled from the pole bundle.");
-  const per = fb.locator(".sd-step", { has: page.locator(".sd-lab", { hasText: "Per device" }) });
+  await addIssue(sd);
+  await pickDevices(page, sd, [1, 2]);                                        // two cameras in one cable issue
+  await pick(page, issueBody(sd).getByRole("button", { name: "Symptom", exact: true }), "No video", { multi: true });
+  await pick(page, issueBody(sd).getByRole("button", { name: "Root cause", exact: true }), "Cable", { multi: true });
+  await issueBody(sd).getByPlaceholder(/Finding/).fill("Cables pulled from the pole bundle.");
+  const per = issueBody(sd).locator(".sd-perdev");
+  await per.locator("summary").click();
   await expect(per.locator(".sd-devrow")).toHaveCount(2);
   await per.locator(".sd-devrow").nth(0).locator("select").selectOption("FAILED");
   await per.locator(".sd-devrow").nth(0).getByPlaceholder("Cable").fill("Visible pull damage");
   await per.locator(".sd-devrow").nth(1).locator("select").selectOption("RESTORED");
-  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("needs_replace");
+  await pick(page, issueBody(sd).getByRole("button", { name: "Outcome", exact: true }), "Needs replacement");
   await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
   await expect(sd.locator(".sd-link")).toHaveText("Diagnostic");                // no money yet → diagnostic document
 
@@ -246,12 +274,11 @@ test("document: mixed OK/FAIL devices, cause badges, repair vs replace, cost com
 test("document: ISP-only call is a one-page diagnostic with no comparison, no charges beyond the visit", async ({ page }) => {
   const url = await createCall(page, "E2E SVC: remote viewing down");
   const sd = page.locator(".sd");
-  await chip(sd.locator(".sd-sec").first(), "Network / Internet").click();
-  await sd.getByRole("button", { name: "+ Finding" }).click();
-  const fb = sd.locator(".sd-find-b");
-  await chip(fb.locator(".sd-step").nth(1), "ISP offline").click();
-  await chip(fb.locator(".sd-step").nth(3), "ISP").click();
-  await fb.getByRole("combobox", { name: "Outcome" }).selectOption("third_party");
+  await addIssue(sd);
+  await pick(page, issueBody(sd).getByRole("button", { name: "System", exact: true }), "Network / Internet");
+  await pick(page, issueBody(sd).getByRole("button", { name: "Symptom", exact: true }), "ISP offline", { multi: true });
+  await pick(page, issueBody(sd).getByRole("button", { name: "Root cause", exact: true }), "ISP", { multi: true });
+  await pick(page, issueBody(sd).getByRole("button", { name: "Outcome", exact: true }), "Third-party / ISP issue");
   await expect(sd.locator(".sd-save")).toHaveText(/Saved/, { timeout: 10000 });
   await page.goto(url + "/report");
   await expect(page.locator(".sr-type")).toHaveText("Service Diagnostic");

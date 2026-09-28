@@ -253,6 +253,67 @@ export function suggestEstimate(doc, rates = []) {
   return [...lines.values()].map((l) => ({ ...l, qty: Math.min(l.qty, 99) }));
 }
 
+// ---- Deterministic diagnostic suggestions ------------------------------------------------------
+// Rank the EXISTING taxonomy by system / symptom / failed test — never invent options, never call a
+// model. The selector shows these first ("Suggested") with the full list underneath.
+export function suggestSymptoms(system) { return (SVC_SYMPTOMS[system] || []).filter((s) => s !== "Other").slice(0, 6); }
+
+const SYMPTOM_TEST_HINTS = {
+  "Offline": ["verify_poe", "continuity", "swap_poe", "cam_direct", "ping"],
+  "No video": ["swap_channel", "cam_direct", "verify_poe", "continuity"],
+  "No power": ["verify_poe", "voltage", "swap_poe"],
+  "Intermittent": ["continuity", "reterminate", "cable_tester", "verify_poe"],
+  "Cameras offline": ["verify_poe", "nvr_reboot", "swap_poe", "ping"],
+  "No recording": ["hdd_health", "recording", "nvr_reboot"],
+  "Missing playback": ["playback", "hdd_health", "recording"],
+  "Hard drive error": ["hdd_health", "recording"],
+  "ISP offline": ["internet", "ping", "speed"],
+  "Router offline": ["lan", "ping", "internet"],
+  "Live view fails": ["remote", "internet", "ping"],
+  "Playback fails": ["playback", "remote"],
+};
+export function suggestTests(system, symptoms = []) {
+  const inSystem = SVC_TESTS.filter((t) => t.systems.includes(system)).map((t) => t.key);
+  const hinted = [];
+  for (const s of symptoms) for (const k of SYMPTOM_TEST_HINTS[s] || []) if (inSystem.includes(k) && !hinted.includes(k)) hinted.push(k);
+  return [...hinted, ...inSystem.filter((k) => !hinted.includes(k))];
+}
+
+const TEST_FAIL_CAUSE = { continuity: ["cable", "termination"], cable_tester: ["cable", "termination"], reterminate: ["termination"], verify_poe: ["poe_port", "poe_switch"], voltage: ["power"], ping: ["lan", "netconfig"], internet: ["isp"], lan: ["lan", "router"], hdd_health: ["hdd"], swap_camera: ["camera_hw"], swap_channel: ["nvr_hw", "camera_hw"] };
+const SYMPTOM_CAUSE_HINTS = {
+  "Offline": ["cable", "termination", "poe_port", "camera_hw"],
+  "No power": ["poe_port", "power", "cable"],
+  "No video": ["camera_hw", "cable", "nvr_hw"],
+  "Intermittent": ["termination", "cable", "poe_port"],
+  "ISP offline": ["isp"], "Router offline": ["router", "lan"],
+  "Hard drive error": ["hdd"], "No recording": ["hdd", "nvr_hw"],
+};
+export function suggestRootCauses(system, symptoms = [], tests = []) {
+  const out = [];
+  const push = (k) => { if (k && !out.includes(k)) out.push(k); };
+  for (const t of tests || []) if (t.result === "FAIL") (TEST_FAIL_CAUSE[t.key] || []).forEach(push);
+  for (const s of symptoms || []) (SYMPTOM_CAUSE_HINTS[s] || []).forEach(push);
+  return [...out, ...SVC_ROOT_CAUSES.map((c) => c.key).filter((k) => !out.includes(k))];
+}
+
+const CAUSE_WORK_HINTS = {
+  cable: ["cable", "reterminated"], termination: ["reterminated", "connector"], poe_port: ["poe_port"], poe_switch: ["switch"],
+  camera_hw: ["camera"], nvr_hw: ["nvr"], hdd: ["hdd"], power: ["connector"], firmware: ["firmware"], credentials: ["credentials"],
+  netconfig: ["network"], lan: ["network"], router: ["network"], cloud: ["remote"], display: ["other"],
+};
+export function suggestWork(rootCauses = []) {
+  const out = [];
+  for (const c of rootCauses || []) for (const w of CAUSE_WORK_HINTS[c] || []) if (!out.includes(w)) out.push(w);
+  return [...out, ...SVC_WORK.map((w) => w.key).filter((k) => !out.includes(k))];
+}
+
+// The one-line story of an issue for its collapsed header: "Camera 4 · Offline → Cable → Restored".
+export function issueLine(doc, f) {
+  const dev = (f.deviceIds || []).map((id) => (doc.devices || []).find((d) => d.id === id)?.label?.split(" — ")[0] || id).join(", ");
+  const chain = [f.symptoms[0] || f.observed, f.rootCauses.map((c) => CAUSE_LABEL[c]).join(" + "), OUTCOME_LABEL[f.outcome]].filter(Boolean).join(" → ");
+  return { dev, chain };
+}
+
 // ---- Report -------------------------------------------------------------------------------------
 // Customer-facing sections from the same document. Internal notes never appear here.
 const join = (arr, sep = ", ") => arr.filter(Boolean).join(sep);
@@ -315,7 +376,7 @@ export function sanitizeDiagnosis(input) {
       system,
       symptoms: [...new Set((Array.isArray(f?.symptoms) ? f.symptoms : []).filter((s) => allowed.has(s)))],
       observed: str(f?.observed, 600),
-      tests: (Array.isArray(f?.tests) ? f.tests : []).filter((t) => testKeys.has(t?.key)).slice(0, 40).map((t) => ({ key: t.key, result: SVC_TEST_RESULTS.includes(t.result) ? t.result : "NOT TESTED", note: str(t.note, 200) })),
+      tests: (Array.isArray(f?.tests) ? f.tests : []).filter((t) => testKeys.has(t?.key)).slice(0, 40).map((t) => ({ key: t.key, result: SVC_TEST_RESULTS.includes(t.result) ? t.result : "NOT TESTED", note: str(t.note, 200), at: str(t.at, 40) || "" })),
       rootCauses: [...new Set((Array.isArray(f?.rootCauses) ? f.rootCauses : []).filter((c) => causeKeys.has(c)))],
       finding: str(f?.finding, 800),
       recommendation: str(f?.recommendation, 600),
@@ -476,7 +537,9 @@ export function documentModel({ call, doc, invoice = null, payments = [], warran
 
   const incident = doc.narrative?.incident || [call.issue, ...findings.map((f) => f.observed)].filter(Boolean).join(" ");
   put("INCIDENT", doc.billing === "warranty" ? "Reported Issue" : "Incident", incident ? { text: incident } : null);
-  const sys = rows[0]?.system || (doc.systems || [])[0] || "other";
+  // Column set follows the primary diagnosed system (the first finding), not whichever device sorts
+  // first — so per-device columns are correct even when no call-level system was picked.
+  const sys = (findings[0]?.system) || rows[0]?.system || (doc.systems || [])[0] || "other";
   const fields = moduleFields(sys);
   put("EQUIPMENT_FINDINGS", `Per-${sys === "cctv" ? "Camera" : "Device"} Findings`, rows.length ? { columns: fields, rows } : null);
   put("SUMMARY", "Summary", (doc.narrative?.summary || autoSummary(doc)) ? { text: doc.narrative?.summary || autoSummary(doc) } : null);

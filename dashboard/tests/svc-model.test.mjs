@@ -2,7 +2,7 @@
 // the project record, time on site, the customer-facing report, and boundary sanitizing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyDiagnosis, emptyFinding, devicesFromCameras, suggestEstimate, warrantyStatus, timeOnSite, reportSections, needsFollowUp, sanitizeDiagnosis, stableJson, SVC_SYMPTOMS, SVC_SYSTEMS } from "../lib/svc-model.js";
+import { emptyDiagnosis, emptyFinding, devicesFromCameras, suggestEstimate, warrantyStatus, timeOnSite, reportSections, needsFollowUp, sanitizeDiagnosis, stableJson, SVC_SYMPTOMS, SVC_SYSTEMS, suggestSymptoms, suggestTests, suggestRootCauses, suggestWork, issueLine } from "../lib/svc-model.js";
 import { SVC_RATES } from "../lib/spec.js";
 
 const cams = [{ tag: "IC1", label: "IC1 — Front Door" }, { tag: "IC2", label: "IC2 — Lobby" }, { tag: "IC3", label: "IC3 — Bay" }, { tag: "IC4", label: "IC4 — Lot" }];
@@ -94,10 +94,45 @@ test("sanitize keeps only known devices/symptoms/causes and caps text", () => {
   const f = doc.findings[0];
   assert.deepEqual(f.deviceIds, ["cam:1"]);
   assert.deepEqual(f.symptoms, ["Offline"]);
-  assert.deepEqual(f.tests, [{ key: "ping", result: "NOT TESTED", note: "" }]);
+  assert.deepEqual(f.tests, [{ key: "ping", result: "NOT TESTED", note: "", at: "" }]);
   assert.deepEqual(f.rootCauses, ["cable"]);
   assert.deepEqual(f.work, ["reboot"]);
   assert.equal(f.finding.length, 800);
   assert.equal(doc.billing, "diagnostic");
   assert.equal(stableJson({ b: 1, a: [2, { d: 1, c: 2 }] }), stableJson({ a: [2, { c: 2, d: 1 }], b: 1 }));
+});
+
+test("deterministic suggestions rank the taxonomy by system / symptom / failed test", () => {
+  // Symptom suggestions are the head of the system's list, minus the Other escape hatch.
+  const sym = suggestSymptoms("cctv");
+  assert.ok(sym.length && sym.length <= 6 && !sym.includes("Other"));
+  // A CCTV camera Offline should surface PoE + continuity first, and every returned key is a real test.
+  const tests = suggestTests("cctv", ["Offline"]);
+  assert.deepEqual(tests.slice(0, 3), ["verify_poe", "continuity", "swap_poe"]);
+  assert.equal(new Set(tests).size, tests.length, "no duplicate test keys");
+  // A failed continuity test points root-cause at cable / termination before anything else.
+  const causes = suggestRootCauses("cctv", ["Offline"], [{ key: "continuity", result: "FAIL" }]);
+  assert.deepEqual(causes.slice(0, 2), ["cable", "termination"]);
+  // Root cause → the matching repair work first.
+  assert.equal(suggestWork(["termination"])[0], "reterminated");
+  // Every suggestion list is exhaustive (the full taxonomy is still reachable, just re-ranked).
+  assert.equal(new Set(causes).size, causes.length);
+});
+
+test("test recheck keeps history: two entries for one test key both survive sanitize", () => {
+  const doc = emptyDiagnosis();
+  doc.devices = [{ id: "cam:4", label: "Camera 4", kind: "camera" }];
+  const f = emptyFinding("cctv", ["cam:4"]);
+  f.tests = [{ key: "continuity", result: "FAIL", note: "open pair", at: "10:18" }, { key: "continuity", result: "PASS", note: "", at: "10:43" }];
+  f.symptoms = ["Offline"]; f.rootCauses = ["termination"]; f.outcome = "repaired";
+  doc.findings = [f];
+  const clean = sanitizeDiagnosis(doc);
+  const kept = clean.findings[0].tests;
+  assert.equal(kept.length, 2);
+  assert.deepEqual(kept.map((t) => t.result), ["FAIL", "PASS"]);
+  assert.deepEqual(kept.map((t) => t.at), ["10:18", "10:43"]);
+  // The collapsed one-liner tells the whole story.
+  const { dev, chain } = issueLine(clean, clean.findings[0]);
+  assert.equal(dev, "Camera 4");
+  assert.equal(chain, "Offline → Termination / RJ45 → Repaired");
 });
