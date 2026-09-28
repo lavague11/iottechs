@@ -116,15 +116,18 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // inline view (their landscape viewport is tall enough).
   const autoFsRef = useRef(false);
   useEffect(() => {
-    // A genuine landscape phone — judged by the PHYSICAL device orientation (screen.orientation),
-    // never by viewport height. The old height-based media query fired when the keyboard shrank a
-    // portrait viewport, auto-fullscreening the survey on every text tap and hiding the field.
+    // A genuine landscape phone — only when the PHYSICAL orientation (screen.orientation, which the
+    // keyboard never changes) AND the actual viewport aspect BOTH say landscape. Requiring both defeats
+    // two false positives: the on-screen keyboard shrinking a portrait viewport (physical stays
+    // portrait) and device emulators that report the host monitor's orientation (viewport stays
+    // portrait). Either alone used to auto-fullscreen the survey on every text tap and hide the field.
     const isLandscapePhone = () => {
-      const ot = window.screen?.orientation?.type;
-      const landscape = ot ? ot.startsWith("landscape") : window.matchMedia("(orientation: landscape)").matches;
-      const short = Math.min(window.screen?.width || 9999, window.screen?.height || 9999) <= 600;   // phone-class, from the device, not the viewport
+      const ot = window.screen?.orientation?.type || "";
+      const physLandscape = ot ? ot.startsWith("landscape") : true;             // unknown → don't veto on it
+      const viewLandscape = window.matchMedia("(orientation: landscape)").matches;
+      const short = Math.min(window.innerWidth, window.innerHeight) <= 600;      // phone-class short side
       const touch = window.matchMedia("(pointer: coarse)").matches;
-      return landscape && short && touch;
+      return physLandscape && viewLandscape && short && touch;
     };
     const sync = () => {
       if (isLandscapePhone()) setFs((cur) => { if (!cur) autoFsRef.current = true; return true; });
@@ -132,9 +135,11 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     };
     sync();
     const oc = window.screen?.orientation;
+    const omq = window.matchMedia("(orientation: landscape)");
     oc?.addEventListener?.("change", sync);
+    omq.addEventListener?.("change", sync);
     window.addEventListener("orientationchange", sync);
-    return () => { oc?.removeEventListener?.("change", sync); window.removeEventListener("orientationchange", sync); };
+    return () => { oc?.removeEventListener?.("change", sync); omq.removeEventListener?.("change", sync); window.removeEventListener("orientationchange", sync); };
   }, []);
 
   // Full-screen overlay: lock page scroll + Esc to exit.

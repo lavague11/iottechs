@@ -12,6 +12,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
   const [confirmDel, setConfirmDel] = useState(null);
   const [capture, setCapture] = useState(-1);     // rapid-capture index into the current floor's cameras
   const [lightbox, setLightbox] = useState(null);
+  const [editingId, setEditingId] = useState(null); // device whose name is being edited inline
+  const [menuId, setMenuId] = useState(null);       // device whose ⋯ menu is open
   const [aiIds, setAiIds] = useState(() => new Set());  // cameras currently being AI-named
   const [aiAll, setAiAll] = useState(null);             // {done,total} while auto-naming every camera
   const fileRef = useRef(null);
@@ -146,56 +148,72 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                 )}
                 {isCur ? (
                   <div className="sd-grid">
-                    {f.devices.map((d, i) => (
-                      <div key={d.id ?? i} className="sd-card"
-                        onMouseEnter={() => cmd({ cmd: "hover", id: d.id })}
-                        onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
-                        <div className="sd-r1">
-                          <span className="sd-chip" style={{ background: d.color }} title="Show on plan" onClick={() => cmd({ cmd: "select", id: d.id })}>{d.tag || (i + 1)}</span>
-                          {locked
-                            ? <span className="sd-nm sd-nm-static">{label(d, i)}</span>
-                            : <input key={d.name} className="sd-nm" defaultValue={d.name} spellCheck={false}
-                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                                onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); }} />}
-                          {!locked && d.k === "cam" && d.photo && (
-                            <button className="sd-ai" title="Auto-name from photo" disabled={aiIds.has(d.id) || !!aiAll}
-                              onClick={() => nameOne(d, curDevices.map((x) => (x.name || "").trim()).filter(Boolean))}>
-                              {aiIds.has(d.id)
-                                ? <svg className="sd-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>
-                                : <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z" /><path d="M18.5 13l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>}
-                            </button>
-                          )}
-                          {!locked && (confirmDel === d.id ? (
-                            <span className="sd-confirm">
-                              <button className="sd-del yes" onClick={() => { cmd({ cmd: "delete", id: d.id }); setConfirmDel(null); }}>Delete</button>
-                              <button className="sd-del no" onClick={() => setConfirmDel(null)}>×</button>
-                            </span>
-                          ) : (
-                            <button className="sd-x" title="Delete device" onClick={() => setConfirmDel(d.id)}>×</button>
-                          ))}
-                        </div>
-                        {d.k === "cam" && (
-                          <div className="sd-pv">
-                            {d.busy || busyId === d.id ? (
-                              <button className="sd-btn" disabled>Adding photo…</button>
-                            ) : d.photo ? (
-                              // Submitted → the photo is view-only (tap to enlarge); no Replace/Remove until unsubmit.
-                              locked ? (
-                                <span className="sd-thumb" style={{ backgroundImage: `url(${d.photo})` }} onClick={() => setLightbox({ url: d.photo, name: label(d, i) })} />
-                              ) : (
-                                <>
-                                  <span className="sd-thumb" style={{ backgroundImage: `url(${d.photo})` }} onClick={() => setLightbox({ url: d.photo, name: label(d, i) })} />
-                                  <button className="sd-btn" onClick={() => shoot(d.id, false)}>Replace</button>
-                                  <button className="sd-btn sd-ghost" onClick={() => cmd({ cmd: "clearPhoto", id: d.id })}>Remove</button>
-                                </>
-                              )
+                    {f.devices.map((d, i) => {
+                      const isCam = d.k === "cam";
+                      const nm = label(d, i);
+                      const busy = d.busy || busyId === d.id;
+                      const editing = editingId === d.id;
+                      const menuOpen = menuId === d.id;
+                      const tapTile = () => {
+                        if (isCam && d.photo) setLightbox({ url: d.photo, name: nm });
+                        else if (isCam && !locked) shoot(d.id, false);
+                        else cmd({ cmd: "select", id: d.id });   // non-camera or submitted → highlight on plan
+                      };
+                      return (
+                        <div key={d.id ?? i} className="sd-card"
+                          onMouseEnter={() => cmd({ cmd: "hover", id: d.id })}
+                          onMouseLeave={() => cmd({ cmd: "hover", id: null })}>
+                          <div className={`sd-tile${isCam && d.photo ? " has" : ""}`} onClick={tapTile}
+                            title={isCam ? (d.photo ? "View photo" : "Add photo") : "Show on plan"}>
+                            <span className="sd-badge" style={{ background: d.color }} title="Show on plan"
+                              onClick={(e) => { e.stopPropagation(); cmd({ cmd: "select", id: d.id }); }}>{d.tag || (i + 1)}</span>
+                            {busy ? (
+                              <span className="sd-tile-msg"><svg className="sd-spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg></span>
+                            ) : isCam && d.photo ? (
+                              <img className="sd-img" src={d.photo} alt={nm} loading="lazy" />
+                            ) : isCam ? (
+                              <span className="sd-add">
+                                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                                <b>{locked ? "No photo" : "Add photo"}</b>
+                              </span>
                             ) : (
-                              locked ? <span className="sd-nophoto">No photo</span> : <button className="sd-btn" onClick={() => shoot(d.id, false)}>+ View photo</button>
+                              <span className="sd-dev-ph" style={{ color: d.color }}>
+                                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" /><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" /></svg>
+                              </span>
                             )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <div className="sd-foot">
+                            {editing && !locked ? (
+                              <input className="sd-nm-in" autoFocus defaultValue={d.name} spellCheck={false}
+                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = d.name || ""; e.currentTarget.blur(); } }}
+                                onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); setEditingId(null); }} />
+                            ) : (
+                              <span className="sd-nm-txt" title={nm} onClick={() => { if (!locked) setEditingId(d.id); }}>{nm}</span>
+                            )}
+                            {!locked && (
+                              <div className="sd-menuwrap">
+                                <button className="sd-more" title="More" aria-label={`${nm} options`} onClick={() => { setMenuId(menuOpen ? null : d.id); setConfirmDel(null); }}>
+                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+                                </button>
+                                {menuOpen && (
+                                  <div className="sd-menu" role="menu">
+                                    <button onClick={() => { setEditingId(d.id); setMenuId(null); }}>Rename</button>
+                                    {isCam && <button onClick={() => { shoot(d.id, false); setMenuId(null); }}>{d.photo ? "Replace photo" : "Add photo"}</button>}
+                                    {isCam && d.photo && <button disabled={aiIds.has(d.id) || !!aiAll} onClick={() => { nameOne(d, curDevices.map((x) => (x.name || "").trim()).filter(Boolean)); setMenuId(null); }}>Auto-name</button>}
+                                    {isCam && d.photo && <button onClick={() => { cmd({ cmd: "clearPhoto", id: d.id }); setMenuId(null); }}>Remove photo</button>}
+                                    {confirmDel === d.id ? (
+                                      <button className="danger" onClick={() => { cmd({ cmd: "delete", id: d.id }); setMenuId(null); setConfirmDel(null); }}>Confirm delete</button>
+                                    ) : (
+                                      <button className="danger" onClick={() => setConfirmDel(d.id)}>Delete device</button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="sd-others">
@@ -211,6 +229,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
           })}
         </div>
       )}
+
+      {menuId != null && <div className="sd-scrim" onClick={() => { setMenuId(null); setConfirmDel(null); }} />}
 
       {lightbox && (
         <div className="sd-lb" onClick={() => setLightbox(null)}>
@@ -232,9 +252,6 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-ai-all:hover{background:rgba(201,169,110,.12)}
         .sd-ai-all.busy{opacity:.7;cursor:default}
         .sd-ai-all + .sd-cap{margin-left:0}
-        .sd-ai{flex:none;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line,#e6e2d9);border-radius:6px;background:var(--bg-soft,#f5f2ea);color:var(--gold-deep,#8a6d2f);cursor:pointer;padding:0}
-        .sd-ai:hover:not(:disabled){border-color:var(--gold,#c9a96e);background:rgba(201,169,110,.12)}
-        .sd-ai:disabled{opacity:.55;cursor:default}
         .sd-spin{animation:sd-spin .7s linear infinite;transform-origin:center}
         @keyframes sd-spin{to{transform:rotate(360deg)}}
         .sd-capbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line,#e6e2d9);background:rgba(201,169,110,.08)}
@@ -246,23 +263,33 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-fhead{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#6f7686);padding:6px 2px;cursor:pointer}
         .sd-fhead.cur{color:var(--gold-deep,#8a6d2f);cursor:default}
         .sd-fn{font-weight:600}
-        .sd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:9px}
-        .sd-card{border:1px solid var(--line,#e6e2d9);border-radius:10px;background:#fff;padding:9px;transition:border-color .13s,box-shadow .13s,transform .13s}
+        /* Photo-first device grid: 2 columns on mobile, more where there's room. The photo IS the card. */
+        .sd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+        @media(min-width:560px){.sd-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
+        .sd-card{border:1px solid var(--line,#e6e2d9);border-radius:11px;background:#fff;overflow:hidden;transition:border-color .13s,box-shadow .13s,transform .13s}
         .sd-card:hover{border-color:var(--gold,#c9a96e);box-shadow:0 4px 14px rgba(201,169,110,.18);transform:translateY(-1px)}
-        .sd-r1{display:flex;align-items:center;gap:7px}
-        .sd-chip{flex:none;min-width:26px;height:22px;padding:0 6px;border-radius:6px;color:#fff;font-size:.68rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .12s,box-shadow .12s}
-        .sd-chip:hover{filter:brightness(1.08);box-shadow:0 0 0 2px rgba(201,169,110,.4)}
-        .sd-nm{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;padding:5px 7px;font-size:.82rem;font-weight:600;color:var(--ink,#1a1a1a);font-family:inherit;background:var(--bg-soft,#f5f2ea)}
-        .sd-nm:focus{outline:none;border-color:var(--gold,#c9a96e);background:#fff}
-        .sd-nm-static{background:none;border-color:transparent;cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sd-tile{position:relative;aspect-ratio:4/3;width:100%;background:var(--bg-soft,#f1eee7);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+        .sd-img{width:100%;height:100%;object-fit:cover;display:block}
+        .sd-badge{position:absolute;top:6px;left:6px;z-index:2;min-width:24px;height:20px;padding:0 6px;border-radius:6px;color:#fff;font-size:.66rem;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+        .sd-badge:hover{filter:brightness(1.08)}
+        .sd-add{display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--gold-deep,#8a6d2f)}
+        .sd-add b{font-size:.74rem;font-weight:700}
+        .sd-dev-ph{display:flex;align-items:center;justify-content:center;opacity:.85}
+        .sd-tile-msg{color:var(--muted,#6f7686)}
+        .sd-foot{display:flex;align-items:center;gap:4px;padding:7px 8px 7px 10px}
+        .sd-nm-txt{flex:1;min-width:0;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+        .sd-nm-in{flex:1;min-width:0;border:1px solid var(--gold,#c9a96e);border-radius:6px;padding:4px 6px;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);font-family:inherit;background:#fff}
+        .sd-nm-in:focus{outline:none}
+        .sd-menuwrap{position:relative;flex:none}
+        .sd-more{flex:none;border:0;background:none;cursor:pointer;color:var(--muted,#6f7686);width:28px;height:28px;border-radius:7px;display:grid;place-items:center}
+        .sd-more:hover{background:var(--bg-soft,#f5f2ea);color:var(--ink,#1a1a1a)}
+        .sd-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:#fff;border:1px solid var(--line,#e6e2d9);border-radius:10px;box-shadow:0 14px 34px -12px rgba(14,19,32,.4);padding:5px;min-width:150px;display:flex;flex-direction:column}
+        .sd-menu button{text-align:left;background:none;border:0;font:inherit;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);padding:9px 11px;border-radius:7px;cursor:pointer}
+        .sd-menu button:hover{background:var(--bg-soft,#f5f2ea)}
+        .sd-menu button.danger{color:#c0392b}
+        .sd-menu button:disabled{opacity:.5;cursor:default}
+        .sd-scrim{position:fixed;inset:0;z-index:15}
         .sd-locked{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;letter-spacing:.02em;color:var(--muted,#6f7686);background:var(--bg-soft,#f5f2ea);border:1px solid var(--line,#e6e2d9);border-radius:100px;padding:3px 9px;margin-left:auto}
-        .sd-nophoto{font-size:.74rem;color:var(--faint,#9a9280);font-style:italic}
-        .sd-x{flex:none;border:0;background:none;cursor:pointer;color:var(--muted,#6f7686);padding:4px;border-radius:6px;font-size:18px;line-height:1;width:26px;height:26px}.sd-x:hover{color:#c0392b}
-        .sd-confirm{display:flex;align-items:center;gap:4px}
-        .sd-del{border:1px solid var(--line,#d9d4c8);border-radius:6px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 7px}
-        .sd-del.yes{background:#c0392b;color:#fff;border-color:#c0392b}.sd-del.no{background:none;color:var(--muted,#6f7686);font-size:15px;line-height:1;padding:2px 6px}
-        .sd-pv{display:flex;align-items:center;gap:7px;margin-top:8px}
-        .sd-thumb{flex:none;width:42px;height:32px;border-radius:6px;background-size:cover;background-position:center;cursor:zoom-in;border:1px solid var(--line,#e6e2d9)}
         .sd-btn{height:30px;padding:0 10px;border:1px solid var(--line,#d9d4c8);border-radius:7px;background:var(--bg-soft,#f5f2ea);color:var(--ink,#1a1a1a);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
         .sd-btn:hover:not(:disabled){border-color:var(--gold,#c9a96e)}.sd-btn:disabled{opacity:.55;cursor:default}
         .sd-primary{background:var(--ink,#1a1a1a);color:#fff;border-color:var(--ink,#1a1a1a)}
