@@ -246,17 +246,17 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   // payouts vary tech-to-tech. camPay[4]=0 (Camera Online is a $0 verification step).
   const camPay = [+rates.cam_drop || 0, +rates.cam_mgmt || 0, +rates.cam_term || 0, +rates.cam_mount || 0, 0];
   const posPay = [+rates.pos_drop || 0, +rates.pos_mgmt || 0, +rates.pos_term || 0, +rates.pos_install || 0];
-  const WPAY = { camera: camPay, pos: posPay };
+  const WPAY = { camera: camPay, speaker: camPay, pos: posPay };   // speakers pay exactly like cameras
   const defCameraPay = camPay.reduce((a, b) => a + b, 0);
   const defPosPay = posPay.reduce((a, b) => a + b, 0);
   const defNvrPay = +rates.nvr_setup || 0;
   // Defaults from the rate library per camera / POS device / NVR; other equipment uses the proposal
   // price. The office can edit any individual line.
-  const typeDefault = (type) => (type === "camera" ? defCameraPay : type === "pos" ? defPosPay : type === "nvr" ? defNvrPay : 0);
+  const typeDefault = (type) => (type === "camera" || type === "speaker" ? defCameraPay : type === "pos" ? defPosPay : type === "nvr" ? defNvrPay : 0);
   const payoutOf = (item) => (payouts[item.id] != null ? +payouts[item.id]
     // Add-on lines carry the office-set payout from the addendum; fall back to the type rate if 0.
     : item.addon ? (+item.tech > 0 ? +item.tech : typeDefault(item.type))
-    : item.type === "camera" ? defCameraPay
+    : item.type === "camera" || item.type === "speaker" ? defCameraPay
     : item.type === "pos" ? defPosPay
     : item.type === "nvr" ? defNvrPay
     : (+item.tech || 0));
@@ -338,9 +338,10 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   // Equipment (NVR / drives / displays) on top, then cameras, then POS, then approved add-ons.
   const equipment = items.filter(i => !i.addon && (i.type === "nvr" || i.type === "equip"));
   const cameras   = items.filter(i => !i.addon && i.type === "camera");
+  const speakers  = items.filter(i => !i.addon && i.type === "speaker");
   const posItems  = items.filter(i => !i.addon && i.type === "pos");
   const addonInstalls = items.filter(i => i.addon);
-  const dropItems = items.filter(i => i.type === "camera" || i.type === "pos");   // cable-drop path (incl. add-ons)
+  const dropItems = items.filter(i => i.type === "camera" || i.type === "speaker" || i.type === "pos");   // cable-drop path (incl. add-ons)
   // Bulk fill: bring every cable-drop item UP TO a milestone (never regress, cap at its last step).
   const bulkCameras = (to) => { if (!canEdit || !dropItems.length) return; pushHist(); dropItems.forEach(c => { const max = stepsFor(c.type).length; const cur = Math.min(steps[c.id] || 0, max); const nx = Math.min(Math.max(cur, to), max); if (nx > cur) logAdvance(c, cur, nx); }); setSteps(s => { const n = { ...s }; dropItems.forEach(c => { n[c.id] = Math.min(Math.max(n[c.id] || 0, to), stepsFor(c.type).length); }); return n; }); };
   const completeAll = () => { if (!canEdit || !items.length) return; pushHist(); items.forEach(it => { const max = stepsFor(it.type).length; const cur = Math.min(steps[it.id] || 0, max); if (max > cur) logAdvance(it, cur, max); }); setSteps(s => { const n = { ...s }; items.forEach(it => { n[it.id] = stepsFor(it.type).length; }); return n; }); };
@@ -366,7 +367,7 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
   const payPct = Math.round(payFraction * 100);
   const pct = canPrice ? payPct : stepPct;   // customers see plain work progress; office sees pay
   const nvrCount = items.filter(i => i.type === "nvr").length;
-  const hoursVal = estHours != null && estHours !== "" ? estHours : estHoursFor(cameras.length, nvrCount, posItems.length);
+  const hoursVal = estHours != null && estHours !== "" ? estHours : estHoursFor(cameras.length, nvrCount, posItems.length, speakers.length);
   const hourlyRate = hoursVal > 0 ? estPayout / hoursVal : 0;
   const hoursDone = Math.round(hoursVal * payFraction * 10) / 10;
   const hoursLeft = Math.round((hoursVal - hoursDone) * 10) / 10;
@@ -637,14 +638,36 @@ export default function InstallChecklist({ accessId, proposal, customerName, cus
               </div>
             </div>
           )}
-          {equipment.length > 0 && <div className="icl-sec">Equipment &amp; Recorders <span className="icl-sec-n">{equipment.length}</span></div>}
-          <div className="icl-list">{equipment.map(Row)}</div>
-          {cameras.length > 0 && <div className="icl-sec">Cameras <span className="icl-sec-n">{cameras.length}</span></div>}
-          <div className="icl-list">{cameras.map(Row)}</div>
-          {posItems.length > 0 && <div className="icl-sec">POS &amp; Network <span className="icl-sec-n">{posItems.length}</span></div>}
-          <div className="icl-list">{posItems.map(Row)}</div>
-          {addonInstalls.length > 0 && <div className="icl-sec icl-sec-addon">Add-on Installs <span className="icl-sec-n">{addonInstalls.length}</span></div>}
-          <div className="icl-list">{addonInstalls.map(Row)}</div>
+          {equipment.length > 0 && (
+            <div className="icl-group" style={{ "--sec": colorFor("equip") }}>
+              <div className="icl-sec"><span className="icl-sec-dot" />Equipment &amp; Recorders <span className="icl-sec-n">{equipment.length}</span></div>
+              <div className="icl-list">{equipment.map(Row)}</div>
+            </div>
+          )}
+          {cameras.length > 0 && (
+            <div className="icl-group" style={{ "--sec": colorFor("camera") }}>
+              <div className="icl-sec"><span className="icl-sec-dot" />Cameras <span className="icl-sec-n">{cameras.length}</span></div>
+              <div className="icl-list">{cameras.map(Row)}</div>
+            </div>
+          )}
+          {speakers.length > 0 && (
+            <div className="icl-group" style={{ "--sec": colorFor("speaker") }}>
+              <div className="icl-sec"><span className="icl-sec-dot" />Speakers <span className="icl-sec-n">{speakers.length}</span></div>
+              <div className="icl-list">{speakers.map(Row)}</div>
+            </div>
+          )}
+          {posItems.length > 0 && (
+            <div className="icl-group" style={{ "--sec": colorFor("pos") }}>
+              <div className="icl-sec"><span className="icl-sec-dot" />POS &amp; Network <span className="icl-sec-n">{posItems.length}</span></div>
+              <div className="icl-list">{posItems.map(Row)}</div>
+            </div>
+          )}
+          {addonInstalls.length > 0 && (
+            <div className="icl-group" style={{ "--sec": "#7c3aed" }}>
+              <div className="icl-sec icl-sec-addon"><span className="icl-sec-dot" />Add-on Installs <span className="icl-sec-n">{addonInstalls.length}</span></div>
+              <div className="icl-list">{addonInstalls.map(Row)}</div>
+            </div>
+          )}
         </>
       )}
 

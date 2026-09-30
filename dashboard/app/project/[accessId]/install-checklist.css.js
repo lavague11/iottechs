@@ -130,6 +130,11 @@ export const ICL_CSS = `
 .icl-sec-addon{color:#7c3aed}
 .icl-sec-addon .icl-sec-n{background:#efe7fc;color:#7c3aed}
 .icl-list{display:flex;flex-direction:column;gap:8px}
+/* Color-coded, visually separated device groups. Each group carries its type color as --sec. */
+.icl-group{border-left:3px solid var(--sec,var(--dv-line-soft,#EDEDE9));padding-left:11px;margin-top:16px}
+.icl-group:first-of-type{margin-top:8px}
+.icl-group .icl-sec{margin:0 0 8px;color:var(--sec,var(--dv-meta,#787D84))}
+.icl-sec-dot{width:8px;height:8px;border-radius:50%;background:var(--sec,var(--dv-meta,#787D84));flex:none}
 .icl-row{background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;overflow:hidden}
 .icl-row.done{background:#f4faf6;border-color:#cfe6d8}
 .icl-main{display:flex;align-items:center;gap:13px;padding:10px 12px}

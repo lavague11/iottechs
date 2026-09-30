@@ -4,25 +4,30 @@
 // colocated here so they can be shared and unit-reasoned about.
 //
 // Camera:  Cable Dropped → Cable Managed → Wires Terminated → Camera Mounted → Camera Online
+// Speaker: Cable Dropped → Cable Managed → Wires Terminated → Speaker Mounted → Speaker Online
 // NVR:     Programmed → Online → Recording Verified
 // Equipment/Displays/Drives: Installed (single tap)
 export const CAMERA_STEPS = ["Cable Dropped", "Cable Managed", "Wires Terminated", "Camera Mounted", "Camera Online"];
+// A ceiling/surface speaker installs on the same five-step cabling path as a camera, and pays the
+// same (owner's rule) — only the last two labels name the speaker instead of the camera.
+export const SPEAKER_STEPS = ["Cable Dropped", "Cable Managed", "Wires Terminated", "Speaker Mounted", "Speaker Online"];
 export const NVR_STEPS    = ["Programmed", "Online", "Recording Verified"];
 export const EQUIP_STEPS  = ["Installed"];
 // Toast POS / network devices (switches, terminals, printers, KDS, kiosks) run the same cabling
 // path as a camera: dropped → managed → terminated → installed.
 export const POS_STEPS    = ["Cable Dropped", "Cable Managed", "Wires Terminated", "Device Installed"];
-const STEPS_BY_TYPE = { camera: CAMERA_STEPS, nvr: NVR_STEPS, pos: POS_STEPS, equip: EQUIP_STEPS };
+const STEPS_BY_TYPE = { camera: CAMERA_STEPS, speaker: SPEAKER_STEPS, nvr: NVR_STEPS, pos: POS_STEPS, equip: EQUIP_STEPS };
 export const stepsFor = (type) => STEPS_BY_TYPE[type] || EQUIP_STEPS;
-export const colorFor = (type) => (type === "camera" ? "#C9A96E" : type === "nvr" ? "#4b6a9b" : type === "pos" ? "#7c3aed" : "#6FBF73");
+export const colorFor = (type) => (type === "camera" ? "#C9A96E" : type === "speaker" ? "#2a9d8f" : type === "nvr" ? "#4b6a9b" : type === "pos" ? "#7c3aed" : "#6FBF73");
 export const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmtLogTime = (t) => { if (!t) return ""; try { return new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } };
 // Per-step payout breakdown (labor): each step earns a slice of the total.
 //   Cameras:  Dropped $10 · Managed $18 · Terminated $12 · Mounted $12 · Online $0   → $52
 //   Toast POS: Dropped $10 · Managed $18 · Terminated $12 · Installed $12            → $52
 export const CAMERA_STEP_PAY = [10, 18, 12, 12, 0];
+export const SPEAKER_STEP_PAY = [10, 18, 12, 12, 0];   // speakers pay exactly like cameras
 export const POS_STEP_PAY    = [10, 18, 12, 12];
-const WEIGHTED_PAY = { camera: CAMERA_STEP_PAY, pos: POS_STEP_PAY };
+const WEIGHTED_PAY = { camera: CAMERA_STEP_PAY, speaker: SPEAKER_STEP_PAY, pos: POS_STEP_PAY };
 // $ earned toward a line item at `done` steps. Cameras/POS use the weighted breakdown (scaled to
 // the item's actual payout); NVR/equipment split their payout evenly across their steps.
 export const earnedFor = (type, done, total, payout) => {
@@ -37,7 +42,7 @@ export const earnedFor = (type, done, total, payout) => {
   return steps ? payout * (d / steps) : 0;
 };
 // Default hour estimate when the office hasn't set one: 2 hours a camera or POS device + 30 min an NVR.
-export const estHoursFor = (cams, nvrs = 0, pos = 0) => Math.max(1, cams * 2 + pos * 2 + nvrs * 0.5);
+export const estHoursFor = (cams, nvrs = 0, pos = 0, spk = 0) => Math.max(1, cams * 2 + pos * 2 + spk * 2 + nvrs * 0.5);
 // Pay follows completion: a single step credits its slice of the line's payout. `wpay` is the
 // assigned tech's per-step weight map ({ camera: [...], pos: [...] }); NVR/equipment split evenly.
 export const weightedInc = (type, stepIdx, payout, wpay) => {
@@ -63,6 +68,9 @@ export function installItemsFromProposal(proposal, laborRx = INSTALL_LABOR_RX) {
     (s.items || []).forEach((it) => {
       const hasSub = (it.sub || []).length > 0;
       if (s.key === "camera" && hasSub) { out.push({ id: it.id, name: it.name, type: "camera" }); return; }
+      // Audio: a speaker line carries a labor sub-bundle (speaker + wire run + drill/mount/tune) — it
+      // installs and pays like a camera. The amplifier / rack head-end are sub-less → fall to equip.
+      if (s.key === "sound" && hasSub) { out.push({ id: it.id, name: it.name, type: "speaker" }); return; }
       if ((s.key === "toast" || s.key === "pos") && hasSub) { out.push({ id: it.id, name: it.name, type: "pos" }); return; }
       if (/\bnvr\b|recorder/i.test(it.name)) { out.push({ id: it.id, name: it.name, type: "nvr" }); return; }
       if (!hasSub && !laborRx.test(it.name)) out.push({ id: it.id, name: it.name, type: "equip" });
@@ -119,10 +127,11 @@ export function itemWorkState(done, max, itemIssues = []) {
 
 // QC: standard checks per device type; an item passes only when ALL of its checks are ticked.
 export const QC_CHECKS = {
-  camera: ["Online", "Angle OK", "Recording", "Night Vision"],
-  nvr:    ["Powered On", "Recording", "Remote Access"],
-  pos:    ["Online", "Recording"],
-  equip:  ["Working"],
+  camera:  ["Online", "Angle OK", "Recording", "Night Vision"],
+  speaker: ["Powered", "Audio OK", "Zone OK"],
+  nvr:     ["Powered On", "Recording", "Remote Access"],
+  pos:     ["Online", "Recording"],
+  equip:   ["Working"],
 };
 export const qcChecksFor = (type) => QC_CHECKS[type] || QC_CHECKS.equip;
 // `openIssues` = open install issue flags (Phase 1): a device with an unresolved flag cannot pass QC
