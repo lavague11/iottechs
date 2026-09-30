@@ -75,7 +75,10 @@ export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = nu
   const markers = all.map((d) => ({ ...d, px: d.x / 100 * W, py: d.y / 100 * H, r }));
   const cones = markers.filter((d) => d.cone && d.aimed).map((d) => ({ px: d.px, py: d.py, aim: d.aim, fov: Math.min(360, Math.max(5, d.fov)), R, color: d.color }));
   // Speaker coverage: a light-blue radius circle (see-through) drawn under the marker, like a cone but round.
-  const rings = markers.filter((d) => d.ring).map((d) => ({ px: d.px, py: d.py, R: Math.max(r * 1.3, Math.min(60, d.range) / 100 * minWH), fill: SPK_COVERAGE.fill, stroke: SPK_COVERAGE.stroke }));
+  // Fixed, sensible radius (like cones use a fixed reach) — the planner stores range in on-screen px,
+  // not a portable unit, so renderers use a consistent fraction of the plan rather than that raw value.
+  const ringR = Math.round(minWH * 0.12);
+  const rings = markers.filter((d) => d.ring).map((d) => ({ px: d.px, py: d.py, R: ringR, fill: SPK_COVERAGE.fill, stroke: SPK_COVERAGE.stroke }));
   return { W, H, r, markers, cones, rings, showNames, count: all.length };
 }
 
