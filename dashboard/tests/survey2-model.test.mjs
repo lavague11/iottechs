@@ -34,6 +34,9 @@ test("audio survey: nine speakers + amp → nine S-coded markers, no cones, exac
   const scene = surveyScene(floors, 0, 1600, 900);
   assert.equal(scene.count, 10);
   assert.equal(scene.cones.length, 0, "speakers never get a camera cone");
+  // Each speaker gets a light-blue coverage ring (a radius circle), the amp does not.
+  assert.equal(scene.rings.length, 9, "one coverage ring per speaker");
+  assert.ok(scene.rings.every((g) => g.R > 0 && /rgba\(96,\s*165,\s*250/.test(g.fill)), "rings are light-blue and sized");
   const s1 = scene.markers.find((m) => m.code === "S1");
   assert.equal(s1.px, 10 / 100 * 1600); assert.equal(s1.py, 20 / 100 * 900);
   assert.equal(s1.color, "#B084E0");

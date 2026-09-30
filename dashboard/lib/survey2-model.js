@@ -12,7 +12,7 @@ export const SURVEY_GROUPS = [
   { key: "cctv",  name: "Cameras",   letter: "C", color: "#b98a2e", items: [
     { k: "cam", name: "Camera", cone: true, fov: 30 }, { k: "nvr", name: "NVR" }, { k: "isp", name: "ISP" }, { k: "poe", name: "PoE Switch" }, { k: "disp", name: "Display" }] },
   { key: "sound", name: "Sound",     letter: "S", color: "#B084E0", items: [
-    { k: "amp", name: "Amp" }, { k: "spk", name: "Speaker" }, { k: "aux", name: "Audio Input" }] },
+    { k: "amp", name: "Amp" }, { k: "spk", name: "Speaker", ring: true, range: 18 }, { k: "aux", name: "Audio Input" }] },
   { key: "toast", name: "Toast POS", letter: "T", color: "#E8743B", items: [
     { k: "pronto", name: "Pronto / Meraki" }, { k: "tap", name: "Access Point" }, { k: "pos", name: "POS Terminal" }, { k: "kprint", name: "Kitchen Printer" }, { k: "kds", name: "Kitchen Display" }, { k: "ssk", name: "Self-Service Kiosk" }, { k: "tpoe", name: "24-Port Switch" }, { k: "tisp", name: "ISP Router" }] },
   { key: "alarm", name: "Alarms",    letter: "A", color: "#5FB8DB", items: [
@@ -53,6 +53,8 @@ export function surveyDevices(floors) {
       code, label: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
       x: Math.max(0, Math.min(100, num(d.x))), y: Math.max(0, Math.min(100, num(d.y))),
       cone: !!(it.cone || d.cone), aimed: !!d.aimed || num(d.aim) !== 0, aim: num(d.aim), fov: num(d.fov, it.fov || 30),
+      // Speakers cover a circle (a radius), not an aimed wedge — range is a percent of the floor's short side.
+      ring: !!(it.ring || d.ring), range: num(d.range, it.range || 18),
       annotation: ANNOTATION_KINDS.has(d.k),
     });
   }));
@@ -62,14 +64,19 @@ export function surveyDevices(floors) {
 // Everything a renderer needs to paint one floor at a given pixel size: background rect, one marker
 // per device (pixel centre, radius, colour, code, label) and a coverage cone for cone kinds that
 // were aimed. Layer order = background → cones → markers → labels. Pure geometry; no DOM/canvas.
+// The speaker coverage fill/stroke — a very light blue kept ~30% opaque so the plan shows through.
+export const SPK_COVERAGE = { fill: "rgba(96,165,250,0.28)", stroke: "rgba(96,165,250,0.55)" };
 export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = null } = {}) {
   const all = surveyDevices(floors).filter((d) => d.floor === floorIndex);
   const r = Math.max(9, Math.round(Math.min(W, H) * 0.018));
   const R = coneLen || Math.round(Math.min(W, H) * 0.14);
+  const minWH = Math.min(W, H);
   const showNames = all.length <= dense;    // past `dense` markers the labels would collide: codes on the plan, names in the list
   const markers = all.map((d) => ({ ...d, px: d.x / 100 * W, py: d.y / 100 * H, r }));
   const cones = markers.filter((d) => d.cone && d.aimed).map((d) => ({ px: d.px, py: d.py, aim: d.aim, fov: Math.min(360, Math.max(5, d.fov)), R, color: d.color }));
-  return { W, H, r, markers, cones, showNames, count: all.length };
+  // Speaker coverage: a light-blue radius circle (see-through) drawn under the marker, like a cone but round.
+  const rings = markers.filter((d) => d.ring).map((d) => ({ px: d.px, py: d.py, R: Math.max(r * 1.3, Math.min(60, d.range) / 100 * minWH), fill: SPK_COVERAGE.fill, stroke: SPK_COVERAGE.stroke }));
+  return { W, H, r, markers, cones, rings, showNames, count: all.length };
 }
 
 // Counts by kind for validation (canonical vs rendered) and the device schedule.

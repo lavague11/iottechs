@@ -36,6 +36,12 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(im, 0, 0, W, H);
       const scene = surveyScene(floors, fi, W, H);
+      // Layer 2a — speaker coverage: a light-blue see-through radius circle (drawn under the markers).
+      (scene.rings || []).forEach((g) => {
+        ctx.beginPath(); ctx.arc(g.px, g.py, g.R, 0, Math.PI * 2);
+        ctx.fillStyle = g.fill; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = g.stroke; ctx.stroke();
+      });
       // Layer 2 — coverage cones (aimed cone kinds only; a speaker never gets a fake camera cone).
       scene.cones.forEach((c) => {
         const a0 = (c.aim - c.fov / 2) * Math.PI / 180, a1 = (c.aim + c.fov / 2) * Math.PI / 180;
