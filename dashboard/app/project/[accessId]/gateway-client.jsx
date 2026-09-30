@@ -2667,12 +2667,27 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // sign-off is missing); seeds from the real current stage so a project is never re-locked below
     // where it already is. Peek is still allowed (clicking a locked phase surfaces the reason, opens read-only).
     const gate = phaseGate(floorFacts, localAssignments, lp.project_type, projectStage);
+    // ARTIFACT VISIBILITY is separate from PHASE GATING. The gate answers "should we warn before
+    // progressing?"; it must NOT hide a phase whose own artifact was explicitly submitted. Once a
+    // phase's artifact is published/submitted, that phase is visible to every role allowed to see it,
+    // even if an earlier step was never completed (fact-driven, so legacy projects benefit too).
+    // Tool-level permissions (sees() + server-side stripping) still decide WHAT each role sees inside.
+    const artifactReached = (pk) => {
+      switch (pk) {
+        case "ph_survey":   return custFacts.survey_published || custFacts.survey_done || custFacts.survey_skipped;
+        case "ph_proposal": return ["sent", "changes_requested", "accepted", "declined"].includes(custFacts.proposal_status);
+        case "ph_install":  return custFacts.install_done || custFacts.install_photos;
+        case "ph_wrap":     return custStage === "payment" || custFacts.final_balance_paid;
+        case "ph_complete": return projCompleted;
+        default:            return false;
+      }
+    };
     const deckStages = phaseList.map((p, i) => {
       const next = phaseList[i + 1];
       const isComplete = p.key === "ph_complete";
       const gph = gate.phases.find((g) => g.key === p.key);
-      const locked = !!gph && !gph.unlocked;
-      const lockReason = gph?.reason || null;
+      const locked = !!gph && !gph.unlocked && !artifactReached(p.key);   // a submitted artifact unlocks its own phase
+      const lockReason = locked ? (gph?.reason || null) : null;
       // Coarse progress readout per slide: done phases 100%, the rest ramp toward completion — but a
       // phase that isn't actually finished never reads 100% (that would paint its dot green early).
       const pct = isComplete
