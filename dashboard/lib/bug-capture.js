@@ -6,8 +6,12 @@
 // keeping it out of the initial bundle.
 
 let _h2c = null;
+// html2canvas-pro: a maintained drop-in fork that understands modern CSS color values. Browsers now
+// serialize color-mix() to the color(srgb …) function and keep oklch()/oklab() as-is; the original
+// html2canvas 1.4.1 throws "unsupported color function" on those and aborts the WHOLE capture, so any
+// page using color-mix (the project deck, install checklist, proposal cards) couldn't be screenshotted.
 async function loadH2C() {
-  if (!_h2c) _h2c = (await import("html2canvas")).default;
+  if (!_h2c) _h2c = (await import("html2canvas-pro")).default;
   return _h2c;
 }
 
