@@ -1102,7 +1102,7 @@
         if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
-    function select(id){ selId=id; devices.forEach(renderDevice); renderPanel(); if(id!=null) growCone(id);
+    function select(id){ selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null) growCone(id);
       // Broadcast the picked camera's cid so the host (System Planner) can focus the same camera in
       // the CAMERA VIEWS pane. Only on genuine picks here — suppressed when we're applying a relay.
       if(!_suppressSelPost){ var sd=byIdDev(id); try{ parent.postMessage({ type:"iotSurveySelect", project:PID, cid:(sd&&sd.cid)||null }, "*"); }catch(e){} }
@@ -1112,9 +1112,12 @@
     function growCone(id){ if(!angleMode) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
       if(g){ g.classList.remove("grow"); void g.offsetWidth; g.classList.add("grow"); } }
     function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
+    // Move the selected-card highlight in the side panel WITHOUT rebuilding every card (used on pick) —
+    // the panel list is unchanged on a selection, only which card is highlighted.
+    function selectPanelCard(id){ try{ [].forEach.call(panelBody.querySelectorAll(".card"), function(c){ c.classList.toggle("sel", c.dataset.devId!=null && +c.dataset.devId===id); }); }catch(e){} }
     // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
     function makeCard(d){
-      var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":"");
+      var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":""); card.dataset.devId=d.id;
       card.addEventListener("mouseenter", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.add("hl"); });
       card.addEventListener("mouseleave", function(){ var el=document.getElementById("dev-"+d.id); if(el) el.classList.remove("hl"); });
       var showFov=(angleMode && d.cone);
@@ -1231,8 +1234,13 @@
       });
       parent.postMessage({ type:"iotSurveyDevices", project:PID, curFloor:curFloor, ro:RO, floors:payload }, "*");
     }catch(e){} }
+    // Coalesce the cross-iframe roster push: posting the full roster (with photos) makes the React host
+    // rebuild the device grid AND the mockup bridge, so firing it on every add/select/keystroke stacked
+    // up and made placing devices feel slow. Debounce so a burst settles into one post.
+    var _rdT=null;
+    function reportDevicesSoon(){ clearTimeout(_rdT); _rdT=setTimeout(reportDevices, 120); }
     function renderPanel(){
-      reportDevices();   // keep the outside panel in sync on every change
+      reportDevicesSoon();   // keep the outside panel in sync (coalesced)
       var others=floors.reduce(function(n,f,i){ return i===curFloor?n:n+((f.devices&&f.devices.length)||0); },0);
       if(!devices.length && !others){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
       panelBody.innerHTML="";
