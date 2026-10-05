@@ -24,6 +24,10 @@
   .stage{flex:1;position:relative;min-height:0;background:var(--soft);overflow:hidden}
   #mapRot{position:absolute;inset:-60%;transform-origin:center center;will-change:transform}
   #map{position:absolute;inset:0}
+  /* Screen-space navigation layer: owns pan + zoom so dragging follows the finger regardless of the
+     image rotation on #mapRot. Sits above the (rotated) map but below the crop/preview/trace layers. */
+  #nav{position:absolute;inset:0;z-index:4;touch-action:none;cursor:grab;background:transparent}
+  #nav.grabbing{cursor:grabbing}
   #msg{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:24px;z-index:6}
   #msg.on{display:grid}
   #draw{position:absolute;inset:0;z-index:5;display:none;touch-action:none;cursor:crosshair}
@@ -228,6 +232,7 @@
   </div>
   <div class="stage">
     <div id="mapRot"><div id="map"></div></div>
+    <div id="nav"></div>
     <div id="levelGrid"></div>
     <div id="draw"><canvas id="drawCv"></canvas></div>
     <div id="msg" class="on">Loading map…</div>
@@ -304,7 +309,7 @@
     msg("");
     map=new google.maps.Map($("map"),{ center:{lat:40.6588,lng:-74.2957}, zoom:20, mapTypeId:"satellite", tilt:0,
       streetViewControl:false, mapTypeControl:false, fullscreenControl:false, rotateControl:false, zoomControl:false,
-      keyboardShortcuts:false, gestureHandling:"greedy", isFractionalZoomEnabled:true });
+      keyboardShortcuts:false, gestureHandling:"none", isFractionalZoomEnabled:true });   // pan/zoom handled by #nav in screen space (rotation-safe)
     geocoder=new google.maps.Geocoder();
     map.addListener("zoom_changed", function(){ invalidateCapture(); });   // zoom via wheel / pinch → drop any stale capture
     $("show").addEventListener("click", function(){ search($("q").value.trim()); });
@@ -323,8 +328,39 @@
       }
     } catch(e){}
     initDraw();
+    initNav();
     search(($("q").value||DEMO).trim(), true);
   };
+
+  /* ---------- screen-space navigation (pan + zoom), rotation-safe ----------
+     Google's own gestures are disabled; this layer owns pan/zoom so a drag ALWAYS follows the finger
+     on screen no matter how the aerial is leveled (#mapRot rotation). Pan converts the screen delta
+     into the rotation-corrected panBy via screenDragToPanBy (mirrors lib/pan-transform.js — a test
+     fails if they drift). Zoom is center-based, matching the crop-layer wheel. */
+  // Inline copy of lib/pan-transform.js — keep identical (tests/pan-transform.test.js enforces).
+  function screenDragToPanBy(rotDeg, dx, dy){ var th=(rotDeg||0)*Math.PI/180, c=Math.cos(th), s=Math.sin(th); return { x: -(c*dx + s*dy), y: (s*dx - c*dy) }; }
+  function clampZoom(z){ return Math.max(17, Math.min(21, z)); }
+  function panByScreen(dx,dy){ if(!map) return; var p=screenDragToPanBy(viewRot, dx, dy); map.panBy(p.x, p.y); }
+  function initNav(){
+    var nav=$("nav"), ptrs=new Map();
+    nav.addEventListener("pointerdown", function(e){ e.preventDefault(); try{nav.setPointerCapture(e.pointerId);}catch(_){ }
+      ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); nav.classList.add("grabbing"); });
+    nav.addEventListener("pointermove", function(e){ if(!ptrs.has(e.pointerId)) return;
+      if(ptrs.size>=2){                                           // two fingers → pinch zoom (center-based)
+        var ids=Array.from(ptrs.keys()), p0=ptrs.get(ids[0]), p1=ptrs.get(ids[1]), prevD=Math.hypot(p0.x-p1.x,p0.y-p1.y);
+        ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+        var q0=ptrs.get(ids[0]), q1=ptrs.get(ids[1]), newD=Math.hypot(q0.x-q1.x,q0.y-q1.y);
+        if(prevD>0 && map){ var dz=Math.log2(newD/prevD); if(Math.abs(dz)>0.0005) map.setZoom(clampZoom(map.getZoom()+dz)); }
+        return;
+      }
+      var prev=ptrs.get(e.pointerId), dx=e.clientX-prev.x, dy=e.clientY-prev.y;   // screen-space delta
+      ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      panByScreen(dx,dy);
+    });
+    function end(e){ ptrs.delete(e.pointerId); if(!ptrs.size) nav.classList.remove("grabbing"); try{nav.releasePointerCapture(e.pointerId);}catch(_){ } }
+    nav.addEventListener("pointerup", end); nav.addEventListener("pointercancel", end);
+    nav.addEventListener("wheel", function(e){ e.preventDefault(); if(!map) return; map.setZoom(clampZoom(map.getZoom()+(e.deltaY<0?0.3:-0.3))); }, {passive:false});
+  }
   var rotCoarse=0;   // 90° steps from the +90° button; the slider is the fine ±45 trim on top, so any angle is reachable
   function applyRot(){ viewRot=norm(rotCoarse + (parseInt($("rot").value,10)||0)); var _rd=$("rotDeg"); if(_rd && document.activeElement!==_rd) _rd.value=viewRot; $("mapRot").style.transform="rotate("+viewRot+"deg)"; if(map) google.maps.event.trigger(map,"resize"); }
   function search(q, isInitial){ if(!q||!geocoder) return; $("show").disabled=true;
