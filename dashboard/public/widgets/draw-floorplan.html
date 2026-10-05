@@ -517,13 +517,49 @@
     if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL}, "*"); }catch(e){} }
     else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true}, "*"); }catch(e){} } });
 
+  // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the
+  // Structure as occupied cells — the SAME canonical model as hand-drawing, just another creation
+  // method. The seed snaps to whole boxes (each stored as its 4 half-cells). Shape + ratio preserved
+  // (x scaled by aspect), fit-to-canvas with padding, centered.
+  function pointInPoly(x,y,poly){ var inside=false,n=poly.length; for(var i=0,j=n-1;i<n;j=i++){ var xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y; if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/((yj-yi)||1e-9)+xi)) inside=!inside; } return inside; }
+  function outlineToCells(pts, aspect){
+    aspect=(+aspect>0)?+aspect:1; var W0=W(), H0=H(); if(!W0||!H0||!pts||pts.length<3) return null;
+    var wp=pts.map(function(p){ return {x:(+p[0])*aspect, y:(+p[1])}; });
+    var xs=wp.map(function(p){return p.x;}), ys=wp.map(function(p){return p.y;});
+    var mnx=Math.min.apply(null,xs), mxx=Math.max.apply(null,xs), mny=Math.min.apply(null,ys), mxy=Math.max.apply(null,ys);
+    var bw=Math.max(1e-6,mxx-mnx), bh=Math.max(1e-6,mxy-mny), pad=0.14;
+    var sc=Math.min((W0*(1-2*pad))/bw, (H0*(1-2*pad))/bh);
+    var offx=(W0-bw*sc)/2 - mnx*sc, offy=(H0-bh*sc)/2 - mny*sc;
+    var poly=wp.map(function(p){ return {x:p.x*sc+offx, y:p.y*sc+offy}; });
+    var pxs=poly.map(function(p){return p.x;}), pys=poly.map(function(p){return p.y;});
+    // Rasterise on the FULL-box grid (not half-cells): the seed snaps to whole boxes — a full box is
+    // "in" when its centre is inside the outline, and it fills all four of its half-cells.
+    var fc0=Math.floor(Math.min.apply(null,pxs)/FULL), fc1=Math.ceil(Math.max.apply(null,pxs)/FULL);
+    var fr0=Math.floor(Math.min.apply(null,pys)/FULL), fr1=Math.ceil(Math.max.apply(null,pys)/FULL);
+    var out=new Set();
+    for(var fc=fc0;fc<=fc1;fc++) for(var fr=fr0;fr<=fr1;fr++){
+      if(pointInPoly(fc*FULL+FULL/2, fr*FULL+FULL/2, poly)){
+        var hc=fc*2, hr=fr*2;
+        out.add(hc+","+hr); out.add((hc+1)+","+hr); out.add(hc+","+(hr+1)); out.add((hc+1)+","+(hr+1));
+      }
+    }
+    return out;
+  }
+
   restore();                                        // resume this floor's saved structure/rooms
   try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
   applySnapUI();
-  fitCanvas();                                       // size the canvas first → W()/H() valid for migration
+  fitCanvas();                                       // size the canvas first → W()/H() valid for migration + trace seed
+  var _seeded=false;
+  (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
+    if(!S||!S.pts||S.pts.length<3) return;
+    if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
+    var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true; } })();
+  if(_seeded){ snap=1; applySnapUI(); }               // seed is box-aligned → continue editing on the full-box grid
   reconcileRooms();                                  // migrate legacy rect rooms + clip every room to the structure
-  hist=[snapshot()]; hi=0;                           // baseline history on the reconciled state
-  setMode(cells.size ? "room" : "structure");        // existing structure → continue with rooms (calls redraw)
+  hist=[snapshot()]; hi=0;                           // baseline history on the reconciled (or seeded) state
+  setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
+  if(_seeded) persist();                             // autosave the seeded structure immediately
   updateTools();
 </script>
 </body>

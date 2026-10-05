@@ -626,7 +626,10 @@
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
-    function enterDraw(){ openBgTool(drawSrc()+"&floor="+curFloor, "draw"); }   // per-floor draft persistence
+    // seed (optional) = a traced building outline {pts:[[x,y]..],aspect} → the draw tool opens with the
+    // footprint already drawn as the canonical Structure (satellite trace → floor plan handoff).
+    function enterDraw(seed){ var extra = (seed && seed.pts && seed.pts.length>=3) ? ("&seed="+encodeURIComponent(JSON.stringify(seed))) : "";
+      openBgTool(drawSrc()+"&floor="+curFloor+extra, "draw"); }   // per-floor draft persistence
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
@@ -680,6 +683,10 @@
     // the satellite tool posts its finished image here (its own "Use" button)
     window.addEventListener("message", function(ev){
       if(!ev.data || ev.data.type!=="satellite-capture-result") return;
+      // Trace Building → "Use Outline": hand the footprint to the Structure editor (seeded), rather than
+      // dropping the aerial as a flat background. The draw tool produces the plan from the seeded shape.
+      var ol = ev.data.outline;
+      if(ol && ol.pts && ol.pts.length>=3){ enterDraw(ol); return; }
       applyBackground(ev.data.dataUrl, false, ev.data.vector);
     });
 
