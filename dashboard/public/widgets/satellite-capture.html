@@ -488,7 +488,8 @@
   }); }
 
   /* ---------- finalized actions ---------- */
-  function usePreview(){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src}, "*"); }catch(e){} }
+  function usePreview(){ var FT=3.28084, scale=(capMetersW>0&&capMetersH>0)?{ftW:+(capMetersW*FT).toFixed(2), ftH:+(capMetersH*FT).toFixed(2)}:null;
+    try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src, scale:scale}, "*"); }catch(e){} }
   function downloadImg(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); }
 
   /* Auto before/after scanner — no dragging. #prevImg (enhanced) is the base; #cmpBefore (original)

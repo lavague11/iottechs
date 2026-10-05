@@ -73,6 +73,23 @@ test("dense plans switch to codes-only markers; annotations are drawn but never 
   assert.equal(surveyCounts(floors).hazard, undefined);
 });
 
+test("pxPerFt scales coverage to real feet; without it, coverage falls back to a fixed fraction", () => {
+  // Floor is 50 ft wide rendered at 1000 px → 20 px/ft. Speaker default 18 ft radius → 360 px; camera 40 ft throw → 800 px.
+  const floors = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "x", devices: [
+    { k: "spk", x: 50, y: 50 }, { k: "cam", x: 50, y: 50, aim: 90 },
+  ] }] }));
+  const pxPerFt = 1000 / 50;                         // 20 px/ft
+  const scaled = surveyScene(floors, 0, 1000, 1000, { pxPerFt });
+  assert.equal(scaled.scaled, true);
+  assert.equal(scaled.rings[0].R, Math.round(18 * pxPerFt), "speaker ring = 18 ft × px/ft");
+  assert.equal(scaled.cones[0].R, Math.round(40 * pxPerFt), "camera cone reach = 40 ft × px/ft");
+  // Unscaled: fixed fractions of the plan, independent of the device's feet value.
+  const plain = surveyScene(floors, 0, 1000, 1000);
+  assert.equal(plain.scaled, false);
+  assert.equal(plain.rings[0].R, Math.round(1000 * 0.12));
+  assert.equal(plain.cones[0].R, Math.round(1000 * 0.14));
+});
+
 test("scope mismatch: 9 planner speakers vs 10 quoted is surfaced, never changed; matching counts are silent", () => {
   const floors = parseSurveyFloors(audioSurvey());
   const items = (n) => Array.from({ length: n }, (_, i) => ({ id: "b" + i, name: "Ceiling Speaker", qty: 1, price: 0, sub: [{ name: "Ceiling Speaker", qty: 1, price: 75 }, { name: "Speaker Wire Run", qty: 1, price: 150 }] }));

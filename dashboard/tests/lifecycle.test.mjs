@@ -186,9 +186,10 @@ test("16: the draw tool hands the survey a vector plan (SVG scene), raster only 
   // One SVG scene: structure (boundary path), rooms (edges), labels (<text>) and the grid pattern.
   const svgFn = html.slice(html.indexOf("function sketchSVG()"), html.indexOf("// ---- enhance"));
   for (const part of ['<svg xmlns="http://www.w3.org/2000/svg"', "boundaryEdges()", "edgesOf(set)", "<text x=", '<pattern id="pg"', "data:image/svg+xml"]) assert.ok(svgFn.includes(part), part);
-  // The finish hand-off posts the SVG (vector:true) unless an AI-enhanced raster exists.
-  assert.ok(html.includes('dataUrl:sketchSVG(), vector:true'));
-  assert.ok(html.includes("if(enhancedURL){ try{ parent.postMessage({type:\"satellite-capture-result\", dataUrl:enhancedURL}"));
+  // The finish hand-off posts the SVG (vector:true) unless an AI-enhanced raster exists; both carry the
+  // real-world scale (feet) so the survey can size coverage to real feet.
+  assert.ok(html.includes('dataUrl:sketchSVG(), vector:true, scale:scale'));
+  assert.ok(html.includes("if(enhancedURL){ try{ parent.postMessage({type:\"satellite-capture-result\", dataUrl:enhancedURL, scale:scale}"));
 });
 
 test("survey skip satisfies both Consulting requirements; gateThroughIndex walks forward", () => {

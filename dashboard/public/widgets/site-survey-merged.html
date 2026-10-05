@@ -613,6 +613,10 @@
     var bgWiz=document.getElementById("bgWiz");
     var bgHasImage=false;   // once a background exists, Back can return to editing it
     var pendingBgSource=null, curBgSource=null;   // how this floor's background was built: 'satellite' | 'upload' | 'draw'
+    // Real-world scale of this floor's background image, {ftW, ftH} in feet (from a trace/aerial), or null
+    // (uploaded/unscaled). Lets coverage (camera throw, speaker radius) render in real feet. See pxPerFt().
+    var curFloorScale=null, pendingBgScale=null;
+    var REACH_FT={ cam:40, motion:30, glass:20, spk:18 };   // default real-world reach (ft) for new coverage devices
 
     // enter background-build mode: satellite tool fills the canvas, its bar takes the bottom
     // Seamless: a background tool (satellite OR draw-floorplan) fills the canvas while the universal
@@ -687,13 +691,14 @@
       // dropping the aerial as a flat background. The draw tool produces the plan from the seeded shape.
       var ol = ev.data.outline;
       if(ol && ol.pts && ol.pts.length>=3){ enterDraw(ol); return; }
-      applyBackground(ev.data.dataUrl, false, ev.data.vector);
+      applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale);
     });
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
     // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
-    function applyBackground(dataUrl, skipSave, vector){
+    function applyBackground(dataUrl, skipSave, vector, scale){
+      pendingBgScale = (scale && +scale.ftW>0 && +scale.ftH>0) ? { ftW:+scale.ftW, ftH:+scale.ftH } : null;   // real feet of this image, or unscaled
       if(!dataUrl){ finishBackground(null, skipSave); return; }
       // VECTOR plan (SVG from the draw tool): keep it as-is — never rasterize it. An SVG background scales
       // crisply at any zoom (paths + real text), and it's small enough to store inline. (BUG: blurry plan.)
@@ -739,7 +744,7 @@
       }catch(e){ cb(null); }
     }
     function finishBackground(dataUrl, skipSave){
-      bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource;
+      bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource; curFloorScale=pendingBgScale; pendingBgScale=null;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.background=""; img.style.backgroundImage='url("'+dataUrl+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
@@ -971,7 +976,7 @@
       if(!d || !d.cone) return;
       var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
       d.aim=Math.round(Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI); d.aimed=true;
-      d.range=Math.max(40, Math.min(maxReach(), Math.round(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale)));   // reach to the tap (scene px ÷ zoom), capped so it can't span the map
+      d.range=reachFromPx(Math.hypot(e.clientX-cx, e.clientY-cy)/zScale, 40);   // reach to the tap → feet when scaled, else px; capped so it can't span the map
       renderDevice(d); growCone(d.id); queueSave(); });
     // Kill the mobile long-press context menu (text-select / Save Image) on the plan.
     work.addEventListener("contextmenu", function(e){ e.preventDefault(); });
@@ -991,6 +996,17 @@
     // A camera's reach (cone length) is capped to ~half the plan's longer side — enough for a realistic
     // cone, but it can never shoot across the whole aerial (and off into the panel) from a far/stray tap.
     function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.35) : 420; }
+    // Pixels per real foot on the current plate (0 = unscaled). scene.clientWidth is the displayed image
+    // width (pre-zoom); the background fills the plate at the image aspect, so it maps to ftW feet.
+    function pxPerFt(){ var f=curFloorScale; if(!f||!(+f.ftW>0)) return 0; var w=(scene&&scene.clientWidth)||0; return w ? w/(+f.ftW) : 0; }
+    // A device's coverage reach in plate pixels: range×px/ft when scaled (range is feet), else legacy px.
+    function devReachPx(d){ var p=pxPerFt(); return p>0 ? Math.max(0,(+d.range||0))*p : (+d.range||RANGE); }
+    // Coverage cap: scaled floors render real feet truthfully (a camera can see past the plan edge), so
+    // only a generous runaway guard (2× the plate) applies; unscaled px keeps the old 35%-of-plate cap.
+    function reachCapPx(){ if(pxPerFt()>0){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? m*2 : 2000; } return maxReach(); }
+    // Drag distance (scene px) → stored reach: feet when scaled, px otherwise; clamped to [minPx, cap].
+    function reachFromPx(distPx, minPx){ var p=pxPerFt(), cap=reachCapPx(); distPx=Math.max(minPx||0, Math.min(distPx, cap));
+      return p>0 ? Math.max(2, Math.round(distPx/p)) : Math.round(distPx); }
     work.addEventListener("wheel", function(e){ if(e.target.closest(".devmenu,.ctxbar,.utils,.plandim")) return;
       e.preventDefault(); var r=work.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.12:1/1.12); }, {passive:false});
     var pinchDist=0, pinchCx=0, pinchCy=0;
@@ -1054,7 +1070,8 @@
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
       var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group, across floors
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
-      var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:RANGE,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
+      var defRange = pxPerFt()>0 ? (REACH_FT[k] || (it.ring?18:40)) : RANGE;   // scaled floor → real-foot default reach; else legacy px
+      var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
     // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
@@ -1091,7 +1108,7 @@
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.left=cen+"px"; wrap.style.top=cen+"px"; wrap.style.transform="rotate("+d.aim+"deg)";
-        var R=Math.min(d.range||RANGE, maxReach()), ap=br, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;   // cap display too, so already-placed cameras with a huge stored reach are reined in
+        var R=Math.min(devReachPx(d), reachCapPx()), ap=br, half=d.fov/2*Math.PI/180, W=ap+R, H=2*R;   // reach is real feet when the floor is scaled, else legacy px; capped (generous when scaled) so it can't run away
         svg.setAttribute("width",W); svg.setAttribute("height",H); svg.style.left="0px"; svg.style.top=(-R)+"px"; svg.setAttribute("viewBox","0 "+(-R)+" "+W+" "+H);
         if(d.fov>=359){ path.setAttribute("d","M "+(ap-R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap+R)+" 0 A "+R+" "+R+" 0 1 1 "+(ap-R)+" 0 Z"); }   // 360° coverage → full circle
         else { var a1x=(ap+R*Math.cos(-half)).toFixed(1), a1y=(R*Math.sin(-half)).toFixed(1), a2x=(ap+R*Math.cos(half)).toFixed(1), a2y=(R*Math.sin(half)).toFixed(1), lg=d.fov>180?1:0;
@@ -1103,10 +1120,10 @@
         s1.setAttribute("stop-color",d.color); s1.setAttribute("stop-opacity",".08");
         line.style.left=ap+"px"; line.style.width=R+"px"; line.style.color=d.color; }
       if(d.ring){ var rw=el.querySelector(".ringWrap"), rc=el.querySelector(".ringC"), rg=el.querySelector(".ringGrip");
-        var cenR=ISZ/2, RR=Math.max(cenR+8, Math.min(d.range||RANGE, maxReach()));
+        var cenR=ISZ/2, RR=Math.max(cenR+8, Math.min(devReachPx(d), reachCapPx()));
         rw.style.left=cenR+"px"; rw.style.top=cenR+"px";
         rc.style.width=(2*RR)+"px"; rc.style.height=(2*RR)+"px"; rc.style.left=(-RR)+"px"; rc.style.top=(-RR)+"px";
-        if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; } }
+        if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; rg.title = pxPerFt()>0 ? (Math.round(d.range)+" ft radius") : "Drag to size the coverage"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
     function select(id){ selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null) growCone(id);
@@ -1297,7 +1314,7 @@
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
-    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.devices=stripDevs(); }
+    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
@@ -1336,11 +1353,14 @@
       scene.style.right="auto"; scene.style.bottom="auto";
       scene.style.left=Math.round((cw-w)/2)+"px"; scene.style.top=Math.round((ch-h)/2)+"px";
       scene.style.width=w+"px"; scene.style.height=h+"px";
+      // Coverage is drawn in plate pixels from pxPerFt (which depends on the plate width just set), so
+      // re-render devices whenever the plate is (re)sized — fixes scaled coverage on first load + on resize.
+      if(typeof devices!=="undefined" && devices.length && typeof renderDevice==="function") devices.forEach(renderDevice);
     }
     window.addEventListener("resize", fitScene);
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo
+      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
@@ -1443,7 +1463,7 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource so the Background tab reopens the saved plan (not the chooser)
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
@@ -1480,7 +1500,7 @@
     // (like a cone's reach), so it's divided by the current zoom to track the pointer 1:1.
     function ringDrag(grip,d){ if(!grip) return; grip.addEventListener("pointerdown", function(e){ if(frozen()) return; e.preventDefault(); e.stopPropagation(); select(d.id); grip.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
-        function mv(ev){ var dist=Math.hypot(ev.clientX-cx,ev.clientY-cy)/(zScale||1); d.range=Math.max(ISZ, Math.min(Math.round(dist), maxReach())); renderDevice(d); }
+        function mv(ev){ var dist=Math.hypot(ev.clientX-cx,ev.clientY-cy)/(zScale||1); d.range=reachFromPx(dist, ISZ); renderDevice(d); }   // feet when scaled, else px
         function up(){ grip.removeEventListener("pointermove",mv); grip.removeEventListener("pointerup",up); queueSave(); }
         grip.addEventListener("pointermove",mv); grip.addEventListener("pointerup",up); }); }
 

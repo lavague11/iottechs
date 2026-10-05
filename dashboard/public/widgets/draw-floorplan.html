@@ -542,12 +542,19 @@
     $("preview").classList.remove("show"); closeLabel(); closeMore(); pushHist(); setMode("structure"); });
   // Done → hand the final plan (enhanced if made, else the sketch) to the survey; it drops it as the
   // floor background AND saves it to the shared library (same contract the satellite tool uses).
+  // Real-world size (feet) of the EXPORTED image — the plan bbox + the same ~6% margin sketchPNG/SVG use —
+  // so the survey can scale coverage (camera throw, speaker radius) to real feet. Omitted when unscaled.
+  function planFeet(){ if(!(metersPerPx>0)) return null;
+    var arr=planCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
+    var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
+    return { ftW:+pxToFeet(bb.w+2*m).toFixed(2), ftH:+pxToFeet(bb.h+2*m).toFixed(2) }; }
   $("tDone").addEventListener("click", function(){ if(busy) return;
     if(!hasSketch()){ msg("Block out the structure, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
+    var scale=planFeet();
     // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
     // at any zoom in the survey (no rasterization on the display path).
-    if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL}, "*"); }catch(e){} }
-    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true}, "*"); }catch(e){} } });
+    if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL, scale:scale}, "*"); }catch(e){} }
+    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale}, "*"); }catch(e){} } });
 
   // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the
   // Structure as occupied cells — the SAME canonical model as hand-drawing, just another creation

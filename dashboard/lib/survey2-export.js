@@ -35,7 +35,9 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       if (!ctx) return null;
       // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(im, 0, 0, W, H);
-      const scene = surveyScene(floors, fi, W, H);
+      // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
+      const pxPerFt = (f.scale && f.scale.ftW > 0) ? W / f.scale.ftW : 0;
+      const scene = surveyScene(floors, fi, W, H, { pxPerFt });
       // Layer 2a — speaker coverage: a light-blue see-through radius circle (drawn under the markers).
       (scene.rings || []).forEach((g) => {
         ctx.beginPath(); ctx.arc(g.px, g.py, g.R, 0, Math.PI * 2);
