@@ -297,8 +297,10 @@
     }).filter(function(r){ return r.cells.length>0; }); }
 
   // ---- per-floor persistence ----
-  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:rooms, metersPerPx:metersPerPx})); }catch(e){} }
-  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=s.rooms; if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }catch(e){} }
+  // Only NAMED rooms are persisted — an unnamed room is never written to storage (also cleans legacy ones).
+  function namedRooms(list){ return (list||[]).filter(function(r){ return r && (r.label||"").trim(); }); }
+  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx})); }catch(e){} }
+  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }catch(e){} }
 
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
@@ -405,9 +407,14 @@
   // Click-away (or Done/Enhance) saves the currently-typed value if it changed. Escape uses finishLabel(false).
   function closeLabel(){ if($("labelPop").classList.contains("on")) finishLabel(true); }
   function finishLabel(save){ var pop=$("labelPop"); if(!pop.classList.contains("on")) return; pop.classList.remove("on");
-    if(save && lpRoom){ var name=lpTC($("lpInput").value); lpRoom.label=name; lpRoom.semanticType=name?(window.IOTRooms?IOTRooms.semanticFor(name):"custom"):""; }
-    var changed=lpRoom && (lpRoom.label||"")!==lpOrig; lpRoom=null; redraw(); persist();
-    if(save && changed) pushHist();
+    var r=lpRoom;
+    if(save && r){ var name=lpTC($("lpInput").value); r.label=name; r.semanticType=name?(window.IOTRooms?IOTRooms.semanticFor(name):"custom"):""; }
+    // A room with no name is never kept — leaving the name blank (click-away, Escape, empty Enter) discards it.
+    var removed=false;
+    if(r && !(r.label||"").trim()){ rooms=rooms.filter(function(x){ return x!==r; }); if(sel===r) sel=null; removed=true; }
+    var changed = removed || (r && (r.label||"")!==lpOrig);
+    lpRoom=null; redraw(); persist();
+    if(changed) pushHist();
   }
 
   // ---- render the current plan to a TIGHTLY-CROPPED png at the plan's real aspect (sent to AI + dropped
