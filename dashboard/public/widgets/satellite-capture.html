@@ -387,6 +387,7 @@
 
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
   var capturedCurrent=false, cropMode=false;
+  var capMetersW=0, capMetersH=0;   // real-world size of the current capture (rect × meters-per-pixel) — the scale carried to the floor plan
   var preview=$("preview");
   document.body.appendChild($("popLevel"));   // lift the Level pop out of the (transformed) toolbar so it can dock as a fixed bottom bar on mobile
   function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); $("levelGrid").classList.remove("on"); }
@@ -479,6 +480,9 @@
       cut.getContext("2d").drawImage(stageCv, Math.round(rect.x*scale), Math.round(rect.y*scale), Math.round(rect.w*scale), Math.round(rect.h*scale), 0,0, cut.width, cut.height);
       var longest=Math.max(cut.width,cut.height);
       if(longest>MAX_EDGE){ var s=MAX_EDGE/longest, ds=document.createElement("canvas"); ds.width=Math.round(cut.width*s); ds.height=Math.round(cut.height*s); var dg=ds.getContext("2d"); dg.imageSmoothingQuality="high"; dg.drawImage(cut,0,0,ds.width,ds.height); cut=ds; }
+      // Real-world size of the captured region: rect is in stage CSS px, mppView is meters per CSS px
+      // at this zoom/latitude. Scale is isotropic, so leveling rotation doesn't change it.
+      capMetersW = rect.w * mppView; capMetersH = rect.h * mppView;
       capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); resetCompare(); enhancedOnce=false; closeRev(); $("tEnhance").title="Enhance with AI"; msg(""); RES(true);
     });
   }); }
@@ -741,7 +745,9 @@
   }
   function trUse(){ if(!(trClosed&&tracePts.length>=3)) return; var R=trImgRect();
     try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src,
-      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect } }, "*"); }catch(e){} }
+      // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
+      // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
+      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) } }, "*"); }catch(e){} }
   (function trInit(){
     var layer=$("trace");
     layer.addEventListener("pointerdown", function(e){ e.preventDefault(); try{layer.setPointerCapture(e.pointerId);}catch(_){ }

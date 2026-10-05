@@ -173,6 +173,11 @@
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
   var enhancedURL=null, enhancedOnce=false, busy=false;
+  // Real-world scale: metres per canvas pixel (0 = unknown / hand-drawn). Set when the structure is
+  // seeded from a satellite trace; persisted with the floor. See lib/floor-scale.js (inlined below).
+  var metersPerPx=0, _seedSc=0, M_PER_FT=0.3048;
+  function pxToFeet(px){ return metersPerPx>0 ? (px*metersPerPx)/M_PER_FT : 0; }
+  function cellsSqFt(n){ var h=pxToFeet(HALF); return metersPerPx>0 ? n*h*h : 0; }
 
   function fitCanvas(){ var r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
     cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
@@ -233,9 +238,16 @@
     var e=edgesOf(set); ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke();
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
-    ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
+    var cx=bb.x+bb.w/2, cy=bb.y+bb.h/2, maxW=Math.max(20,bb.w-12);
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(name||"Tap to name", bb.x+bb.w/2, bb.y+bb.h/2, Math.max(20,bb.w-12)); }
+    var sqft = name ? cellsSqFt((r.cells||[]).length) : 0;   // real sq ft only when the floor is scaled
+    if(sqft>0){
+      ctx.fillStyle="#2b2f36"; ctx.font="600 14px "+fontFam(); ctx.fillText(name, cx, cy-8, maxW);
+      ctx.fillStyle="#9aa0a6"; ctx.font="600 11px "+fontFam(); ctx.fillText(Math.round(sqft)+" sq ft", cx, cy+9, maxW);
+    } else {
+      ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
+      ctx.fillText(name||"Tap to name", cx, cy, maxW);
+    } }
   // Room drag → the cells inside the drag rect that ALSO belong to the structure (the clamp that keeps rooms inside).
   function roomDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return has(cr[0],cr[1]); }); }
   function drawPreview(){
@@ -259,7 +271,20 @@
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
-    drawPreview(); }
+    drawPreview();
+    drawFootprintDims(); }
+  // Overall footprint size, shown only when the floor has a real scale (seeded from a trace).
+  function drawFootprintDims(){ if(!(metersPerPx>0) || !cells.size) return;
+    var bb=cellsBBoxPx(Array.from(cells));
+    var label=Math.round(pxToFeet(bb.w))+" × "+Math.round(pxToFeet(bb.h))+" ft";
+    ctx.font="600 12px "+fontFam(); ctx.textAlign="center"; ctx.textBaseline="middle";
+    var tx=bb.x+bb.w/2, ty=bb.y-13; if(ty<12) ty=bb.y+15;          // above the footprint, or inside if it's at the top
+    var tw=ctx.measureText(label).width, px=8, bw=tw+px*2, bh=20, bx=tx-bw/2, by=ty-bh/2, rr=6;
+    ctx.beginPath();                                               // faint pill so it reads over the grid
+    ctx.moveTo(bx+rr,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,rr); ctx.arcTo(bx+bw,by+bh,bx,by+bh,rr);
+    ctx.arcTo(bx,by+bh,bx,by,rr); ctx.arcTo(bx,by,bx+bw,by,rr); ctx.closePath();
+    ctx.fillStyle="rgba(255,255,255,.9)"; ctx.fill();
+    ctx.fillStyle="#6b7076"; ctx.fillText(label, tx, ty); }
 
   // Enforce ROOM ⊆ STRUCTURE: keep only room cells the structure still occupies. Also migrates any legacy
   // normalized-rect rooms ({x,y,w,h}) into structure-clamped cells. Run on load and after every structure edit.
@@ -272,8 +297,8 @@
     }).filter(function(r){ return r.cells.length>0; }); }
 
   // ---- per-floor persistence ----
-  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:rooms})); }catch(e){} }
-  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=s.rooms; } }catch(e){} }
+  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:rooms, metersPerPx:metersPerPx})); }catch(e){} }
+  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=s.rooms; if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }catch(e){} }
 
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
@@ -529,6 +554,7 @@
     var mnx=Math.min.apply(null,xs), mxx=Math.max.apply(null,xs), mny=Math.min.apply(null,ys), mxy=Math.max.apply(null,ys);
     var bw=Math.max(1e-6,mxx-mnx), bh=Math.max(1e-6,mxy-mny), pad=0.14;
     var sc=Math.min((W0*(1-2*pad))/bw, (H0*(1-2*pad))/bh);
+    _seedSc=sc;                                        // canvas px per world unit — lets the seed resolve real scale
     var offx=(W0-bw*sc)/2 - mnx*sc, offy=(H0-bh*sc)/2 - mny*sc;
     var poly=wp.map(function(p){ return {x:p.x*sc+offx, y:p.y*sc+offy}; });
     var pxs=poly.map(function(p){return p.x;}), pys=poly.map(function(p){return p.y;});
@@ -554,7 +580,9 @@
   (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
     if(!S||!S.pts||S.pts.length<3) return;
     if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
-    var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true; } })();
+    var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
+      if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
+    } })();
   if(_seeded){ snap=1; applySnapUI(); }               // seed is box-aligned → continue editing on the full-box grid
   reconcileRooms();                                  // migrate legacy rect rooms + clip every room to the structure
   hist=[snapshot()]; hi=0;                           // baseline history on the reconciled (or seeded) state
