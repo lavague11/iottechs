@@ -78,3 +78,17 @@ test("floor id rule: f_ + 8 base-36 chars, backfill only when missing, no collis
   ensure(many);
   assert.equal(new Set(many.map((f) => f.id)).size, 1000);
 });
+
+test("approval fingerprint: Structure changes it, bookkeeping (id/aerial/legacyIdx/outlineDraft/ctx) never does", async () => {
+  const { toolFingerprint } = await import("../lib/tool-data.js");
+  const base = { floors: [{ id: "f_a", name: "Floor 1", bg: "data:image/png;base64,AAAA", started: true, devices: [{ k: "cam", x: 10, y: 20, aim: 0, fov: 90, range: 40 }],
+    plan: { v: 1, cells: ["0,0", "1,0"], rooms: [], metersPerPx: 0.02 } }] };
+  const fp = (d) => toolFingerprint("survey2", JSON.stringify(d));
+  const vary = (patch) => fp({ floors: [{ ...base.floors[0], ...patch }] });
+  assert.equal(vary({}), fp(base));
+  assert.equal(vary({ id: "f_zzz", legacyIdx: 3 }), fp(base), "id/legacyIdx are bookkeeping");
+  assert.equal(vary({ aerial: { northDeg: -13, rotationDeg: -13 } }), fp(base), "capture transform is bookkeeping");
+  assert.equal(vary({ outlineDraft: { pts: [[0.1, 0.1], [0.5, 0.1], [0.5, 0.5]], closed: false } }), fp(base), "an unfinished outline is view-state");
+  assert.equal(vary({ ctx: { src: "data:image/jpeg;base64,BBBB", rect: { x: 0, y: 0, w: 1, h: 1 } } }), fp(base), "context crop is derived from the capture");
+  assert.notEqual(vary({ plan: { ...base.floors[0].plan, cells: ["0,0", "1,0", "2,0"] } }), fp(base), "Structure IS meaning");
+});

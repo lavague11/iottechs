@@ -56,7 +56,8 @@ function fnv1a(str) {
 function planHash(plan) {
   return (plan && Array.isArray(plan.cells) && plan.cells.length) ? fnv1a(JSON.stringify({ c: plan.cells, r: plan.rooms })) : null;
 }
-// Floor `id`, capture `aerial` and `legacyIdx` are bookkeeping, NOT meaning — backfilling them never voids an approval.
+// Floor `id`, capture `aerial`, `legacyIdx`, the unfinished `outlineDraft` and the derived `ctx` crop are bookkeeping,
+// NOT meaning — backfilling them never voids an approval.
 // `planHash` is only present when the floor HAS a Structure, so floors without one hash exactly as before.
 function survey2Meaning(d) {
   if (!d || !Array.isArray(d.floors)) return null;

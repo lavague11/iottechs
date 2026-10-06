@@ -40,6 +40,14 @@ test("inline survey helpers are numerically identical to the library", () => {
   assert.equal(inline.northArrowAngle(undefined), northArrowAngle(undefined));
 });
 
+test("satellite norm() — the source of northDeg — is numerically identical to the library", () => {
+  const satellite = readFileSync(new URL("../public/widgets/satellite-capture.html", import.meta.url), "utf8");
+  const src = satellite.match(/function norm\(d\)\{[^\n]*?\}/)[0];
+  const inline = new Function(`${src}\nreturn norm;`)();
+  for (const d of [-13, 13, 180, -180, 193, 540, 0, -200, 359.5, 720.25]) assert.equal(inline(d), norm(d), `norm(${d})`);
+  assert.ok(satellite.includes("northDeg: norm(viewRot)"), "northDeg comes from this norm()");
+});
+
 test("inline draw gridBoxFeet is numerically identical to the library (FULL = 26)", () => {
   const src = draw.match(/function gridBoxFeet\([^)]*\)\s*\{[^\n]*\}\s*\n/)[0];
   const M_PER_FT = 0.3048, FULL = 26;
