@@ -160,9 +160,12 @@
   var BIZ=_qs.get("biz")||"";
   // Per-floor geometry: the CANONICAL copy is the survey floor record's `plan` (reaches the server with the
   // survey), delivered over postMessage (iotPlanReady → iotPlanLoad, iotPlanSave on every persist). This
-  // localStorage key — per (project, floor id) — is crash recovery only. LSK_OLD = the legacy index key.
-  var LSK_OLD = PID ? ("iot_struct_"+PID+"_"+FLOOR) : null;
-  var LSK = PID && FID ? ("iot_struct_"+PID+"_"+FID) : LSK_OLD;
+  // localStorage key — per (project, floor id) — is crash recovery only. LSK_OLD = the legacy index key, and
+  // ONLY for a floor the survey says pre-dates ids (&lidx = its index at backfill). Never the live FLOOR index:
+  // after a Duplicate/Delete that index belongs to a different floor's old draft.
+  var LIDX=_qs.get("lidx")||"";
+  var LSK_OLD = PID && LIDX ? ("iot_struct_"+PID+"_"+LIDX) : null;
+  var LSK = PID && FID ? ("iot_struct_"+PID+"_"+FID) : (PID ? ("iot_struct_"+PID+"_"+(LIDX||FLOOR)) : null);   // no fid = standalone/old host: local-only, never posted
   var planState="loading";          // "loading" until the geometry is resolved (host plan / legacy / standalone)
   function $(id){return document.getElementById(id);}
   var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage");
@@ -302,28 +305,32 @@
   // ---- per-floor persistence ----
   // Only NAMED rooms are persisted — an unnamed room is never written to storage (also cleans legacy ones).
   function namedRooms(list){ return (list||[]).filter(function(r){ return r && (r.label||"").trim(); }); }
-  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx}; }
-  function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx})); }catch(e){} }
+  // t = when this geometry was last EDITED (not written): the recovery copy and the posted plan share it, a
+  // loaded plan keeps its own — so a local copy is only "newer" when edits never reached the survey.
+  var _planStamp=0;
+  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx, t:_planStamp}; }
+  function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; metersPerPx=0; sel=null;
+  function applyPlan(s){ cells=new Set(); rooms=[]; metersPerPx=0; sel=null; _planStamp=(s&&+s.t)||0;
     if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
-  // Local recovery copy: this floor's id key first, then the legacy index key (pre-floor-id drafts).
-  function localPlan(){ var s=readLS(LSK); if(!hasPlan(s) && LSK_OLD && LSK_OLD!==LSK) s=readLS(LSK_OLD); return hasPlan(s) ? s : null; }
+  // Local recovery copy: this floor's id key first, then the legacy index key (only with &lidx). _lpKey = where it came from.
+  var _lpKey=null;
+  function localPlan(){ var s=readLS(LSK); _lpKey=LSK; if(!hasPlan(s) && LSK_OLD && LSK_OLD!==LSK){ s=readLS(LSK_OLD); _lpKey=LSK_OLD; } if(!hasPlan(s)){ _lpKey=null; return null; } return s; }
   // Canonical save → the survey floor record (debounced); flushPlan() forces it out now (Done / migration).
   var _planT=null;
   function postPlan(){ _planT=null; if(!FID || window.parent===window) return; try{ parent.postMessage({type:"iotPlanSave", project:PID, fid:FID, plan:planOut()}, "*"); }catch(e){} }
   function flushPlan(){ if(_planT){ clearTimeout(_planT); postPlan(); } }
-  function persist(){ if(planState!=="loaded") return; writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); }
+  function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); }
 
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
   var hist=[snapshot()], hi=0;
   function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
   function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); sel=null; closeLabel(); }
-  function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } } }
-  function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); } }
+  function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } persist(); } }   // an undo is an edit → saved like one
+  function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); persist(); } }
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
   function updateTools(){ $("tUndo").style.display = hi>0 ? "inline-flex" : "none"; $("tRedo").style.display = hi<hist.length-1 ? "inline-flex" : "none"; $("tRoom").classList.toggle("locked", cells.size===0); }
 
@@ -565,7 +572,7 @@
     return { ftW:+pxToFeet(bb.w+2*m).toFixed(2), ftH:+pxToFeet(bb.h+2*m).toFixed(2) }; }
   $("tDone").addEventListener("click", function(){ if(busy||planState!=="loaded") return;
     if(!hasSketch()){ msg("Block out the structure, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
-    closeLabel(); flushPlan();                     // the floor record holds the final geometry BEFORE the result lands
+    closeLabel(); clearTimeout(_planT); _planT=null; writeLS(); postPlan();   // always: the floor record holds the final geometry BEFORE the result lands
     var scale=planFeet();
     // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
     // at any zoom in the survey (no rasterization on the display path).
@@ -608,7 +615,7 @@
   // Geometry resolves ONCE (host plan / legacy import / standalone), THEN the trace seed applies on top, then
   // history + mode. Until then the canvas stays a neutral blank (no "block out" prompt, input ignored).
   var _seeded=false, _planTO=null, _lateOK=false;
-  function initWithPlan(plan, migrated){ if(planState==="loaded") return; planState="loaded"; clearTimeout(_planTO);
+  function initWithPlan(plan, migrated, fromKey){ if(planState==="loaded") return; planState="loaded"; clearTimeout(_planTO);
     applyPlan(plan);
     (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
       if(!S||!S.pts||S.pts.length<3) return;
@@ -621,20 +628,30 @@
     hist=[snapshot()]; hi=0;                         // baseline history on the reconciled (or seeded) state
     setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
     writeLS();                                       // recovery copy now mirrors the resolved geometry (overwrite, never merge)
+    if(fromKey===LSK_OLD && LSK_OLD && LSK_OLD!==LSK && hasPlan(readLS(LSK))){ try{ localStorage.removeItem(LSK_OLD); }catch(e){} }   // legacy draft now lives under the fid key → never imported twice
     if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
     updateTools(); }
-  // Host reply: a non-null plan is authoritative (even an empty one). null → import a local draft once, else empty.
+  // Host reply: a non-null plan is authoritative (even an empty one) — unless this floor's recovery copy holds
+  // edits made after it (crash before the survey got them). null → import a local draft once, else empty.
   window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotPlanLoad"||m.fid!==FID) return;
     var p=(m.plan && typeof m.plan==="object") ? m.plan : null;
-    if(planState==="loaded"){                        // reply after the 800 ms fallback: adopt it only if nothing was touched yet
-      if(_lateOK && p && hi===0 && !_qs.get("seed")){ applyPlan(p); reconcileRooms(); hist=[snapshot()]; hi=0; setMode(cells.size?"room":"structure"); writeLS(); }
-      return; }
-    if(p){ initWithPlan(p, false); return; }
-    var lp=localPlan(); initWithPlan(lp, !!lp); });
-  if(window.parent===window){ initWithPlan(localPlan(), false); }   // standalone / dev: localStorage as before
+    if(planState==="loaded"){                        // reply after the fallback: never dropped silently
+      if(!_lateOK || !p || _qs.get("seed")) return; _lateOK=false;
+      if(hi>0){ if(!hasPlan(p)) return;              // edits vs an empty server plan → nothing to lose
+        if(!window.confirm("A saved plan for this floor exists on the server. Replace your current changes with it?")){ persist(); flushPlan(); return; } }   // keep local → replace the server copy deliberately
+      applyPlan(p); reconcileRooms(); hist=[snapshot()]; hi=0; setMode(cells.size?"room":"structure"); writeLS();
+      clearTimeout(_planT); postPlan(); return; }    // hand it back: any edit/undo already posted must not stand in for it
+    if(p){ var lc=readLS(LSK); if(hasPlan(p) && hasPlan(lc) && (+lc.t||0) > (+p.t||0)+1500){ initWithPlan(lc, true); return; }   // unsent local edits win, and are posted
+      initWithPlan(p, false); return; }
+    var lp=localPlan(); initWithPlan(lp, !!lp, _lpKey); });
+  if(window.parent===window){ var lp0=localPlan(); initWithPlan(lp0, false, _lpKey); }   // standalone / dev: localStorage as before
   else {
-    _planTO=setTimeout(function(){ _lateOK=true; initWithPlan(localPlan(), false); }, 800);   // silent/broken host → never stay blank
-    try{ parent.postMessage({type:"iotPlanReady", project:PID, fid:FID}, "*"); }catch(e){ initWithPlan(localPlan(), false); }
+    // Silent/slow host: a local copy → use it at 800 ms. Nothing local → keep the canvas blocked ("Loading plan…")
+    // up to 6 s total before starting empty, so an empty sketch can't race ahead of (and later replace) the real plan.
+    _planTO=setTimeout(function(){ var lp=localPlan(); if(lp){ _lateOK=true; initWithPlan(lp, false, _lpKey); return; }
+      $("hint").textContent="Loading plan…"; $("hint").style.display="block";
+      _planTO=setTimeout(function(){ _lateOK=true; initWithPlan(null, false); }, 5200); }, 800);
+    try{ parent.postMessage({type:"iotPlanReady", project:PID, fid:FID}, "*"); }catch(e){ var lp1=localPlan(); initWithPlan(lp1, false, _lpKey); }
   }
 </script>
 </body>
