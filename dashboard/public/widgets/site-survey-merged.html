@@ -1882,14 +1882,39 @@
     function planViewBox(src){ if(gridVBCache.src===src) return gridVBCache.vb; var vb=null;
       try{ var i=src.indexOf(","), txt=/;base64/.test(src.slice(0,i)) ? atob(src.slice(i+1)) : decodeURIComponent(src.slice(i+1)); var m=/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/.exec(txt); if(m && +m[3]>0 && +m[4]>0) vb={x0:+m[1],y0:+m[2],vw:+m[3],vh:+m[4]}; }catch(e){}
       gridVBCache={src:src,vb:vb}; return vb; }
+    // ---- Phase 1 (grid-first): the floor's own persisted grid transform. The grid becomes a first-class
+    // canonical surface established on the enhanced aerial — origin (plate fraction), box size in FEET, and
+    // a reserved rotation — instead of being derived from the plan's viewBox. `floor.grid` (when set) wins;
+    // a scaled aerial with no plan yet gets a scale-derived grid so the grid exists BEFORE outlining; a
+    // legacy hybrid floor with no explicit grid keeps the plan-viewBox overlay exactly as before (no drift).
+    function validGrid(g){ try{ if(!g||typeof g!=="object") return null; var bf=+g.boxFt; if(!(bf>0)||bf>100000) return null;
+      var ox=(g.origin&&isFinite(+g.origin.x))?+g.origin.x:0, oy=(g.origin&&isFinite(+g.origin.y))?+g.origin.y:0;
+      ox=Math.max(-1,Math.min(1,ox)); oy=Math.max(-1,Math.min(1,oy));
+      var rot=isFinite(+g.rotation)?+g.rotation:0; while(rot<=-180)rot+=360; while(rot>180)rot-=360;   // rotation reserved for the alignment phase (stored, not yet applied to the overlay)
+      return { boxFt:Math.round(bf*1000)/1000, origin:{x:ox,y:oy}, rotation:Math.round(rot*100)/100 }; }catch(e){ return null; } }
+    // Real-world feet of the plate (scale wins, else the ctx crop's feet) — null when the floor is unscaled.
+    function floorScaleFeet(f){ var sc=curFloorScale||(f&&f.scale)||null; if(sc&&+sc.ftW>0&&+sc.ftH>0) return {ftW:+sc.ftW,ftH:+sc.ftH};
+      if(f&&f.ctx&&+f.ctx.ftW>0&&+f.ctx.ftH>0) return {ftW:+f.ctx.ftW,ftH:+f.ctx.ftH}; return null; }
+    // A "nice" default box in feet (~10 boxes across the site) when nothing explicit is set: 1/2/5/10·10^n.
+    function niceStep(ft){ if(!(ft>0)) return 0; var raw=ft/10, pow=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10)), n=raw/pow, m=n<1.5?1:n<3.5?2:n<7.5?5:10; return m*pow; }
+    // Feet per grid box for a floor: explicit grid wins; else the plan's real scale (identical to the legacy overlay); else a nice step from the site width.
+    function gridBoxFtFor(f){ if(f&&f.grid&&+f.grid.boxFt>0) return +f.grid.boxFt; var mpp=(f&&f.plan&&+f.plan.metersPerPx)||0; if(mpp>0) return GRID_FULL*mpp/0.3048; var sc=floorScaleFeet(f); return sc?niceStep(sc.ftW):0; }
     function renderGrid(){
       var g=document.getElementById("gridLayer"), lab=document.getElementById("gridScale"), scene=document.getElementById("scene"); if(!g||!lab) return;
-      var f=floors[curFloor]||{}, mpp=(f.plan&&+f.plan.metersPerPx)||0, vb=(hybridCapable(f)&&mpp>0)?planViewBox(f.planSvg):null, sw=scene?scene.clientWidth:0, sh=scene?scene.clientHeight:0;
-      var gt=document.getElementById("showGridTog"), gr=gt&&gt.closest?gt.closest(".showRow"):null; if(gr) gr.style.display=vb?"":"none";   // the Grid toggle only drives the overlay — hide it on floors that have no scaled overlay grid (plain/upload/unscaled)
-      if(!showGridState||!vb||!sw||!sh||!bgData){ g.style.display="none"; lab.style.display="none"; return; }
-      var mx=gridMetrics(sw,vb.x0,vb.vw), my=gridMetrics(sh,vb.y0,vb.vh), n=Math.round(GRID_FULL*mpp/0.3048*10)/10;
-      g.style.display="block"; g.style.backgroundSize=mx.spacing+"px "+my.spacing+"px"; g.style.backgroundPosition=mx.off+"px "+my.off+"px";
-      lab.textContent="1 box = "+n+" ft"; lab.style.display="block";
+      var f=floors[curFloor]||{}, mpp=(f.plan&&+f.plan.metersPerPx)||0, sw=scene?scene.clientWidth:0, sh=scene?scene.clientHeight:0;
+      // Legacy floor (a plan exists, no explicit grid transform) → keep the plan-viewBox overlay verbatim so drawn structures never shift.
+      var useLegacy=(!f.grid && hybridCapable(f) && mpp>0), vb=useLegacy?planViewBox(f.planSvg):null;
+      // Canonical grid: an explicit floor.grid, OR a scaled aerial with no legacy plan overlay (grid-first — exists before outlining).
+      var sc=floorScaleFeet(f), boxFt=gridBoxFtFor(f), canCanon=(!useLegacy && !!sc && boxFt>0);
+      var hasGrid=(useLegacy && !!vb) || canCanon;
+      var gt=document.getElementById("showGridTog"), gr=gt&&gt.closest?gt.closest(".showRow"):null; if(gr) gr.style.display=hasGrid?"":"none";   // the Grid toggle drives the overlay — hidden on floors with no scaled grid (plain/upload/unscaled)
+      if(!showGridState||!hasGrid||!sw||!sh||!bgData){ g.style.display="none"; lab.style.display="none"; return; }
+      var spx, spy, offx, offy, n;
+      if(useLegacy){ var mx=gridMetrics(sw,vb.x0,vb.vw), my=gridMetrics(sh,vb.y0,vb.vh); spx=mx.spacing; spy=my.spacing; offx=mx.off; offy=my.off; n=GRID_FULL*mpp/0.3048; }
+      else { var og=(f.grid&&f.grid.origin)?f.grid.origin:{x:0,y:0}; spx=boxFt/sc.ftW*sw; spy=boxFt/sc.ftH*sh;   // square in FEET; plate maps uniformly to ftW×ftH
+        offx=(((og.x*sw)%spx)+spx)%spx; offy=(((og.y*sh)%spy)+spy)%spy; n=boxFt; }
+      g.style.display="block"; g.style.backgroundSize=spx+"px "+spy+"px"; g.style.backgroundPosition=offx+"px "+offy+"px";
+      lab.textContent="1 box = "+(Math.round(n*10)/10)+" ft"; lab.style.display="block";
     }
     function syncViewSeg(cap, v){ var seg=document.getElementById("viewSeg"); if(!seg) return; seg.style.display=cap?"":"none";
       if(cap) [].forEach.call(seg.querySelectorAll("button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); }); }
@@ -1943,7 +1968,7 @@
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(from&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
         derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
@@ -1954,7 +1979,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
         derivedFromFloorId:src.id||null,   // lineage only — the copy is fully independent (deep copies + fresh ids)
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); flushNow(); }   // discrete action → immediate server flush
@@ -2051,7 +2076,7 @@
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showGridState=st.showGrid!==false; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
