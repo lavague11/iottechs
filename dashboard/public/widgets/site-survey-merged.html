@@ -84,6 +84,10 @@
   .ubtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   .ubtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .ubtn:disabled{opacity:.5;cursor:default}
+  .viewseg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(4px)}
+  .viewseg .vbtn{background:rgba(255,255,255,.9);border:0;border-left:1px solid var(--line);height:34px;padding:0 11px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer}
+  .viewseg .vbtn:first-child{border-left:0}
+  .viewseg .vbtn.on{background:var(--ink);color:#fff}
   /* dim (moon) sits in the plan's top-right corner */
   .plandim{position:absolute;right:14px;top:14px;z-index:7;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
   .plandim svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -499,7 +503,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
@@ -509,6 +513,7 @@
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
+            <div class="viewseg" id="viewSeg" role="group" aria-label="View" style="display:none"><button class="vbtn" data-v="satellite">Aerial</button><button class="vbtn" data-v="plan">Plan</button><button class="vbtn" data-v="hybrid">Hybrid</button></div>
             <button class="ubtn" id="fitBtn" title="Fit" aria-label="Fit plan to screen"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
@@ -666,7 +671,7 @@
       var o={ src:c.src, rect:{ x:r.x, y:r.y, w:r.w, h:r.h }, northDeg:(typeof c.northDeg==="number"&&isFinite(c.northDeg))?c.northDeg:null };
       if(+c.ftW>0&&+c.ftH>0){ o.ftW=+c.ftW; o.ftH=+c.ftH; } return o; }catch(e){ return null; } }
     function validPlanSvg(s){ return (typeof s==="string" && s.indexOf("data:image/svg")===0 && s.length<=400000) ? s : null; }
-    function clearCtx(fl){ if(fl){ fl.ctx=null; fl.planSvg=null; } }   // a new non-outline background (satellite Use / upload / library) → the context no longer applies
+    function clearCtx(fl){ if(fl){ fl.ctx=null; fl.planSvg=null; fl.bgCtx=false; } }   // a new non-outline background (satellite Use / upload / library) → the context no longer applies (not hybrid-capable)
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
@@ -726,7 +731,7 @@
       var ol = ev.data.outline;
       if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]){ floors[curFloor].outlineDraft=null; floors[curFloor].ctx=validCtx(ev.data.ctx); } queueSave(); enterDraw(ol); return; }   // Use Outline consumed the unfinished draft; ctx = the context crop every view of this floor shares
       // A draw result carries the transparent plan layer (null when it has no seed/ctx, or an AI raster); any other new background invalidates both layers.
-      if(floors[curFloor]){ if(pendingBgSource==="draw") floors[curFloor].planSvg=validPlanSvg(ev.data.planSvg); else clearCtx(floors[curFloor]); }
+      if(floors[curFloor]){ if(pendingBgSource==="draw"){ floors[curFloor].planSvg=validPlanSvg(ev.data.planSvg); floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true); } else clearCtx(floors[curFloor]); }
       applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale, ev.data.aerial);
     });
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
@@ -803,9 +808,7 @@
     }
     function finishBackground(dataUrl, skipSave){
       bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource; curFloorScale=pendingBgScale; pendingBgScale=null; curFloorAerial=pendingBgAerial; pendingBgAerial=null;
-      var img=document.getElementById("stageImg");
-      if(dataUrl){ img.style.background=""; img.style.backgroundImage='url("'+dataUrl+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
-      else { img.style.backgroundImage=""; img.style.background="#fff"; }
+      renderView();            // one path for the layers (capable → aerial/plan/hybrid; else the plain plan bg)
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
@@ -1093,6 +1096,9 @@
     var fitBtn=document.getElementById("fitBtn");
     function updateFitBtn(){ if(fitBtn){ fitBtn.classList.toggle("on", curCover); fitBtn.title = curCover ? "Fit" : "Fill"; } }
     if(fitBtn) fitBtn.addEventListener("click", function(){ fitOverride=!curCover; resetZoom(); fitScene(); updateFitBtn(); });
+    // View pill (capable floors only): switch the shared plate between Aerial / Plan / Hybrid.
+    var viewSeg=document.getElementById("viewSeg");
+    if(viewSeg) [].forEach.call(viewSeg.querySelectorAll("button"), function(b){ b.addEventListener("click", function(){ var f=floors[curFloor]; if(!hybridCapable(f)) return; f.view=b.getAttribute("data-v"); renderView(); queueSave(); }); });
 
     // ---- Rotate: turn the plan 90° clockwise. Baked into the image itself so aspect/fit/device
     //      anchoring all stay correct; placed devices + aims rotate with it. ----
@@ -1410,7 +1416,26 @@
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
       var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
       devices.push(d); mountDevice(d); }
-    function setStageBg(){ var img=document.getElementById("stageImg"); if(bgData){ img.style.background=""; img.style.backgroundImage='url("'+bgData+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } fitScene(); }   // clear the shorthand FIRST, then set image + force no-repeat/cover
+    // Phase 4.2 view modes. A floor is hybrid-capable only when it has the ctx aerial crop, the transparent plan layer, AND a
+    // ctx-framed opaque bg (bgCtx) — so one plate (the ctx extent) holds all three and device %-coords stay valid in every view.
+    // Floors outlined in the 4.1-only window (ctx+planSvg, no bgCtx) are NON-capable → single view, unchanged (no ctx-extent overlay on a tight bbox bg).
+    function hybridCapable(f){ return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }
+    // ONE place that drives the two layers (#aerialImg behind, #stageImg the plan) by the floor's view. #scene stays sized to
+    // sceneAspect (from floor.bg); for a capable floor floor.bg is ctx-framed so its aspect == the ctx/planSvg aspect → all layers line up 1:1.
+    function renderView(){
+      var aerial=document.getElementById("aerialImg"), img=document.getElementById("stageImg"); if(!aerial||!img) return;
+      var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?((f.view==="satellite"||f.view==="plan"||f.view==="hybrid")?f.view:"hybrid"):null;
+      function lay(el,src){ if(src){ el.style.background=""; el.style.backgroundImage='url("'+src+'")'; el.style.backgroundRepeat="no-repeat"; el.style.backgroundSize="contain"; el.style.backgroundPosition="center"; } else { el.style.backgroundImage=""; el.style.background="transparent"; } }
+      if(!cap){ aerial.style.display="none";   // unchanged: #stageImg = floor.bg (cover), as setStageBg always did
+        if(bgData){ img.style.background=""; img.style.backgroundImage='url("'+bgData+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
+      else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }                      // the ctx-framed OPAQUE plan
+      else if(v==="satellite"){ aerial.style.display=""; lay(aerial, f.ctx.src); lay(img, null); } // aerial only; plan layer transparent
+      else { aerial.style.display=""; lay(aerial, f.ctx.src); lay(img, f.planSvg); }               // hybrid: aerial + transparent plan (0.85-white structure subdues the roof)
+      syncViewSeg(cap, v);
+    }
+    function syncViewSeg(cap, v){ var seg=document.getElementById("viewSeg"); if(!seg) return; seg.style.display=cap?"":"none";
+      if(cap) [].forEach.call(seg.querySelectorAll("button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); }); }
+    function setStageBg(){ renderView(); fitScene(); }   // layers chosen by view; fitScene sizes #scene to floor.bg's aspect as before
     // Size #scene to the PHOTO's aspect ratio, centered in the canvas — so device icons (positioned
     // at % of #scene) always anchor to the same spot on the image on every screen (iPhone/iPad/desktop),
     // and the whole photo shows with blank space AROUND the plate (never inside it → no floating icons,
@@ -1459,7 +1484,7 @@
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null,   // real-world scale + capture + structure travel with the background (deep copies — never shared with the source)
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null,   // real-world scale + capture + structure + ctx-framed flag + view travel with the background (deep copies — never shared with the source)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
@@ -1469,7 +1494,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null,
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null,
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); queueSave(); }
     // New floor: if the current floor has a background, offer to import it (with or without the placed
@@ -1564,7 +1589,7 @@
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);

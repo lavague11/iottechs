@@ -184,7 +184,7 @@ test("16: the draw tool hands the survey a vector plan (SVG scene), raster only 
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../public/widgets/draw-floorplan.html", import.meta.url), "utf8");
   // One SVG scene: structure (boundary path), rooms (edges), labels (<text>) and the grid pattern.
-  const svgFn = html.slice(html.indexOf("function sketchSVG()"), html.indexOf("// ---- enhance"));
+  const svgFn = html.slice(html.indexOf("function sketchSVG("), html.indexOf("// ---- enhance"));
   for (const part of ['<svg xmlns="http://www.w3.org/2000/svg"', "boundaryEdges()", "edgesOf(set)", "<text x=", '<pattern id="pg"', "data:image/svg+xml"]) assert.ok(svgFn.includes(part), part);
   // The finish hand-off posts the SVG (vector:true) unless an AI-enhanced raster exists; both carry the
   // real-world scale (feet) so the survey can size coverage to real feet.

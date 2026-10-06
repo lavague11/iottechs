@@ -477,10 +477,13 @@
   // ---- VECTOR export: the drawn plan as an SVG data URL. This is what Done hands back, so the finished
   // plan stays perfectly crisp at any zoom (paths + real <text>, never a rasterized bitmap). ----
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-  function sketchSVG(){
-    var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
-    var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
-    var x0=bb.x-m, y0=bb.y-m, vw=bb.w+2*m, vh=bb.h+2*m;
+  // vb (optional) = {x0,y0,vw,vh} in plan px → frame the OPAQUE plan on that exact extent (the ctx plate, 4.2); no arg → today's tight bbox + 6% margin.
+  function sketchSVG(vb){
+    var x0,y0,vw,vh;
+    if(vb){ x0=vb.x0; y0=vb.y0; vw=vb.vw; vh=vb.vh; }
+    else { var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
+      var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
+      x0=bb.x-m; y0=bb.y-m; vw=bb.w+2*m; vh=bb.h+2*m; }
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
     o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="#ffffff"/>');
@@ -507,8 +510,11 @@
      context crop — viewBox = the ctx rect mapped through the seed transform (aerial fraction x·aspect·sc+offx, y·sc+offy).
      The survey stacks it 1:1 over the ctx aerial crop (same fractional extent → devices keep one set of % coords).
      preserveAspectRatio none → it fills the plate box exactly even with the rounded width/height. Null without seed+ctx. */
+  // The ctx plate's viewBox in plan px (4.2) — ONE source for both the plan layer and the ctx-framed opaque bg, so they can't drift.
+  function ctxVB(){ if(!(_seed&&CTX)) return null; var r4=function(v){ return Math.round(v*1e4)/1e4; }, a=_seed.aspect, sc=_seed.sc;
+    return { x0:r4(CTX.x*a*sc+_seed.offx), y0:r4(CTX.y*sc+_seed.offy), vw:r4(CTX.w*a*sc), vh:r4(CTX.h*sc) }; }
   function planLayerSVG(){ if(!_seed||!CTX||!hasSketch()) return null;
-    var r4=function(v){ return Math.round(v*1e4)/1e4; }, a=_seed.aspect, sc=_seed.sc, x0=r4(CTX.x*a*sc+_seed.offx), y0=r4(CTX.y*sc+_seed.offy), vw=r4(CTX.w*a*sc), vh=r4(CTX.h*sc);
+    var vb=ctxVB(), x0=vb.x0, y0=vb.y0, vw=vb.vw, vh=vb.vh;
     if(!(vw>0&&vh>0)) return null;
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="none" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
@@ -600,7 +606,9 @@
     // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
     // at any zoom in the survey (no rasterization on the display path).
     if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL, scale:scale}, "*"); }catch(e){} }
-    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } });
+    else { var vb=ctxVB();   // outlined floor → the bg is the OPAQUE plan framed on the ctx plate (flagged bgCtx) so Plan/customer/PDF surfaces align with the aerial; plain hand-drawn keeps the tight bbox bg
+      if(vb){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(vb), vector:true, scale:scale, planSvg:planLayerSVG(), bgCtx:true}, "*"); }catch(e){} }
+      else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } } });
     // planSvg (Phase 4 layer) rides the vector hand-off only — an AI-enhanced result carries none, so the survey stores null (never a stale layer).
 
   // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the
