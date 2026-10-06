@@ -61,7 +61,7 @@
 
   /* device + FOV (used when a background is set) */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
-  #northArrow{position:absolute;top:8px;right:8px;width:26px;height:26px;z-index:2;pointer-events:none;display:none}
+  #northArrow{position:absolute;top:58px;right:19px;width:26px;height:26px;z-index:6;pointer-events:none;display:none}
   .stage-img{position:absolute;inset:0;background:#fff;background-repeat:no-repeat;background-size:contain;background-position:center}
   .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
   .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
@@ -499,7 +499,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg></div>
+          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
@@ -743,11 +743,13 @@
     // Unfinished "Outline Building" corners (image fractions of this floor's capture) — view-state on the floor so a refresh mid-outline restores them.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotOutlineSave"&&m.type!=="iotOutlineReady")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;
-      var fl=floors[curFloor];
-      if(m.type==="iotOutlineReady"){ try{ satFrame.contentWindow.postMessage({type:"iotOutlineLoad", draft:(fl&&fl.outlineDraft)||null}, "*"); }catch(e){} return; }
+      var fl=m.type==="iotOutlineSave" && m.fid ? floors.filter(function(f){ return f&&f.id===m.fid; })[0] : floors[curFloor];   // a late/debounced save lands on the floor it was drawn on, never the now-current one
+      if(m.type==="iotOutlineReady"){ try{ satFrame.contentWindow.postMessage({type:"iotOutlineLoad", fid:(fl&&fl.id)||null, draft:(fl&&fl.outlineDraft)||null}, "*"); }catch(e){} return; }
       if(frozen() || !fl) return;
       var d=m.draft, ok=false; try{ ok=!!(d && Array.isArray(d.pts) && d.pts.length<=500); }catch(e){ ok=false; }
-      fl.outlineDraft = ok ? { pts:d.pts.map(function(p){ return [+p[0]||0, +p[1]||0]; }), closed:!!d.closed } : null; queueSave(); });
+      var pts=ok ? d.pts.filter(function(p){ return Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1]); }).map(function(p){ return [Math.max(0,Math.min(1,+p[0])), Math.max(0,Math.min(1,+p[1]))]; }) : [];
+      var cap=null; try{ cap=(d && d.cap && typeof d.cap==="object" && !Array.isArray(d.cap)) ? JSON.parse(JSON.stringify(d.cap)) : null; }catch(e){ cap=null; }   // capture key the draft was drawn on — opaque here, the satellite matches it
+      fl.outlineDraft = pts.length ? { pts:pts, closed:!!d.closed, cap:cap } : null; queueSave(); });
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
@@ -1441,6 +1443,7 @@
     }
     window.addEventListener("resize", fitScene);
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
+      if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow();

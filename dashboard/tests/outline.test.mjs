@@ -37,11 +37,12 @@ function extractVar(src, re, label) {
 }
 
 const trZDecl = extractVar(widget, /var trZ=\{[^}]*\};/, "var trZ={…}");
-const FNS = ["trC2S", "trS2C", "trSnap", "trBtns", "trDraftPost", "trPush", "trGo", "trUndo", "trRedo", "trLoadDraft"]
+const FNS = ["norm", "trC2S", "trS2C", "trSnap", "trBtns", "trCapKey", "trCapMatch", "trDraftPost", "trPush", "trGo", "trUndo", "trRedo", "trLoadDraft"]
   .map((n) => extractFn(widget, n)).join("\n");
 
 // One sandbox per test. `embedded` → window.parent !== window so the debounced autosave path runs.
-function sandbox({ embedded = false, tracing = true, capCanvas = {} } = {}) {
+const CAP = { center: { lat: 40.1, lng: -74.2 }, zoom: 20, rotationDeg: 12, rect: { x: 10, y: 20, w: 300, h: 200 }, stage: { w: 800, h: 600 } };
+function sandbox({ embedded = false, tracing = true, capCanvas = {}, capAerial = CAP } = {}) {
   const posts = [], timers = new Map();
   let nextId = 1;
   const els = {};
@@ -50,8 +51,8 @@ function sandbox({ embedded = false, tracing = true, capCanvas = {} } = {}) {
   win.parent = embedded ? { postMessage: (m) => posts.push(m) } : win;
   const calls = { paint: 0, sync: 0 };
   const factory = new Function(
-    "$", "window", "parent", "PID", "setTimeout", "clearTimeout", "trPaint", "trSync", "preview", "capCanvas",
-    `var tracePts=[], trClosed=false, trDrag=-1, trHover=-1, trSel=-1, trHist=[], trHi=-1, trSaveT=null;
+    "$", "window", "parent", "PID", "setTimeout", "clearTimeout", "trPaint", "trSync", "preview", "capCanvas", "capAerial",
+    `var tracePts=[], trClosed=false, trDrag=-1, trHover=-1, trSel=-1, trHist=[], trHi=-1, trSaveT=null, trDraftFid=null;
      ${trZDecl}
      ${FNS}
      return {
@@ -63,7 +64,8 @@ function sandbox({ embedded = false, tracing = true, capCanvas = {} } = {}) {
        get trHi(){return trHi;}, set trHi(v){trHi=v;},
        get trZ(){return trZ;},
        trC2S:trC2S, trS2C:trS2C, trSnap:trSnap, trPush:trPush, trGo:trGo, trUndo:trUndo, trRedo:trRedo,
-       trBtns:trBtns, trLoadDraft:trLoadDraft
+       trBtns:trBtns, trLoadDraft:trLoadDraft, trCapKey:trCapKey, trCapMatch:trCapMatch,
+       get trDraftFid(){return trDraftFid;}, set trDraftFid(v){trDraftFid=v;}
      };`
   );
   const env = factory(
@@ -71,7 +73,7 @@ function sandbox({ embedded = false, tracing = true, capCanvas = {} } = {}) {
     (fn) => { const id = nextId++; timers.set(id, fn); return id; },
     (id) => { timers.delete(id); },
     () => { calls.paint++; }, () => { calls.sync++; },
-    { classList: { contains: () => tracing } }, capCanvas
+    { classList: { contains: () => tracing } }, capCanvas, capAerial
   );
   env.$ = $; env.posts = posts; env.calls = calls;
   env.pendingTimers = () => timers.size;
@@ -234,7 +236,21 @@ test("embedded: pushes debounce into one iotOutlineSave with the latest draft", 
   assert.equal(e.posts.length, 0);
   e.flush();
   assert.equal(e.posts.length, 1);
-  assert.deepEqual(e.posts[0], { type: "iotOutlineSave", project: "P1", draft: { pts: [[0.1, 0.2], [0.3, 0.4]], closed: false } });
+  assert.deepEqual(e.posts[0], { type: "iotOutlineSave", project: "P1", fid: null, draft: { pts: [[0.1, 0.2], [0.3, 0.4]], closed: false, cap: CAP } });
+});
+
+test("embedded: every save carries the floor id and the capture key; clearing posts draft:null with the fid", () => {
+  const e = sandbox({ embedded: true });
+  e.trDraftFid = "fl_A";
+  add(e, 0.1, 0.2);
+  e.flush();
+  assert.equal(e.posts[0].fid, "fl_A");
+  assert.deepEqual(e.posts[0].draft.cap, CAP);
+  e.trUndo(); e.flush();
+  assert.deepEqual(e.posts[1], { type: "iotOutlineSave", project: "P1", fid: "fl_A", draft: null });
+  const n = sandbox({ embedded: true, capAerial: null });
+  add(n, 0.1, 0.2); n.flush();
+  assert.equal(n.posts[0].draft.cap, null);
 });
 
 test("embedded: undoing back to an empty outline posts draft:null", () => {
@@ -306,6 +322,33 @@ test("trLoadDraft: caps a draft at 500 points", () => {
   assert.equal(e.tracePts.length, 500);
 });
 
+test("trLoadDraft: a draft keyed to a different capture is ignored; a matching or cap-less one loads", () => {
+  const pts = [[0.1, 0.1], [0.5, 0.1], [0.5, 0.5]];
+  const clone = (o) => JSON.parse(JSON.stringify(Object.assign({}, CAP, o)));
+  const mismatches = [
+    { center: { lat: 40.1001, lng: -74.2 } }, { zoom: 19 }, { rotationDeg: 14 },
+    { rect: { x: 12.5, y: 20, w: 300, h: 200 } }, { stage: { w: 800, h: 640 } },
+  ];
+  for (const m of mismatches) {
+    const e = sandbox();
+    e.trLoadDraft({ pts, closed: false, cap: clone(m) });
+    assert.equal(e.tracePts.length, 0, "ignored: " + JSON.stringify(m));
+    assert.equal(e.trHist.length, 1);
+  }
+  const nocap = sandbox({ capAerial: null });
+  nocap.trLoadDraft({ pts, cap: clone({}) });
+  assert.equal(nocap.tracePts.length, 0, "keyed draft with no current capture is ignored");
+  const ok = sandbox();
+  ok.trLoadDraft({ pts, cap: clone({ center: { lat: 40.1000004, lng: -74.2 }, rotationDeg: 12.4, rect: { x: 10.5, y: 20, w: 300, h: 200 } }) });
+  assert.equal(ok.tracePts.length, 3, "within tolerance loads");
+  const wrap = sandbox({ capAerial: Object.assign({}, CAP, { rotationDeg: 179.8 }) });
+  wrap.trLoadDraft({ pts, cap: clone({ rotationDeg: -179.8 }) });
+  assert.equal(wrap.tracePts.length, 3, "rotation compares across the ±180 wrap");
+  const legacy = sandbox();
+  legacy.trLoadDraft({ pts });
+  assert.equal(legacy.tracePts.length, 3, "a cap-less (older) draft still loads");
+});
+
 // ---------- message contract (widget ⇄ survey host) ----------
 test("widget speaks the iotOutline* protocol", () => {
   assert.ok(widget.includes('"iotOutlineSave"'), "iotOutlineSave");
@@ -316,6 +359,15 @@ test("widget speaks the iotOutline* protocol", () => {
 test("applyAerial marks aerialApplied, and the initial search honours it", () => {
   assert.ok(extractFn(widget, "applyAerial").includes("aerialApplied=true;"), "applyAerial sets aerialApplied=true;");
   assert.ok(extractFn(widget, "search").includes("if(!(isInitial && aerialApplied))"), "search skips the initial recenter when an aerial was restored");
+});
+
+test("floor routing: widget echoes fid, host replies with fid and routes saves by it", () => {
+  assert.ok(widget.includes("fid:trDraftFid"), "saves carry fid");
+  assert.ok(widget.includes("trDraftFid=d.fid||null"), "load stores fid");
+  assert.ok(widget.includes("e.source!==window.parent"), "load listener checks the sender");
+  assert.ok(survey.includes('type:"iotOutlineLoad", fid:(fl&&fl.id)||null'), "host load reply carries the floor id");
+  assert.ok(survey.includes("f.id===m.fid"), "host resolves the save target by fid");
+  assert.ok(survey.includes("if(bgToolSrc===SAT_SRC) bgToolSrc=null;"), "floor switch drops the stale satellite frame");
 });
 
 test("survey host persists the draft and answers with iotOutlineLoad", () => {
