@@ -735,12 +735,13 @@
   function trToFrac(px,py){ var R=trImgRect(); return { x:Math.max(0,Math.min(1,(px-R.x)/R.w)), y:Math.max(0,Math.min(1,(py-R.y)/R.h)) }; }
   function trToPx(p){ var R=trImgRect(); return { x:R.x+p.x*R.w, y:R.y+p.y*R.h }; }
   function trNear(px,py){ for(var i=0;i<tracePts.length;i++){ var q=trToPx(tracePts[i]); if(Math.hypot(q.x-px,q.y-py)<=14) return i; } return -1; }
-  function trSync(){ $("trUse").disabled = !(trClosed && tracePts.length>=3); trHintUpdate(); }
+  // Use Outline is ready once there are 3+ corners — closing the loop is optional (Use Outline auto-closes).
+  function trSync(){ $("trUse").disabled = !(tracePts.length>=3); trHintUpdate(); }
   // What to do right now — updates as the outline is built (tracing is a non-obvious action).
   function trHintUpdate(){ var h=$("traceHint"); if(!h) return;
     h.textContent = trClosed ? "Drag a dot to adjust, then “Use Outline”"
-      : (tracePts.length>=3 ? "Tap the first dot to close the building"
-      : "Tap each corner of the building"); }
+      : (tracePts.length>=3 ? "Tap “Use Outline” — or tap the first dot to close"
+      : "Tap each corner of the building (3 or more)"); }
   function enterTrace(){ exitCrop(); closePops(); tracePts=[]; trClosed=false; trDrag=-1; trHover=-1;
     preview.classList.add("tracing"); $("tTrace").classList.add("on"); trPaint(); trSync(); }
   function exitTrace(){ if(!preview.classList.contains("tracing")) return; preview.classList.remove("tracing"); $("tTrace").classList.remove("on"); }
@@ -757,7 +758,7 @@
     for(var i=0;i<P.length;i++){ var q=P[i]; g.beginPath(); g.arc(q.x,q.y,(i===trHover||i===trDrag)?6.5:5,0,6.2832);
       g.fillStyle="#fff"; g.fill(); g.lineWidth=2; g.strokeStyle="#b98a2e"; g.stroke(); }
   }
-  function trUse(){ if(!(trClosed&&tracePts.length>=3)) return; var R=trImgRect();
+  function trUse(){ if(tracePts.length<3) return; trClosed=true; trPaint(); var R=trImgRect();   // auto-close the loop — no separate close tap needed
     try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src,
       // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
       // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
