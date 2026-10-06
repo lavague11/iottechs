@@ -6,6 +6,7 @@ import MicButton from "../../components/mic-button";
 import { northArrowAngle } from "../../../lib/site-transform";
 import { SPK_COVERAGE } from "../../../lib/survey2-model";
 import { buildStops, coverageShape, stopPlace } from "../../../lib/walkthrough-stops";
+import { polygonCentroid } from "../../../lib/device-context";
 
 // Walkthrough: ONE canonical survey, played back stop by stop. Stops are the survey's own devices —
 // cameras, plus placed speakers that have coverage or a photo (lib/walkthrough-stops.js). The floor plan
@@ -30,6 +31,22 @@ function useReducedMotion() {
     return () => { try { m.removeEventListener("change", h); } catch { try { m.removeListener(h); } catch { /* noop */ } } };
   }, []);
   return rm;
+}
+
+// Estimated site context (zones + boundary): PLATE-% polygons, the same space the device markers use. Quiet
+// layer UNDER coverage + markers. Estimates only — never labelled or drawn as a legal/parcel line.
+const ZONE_RGB = { street: "120,132,148", driveway: "176,136,84", parking: "74,126,206", "front-yard": "84,164,104", "rear-yard": "138,172,64", "side-yard": "58,160,150", alley: "154,102,170", loading: "206,112,72", entrance: "200,84,114", custom: "140,146,150" };
+const ptXY = (p) => { const x = Array.isArray(p) ? p[0] : p && p.x, y = Array.isArray(p) ? p[1] : p && p.y; return Number.isFinite(+x) && Number.isFinite(+y) && x !== null && y !== null ? [+x, +y] : null; };
+const ptsStr = (pts) => { const q = (Array.isArray(pts) ? pts : []).map(ptXY).filter(Boolean); return q.length >= 3 ? q.map((p) => `${+p[0].toFixed(2)},${+p[1].toFixed(2)}`).join(" ") : ""; };
+function siteRegions(f) {
+  const zones = [];
+  ((f && f.zones) || []).forEach((z, i) => {
+    const points = ptsStr(z && z.pts); if (!points) return;
+    const label = String((z && z.label) || "").trim(), c = label ? polygonCentroid(z.pts) : null;
+    zones.push({ key: (z && z.id) || `z${i}`, points, rgb: ZONE_RGB[z.type] || ZONE_RGB.custom, label, cx: c ? c.x : 0, cy: c ? c.y : 0 });
+  });
+  const boundary = ptsStr(f && f.boundary && f.boundary.pts);
+  return zones.length || boundary ? { zones, boundary } : null;
 }
 
 const Ico = ({ kind, size = 14 }) => kind === "spk"
@@ -179,6 +196,8 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
   const floorStops = useMemo(() => stops.map((s, i) => ({ s, i })).filter((x) => x.s.fi === curFi), [stops, curFi]);
   const shapes = useMemo(() => floorStops.map(({ s }) => coverageShape(s.dev, s.floor, plate)), [floorStops, plate]);
   const place = useMemo(() => (cur ? stopPlace(cur.dev, cur.floor) : []), [cur]);
+  const curFloor = cur ? cur.floor : null;
+  const regions = useMemo(() => { try { return siteRegions(curFloor); } catch { return null; } }, [curFloor]);   // per floor, not per stop/pointer
 
   if (!total || !cur) return null;
   const f = cur.floor;
@@ -201,6 +220,15 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
       {/* MAP — the floor plan stays put; the selected device's marker + coverage are emphasised, the rest dimmed */}
       <div className="swk2-map" ref={mapRef}>
         <img className="swk2-plan" ref={aerialRef} onLoad={measure} src={f.bg} alt={f.name} />
+        {plate && regions && (
+          <div className="swk2-site" aria-hidden="true" style={{ left: `${plate.l}px`, top: `${plate.t}px`, width: `${plate.w}px`, height: `${plate.h}px` }}>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              {regions.zones.map((z) => <polygon key={z.key} points={z.points} fill={`rgba(${z.rgb},.16)`} stroke={`rgba(${z.rgb},.7)`} />)}
+              {regions.boundary && <polygon className="bnd" points={regions.boundary} />}
+            </svg>
+            {regions.zones.map((z) => z.label ? <span key={`l-${z.key}`} className="swk2-zl" style={{ left: `${z.cx}%`, top: `${z.cy}%` }}>{z.label}</span> : null)}
+          </div>
+        )}
         {plate && (
           <svg className="swk2-cov" aria-hidden="true">
             {floorStops.map(({ s, i }, j) => {
@@ -358,6 +386,12 @@ const CSS = `
 .swk2-cov{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}
 .swk2-cov path.cone{fill:rgba(201,169,110,.07);stroke:rgba(201,169,110,.32);stroke-width:1}
 .swk2-cov path.ring{fill:rgba(96,165,250,.07);stroke:rgba(96,165,250,.32);stroke-width:1}
+/* Site context (zones + estimated boundary) — static, quiet, under coverage (z0 < z1) and markers */
+.swk2-site{position:absolute;z-index:0;pointer-events:none}
+.swk2-site svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.swk2-site polygon{stroke-width:1;vector-effect:non-scaling-stroke}
+.swk2-site polygon.bnd{fill:none;stroke:#b98a2e;stroke-width:1.2;stroke-dasharray:5 4;opacity:.85}
+.swk2-zl{position:absolute;transform:translate(-50%,-50%);max-width:34%;padding:1px 5px;border-radius:4px;background:rgba(16,20,24,.6);color:rgba(255,255,255,.9);font-size:.6rem;font-weight:700;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .swk2-cone{position:absolute;z-index:1;pointer-events:none;transform-origin:0 0}
 .swk2-cone-grow{transform-origin:0 0;animation:swkConeGrow .6s cubic-bezier(.2,.85,.25,1)}
 @keyframes swkConeGrow{from{transform:scale(.08);opacity:.15}55%{opacity:1}to{transform:scale(1);opacity:1}}
