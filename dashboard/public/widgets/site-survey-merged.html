@@ -1633,9 +1633,15 @@
       for(i=1;ok && i<n;i++) if(+devs[ord[i]][key]-(+devs[ord[i-1]][key])<1) ok=false;   // too close to call by side → number them
       ord.forEach(function(di,r){ out[di]=b+" "+(ok?names[r]:(r+1)); }); }
     // Suggested names for a whole floor's devices (parallel array; "" = nothing to suggest). o = { vb (planSvg viewBox), scale {ftW}, aspect (plate w/h), sceneW (px), cat(k) }.
-    function suggestDeviceNames(devs,f,o){ var zs, out=[], groups={}, order=[], i, b; o=o||{}; f=f||{}; devs=devs||[]; zs=sugZones(f);
-      for(i=0;i<devs.length;i++){ b=sugBase(devs[i],f,o,zs); out.push(b); if(b){ if(!groups["k:"+b]){ groups["k:"+b]=[]; order.push(b); } groups["k:"+b].push(i); } }
-      order.forEach(function(nm){ var g=groups["k:"+nm]; if(g.length>1) sugQualify(nm,g,devs,out); });
+    // CAMERAS are named "<location> Camera <N>" — the location is the canonical Room the camera stands in (point-in-room on
+    // floor.plan.rooms) else the exterior Zone cell it's in/covers else the mounted side; N numbers cameras per-location by
+    // creation order. Speakers / other kinds keep "<location> Speaker" + Left/Right/number dedup. Always suggestion-first.
+    function suggestDeviceNames(devs,f,o){ var zs, out=[], camG={}, camOrd=[], othG={}, othOrd=[], i, b, d; o=o||{}; f=f||{}; devs=devs||[]; zs=sugZones(f);
+      for(i=0;i<devs.length;i++){ d=devs[i]; b=sugBase(d,f,o,zs); out.push(b); if(!b) continue;
+        if(d && d.k==="cam"){ if(!camG[b]){ camG[b]=[]; camOrd.push(b); } camG[b].push(i); }           // cameras group by LOCATION (base has no kind suffix)
+        else { if(!othG["k:"+b]){ othG["k:"+b]=[]; othOrd.push(b); } othG["k:"+b].push(i); } }
+      camOrd.forEach(function(loc){ var g=camG[loc]; g.forEach(function(di,r){ out[di]=loc+" Camera "+(r+1); }); });   // "<location> Camera N" — always numbered, creation order within the location
+      othOrd.forEach(function(nm){ var g=othG["k:"+nm]; if(g.length>1) sugQualify(nm,g,devs,out); });     // speakers/other: dedup only when there's more than one
       return out; }
     function suggestDeviceName(d,f,all,o){ var list=Array.isArray(all)?all:[d], i=list.indexOf(d); if(i<0){ list=list.concat([d]); i=list.length-1; } return suggestDeviceNames(list,f,o)[i]||""; }
     // widget glue — memoised per panel render (O(n) coverage runs, not O(n²)); invalidated on renderPanel / any queueSave

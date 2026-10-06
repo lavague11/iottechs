@@ -50,48 +50,48 @@ test("pointInPolygon (the widget's zPointIn): inside / outside / array + {x,y} v
   assert.equal(zPointIn(sq.map(([x, y]) => ({ x, y })), 30, 30), true);
 });
 
-test("camera aimed at a driveway zone → 'Driveway' (coverage beats mount/room)", () => {
+test("camera aimed at a driveway zone → 'Driveway Camera 1' (coverage beats mount/room)", () => {
   const c = cam(50, 65, 90);                                   // aims down into the lower zone
   const f = { zones: [DRIVE, PARK], boundary: BOUND };
-  assert.equal(suggestDeviceName(c, f, [c], O), "Driveway");
+  assert.equal(suggestDeviceName(c, f, [c], O), "Driveway Camera 1");
   const c2 = cam(50, 65, 90);
-  assert.equal(suggestDeviceName(c2, Object.assign({ plan: ROOMFLOOR.plan }, f), [c2], Object.assign({ vb: VB4 }, O)), "Driveway", "coverage still beats a room");
+  assert.equal(suggestDeviceName(c2, Object.assign({ plan: ROOMFLOOR.plan }, f), [c2], Object.assign({ vb: VB4 }, O)), "Driveway Camera 1", "coverage still beats a room");
 });
 
-test("camera that covers nothing falls to its room, then the zone it stands in, then the mounted side", () => {
+test("camera that covers nothing falls to its room, then the zone it stands in, then the mounted side (all '<location> Camera N')", () => {
   const room = cam(22.5, 22.5, 0);
-  assert.equal(suggestDeviceName(room, ROOMFLOOR, [room], Object.assign({ vb: VB4 }, O)), "Lobby");
-  const inz = cam(50, 90, 90);                                  // standing in Driveway, aimed off the plate edge → wedge reaches nothing useful? still inside → zone
-  assert.equal(suggestDeviceName(inz, { zones: [DRIVE] }, [inz], O), "Driveway");
+  assert.equal(suggestDeviceName(room, ROOMFLOOR, [room], Object.assign({ vb: VB4 }, O)), "Lobby Camera 1");
+  const inz = cam(50, 90, 90);                                  // standing in Driveway, aimed off the plate edge → still inside → zone
+  assert.equal(suggestDeviceName(inz, { zones: [DRIVE] }, [inz], O), "Driveway Camera 1");
   const side = cam(50, 22, 270);                                // on the structure's top edge, aimed away from any zone
-  assert.equal(suggestDeviceName(side, { boundary: BOUND }, [side], O), "Front");
+  assert.equal(suggestDeviceName(side, { boundary: BOUND }, [side], O), "Front Camera 1");
   const left = cam(21, 50, 180);
-  assert.equal(suggestDeviceName(left, { boundary: BOUND }, [left], O), "Left");
+  assert.equal(suggestDeviceName(left, { boundary: BOUND }, [left], O), "Left Camera 1");
 });
 
 test("mounted side honours floor.sides retags", () => {
   const c = cam(50, 22, 270);
-  assert.equal(suggestDeviceName(c, { boundary: BOUND, sides: { top: { label: "Street", type: "street" } } }, [c], O), "Street");
+  assert.equal(suggestDeviceName(c, { boundary: BOUND, sides: { top: { label: "Street", type: "street" } } }, [c], O), "Street Camera 1");
 });
 
-test("two cameras on one zone → 'Driveway Left' / 'Driveway Right', independent of array order", () => {
+test("cameras number per LOCATION by creation order → 'Driveway Camera 1' / 'Driveway Camera 2'", () => {
   const f = { zones: [DRIVE] };
   const a = cam(20, 65, 90), b = cam(70, 65, 90);
-  assert.deepEqual(suggestDeviceNames([a, b], f, O), ["Driveway Left", "Driveway Right"]);
-  assert.deepEqual(suggestDeviceNames([b, a], f, O), ["Driveway Right", "Driveway Left"]);
-  assert.deepEqual(suggestDeviceNames([a, b], f, O), suggestDeviceNames([a, b], f, O), "stable across calls");
+  assert.deepEqual(suggestDeviceNames([a, b], f, O), ["Driveway Camera 1", "Driveway Camera 2"]);
+  assert.deepEqual(suggestDeviceNames([b, a], f, O), ["Driveway Camera 1", "Driveway Camera 2"], "the first in the floor's order is Camera 1");
+  const four = [cam(10, 65, 90), cam(35, 65, 90), cam(60, 65, 90), cam(85, 65, 90)];
+  assert.deepEqual(suggestDeviceNames(four, f, O), ["Driveway Camera 1", "Driveway Camera 2", "Driveway Camera 3", "Driveway Camera 4"]);
+  // cameras in DIFFERENT locations number independently
+  const mix = [cam(22.5, 22.5, 0), cam(50, 90, 90)];           // Lobby (room) + Driveway (zone)
+  assert.deepEqual(suggestDeviceNames(mix, Object.assign({ zones: [DRIVE] }, ROOMFLOOR), Object.assign({ vb: VB4 }, O)), ["Lobby Camera 1", "Driveway Camera 1"]);
 });
 
-test("dedup: vertical split → Front/Back; three → Left/Center/Right; four or too-close → numbered", () => {
+test("speaker dedup still uses Left/Right/Front/Back (cameras number, speakers position)", () => {
   const f = { zones: [DRIVE] };
-  const v1 = cam(50, 62, 90), v2 = cam(51, 74, 90);
-  assert.deepEqual(suggestDeviceNames([v1, v2], f, O), ["Driveway Front", "Driveway Back"]);
-  const three = [cam(10, 65, 90), cam(50, 65, 90), cam(90, 65, 90)];
-  assert.deepEqual(suggestDeviceNames(three, f, O), ["Driveway Left", "Driveway Center", "Driveway Right"]);
-  const four = [cam(10, 65, 90), cam(35, 65, 90), cam(60, 65, 90), cam(85, 65, 90)];
-  assert.deepEqual(suggestDeviceNames(four, f, O), ["Driveway 1", "Driveway 2", "Driveway 3", "Driveway 4"]);
-  const tie = [cam(50, 65, 90), cam(50.2, 65, 90)];
-  assert.deepEqual(suggestDeviceNames(tie, f, O), ["Driveway 1", "Driveway 2"], "indistinguishable by side → numbers, never duplicates");
+  const a = spk(20, 65), b = spk(70, 65);
+  assert.deepEqual(suggestDeviceNames([a, b], f, O), ["Driveway Speaker Left", "Driveway Speaker Right"]);
+  const tie = [spk(50, 65), spk(50.2, 65)];
+  assert.deepEqual(suggestDeviceNames(tie, f, O), ["Driveway Speaker 1", "Driveway Speaker 2"], "indistinguishable by side → numbers");
 });
 
 test("speaker in a room → '<Room> Speaker'; in a zone → '<Zone> Speaker'; else mounted side", () => {
@@ -128,7 +128,7 @@ test("scaled floors: reach comes from real feet; a short range stops short of a 
   const far = cam(50, 30, 90, { range: 10 });                   // 10 ft of a 100 ft plate = 10% → wedge ends at y≈40, zone starts at 60
   assert.equal(suggestDeviceName(far, { zones: [DRIVE], scale: null }, [far], Object.assign({ scale: { ftW: 100 } }, O)), "");
   const long = cam(50, 30, 90, { range: 60 });                  // 60% → reaches the driveway band
-  assert.equal(suggestDeviceName(long, { zones: [DRIVE] }, [long], Object.assign({ scale: { ftW: 100 } }, O)), "Driveway");
+  assert.equal(suggestDeviceName(long, { zones: [DRIVE] }, [long], Object.assign({ scale: { ftW: 100 } }, O)), "Driveway Camera 1");
 });
 
 test("parity with lib/device-context.js (8.1): same top coverage zone on a shared sample", () => {
@@ -197,7 +197,7 @@ test("cell zones are preferred but fall back to polygon zones when absent", () =
   // no zcMap → sugZoneCellAt is silent; suggestDeviceNames uses the polygon zone
   assert.equal(api.sugZoneCellAt({ x: 10, y: 50 }, o), "");
   const names = suggestDeviceNames([{ k: "cam", x: 10, y: 50, cone: false }], polyFloor, o);
-  assert.equal(names[0], "Parking");
+  assert.equal(names[0], "Parking Camera 1");
 });
 
 test("inline scripts still parse", () => {
