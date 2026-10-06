@@ -166,6 +166,7 @@
         <div class="moremenu" id="moreMenu">
           <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> Enhance</button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
+          <button id="mMergeRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
           <button id="mDeleteRoom" class="danger" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteRoomTxt">Delete room</span></button>
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
         </div>
@@ -237,6 +238,21 @@
     var mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9; arr.forEach(function(k){ var a=k.split(","),c=+a[0],r=+a[1];
       mnx=Math.min(mnx,c*HALF); mny=Math.min(mny,r*HALF); mxx=Math.max(mxx,c*HALF+HALF); mxy=Math.max(mxy,r*HALF+HALF); });
     return {x:mnx,y:mny,w:mxx-mnx,h:mxy-mny}; }
+  // Pole of inaccessibility (discrete): multi-source BFS inward from boundary cells — the member cell FARTHEST from
+  // any NON-member is the most interior. Returns its CENTRE in plan px, so a label lands inside L-shaped / concave
+  // rooms (never the bbox centre, which can fall in the notch). Ties → nearest the bbox centre.
+  function roomLabelCell(arr){ arr=arr||[]; var n=arr.length; if(!n) return [0,0]; var inS={}, i;
+    for(i=0;i<n;i++) inS[arr[i]]=1;
+    var dist={}, q=[], qh=0;
+    for(i=0;i<n;i++){ var a=arr[i].split(","),c=+a[0],r=+a[1];
+      if(!inS[key(c,r-1)]||!inS[key(c,r+1)]||!inS[key(c-1,r)]||!inS[key(c+1,r)]){ dist[arr[i]]=1; q.push([c,r]); } }
+    if(!q.length){ var f=arr[0].split(","); dist[arr[0]]=1; q.push([+f[0],+f[1]]); }   // (defensive) nothing on a boundary
+    while(qh<q.length){ var p=q[qh++],pc=p[0],pr=p[1],d=dist[key(pc,pr)],nb=[[pc,pr-1],[pc,pr+1],[pc-1,pr],[pc+1,pr]];
+      for(var j=0;j<4;j++){ var nk=key(nb[j][0],nb[j][1]); if(inS[nk]&&!dist[nk]){ dist[nk]=d+1; q.push(nb[j]); } } }
+    var bb=cellsBBoxPx(arr), bcx=bb.x+bb.w/2, bcy=bb.y+bb.h/2, best=null,bD=-1,bT=1/0;
+    for(i=0;i<n;i++){ var k=arr[i],aa=k.split(","),px=(+aa[0])*HALF+HALF/2,py=(+aa[1])*HALF+HALF/2,dd=dist[k]||1,t=(px-bcx)*(px-bcx)+(py-bcy)*(py-bcy);
+      if(dd>bD||(dd===bD&&t<bT)){ bD=dd; bT=t; best=[px,py]; } }
+    return best||[0,0]; }
 
   // ---- grid math ----
   function key(c,r){ return c+","+r; }
@@ -273,7 +289,7 @@
     var e=edgesOf(set); ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke();
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
-    var cx=bb.x+bb.w/2, cy=bb.y+bb.h/2, maxW=Math.max(20,bb.w-12);
+    var lc=roomLabelCell(r.cells||[]), cx=lc[0], cy=lc[1], maxW=Math.max(20,bb.w-12);   // pole-of-inaccessibility anchor (stays inside concave rooms)
     ctx.textAlign="center"; ctx.textBaseline="middle";
     var sqft = name ? cellsSqFt((r.cells||[]).length) : 0;   // real sq ft only when the floor is scaled
     if(sqft>0){
@@ -331,6 +347,24 @@
       return { cells:[], label:(r&&r.label)||"", semanticType:sem };
     }).filter(function(r){ return r.cells.length>0; }); }
 
+  // Pure room-union: A ∪ B cells (unique, A's order first), keep A's label else B's, keep A's semanticType unless A
+  // is empty/custom and B has a real one. Shared walls fall out on their own — edgesOf derives them from the merged set.
+  function mergeRooms(a,b){ if(!a) return b; if(!b) return a; var seen={}, out=[];
+    (a.cells||[]).concat(b.cells||[]).forEach(function(k){ if(!seen[k]){ seen[k]=1; out.push(k); } });
+    var real=function(t){ return t && t!=="custom"; }, at=(a.semanticType||""), bt=(b.semanticType||"");
+    return { cells:out, label:((a.label||"").trim())||((b.label||"").trim()), semanticType: real(at)?at : (real(bt)?bt:at) }; }
+  // Merge UX: with room A selected, "Merge" (More menu) arms a one-shot pick — the NEXT room tapped is unioned into A.
+  var mergeArmed=null;   // the room to merge INTO, while picking (null = not merging)
+  function startMerge(){ if(busy||!sel||planState!=="loaded") return; mergeArmed=sel; closeMore(); closeLabel(); setMode("room");
+    var h=$("hint"); if(h){ h.innerHTML="Tap a room to merge."; h.style.display="block"; } cv.style.cursor="pointer"; }
+  function endMerge(){ if(!mergeArmed) return; mergeArmed=null; setMode("room"); }   // setMode restores the room hint + cursor + redraw
+  function doMerge(a,b){ if(busy||!a||!b||a===b) return; var m=mergeRooms(a,b);
+    a.cells=m.cells; a.label=m.label; a.semanticType=m.semanticType;
+    rooms=rooms.filter(function(x){ return x!==b; });
+    var anchor=(a.cells&&a.cells[0])||null; mergeArmed=null; reconcileRooms();   // reconcile rebuilds room objects → re-point sel by a surviving cell
+    sel=null; if(anchor){ for(var i=0;i<rooms.length;i++){ if((rooms[i].cells||[]).indexOf(anchor)>=0){ sel=rooms[i]; break; } } }
+    pushHist(); setMode("room"); }
+
   // ---- per-floor persistence ----
   // Only NAMED rooms are persisted — an unnamed room is never written to storage (also cleans legacy ones).
   function namedRooms(list){ return (list||[]).filter(function(r){ return r && (r.label||"").trim(); }); }
@@ -378,6 +412,7 @@
 
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
+    if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap a room → name it
@@ -492,9 +527,9 @@
     var e=boundaryEdges(); g.strokeStyle="#111"; g.lineWidth=Math.max(4,cellPx*0.3);
     g.beginPath(); e.forEach(function(s){ g.moveTo(ox+s[0]*sc,oy+s[1]*sc); g.lineTo(ox+s[2]*sc,oy+s[3]*sc); }); g.stroke();
     // labels
-    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var bb2=cellsBBoxPx(r.cells||[]);
+    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var bb2=cellsBBoxPx(r.cells||[]), lc=roomLabelCell(r.cells||[]);
       g.fillStyle="#111"; g.font="600 "+Math.max(13,Math.round(cellPx*0.62))+"px sans-serif"; g.textAlign="center"; g.textBaseline="middle";
-      g.fillText(name, ox+(bb2.x+bb2.w/2)*sc, oy+(bb2.y+bb2.h/2)*sc, Math.max(30,bb2.w*sc-12)); });
+      g.fillText(name, ox+lc[0]*sc, oy+lc[1]*sc, Math.max(30,bb2.w*sc-12)); });
     return c; }
   function hasSketch(){ return cells.size>0 || rooms.length>0; }
 
@@ -529,8 +564,8 @@
       if(rp) o.push('<path d="'+rp+'" fill="none" stroke="#111" stroke-width="'+swR+'" stroke-linecap="round" stroke-linejoin="round"/>'); });
     var sp=""; boundaryEdges().forEach(function(s){ sp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
     if(sp) o.push('<path d="'+sp+'" fill="none" stroke="#111" stroke-width="'+swS+'" stroke-linecap="round" stroke-linejoin="round"/>');
-    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var b2=cellsBBoxPx(r.cells||[]);
-      o.push('<text x="'+(b2.x+b2.w/2)+'" y="'+(b2.y+b2.h/2)+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
+    rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var lc=roomLabelCell(r.cells||[]);
+      o.push('<text x="'+lc[0]+'" y="'+lc[1]+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
   /* Phase 4 plan LAYER: the same scene, TRANSPARENT (no paper, no grid; structure a light wash), framed on the floor's
      context crop — viewBox = the ctx rect mapped through the seed transform (aerial fraction x·aspect·sc+offx, y·sc+offy).
      The survey stacks it 1:1 over the ctx aerial crop (same fractional extent → devices keep one set of % coords).
@@ -595,14 +630,15 @@
   $("tUndo").addEventListener("click", function(){ if(busy) return; if(backToDraw()) return; undo(); });
   $("tRedo").addEventListener("click", function(){ if(!busy) redo(); });
   document.addEventListener("keydown", function(e){
-    if(e.key==="Escape"){ if($("floorMenu").classList.contains("on")){ closeFloorMenu(); $("floorBtn").focus(); return; } if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(backToDraw()) return; if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
+    if(e.key==="Escape"){ if($("floorMenu").classList.contains("on")){ closeFloorMenu(); $("floorBtn").focus(); return; } if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(mergeArmed){ endMerge(); return; } if(backToDraw()) return; if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(busy) return; if(e.shiftKey){ redo(); } else if(!backToDraw()){ undo(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="y"||e.key==="Y")){ e.preventDefault(); redo(); } });
   // More menu (secondary tools) — toggle + outside-close. "Delete room" appears only with a room selected
   // (naming is for naming; deletion lives here per the redesign).
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu();
-    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)); $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; }
+    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)); $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none"; }
     $("moreMenu").classList.toggle("on"); });
+  $("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge(); });
   $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
     if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
     rooms=rooms.filter(function(x){return x!==sel;}); sel=null; finishLabel(false); closeMore(); pushHist(); redraw(); });
