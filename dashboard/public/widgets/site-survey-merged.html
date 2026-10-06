@@ -714,7 +714,7 @@
       // Trace Building → "Use Outline": hand the footprint to the Structure editor (seeded), rather than
       // dropping the aerial as a flat background. The draw tool produces the plan from the seeded shape.
       var ol = ev.data.outline;
-      if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; queueSave(); } enterDraw(ol); return; }
+      if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]) floors[curFloor].outlineDraft=null; queueSave(); enterDraw(ol); return; }   // Use Outline consumed the unfinished draft
       applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale, ev.data.aerial);
     });
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
@@ -728,6 +728,14 @@
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
       fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; queueSave(); });   // a real Structure now lives on the floor → stop passing lidx
+    // Unfinished "Outline Building" corners (image fractions of this floor's capture) — view-state on the floor so a refresh mid-outline restores them.
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotOutlineSave"&&m.type!=="iotOutlineReady")||(PID&&m.project!==PID)) return;
+      if(!ev.source || ev.source!==satFrame.contentWindow) return;
+      var fl=floors[curFloor];
+      if(m.type==="iotOutlineReady"){ try{ satFrame.contentWindow.postMessage({type:"iotOutlineLoad", draft:(fl&&fl.outlineDraft)||null}, "*"); }catch(e){} return; }
+      if(frozen() || !fl) return;
+      var d=m.draft, ok=false; try{ ok=!!(d && Array.isArray(d.pts) && d.pts.length<=500); }catch(e){ ok=false; }
+      fl.outlineDraft = ok ? { pts:d.pts.map(function(p){ return [+p[0]||0, +p[1]||0]; }), closed:!!d.closed } : null; queueSave(); });
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
@@ -1435,7 +1443,7 @@
       return out; }
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
-        scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null,   // real-world scale + capture + structure travel with the background (deep copies — never shared with the source)
+        scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,   // real-world scale + capture + structure travel with the background (deep copies — never shared with the source)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
@@ -1444,7 +1452,7 @@
     // Duplicate: a full copy (background, scale, capture, structure, devices) inserted right after the source, which stays untouched.
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
-        scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null,
+        scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); queueSave(); }
     // New floor: if the current floor has a background, offer to import it (with or without the placed
@@ -1539,7 +1547,7 @@
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);

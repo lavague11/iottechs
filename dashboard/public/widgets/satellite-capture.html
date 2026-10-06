@@ -153,6 +153,10 @@
   #preview.tracing #traceHint{display:block}
   #traceBar button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:9px 14px;font:600 13px/1 var(--sans);cursor:pointer}
   #traceBar button:hover{border-color:var(--ink)}
+  #traceBar button.ic{padding:9px;display:inline-flex;align-items:center;justify-content:center}
+  #traceBar button.ic:disabled{opacity:.4;cursor:default}
+  #trDel{position:absolute;left:0;top:0;z-index:12;display:none;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;align-items:center;justify-content:center}
+  #preview.tracing #trDel.on{display:flex}
   #traceBar button.use{background:var(--ink);color:#fff;border-color:var(--ink)}
   #traceBar button.use:disabled{opacity:.45;cursor:default;background:var(--ink)}
 
@@ -262,8 +266,11 @@
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
       <!-- Trace Building: tap corners to outline the roof, tap the first corner to close, drag to adjust -->
       <div id="trace"><canvas id="traceCv"></canvas></div>
+      <button id="trDel" type="button" aria-label="Delete corner" title="Delete"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <div id="traceHint"></div>
       <div id="traceBar">
+        <button id="trUndo" class="ic" type="button" aria-label="Undo" title="Undo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg></button>
+        <button id="trRedo" class="ic" type="button" aria-label="Redo" title="Redo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg></button>
         <button id="trCancel" type="button">Cancel</button>
         <button id="trRedraw" type="button">Redraw</button>
         <button id="trUse" class="use" type="button" disabled>Use Outline</button>
@@ -345,9 +352,10 @@
   };
 
   /* ---------- restore a saved aerial transform (rotation + center + zoom) ---------- */
-  var pendingAerial=null;
+  var pendingAerial=null, aerialApplied=false;   // aerialApplied: a restored transform won — the initial address geocode must not recenter over it
   function applyAerial(a){
     if(!a) return;
+    aerialApplied=true;
     if(!map){ pendingAerial=a; return; }   // maps not loaded yet → applied at the end of initMap instead of the default search
     rotCoarse=norm(+a.rotationDeg||0); $("rot").value=0; applyRot();
     if(a.center && Number.isFinite(+a.center.lat) && Number.isFinite(+a.center.lng)){
@@ -400,7 +408,7 @@
       // useless centroid ("New Jersey, USA"). Don't strand the user there — fall back to the test
       // property. A precise street address is always honored; typed searches are never overridden.
       if(isInitial && q!==DEMO && /administrative_area_level_1|administrative_area_level_2|\bcountry\b/.test(t) && !/street_address|premise|route|point_of_interest|establishment/.test(t)){ search(DEMO,true); return; }
-      var loc=r.geometry.location; map.setCenter(loc); map.setZoom(20);
+      var loc=r.geometry.location; if(!(isInitial && aerialApplied)){ map.setCenter(loc); map.setZoom(20); }
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc});
       var cur=($("q").value||"").trim(), fa=r.formatted_address||"";
       if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }
@@ -749,7 +757,7 @@
      so they survive the object-fit:contain letterboxing and any resize; the aerial's aspect ratio
      (capCanvas w/h) rides along so the floor plan can restore true proportions. Tap to drop corners,
      tap the first corner (3+ pts) to close, drag any corner to adjust. */
-  var tracePts=[], trClosed=false, trDrag=-1, trHover=-1;
+  var tracePts=[], trClosed=false, trDrag=-1, trHover=-1, trSel=-1, trHist=[], trHi=-1, trSaveT=null;
   function trImgRect(){                               // displayed content rect of #prevImg (object-fit:contain)
     var box=preview, W=box.clientWidth, H=box.clientHeight;
     var nw=(capCanvas&&capCanvas.width)||$("prevImg").naturalWidth||W, nh=(capCanvas&&capCanvas.height)||$("prevImg").naturalHeight||H;
@@ -783,32 +791,49 @@
     h.textContent = trClosed ? "Drag a dot to adjust, then “Use Outline”"
       : (tracePts.length>=3 ? "Tap “Use Outline” — or tap the first dot to close"
       : "Tap each corner of the building (3 or more)"); }
-  function enterTrace(){ exitCrop(); closePops(); tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trZReset();
-    preview.classList.add("tracing"); $("tTrace").classList.add("on"); trPaint(); trSync(); }
+  /* Undo/redo + autosave: trHist holds {p:[[x,y]…],c:closed} snapshots, trHi the current one. Every history change
+     (and nothing else) re-posts the unfinished outline to the parent (debounced), which stores it per floor. */
+  function trSnap(){ return { p:tracePts.map(function(q){ return [q.x,q.y]; }), c:trClosed }; }
+  function trBtns(){ $("trUndo").disabled = !(trHi>0); $("trRedo").disabled = !(trHi<trHist.length-1); }
+  function trDraftPost(draft){ clearTimeout(trSaveT); if(window.parent===window) return; try{ parent.postMessage({ type:"iotOutlineSave", project:PID, draft:draft }, "*"); }catch(e){} }
+  function trPush(){ trHist=trHist.slice(0,trHi+1); trHist.push(trSnap()); if(trHist.length>100) trHist.shift(); trHi=trHist.length-1; trBtns();
+    clearTimeout(trSaveT); if(window.parent!==window) trSaveT=setTimeout(function(){ var s=trSnap(); trDraftPost(s.p.length?{ pts:s.p, closed:s.c }:null); },300); }
+  function trGo(i){ if(i<0||i>=trHist.length) return; trHi=i; var s=trHist[i]; tracePts=s.p.map(function(q){ return {x:q[0],y:q[1]}; }); trClosed=s.c; trSel=-1; trDrag=-1; trBtns(); trPaint(); trSync();
+    clearTimeout(trSaveT); if(window.parent!==window) trSaveT=setTimeout(function(){ trDraftPost(s.p.length?{ pts:s.p, closed:s.c }:null); },300); }
+  function trUndo(){ trGo(trHi-1); } function trRedo(){ trGo(trHi+1); }
+  function trLoadDraft(d){ if(!d||!Array.isArray(d.pts)||!d.pts.length||!capCanvas||!preview.classList.contains("tracing")) return;   // image fractions → only meaningful on a capture
+    tracePts=d.pts.slice(0,500).map(function(q){ return { x:Math.max(0,Math.min(1,+q[0]||0)), y:Math.max(0,Math.min(1,+q[1]||0)) }; }); trClosed=!!d.closed&&tracePts.length>=3; trSel=-1;
+    trHist=[trSnap()]; trHi=0; trBtns(); trPaint(); trSync(); }
+  function enterTrace(){ exitCrop(); closePops(); tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trSel=-1; trZReset(); trHist=[trSnap()]; trHi=0; trBtns();
+    preview.classList.add("tracing"); $("tTrace").classList.add("on"); trPaint(); trSync();
+    if(window.parent!==window){ try{ parent.postMessage({ type:"iotOutlineReady", project:PID }, "*"); }catch(e){} } }
+  window.addEventListener("message", function(e){ var d=e&&e.data; if(!d||d.type!=="iotOutlineLoad") return; trLoadDraft(d.draft); });
   function exitTrace(){ if(!preview.classList.contains("tracing")) return; preview.classList.remove("tracing"); $("tTrace").classList.remove("on"); trZReset(); }
   function trPaint(){
     var cv=$("traceCv"); if(!cv) return; var dpr=window.devicePixelRatio||1, box=$("trace"), W=box.clientWidth, H=box.clientHeight; if(!W||!H) return;
     if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){ cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); }
     var g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+    var dl=$("trDel"); if(trSel>=tracePts.length) trSel=-1; if(dl) dl.classList.toggle("on", trSel>=0);
     if(!tracePts.length) return;
     var P=tracePts.map(function(pt){ return trC2S(trToPx(pt)); });   // content → screen (zoom/pan)
+    if(dl && trSel>=0){ var sp=P[trSel]; dl.style.left=Math.max(2,Math.min(W-26,sp.x+9))+"px"; dl.style.top=Math.max(2,Math.min(H-26,sp.y-33))+"px"; }   // beside the selected dot
     g.lineJoin="round"; g.lineCap="round"; g.lineWidth=2.5; g.strokeStyle="#b98a2e";
     g.beginPath(); P.forEach(function(q,i){ i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y); }); if(trClosed) g.closePath();
     if(trClosed){ g.fillStyle="rgba(185,138,46,.18)"; g.fill(); }
     g.stroke();
-    for(var i=0;i<P.length;i++){ var q=P[i]; g.beginPath(); g.arc(q.x,q.y,(i===trHover||i===trDrag)?6.5:5,0,6.2832);
-      g.fillStyle="#fff"; g.fill(); g.lineWidth=2; g.strokeStyle="#b98a2e"; g.stroke(); }
+    for(var i=0;i<P.length;i++){ var q=P[i], sel=(i===trSel); g.beginPath(); g.arc(q.x,q.y,sel?7.5:(i===trHover||i===trDrag)?6.5:5,0,6.2832);
+      g.fillStyle=sel?"#b98a2e":"#fff"; g.fill(); g.lineWidth=2; g.strokeStyle=sel?"#fff":"#b98a2e"; g.stroke(); }
   }
   function trUse(){ if(tracePts.length<3) return; trClosed=true; trPaint(); var R=trImgRect();   // auto-close the loop — no separate close tap needed
     try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src, aerial: capAerial,
       // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
       // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
-      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) } }, "*"); }catch(e){} }
+      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) } }, "*"); }catch(e){} trDraftPost(null); }   // consumed → the parent drops the unfinished draft
   (function trInit(){
     // Gestures: tap = corner (added on pointerUP, so a pan never leaves a stray vertex); drag a dot = move it;
     // drag empty space (>6px) = pan; two fingers = pinch-zoom + pan about the midpoint; wheel = zoom at cursor.
     // While 2+ pointers are down (trPinch) nothing is added or moved until every finger lifts.
-    var layer=$("trace"), ptrs=new Map(), tap=null, trPinch=false;
+    var layer=$("trace"), ptrs=new Map(), tap=null, trPinch=false, dg=null;
     function closable(hit){ return !trClosed && tracePts.length>=3 && hit===0; }
     layer.addEventListener("pointerdown", function(e){ e.preventDefault(); try{layer.setPointerCapture(e.pointerId);}catch(_){ }
       if(e.isPrimary){ ptrs.clear(); trPinch=false; tap=null; trDrag=-1; }             // a fresh gesture — drop any stale pointers
@@ -817,7 +842,7 @@
       var hit=trNear(p.x,p.y);
       // tapping the FIRST corner (3+ pts, still open) closes the polygon on release — so it isn't
       // mistaken for starting a drag of corner 0.
-      if(hit>=0 && !closable(hit)){ trDrag=hit; tap=null; trPaint(); return; }   // grab a corner to move it
+      if(hit>=0 && !closable(hit)){ trDrag=hit; dg={x:p.x,y:p.y,moved:false}; tap=null; trPaint(); return; }   // grab a corner to move it (a drag that never leaves 4px is a tap → selects it)
       tap={ id:e.pointerId, x0:p.x, y0:p.y, hit:hit, moved:false }; });
     layer.addEventListener("pointermove", function(e){ var p=trXY(e);
       if(!ptrs.has(e.pointerId)){ var h=trNear(p.x,p.y); if(h!==trHover){ trHover=h; trPaint(); } return; }   // hover (mouse, no button)
@@ -828,16 +853,19 @@
         if(pd>0) trZoomTo(trZ.s*nd/pd, {x:(prev.x+o.x)/2,y:(prev.y+o.y)/2}, {x:(p.x+o.x)/2,y:(p.y+o.y)/2});
         return;
       }
-      if(trDrag>=0){ var c=trS2C(p.x,p.y); tracePts[trDrag]=trToFrac(c.x,c.y); trPaint(); return; }
+      if(trDrag>=0){ if(dg && !dg.moved){ if(Math.hypot(p.x-dg.x,p.y-dg.y)<=4) return; dg.moved=true; }
+        var c=trS2C(p.x,p.y); tracePts[trDrag]=trToFrac(c.x,c.y); trPaint(); return; }
       if(tap && tap.id===e.pointerId && !tap.moved){ if(Math.hypot(p.x-tap.x0,p.y-tap.y0)<=6) return; tap.moved=true; prev={x:tap.x0,y:tap.y0}; }
       trPanBy(p.x-prev.x, p.y-prev.y); });                                  // one finger on empty space → pan
     function trEnd(e){ var p=trXY(e), t=tap; ptrs.delete(e.pointerId); try{layer.releasePointerCapture(e.pointerId);}catch(_){ }
-      if(trDrag>=0 && !ptrs.size){ trDrag=-1; trPaint(); }
+      if(trDrag>=0 && !ptrs.size){ var di=trDrag, dm=dg&&dg.moved; trDrag=-1; dg=null;
+        if(dm) trPush(); else if(e.type==="pointerup") trSel=di;     // moved → one undo step; clean tap on a dot → select it (shows ×)
+        trPaint(); }
       if(t && t.id===e.pointerId){ tap=null;
         if(e.type==="pointerup" && !t.moved && !trPinch){                  // a clean tap → today's tap logic at the release point
           var hit=t.hit>=0 ? t.hit : trNear(p.x,p.y);
-          if(closable(hit)){ trClosed=true; trPaint(); trSync(); }
-          else if(hit<0 && !trClosed){ var c=trS2C(p.x,p.y); tracePts.push(trToFrac(c.x,c.y)); trPaint(); trSync(); } } }   // closed → only dragging edits it
+          if(closable(hit)){ trClosed=true; trSel=-1; trPaint(); trSync(); trPush(); }
+          else if(hit<0){ trSel=-1; if(!trClosed){ var c=trS2C(p.x,p.y); tracePts.push(trToFrac(c.x,c.y)); trPush(); trSync(); } trPaint(); } } }   // empty tap clears selection; closed → only dragging edits it
       if(!ptrs.size) trPinch=false; }
     layer.addEventListener("pointerup", trEnd); layer.addEventListener("pointercancel", trEnd);
     layer.addEventListener("lostpointercapture", function(e){ if(ptrs.has(e.pointerId)) trEnd(e); });
@@ -845,8 +873,12 @@
       var d=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?400:1); d=Math.max(-300,Math.min(300,d));
       trZoomTo(trZ.s*Math.exp(-d*(e.ctrlKey?0.01:0.002)), p, p); }, {passive:false});
     window.addEventListener("resize", function(){ if(preview.classList.contains("tracing")){ trZClamp(); trZApply(); trPaint(); } });
-    $("trCancel").addEventListener("click", exitTrace);
-    $("trRedraw").addEventListener("click", function(){ tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trPaint(); trSync(); });
+    $("trCancel").addEventListener("click", function(){ trDraftPost(null); exitTrace(); });
+    $("trRedraw").addEventListener("click", function(){ tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trSel=-1; trPush(); trPaint(); trSync(); });
+    $("trUndo").addEventListener("click", trUndo); $("trRedo").addEventListener("click", trRedo);
+    $("trDel").addEventListener("click", function(){ if(trSel<0||trSel>=tracePts.length) return; tracePts.splice(trSel,1); trSel=-1; if(tracePts.length<3) trClosed=false; trPush(); trPaint(); trSync(); });
+    window.addEventListener("keydown", function(e){ if(!preview.classList.contains("tracing")) return; if(!(e.ctrlKey||e.metaKey) || (e.key||"").toLowerCase()!=="z") return;
+      var tg=e.target&&e.target.tagName; if(tg==="INPUT"||tg==="TEXTAREA") return; e.preventDefault(); e.shiftKey ? trRedo() : trUndo(); });
     $("trUse").addEventListener("click", trUse);
     $("tTrace").addEventListener("click", function(){
       if(preview.classList.contains("tracing")){ exitTrace(); return; }
