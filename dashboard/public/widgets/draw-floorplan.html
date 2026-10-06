@@ -166,6 +166,8 @@
   var LIDX=_qs.get("lidx")||"";
   var LSK_OLD = PID && LIDX ? ("iot_struct_"+PID+"_"+LIDX) : null;
   var LSK = PID && FID ? ("iot_struct_"+PID+"_"+FID) : (PID ? ("iot_struct_"+PID+"_"+(LIDX||FLOOR)) : null);   // no fid = standalone/old host: local-only, never posted
+  // &ctx=x,y,w,h — the floor's context crop (fractions of the aerial capture) → planLayerSVG() exports the plan on that exact plate.
+  var CTX=(function(){ var a=String(_qs.get("ctx")||"").split(",").map(Number); return (a.length===4 && a.every(isFinite) && a[2]>0 && a[3]>0) ? { x:a[0], y:a[1], w:a[2], h:a[3] } : null; })();
   var planState="loading";          // "loading" until the geometry is resolved (host plan / legacy / standalone)
   function $(id){return document.getElementById(id);}
   var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage");
@@ -182,6 +184,7 @@
   // Real-world scale: metres per canvas pixel (0 = unknown / hand-drawn). Set when the structure is
   // seeded from a satellite trace; persisted with the floor. See lib/floor-scale.js (inlined below).
   var metersPerPx=0, _seedSc=0, M_PER_FT=0.3048;
+  var _seed=null;   // the outline seed transform {sc,offx,offy,aspect}: aerial fraction (x·aspect, y) → plan px = ·sc + off; persisted in the plan
   function pxToFeet(px){ return metersPerPx>0 ? (px*metersPerPx)/M_PER_FT : 0; }
   function cellsSqFt(n){ var h=pxToFeet(HALF); return metersPerPx>0 ? n*h*h : 0; }
   // Feet per full grid box — inline copy of lib/site-transform.js gridBoxFeet(); tests/site-transform-drift.test.mjs keeps the formula identical.
@@ -310,12 +313,13 @@
   // t = when this geometry was last EDITED (not written): the recovery copy and the posted plan share it, a
   // loaded plan keeps its own — so a local copy is only "newer" when edits never reached the survey.
   var _planStamp=0;
-  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx, t:_planStamp}; }
+  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp}; }
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
   function applyPlan(s){ cells=new Set(); rooms=[]; metersPerPx=0; sel=null; _planStamp=(s&&+s.t)||0;
+    _seed=(s && s.seed && +s.seed.sc>0) ? { sc:+s.seed.sc, offx:+s.seed.offx||0, offy:+s.seed.offy||0, aspect:(+s.seed.aspect>0)?+s.seed.aspect:1 } : null;
     if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
   // Local recovery copy: this floor's id key first, then the legacy index key (only with &lidx). _lpKey = where it came from.
   var _lpKey=null;
@@ -485,6 +489,11 @@
     o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="url(#pg)"/>');
     var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');
+    svgPlanBody(o, swS, swR, fs);
+    o.push("</svg>");
+    return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
+  // Shared middle of both exports (room fills + walls, structure boundary, labels) — one copy so the sketch and the layer can't drift.
+  function svgPlanBody(o, swS, swR, fs){
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
       var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
       o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
@@ -493,9 +502,21 @@
     var sp=""; boundaryEdges().forEach(function(s){ sp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
     if(sp) o.push('<path d="'+sp+'" fill="none" stroke="#111" stroke-width="'+swS+'" stroke-linecap="round" stroke-linejoin="round"/>');
     rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var b2=cellsBBoxPx(r.cells||[]);
-      o.push('<text x="'+(b2.x+b2.w/2)+'" y="'+(b2.y+b2.h/2)+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); });
+      o.push('<text x="'+(b2.x+b2.w/2)+'" y="'+(b2.y+b2.h/2)+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
+  /* Phase 4 plan LAYER: the same scene, TRANSPARENT (no paper, no grid; structure a light wash), framed on the floor's
+     context crop — viewBox = the ctx rect mapped through the seed transform (aerial fraction x·aspect·sc+offx, y·sc+offy).
+     The survey stacks it 1:1 over the ctx aerial crop (same fractional extent → devices keep one set of % coords).
+     preserveAspectRatio none → it fills the plate box exactly even with the rounded width/height. Null without seed+ctx. */
+  function planLayerSVG(){ if(!_seed||!CTX||!hasSketch()) return null;
+    var r4=function(v){ return Math.round(v*1e4)/1e4; }, a=_seed.aspect, sc=_seed.sc, x0=r4(CTX.x*a*sc+_seed.offx), y0=r4(CTX.y*sc+_seed.offy), vw=r4(CTX.w*a*sc), vh=r4(CTX.h*sc);
+    if(!(vw>0&&vh>0)) return null;
+    var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
+    var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="none" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
+    var sf=""; cells.forEach(function(k){ var c=k.split(","); sf+='<rect x="'+(+c[0]*HALF)+'" y="'+(+c[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+    if(sf) o.push('<g fill="#ffffff" fill-opacity="0.85">'+sf+'</g>');
+    svgPlanBody(o, swS, swR, fs);
     o.push("</svg>");
-    return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
+    var u="data:image/svg+xml,"+encodeURIComponent(o.join("")); return u.length<=400000 ? u : null; }   // the survey's cap — over it, no layer rather than a rejected one
 
   // ---- enhance: sketch → real floor plan via /api/enhance (mode=floorplan) ----
   function scanOn(on){ $("scan").classList.toggle("on",on); }
@@ -579,7 +600,8 @@
     // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
     // at any zoom in the survey (no rasterization on the display path).
     if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL, scale:scale}, "*"); }catch(e){} }
-    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale}, "*"); }catch(e){} } });
+    else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } });
+    // planSvg (Phase 4 layer) rides the vector hand-off only — an AI-enhanced result carries none, so the survey stores null (never a stale layer).
 
   // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the
   // Structure as occupied cells — the SAME canonical model as hand-drawing, just another creation
@@ -595,6 +617,7 @@
     var sc=Math.min((W0*(1-2*pad))/bw, (H0*(1-2*pad))/bh);
     _seedSc=sc;                                        // canvas px per world unit — lets the seed resolve real scale
     var offx=(W0-bw*sc)/2 - mnx*sc, offy=(H0-bh*sc)/2 - mny*sc;
+    _seed={ sc:sc, offx:offx, offy:offy, aspect:aspect };   // plan px = canvas px (cells are absolute "c,r" × HALF) → valid at any later canvas size
     var poly=wp.map(function(p){ return {x:p.x*sc+offx, y:p.y*sc+offy}; });
     var pxs=poly.map(function(p){return p.x;}), pys=poly.map(function(p){return p.y;});
     // Rasterise on the FULL-box grid (not half-cells): the seed snaps to whole boxes — a full box is
@@ -622,9 +645,9 @@
     (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
       if(!S||!S.pts||S.pts.length<3) return;
       if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
-      var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
+      var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
         if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
-      } })();
+      } else _seed=prevSeed; })();   // nothing seeded → the loaded plan's transform still describes its geometry
     if(_seeded){ snap=1; applySnapUI(); }             // seed is box-aligned → continue editing on the full-box grid
     reconcileRooms();                                // migrate legacy rect rooms + clip every room to the structure
     hist=[snapshot()]; hi=0;                         // baseline history on the reconciled (or seeded) state

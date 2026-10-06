@@ -828,7 +828,21 @@
     try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src, aerial: capAerial,
       // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
       // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
-      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) } }, "*"); }catch(e){} trDraftPost(null); }   // consumed → the parent drops the unfinished draft
+      outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) }, ctx: trCtx() }, "*"); }catch(e){} trDraftPost(null); }   // consumed → the parent drops the unfinished draft
+  /* Context crop (Phase 4): outline bbox + a 20% margin (of its larger side, in real px so the margin is even) of the
+     aerial, as FRACTIONS of the capture — the one plate extent every Satellite | Plan | Hybrid view of the floor shares.
+     The crop is cut from capCanvas by that exact rect (longest edge ≤1280, JPEG .85); ftW/ftH only when the scale is known. */
+  function trCtx(){ if(!capCanvas||tracePts.length<3) return null;
+    var W=capCanvas.width, H=capCanvas.height, x0=1, y0=1, x1=0, y1=0, k=1e6;
+    tracePts.forEach(function(p){ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x); y1=Math.max(y1,p.y); });
+    var m=0.2*Math.max((x1-x0)*W,(y1-y0)*H), rx=Math.max(0,x0-m/W), ry=Math.max(0,y0-m/H);
+    var rect={ x:Math.round(rx*k)/k, y:Math.round(ry*k)/k, w:Math.round((Math.min(1,x1+m/W)-rx)*k)/k, h:Math.round((Math.min(1,y1+m/H)-ry)*k)/k };
+    if(!(rect.w>0&&rect.h>0)) return null;
+    var sw=rect.w*W, sh=rect.h*H, s=Math.min(1,1280/Math.max(sw,sh)), cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(sw*s)); cv.height=Math.max(1,Math.round(sh*s));
+    var g=cv.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(capCanvas, rect.x*W, rect.y*H, sw, sh, 0,0, cv.width, cv.height);
+    var out={ src:cv.toDataURL("image/jpeg",0.85), rect:rect, northDeg: capAerial ? capAerial.northDeg : null }, FT=3.28084;
+    if(capMetersW>0&&capMetersH>0){ out.ftW=+(rect.w*capMetersW*FT).toFixed(2); out.ftH=+(rect.h*capMetersH*FT).toFixed(2); }
+    return out; }
   (function trInit(){
     // Gestures: tap = corner (added on pointerUP, so a pan never leaves a stray vertex); drag a dot = move it;
     // drag empty space (>6px) = pan; two fingers = pinch-zoom + pan about the midpoint; wheel = zoom at cursor.
