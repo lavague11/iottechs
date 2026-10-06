@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
+import { buildStops } from "../../../lib/walkthrough-stops";
 
 // The "Visualize" deck step: a guided, cinematic walk through the planned system before any pricing.
 // The aerial site survey is the stage; each camera marker morphs open into what that camera sees.
@@ -27,7 +28,11 @@ export default function SystemVisualize({ accessId, customerName = "" }) {
 
   const floors = useMemo(() => {
     try { const d = JSON.parse(sv); return (d.floors || []).filter((f) => f.bg)
-      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
+      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, cams: (f.devices || []).filter((x) => x.k === "cam"),
+        // The full canonical device list (cameras + speakers) and the survey's own context (zones/rooms/sides) — the
+        // walkthrough builds its stops and place labels from these; nothing is recomputed here.
+        devices: f.devices || [], zones: f.zones || null, boundary: f.boundary || null, sides: f.sides || null,
+        plan: f.plan ? { rooms: f.plan.rooms || [], seed: f.plan.seed || null } : null, ctx: f.ctx && f.ctx.rect ? { rect: f.ctx.rect } : null })); }
     catch { return []; }
   }, [sv]);
   const photos = useMemo(() => {
@@ -36,7 +41,7 @@ export default function SystemVisualize({ accessId, customerName = "" }) {
       .filter((x) => typeof x.url === "string" && x.url.startsWith("data:image")); }
     catch { return []; }
   }, [mk]);
-  const hasCams = floors.some((f) => (f.cams || []).length > 0);
+  const hasCams = useMemo(() => buildStops(floors).length > 0, [floors]);   // cameras, or speakers with coverage
 
   return (
     <div className="svz">

@@ -97,7 +97,7 @@ export default function SystemPlanner({
 
   const floors = useMemo(() => {
     try { const d = JSON.parse(sv); return (d.floors || []).filter((f) => f.bg)
-      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
+      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, devices: f.devices || [], zones: f.zones || [], boundary: f.boundary || null, sides: f.sides || null, plan: f.plan || null, ctx: f.ctx || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
     catch { return []; }
   }, [sv]);
   const photos = useMemo(() => {
