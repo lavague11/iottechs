@@ -690,9 +690,9 @@
     /* Phase 4 layers on the floor record (like `plan`, never via snapFloor): ctx = {src, rect:{x,y,w,h} fractions of the capture,
        ftW?, ftH?, northDeg} — the aerial crop (outline bbox + 20%) every Satellite | Plan | Hybrid view shares; planSvg = the draw
        tool's TRANSPARENT plan SVG whose viewBox is that same rect in plan px, so the two stack 1:1 on one plate. Validated (server-synced). */
-    function validCtx(c){ try{ if(!c||typeof c!=="object"||typeof c.src!=="string"||c.src.indexOf("data:image/")!==0||c.src.length>1500000) return null;
+    function validCtx(c){ try{ if(!c||typeof c!=="object"||typeof c.src!=="string"||(c.src.indexOf("data:image/")!==0 && c.src.indexOf("/")!==0)||c.src.length>2500000) return null;   // src may already be an /api/media URL after upload
       var r=c.rect; if(!r||!["x","y","w","h"].every(function(k){ return typeof r[k]==="number"&&isFinite(r[k])&&r[k]>=0&&r[k]<=1; })||!(r.w>0&&r.h>0)) return null;
-      var o={ src:c.src, rect:{ x:r.x, y:r.y, w:r.w, h:r.h }, northDeg:(typeof c.northDeg==="number"&&isFinite(c.northDeg))?c.northDeg:null };
+      var o={ src:c.src, rect:{ x:r.x, y:r.y, w:r.w, h:r.h }, full:!!c.full, northDeg:(typeof c.northDeg==="number"&&isFinite(c.northDeg))?c.northDeg:null };   // full = src is the whole aerial, window by rect (new); legacy = pre-cropped strip
       if(+c.ftW>0&&+c.ftH>0){ o.ftW=+c.ftW; o.ftH=+c.ftH; } return o; }catch(e){ return null; } }
     function validPlanSvg(s){ return (typeof s==="string" && s.indexOf("data:image/svg")===0 && s.length<=400000) ? s : null; }
     function clearCtx(fl){ if(fl){ fl.ctx=null; fl.planSvg=null; fl.bgCtx=false; } }   // a new non-outline background (satellite Use / upload / library) → the context no longer applies (not hybrid-capable)
@@ -1530,12 +1530,19 @@
     function renderView(){
       var aerial=document.getElementById("aerialImg"), img=document.getElementById("stageImg"); if(!aerial||!img) return;
       var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?((f.view==="satellite"||f.view==="plan"||f.view==="hybrid")?f.view:"hybrid"):null;
-      function lay(el,src){ if(src){ el.style.background=""; el.style.backgroundImage='url("'+src+'")'; el.style.backgroundRepeat="no-repeat"; el.style.backgroundSize="contain"; el.style.backgroundPosition="center"; } else { el.style.backgroundImage=""; el.style.background="transparent"; } }
+      // background:transparent (NOT "") so the .stage-img default #fff never shows: in Hybrid the plan layer is a TRANSPARENT SVG and the aerial behind it must show through (an opaque white here is what made Hybrid look like Plan).
+      function lay(el,src){ if(src){ el.style.background="transparent"; el.style.backgroundImage='url("'+src+'")'; el.style.backgroundRepeat="no-repeat"; el.style.backgroundSize="contain"; el.style.backgroundPosition="center"; } else { el.style.backgroundImage=""; el.style.background="transparent"; } }
+      // Aerial layer: ctx.src is now the FULL leveled aerial — WINDOW it to the viewport rect (ctx.rect) so the building sits framed with real surroundings and the plate aspect matches the plan. (Legacy ctx without `full` held a pre-cropped strip → contain-fit.)
+      function layAerial(el,c){ if(!c||!c.src){ el.style.backgroundImage=""; el.style.background="transparent"; return; }
+        el.style.background=""; el.style.backgroundImage='url("'+c.src+'")'; el.style.backgroundRepeat="no-repeat"; var r=c.rect;
+        if(c.full && r && r.w>0 && r.h>0){ el.style.backgroundSize=(100/r.w).toFixed(3)+"% "+(100/r.h).toFixed(3)+"%";
+          el.style.backgroundPosition=(r.w<1?(r.x/(1-r.w)*100):0).toFixed(3)+"% "+(r.h<1?(r.y/(1-r.h)*100):0).toFixed(3)+"%"; }
+        else { el.style.backgroundSize="contain"; el.style.backgroundPosition="center"; } }
       if(!cap){ aerial.style.display="none";   // unchanged: #stageImg = floor.bg (cover), as setStageBg always did
         if(bgData){ img.style.background=""; img.style.backgroundImage='url("'+bgData+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; } else { img.style.backgroundImage=""; img.style.background="#fff"; } }
       else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }                      // the ctx-framed OPAQUE plan
-      else if(v==="satellite"){ aerial.style.display=""; lay(aerial, f.ctx.src); lay(img, null); } // aerial only; plan layer transparent
-      else { aerial.style.display=""; lay(aerial, f.ctx.src); lay(img, f.planSvg); }               // hybrid: aerial + transparent plan (0.85-white structure subdues the roof)
+      else if(v==="satellite"){ aerial.style.display=""; layAerial(aerial, f.ctx); lay(img, null); } // aerial only; plan layer transparent
+      else { aerial.style.display=""; layAerial(aerial, f.ctx); lay(img, f.planSvg); }               // hybrid: windowed aerial + transparent plan (0.85-white structure subdues the roof)
       syncViewSeg(cap, v);
       var rb=document.getElementById("rotateBtn"); if(rb) rb.style.display=cap?"none":"";   // rotating only bgData would misalign the ctx aerial/planSvg layers (and a ctx plan is already leveled)
       renderGrid();

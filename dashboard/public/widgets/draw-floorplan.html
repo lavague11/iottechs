@@ -48,6 +48,16 @@
   #revBox.on{display:flex}
   #revBox input{border:0;outline:none;font:inherit;font-size:13px;color:var(--ink);width:min(52vw,320px)}
   #revBox button{border:0;background:var(--gold);color:#fff;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer}
+  /* In-product confirm (replaces window.confirm): compact centered card over a light dim; Cancel quiet, one primary. */
+  #confirmCard{position:absolute;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.28);padding:16px}
+  #confirmCard.on{display:flex}
+  #confirmCard .cc{width:min(300px,100%);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.24);padding:14px}
+  #confirmCard .cct{font-size:14px;font-weight:700;color:var(--ink)}
+  #confirmCard .ccb{margin-top:4px;font-size:12.5px;color:var(--muted)}
+  #confirmCard .cca{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+  #confirmCard button{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font:600 13px var(--sans);cursor:pointer}
+  #confirmCard button#ccOk{background:var(--ink);border-color:var(--ink);color:#fff}
+  #confirmCard button#ccOk.danger{background:#c4553d;border-color:#c4553d}
 
   /* One compact bottom dock — a single row, never wraps: [Structure|Room] [+][Erase][snap] [•••] [Done]. */
   .tbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:14;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;max-width:calc(100vw - 16px);
@@ -115,6 +125,7 @@
     </div>
     <div id="msg"></div>
     <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. add a hallway between the rooms"><button id="revGo">Revise</button></div>
+    <div id="confirmCard"><div class="cc" role="alertdialog" aria-modal="true" aria-labelledby="ccT" aria-describedby="ccB"><div class="cct" id="ccT"></div><div class="ccb" id="ccB"></div><div class="cca"><button id="ccNo">Cancel</button><button id="ccOk">OK</button></div></div></div>
 
     <!-- Bottom-left contextual history — outside the toolbar; Undo appears after the first edit, Redo only when a redo exists. -->
     <div class="histctl" id="histCtl">
@@ -649,32 +660,49 @@
   // Geometry resolves ONCE (host plan / legacy import / standalone), THEN the trace seed applies on top, then
   // history + mode. Until then the canvas stays a neutral blank (no "block out" prompt, input ignored).
   var _seeded=false, _planTO=null, _lateOK=false;
+  // In-product confirm (replaces window.confirm): askConfirm({title,body,ok,danger}, onYes, onNo) — exactly one callback fires, once.
+  // Esc / backdrop = No; while open, keys never reach the editor shortcuts (undo etc.).
+  var _cc=null;
+  function closeConfirm(yes){ var c=_cc; if(!c) return; _cc=null; $("confirmCard").classList.remove("on"); var f=yes?c.yes:c.no; if(f) f(); }
+  function askConfirm(o, onYes, onNo){ if(_cc) closeConfirm(false); o=o||{}; $("ccT").textContent=o.title||"Confirm"; $("ccB").textContent=o.body||""; $("ccB").style.display=o.body?"":"none";
+    var ok=$("ccOk"); ok.textContent=o.ok||"OK"; ok.className=o.danger?"danger":""; _cc={yes:onYes,no:onNo}; $("confirmCard").classList.add("on");
+    try{ (o.danger?$("ccNo"):ok).focus(); }catch(e){} }
+  $("ccOk").addEventListener("click", function(){ closeConfirm(true); });
+  $("ccNo").addEventListener("click", function(){ closeConfirm(false); });
+  $("confirmCard").addEventListener("click", function(e){ if(e.target===this) closeConfirm(false); });
+  document.addEventListener("keydown", function(e){ if(!_cc) return; e.stopPropagation(); if(e.key==="Escape"){ e.preventDefault(); closeConfirm(false); } }, true);
   function initWithPlan(plan, migrated, fromKey){ if(planState==="loaded") return; planState="loaded"; clearTimeout(_planTO);
     applyPlan(plan);
-    (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
-      if(!S||!S.pts||S.pts.length<3) return;
-      if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
-      var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
+    // Everything after the (optional) seed choice — runs exactly once, on whatever geometry resulted (seeded, or the loaded plan on No / no seed).
+    function finish(){
+      if(_seeded){ snap=1; applySnapUI(); }           // seed is box-aligned → continue editing on the full-box grid
+      reconcileRooms();                              // migrate legacy rect rooms + clip every room to the structure
+      hist=[snapshot()]; hi=0;                       // baseline history on the reconciled (or seeded) state
+      setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
+      writeLS();                                     // recovery copy now mirrors the resolved geometry (overwrite, never merge)
+      if(fromKey===LSK_OLD && LSK_OLD && LSK_OLD!==LSK && hasPlan(readLS(LSK))){ try{ localStorage.removeItem(LSK_OLD); }catch(e){} }   // legacy draft now lives under the fid key → never imported twice
+      if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
+      updateTools(); }
+    var raw=_qs.get("seed"), S=null; if(raw){ try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){} }
+    if(!S||!S.pts||S.pts.length<3){ finish(); return; }
+    function seed(){ var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
         if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
-      } else _seed=prevSeed; })();   // nothing seeded → the loaded plan's transform still describes its geometry
-    if(_seeded){ snap=1; applySnapUI(); }             // seed is box-aligned → continue editing on the full-box grid
-    reconcileRooms();                                // migrate legacy rect rooms + clip every room to the structure
-    hist=[snapshot()]; hi=0;                         // baseline history on the reconciled (or seeded) state
-    setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
-    writeLS();                                       // recovery copy now mirrors the resolved geometry (overwrite, never merge)
-    if(fromKey===LSK_OLD && LSK_OLD && LSK_OLD!==LSK && hasPlan(readLS(LSK))){ try{ localStorage.removeItem(LSK_OLD); }catch(e){} }   // legacy draft now lives under the fid key → never imported twice
-    if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
-    updateTools(); }
+      } else _seed=prevSeed;   // nothing seeded → the loaded plan's transform still describes its geometry
+      finish(); }
+    if(cells.size) askConfirm({title:"Replace structure?", body:"This floor already has a structure. The traced outline will replace it.", ok:"Replace"}, seed, finish);   // never silently overwrite; No keeps the structure
+    else seed(); }
   // Host reply: a non-null plan is authoritative (even an empty one) — unless this floor's recovery copy holds
   // edits made after it (crash before the survey got them). null → import a local draft once, else empty.
   window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotPlanLoad"||m.fid!==FID) return;
     var p=(m.plan && typeof m.plan==="object") ? m.plan : null;
     if(planState==="loaded"){                        // reply after the fallback: never dropped silently
       if(!_lateOK || !p || _qs.get("seed")) return; _lateOK=false;
+      var accept=function(){ applyPlan(p); reconcileRooms(); hist=[snapshot()]; hi=0; setMode(cells.size?"room":"structure"); writeLS();
+        clearTimeout(_planT); postPlan(); };         // hand it back: any edit/undo already posted must not stand in for it
       if(hi>0){ if(!hasPlan(p)) return;              // edits vs an empty server plan → nothing to lose
-        if(!window.confirm("A saved plan for this floor exists on the server. Replace your current changes with it?")){ persist(); flushPlan(); return; } }   // keep local → replace the server copy deliberately
-      applyPlan(p); reconcileRooms(); hist=[snapshot()]; hi=0; setMode(cells.size?"room":"structure"); writeLS();
-      clearTimeout(_planT); postPlan(); return; }    // hand it back: any edit/undo already posted must not stand in for it
+        askConfirm({title:"Replace changes?", body:"A saved plan for this floor exists on the server. It will replace your current changes.", ok:"Replace"}, accept, function(){ persist(); flushPlan(); });   // No = keep local → replace the server copy deliberately
+        return; }
+      accept(); return; }
     if(p){ var lc=readLS(LSK); if(hasPlan(p) && hasPlan(lc) && (+lc.t||0) > (+p.t||0)+1500){ initWithPlan(lc, true); return; }   // unsent local edits win, and are posted
       initWithPlan(p, false); return; }
     var lp=localPlan(); initWithPlan(lp, !!lp, _lpKey); });

@@ -60,8 +60,9 @@ test("4.2 survey: hybridCapable requires ctx.src AND planSvg AND bgCtx", () => {
 test("4.2 survey: renderView has the three view branches on the shared two-layer stack", () => {
   const fn = extractFn(survey, "renderView");
   assert.ok(fn.includes('else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }'), "plan → opaque ctx-framed bg, aerial hidden");
-  assert.ok(fn.includes('else if(v==="satellite"){ aerial.style.display=""; lay(aerial, f.ctx.src); lay(img, null); }'), "satellite → aerial only, plan layer transparent");
-  assert.ok(fn.includes('lay(aerial, f.ctx.src); lay(img, f.planSvg); }'), "hybrid → aerial + transparent plan");
+  assert.ok(fn.includes('else if(v==="satellite"){ aerial.style.display=""; layAerial(aerial, f.ctx); lay(img, null); }'), "satellite → windowed full aerial only, plan layer transparent");
+  assert.ok(fn.includes('layAerial(aerial, f.ctx); lay(img, f.planSvg); }'), "hybrid → windowed full aerial + transparent plan");
+  assert.ok(fn.includes('c.full && r && r.w>0 && r.h>0'), "layAerial windows the full aerial to the viewport rect");
   assert.ok(fn.includes('backgroundSize="cover"'), "non-capable keeps today's cover bg");
 });
 

@@ -835,18 +835,26 @@
       // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
       // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
       outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) }, ctx: trCtx() }, "*"); }catch(e){} trDraftPost(null); }   // consumed → the parent drops the unfinished draft
-  /* Context crop (Phase 4): outline bbox + a 20% margin (of its larger side, in real px so the margin is even) of the
-     aerial, as FRACTIONS of the capture — the one plate extent every Satellite | Plan | Hybrid view of the floor shares.
-     The crop is cut from capCanvas by that exact rect (longest edge ≤1280, JPEG .85); ftW/ftH only when the scale is known. */
+  /* Context (Phase 4, reworked): the FULL leveled aerial is kept intact (src = the whole capCanvas) so the exterior
+     context is never destroyed, PLUS a presentation VIEWPORT rect (outline bbox + a generous margin, aspect-padded so
+     it's never a thin building-only strip), as FRACTIONS of the capture. The survey WINDOWS the full aerial to `rect`
+     to frame the building with real surroundings (driveway/yard/street), and can show wider context. `full:true` marks
+     the new "src is the whole aerial, window by rect" semantics (old saves had src = a tight crop → contain-fit). */
   function trCtx(){ if(!capCanvas||tracePts.length<3) return null;
     var W=capCanvas.width, H=capCanvas.height, x0=1, y0=1, x1=0, y1=0, k=1e6;
     tracePts.forEach(function(p){ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x); y1=Math.max(y1,p.y); });
-    var m=0.2*Math.max((x1-x0)*W,(y1-y0)*H), rx=Math.max(0,x0-m/W), ry=Math.max(0,y0-m/H);
-    var rect={ x:Math.round(rx*k)/k, y:Math.round(ry*k)/k, w:Math.round((Math.min(1,x1+m/W)-rx)*k)/k, h:Math.round((Math.min(1,y1+m/H)-ry)*k)/k };
+    var bw=Math.max(1e-4,x1-x0), bh=Math.max(1e-4,y1-y0);
+    var m=0.35*Math.max(bw*W,bh*H);                       // generous even margin (px) → real exterior context, not a tight hug
+    var rx=x0-m/W, ry=y0-m/H, rw=bw+2*m/W, rh=bh+2*m/H;
+    var ARlo=0.7, ARhi=1.5, ar=(rw*W)/(rh*H);             // pad the short side into a sane band so the viewport is never a thin strip
+    if(ar<ARlo){ var nw=ARlo*rh*H/W; rx-=(nw-rw)/2; rw=nw; }
+    else if(ar>ARhi){ var nh=rw*W/(ARhi*H); ry-=(nh-rh)/2; rh=nh; }
+    rx=Math.max(0,rx); ry=Math.max(0,ry); rw=Math.min(rw,1-rx); rh=Math.min(rh,1-ry);   // clamp into the capture (an edge may re-tighten the aspect; the full aerial is still kept in src)
+    var rect={ x:Math.round(rx*k)/k, y:Math.round(ry*k)/k, w:Math.round(rw*k)/k, h:Math.round(rh*k)/k };
     if(!(rect.w>0&&rect.h>0)) return null;
-    var sw=rect.w*W, sh=rect.h*H, s=Math.min(1,1280/Math.max(sw,sh)), cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(sw*s)); cv.height=Math.max(1,Math.round(sh*s));
-    var g=cv.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(capCanvas, rect.x*W, rect.y*H, sw, sh, 0,0, cv.width, cv.height);
-    var out={ src:cv.toDataURL("image/jpeg",0.85), rect:rect, northDeg: capAerial ? capAerial.northDeg : null }, FT=3.28084;
+    var s=Math.min(1,1600/Math.max(W,H)), cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(W*s)); cv.height=Math.max(1,Math.round(H*s));
+    var g=cv.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(capCanvas, 0,0, cv.width, cv.height);   // the FULL leveled aerial, downscaled (longest edge ≤1600)
+    var out={ src:cv.toDataURL("image/jpeg",0.85), rect:rect, full:true, northDeg: capAerial ? capAerial.northDeg : null }, FT=3.28084;
     if(capMetersW>0&&capMetersH>0){ out.ftW=+(rect.w*capMetersW*FT).toFixed(2); out.ftH=+(rect.h*capMetersH*FT).toFixed(2); }
     return out; }
   (function trInit(){
