@@ -700,7 +700,7 @@
     /* Phase 4 layers on the floor record (like `plan`, never via snapFloor): ctx = {src, rect:{x,y,w,h} fractions of the capture,
        ftW?, ftH?, northDeg} — the aerial crop (outline bbox + 20%) every Satellite | Plan | Hybrid view shares; planSvg = the draw
        tool's TRANSPARENT plan SVG whose viewBox is that same rect in plan px, so the two stack 1:1 on one plate. Validated (server-synced). */
-    function validCtx(c){ try{ if(!c||typeof c!=="object"||typeof c.src!=="string"||(c.src.indexOf("data:image/")!==0 && c.src.indexOf("/")!==0)||c.src.length>2500000) return null;   // src may already be an /api/media URL after upload
+    function validCtx(c){ try{ if(!c||typeof c!=="object"||typeof c.src!=="string"||!(c.src.indexOf("data:image/")===0 || c.src.indexOf("/api/media/")===0)||c.src.length>2500000) return null;   // only an inline image OR our own /api/media URL — never a protocol-relative "//host" off-origin fetch
       var r=c.rect; if(!r||!["x","y","w","h"].every(function(k){ return typeof r[k]==="number"&&isFinite(r[k])&&r[k]>=0&&r[k]<=1; })||!(r.w>0&&r.h>0)) return null;
       var o={ src:c.src, rect:{ x:r.x, y:r.y, w:r.w, h:r.h }, full:!!c.full, northDeg:(typeof c.northDeg==="number"&&isFinite(c.northDeg))?c.northDeg:null };   // full = src is the whole aerial, window by rect (new); legacy = pre-cropped strip
       if(+c.ftW>0&&+c.ftH>0){ o.ftW=+c.ftW; o.ftH=+c.ftH; } return o; }catch(e){ return null; } }
