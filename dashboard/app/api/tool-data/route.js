@@ -11,6 +11,14 @@ import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall,
 // Every other tool (schedule/receiving/install/addendum/qc — small JSON, no photos) still goes
 // through the server actions and is untouched by this.
 
+// This plain REST route exists ONLY for the client autosync/seed of the geometry/photo/appointment
+// tools (tool-sync.js seedToolData/startToolAutosync + survey-approve flushDraft): survey, survey2,
+// mockup, schedule. Those carry no payout/retail/cost. Every OTHER tool (install, qc, addendum,
+// techs, tracking, receiving) MUST go through the server actions getToolDataAction/saveToolDataAction,
+// which apply sanitizeToolRead (role stripping) + the per-tool editor map. Serving them here would
+// bypass both — so this route hard-restricts to SYNC_TOOLS.
+const SYNC_TOOLS = new Set(["survey", "survey2", "mockup", "schedule"]);
+
 async function getSessionRole() {
   const jar = await cookies();
   const raw = jar.get("iot_session")?.value;
@@ -37,7 +45,7 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const accessId = searchParams.get("accessId");
   const tool = searchParams.get("tool");
-  if (!accessId || !TOOL_KEYS.has(tool)) return Response.json({ ok: false });
+  if (!accessId || !SYNC_TOOLS.has(tool)) return Response.json({ ok: false });
   const tok = await getSessionRole();
   if (!(await canReadProject(tok, accessId))) {
     // Service-call PIN visitor: the iot_svc grant covers READING the survey of the call's OWN
@@ -61,7 +69,7 @@ export async function POST(req) {
   const { accessId, tool, data } = await req.json();
   const tok = await getSessionRole();
   if (!tok) return Response.json({ error: "Session expired." });
-  if (!TOOL_KEYS.has(tool)) return Response.json({ error: "Unknown tool." });
+  if (!SYNC_TOOLS.has(tool)) return Response.json({ error: "Unknown tool." });
   if (typeof data !== "string" || data.length > 8_000_000) return Response.json({ error: "Bad payload." });
   const editors = ["admin", "manager", "sales"];   // survey + mockup are office-only writes
   if (!editors.includes(tok.role)) return Response.json({ error: "Read-only for your role." });

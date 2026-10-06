@@ -52,6 +52,7 @@ async function revalidate(accessId) {
 }
 
 export async function getProposalAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false };   // gate reads to the project's own people (mirror getProposalDiffAction) — else any logged-in customer could read a stranger's proposal + signature
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
   return { ok: true, proposal: sanitizeProposal(getActiveProposal(accessId), role) };
@@ -438,6 +439,7 @@ const STAFF = new Set(["admin", "manager"]);
 
 // Bundle the approval page needs in one round-trip: sanitized proposal + payments + acceptances.
 export async function getApprovalDataAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false };   // gate: this returns the payment ledger + signatures — never cross-project
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
   return {
@@ -453,6 +455,9 @@ export async function getApprovalDataAction(accessId) {
 // these as a separate line so the base proposal stays intact while the current contract total reflects
 // them — same source (getApprovedAddons) the deposit/closeout/balance already use.
 export async function getProjectAddonsAction(accessId) {
+  if (!(await canReadProject(accessId))) return { total: 0, list: [] };   // was unauthenticated — anyone could read a project's approved add-on retail + signer
+  const tok = await getSessionRole();
+  if (!can(tok?.role, "customer.financials.view")) return { total: 0, list: [] };   // retail line items: not for tech/vendor
   return getApprovedAddons(accessId);   // { total, list }
 }
 
