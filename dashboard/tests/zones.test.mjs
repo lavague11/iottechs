@@ -248,7 +248,7 @@ test("the editor is routed by target, not duplicated: one pointer IIFE, one bdCo
   assert.equal(survey.split('rl.addEventListener("pointerdown"').length - 1, 1, "single pointerdown handler on #regionLayer");
   assert.ok(extractFn(survey, "bdCommit").includes('rgTarget.kind==="zone"'), "bdCommit writes to the zone row for a zone target");
   assert.ok(survey.includes('if(hit<0 && rgTarget.kind==="zone" && rgZoneTap(e.clientX,e.clientY)) return;'), "zone tap routing precedes the add-vertex path");
-  assert.ok(survey.includes('if(bdSel>=0){ bdSel=-1; renderBoundary(); } else if(!bdClosed)'), "boundary empty-tap logic is untouched");
+  assert.ok(survey.includes('if(bdSel>=0){ bdSel=-1; renderBoundary(); }'), "boundary empty-tap still deselects first (no stray vertex)");
   assert.ok(survey.includes('if(rgTarget.kind==="zone" && rgTarget.id==null) openZonePop();'), "closing a NEW zone opens the type picker");
 });
 

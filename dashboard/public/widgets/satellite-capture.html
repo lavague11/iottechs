@@ -145,6 +145,11 @@
   #traceBar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:11;display:none;gap:8px;align-items:center;
     background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:7px 8px;box-shadow:0 8px 30px rgba(16,17,18,.2);backdrop-filter:blur(8px)}
   #preview.tracing #traceBar{display:flex}
+  /* Build Floor Plan (outline-only): a focused entry that hides ALL the live-capture chrome — the address/search
+     bar + the whole floating toolbar (Level/Crop/Enhance/Download/Outline/Done). The user only outlines THIS aerial
+     (trace editor + Use Outline) and backs out via Cancel. (.tbar is also hidden while tracing; this keeps it hidden
+     even in the instant before/after trace.) */
+  body.outline-only .head,body.outline-only .tbar{display:none!important}
   /* While tracing, the main toolbar (Level/Crop/Trace/Done) docks in the same spot as the trace controls
      and, being higher z-index, would hide them — hide it so Cancel/Redraw/Use Outline are reachable. */
   #preview.tracing ~ .tbar{display:none}
@@ -306,6 +311,10 @@
   var API_KEY=null, map=null, geocoder=null, marker=null;
   var PID=new URLSearchParams(location.search).get("project")||"";
   if(new URLSearchParams(location.search).get("embed")==="1") document.body.classList.add("embed");
+  // Build Floor Plan entry (distinct src): outline THIS aerial only — hide the live-capture chrome up front (before the
+  // image arrives) + auto-enter trace. The parent reloads a clean frame when switching into/out of this mode.
+  var outlineOnly=(new URLSearchParams(location.search).get("buildplan")==="1");
+  if(outlineOnly) document.body.classList.add("outline-only");
   var DEMO="2503 Jay Place, Union, NJ 07083", FT=3.28084;
   var viewRot=0, step=0, rect=null;
   function $(id){return document.getElementById(id);}
@@ -348,7 +357,8 @@
     } catch(e){}
     initDraw();
     initNav();
-    if(pendingAerial){ var pa=pendingAerial; pendingAerial=null; applyAerial(pa); if(!aerialApplied) search(($("q").value||DEMO).trim(), true); }   // a restored transform must not be overridden by the default geocode (a center-less one falls back to it)
+    if(pendingCapture){ var pc=pendingCapture; pendingCapture=null; loadCapture(pc); }   // a parent-supplied capture wins — never run the default geocode over it (the race that let the live map show through)
+    else if(pendingAerial){ var pa=pendingAerial; pendingAerial=null; applyAerial(pa); if(!aerialApplied) search(($("q").value||DEMO).trim(), true); }   // a restored transform must not be overridden by the default geocode (a center-less one falls back to it)
     else search(($("q").value||DEMO).trim(), true);
   };
 
@@ -369,6 +379,31 @@
     var d=e&&e.data; if(!d||d.type!=="iotAerialRestore") return;
     applyAerial(d.aerial);
   });
+  // A parent-supplied capture (Build Floor Plan hands THIS floor's aerial here) is a STATIC image, not the live map —
+  // Level/Crop drive the live map, so hide them in this loaded state (Outline/Enhance/Download/Done stay in a normal
+  // load; outlineOnly hides the lot via body.outline-only). Cleared the instant a fresh live capture or backToLive.
+  function applyLoadedCapture(){ var d=loadedCapture?"none":""; if($("tLevel")) $("tLevel").style.display=d; if($("tCrop")) $("tCrop").style.display=d; }
+  var pendingCapture=null;   // a capture that arrived before Maps loaded → applied at the end of initMap (mirrors pendingAerial) so the default geocode never wins over it
+  function applyOutlineOnly(){ document.body.classList.toggle("outline-only", outlineOnly); }
+  // iotLoadCapture (parent→satellite, same pattern as iotAerialRestore): load m.src as THE capture so the user OUTLINES
+  // that aerial IN PLACE — no fresh live-map shot. Mirrors a finished capture (capCanvas + capMetersW/H + capAerial set,
+  // preview shown, enhancedOnce so the wand revises) so trCtx/Outline/Use flow unchanged. outlineOnly → auto-enter trace.
+  function loadCapture(m){
+    outlineOnly=!!m.outlineOnly; applyOutlineOnly();
+    var im=new Image(); im.crossOrigin="anonymous";
+    im.onload=function(){ var cv=document.createElement("canvas"); cv.width=im.naturalWidth||im.width||1; cv.height=im.naturalHeight||im.height||1; cv.getContext("2d").drawImage(im,0,0); capCanvas=cv;   // capCanvas drives trCtx/trImgRect
+      capMetersW=(+m.ftW>0)?+m.ftW/3.28084:0; capMetersH=(+m.ftH>0)?+m.ftH/3.28084:0;   // ft → meters (the scale trCtx carries to the floor plan)
+      capAerial=(m.aerial&&typeof m.aerial==="object")?{ rotationDeg:+m.aerial.rotationDeg||0, northDeg:(Number.isFinite(+m.aerial.northDeg)?+m.aerial.northDeg:0), center:m.aerial.center||null, zoom:+m.aerial.zoom||0, rect:m.aerial.rect||null, stage:m.aerial.stage||null, mppView:+m.aerial.mppView||0 }:null;
+      $("prevImg").src=m.src; capturedCurrent=true; enhancedOnce=true; loadedCapture=true; resetCompare(); closeRev();   // land on the aerial like a finished capture
+      exitCrop(); closePops(); applyLoadedCapture(); preview.classList.add("show"); $("tEnhance").classList.remove("busy"); msg("");
+      if(outlineOnly) enterTrace(); };   // focused Build-Floor-Plan entry → drop the user straight into outlining
+    im.onerror=function(){ loadedCapture=false; outlineOnly=false; applyLoadedCapture(); applyOutlineOnly(); msg(""); };   // image failed → fall back to the live map, don't strand the tool
+    im.src=m.src;
+  }
+  window.addEventListener("message", function(e){ var m=e&&e.data; if(!m||m.type!=="iotLoadCapture"||e.source!==window.parent) return;
+    loadedCapture=true; applyLoadedCapture();   // synchronous: mark loaded NOW so the initMap default search never runs/recenters over the capture (preview.show sticks)
+    if(!map){ pendingCapture=m; return; }        // Maps not ready yet → apply at the end of initMap (mirrors pendingAerial)
+    loadCapture(m); });
 
   /* ---------- screen-space navigation (pan + zoom), rotation-safe ----------
      Google's own gestures are disabled; this layer owns pan/zoom so a drag ALWAYS follows the finger
@@ -409,7 +444,7 @@
       // useless centroid ("New Jersey, USA"). Don't strand the user there — fall back to the test
       // property. A precise street address is always honored; typed searches are never overridden.
       if(isInitial && q!==DEMO && /administrative_area_level_1|administrative_area_level_2|\bcountry\b/.test(t) && !/street_address|premise|route|point_of_interest|establishment/.test(t)){ search(DEMO,true); return; }
-      var loc=r.geometry.location; if(!(isInitial && aerialApplied)){ map.setCenter(loc); map.setZoom(20); }
+      var loc=r.geometry.location; if(!(isInitial && (aerialApplied || loadedCapture))){ map.setCenter(loc); map.setZoom(20); }   // a loaded/parent capture also blocks the initial recenter (its zoom_changed would otherwise invalidate the shown capture)
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc});
       var cur=($("q").value||"").trim(), fa=r.formatted_address||"";
       if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }
@@ -424,16 +459,16 @@
   function ensureRect(){ if(!rect){ var st=document.querySelector(".stage"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
 
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
-  var capturedCurrent=false, cropMode=false;
+  var capturedCurrent=false, cropMode=false, loadedCapture=false;   // loadedCapture = the preview is a parent-supplied (enhanced) aerial, not a live-map shot → Level/Crop hidden (they drive the live map)
   var capAerial=null;   // transform of the current capture (rotation/north, center, zoom, crop rect) — posted as `aerial` on every result
   var capMetersW=0, capMetersH=0;   // real-world size of the current capture (rect × meters-per-pixel) — the scale carried to the floor plan
   var preview=$("preview");
   document.body.appendChild($("popLevel"));   // lift the Level pop out of the (transformed) toolbar so it can dock as a fixed bottom bar on mobile
   function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); $("levelGrid").classList.remove("on"); }
   // Back from the frozen preview to the live, pannable map so the framing can change again.
-  function backToLive(){ preview.classList.remove("show"); exitTrace(); resetCompare(); enhancedOnce=false; capturedCurrent=false; $("tEnhance").classList.remove("busy"); }
+  function backToLive(){ preview.classList.remove("show"); exitTrace(); resetCompare(); enhancedOnce=false; capturedCurrent=false; loadedCapture=false; applyLoadedCapture(); $("tEnhance").classList.remove("busy"); }   // back to the live map → Level/Crop return
   // Any framing change (rotate/zoom/crop) drops a stale capture so the next action re-shoots.
-  function invalidateCapture(){ if(capturedCurrent){ capturedCurrent=false; preview.classList.remove("show"); exitTrace(); } }
+  function invalidateCapture(){ if(loadedCapture) return; if(capturedCurrent){ capturedCurrent=false; preview.classList.remove("show"); exitTrace(); } }   // a parent-loaded capture isn't a live-map shot → stray map moves never drop it
   // Freeze the current framing into a preview (whole view unless a crop box was drawn).
   function ensureCaptured(){
     if(capturedCurrent) return Promise.resolve(true);
@@ -525,7 +560,7 @@
       capAerial = { rotationDeg: norm(viewRot),
         northDeg: norm(viewRot),   // north is this many degrees CLOCKWISE from screen-up (raw map is north-up; the view is CSS-rotated by viewRot)
         center:{ lat:c.lat(), lng:c.lng() }, zoom: zView, rect:{ x:rect.x, y:rect.y, w:rect.w, h:rect.h }, stage:{ w:sw, h:sh }, mppView: mppView };
-      capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); resetCompare(); enhancedOnce=false; closeRev(); $("tEnhance").title="Enhance with AI"; msg(""); RES(true);
+      capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); resetCompare(); enhancedOnce=false; loadedCapture=false; applyLoadedCapture(); closeRev(); $("tEnhance").title="Enhance with AI"; msg(""); RES(true);   // fresh live shot → clear loaded mode, Level/Crop return
     });
   }); }
 
@@ -791,7 +826,7 @@
   function trHintUpdate(){ var h=$("traceHint"); if(!h) return;
     h.textContent = trClosed ? "Drag a dot to adjust, then “Use Outline”"
       : (tracePts.length>=3 ? "Tap “Use Outline” — or tap the first dot to close"
-      : "Tap each corner of the building (3 or more)"); }
+      : "Tap each corner of the building, then Use Outline"); }
   /* Undo/redo + autosave: trHist holds {p:[[x,y]…],c:closed} snapshots, trHi the current one. Every history change
      (and nothing else) re-posts the unfinished outline to the parent (debounced), which stores it per floor. */
   function trSnap(){ return { p:tracePts.map(function(q){ return [q.x,q.y]; }), c:trClosed }; }
@@ -901,7 +936,9 @@
       var d=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?400:1); d=Math.max(-300,Math.min(300,d));
       trZoomTo(trZ.s*Math.exp(-d*(e.ctrlKey?0.01:0.002)), p, p); }, {passive:false});
     window.addEventListener("resize", function(){ if(preview.classList.contains("tracing")){ trZClamp(); trZApply(); trPaint(); } });
-    $("trCancel").addEventListener("click", function(){ trDraftPost(null); exitTrace(); });
+    $("trCancel").addEventListener("click", function(){ trDraftPost(null);
+      if(outlineOnly){ outlineOnly=false; applyOutlineOnly(); exitTrace(); try{ parent.postMessage({type:"iotCaptureCancel"},"*"); }catch(e){} return; }   // focused Build-Floor-Plan entry → Cancel abandons back to the floor (the aerial is unchanged)
+      exitTrace(); });
     $("trRedraw").addEventListener("click", function(){ if(!tracePts.length && !trClosed) return; tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trSel=-1; trPush(); trPaint(); trSync(); });
     $("trUndo").addEventListener("click", trUndo); $("trRedo").addEventListener("click", trRedo);
     $("trDel").addEventListener("click", function(){ if(trSel<0||trSel>=tracePts.length) return; tracePts.splice(trSel,1); trSel=-1; if(tracePts.length<3) trClosed=false; trPush(); trPaint(); trSync(); });

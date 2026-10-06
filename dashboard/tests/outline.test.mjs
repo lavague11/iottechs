@@ -358,7 +358,7 @@ test("widget speaks the iotOutline* protocol", () => {
 
 test("applyAerial marks aerialApplied, and the initial search honours it", () => {
   assert.ok(extractFn(widget, "applyAerial").includes("aerialApplied=true;"), "applyAerial sets aerialApplied=true;");
-  assert.ok(extractFn(widget, "search").includes("if(!(isInitial && aerialApplied))"), "search skips the initial recenter when an aerial was restored");
+  assert.ok(extractFn(widget, "search").includes("if(!(isInitial && (aerialApplied || loadedCapture)))"), "search skips the initial recenter when an aerial was restored (or a capture was loaded)");
 });
 
 test("floor routing: widget echoes fid, host replies with fid and routes saves by it", () => {

@@ -269,8 +269,11 @@ test("regionBtn/editor are hidden for frozen (customer/submitted) views but the 
 });
 
 test("empty-tap with a selected vertex only deselects — never drops a stray vertex (Phase 2.3 lesson)", () => {
-  assert.ok(survey.includes("if(bdSel>=0){ bdSel=-1; renderBoundary(); } else if(!bdClosed)"),
-    "deselect branch precedes the add branch");
+  assert.ok(survey.includes("if(bdSel>=0){ bdSel=-1; renderBoundary(); }"), "a selected dot: tap away only deselects");
+  assert.ok(survey.includes("else if(!bdClosed){ var p=bdPt(e.clientX,e.clientY); bdPts.push({x:p.x,y:p.y}); bdPush(); }"),
+    "open polygon: empty tap appends a corner");
+  assert.ok(survey.includes("else { bdInsertOnEdge(e.clientX,e.clientY,16); }"),
+    "closed polygon: a tap near an edge inserts a vertex (add-point on a closed boundary)");
 });
 
 test("two-finger gestures fall through to pinch-zoom (never a vertex)", () => {

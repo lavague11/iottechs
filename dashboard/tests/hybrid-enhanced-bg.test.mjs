@@ -12,35 +12,35 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("the Use Enhanced action exists as a single hybrid-floor button (icon + one-word label, no emoji)", () => {
-  has('<button id="enhBtn"', "enhanced button element");
+test("Enhance aerial is a ••• overflow menu item (icon + two-word label, descriptive aria, no emoji)", () => {
+  has('<button id="enhBtn" role="menuitem"', "enhance is a menu item in the ••• overflow");
   const i = survey.indexOf('<button id="enhBtn"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
-  assert.ok(btn.includes("<span>Enhanced</span>"), "one-word visible label");
-  assert.ok(btn.includes('aria-label="Use enhanced background"'), "descriptive aria-label for the icon action");
+  assert.ok(btn.includes("<span>Enhance aerial</span>"), "two-word visible label");
+  assert.ok(btn.includes('aria-label="Enhance aerial"'), "descriptive aria-label for the action");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // locked states hide it via CSS too (belt-and-braces with the handler's !frozen())
-  has("body.ro #enhBtn, body.frozen #enhBtn{display:none!important}", "read-only / submitted hide the button");
+  // the whole floor-actions cluster (which holds this item) is locked out for read-only / submitted
+  has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "read-only / submitted hide the floor actions");
 });
 
-test("gating: hybrid-capable AND a real background AND not frozen", () => {
-  has('b.style.display=(bgHasImage && hybridCapable(floors[curFloor]) && !frozen()) ? "inline-flex" : "none"', "updateEnhancedBtn gates on bgHasImage + hybridCapable + !frozen");
-  // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
-  has('updateEnhancedBtn();   // Phase H2: the hybrid-floor "Use Enhanced Background" verb tracks the current floor + step', "goStep re-gates the Enhanced verb");
+test("gating: Enhance aerial shows whenever the floor has an aerial (under •••), re-gated on step/floor/frozen change", () => {
+  has('ea.style.display = floorHasAerial(f) ? "flex" : "none"', "updateBgActions shows Enhance aerial when there's an aerial");
+  has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
   const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
-  assert.ok(setStatus.includes("updateEnhancedBtn()"), "setStatus re-gates on frozen change");
-  // hybridCapable contract unchanged — a non-hybrid (aerial-only) floor never sees this action
+  assert.ok(setStatus.includes("updateBgActions()"), "setStatus re-gates on frozen change");
+  // hybridCapable contract unchanged — only a hybrid floor gets the src-only swap (below); a plain aerial enhances+replaces
   const capable = (f) => !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx);
-  assert.equal(capable({ ctx: { src: "x" } }), false, "aerial-only (no Structure) is not hybrid-capable → no Enhanced verb");
-  assert.equal(capable({ ctx: { src: "x" }, planSvg: "y", bgCtx: true }), true, "a built Structure plan is hybrid-capable → verb shows");
+  assert.equal(capable({ ctx: { src: "x" } }), false, "aerial-only (no Structure) is not hybrid-capable");
+  assert.equal(capable({ ctx: { src: "x" }, planSvg: "y", bgCtx: true }), true, "a built Structure plan is hybrid-capable");
 });
 
-test("click sets pendingCtxSwap then reopens the satellite at the inherited capture", () => {
-  const h = survey.slice(survey.indexOf('getElementById("enhBtn").addEventListener'), survey.indexOf('getElementById("enhBtn").addEventListener') + 500);
+test("click: a hybrid-capable floor sets pendingCtxSwap, then reopens the satellite at the inherited capture", () => {
+  const h = survey.slice(survey.indexOf('getElementById("enhBtn").addEventListener'), survey.indexOf('getElementById("enhBtn").addEventListener') + 420);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
-  assert.ok(h.includes("if(!f || !hybridCapable(f)) return;"), "guards the gate again at click time");
-  assert.ok(h.includes("pendingCtxSwap=true; enterBg(); postAerialRestore(true);"), "flags the swap, opens the satellite, restores the inherited leveled aerial (SAME framing)");
+  assert.ok(h.includes("if(!f || !floorHasAerial(f)) return;"), "guards: only an aerial floor");
+  assert.ok(h.includes("if(hybridCapable(f)) pendingCtxSwap=true;"), "ONLY a hybrid floor flags the src-only swap (a plain aerial floor enhances+replaces via the normal path)");
+  assert.ok(h.includes("enterBg(); postAerialRestore(true);"), "reopens the satellite + restores the inherited leveled aerial (SAME framing)");
   // in-memory flag declared
   assert.ok(/var pendingCtxSwap=false;/.test(survey), "pendingCtxSwap declared false by default");
 });

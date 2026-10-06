@@ -227,24 +227,21 @@
   #saveErr{position:fixed;top:0;left:0;right:0;z-index:9999;display:none;padding:7px 14px;text-align:center;font-size:12px;font-weight:600;color:#fff;background:#b23b3b}
   #bgWiz .steps{padding:9px 16px 10px}
 
-  /* "Edit background" pill — top-left of the plan on the Background tab (clear of the bottom-left plan utils). */
-  #changeBgBtn{position:absolute;left:14px;top:14px;z-index:9;display:none;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;padding:9px 13px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);font:600 13px var(--sans);backdrop-filter:blur(6px)}
-  body.ro #changeBgBtn, body.frozen #changeBgBtn{display:none!important}   /* read-only / submitted: the geometry is locked */
-  #changeBgBtn span{white-space:nowrap}
-  #changeBgBtn:hover{border-color:var(--gold)}
-  #changeBgBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-  /* Phase H1: the primary workflow verb on an aerial floor — derive a hybrid (one grid rooted in Structure, aerial aligned beneath). Gold-filled so it reads as primary; stacked below Edit background, clear of the view pill / utils (bottom-right). */
-  #hybridBtn{position:absolute;left:14px;top:60px;z-index:9;display:none;align-items:center;gap:8px;background:var(--gold);border:1px solid var(--gold);border-radius:9px;padding:9px 13px;color:#fff;cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.22);font:700 13px var(--sans)}
-  body.ro #hybridBtn, body.frozen #hybridBtn{display:none!important}   /* read-only / submitted: geometry is locked */
-  #hybridBtn span{white-space:nowrap}
-  #hybridBtn:hover{filter:brightness(1.07)}
-  #hybridBtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-  /* Phase H2 — "Use Enhanced Background": quiet secondary verb on a hybrid floor; mutually exclusive with #hybridBtn (that shows only on a NON-capable aerial floor), so it reuses the same slot. */
-  #enhBtn{position:absolute;left:14px;top:60px;z-index:9;display:none;align-items:center;gap:7px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;padding:9px 13px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);font:600 13px var(--sans);backdrop-filter:blur(6px)}
-  body.ro #enhBtn, body.frozen #enhBtn{display:none!important}   /* read-only / submitted: geometry is locked */
-  #enhBtn span{white-space:nowrap}
-  #enhBtn:hover{border-color:var(--gold)}
-  #enhBtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  /* Floor actions — top-left of the plan on the Background tab: ONE primary "Build Floor Plan" + a ••• overflow (Change background · Enhance aerial). Clear of the bottom-left plan utils + the bottom-right view pill. */
+  #bgActions{position:absolute;left:14px;top:14px;z-index:9;display:none;align-items:flex-start;gap:8px}
+  body.ro #bgActions, body.frozen #bgActions{display:none!important}   /* read-only / submitted: the geometry is locked */
+  #buildPlanBtn{display:none;align-items:center;gap:8px;background:var(--gold);border:1px solid var(--gold);border-radius:9px;padding:9px 13px;color:#fff;cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.22);font:700 13px var(--sans)}
+  #buildPlanBtn span{white-space:nowrap}
+  #buildPlanBtn:hover{filter:brightness(1.07)}
+  #buildPlanBtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  #bgMore{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);backdrop-filter:blur(6px);padding:0}
+  #bgMore:hover{border-color:var(--gold)}
+  #bgMore svg{width:18px;height:18px;fill:currentColor;stroke:none}
+  #bgMenu{position:absolute;left:0;top:46px;min-width:170px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(16,17,18,.16);padding:5px;display:none;flex-direction:column}
+  #bgActions.menu #bgMenu{display:flex}
+  #bgMenu button{display:flex;align-items:center;gap:9px;width:100%;background:none;border:0;border-radius:7px;padding:9px 11px;color:var(--ink);cursor:pointer;font:600 13px var(--sans);text-align:left;white-space:nowrap}
+  #bgMenu button:hover{background:rgba(16,17,18,.06)}
+  #bgMenu button svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   /* ===== satellite overlay (the sub-tool, opened from the Satellite door) ===== */
   .satov{position:fixed;inset:0;background:#fff;z-index:50;display:none;flex-direction:column}
   .satov.show{display:flex}
@@ -342,6 +339,13 @@
   body.ro .devNode .ringGrip{display:none}
   .devNode .coneLine{position:absolute;top:-1px;height:2px;background:currentColor}
   .devNode .coneLine::after{content:"";position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:9px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}   /* arrowhead */
+  /* Precision placement: while a device is being dragged to a new spot, strip everything that hides
+     the point it's being mounted to — its FOV cone, speaker ring, and name label — leaving only the
+     compact dot. The magnifier loupe (mouse + touch) shows what's directly under it. The view-photo
+     card is hidden in JS on drag start. All of it is restored on drop (renderDevice + class removal). */
+  .devNode.drag{z-index:9}
+  .devNode.drag .fovWrap,.devNode.drag .coneSvg,.devNode.drag .ringWrap,.devNode.drag .icLabel{display:none!important}
+  .devNode.drag .devDot{cursor:grabbing;box-shadow:0 0 0 3px rgba(185,138,46,.55),0 3px 12px rgba(16,17,18,.3)}
   /* Add device: frosted + gold so it reads clearly over any aerial (not a heavy black block) */
   #addDeviceBtn,#angleModeBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
   #addDeviceBtn:hover,#angleModeBtn:hover{background:#fff}
@@ -523,11 +527,15 @@
         <iframe id="satFrame" title="Satellite Capture"
           style="display:none;position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--soft);z-index:6"
           allow="geolocation"></iframe>
-        <!-- shown only when re-editing a built satellite background — jumps back to the source chooser -->
-        <button id="changeBgBtn" title="Edit this floor's background"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span>Edit background</span></button>
-        <!-- Phase H1: on an aerial floor (no Structure yet) — derive a "<name> · Hybrid" floor off this one, then level → outline → Structure. The source floor is never mutated. -->
-        <button id="hybridBtn" title="Create Hybrid Floor Plan"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button>
-        <button id="enhBtn" title="Enhanced" aria-label="Use enhanced background"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg><span>Enhanced</span></button>
+        <!-- ONE floor-build path: a primary "Build Floor Plan" (outline THIS aerial in place → Structure) with the rarer actions (swap the aerial, AI-enhance it) folded under a ••• overflow. -->
+        <div id="bgActions">
+          <button id="buildPlanBtn" title="Build the floor plan"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Build Floor Plan</span></button>
+          <button id="bgMore" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+          <div id="bgMenu" role="menu">
+            <button id="changeBgBtn" role="menuitem" title="Replace this floor's background"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span>Change background</span></button>
+            <button id="enhBtn" role="menuitem" aria-label="Enhance aerial" title="AI-enhance this aerial"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg><span>Enhance aerial</span></button>
+          </div>
+        </div>
 
         <!-- STATE A: Background step, nothing chosen yet — one question, three doors -->
         <div class="bgstep" id="bgstep">
@@ -562,7 +570,7 @@
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
-          <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Zone</button></div><button class="vbtn" id="zoneName" aria-label="Edit zone" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete zone" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
+          <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Zone</button></div><button class="vbtn" id="zoneName" aria-label="Edit zone" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete zone" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="bdDel" title="Clear boundary" aria-label="Clear boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
           <div id="zonePop" role="dialog" aria-label="Zone"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Zone name"></div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -717,6 +725,7 @@
       var lbl=bgWiz.querySelector(".bgstriplbl"); if(lbl) lbl.textContent = source==="draw" ? "Structure" : "Aerial";   // 1-word context tag — the back chip is the control, no instructional sentence (UI constitution)
       sideCollapsed=true; applySideCollapsed();
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
+      if(typeof updateBgActions==="function") updateBgActions();   // the tool fills the canvas → hide the floor-action cluster (it must not float over the iframe)
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
     // Reopen the map AS IT WAS LEVELED (the tool stashes it until Maps is ready). changed = enterBg() just
@@ -749,6 +758,7 @@
       if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
       else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
       else { document.getElementById("working").style.display="block"; }
+      if(typeof updateBgActions==="function") updateBgActions();   // left the tool → re-gate the floor-action cluster for the current floor/step
     }
 
     document.getElementById("doorSat").addEventListener("click", enterBg);
@@ -774,51 +784,57 @@
       } catch(e){}
     }
     document.getElementById("doorSample").addEventListener("click", loadSample);
-    // "Edit background" → reopen the SAME tool that built this floor's plan so you can edit it in place:
-    // a drawing resumes its grid geometry, satellite reopens the map. Upload has nothing to edit → chooser.
-    document.getElementById("changeBgBtn").addEventListener("click", function(){ if(frozen()) return;
-      if(curBgSource==="draw"){ this.style.display="none"; enterDraw(); return; }
-      if(curBgSource==="satellite"){ this.style.display="none"; var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); return; }
+    // "Change background" (••• overflow) → reopen the SAME tool that built this floor's background so you can get a
+    // NEW one in place: a drawing resumes its grid geometry, satellite reopens the map. Upload → the source chooser.
+    document.getElementById("changeBgBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
+      if(curBgSource==="draw"){ enterDraw(); return; }
+      if(curBgSource==="satellite"){ var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); return; }
       satFrame.style.display="none";
-      this.style.display="none";
       document.getElementById("bgstep").style.display="";
       document.getElementById("working").style.display="none";
     });
-    // Phase H1 — "Create Hybrid Floor Plan": a hybrid floor plan = ONE grid rooted in the building Structure
-    // with the aerial aligned beneath it. Shown on a floor whose background is an aerial (satellite capture, or
-    // an inherited aerial/ctx) that is NOT yet hybrid-capable (no Structure plan). floorHasAerial reads the floor
-    // record (so it's a pure, testable check); a sample floor's object bgSource is not the "satellite" string.
+    // ONE build path. A hybrid floor plan = ONE grid rooted in the building Structure with the aerial aligned
+    // beneath it. "Build Floor Plan" is the single primary verb on a floor that HAS an aerial but is NOT yet a plan
+    // (no Structure). floorHasAerial reads the floor record (pure, testable); a sample floor's object bgSource is not
+    // the "satellite" string. canBuild = an aerial floor that isn't already hybrid-capable, and is editable.
     function floorHasAerial(f){ return !!(f && (f.bgSource==="satellite" || f.aerial || (f.ctx && f.ctx.src))); }
-    function canCreateHybrid(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }   // aerial floor, not already a Structure plan, editable
-    function updateHybridBtn(){ var b=document.getElementById("hybridBtn"); if(!b) return; b.style.display=(bgHasImage && canCreateHybrid(floors[curFloor])) ? "inline-flex" : "none"; }
-    // Phase H2 — "Use Enhanced Background" verb: shown only on a hybrid-capable, editable floor (the swap needs an existing ctx/plan to preserve). Mirrors updateHybridBtn's live-floor gate.
-    function updateEnhancedBtn(){ var b=document.getElementById("enhBtn"); if(!b) return; b.style.display=(bgHasImage && hybridCapable(floors[curFloor]) && !frozen()) ? "inline-flex" : "none"; }
-    // Click = reopen the satellite AT THE SAME inherited capture (postAerialRestore) so the user only RE-ENHANCES
-    // the aerial (not re-levels/crops). pendingCtxSwap tells the capture handler to swap ONLY ctx.src — the
-    // Structure/rooms/devices/grid and ctx.rect windowing are never touched (SAME-FRAMING assumption: an unchanged
-    // level+crop means the new full aerial lines up under the identical rect). Re-leveling could drift the image off
-    // the Structure — that is the DEFERRED full-registration case (enhancedRegistration would re-derive ctx.rect +
-    // aerial from the new capture here instead of keeping rect; H2 is the lowest-risk visual-only swap).
-    document.getElementById("enhBtn").addEventListener("click", function(){ if(frozen()) return;
-      var f=floors[curFloor]; if(!f || !hybridCapable(f)) return;
-      pendingCtxSwap=true; enterBg(); postAerialRestore(true);   // reopen at the inherited leveled capture → user Enhances → "Use" lands in the swap branch below
+    function canBuild(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }
+    function closeBgMenu(){ var w=document.getElementById("bgActions"); if(!w) return; w.classList.remove("menu"); var m=document.getElementById("bgMore"); if(m) m.setAttribute("aria-expanded","false"); }
+    // The whole cluster shows over a real floor on the Background tab (not the chooser, not inside a tool). Build
+    // Floor Plan shows only on an aerial-not-yet-plan floor; "Enhance aerial" only when there's an aerial to enhance.
+    function updateBgActions(){ var w=document.getElementById("bgActions"); if(!w) return;
+      var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);
+      w.style.display = show ? "flex" : "none"; if(!show){ closeBgMenu(); return; }
+      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display = canBuild(f) ? "inline-flex" : "none";
+      var ea=document.getElementById("enhBtn"); if(ea) ea.style.display = floorHasAerial(f) ? "flex" : "none"; }
+    document.getElementById("bgMore").addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return;
+      var w=document.getElementById("bgActions"), open=!w.classList.contains("menu"); w.classList.toggle("menu",open); this.setAttribute("aria-expanded",open?"true":"false"); });
+    document.addEventListener("click", function(e){ var w=document.getElementById("bgActions"); if(w && w.classList.contains("menu") && !w.contains(e.target)) closeBgMenu(); });   // tap-away closes the overflow
+    // Build Floor Plan — outline the EXISTING aerial IN PLACE (no derived floor): reopen the satellite in a focused
+    // OUTLINE-ONLY mode (distinct &buildplan=1 src → the shared frame reloads clean into/out of this mode) on THIS
+    // floor's aerial (iotLoadCapture). The user outlines, "Use Outline" hands off to the Structure editor on THIS
+    // SAME floor (the existing satellite-capture-result → enterDraw path), and the floor becomes hybrid-capable
+    // (Aerial/Plan/Hybrid). Same load-listener-then-post pattern as postAerialRestore. The floor is never cloned.
+    document.getElementById("buildPlanBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
+      var f=floors[curFloor]; if(!canBuild(f)) return;
+      var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;   // need an aerial image to outline
+      snapFloor();                               // freeze the floor's live edits onto its record before reopening the tool
+      openBgTool(SAT_SRC+"&buildplan=1", "satellite");   // distinct src so the shared frame always (re)loads into the outline-only mode
+      var lcMsg={ type:"iotLoadCapture", outlineOnly:true, src:lcBg, ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0, aerial:f.aerial||null }, lcPost=function(){ try{ satFrame.contentWindow.postMessage(lcMsg,"*"); }catch(e){} };
+      satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();   // (re)loaded frame → post on load; also now in case it's already loaded
     });
-    // Click = derive a NEW floor off this aerial one and jump straight into the focused Level step on it. The
-    // source floor is a separate record (createFloor deep-copies bg/aerial/ctx/plan/boundary/zones + clones device
-    // cids), so it is never mutated — switching back shows it exactly as surveyed. The derived floor inherits the
-    // source's aerial, so an AI-enhanced+used aerial carries over automatically. (Phase H2 — the explicit
-    // "Use Enhanced Background" swap + enhancedRegistration — would re-register nf.ctx/nf.aerial right after the
-    // rename below; H1 only inherits and must not block it.)
-    document.getElementById("hybridBtn").addEventListener("click", function(){ if(frozen()) return;
-      var src=floors[curFloor]; if(!canCreateHybrid(src)) return;
-      snapFloor();                               // freeze the source's live edits onto its record BEFORE copying
-      createFloor(src, true);                    // EXISTING engine: deep-copied, independent derived floor (fresh id + device cids), derivedFromFloorId set, selected + loaded + flushNow()
-      var nf=floors[curFloor]; if(nf){ nf.name=(src.name||"Floor")+" · Hybrid"; }   // custom name → survives delete-renumber (createFloor defaulted it to "Floor N")
-      renderFloorTabs(); flushNow();             // reflect + persist the "· Hybrid" name (createFloor flushed pre-rename)
-      // Enter the Level step on the HYBRID floor only: reopen the satellite tool at the inherited leveled aerial so
-      // the user re-levels it for the hybrid. This transforms nf.aerial (its own record); src stays untouched.
-      enterBg(); postAerialRestore(true);        // changed=true → wait for the (re)loaded frame, then restore the capture
+    // "Enhance aerial" (••• overflow) — reopen the satellite at THIS floor's leveled aerial (postAerialRestore, SAME
+    // framing) so the user can AI-enhance it. On a hybrid-capable floor the re-enhanced capture swaps ONLY the image
+    // under the plan (ctx.src; pendingCtxSwap → the swap branch in the capture handler, Structure/rooms/devices/grid
+    // untouched; re-leveling = the deferred enhancedRegistration case). On a plain aerial floor it simply replaces
+    // the flat aerial with the enhanced one via the normal background path.
+    document.getElementById("enhBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
+      var f=floors[curFloor]; if(!f || !floorHasAerial(f)) return;
+      if(hybridCapable(f)) pendingCtxSwap=true;   // hybrid floor → src-only swap (SAME-FRAMING); else a normal enhance+replace
+      enterBg(); postAerialRestore(true);
     });
+    // Cancel from the satellite's focused outline-only mode → close the tool back to this floor (unchanged).
+    window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotCaptureCancel" || !ev.source || ev.source!==satFrame.contentWindow) return; exitBg(false); });
     // Back on the strip leaves the tool: to the three-source chooser (nothing yet) or the saved plan (bg exists).
     // Geometry autosaves (Phase 1), so backing out of the draw tool never loses the Structure. exitBg(false)
     // owns the display swap + clears bgToolOpen so a refresh doesn't reopen the tool.
@@ -1243,6 +1259,17 @@
     function bdClose(){ if(bdClosed||bdPts.length<3) return; bdClosed=true; bdSel=-1; bdPush(); }
     function bdDelSel(){ if(bdSel<0||bdSel>=bdPts.length) return; if(rgTarget.kind=="zone" && rgTarget.id!=null && bdPts.length<=3){ bdSel=-1; renderBoundary(); return; }   // a zone keeps >=3 vertices (delete the zone itself via the bin)
       bdPts.splice(bdSel,1); bdSel=-1; if(bdPts.length<3) bdClosed=false; bdPush(); }
+    // Clear the whole boundary (bin, two-step armed). Only the boundary target — a zone is removed via rgDelZone.
+    function bdClear(){ if(frozen()||rgTarget.kind!=="boundary"||!bdPts.length) return; bdPts=[]; bdClosed=false; bdSel=-1; bdDrag=-1; bdPush(); updateRegionUI(); }
+    // Insert a vertex on the nearest edge of a CLOSED boundary near (cx,cy) in client px; within tolPx. Returns true if inserted.
+    function bdInsertOnEdge(cx,cy,tolPx){ if(!bdClosed||bdPts.length<2) return false; var r=scene.getBoundingClientRect(); if(!r.width||!r.height) return false;
+      var best=-1, bq=null, bd=tolPx, n=bdPts.length;
+      for(var i=0;i<n;i++){ var a=bdPts[i], b=bdPts[(i+1)%n];                                   // closed → wrap the last edge back to the first
+        var ax=r.left+a.x/100*r.width, ay=r.top+a.y/100*r.height, bx=r.left+b.x/100*r.width, by=r.top+b.y/100*r.height;
+        var dx=bx-ax, dy=by-ay, l2=dx*dx+dy*dy, t=l2?((cx-ax)*dx+(cy-ay)*dy)/l2:0; if(t<0)t=0; else if(t>1)t=1;
+        var px=ax+t*dx, py=ay+t*dy, dist=Math.hypot(cx-px,cy-py);
+        if(dist<=bd){ bd=dist; best=i; bq={ x:Math.max(0,Math.min(100,(px-r.left)/r.width*100)), y:Math.max(0,Math.min(100,(py-r.top)/r.height*100)) }; } }
+      if(best<0||!bq) return false; bdPts.splice(best+1,0,{x:bq.x,y:bq.y}); bdSel=best+1; bdPush(); return true; }
     // Validate a stored boundary on restore: array of [num,num] clamped to [0,100], ≥3 pts, capped at 200 — else null.
     function bdValidBoundary(b){ if(!b||!b.pts||!b.pts.length) return null; var out=[]; for(var i=0;i<b.pts.length && out.length<200;i++){ var q=b.pts[i]; if(!q||q.length<2) continue; var x=+q[0], y=+q[1]; if(!isFinite(x)||!isFinite(y)) continue; out.push([Math.max(0,Math.min(100,x)),Math.max(0,Math.min(100,y))]); } return out.length>=3 ? { pts:out } : null; }
     // Pure %→SVG points string (viewBox 0 0 100 100 → user units are plate-%). Accepts {x,y} or [x,y].
@@ -1318,13 +1345,16 @@
           s += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(sel?hr*1.3:hr)+'" fill="'+(sel?hc:"#fff")+'" stroke="'+(first?"#2a8a4e":hc)+'" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'; }
         if(bdSel>=0 && bdSel<m){ var sp=bdPts[bdSel], bx=sp.x+3/z, by=sp.y-3/z, br=1.9/z, bl=br*0.5;
           s += '<g class="bdDel" style="pointer-events:all;cursor:pointer"><circle cx="'+bx+'" cy="'+by+'" r="'+br+'" fill="#c0392b" stroke="#fff" stroke-width="1.4" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by-bl)+'" x2="'+(bx+bl)+'" y2="'+(by+bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by+bl)+'" x2="'+(bx+bl)+'" y2="'+(by-bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g>'; } }
-      rl.innerHTML=s; }
+      rl.innerHTML=s;
+      // Keep the "Clear boundary" bin in sync with the live vertex count (boundary target, ≥1 point, editing).
+      var bdl=document.getElementById("bdDel"); if(bdl){ var showBdl=(!zt && bdPts.length>0 && regionMode && !frozen()); bdl.style.display=showBdl?"":"none"; if(!showBdl) bdl.classList.remove("armed"); } }
     // regionBtn visible only to staff, on the Setup step, once a background exists; undo/redo only while editing.
     function updateRegionUI(){ var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.style.display=(bgData && !frozen() && curStep===1)?"":"none"; rbn.classList.toggle("on", regionMode); }
       var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns();
       var bar=document.getElementById("rgBar"); if(bar){ var zt=(rgTarget.kind==="zone"), zs=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, nm=document.getElementById("zoneName"), dl=document.getElementById("zoneDel");   // sub-selector (Boundary | Zone) + the selected zone's name / bin
         bar.style.display=(regionMode&&!frozen())?"flex":"none"; [].forEach.call(bar.querySelectorAll("#rgKind .vbtn"), function(b){ var on=(b.getAttribute("data-k")===(zt?"zone":"boundary")); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
-        if(nm){ nm.style.display=zs?"":"none"; nm.textContent=zs?zs.label:""; } if(dl){ dl.style.display=zs?"":"none"; dl.classList.remove("armed"); } } siUpdateUI(); }
+        if(nm){ nm.style.display=zs?"":"none"; nm.textContent=zs?zs.label:""; } if(dl){ dl.style.display=zs?"":"none"; dl.classList.remove("armed"); }
+        var bdl=document.getElementById("bdDel"); if(bdl){ var showBdl=(!zt && bdPts.length>0); bdl.style.display=showBdl?"":"none"; if(!showBdl) bdl.classList.remove("armed"); } } siUpdateUI(); }
     function setRegionMode(on){ regionMode=!!on && !frozen() && !!bgData;
       if(regionMode){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); devMenu.classList.remove("show"); }
       else { bdSel=-1; bdDrag=-1; bdDownPt=null; closeZonePop(false); if(rgTarget.kind!=="boundary"){ rgTarget={kind:"boundary"}; rgLoad(); } }   // leaving Regions -> back to the boundary target (an unfinished zone draft is dropped)
@@ -1348,7 +1378,9 @@
         if(!dp) return; var hit=bdNear(e.clientX,e.clientY);
         if(bdClosable(hit)){ bdClose(); if(rgTarget.kind==="zone" && rgTarget.id==null) openZonePop(); return; }   // closing a NEW zone -> type picker                                         // tap the first dot → close
         if(hit<0 && rgTarget.kind==="zone" && rgZoneTap(e.clientX,e.clientY)) return;   // zone target: tap another zone's fill -> select it; tap empty beside a selected zone -> deselect (new draft)
-        if(hit<0){ if(bdSel>=0){ bdSel=-1; renderBoundary(); } else if(!bdClosed){ var p=bdPt(e.clientX,e.clientY); bdPts.push({x:p.x,y:p.y}); bdPush(); } }   // empty tap: a selected dot ONLY deselects (no stray vertex); else add
+        if(hit<0){ if(bdSel>=0){ bdSel=-1; renderBoundary(); }                                 // a selected dot: tap away ONLY deselects (no stray vertex)
+          else if(!bdClosed){ var p=bdPt(e.clientX,e.clientY); bdPts.push({x:p.x,y:p.y}); bdPush(); }   // still drawing → append a corner
+          else { bdInsertOnEdge(e.clientX,e.clientY,16); } }                                   // closed → tap ON an edge inserts a vertex there (ignored if not near an edge)
         else { bdSel=hit; renderBoundary(); } });                                         // tapped an existing dot → select
       rl.addEventListener("pointercancel", function(){ bdDrag=-1; bdDownPt=null; });
       rl.addEventListener("contextmenu", function(e){ if(regionMode) e.preventDefault(); });
@@ -1376,7 +1408,11 @@
         zbar.addEventListener("pointerdown",function(e){ e.stopPropagation(); });
         if(znm) znm.addEventListener("click",function(e){ e.stopPropagation(); if(zpOpen) closeZonePop(false); else openZonePop(); });
         if(zdl) zdl.addEventListener("click",function(e){ e.stopPropagation(); clearTimeout(zt0);   // two-step: first tap arms, second deletes
-          if(zdl.classList.contains("armed")){ zdl.classList.remove("armed"); rgDelZone(); } else { zdl.classList.add("armed"); zt0=setTimeout(function(){ zdl.classList.remove("armed"); },3000); } }); }
+          if(zdl.classList.contains("armed")){ zdl.classList.remove("armed"); rgDelZone(); } else { zdl.classList.add("armed"); zt0=setTimeout(function(){ zdl.classList.remove("armed"); },3000); } });
+        var bdl=document.getElementById("bdDel"), bt0=null;
+        if(bdl){ bdl.addEventListener("pointerdown",function(e){ e.stopPropagation(); });
+          bdl.addEventListener("click",function(e){ e.stopPropagation(); clearTimeout(bt0);   // two-step: first tap arms, second clears the whole boundary
+            if(bdl.classList.contains("armed")){ bdl.classList.remove("armed"); bdClear(); } else { bdl.classList.add("armed"); bt0=setTimeout(function(){ bdl.classList.remove("armed"); },3000); } }); } }
       document.addEventListener("keydown", function(e){ if(!regionMode||frozen()) return; var mod=e.ctrlKey||e.metaKey;
         if(mod && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(e.shiftKey) bdRedo(); else bdUndo(); }
         else if(mod && (e.key==="y"||e.key==="Y")){ e.preventDefault(); bdRedo(); }
@@ -1993,7 +2029,7 @@
       else if(submitted){ lbl = RO ? "Awaiting approval" : "Submitted"; col="#3aa55d"; }   // customer sees it as awaiting THEIR approval
       else { lbl="Draft"; col="var(--gold)"; }
       pill.innerHTML='<span class="g" style="background:'+col+'"></span>'+lbl;
-      if(typeof updateHybridBtn==="function") updateHybridBtn(); if(typeof updateEnhancedBtn==="function") updateEnhancedBtn(); }   // Phase H1/H2: submit/unsubmit flips frozen() → re-gate the Create Hybrid + Use Enhanced verbs
+      if(typeof updateBgActions==="function") updateBgActions(); }   // submit/unsubmit flips frozen() → re-gate the floor actions
     function submit(){ snapFloor(); submitted=true; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
       if(curStep===2) goStep(2); }
@@ -2034,15 +2070,16 @@
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
         var r=document.getElementById("scene").getBoundingClientRect();   // scene rect → drag maps correctly at any zoom
-        var moved=false, sx=e.clientX, sy=e.clientY, isTouch=e.pointerType!=="mouse";
+        var moved=false, sx=e.clientX, sy=e.clientY;
         function mv(ev){ if(!moved && Math.hypot(ev.clientX-sx,ev.clientY-sy)<=6) return;   // ignore tiny jitter so a tap doesn't nudge the camera
-          moved=true; d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d);
-          if(isTouch) showLoupe(ev.clientX, ev.clientY); }   // magnifier while dragging on a phone
-        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); hideLoupe();
+          if(!moved){ moved=true; el.classList.add("drag"); hideViewPop(); }   // entering a real drag → strip FOV/ring/label + the photo card so the mount point is visible
+          d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d);
+          showLoupe(ev.clientX, ev.clientY); }   // magnifier over the exact mount point (mouse + touch)
+        function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); dot.removeEventListener("pointercancel",up); hideLoupe(); el.classList.remove("drag");
           if(moved){ queueSave(); }
           else if(d.photo){ if(popId===d.id && popPinned) hideViewPop(); else showViewPop(d, el, true); }   // a clean tap on a photographed camera → toggle its full view
         }
-        dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); }); }
+        dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); dot.addEventListener("pointercancel",up); }); }
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
     function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(frozen()||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
@@ -2097,27 +2134,24 @@
       curStep=idx;
       stepEls.forEach(function(x,i){ x.classList.toggle("active", i===idx); });
       // Background step shows the source chooser (redo from any source, devices stay); other steps show the plan
-      var chooser=(idx===0), cbg=document.getElementById("changeBgBtn");
+      var chooser=(idx===0);
       if(chooser){
         if(bgHasImage){
-          // The Background tab just SHOWS the saved plan (the last-saved background + its devices) — it
-          // never forces the chooser or re-opens the editor. "Change background" swaps it (→ chooser).
+          // The Background tab just SHOWS the saved plan (the last-saved background + its devices) — it never forces
+          // the chooser or re-opens the editor. The floor actions (Build Floor Plan / ••• Change background) overlay it.
           satFrame.style.display="none";
           document.getElementById("bgstep").style.display="none";
           document.getElementById("working").style.display="block";
-          if(cbg) cbg.style.display="inline-flex";
           fitScene();
         } else {
           satFrame.style.display="none";
           document.getElementById("bgstep").style.display="";
           document.getElementById("working").style.display="none";
-          if(cbg) cbg.style.display="none";
         }
       } else {
         satFrame.style.display="none";
         document.getElementById("bgstep").style.display="none";
         document.getElementById("working").style.display="block";
-        if(cbg) cbg.style.display="none";
       }
       if(idx!==1){ setAngleMode(false); if(regionMode) setRegionMode(false); }   // angle + boundary editing live inside Setup only
       updateRegionUI();
@@ -2131,8 +2165,7 @@
       unsubConfirm=false; clearTimeout(unsubTimer);  // changing steps drops any pending unsubmit confirm
       renderSubmitCtl();                             // just Next / (hidden on the last step) — submit is in the host footer
       setHint("");   // no step instructions — the UI speaks for itself
-      updateHybridBtn();   // Phase H1: the aerial-floor workflow verb tracks the current floor + step
-      updateEnhancedBtn();   // Phase H2: the hybrid-floor "Use Enhanced Background" verb tracks the current floor + step
+      updateBgActions();   // the floor actions (Build Floor Plan + ••• Change background / Enhance aerial) track the current floor + step
       queueSave();
     }
     // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup

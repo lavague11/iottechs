@@ -2,126 +2,101 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-// Phase H1 — "Create Hybrid Floor Plan": an ADDITIVE workflow verb on an aerial floor. It derives a NEW
-// "<name> · Hybrid" floor off the current one via the EXISTING createFloor engine, then jumps into the
-// satellite Level step on the derived floor. The source floor must never be mutated. The widget is static
-// HTML (no imports), so the DOM/handler guards are source-reads; the deep-copy independence is proven by
-// replicating createFloor's copy logic (the contract these source-reads lock in place).
+// ONE consolidated "Build Floor Plan" path (replaces the old "Create Hybrid" derived-floor flow). On a floor that HAS
+// an aerial but is NOT yet a plan, a single gold primary verb — "Build Floor Plan" — opens the satellite in a focused
+// outline-only mode on THAT SAME floor's aerial (no derived "· Hybrid" floor, no createFloor). The rarer actions
+// (Change background · Enhance aerial) live under a ••• overflow. The widget is static HTML (no imports), so the
+// DOM/handler guards are source-reads; the gate predicate is replicated and proven numerically.
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("the Create Hybrid action exists as a single aerial-floor button (icon + the one deliberate longer label)", () => {
-  has('<button id="hybridBtn"', "hybrid button element");
-  has("Create Hybrid Floor Plan", "workflow label");
-  // inline SVG icon, no emoji
-  const i = survey.indexOf('<button id="hybridBtn"');
+test("one primary action: Build Floor Plan (gold primary, inline-SVG icon, the one deliberate longer label)", () => {
+  has('<button id="buildPlanBtn"', "build button element");
+  has("Build Floor Plan", "primary workflow label");
+  const i = survey.indexOf('<button id="buildPlanBtn"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // read-only / submitted hide it via CSS too (belt-and-braces with canCreateHybrid's !frozen())
-  has("body.ro #hybridBtn, body.frozen #hybridBtn{display:none!important}", "locked states hide the button");
+  // gold-filled primary styling
+  assert.ok(/#buildPlanBtn\{[^}]*background:var\(--gold\)/.test(survey), "Build Floor Plan is the gold primary");
+  // the OLD derived-floor entry is gone — no more "Create Hybrid", #hybridBtn, derived/"· Hybrid" floors
+  assert.ok(!survey.includes("Create Hybrid"), "the old Create Hybrid label is gone");
+  assert.ok(!survey.includes('id="hybridBtn"'), "the old #hybridBtn element is gone");
+  assert.ok(!survey.includes('" · Hybrid"') && !survey.includes("· Hybrid"), "no '· Hybrid' floor naming anywhere");
+  assert.ok(!survey.includes("canCreateHybrid"), "the old canCreateHybrid gate is gone");
 });
 
-test("gating: aerial floor AND not already hybrid-capable AND not frozen", () => {
-  has("function floorHasAerial(f){ return !!(f && (f.bgSource===\"satellite\" || f.aerial || (f.ctx && f.ctx.src)));", "floorHasAerial reads the floor record");
-  has("function canCreateHybrid(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }", "canCreateHybrid composes the three gates");
-  // display tracks the live current floor + a real background
-  has("b.style.display=(bgHasImage && canCreateHybrid(floors[curFloor])) ? \"inline-flex\" : \"none\"", "updateHybridBtn gates on bgHasImage + canCreateHybrid");
+test("the rarer actions are folded under a single ••• overflow (Change background · Enhance aerial)", () => {
+  has('<button id="bgMore"', "overflow trigger present");
+  has('aria-haspopup="true"', "••• declares a menu popup");
+  has('<div id="bgMenu" role="menu">', "overflow menu present");
+  has('<button id="changeBgBtn" role="menuitem"', "Change background is a menu item");
+  has("Change background", "Change background label");
+  has('<button id="enhBtn" role="menuitem"', "Enhance aerial is a menu item");
+  has("Enhance aerial", "Enhance aerial label");
+  // the whole cluster is locked out for read-only / submitted
+  has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "locked states hide the floor actions");
+});
+
+test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, and not frozen", () => {
+  has('function floorHasAerial(f){ return !!(f && (f.bgSource==="satellite" || f.aerial || (f.ctx && f.ctx.src)));', "floorHasAerial reads the floor record");
+  has("function canBuild(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }", "canBuild composes floorHasAerial AND !hybridCapable AND !frozen");
+  // updateBgActions drives visibility: cluster on the Background step over a real floor; Build only when canBuild
+  has('var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);', "cluster shows on the Background tab over a real floor, outside any tool");
+  has('bp.style.display = canBuild(f) ? "inline-flex" : "none"', "Build Floor Plan gates on canBuild(current floor)");
+  has('ea.style.display = floorHasAerial(f) ? "flex" : "none"', "Enhance aerial shows only when there's an aerial");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
-  has("updateHybridBtn();   // Phase H1: the aerial-floor workflow verb tracks the current floor + step", "goStep re-gates the button");
-  const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 900);
-  assert.ok(setStatus.includes("updateHybridBtn()"), "setStatus re-gates on frozen change");
+  has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
+  const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
+  assert.ok(setStatus.includes("updateBgActions()"), "setStatus re-gates on frozen change");
 });
 
-test("click reuses createFloor(src,true), renames to '<name> · Hybrid', and flushes", () => {
-  const h = survey.slice(survey.indexOf('getElementById("hybridBtn").addEventListener'), survey.indexOf('getElementById("hybridBtn").addEventListener') + 1400);
+// replicate canBuild (frozen() assumed false) and prove the gate
+const floorHasAerial = (f) => !!(f && (f.bgSource === "satellite" || f.aerial || (f.ctx && f.ctx.src)));
+const hybridCapable = (f) => !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx);
+const canBuild = (f) => !!(f && floorHasAerial(f) && !hybridCapable(f));
+test("canBuild: an aerial-not-yet-plan floor qualifies; a plain or already-built floor does not", () => {
+  assert.equal(canBuild({ bgSource: "satellite", name: "Floor 1" }), true, "aerial, no Structure → Build offered");
+  assert.equal(canBuild({ aerial: { northDeg: 0 }, name: "Floor 1" }), true, "an inherited aerial transform also qualifies");
+  assert.equal(canBuild({ ctx: { src: "x" }, planSvg: "y", bgCtx: true, name: "Floor 1" }), false, "already hybrid-capable → no Build (it's already a plan)");
+  assert.equal(canBuild({ name: "Floor 1" }), false, "a non-aerial (plain upload) floor never qualifies");
+});
+
+test("Build Floor Plan builds IN PLACE: no createFloor, no derived floor, outline-only iotLoadCapture on the CURRENT floor", () => {
+  const start = survey.indexOf('getElementById("buildPlanBtn").addEventListener');
+  const h = survey.slice(start, start + 1600);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
-  assert.ok(h.includes("if(!canCreateHybrid(src)) return;"), "guards the gate again at click time");
-  assert.ok(h.includes("snapFloor();"), "snaps the source's live edits onto its record before copying");
-  assert.ok(h.includes("createFloor(src, true);"), "reuses the EXISTING createFloor engine with items");
-  assert.ok(h.includes('nf.name=(src.name||"Floor")+" · Hybrid"'), "renames the derived floor to '· Hybrid' (custom name)");
-  assert.ok(h.includes("renderFloorTabs(); flushNow();"), "re-renders the selector and persists the rename now");
-  assert.ok(h.includes("enterBg(); postAerialRestore(true);"), "opens the satellite tool and restores the inherited leveled aerial");
-  // the mandatory: it must NOT clone geometry by hand — createFloor owns the deep copy
-  assert.ok(!/JSON\.parse\(JSON\.stringify/.test(h), "the handler must not hand-roll a second copy path");
+  assert.ok(h.includes("if(!canBuild(f)) return;"), "guards the gate again at click time");
+  assert.ok(h.includes("snapFloor();"), "snaps the floor's live edits onto its record before reopening the tool");
+  assert.ok(!/createFloor\(/.test(h), "NEVER derives/clones a floor — it builds on the current floor");
+  assert.ok(!/renderFloorTabs\(\)/.test(h), "no new floor → no floor-tab re-render in the handler");
+  assert.ok(h.includes('openBgTool(SAT_SRC+"&buildplan=1", "satellite");'), "reuses openBgTool with a distinct outline-only src");
+  assert.ok(h.includes('type:"iotLoadCapture", outlineOnly:true'), "posts iotLoadCapture in outline-only mode");
+  assert.ok(h.includes('src:lcBg'), "hands THIS floor's aerial as the capture (outline it, no fresh live shot)");
+  assert.ok(h.includes('var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;'), "the image is this floor's ctx.src || bg");
+  assert.ok(h.includes("ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0"), "carries the floor's real-world scale (ft)");
+  assert.ok(h.includes("aerial:f.aerial||null"), "carries the floor's leveled transform");
+  assert.ok(h.includes('satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();'), "one-shot load listener THEN immediate post");
 });
 
-test("createFloor records lineage and mints fresh ids (reused, not duplicated)", () => {
-  has("derivedFromFloorId:(from&&from.id)?from.id:null", "createFloor sets derivedFromFloorId from the source id");
-  has("devices:(from&&withItems)?cloneDevices(from.devices):[]", "createFloor carries items via cloneDevices (fresh cids)");
-  has("flushNow();   // discrete action", "createFloor flushes on create");
+test("Use Outline still routes to enterDraw on the CURRENT floor (in-place handoff, unchanged)", () => {
+  // the satellite-capture-result handler: an outline result → set the floor's ctx + hand off to the Structure editor
+  has("if(ol && ol.pts && ol.pts.length>=3){", "outline branch present");
+  has("floors[curFloor].ctx=validCtx(ev.data.ctx)", "the outline sets THIS floor's ctx (same curFloor, no switch)");
+  has("flushNow(); enterDraw(ol); return;", "Use Outline flushes then enters the Structure editor in place");
 });
 
-// ---- deep-copy independence: replicate createFloor's copy logic and prove the source is untouched ----
-// This mirrors the field-for-field copy in createFloor(from,true): every nested object is JSON-cloned, the
-// derived floor gets a fresh id + name, derivedFromFloorId = source id, and devices are cloned with fresh cids.
-function cloneDevices(devs, used) {
-  const out = JSON.parse(JSON.stringify(devs || []));
-  used = used || {};
-  out.forEach((d) => { if (!d.cid) return; let id; do { id = "c" + Math.random().toString(36).slice(2, 9); } while (used[id]); used[id] = 1; d.cid = id; });
-  return out;
-}
-function createFloorFrom(from, withItems, id) {
-  return {
-    id, name: "Floor N", bg: from ? from.bg : null, bgSource: from ? from.bgSource : null,
-    scale: from && from.scale ? JSON.parse(JSON.stringify(from.scale)) : null,
-    aerial: from && from.aerial ? JSON.parse(JSON.stringify(from.aerial)) : null,
-    plan: from && from.plan ? JSON.parse(JSON.stringify(from.plan)) : null, outlineDraft: null,
-    ctx: from && from.ctx ? JSON.parse(JSON.stringify(from.ctx)) : null,
-    planSvg: from && typeof from.planSvg === "string" ? from.planSvg : null, bgCtx: !!(from && from.bgCtx),
-    view: from && typeof from.view === "string" ? from.view : null,
-    sides: from && from.sides ? JSON.parse(JSON.stringify(from.sides)) : null,
-    boundary: from && from.boundary ? JSON.parse(JSON.stringify(from.boundary)) : null,
-    zones: from && from.zones ? JSON.parse(JSON.stringify(from.zones)) : [],
-    derivedFromFloorId: from && from.id ? from.id : null,
-    devices: from && withItems ? cloneDevices(from.devices, {}) : [], started: !!(from && from.bg),
-  };
-}
-
-test("derived hybrid floor is independent: mutating it never touches the source", () => {
-  const source = {
-    id: "f_src", name: "Property", bg: "data:image/jpeg;base64,AAAA", bgSource: "satellite", started: true,
-    aerial: { northDeg: -12, rotationDeg: -12, center: { lat: 1, lng: 2 }, zoom: 20 },
-    scale: { ftW: 120, ftH: 90 },
-    ctx: { src: "data:image/jpeg;base64,BBBB", rect: { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, ftW: 120, ftH: 90 },
-    boundary: { pts: [[0, 0], [1, 0], [1, 1]] }, zones: [{ name: "Lot", pts: [[0, 0]] }],
-    plan: null, planSvg: null, bgCtx: false, view: null, sides: { top: { label: "Front" } },
-    devices: [{ k: "cam", x: 34, y: 49, aim: 150, cid: "cSRC01" }, { k: "cam", x: 47, y: 71, cid: "cSRC02" }],
-  };
-  const snapshot = JSON.parse(JSON.stringify(source));
-
-  const nf = createFloorFrom(source, true, "f_hyb");
-  nf.name = (source.name || "Floor") + " · Hybrid";
-
-  // lineage + naming
-  assert.equal(nf.derivedFromFloorId, source.id, "derivedFromFloorId = source id");
-  assert.equal(nf.name, "Property · Hybrid", "named '<name> · Hybrid'");
-  assert.notEqual(nf.id, source.id, "fresh floor id");
-
-  // inherited aerial / ctx carried (enhanced-aerial inheritance rides on this copy)
-  assert.deepEqual(nf.aerial, source.aerial, "inherits the leveled aerial");
-  assert.ok(nf.ctx && nf.ctx.src === source.ctx.src, "inherits the aerial ctx (enhanced image carries here)");
-
-  // fresh device cids, not shared
-  assert.notEqual(nf.devices[0].cid, "cSRC01", "device cid is regenerated");
-  assert.notEqual(nf.devices[1].cid, "cSRC02", "device cid is regenerated");
-
-  // MUTATE the derived floor hard — plan built, aerial re-leveled, devices moved/added, boundary/zones/ctx edited
-  nf.plan = { v: 1, cells: ["0,0", "1,0"], rooms: [{ name: "Garage" }], metersPerPx: 0.02 };
-  nf.planSvg = "data:image/svg+xml;base64,Zm9v"; nf.bgCtx = true; nf.view = "hybrid";
-  nf.aerial.northDeg = 90; nf.aerial.center.lat = 999;
-  nf.ctx.rect.x = 0.5; nf.ctx.ftW = 1;
-  nf.boundary.pts.push([9, 9]); nf.zones.push({ name: "Hybrid zone" }); nf.sides.top.label = "Rear";
-  nf.devices[0].x = 1; nf.devices.push({ k: "spk", x: 5, y: 5, cid: "cNEW" });
-
-  // the source is byte-for-byte what it was before deriving
-  assert.deepEqual(source, snapshot, "source floor is completely unmutated after editing the derived floor");
+test("Build Floor Plan → Change background delegate to the existing enterBg/enterDraw/postAerialRestore engine", () => {
+  const cb = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 450);
+  assert.ok(cb.includes("if(curBgSource===\"draw\"){ enterDraw(); return; }"), "a drawn floor resumes the draw tool");
+  assert.ok(cb.includes("if(curBgSource===\"satellite\"){ var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); return; }"), "an aerial floor reopens the satellite as leveled");
+  // Cancel from outline-only closes the tool back to the floor (no derived floor to discard)
+  has('ev.data.type!=="iotCaptureCancel"', "the parent handles the outline-only Cancel");
+  has("exitBg(false); });", "Cancel exits the tool without committing");
 });
 
-test("hybridCapable still requires ctx.src + planSvg + bgCtx (unchanged — the derived floor reaches it via the same ctx flow)", () => {
+test("hybridCapable contract unchanged — a built Structure plan is a plan; aerial-only is not", () => {
   has("function hybridCapable(f){ return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }", "hybridCapable contract unchanged");
-  // a freshly derived aerial floor (ctx inherited, but no planSvg/bgCtx yet) is NOT hybrid-capable → the button shows there
-  const capable = (f) => !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx);
-  assert.equal(capable({ ctx: { src: "x" } }), false, "aerial-only (no Structure) is not hybrid-capable");
-  assert.equal(capable({ ctx: { src: "x" }, planSvg: "y", bgCtx: true }), true, "a built Structure plan is hybrid-capable");
+  assert.equal(hybridCapable({ ctx: { src: "x" } }), false, "aerial-only (no Structure) is not hybrid-capable");
+  assert.equal(hybridCapable({ ctx: { src: "x" }, planSvg: "y", bgCtx: true }), true, "a built Structure plan is hybrid-capable");
 });
