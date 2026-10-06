@@ -75,6 +75,16 @@
   #zoneName.vbtn{height:34px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.9);font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12)}
   #zoneDel.armed{background:#c0392b;color:#fff;border-color:#c0392b}
   body.ro #rgBar,body.frozen #rgBar{display:none!important}
+  /* Phase 7: Site Intelligence — AI output lives in a DRAFT (preview layer + review panel) and never touches floor.* until Apply. */
+  #siLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
+  #siPanel{position:absolute;right:14px;bottom:116px;z-index:7;display:none;width:236px;max-height:56%;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.96);box-shadow:0 2px 14px rgba(16,17,18,.16);font:600 12px/1.3 system-ui,sans-serif;color:var(--ink)}
+  #siPanel .siHd{display:flex;align-items:center;gap:6px;margin-bottom:6px} #siPanel .siHd span{flex:1} #siPanel .siBadge{flex:none;padding:1px 7px;border-radius:999px;background:#fbefd3;color:#8a6212;font-size:10px}
+  #siPanel .siRow{display:flex;align-items:center;gap:7px;width:100%;padding:5px 6px;border:0;border-radius:7px;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer} #siPanel .siRow:hover{background:var(--soft)}
+  #siPanel .siRow i{flex:none;width:9px;height:9px;border-radius:3px} #siPanel .siRow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #siPanel .siRow em{flex:none;font-style:normal;color:var(--muted);font-size:11px}
+  #siPanel .siRow b{flex:none;width:14px;height:14px;border:1.5px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center} #siPanel .siRow.on b{background:var(--ink);border-color:var(--ink)} #siPanel .siRow b svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:2.4;opacity:0} #siPanel .siRow.on b svg{opacity:1} #siPanel .siRow:not(.on) span,#siPanel .siRow:not(.on) em{opacity:.5}
+  #siPanel .siFt{display:flex;gap:6px;margin-top:6px} #siPanel .siB{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center} #siPanel .siB.pri{background:var(--ink);color:#fff;border-color:var(--ink);flex:1} #siPanel .siB:disabled{opacity:.4;cursor:default} #siPanel .siB svg,#siPanel .siX svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #siPanel .siX{flex:none;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:2px;display:flex} #siPanel .siMsg{padding:2px 2px 4px;color:var(--muted)}
+  body.ro #siPanel,body.frozen #siPanel,body.ro #siLayer,body.frozen #siLayer{display:none!important}
   .ubtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   #northArrow{position:absolute;top:58px;right:19px;width:26px;height:26px;z-index:6;pointer-events:none;display:none}
   .sidechip{position:absolute;z-index:6;display:none;padding:3px 9px;border-radius:999px;border:0;background:rgba(16,20,24,.72);color:rgba(255,255,255,.86);font:600 11px/1.3 system-ui,sans-serif;letter-spacing:.2px;white-space:nowrap;cursor:pointer;pointer-events:auto}   /* Phase 4.4: muted side tags, Hybrid only; centred per edge so they clear the north arrow (top-right) + scale label (bottom-left) */
@@ -529,8 +539,9 @@
         <div id="working" style="display:none;position:absolute;inset:0">
           <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
+          <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
-          <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Zone</button></div><button class="vbtn" id="zoneName" aria-label="Edit zone" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete zone" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button></div>
+          <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Zone</button></div><button class="vbtn" id="zoneName" aria-label="Edit zone" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete zone" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
           <div id="zonePop" role="dialog" aria-label="Zone"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Zone name"></div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -1237,7 +1248,7 @@
       var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns();
       var bar=document.getElementById("rgBar"); if(bar){ var zt=(rgTarget.kind==="zone"), zs=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, nm=document.getElementById("zoneName"), dl=document.getElementById("zoneDel");   // sub-selector (Boundary | Zone) + the selected zone's name / bin
         bar.style.display=(regionMode&&!frozen())?"flex":"none"; [].forEach.call(bar.querySelectorAll("#rgKind .vbtn"), function(b){ var on=(b.getAttribute("data-k")===(zt?"zone":"boundary")); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
-        if(nm){ nm.style.display=zs?"":"none"; nm.textContent=zs?zs.label:""; } if(dl){ dl.style.display=zs?"":"none"; dl.classList.remove("armed"); } } }
+        if(nm){ nm.style.display=zs?"":"none"; nm.textContent=zs?zs.label:""; } if(dl){ dl.style.display=zs?"":"none"; dl.classList.remove("armed"); } } siUpdateUI(); }
     function setRegionMode(on){ regionMode=!!on && !frozen() && !!bgData;
       if(regionMode){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); devMenu.classList.remove("show"); }
       else { bdSel=-1; bdDrag=-1; bdDownPt=null; closeZonePop(false); if(rgTarget.kind!=="boundary"){ rgTarget={kind:"boundary"}; rgLoad(); } }   // leaving Regions -> back to the boundary target (an unfinished zone draft is dropped)
@@ -1652,7 +1663,7 @@
       var rb=document.getElementById("rotateBtn"); if(rb) rb.style.display=cap?"none":"";   // rotating only bgData would misalign the ctx aerial/planSvg layers (and a ctx plan is already leveled)
       renderGrid();
       renderSides(cap && v==="hybrid");
-      renderBoundary(); updateRegionUI();   // the boundary rides the same plate → redrawn in every view
+      renderBoundary(); updateRegionUI(); siRender();   // the boundary rides the same plate → redrawn in every view (+ the Phase 7 draft preview, if any)
     }
     // Phase 4.4 — exterior side labels: four muted edge chips (Hybrid only) naming what's on each side of the building. floor.sides = {top,right,bottom,left}:{label,type}.
     var SIDE_KEYS=["top","right","bottom","left"], SIDE_COMPASS={top:"Top",right:"Right",bottom:"Bottom",left:"Left"};   // positional, not compass — the aerial may not be north-up (northDeg varies)
@@ -1991,7 +2002,102 @@
     document.getElementById("fsX").addEventListener("click", closeFloorSheet);
     document.getElementById("fsAdd").addEventListener("click", function(){ addFloor(); closeFloorSheet(); });
 
+    // ===== Phase 7 — Site Intelligence (client). SUGGESTION-FIRST: the AI result is held as siDraft (NEVER floor.boundary/zones/sides); only Apply writes canonical geometry. The single AI call is the explicit Analyze tap (siAnalyze). =====
+    var siteIntelOK=false, siProbed, siGone=false, siBusy=false, siErr="", siDraft=null, siFloor=null, siSeq=0, siStT=null;
+    // AI zone type (13) -> editor zone type. The editor has 9 typed zones; sidewalk/curb/pedestrian_approach/vehicle_approach have no equal, so they become labeled "custom" zones (never silently re-typed to a wrong class).
+    var SI_TYPE_MAP={ street:["street",""], sidewalk:["custom","Sidewalk"], curb:["custom","Curb"], driveway:["driveway",""], parking:["parking",""], front_yard:["front-yard",""], rear_yard:["rear-yard",""], side_yard:["side-yard",""], alley:["alley",""], loading:["loading",""], entrance:["entrance",""], pedestrian_approach:["custom","Pedestrian Approach"], vehicle_approach:["custom","Vehicle Approach"] };
+    function siZoneType(t){ var m=SI_TYPE_MAP[String(t==null?"":t).toLowerCase()]; return m?{type:m[0],label:m[1]}:{type:"custom",label:""}; }
+    // IMAGE fraction (of the FULL aerial) -> PLATE-% (the plate shows ctx.rect of it). rect null/invalid = identity. Clamped to [0,100] (a partly off-viewport polygon keeps its shape, clamped).
+    function imgFracToPlate(pt,rect){ var r=(rect&&+rect.w>0&&+rect.h>0)?rect:{x:0,y:0,w:1,h:1}, fx=+(Array.isArray(pt)?pt[0]:(pt&&pt.x)), fy=+(Array.isArray(pt)?pt[1]:(pt&&pt.y)); if(!isFinite(fx)||!isFinite(fy)) return null;
+      return [Math.max(0,Math.min(100,(fx-r.x)/r.w*100)),Math.max(0,Math.min(100,(fy-r.y)/r.h*100))]; }
+    function siRect(f){ var c=f&&f.ctx; return (c&&c.full&&c.rect&&+c.rect.w>0&&+c.rect.h>0)?{x:+c.rect.x,y:+c.rect.y,w:+c.rect.w,h:+c.rect.h}:null; }   // legacy non-full ctx: the plate shows the whole src -> identity
+    function siMapPoly(poly,rect){ var out=[], r=rect||{x:0,y:0,w:1,h:1}, any=false, i, q, fx, fy; if(!Array.isArray(poly)) return out;
+      for(i=0;i<poly.length;i++){ q=imgFracToPlate(poly[i],rect); if(!q) continue; out.push(q); fx=+(Array.isArray(poly[i])?poly[i][0]:poly[i].x); fy=+(Array.isArray(poly[i])?poly[i][1]:poly[i].y); if(fx>=r.x&&fx<=r.x+r.w&&fy>=r.y&&fy<=r.y+r.h) any=true; }
+      return any?out:[]; }   // wholly outside the viewport -> nothing to show
+    // orientation {front,rear,left,right} -> floor.sides entries. A value naming an image edge (top/right/bottom/left) puts that property side on that edge; any other short label names what sits at the default edge (front=top, rear=bottom, left=left, right=right).
+    function siSides(o){ var out=[], used={}, NM={front:"Front",rear:"Rear",left:"Left",right:"Right"}, DEF={front:"top",rear:"bottom",left:"left",right:"right"}; if(!o||typeof o!=="object") return out;
+      ["front","rear","left","right"].forEach(function(k){ var v=o[k]; if(typeof v!=="string"||!v.trim()) return; v=v.trim(); var low=v.toLowerCase(), side=DEF[k], label=v; if(SIDE_KEYS.indexOf(low)>=0){ side=low; label=NM[k]; } if(used[side]) return; used[side]=1; out.push({side:side,label:label.slice(0,24),type:sideType(label)}); }); return out; }
+    // The explicit context a run is keyed on. Everything that changes the analysis is in here; siteHash(this) is the sourceHash.
+    function siContext(f){ var c=(f&&f.ctx)||{}, pl=f&&f.plan, r=siRect(f), zt=[], zs=Array.isArray(f&&f.zones)?f.zones:[], fp=0, i, js;
+      if(pl){ try{ js=JSON.stringify(pl); for(i=0;i<js.length;i++) fp=((fp*31)+js.charCodeAt(i))|0; }catch(e){} }
+      for(i=0;i<zs.length;i++) zt.push(String(zs[i].type||"custom")); zt.sort();
+      return { image:c.src||"", grid:{ scale:(f&&f.scale)||null }, transform:{ rect:r||null, full:!!c.full, seed:(c.seed!=null?c.seed:null) },
+        north:(typeof c.northDeg==="number"&&isFinite(c.northDeg))?c.northDeg:((f&&f.aerial&&typeof f.aerial.northDeg==="number"&&isFinite(f.aerial.northDeg))?f.aerial.northDeg:null),
+        structure:{ revision:(pl&&pl.revision!=null)?pl.revision:null, cells:(pl&&Array.isArray(pl.cells))?pl.cells.length:0, rooms:(pl&&Array.isArray(pl.rooms))?pl.rooms.length:0, mpp:(pl&&+pl.metersPerPx)||null, fp:fp },
+        metadata:{ propertyType:SURVEY_PROP }, zones:zt }; }
+    function siCanon(v){ if(v==null) return "null"; if(typeof v!=="object") return JSON.stringify(v); if(Array.isArray(v)) return "["+v.map(siCanon).join(",")+"]"; return "{"+Object.keys(v).sort().map(function(k){ return JSON.stringify(k)+":"+siCanon(v[k]); }).join(",")+"}"; }
+    function siFnv(s){ var out="", k, h, i; for(k=0;k<8;k++){ h=(0x811c9dc5^(k*0x9e3779b1))>>>0; for(i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } out+=("00000000"+h.toString(16)).slice(-8); } return out; }
+    function siteHash(obj){ var s=siCanon(obj); try{ if(window.crypto&&crypto.subtle&&window.TextEncoder){ return crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)).then(function(b){ var a=new Uint8Array(b), h="", i; for(i=0;i<a.length;i++) h+=(a[i]<16?"0":"")+a[i].toString(16); return h; }); } }catch(e){} return Promise.resolve(siFnv(s)); }
+    // The aerial as a data URL for the server (it only accepts data/base64 images); downscaled to <=1600px JPEG — fractions are unchanged by a uniform resize.
+    function siImageData(src,cb){ if(typeof src!=="string"||!src) return cb(null); if(src.indexOf("data:")===0) return cb(src);
+      var im=new Image(), done=false; function fin(v){ if(done) return; done=true; cb(v); }
+      im.onload=function(){ try{ var w=im.naturalWidth, h=im.naturalHeight, s=Math.min(1,1600/Math.max(w,h)), c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w*s)); c.height=Math.max(1,Math.round(h*s)); c.getContext("2d").drawImage(im,0,0,c.width,c.height); fin(c.toDataURL("image/jpeg",0.85)); }catch(e){ fin(null); } };
+      im.onerror=function(){ fin(null); }; im.src=src; }
+    // One cheap capability GET (no AI): staff, not frozen, once per session. Only a true result ever shows the Analyze action.
+    function siProbe(){ if(siProbed||RO||frozen()) return; siProbed=true;
+      try{ fetch("/api/site-intel?probe=1",{credentials:"same-origin"}).then(function(r){ return r.ok?r.json():null; }).then(function(j){ siteIntelOK=!!(j&&j.ok&&j.configured); siUpdateUI(); }).catch(function(){}); }catch(e){} }
+    function siActive(){ var f=floors[curFloor]; return !!(siteIntelOK && !siGone && PID && hybridCapable(f) && !frozen()); }
+    function siUpdateUI(){ siProbe(); var b=document.getElementById("siBtn"); if(b){ b.style.display=siActive()?"":"none"; b.disabled=!!siBusy; b.classList.toggle("on",!!siBusy); } }
+    // Draft items for the current floor: boundary / zones (plate-% polygons) / sides — one list drives the preview, the panel and Apply.
+    function siItems(d,f){ var out=[], p=d&&d.payload, rect=siRect(f); if(!p) return out;
+      if(p.siteBoundary&&p.siteBoundary.polygon){ var bp=siMapPoly(p.siteBoundary.polygon,rect); if(bp.length>=3) out.push({ id:"b", kind:"boundary", label:"Boundary", conf:+p.siteBoundary.confidence||0, pts:bp }); }
+      (Array.isArray(p.zones)?p.zones:[]).forEach(function(z,i){ var pp=siMapPoly(z&&z.polygon,rect); if(pp.length<3) return; var t=siZoneType(z.type); out.push({ id:"z"+i, kind:"zone", label:t.label||zTypeLabel(t.type), conf:+z.confidence||0, pts:pp, type:t.type, zlabel:t.label }); });
+      siSides(p.orientation).forEach(function(s){ out.push({ id:"s"+s.side, kind:"side", label:SIDE_COMPASS[s.side]+" · "+s.label, conf:+(p.orientation&&p.orientation.confidence)||0, side:s.side, sideLabel:s.label, sideType:s.type }); });
+      return out; }
+    function siLayerEl(){ var ly=document.getElementById("siLayer"), sc=document.getElementById("scene"); if(!ly&&sc){ ly=document.createElementNS("http://www.w3.org/2000/svg","svg"); ly.setAttribute("id","siLayer"); ly.setAttribute("viewBox","0 0 100 100"); ly.setAttribute("preserveAspectRatio","none"); ly.setAttribute("aria-hidden","true"); sc.appendChild(ly); } return ly; }   // preview layer lives in #scene (rides zoom/pan), created on first render so the static plate markup is unchanged
+    function siPct(c){ return Math.round(Math.max(0,Math.min(1,c))*100)+"%"; }
+    function siRender(noChk){ var pn=document.getElementById("siPanel"), ly=siLayerEl(), f=floors[curFloor], mine=(siFloor===f)&&!frozen()&&hybridCapable(f), d=(mine&&siDraft&&siDraft.f===f)?siDraft:null, show=mine&&(siBusy||!!siErr||!!d), s="", h="";
+      if(ly){ if(d){ siItems(d,f).forEach(function(it){ if(it.kind==="side"||d.off[it.id]) return; var col=(it.kind==="boundary")?"61,123,217":(ZONE_COLORS[it.type]||ZONE_COLORS.custom), op=(0.45+0.55*it.conf).toFixed(2);
+          s+='<polygon points="'+boundaryToPath(it.pts)+'" fill="rgba('+col+',.12)" stroke="rgb('+col+')" stroke-width="1.6" stroke-dasharray="2 3" opacity="'+op+'" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'; }); } ly.innerHTML=s; }
+      if(!pn) return; pn.style.display=show?"block":"none"; if(!show){ pn.innerHTML=""; return; }
+      var X='<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>', RR='<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>';
+      if(siBusy){ h='<div class="siMsg">Analyzing…</div>'; }
+      else if(siErr){ h='<div class="siHd"><span>'+zEsc(siErr)+'</span><button class="siX" data-act="close" aria-label="Close">'+X+'</button></div>'+(siGone?'':'<div class="siFt"><button class="siB pri" data-act="retry">Retry</button></div>'); }
+      else { var its=siItems(d,f), n=0; h='<div class="siHd"><span>Analysis</span>'+(d.stale?'<em class="siBadge" style="font-style:normal">Outdated</em>':'')+'<button class="siX" data-act="discard" aria-label="Discard">'+X+'</button></div>';
+        its.forEach(function(it){ var on=!d.off[it.id]; if(on) n++; var col=(it.kind==="boundary")?"61,123,217":(it.kind==="side"?"140,146,150":(ZONE_COLORS[it.type]||ZONE_COLORS.custom));
+          h+='<button class="siRow'+(on?' on':'')+'" data-act="tog" data-id="'+it.id+'" aria-pressed="'+(on?'true':'false')+'"><b><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></b><i style="background:rgb('+col+')"></i><span>'+zEsc(it.label)+'</span><em>'+siPct(it.conf)+'</em></button>'; });
+        if(!its.length) h+='<div class="siMsg">Nothing found</div>';
+        h+='<div class="siFt"><button class="siB pri" data-act="apply"'+((d.stale||!n)?' disabled':'')+'>Apply</button><button class="siB" data-act="discard">Discard</button><button class="siB" data-act="again" title="Again" aria-label="Analyze Again">'+RR+'</button></div>'; }
+      pn.innerHTML=h; if(d && !noChk) siCheckStale(); }
+    // Outdated = the context now hashes differently from the one this draft was analyzed on. Badge + Apply disabled; NEVER an automatic re-run.
+    function siCheckStale(){ clearTimeout(siStT); var d=siDraft; if(!d) return; siStT=setTimeout(function(){ var f=d.f; if(siDraft!==d||floors.indexOf(f)<0) return;
+      siteHash(siContext(f)).then(function(h){ var st=(h!==d.hash); if(siDraft===d && !!d.stale!==st){ d.stale=st; siRender(true); } }).catch(function(){}); },200); }
+    function siDiscard(){ siDraft=null; siErr=""; siSeq++; siBusy=false; siUpdateUI(); siRender(true); }
+    // THE only AI call: an explicit Analyze / Analyze Again tap lands here. No auto-retry; a 100s guard so it never spins forever.
+    function siAnalyze(again){ if(siBusy||frozen()||!siteIntelOK||siGone) return; var f=floors[curFloor]; if(!siActive()) return;
+      var ctx=siContext(f), seq=++siSeq, ac=(typeof AbortController!=="undefined")?new AbortController():null;
+      siBusy=true; siErr=""; siDraft=null; siFloor=f; siUpdateUI(); siRender(true);
+      var tm=setTimeout(function(){ if(ac) try{ ac.abort(); }catch(e){} fail(); },100000);
+      function fail(){ if(seq!==siSeq||!siBusy) return; clearTimeout(tm); siBusy=false; siErr="Analysis failed"; siUpdateUI(); siRender(true); }
+      siImageData(ctx.image,function(img){ if(seq!==siSeq) return; if(!img) return fail();
+        siteHash(ctx).then(function(hash){ if(seq!==siSeq) return;
+          var body={ accessId:PID, floorId:f.id||null, sourceHash:hash, image:img, grid:ctx.grid, transform:ctx.transform, north:ctx.north, structure:ctx.structure, metadata:ctx.metadata, zones:ctx.zones }; if(again) body.analyzeAgain=true;
+          return fetch("/api/site-intel",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify(body),signal:ac?ac.signal:undefined})
+            .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(seq!==siSeq) return; clearTimeout(tm);
+              if(r.status===503){ siGone=true; siBusy=false; siErr="AI not configured"; siUpdateUI(); siRender(true); return; }
+              var run=j&&j.run, p=run&&run.payload;
+              if(!r.ok||!j||!j.ok||!p||typeof p!=="object"||p.error){ fail(); return; }
+              var off={}; if(f.boundary&&f.boundary.pts&&f.boundary.pts.length>=3) off.b=true; if(f.sides&&typeof f.sides==="object") ["top","right","bottom","left"].forEach(function(k){ if(f.sides[k]) off["s"+k]=true; });   // never default-replace what the user already set
+              siBusy=false; siDraft={ f:f, hash:hash, payload:p, off:off, reused:!!j.reused, stale:false }; siUpdateUI(); siRender(); }); }); })
+        .catch(function(){ fail(); }); }); }
+    // Apply: the INCLUDED suggestions become ordinary canonical geometry (validated like hand-drawn), then the draft is dropped.
+    function siApply(){ var d=siDraft; if(!d||frozen()||d.stale) return; var f=d.f; if(floors.indexOf(f)<0||f!==floors[curFloor]){ siDiscard(); return; }
+      var zs=[], did=false;
+      siItems(d,f).forEach(function(it){ if(d.off[it.id]) return;
+        if(it.kind==="boundary"){ var b=bdValidBoundary({pts:it.pts}); if(b){ f.boundary=b; did=true; } }
+        else if(it.kind==="zone") zs.push({ label:it.zlabel, type:it.type, pts:it.pts });
+        else if(it.kind==="side"){ f.sides=sidesOf(f); f.sides[it.side]={ label:it.sideLabel, type:it.sideType }; did=true; } });
+      if(zs.length){ var before=Array.isArray(f.zones)?f.zones:[], merged=zValidZones(before.concat(zs)); if(merged.length>before.length){ f.zones=merged; did=true; } }
+      siDraft=null; siErr=""; if(did){ bdLoad(); renderView(); renderBoundary(); updateRegionUI(); flushNow(); } else siRender(true); siUpdateUI(); }
+    (function(){ var pn=document.getElementById("siPanel"), btn=document.getElementById("siBtn"); if(!pn||!btn) return;
+      btn.addEventListener("pointerdown",function(e){ e.stopPropagation(); }); btn.addEventListener("click",function(e){ e.stopPropagation(); siAnalyze(false); });
+      pn.addEventListener("pointerdown",function(e){ e.stopPropagation(); });
+      pn.addEventListener("click",function(e){ e.stopPropagation(); var t=e.target; while(t&&t!==pn&&!(t.getAttribute&&t.getAttribute("data-act"))) t=t.parentNode; if(!t||t===pn) return; var a=t.getAttribute("data-act");
+        if(a==="tog"&&siDraft){ var id=t.getAttribute("data-id"); if(siDraft.off[id]) delete siDraft.off[id]; else siDraft.off[id]=true; siRender(true); }
+        else if(a==="apply") siApply(); else if(a==="discard"||a==="close") siDiscard(); else if(a==="again") siAnalyze(true); else if(a==="retry") siAnalyze(false); });
+    })();
     restore();   // reopen the saved survey (all floors) for this project (if any)
+    siProbe();   // Phase 7: ONE capability GET (no AI) so the Analyze action only shows when the server is configured
   </script>
 </body>
 </html>
