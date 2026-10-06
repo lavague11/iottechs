@@ -63,6 +63,12 @@
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
   #gridLayer{position:absolute;inset:0;z-index:2;pointer-events:none;display:none;background-image:linear-gradient(to right,rgba(16,20,24,.14) 1px,transparent 1px),linear-gradient(to bottom,rgba(16,20,24,.14) 1px,transparent 1px)}   /* Phase 4.3: ONE scaled grid on the plate (scene-local px → rides the zoom); under devices (z3), over the plan */
   #gridScale{position:absolute;left:14px;bottom:56px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:#fff;font-size:11px;font-weight:600;letter-spacing:.2px}
+  /* Phase 5.1: ONE editable property-boundary polygon per floor, in #scene so it rides zoom/pan. viewBox 0 0 100 100 → user units are plate-%. pointer-events only while editing. */
+  #regionLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
+  #boundaryTag{position:absolute;left:14px;bottom:86px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;letter-spacing:.2px}
+  body.regions .ctxbar,body.regions .showCtl,body.regions #dimBtn{display:none!important}   /* one primary mode: Regions suspends device placement + its chrome */
+  body.regions #regionLayer{cursor:crosshair}
+  .ubtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   #northArrow{position:absolute;top:58px;right:19px;width:26px;height:26px;z-index:6;pointer-events:none;display:none}
   .sidechip{position:absolute;z-index:6;display:none;padding:3px 9px;border-radius:999px;border:0;background:rgba(16,20,24,.72);color:rgba(255,255,255,.86);font:600 11px/1.3 system-ui,sans-serif;letter-spacing:.2px;white-space:nowrap;cursor:pointer;pointer-events:auto}   /* Phase 4.4: muted side tags, Hybrid only; centred per edge so they clear the north arrow (top-right) + scale label (bottom-left) */
   .sidechip.ro{cursor:default;pointer-events:none}
@@ -513,7 +519,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div></div><div id="gridScale"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
           <div class="ctxbar">
@@ -527,6 +533,9 @@
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
             <div class="viewseg" id="viewSeg" role="group" aria-label="View" style="display:none"><button class="vbtn" data-v="satellite">Aerial</button><button class="vbtn" data-v="plan">Plan</button><button class="vbtn" data-v="hybrid">Hybrid</button></div>
             <button class="ubtn" id="fitBtn" title="Fit" aria-label="Fit plan to screen"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
+            <button class="ubtn" id="regionBtn" title="Boundary" aria-label="Boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
+            <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo boundary edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+            <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo boundary edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
           <div class="showCtl" id="showCtl">
@@ -878,6 +887,8 @@
     var work=document.getElementById("working"), panelBody=document.querySelector(".panelBody"),
         panelN=document.querySelector(".panelHead .n"), devMenu=document.getElementById("devMenu"), addBtn=document.getElementById("addDeviceBtn");
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
+    // Phase 5.1 boundary editor state (working copy of floor.boundary, in plate-%): regionMode gates device placement; bdHist is the add/move/delete/close undo stack.
+    var regionMode=false, bdPts=[], bdClosed=false, bdDrag=-1, bdSel=-1, bdHist=[], bdHi=-1, bdDownPt=null;
     var ISZ=28, showFovState=false, showGridState=true, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium — the primary size) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
@@ -1004,7 +1015,7 @@
     work.addEventListener("pointerup", ptrGone, true);
     work.addEventListener("pointercancel", ptrGone, true);
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
-    function placeAt(cx,cy){ if(frozen()||!armedK) return; var r=document.getElementById("scene").getBoundingClientRect();
+    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode) return; var r=document.getElementById("scene").getBoundingClientRect();
       addDevice(armedK,(cx-r.left)/r.width*100,(cy-r.top)/r.height*100); devMenu.classList.remove("show"); }
     // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
     var loupeEl=null;
@@ -1021,7 +1032,7 @@
     // the crosshair. Mouse places immediately (precise cursor). A second finger (pinch) cancels it.
     var placing=false, placePt=null;
     work.addEventListener("pointerdown", function(e){
-      if(frozen()||!armedK||inChrome(e)) return;
+      if(frozen()||!armedK||inChrome(e)||regionMode) return;
       if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }
       if(activePtrs.size>1){ placing=false; hideLoupe(); return; }
       placing=true; placePt={x:e.clientX,y:e.clientY};
@@ -1048,7 +1059,7 @@
 
     // Angles step, second tap: with a camera selected, tap where the view should point — that sets
     // both the aim (direction) and the length (distance to the tapped point). The line connects them.
-    work.addEventListener("pointerdown", function(e){ if(frozen() || !angleMode || selId==null) return;
+    work.addEventListener("pointerdown", function(e){ if(frozen() || !angleMode || selId==null || regionMode) return;
       if(activePtrs.size>1) return;                                   // pinch-zoom in progress → don't re-aim
       if(e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim")) return;
       var d=null; for(var i=0;i<devices.length;i++){ if(devices[i].id===selId){ d=devices[i]; break; } }
@@ -1108,6 +1119,80 @@
       pinchDist=d; pinchCx=cx; pinchCy=cy; } }, {passive:false});
     work.addEventListener("touchend", function(e){ if(e.touches.length<2) pinchDist=0; });
     var cbtn=document.getElementById("centerBtn"); if(cbtn) cbtn.addEventListener("click", resetZoom);   // Center resets the view
+
+    /* ===== Phase 5.1 — site BOUNDARY polygon + editor =====
+       ONE editable polygon per floor, stored as % of #scene (floor.boundary={pts:[[x,y]…]} ≥3 or null) so it rides
+       zoom/pan and aligns across Aerial/Plan/Hybrid (because #regionLayer lives inside #scene, viewBox 0 0 100 100,
+       preserveAspectRatio none → user units ARE plate-%). History/edit model mirrors the satellite trace. Built so
+       5.2 zones can reuse this editor; 5.1 ships boundary only. */
+    function bdSnap(){ return { p:bdPts.map(function(q){ return [q.x,q.y]; }), c:bdClosed }; }
+    function bdBtns(){ var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.disabled=!(bdHi>0); if(r) r.disabled=!(bdHi<bdHist.length-1); }
+    // boundary is floor view-state like ctx/sides — written straight onto the floor row (NOT via snapFloor). ≥3 pts or null.
+    function bdCommit(){ var f=floors[curFloor]; if(!f) return; f.boundary=(bdPts.length>=3)?{ pts:bdPts.map(function(q){ return [q.x,q.y]; }) }:null; queueSave(); }
+    function bdPush(){ bdHist=bdHist.slice(0,bdHi+1); bdHist.push(bdSnap()); if(bdHist.length>100) bdHist.shift(); bdHi=bdHist.length-1; bdBtns(); bdCommit(); renderBoundary(); }
+    function bdGo(i){ if(i<0||i>=bdHist.length) return; bdHi=i; var s=bdHist[i]; bdPts=s.p.map(function(q){ return {x:q[0],y:q[1]}; }); bdClosed=s.c; bdSel=-1; bdDrag=-1; bdBtns(); bdCommit(); renderBoundary(); }
+    function bdUndo(){ if(bdHi>0) bdGo(bdHi-1); }
+    function bdRedo(){ if(bdHi<bdHist.length-1) bdGo(bdHi+1); }
+    function bdClosable(hit){ return !bdClosed && bdPts.length>=3 && hit===0; }   // tapping the first dot (open, ≥3) closes the loop
+    function bdClose(){ if(bdClosed||bdPts.length<3) return; bdClosed=true; bdSel=-1; bdPush(); }
+    function bdDelSel(){ if(bdSel<0||bdSel>=bdPts.length) return; bdPts.splice(bdSel,1); bdSel=-1; if(bdPts.length<3) bdClosed=false; bdPush(); }
+    // Validate a stored boundary on restore: array of [num,num] clamped to [0,100], ≥3 pts, capped at 200 — else null.
+    function bdValidBoundary(b){ if(!b||!b.pts||!b.pts.length) return null; var out=[]; for(var i=0;i<b.pts.length && out.length<200;i++){ var q=b.pts[i]; if(!q||q.length<2) continue; var x=+q[0], y=+q[1]; if(!isFinite(x)||!isFinite(y)) continue; out.push([Math.max(0,Math.min(100,x)),Math.max(0,Math.min(100,y))]); } return out.length>=3 ? { pts:out } : null; }
+    // Pure %→SVG points string (viewBox 0 0 100 100 → user units are plate-%). Accepts {x,y} or [x,y].
+    function boundaryToPath(pts){ return (pts||[]).map(function(p){ var x=(p.x!=null?p.x:p[0]), y=(p.y!=null?p.y:p[1]); return (Math.round(x*1000)/1000)+","+(Math.round(y*1000)/1000); }).join(" "); }
+    // Load this floor's committed boundary into the working edit state (called from loadFloor).
+    function bdLoad(){ var b=floors[curFloor]&&floors[curFloor].boundary, pts=(b&&b.pts&&b.pts.length>=3)?b.pts:[]; bdPts=pts.map(function(q){ return {x:q[0],y:q[1]}; }); bdClosed=bdPts.length>=3; bdSel=-1; bdDrag=-1; bdHist=[bdSnap()]; bdHi=0; bdBtns(); }
+    // Render floor.boundary (via the working bdPts) into #regionLayer: a closed dashed polygon + "Estimated boundary" chip. Handles/× only while editing.
+    function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;
+      var n=bdPts.length, has=n>=3, edit=regionMode && !frozen(), z=(typeof zScale==="number"&&zScale>0)?zScale:1;
+      if(tag){ tag.textContent="Estimated boundary"; tag.style.display=has?"block":"none"; }
+      if(!n){ rl.innerHTML=""; return; }
+      var path=boundaryToPath(bdPts), s="", dash='stroke="#b98a2e" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"';
+      s += (bdClosed&&has) ? '<polygon points="'+path+'" fill="rgba(185,138,46,.06)" '+dash+'/>' : '<polyline points="'+path+'" fill="none" '+dash+'/>';
+      if(edit){ var hr=1.6/z, i;                                                         // counter-scale handles by zoom so they stay ~constant on-screen
+        for(i=0;i<n;i++){ var p=bdPts[i], sel=(i===bdSel), first=(i===0 && !bdClosed && n>=3);
+          s += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(sel?hr*1.3:hr)+'" fill="'+(sel?"#b98a2e":"#fff")+'" stroke="'+(first?"#2a8a4e":"#b98a2e")+'" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'; }
+        if(bdSel>=0 && bdSel<n){ var sp=bdPts[bdSel], bx=sp.x+3/z, by=sp.y-3/z, br=1.9/z, bl=br*0.5;
+          s += '<g class="bdDel" style="pointer-events:all;cursor:pointer"><circle cx="'+bx+'" cy="'+by+'" r="'+br+'" fill="#c0392b" stroke="#fff" stroke-width="1.4" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by-bl)+'" x2="'+(bx+bl)+'" y2="'+(by+bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by+bl)+'" x2="'+(bx+bl)+'" y2="'+(by-bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g>'; } }
+      rl.innerHTML=s; }
+    // regionBtn visible only to staff, on the Setup step, once a background exists; undo/redo only while editing.
+    function updateRegionUI(){ var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.style.display=(bgData && !frozen() && curStep===1)?"":"none"; rbn.classList.toggle("on", regionMode); }
+      var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns(); }
+    function setRegionMode(on){ regionMode=!!on && !frozen() && !!bgData;
+      if(regionMode){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); devMenu.classList.remove("show"); }
+      else { bdSel=-1; bdDrag=-1; bdDownPt=null; }
+      document.body.classList.toggle("regions", regionMode);
+      var rl=document.getElementById("regionLayer"); if(rl) rl.style.pointerEvents=regionMode?"auto":"none";
+      updateRegionUI(); renderBoundary(); }
+    (function(){ var rl=document.getElementById("regionLayer"); if(!rl) return;
+      function bdPt(cx,cy){ var r=scene.getBoundingClientRect(); return { x:Math.max(0,Math.min(100,(cx-r.left)/r.width*100)), y:Math.max(0,Math.min(100,(cy-r.top)/r.height*100)) }; }   // SAME client→plate-% conversion devices use (placeAt)
+      function bdNear(cx,cy){ var r=scene.getBoundingClientRect(); if(!r.width||!r.height) return -1; for(var i=0;i<bdPts.length;i++){ var vx=r.left+bdPts[i].x/100*r.width, vy=r.top+bdPts[i].y/100*r.height; if(Math.hypot(cx-vx,cy-vy)<=14) return i; } return -1; }   // hit-test in client px (accounts for zoom via the live rect)
+      rl.addEventListener("pointerdown", function(e){ if(!regionMode||frozen()) return;
+        if(activePtrs.size>1){ bdDrag=-1; return; }                                       // second finger → let the plate pinch-zoom (never add a vertex)
+        if(e.target.closest && e.target.closest(".bdDel")){ e.preventDefault(); e.stopPropagation(); bdDelSel(); return; }
+        var hit=bdNear(e.clientX,e.clientY); bdDownPt={x:e.clientX,y:e.clientY,moved:false};
+        if(hit>=0 && !bdClosable(hit)){ bdDrag=hit; try{ rl.setPointerCapture(e.pointerId); }catch(_){} }   // grab a vertex (not the closable first dot) to drag
+        e.preventDefault(); e.stopPropagation(); });
+      rl.addEventListener("pointermove", function(e){ if(!regionMode||frozen()||!bdDownPt) return;
+        if(activePtrs.size>1){ bdDrag=-1; return; }
+        if(bdDrag>=0){ if(!bdDownPt.moved){ if(Math.hypot(e.clientX-bdDownPt.x,e.clientY-bdDownPt.y)<=4) return; bdDownPt.moved=true; } var p=bdPt(e.clientX,e.clientY); bdPts[bdDrag]={x:p.x,y:p.y}; renderBoundary(); } });
+      rl.addEventListener("pointerup", function(e){ if(!regionMode||frozen()) return; var dp=bdDownPt; bdDownPt=null;
+        if(bdDrag>=0){ var di=bdDrag, moved=dp&&dp.moved; bdDrag=-1; if(moved) bdPush(); else { bdSel=di; renderBoundary(); } return; }   // moved → one undo step; clean tap on a dot → select it (shows ×)
+        if(!dp) return; var hit=bdNear(e.clientX,e.clientY);
+        if(bdClosable(hit)){ bdClose(); return; }                                         // tap the first dot → close
+        if(hit<0){ if(bdSel>=0){ bdSel=-1; renderBoundary(); } else if(!bdClosed){ var p=bdPt(e.clientX,e.clientY); bdPts.push({x:p.x,y:p.y}); bdPush(); } }   // empty tap: a selected dot ONLY deselects (no stray vertex); else add
+        else { bdSel=hit; renderBoundary(); } });                                         // tapped an existing dot → select
+      rl.addEventListener("pointercancel", function(){ bdDrag=-1; bdDownPt=null; });
+      rl.addEventListener("contextmenu", function(e){ if(regionMode) e.preventDefault(); });
+      var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.addEventListener("pointerdown", function(e){ e.stopPropagation(); }); rbn.addEventListener("click", function(e){ e.stopPropagation(); if(frozen()||!bgData) return; setRegionMode(!regionMode); }); }
+      var ub=document.getElementById("bdUndo"), rbtn=document.getElementById("bdRedo");
+      if(ub){ ub.addEventListener("pointerdown", function(e){ e.stopPropagation(); }); ub.addEventListener("click", function(e){ e.stopPropagation(); if(regionMode) bdUndo(); }); }
+      if(rbtn){ rbtn.addEventListener("pointerdown", function(e){ e.stopPropagation(); }); rbtn.addEventListener("click", function(e){ e.stopPropagation(); if(regionMode) bdRedo(); }); }
+      document.addEventListener("keydown", function(e){ if(!regionMode||frozen()) return; var mod=e.ctrlKey||e.metaKey;
+        if(mod && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(e.shiftKey) bdRedo(); else bdUndo(); }
+        else if(mod && (e.key==="y"||e.key==="Y")){ e.preventDefault(); bdRedo(); }
+        else if(e.key==="Escape"){ setRegionMode(false); } });
+    })();
 
     // ---- Fit: toggle whole-plan (contain) vs fill-screen (cover). A portrait plan on a wide canvas
     //      leaves side margins in "Fit"; "Fill" edges it out (pan/zoom to reach the cropped sides). ----
@@ -1455,6 +1540,7 @@
       var rb=document.getElementById("rotateBtn"); if(rb) rb.style.display=cap?"none":"";   // rotating only bgData would misalign the ctx aerial/planSvg layers (and a ctx plan is already leveled)
       renderGrid();
       renderSides(cap && v==="hybrid");
+      renderBoundary(); updateRegionUI();   // the boundary rides the same plate → redrawn in every view
     }
     // Phase 4.4 — exterior side labels: four muted edge chips (Hybrid only) naming what's on each side of the building. floor.sides = {top,right,bottom,left}:{label,type}.
     var SIDE_KEYS=["top","right","bottom","left"], SIDE_COMPASS={top:"Top",right:"Right",bottom:"Bottom",left:"Left"};   // positional, not compass — the aerial may not be north-up (northDeg varies)
@@ -1530,7 +1616,7 @@
       var w,h; if(byHeight){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
       scene.style.right="auto"; scene.style.bottom="auto";
       scene.style.left=Math.round((cw-w)/2)+"px"; scene.style.top=Math.round((ch-h)/2)+"px";
-      scene.style.width=w+"px"; scene.style.height=h+"px"; renderGrid();   // plate size changed → grid box px recomputed
+      scene.style.width=w+"px"; scene.style.height=h+"px"; renderGrid(); renderBoundary();   // plate size changed → grid box px + boundary redrawn
       // Coverage is drawn in plate pixels from pxPerFt (which depends on the plate width just set), so
       // re-render devices whenever the plate is (re)sized — fixes scaled coverage on first load + on resize.
       if(typeof devices!=="undefined" && devices.length && typeof renderDevice==="function") devices.forEach(renderDevice);
@@ -1542,6 +1628,7 @@
       if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
+      regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; bdLoad();   // leave edit mode + load this floor's boundary
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
@@ -1555,7 +1642,7 @@
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null,   // real-world scale + capture + structure + ctx-framed flag + view travel with the background (deep copies — never shared with the source)
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null,   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
@@ -1565,7 +1652,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null,
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null,
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); queueSave(); }
     // New floor: if the current floor has a background, offer to import it (with or without the placed
@@ -1632,7 +1719,7 @@
     function setStatus(){
       var froze = submitted && !RO;                       // staff, submitted → lock the map's edit tools
       document.body.classList.toggle("frozen", froze);
-      if(froze){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); }
+      if(froze){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); if(regionMode) setRegionMode(false); }
       var pill=document.querySelector(".pill"); if(!pill) return;
       var lbl, col;
       if(approved){ lbl="Approved"; col="#2a8a4e"; }
@@ -1660,7 +1747,7 @@
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showGridState=st.showGrid!==false; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,boundary:bdValidBoundary(f.boundary),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
@@ -1673,7 +1760,8 @@
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(frozen()){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only / submitted: tap a photographed camera to view it (no drag)
+      dot.addEventListener("pointerdown", function(e){ if(regionMode) return;                                            // Regions mode suspends device drag/select
+        if(frozen()){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only / submitted: tap a photographed camera to view it (no drag)
         if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
         e.preventDefault(); e.stopPropagation(); dot.setPointerCapture(e.pointerId);
@@ -1763,7 +1851,8 @@
         document.getElementById("working").style.display="block";
         if(cbg) cbg.style.display="none";
       }
-      if(idx!==1) setAngleMode(false);   // angle editing lives inside Setup only
+      if(idx!==1){ setAngleMode(false); if(regionMode) setRegionMode(false); }   // angle + boundary editing live inside Setup only
+      updateRegionUI();
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
       if(idx!==1){ arm(null); devMenu.classList.remove("show"); }
