@@ -1,5 +1,6 @@
 "use client";
 import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts } from "./survey2-model.js";
+import { northArrowAngle } from "./site-transform.js";
 
 // Rasterize the Site Survey (the "survey2" planner) into one PNG per floor for the proposal PDF —
 // the SAME floors, backgrounds and devices the planner shows, projected through the same geometry
@@ -74,6 +75,25 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
           ctx.textAlign = "center";
         }
       });
+      // Layer 5 — north indicator (top-right), only when the floor's capture transform knows north.
+      if (f.aerial && Number.isFinite(f.aerial.northDeg)) {
+        const nr = Math.max(14, Math.round(Math.min(W, H) * 0.028));
+        const nx = W - nr * 1.3, ny = nr * 1.3;
+        ctx.save();
+        ctx.translate(nx, ny);
+        ctx.rotate(northArrowAngle(f.aerial.northDeg) * Math.PI / 180);
+        ctx.beginPath(); ctx.arc(0, 0, nr, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(16,20,24,.86)"; ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();                       // arrow pointing up: triangle tip + short shaft
+        ctx.moveTo(0, -nr * 0.45); ctx.lineTo(nr * 0.2, -nr * 0.02); ctx.lineTo(nr * 0.07, -nr * 0.02);
+        ctx.lineTo(nr * 0.07, nr * 0.6); ctx.lineTo(-nr * 0.07, nr * 0.6); ctx.lineTo(-nr * 0.07, -nr * 0.02);
+        ctx.lineTo(-nr * 0.2, -nr * 0.02); ctx.closePath(); ctx.fill();
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `800 ${Math.round(nr * 0.9)}px system-ui, "Segoe UI", sans-serif`;
+        ctx.fillText("N", 0, -nr * 0.72);
+        ctx.restore();
+      }
       let img;
       try { img = cv.toDataURL("image/png"); } catch { return null; }
       const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, kind: d.kindName, group: d.group }));

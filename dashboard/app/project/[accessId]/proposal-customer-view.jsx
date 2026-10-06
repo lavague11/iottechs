@@ -151,7 +151,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const layoutFloors = useMemo(() => {
     const floors = parseSurveyFloors(survey2Raw);
     const devs = surveyDevices(floors);
-    return floors.map((f, fi) => ({ name: f.name, bg: f.bg, scale: f.scale || null, cams: (f.devices || []).filter((x) => x.k === "cam"),
+    return floors.map((f, fi) => ({ name: f.name, bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, cams: (f.devices || []).filter((x) => x.k === "cam"),
       // Every placed device (speakers, readers, APs…) for the plan view — same model as the PDF.
       markers: devs.filter((d) => d.floor === fi && !d.annotation) }));
   }, [survey2Raw]);

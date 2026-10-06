@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { addToolNoteAction } from "./proposal-actions";
 import MicButton from "../../components/mic-button";
+import { northArrowAngle } from "../../../lib/site-transform";
 
 // Two-panel Walkthrough (mobile-first): the floor plan stays PUT on top with the active camera's marker
 // highlighted, and the camera view below is a horizontal photo carousel (swipe / prev-next / autoplay).
@@ -189,6 +190,13 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
             </button>
           ) : null
         ))}
+        {f.aerial && Number.isFinite(f.aerial.northDeg) && (
+          <svg className="swk2-north" viewBox="0 0 26 26" aria-hidden="true" style={{ transform: `rotate(${northArrowAngle(f.aerial.northDeg)}deg)` }}>
+            <circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)" />
+            <path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff" />
+            <text x="13" y="7" textAnchor="middle" fontSize="7" fontWeight="800" fill="#fff" fontFamily="system-ui,sans-serif">N</text>
+          </svg>
+        )}
       </div>
 
       {/* BOTTOM — camera identity + a horizontal photo carousel */}
@@ -275,6 +283,7 @@ const CSS = `
 
 /* TOP — stable floor plan; a white panel (contain letterbox is seamless on white plans) */
 .swk2-map{position:relative;overflow:hidden;background:#0b0f16;border-radius:14px}
+.swk2-north{position:absolute;top:8px;right:8px;z-index:3;width:26px;height:26px;pointer-events:none}
 .swk2.fs .swk2-map{min-height:0;border-radius:12px;background:#fff}
 .swk2-plan{display:block;width:100%;height:auto;max-height:230px;margin:0 auto;object-fit:contain;-webkit-user-drag:none;user-select:none}
 .swk2.fs .swk2-plan{height:100%;max-height:none}

@@ -38,6 +38,8 @@ export function parseSurveyFloors(raw) {
     return (d?.floors || []).filter((f) => f && typeof f.bg === "string" && f.bg.length > 0)
       .map((f) => ({ name: f.name || "Floor", bg: f.bg,
         scale: (f.scale && +f.scale.ftW > 0 && +f.scale.ftH > 0) ? { ftW: +f.scale.ftW, ftH: +f.scale.ftH } : null,   // real-world size of the plan image (feet), for coverage scaling
+        // Persisted capture transform: north is drawn ONLY when known (older floors carry none).
+        aerial: (f.aerial && Number.isFinite(+f.aerial.northDeg)) ? { northDeg: +f.aerial.northDeg, rotationDeg: Number.isFinite(+f.aerial.rotationDeg) ? +f.aerial.rotationDeg : 0 } : null,
         devices: Array.isArray(f.devices) ? f.devices.filter((x) => x && x.k) : [] }));
   } catch { return []; }
 }

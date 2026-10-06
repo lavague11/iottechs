@@ -27,7 +27,7 @@ export default function SystemVisualize({ accessId, customerName = "" }) {
 
   const floors = useMemo(() => {
     try { const d = JSON.parse(sv); return (d.floors || []).filter((f) => f.bg)
-      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
+      .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
     catch { return []; }
   }, [sv]);
   const photos = useMemo(() => {
