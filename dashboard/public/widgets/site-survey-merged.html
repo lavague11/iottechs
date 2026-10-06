@@ -65,6 +65,18 @@
   #gridScale{position:absolute;left:14px;bottom:56px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:#fff;font-size:11px;font-weight:600;letter-spacing:.2px}
   /* Phase 5.1: ONE editable property-boundary polygon per floor, in #scene so it rides zoom/pan. viewBox 0 0 100 100 → user units are plate-%. pointer-events only while editing. */
   #regionLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
+  /* Clickable rooms (Plan/Hybrid): a thin interactive hit-layer over the vector plan — one point-in-path
+     target per canonical room (irregular cell-unions work for free). Live object selection, NOT a re-render
+     of the plan. Below devices (z5) so a camera still takes its own clicks; shown only when idle. */
+  #roomLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible;display:none}
+  #roomLayer.on{display:block}
+  #roomLayer path{fill:transparent;stroke:none;cursor:pointer;pointer-events:all}
+  @media (hover:hover){ #roomLayer path:hover{fill:rgba(185,138,46,.14)} }
+  #roomLayer path.sel{fill:rgba(185,138,46,.22);stroke:#b98a2e;stroke-width:1.6;vector-effect:non-scaling-stroke}
+  #roomTag{position:absolute;left:14px;bottom:86px;z-index:7;display:none;align-items:center;gap:8px;padding:5px 7px 5px 11px;border-radius:8px;background:rgba(16,20,24,.82);color:#fff;font:600 12px var(--sans)}
+  #roomTag .rt-sub{color:rgba(255,255,255,.6);font-weight:500}
+  #roomTag button{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:6px;padding:5px 9px;font:600 11px var(--sans);cursor:pointer}
+  #roomTag button:hover{background:rgba(255,255,255,.28)}
   #boundaryTag{position:absolute;left:14px;bottom:86px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;letter-spacing:.2px}
   body.regions .ctxbar,body.regions .showCtl,body.regions #dimBtn{display:none!important}   /* one primary mode: Regions suspends device placement + its chrome */
   body.regions #undoBtn,body.regions #rotateBtn{display:none!important}   /* hide the DEVICE undo + rotate while drawing a boundary/zone — the boundary #bdUndo is the one undo (removes the last vertex / backs out) */
@@ -567,7 +579,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
@@ -1105,6 +1117,7 @@
       document.body.classList.toggle("show-all-angles", angleMode || showAllAngles);
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
+      if(typeof renderRooms==="function") renderRooms();   // angle mode suspends room selection
     }
     document.getElementById("angleModeBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });
     document.getElementById("angleModeBtn").addEventListener("click", function(e){ e.stopPropagation(); setAngleMode(!angleMode); queueSave(); });
@@ -1140,6 +1153,7 @@
     function arm(k){ if(k && angleMode) setAngleMode(false); armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
       var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
+      if(typeof renderRooms==="function") renderRooms();   // placing a device → room selection off; idle → rooms clickable again
     }
     var activePtrs=new Set();
     work.addEventListener("pointerdown", function(e){ if(e.pointerType!=="mouse") activePtrs.add(e.pointerId); }, true);
@@ -1375,7 +1389,7 @@
       else { bdSel=-1; bdDrag=-1; bdDownPt=null; closeZonePop(false); if(rgTarget.kind!=="boundary"){ rgTarget={kind:"boundary"}; rgLoad(); } }   // leaving Regions -> back to the boundary target (an unfinished zone draft is dropped)
       document.body.classList.toggle("regions", regionMode);
       var rl=document.getElementById("regionLayer"); if(rl) rl.style.pointerEvents=regionMode?"auto":"none";
-      updateRegionUI(); renderBoundary(); }
+      updateRegionUI(); renderBoundary(); renderRooms(); }   // region editing suspends room selection; leaving it restores
     (function(){ var rl=document.getElementById("regionLayer"); if(!rl) return;
       function bdPt(cx,cy){ var r=scene.getBoundingClientRect(); return { x:Math.max(0,Math.min(100,(cx-r.left)/r.width*100)), y:Math.max(0,Math.min(100,(cy-r.top)/r.height*100)) }; }   // SAME client→plate-% conversion devices use (placeAt)
       function bdNear(cx,cy){ var r=scene.getBoundingClientRect(); if(!r.width||!r.height) return -1; for(var i=0;i<bdPts.length;i++){ var vx=r.left+bdPts[i].x/100*r.width, vy=r.top+bdPts[i].y/100*r.height; if(Math.hypot(cx-vx,cy-vy)<=14) return i; } return -1; }   // hit-test in client px (accounts for zoom via the live rect)
@@ -1880,6 +1894,7 @@
       renderGrid();
       renderSides(cap && v==="hybrid");
       renderBoundary(); updateRegionUI(); siRender();   // the boundary rides the same plate → redrawn in every view (+ the Phase 7 draft preview, if any)
+      renderRooms();   // room hit-layer shows in Plan/Hybrid (clickable live rooms)
     }
     // Phase 4.4 — exterior side labels: four muted edge chips (Hybrid only) naming what's on each side of the building. floor.sides = {top,right,bottom,left}:{label,type}.
     var SIDE_KEYS=["top","right","bottom","left"], SIDE_COMPASS={top:"Top",right:"Right",bottom:"Bottom",left:"Left"};   // positional, not compass — the aerial may not be north-up (northDeg varies)
@@ -1955,6 +1970,32 @@
       g.style.display="block"; g.style.backgroundSize=spx+"px "+spy+"px"; g.style.backgroundPosition=offx+"px "+offy+"px";
       lab.textContent="1 box = "+(Math.round(n*10)/10)+" ft"; lab.style.display="block";
     }
+    // ---- Clickable rooms (Plan/Hybrid): a live hit-layer over the vector plan. Click selects the canonical
+    // Room object (floor.plan.rooms). The browser's point-in-path handles irregular cell-union shapes. The
+    // plan visual still comes from planSvg; this layer adds interaction, not a re-render. Rename/merge/semantic
+    // stay in the structure editor (Edit opens it) so the baked labels never go stale. ----
+    var roomSel=-1, RM_HALF=13;
+    function rmEsc(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function roomCellsPath(cells){ var d="",i,a; for(i=0;i<cells.length;i++){ a=String(cells[i]).split(","); if(a.length<2) continue; var x=(+a[0])*RM_HALF, y=(+a[1])*RM_HALF; d+="M"+x+" "+y+"h"+RM_HALF+"v"+RM_HALF+"h-"+RM_HALF+"z"; } return d; }
+    function roomsIdle(){ return !frozen() && !armedK && !regionMode && !angleMode; }   // only select rooms when not placing/aiming/region-editing
+    function renderRooms(){ var rl=document.getElementById("roomLayer"), tag=document.getElementById("roomTag"); if(!rl) return;
+      var f=floors[curFloor]||{}, vb=hybridCapable(f)?planViewBox(f.planSvg):null, rooms=(f.plan&&Array.isArray(f.plan.rooms))?f.plan.rooms:null, view=f.view||"satellite";
+      var show = vb && rooms && rooms.length && roomsIdle() && (view==="plan"||view==="hybrid");
+      if(!show){ rl.classList.remove("on"); rl.innerHTML=""; roomSel=-1; if(tag) tag.style.display="none"; return; }
+      rl.setAttribute("viewBox", vb.x0+" "+vb.y0+" "+vb.vw+" "+vb.vh);
+      if(roomSel>=rooms.length) roomSel=-1;
+      var s="",i; for(i=0;i<rooms.length;i++){ var r=rooms[i]; if(!r||!Array.isArray(r.cells)||!r.cells.length) continue;
+        s+='<path data-ri="'+i+'" class="'+(i===roomSel?"sel":"")+'" d="'+roomCellsPath(r.cells)+'"></path>'; }
+      rl.innerHTML=s; rl.classList.add("on"); roomTagShow(rooms); }
+    function roomTagShow(rooms){ var tag=document.getElementById("roomTag"); if(!tag) return;
+      if(roomSel<0||!rooms||!rooms[roomSel]){ tag.style.display="none"; return; }
+      var r=rooms[roomSel], nm=(r.label&&String(r.label).trim())||"Room", st=(r.semanticType&&r.semanticType!=="custom")?String(r.semanticType).replace(/_/g," "):"";
+      tag.innerHTML='<span>'+rmEsc(nm)+'</span>'+(st?'<span class="rt-sub">'+rmEsc(st)+'</span>':'')+(frozen()?'':'<button type="button" id="roomEditBtn">Edit</button>');
+      tag.style.display="flex";
+      var eb=document.getElementById("roomEditBtn"); if(eb) eb.addEventListener("click", function(e){ e.stopPropagation(); enterDraw(); }); }   // rename/merge/assign type → the structure editor (re-bakes the plan)
+    function selectRoom(i){ roomSel=i; if(selId!=null) select(null); renderRooms(); }
+    (function(){ var rl=document.getElementById("roomLayer"); if(!rl) return;
+      rl.addEventListener("click", function(e){ var p=e.target&&e.target.closest?e.target.closest("path"):null; if(!p) return; e.stopPropagation(); var i=+p.getAttribute("data-ri"); selectRoom(isFinite(i)?i:-1); }); })();
     function syncViewSeg(cap, v){ var seg=document.getElementById("viewSeg"); if(!seg) return; seg.style.display=cap?"":"none";
       if(cap) [].forEach.call(seg.querySelectorAll("button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); }); }
     function setStageBg(){ renderView(); fitScene(); }   // layers chosen by view; fitScene sizes #scene to floor.bg's aspect as before
@@ -1981,7 +2022,7 @@
       var w,h; if(byHeight){ h=ch; w=Math.round(ch*sceneAspect); } else { w=cw; h=Math.round(cw/sceneAspect); }
       scene.style.right="auto"; scene.style.bottom="auto";
       scene.style.left=Math.round((cw-w)/2)+"px"; scene.style.top=Math.round((ch-h)/2)+"px";
-      scene.style.width=w+"px"; scene.style.height=h+"px"; renderGrid(); renderBoundary();   // plate size changed → grid box px + boundary redrawn
+      scene.style.width=w+"px"; scene.style.height=h+"px"; renderGrid(); renderBoundary(); renderRooms();   // plate size changed → grid box px + boundary + room hit-layer redrawn
       // Coverage is drawn in plate pixels from pxPerFt (which depends on the plate width just set), so
       // re-render devices whenever the plate is (re)sized — fixes scaled coverage on first load + on resize.
       if(typeof devices!=="undefined" && devices.length && typeof renderDevice==="function") devices.forEach(renderDevice);
