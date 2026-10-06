@@ -38,13 +38,15 @@ test("4.3 survey: #gridLayer sits after .dimOverlay inside #scene; #gridScale is
   assert.match(survey, /\.devNode\{[^}]*z-index:3/, "devices stay above the grid");
 });
 
-test("4.3 survey: Grid toggle row, state default-on, applySettings reflects it, save/restore persist it", () => {
-  assert.match(survey, /<label>Grid<\/label><button class="settog" id="showGridTog"/);
-  assert.match(survey, /showGridState=true/);
-  assert.ok(extractFn(survey, "applySettings").includes('getElementById("showGridTog")') && extractFn(survey, "applySettings").includes("renderGrid()"));
-  assert.match(survey, /getElementById\("showGridTog"\)\.addEventListener\("click".*showGridState=!showGridState/);
-  assert.ok(extractFn(survey, "save").includes("showGrid:showGridState"));
-  assert.ok(extractFn(survey, "restore").includes("showGridState=st.showGrid!==false"), "defaults on when absent");
+test("3d survey: Grid is a 3-level Off/Light/Full control, default Full, applySettings reflects it, save/restore persist + migrate", () => {
+  assert.match(survey, /<label>Grid<\/label><div class="viewseg" id="gridSeg"[\s\S]*data-g="0">Off<[\s\S]*data-g="1">Light<[\s\S]*data-g="2">Full</);
+  assert.match(survey, /gridMode=2/);                                   // default Full
+  assert.ok(extractFn(survey, "applySettings").includes('getElementById("gridSeg")') && extractFn(survey, "applySettings").includes("renderGrid()"));
+  assert.match(survey, /gridMode=Math\.max\(0,Math\.min\(2,\+b\.getAttribute\("data-g"\)\|\|0\)\)/);   // segment sets the mode
+  assert.ok(extractFn(survey, "save").includes("gridMode:gridMode"));
+  assert.ok(extractFn(survey, "restore").includes('(typeof st.gridMode==="number")') && extractFn(survey, "restore").includes("st.showGrid===false?0:2"), "persists gridMode; migrates legacy on→Full / off→Off");
+  const rg = extractFn(survey, "renderGrid");
+  assert.ok(rg.includes("if(!gridMode||!hasGrid") && rg.includes('gridMode===1 ? "0.5" : "1"'), "Off hides; Light faint; Full base weight");
 });
 
 test("4.3 survey: renderGrid uses viewBox parse + FULL + metersPerPx + 0.3048 and is driven by renderView/fitScene", () => {

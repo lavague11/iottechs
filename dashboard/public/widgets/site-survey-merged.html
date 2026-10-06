@@ -592,7 +592,7 @@
             <div class="showPop" id="showPop">
               <div class="showRow"><label>Angles</label><button class="settog" id="showAnglesTog" title="Show every camera's aim"><span class="knob"></span></button></div>
               <div class="showRow"><label>FOV</label><button class="settog" id="showFovTog" title="Show the shaded coverage"><span class="knob"></span></button></div>
-              <div class="showRow"><label>Grid</label><button class="settog" id="showGridTog" title="Show the scaled grid"><span class="knob"></span></button></div>
+              <div class="showRow"><label>Grid</label><div class="viewseg" id="gridSeg" role="group" aria-label="Grid"><button class="vbtn" type="button" data-g="0">Off</button><button class="vbtn" type="button" data-g="1">Light</button><button class="vbtn" type="button" data-g="2">Full</button></div></div>
             </div>
             <button class="showBtn" id="showBtn" title="Show angles / FOV"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Show</button>
           </div>
@@ -1012,7 +1012,7 @@
     // Phase 5.1 boundary editor state (working copy of floor.boundary, in plate-%): regionMode gates device placement; bdHist is the add/move/delete/close undo stack.
     var regionMode=false, bdPts=[], bdClosed=false, bdDrag=-1, bdSel=-1, bdHist=[], bdHi=-1, bdDownPt=null;
     var rgTarget={kind:"boundary"}, zpOpen=false;   // Phase 5.2: the bd* working copy edits THIS target — the single boundary, or one zone (id null = an un-typed draft)
-    var ISZ=28, showFovState=false, showGridState=true, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium — the primary size) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
+    var ISZ=28, showFovState=false, gridMode=2, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium) + FOV shading (default OFF) + panel collapse + all-angles (default OFF) + grid display 0 off·1 light·2 full (default full)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
     var collapsedFloors={};   // floor index → collapsed? (the SURVEY panel shows every floor under a divider)
@@ -1080,7 +1080,7 @@
       var aa=document.getElementById("setAllAngles"); if(aa) aa.classList.toggle("on", showAllAngles);
       var sa=document.getElementById("showAnglesTog"); if(sa) sa.classList.toggle("on", showAllAngles);
       var sf=document.getElementById("showFovTog"); if(sf) sf.classList.toggle("on", showFovState);
-      var sg=document.getElementById("showGridTog"); if(sg) sg.classList.toggle("on", showGridState);
+      var gseg=document.getElementById("gridSeg"); if(gseg) [].forEach.call(gseg.querySelectorAll(".vbtn"), function(b){ var on=(+b.getAttribute("data-g")===gridMode); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
       renderGrid(); devices.forEach(renderDevice); }
     // Settings toggles (in the picker): icon size cycles S→M→L; Show FOV; All angles
     document.getElementById("setIsz").addEventListener("click", function(e){ e.stopPropagation(); ISZ=ISZ_STEPS[(iszIndex()+1)%ISZ_STEPS.length]; applySettings(); queueSave(); });
@@ -1106,7 +1106,7 @@
       document.addEventListener("click", function(e){ if(!document.getElementById("showCtl").contains(e.target)){ sPop.classList.remove("open"); sBtn.classList.remove("on"); } });
       document.getElementById("showAnglesTog").addEventListener("click", function(e){ e.stopPropagation(); showAllAngles=!showAllAngles; applySettings(); queueSave(); });
       document.getElementById("showFovTog").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
-      document.getElementById("showGridTog").addEventListener("click", function(e){ e.stopPropagation(); showGridState=!showGridState; applySettings(); queueSave(); });
+      (function(){ var gseg=document.getElementById("gridSeg"); if(gseg) [].forEach.call(gseg.querySelectorAll(".vbtn"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); gridMode=Math.max(0,Math.min(2,+b.getAttribute("data-g")||0)); applySettings(); queueSave(); }); }); })();
     })();
     // Undo: remove the last-placed device
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; removeDevice(devices[devices.length-1].id); });
@@ -1804,7 +1804,7 @@
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
-    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, showGrid:showGridState, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen })); saveErr(false); }catch(e){ saveErr(true); } reportHost(); }
+    function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, gridMode:gridMode, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen })); saveErr(false); }catch(e){ saveErr(true); } reportHost(); }
     // Quota (or any write) failure used to be swallowed → the survey silently stopped saving and was lost on reload. Surface it instead.
     function saveErr(on){ var b=document.getElementById("saveErr"); if(!b){ if(!on) return; b=document.createElement("div"); b.id="saveErr"; b.textContent="Storage full — changes aren’t being saved."; document.body.appendChild(b); } b.style.display=on?"block":"none"; }
     // Immediate server flush for DISCRETE actions (Use Outline, Done/background set, duplicate, delete) — the 5s autosync poll
@@ -1910,8 +1910,9 @@
       // Canonical grid: an explicit floor.grid, OR a scaled aerial with no legacy plan overlay (grid-first — exists before outlining).
       var sc=floorScaleFeet(f), boxFt=gridBoxFtFor(f), canCanon=(!useLegacy && !!sc && boxFt>0);
       var hasGrid=(useLegacy && !!vb) || canCanon;
-      var gt=document.getElementById("showGridTog"), gr=gt&&gt.closest?gt.closest(".showRow"):null; if(gr) gr.style.display=hasGrid?"":"none";   // the Grid toggle drives the overlay — hidden on floors with no scaled grid (plain/upload/unscaled)
-      if(!showGridState||!hasGrid||!sw||!sh||!bgData){ g.style.display="none"; lab.style.display="none"; return; }
+      var gt=document.getElementById("gridSeg"), gr=gt&&gt.closest?gt.closest(".showRow"):null; if(gr) gr.style.display=hasGrid?"":"none";   // the Grid control drives the overlay — hidden on floors with no scaled grid (plain/upload/unscaled)
+      if(!gridMode||!hasGrid||!sw||!sh||!bgData){ g.style.display="none"; lab.style.display="none"; return; }
+      g.style.opacity = gridMode===1 ? "0.5" : "1";   // Light = faint, Full = the base line weight
       var spx, spy, offx, offy, n;
       if(useLegacy){ var mx=gridMetrics(sw,vb.x0,vb.vw), my=gridMetrics(sh,vb.y0,vb.vh); spx=mx.spacing; spy=my.spacing; offx=mx.off; offy=my.off; n=GRID_FULL*mpp/0.3048; }
       else { var og=(f.grid&&f.grid.origin)?f.grid.origin:{x:0,y:0}; spx=boxFt/sc.ftW*sw; spy=boxFt/sc.ftH*sh;   // square in FEET; plate maps uniformly to ftW×ftH
@@ -2076,7 +2077,9 @@
       if(typeof m.biz==="string" && m.biz) SURVEY_BIZ = m.biz; });
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
-      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showGridState=st.showGrid!==false; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
+      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles;
+      gridMode = (typeof st.gridMode==="number") ? Math.max(0,Math.min(2,st.gridMode|0)) : (st.showGrid===false?0:2);   // migrate the legacy on/off grid: on→Full, off→Off
+      applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
         floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
