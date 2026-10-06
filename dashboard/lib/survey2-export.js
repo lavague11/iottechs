@@ -36,6 +36,10 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       if (!ctx) return null;
       // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(im, 0, 0, W, H);
+      // Layer 1b — scaled grid: a ctx-framed plan SVG is drawn gridless (the planner overlays its grid), so the
+      // customer PDF would lose the "1 box = N ft" scale cue. Re-draw the SAME grid here. Skipped for a plain
+      // hand-drawn plan (it keeps its own baked grid — avoid doubling) and for raster/aerial backgrounds.
+      drawExportGrid(ctx, f.bg, (f.scale && f.scale.ftW > 0) ? f.scale.ftW : 0, W, H);
       // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
       const pxPerFt = (f.scale && f.scale.ftW > 0) ? W / f.scale.ftW : 0;
       const scene = surveyScene(floors, fi, W, H, { pxPerFt });
@@ -107,6 +111,37 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       resolve(done);
     });
   });
+}
+
+// The ctx-framed plan's grid, re-drawn on the export canvas so the customer PDF keeps the "1 box = N ft" scale cue.
+// Only for an inline SVG plan that has a viewBox + known scale AND no baked grid pattern (ctx plans are gridless;
+// hand-drawn plans bake their own grid — drawing here would double it). One grid box = FULL (26) plan-px.
+function drawExportGrid(ctx, bg, ftW, W, H) {
+  try {
+    if (!(ftW > 0) || typeof bg !== "string" || bg.indexOf("data:image/svg") !== 0) return;
+    const i = bg.indexOf(","); if (i < 0) return;
+    const svg = /;base64/.test(bg.slice(0, i)) ? atob(bg.slice(i + 1)) : decodeURIComponent(bg.slice(i + 1));
+    if (/<pattern[^>]*id="pg"/.test(svg)) return;   // a baked grid is already present → don't double it
+    const m = /viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/.exec(svg);
+    if (!m) return;
+    const FULL = 26, x0 = +m[1], y0 = +m[2], vw = +m[3], vh = +m[4];
+    if (!(vw > 0 && vh > 0)) return;
+    const sx = W / vw, sy = H / vh, step = FULL * sx;
+    if (!(step >= 6)) return;   // too dense to read → skip
+    const offx = (Math.ceil(x0 / FULL) * FULL - x0) * sx, offy = (Math.ceil(y0 / FULL) * FULL - y0) * sy;
+    ctx.save();
+    ctx.strokeStyle = "rgba(16,20,24,.14)"; ctx.lineWidth = 1;
+    for (let x = offx; x <= W; x += step) { ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, 0); ctx.lineTo(Math.round(x) + 0.5, H); ctx.stroke(); }
+    for (let y = offy; y <= H; y += FULL * sy) { ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(W, Math.round(y) + 0.5); ctx.stroke(); }
+    // "1 box = N ft" chip, bottom-left
+    const n = Math.round(FULL * ftW / vw * 10) / 10, txt = "1 box = " + n + " ft";
+    ctx.font = `600 ${Math.max(10, Math.round(Math.min(W, H) * 0.024))}px system-ui, "Segoe UI", sans-serif`;
+    const pad = 6, tw = ctx.measureText(txt).width, bh = Math.max(16, Math.round(Math.min(W, H) * 0.04));
+    ctx.fillStyle = "rgba(16,20,24,.72)"; roundRect(ctx, 8, H - bh - 8, tw + pad * 2, bh, 4); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(txt, 8 + pad, H - bh / 2 - 8);
+    ctx.restore();
+  } catch (e) { /* export grid is cosmetic — never break the PDF over it */ }
 }
 
 function hexA(hex, a) {
