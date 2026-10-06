@@ -158,6 +158,27 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
       {/* TOP — the floor plan stays put; the active camera's marker is highlighted */}
       <div className="swk2-map" ref={mapRef}>
         <img className="swk2-plan" ref={aerialRef} onLoad={measure} src={f.bg} alt={f.name} />
+        {/* Active camera's FOV cone — fans out from the camera on each advance, settles into real geometry.
+            Uses the stored aim/fov/range (real feet when the floor is scaled), never mutates them. */}
+        {plate && cur.cam && (cur.cam.aimed || cur.cam.aim) && Number.isFinite(cur.cam.x) && Number.isFinite(cur.cam.y) && (() => {
+          const c = cur.cam;
+          const px = plate.l + (c.x / 100) * plate.w, py = plate.t + (c.y / 100) * plate.h;
+          const pxPerFt = (f.scale && f.scale.ftW > 0) ? plate.w / f.scale.ftW : 0;
+          const reach = pxPerFt > 0 ? Math.min((+c.range || 40) * pxPerFt, Math.max(plate.w, plate.h)) : Math.min(plate.w, plate.h) * 0.3;
+          const fov = Math.min(360, Math.max(5, +c.fov || 30)), half = (fov / 2) * Math.PI / 180, R = reach.toFixed(1);
+          let d;
+          if (fov >= 359) d = `M ${-reach} 0 A ${R} ${R} 0 1 1 ${reach} 0 A ${R} ${R} 0 1 1 ${-reach} 0 Z`;
+          else {
+            const x0 = (reach * Math.cos(-half)).toFixed(1), y0 = (reach * Math.sin(-half)).toFixed(1),
+              x1 = (reach * Math.cos(half)).toFixed(1), y1 = (reach * Math.sin(half)).toFixed(1), la = fov > 180 ? 1 : 0;
+            d = `M 0 0 L ${x0} ${y0} A ${R} ${R} 0 ${la} 1 ${x1} ${y1} Z`;
+          }
+          return (
+            <div className="swk2-cone" style={{ left: `${px}px`, top: `${py}px`, transform: `rotate(${c.aim || 0}deg)` }} aria-hidden="true">
+              <div className="swk2-cone-grow" key={`cone-${cur.fi}-${cur.ci}-${idx}`}><svg><path d={d} /></svg></div>
+            </div>
+          );
+        })()}
         {plate && (f.cams || []).map((c, j) => (
           Number.isFinite(c.x) && Number.isFinite(c.y) ? (
             <button key={j} className={`swk2-mk${j === cur.ci ? " on" : ""}`}
@@ -262,6 +283,14 @@ const CSS = `
   box-shadow:0 2px 7px rgba(0,0,0,.4);transition:background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
 .swk2-mk:hover{transform:translate(-50%,-50%) scale(1.08)}
 .swk2-mk.on{background:var(--dv-gold,#C9A96E);color:#1a1712;border-color:#fff;box-shadow:0 0 0 4px rgba(201,169,110,.3),0 3px 9px rgba(0,0,0,.4)}
+/* Active camera's FOV cone — fans out from the camera (wrapper origin = apex), then settles. Replays
+   each time the walkthrough advances to a camera. Gold to match the walkthrough theme; under the markers. */
+.swk2-cone{position:absolute;z-index:1;pointer-events:none;transform-origin:0 0}
+.swk2-cone-grow{transform-origin:0 0;animation:swkConeGrow .6s cubic-bezier(.2,.85,.25,1)}
+@keyframes swkConeGrow{from{transform:scale(.08);opacity:.15}55%{opacity:1}to{transform:scale(1);opacity:1}}
+.swk2-cone svg{position:absolute;left:0;top:0;overflow:visible}
+.swk2-cone path{fill:rgba(201,169,110,.3);stroke:rgba(201,169,110,.7);stroke-width:1}
+@media (prefers-reduced-motion:reduce){.swk2-cone-grow{animation:none}}
 
 /* BOTTOM — camera identity + photo carousel */
 .swk2-cam{display:flex;flex-direction:column;min-height:0}
