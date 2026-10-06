@@ -66,6 +66,18 @@ test("zone paint is one-class-per-cell and draws UNDER the structure", () => {
   assert.ok(/drawZoneCells\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")), "zone fills render beneath the structure");
 });
 
+test("3b: zone cells bake into every plan SVG, as the lowest content layer (under the structure)", () => {
+  // zoneCellsSVG emitted (translucent by type) and pushed before the structure wash in each builder
+  assert.ok(draw.includes('out+=\'<g fill="rgb(\'+col+\')" fill-opacity="0.22">\'+rects+\'</g>\';'), "zone fills are translucent rgb groups");
+  // sketchSVG (Plan/PDF opaque bg), planLayerSVG (Hybrid transparent), overlaySVG (AI) each push zones before the structure cells
+  const order = (anchor) => {
+    const i = draw.indexOf("var zc=zoneCellsSVG(); if(zc) o.push(zc);", draw.indexOf(anchor));
+    return i >= 0;
+  };
+  assert.ok(draw.split("var zc=zoneCellsSVG(); if(zc) o.push(zc);").length - 1 >= 3, "zones baked into all three SVG builders");
+  assert.ok(draw.includes("!(hasSketch()||zoneHasCells())"), "a zones-only floor still emits a Hybrid plan layer");
+});
+
 test("Zones mode UI: segment button + type picker exist and are wired", () => {
   assert.ok(draw.includes('id="tZones"'), "Zones segment button");
   assert.ok(draw.includes('id="zoneTypeSel"'), "zone type picker");

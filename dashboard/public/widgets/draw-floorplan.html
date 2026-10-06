@@ -679,12 +679,19 @@
       g.fillStyle="#111"; g.font="600 "+Math.max(13,Math.round(cellPx*0.62))+"px sans-serif"; g.textAlign="center"; g.textBaseline="middle";
       g.fillText(name, ox+lc[0]*sc, oy+lc[1]*sc, Math.max(30,bb2.w*sc-12)); });
     return c; }
+  function zoneHasCells(){ for(var t in zoneCells){ if(zoneCells[t]&&zoneCells[t].size) return true; } return false; }
   function hasSketch(){ return cells.size>0 || rooms.length>0; }
 
   // ---- VECTOR export: the drawn plan as an SVG data URL. This is what Done hands back, so the finished
   // plan stays perfectly crisp at any zoom (paths + real <text>, never a rasterized bitmap). ----
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   // vb (optional) = {x0,y0,vw,vh} in plan px → frame the OPAQUE plan on that exact extent (the ctx plate, 4.2); no arg → today's tight bbox + 6% margin.
+  // Phase 3b: SITE + exterior zone cells as the lowest content layer of every plan SVG (translucent by
+  // type, UNDER the structure) — so Plan / Hybrid / the PDF / the AI overlay all show zones with no
+  // consumer changes. Baked on Done, exactly like the structure + rooms.
+  function zoneCellsSVG(){ var out=""; for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site, rects="";
+      set.forEach(function(k){ var a=k.split(","); rects+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+      out+='<g fill="rgb('+col+')" fill-opacity="0.22">'+rects+'</g>'; } return out; }
   function sketchSVG(vb){
     var x0,y0,vw,vh;
     if(vb){ x0=vb.x0; y0=vb.y0; vw=vb.vw; vh=vb.vh; }
@@ -698,6 +705,7 @@
     // Phase 4.3: a ctx-framed bg (vb given) carries NO baked grid — the survey draws ONE scaled scene-level grid overlay so Plan/Hybrid never double it.
     if(!vb){ o.push('<defs><pattern id="pg" width="'+FULL+'" height="'+FULL+'" patternUnits="userSpaceOnUse"><path d="M '+FULL+' 0 H 0 V '+FULL+'" fill="none" stroke="#eceae4" stroke-width="0.8"/></pattern></defs>');
       o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="url(#pg)"/>'); }
+    var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure
     var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');
     svgPlanBody(o, swS, swR, fs);
@@ -732,11 +740,12 @@
   // The ctx plate's viewBox in plan px (4.2) — ONE source for both the plan layer and the ctx-framed opaque bg, so they can't drift.
   function ctxVB(){ if(!(_seed&&CTX)) return null; var r4=function(v){ return Math.round(v*1e4)/1e4; }, a=_seed.aspect, sc=_seed.sc;
     return { x0:r4(CTX.x*a*sc+_seed.offx), y0:r4(CTX.y*sc+_seed.offy), vw:r4(CTX.w*a*sc), vh:r4(CTX.h*sc) }; }
-  function planLayerSVG(){ if(!_seed||!CTX||!hasSketch()) return null;
+  function planLayerSVG(){ if(!_seed||!CTX||!(hasSketch()||zoneHasCells())) return null;   // zones-only floor still emits a transparent layer for Hybrid
     var vb=ctxVB(), x0=vb.x0, y0=vb.y0, vw=vb.vw, vh=vb.vh;
     if(!(vw>0&&vh>0)) return null;
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="none" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
+    var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure — transparent layer, shows over the aerial in Hybrid
     var sf=""; cells.forEach(function(k){ var c=k.split(","); sf+='<rect x="'+(+c[0]*HALF)+'" y="'+(+c[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     if(sf) o.push('<g fill="#ffffff" fill-opacity="0.85">'+sf+'</g>');
     svgPlanBody(o, swS, swR, fs);
@@ -750,6 +759,7 @@
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06)), x0=bb.x-m, y0=bb.y-m, vw=bb.w+2*m, vh=bb.h+2*m;
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="xMidYMid meet" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
+    var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure wash
     var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     if(sf) o.push('<g fill="#b98a2e" fill-opacity="0.08">'+sf+'</g>');   // faint wash only — no opaque paper, no grid (the AI raster is the background)
     svgPlanBody(o, swS, swR, fs);
