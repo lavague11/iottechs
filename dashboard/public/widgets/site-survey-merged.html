@@ -256,15 +256,24 @@
   .showPop.open{display:flex}
   .showRow{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:6px 8px;min-width:150px}
   .showRow label{font-size:13px;color:var(--ink);font-weight:500}
-  .devNode .fovGrow{position:absolute;left:0;top:0;transform-origin:0 0}   /* wrapper the expand animation scales */
-  .devNode .fovGrow.grow{animation:coneGrow .34s cubic-bezier(.2,.85,.25,1)}
-  @keyframes coneGrow{from{transform:scale(.1);opacity:.25}to{transform:scale(1);opacity:1}}
+  .devNode .fovGrow{position:absolute;left:0;top:0;transform-origin:0 0}   /* wrapper the expand animation scales — origin 0,0 = the camera apex, so the cone fans out FROM the camera */
+  .devNode .fovGrow.grow{animation:coneGrow .6s cubic-bezier(.2,.85,.25,1)}
+  @keyframes coneGrow{from{transform:scale(.08);opacity:.2}60%{opacity:1}to{transform:scale(1);opacity:1}}
   .devNode .coneSvg{position:absolute;overflow:visible;pointer-events:none}
   body.no-fov .devNode .coneSvg{display:none}   /* Show FOV off → hide the shaded cone, keep the aim line + arrow */
   /* Speaker coverage ring — a light-blue see-through radius circle, sits under the marker */
   .devNode .ringWrap{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);z-index:1;pointer-events:none}
   .devNode .ringWrap .ringC{position:absolute;border-radius:50%;background:rgba(96,165,250,.28);border:1px solid rgba(96,165,250,.55)}
   body.no-fov .devNode .ringWrap{display:none}   /* Show FOV off → hide speaker coverage too */
+  /* Speaker coverage reveal: the ring grows FROM the speaker (ringWrap is a 0-size anchor at the device
+     centre, so scaling it radiates from that point). Runs once on load + a replay on select/walkthrough. */
+  .devNode .ringWrap.grow{animation:ringGrow .75s cubic-bezier(.2,.85,.25,1)}
+  @keyframes ringGrow{from{transform:scale(.18);opacity:.12}60%{opacity:1}to{transform:scale(1);opacity:1}}
+  /* Desktop hover: a restrained coverage emphasis (no re-reveal, no motion) */
+  @media (hover:hover){ .devNode .coneSvg,.devNode .ringC{transition:filter .2s}
+    .devNode:hover .coneSvg,.devNode:hover .ringC{filter:brightness(1.08) saturate(1.05)} }
+  /* Respect reduced-motion: show the final coverage immediately, no expand */
+  @media (prefers-reduced-motion:reduce){ .devNode .fovGrow.grow,.devNode .ringWrap.grow{animation:none} }
   .devNode .ringGrip{position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #60a5fa;box-shadow:0 1px 4px rgba(16,17,18,.3);cursor:ew-resize;display:none;pointer-events:auto;touch-action:none}
   .devNode.sel .ringGrip{display:block}
   body.ro .devNode .ringGrip{display:none}
@@ -1126,15 +1135,29 @@
         if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; rg.title = pxPerFt()>0 ? (Math.round(d.range)+" ft radius") : "Drag to size the coverage"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
-    function select(id){ selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null) growCone(id);
+    function select(id){ selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null){ growCone(id); growCoverage(id); }   // selecting (incl. Walkthrough via selectCid) replays that device's coverage reveal
       // Broadcast the picked camera's cid so the host (System Planner) can focus the same camera in
       // the CAMERA VIEWS pane. Only on genuine picks here — suppressed when we're applying a relay.
       if(!_suppressSelPost){ var sd=byIdDev(id); try{ parent.postMessage({ type:"iotSurveySelect", project:PID, cid:(sd&&sd.cid)||null }, "*"); }catch(e){} }
       _suppressSelPost=false;
     }
-    // replay the expand animation on the selected camera's cone
+    // replay the expand animation on the selected camera's cone (used while editing angles)
     function growCone(id){ if(!angleMode) return; var g=document.querySelector("#dev-"+id+" .fovGrow");
       if(g){ g.classList.remove("grow"); void g.offsetWidth; g.classList.add("grow"); } }
+    var REDUCE = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches);
+    // Coverage reveal: the cone fans out from the camera / the ring grows from the speaker, then settles
+    // into the EXACT current geometry (pure CSS transform/opacity — never touches aim/fov/range/position).
+    function restartAnim(el, cls){ if(!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+      el.addEventListener("animationend", function h(){ el.classList.remove(cls); el.removeEventListener("animationend", h); }); }
+    function growCoverage(id){ if(REDUCE) return; var n=document.getElementById("dev-"+id); if(!n) return;
+      restartAnim(n.querySelector(".fovGrow"), "grow"); restartAnim(n.querySelector(".ringWrap"), "grow"); }
+    // First-load / floor-ready reveal: play each device's coverage once, lightly staggered (capped so a
+    // big system doesn't crawl). Fires after the plate is sized (see fitScene), once per floor load.
+    var coverageRevealed=false;
+    function revealCoverage(){ if(REDUCE) return;
+      var list=devices.filter(function(d){ return d.cone || d.ring; });
+      var per=list.length ? Math.min(80, Math.round(1000/list.length)) : 80;
+      list.forEach(function(d,i){ setTimeout(function(){ growCoverage(d.id); }, i*per); }); }
     function markSel(id){ selId=id; devices.forEach(renderDevice); }   // reveal a camera's cone without rebuilding the panel (e.g. mid-slider)
     // Move the selected-card highlight in the side panel WITHOUT rebuilding every card (used on pick) —
     // the panel list is unchanged on a selection, only which card is highlighted.
@@ -1356,11 +1379,13 @@
       // Coverage is drawn in plate pixels from pxPerFt (which depends on the plate width just set), so
       // re-render devices whenever the plate is (re)sized — fixes scaled coverage on first load + on resize.
       if(typeof devices!=="undefined" && devices.length && typeof renderDevice==="function") devices.forEach(renderDevice);
+      // Plate is now sized → play the coverage reveal once for this floor (not on every resize/zoom-fit).
+      if(!coverageRevealed && bgHasImage && typeof devices!=="undefined" && devices.length){ coverageRevealed=true; revealCoverage(); }
     }
     window.addEventListener("resize", fitScene);
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo
+      devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
