@@ -85,6 +85,7 @@
   .tb.ico{width:40px;padding:0;justify-content:center}
   .tb.snap{font-weight:800;font-size:15px}
   .tb.ico.on{background:var(--ink);color:#fff}
+  .tb.ico.locked{opacity:.4;pointer-events:none}
   .tb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .tb:hover{background:var(--soft)}
   .tb.ico.on:hover{background:#000}
@@ -156,6 +157,7 @@
         <span id="modeToggleName">Structure</span>
         <svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4"/><path d="M21 7H7"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h14"/></svg>
       </button>
+      <button class="tb ico" id="tOpening" title="Openings" aria-label="Openings"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 20V5l8-1.5V20"/><path d="M15 20a8 8 0 0 0-8-8"/><path d="M11 12h.01"/></svg></button>
       <span id="structTools" class="stools">
         <button class="tb ico on" id="tAdd" title="Add" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
@@ -203,6 +205,10 @@
   var FULL=26, HALF=13;
   var cells=new Set();              // occupied half-cells: "hc,hr"
   var rooms=[], sel=null, draft=null, mode="structure";
+  // OPENINGS (doors): each sits on ONE grid-aligned wall UNIT (a HALF-length edge) — stored as its two plan-px
+  // endpoints {a:[x,y],b:[x,y]}, canonical-ordered (a<b lexicographically). Plan geometry (persisted + reconciled),
+  // not editor chrome. hoverWall = the wall unit under the cursor while in opening mode.
+  var openings=[], hoverWall=null;
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
   var enhancedURL=null, enhancedOnce=false, busy=false;
@@ -277,17 +283,67 @@
     if(!has(c-1,r)) e.push([x,y,x,y+HALF]);
     if(!has(c+1,r)) e.push([x+HALF,y,x+HALF,y+HALF]); }); return e; }
 
+  // ---- openings (doors) ----
+  // A wall unit is a HALF-length edge; its canonical key is "x1,y1,x2,y2" with the smaller endpoint first.
+  function ptLess(p,q){ return p[0]<q[0] || (p[0]===q[0] && p[1]<q[1]); }
+  function wallKey(x1,y1,x2,y2){ if(x1>x2||(x1===x2&&y1>y2)){ var tx=x1,ty=y1; x1=x2;y1=y2;x2=tx;y2=ty; } return x1+","+y1+","+x2+","+y2; }
+  function canonOpening(p,q){ return ptLess(p,q) ? {a:[p[0],p[1]],b:[q[0],q[1]]} : {a:[q[0],q[1]],b:[p[0],p[1]]}; }
+  function openKey(o){ return wallKey(o.a[0],o.a[1],o.b[0],o.b[1]); }
+  function segDistSq(px,py,x1,y1,x2,y2){ var dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy; if(!l2) return (px-x1)*(px-x1)+(py-y1)*(py-y1);
+    var t=((px-x1)*dx+(py-y1)*dy)/l2; t=t<0?0:t>1?1:t; var cx=x1+t*dx,cy=y1+t*dy; return (px-cx)*(px-cx)+(py-cy)*(py-cy); }
+  // The authoritative "where can a door go / does this door's wall still exist" set: every room's partition walls +
+  // the structure shell, each edge split into HALF-length units, keyed canonically. edgesOf edges are already HALF
+  // units, but the splitter is defensive (an edge of any length → its units).
+  function allWallUnits(){ var u={}, add=function(s){ var x1=s[0],y1=s[1],x2=s[2],y2=s[3],dx=x2-x1,dy=y2-y1,
+      n=Math.max(1,Math.round((Math.abs(dx)+Math.abs(dy))/HALF)),ux=dx/n,uy=dy/n,i; for(i=0;i<n;i++){ var ax=x1+ux*i,ay=y1+uy*i; u[wallKey(ax,ay,ax+ux,ay+uy)]=1; } };
+    (rooms||[]).forEach(function(r){ edgesOf(new Set(r.cells||[])).forEach(add); });
+    boundaryEdges().forEach(add); return u; }
+  // Validate a persisted list: two finite [x,y] pairs, non-degenerate, re-canonicalised, deduped, capped ~200.
+  function sanitizeOpenings(list){ var out=[], seen={}, i; if(!Array.isArray(list)) return out;
+    for(i=0;i<list.length && out.length<200;i++){ var o=list[i]; if(!o||!Array.isArray(o.a)||!Array.isArray(o.b)) continue;
+      var ax=+o.a[0],ay=+o.a[1],bx=+o.b[0],by=+o.b[1]; if(!(isFinite(ax)&&isFinite(ay)&&isFinite(bx)&&isFinite(by))) continue;
+      if(ax===bx&&ay===by) continue; var c=canonOpening([ax,ay],[bx,by]), k=openKey(c); if(seen[k]) continue; seen[k]=1; out.push(c); }
+    return out; }
+  // Drop any opening whose wall unit no longer exists (e.g. a shared wall that merged away became interior).
+  function reconcileOpenings(){ var u=allWallUnits(); openings=(openings||[]).filter(function(o){ return o && u[openKey(o)]; }); }
+  function openSet(){ var s={}; (openings||[]).forEach(function(o){ s[openKey(o)]=1; }); return s; }
+  // Snap a tap to the nearest wall UNIT within a small px tolerance (null if the tap isn't near any wall).
+  function nearestWallUnit(x,y){ var u=allWallUnits(), best=null, bd=1/0, tol=HALF*0.6, k;
+    for(k in u){ if(!u.hasOwnProperty(k)) continue; var a=k.split(",").map(Number), d=segDistSq(x,y,a[0],a[1],a[2],a[3]);
+      if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
+    return (best && bd<=tol*tol) ? best : null; }
+  // Tap a wall unit → toggle a door there (add if absent, remove if present); undoable + redraw.
+  function toggleOpeningAt(x,y){ var wu=nearestWallUnit(x,y); if(!wu) return; var o=canonOpening(wu.a,wu.b), k=openKey(o), i;
+    for(i=0;i<openings.length;i++){ if(openKey(openings[i])===k){ openings.splice(i,1); pushHist(); redraw(); return; } }
+    openings.push(o); pushHist(); redraw(); }
+
   // ---- draw ----
+  // Stroke a set of wall edges; at each edge carrying a door, leave the middle ~60% as a gap and draw a light
+  // door-swing arc + jamb ticks. Edges with NO door stroke byte-identically to the old single-path stroke (the
+  // os lookup is the only branch — empty openings → every edge takes the plain moveTo/lineTo path).
+  function paintWalls(e, color, w){ var os=openSet(), hasO=false;
+    ctx.strokeStyle=color; ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath();
+    e.forEach(function(s){ if(os[wallKey(s[0],s[1],s[2],s[3])]){ hasO=true; var dx=s[2]-s[0],dy=s[3]-s[1];
+        ctx.moveTo(s[0],s[1]); ctx.lineTo(s[0]+dx*0.2,s[1]+dy*0.2); ctx.moveTo(s[0]+dx*0.8,s[1]+dy*0.8); ctx.lineTo(s[2],s[3]); }
+      else { ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); } });
+    ctx.stroke();
+    if(hasO) paintDoorArcs(e, os, color, w); }
+  function paintDoorArcs(e, os, color, w){ ctx.save(); ctx.strokeStyle=color; ctx.globalAlpha=0.5; ctx.lineWidth=Math.max(1,w*0.6); ctx.lineCap="round"; ctx.lineJoin="round";
+    e.forEach(function(s){ if(!os[wallKey(s[0],s[1],s[2],s[3])]) return;
+      var x1=s[0],y1=s[1],dx=s[2]-x1,dy=s[3]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+      var jx=x1+dx*0.2,jy=y1+dy*0.2,jx2=x1+dx*0.8,jy2=y1+dy*0.8,dw=len*0.6,tk=Math.max(2,w*1.1);
+      ctx.beginPath(); ctx.moveTo(jx,jy); ctx.lineTo(jx+nx*tk,jy+ny*tk); ctx.moveTo(jx2,jy2); ctx.lineTo(jx2+nx*tk,jy2+ny*tk);
+      ctx.moveTo(jx,jy); ctx.lineTo(jx+nx*dw,jy+ny*dw); ctx.stroke();
+      ctx.beginPath(); ctx.arc(jx,jy,dw,Math.atan2(uy,ux),Math.atan2(ny,nx),false); ctx.stroke(); }); ctx.restore(); }
   function drawStructure(){ if(!cells.size) return;
     ctx.fillStyle="rgba(185,138,46,.10)";
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
-    var e=boundaryEdges(); ctx.strokeStyle="#111"; ctx.lineWidth=3.5; ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke(); }
+    paintWalls(boundaryEdges(), "#111", 3.5); }
   function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;
     ctx.fillStyle= on ? "rgba(185,138,46,.14)" : "rgba(16,17,18,.05)";
     set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
-    var e=edgesOf(set); ctx.strokeStyle= on ? "#b98a2e" : "#2b2f36"; ctx.lineWidth= on ? 2.4 : 2; ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.beginPath(); e.forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke();
+    paintWalls(edgesOf(set), on ? "#b98a2e" : "#2b2f36", on ? 2.4 : 2);
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
     var lc=roomLabelCell(r.cells||[]), cx=lc[0], cy=lc[1], maxW=Math.max(20,bb.w-12);   // pole-of-inaccessibility anchor (stays inside concave rooms)
     ctx.textAlign="center"; ctx.textBaseline="middle";
@@ -318,6 +374,10 @@
       ctx.fillStyle="rgba(185,138,46,.32)";
       rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
     }
+    if(mode==="opening" && hoverWall){   // the wall unit under the cursor, ready to toggle a door
+      ctx.save(); ctx.strokeStyle="rgba(185,138,46,.9)"; ctx.lineWidth=4; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(hoverWall.a[0],hoverWall.a[1]); ctx.lineTo(hoverWall.b[0],hoverWall.b[1]); ctx.stroke(); ctx.restore();
+    }
   }
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawStructure();
@@ -345,7 +405,7 @@
       if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
         return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem }; }
       return { cells:[], label:(r&&r.label)||"", semanticType:sem };
-    }).filter(function(r){ return r.cells.length>0; }); }
+    }).filter(function(r){ return r.cells.length>0; }); reconcileOpenings(); }   // a door whose wall no longer exists drops with it
 
   // Pure room-union: A ∪ B cells (unique, A's order first), keep A's label else B's, keep A's semanticType unless A
   // is empty/custom and B has a real one. Shared walls fall out on their own — edgesOf derives them from the merged set.
@@ -361,7 +421,7 @@
   function doMerge(a,b){ if(busy||!a||!b||a===b) return; var m=mergeRooms(a,b);
     a.cells=m.cells; a.label=m.label; a.semanticType=m.semanticType;
     rooms=rooms.filter(function(x){ return x!==b; });
-    var anchor=(a.cells&&a.cells[0])||null; mergeArmed=null; reconcileRooms();   // reconcile rebuilds room objects → re-point sel by a surviving cell
+    var anchor=(a.cells&&a.cells[0])||null; mergeArmed=null; reconcileRooms(); reconcileOpenings();   // reconcile rebuilds room objects → re-point sel by a surviving cell; a door on the now-interior shared wall drops
     sel=null; if(anchor){ for(var i=0;i<rooms.length;i++){ if((rooms[i].cells||[]).indexOf(anchor)>=0){ sel=rooms[i]; break; } } }
     pushHist(); setMode("room"); }
 
@@ -371,14 +431,14 @@
   // t = when this geometry was last EDITED (not written): the recovery copy and the posted plan share it, a
   // loaded plan keeps its own — so a local copy is only "newer" when edits never reached the survey.
   var _planStamp=0;
-  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp}; }
+  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), openings:sanitizeOpenings(openings), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp}; }
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; metersPerPx=0; sel=null; _planStamp=(s&&+s.t)||0;
+  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; metersPerPx=0; sel=null; _planStamp=(s&&+s.t)||0;
     _seed=(s && s.seed && +s.seed.sc>0) ? { sc:+s.seed.sc, offx:+s.seed.offx||0, offy:+s.seed.offy||0, aspect:(+s.seed.aspect>0)?+s.seed.aspect:1 } : null;
-    if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
+    if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(Array.isArray(s.openings)) openings=sanitizeOpenings(s.openings); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
   // Local recovery copy: this floor's id key first, then the legacy index key (only with &lidx). _lpKey = where it came from.
   var _lpKey=null;
   function localPlan(){ var s=readLS(LSK); _lpKey=LSK; if(!hasPlan(s) && LSK_OLD && LSK_OLD!==LSK){ s=readLS(LSK_OLD); _lpKey=LSK_OLD; } if(!hasPlan(s)){ _lpKey=null; return null; } return s; }
@@ -389,36 +449,38 @@
   function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); }
 
   // ---- history (undo/redo) ----
-  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
+  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), openings:JSON.parse(JSON.stringify(openings))}; }
   var hist=[snapshot()], hi=0;
   function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
-  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); sel=null; closeLabel(); }
+  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); sel=null; closeLabel(); }
   function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } persist(); } }   // an undo is an edit → saved like one
   function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); persist(); } }
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
-  function updateTools(){ $("tUndo").style.display = hi>0 ? "inline-flex" : "none"; $("tRedo").style.display = hi<hist.length-1 ? "inline-flex" : "none"; $("tRoom").classList.toggle("locked", cells.size===0); }
+  function updateTools(){ $("tUndo").style.display = hi>0 ? "inline-flex" : "none"; $("tRedo").style.display = hi<hist.length-1 ? "inline-flex" : "none"; $("tRoom").classList.toggle("locked", cells.size===0); var to=$("tOpening"); if(to) to.classList.toggle("locked", cells.size===0); }
 
-  function setMode(m){ mode=m; $("tStructure").classList.toggle("on",m==="structure"); $("tRoom").classList.toggle("on",m==="room");
+  function setMode(m){ mode=m; if(m!=="opening") hoverWall=null; $("tStructure").classList.toggle("on",m==="structure"); $("tRoom").classList.toggle("on",m==="room");
+    var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     $("tRoom").classList.toggle("locked", cells.size===0);
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : "Room";
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Openings" : "Room");
     var edit = m==="structure";                     // Add/Erase are structure-only; the snap toggle stays in both
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
-    cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : "crosshair";
-    $("hint").innerHTML = edit
-      ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
+    cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening" ? "pointer" : "crosshair");
+    $("hint").innerHTML = m==="opening" ? "Tap a wall to add a door."
+      : edit ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
       : "Draw the <b>rooms</b> inside and name each.";
     $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; updateTools(); redraw(); }
 
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
+    if(mode==="opening"){ toggleOpeningAt(pt.x,pt.y); return; }   // tap a wall unit → toggle a door (structure/room editing suspended)
     if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap a room → name it
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
-    if(!dragging){ if(mode==="structure") redraw(); return; }
+    if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
   cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
     if(mode==="structure"){
@@ -438,7 +500,7 @@
       rooms=rooms.filter(function(o){ return (o.cells||[]).length>0; });
       var shape={cells:rk, label:""}; rooms.push(shape); sel=shape; pushHist(); redraw(); openLabel(shape); }
     else { redraw(); } });
-  cv.addEventListener("pointerleave", function(){ hoverPt=null; if(!dragging) redraw(); });
+  cv.addEventListener("pointerleave", function(){ hoverPt=null; hoverWall=null; if(!dragging) redraw(); });
 
   // ---- intelligent room-name combobox (rooms only; the structure shell needs no name) ----
   // Type → 3–5 context-ranked suggestions → Enter / click / click-away saves; Escape cancels.
@@ -555,15 +617,26 @@
     svgPlanBody(o, swS, swR, fs);
     o.push("</svg>");
     return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
+  // A door's SVG geometry (jamb ticks + leaf + quarter swing arc) for the wall unit `s` — decorative, light ink.
+  function doorArcD(s){ var x1=s[0],y1=s[1],dx=s[2]-x1,dy=s[3]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+    var jx=x1+dx*0.2,jy=y1+dy*0.2,jx2=x1+dx*0.8,jy2=y1+dy*0.8,dw=len*0.6,tk=Math.max(1.5,len*0.14);
+    var ex=jx+ux*dw,ey=jy+uy*dw,lx=jx+nx*dw,ly=jy+ny*dw;
+    return "M"+jx+" "+jy+"L"+(jx+nx*tk)+" "+(jy+ny*tk)+"M"+jx2+" "+jy2+"L"+(jx2+nx*tk)+" "+(jy2+ny*tk)+"M"+jx+" "+jy+"L"+lx+" "+ly+"M"+ex+" "+ey+"A"+dw+" "+dw+" 0 0 0 "+lx+" "+ly; }
+  // Build a wall path `d`: a doored edge leaves the middle ~60% as a gap (and queues a door arc); an undoored edge
+  // is "M x1 y1 L x2 y2" — byte-identical to the old builder, so a plan with no openings renders exactly as before.
+  function wallPathD(edges, os, doors){ var d=""; edges.forEach(function(s){ if(os[wallKey(s[0],s[1],s[2],s[3])]){ var dx=s[2]-s[0],dy=s[3]-s[1];
+        d+="M"+s[0]+" "+s[1]+"L"+(s[0]+dx*0.2)+" "+(s[1]+dy*0.2)+"M"+(s[0]+dx*0.8)+" "+(s[1]+dy*0.8)+"L"+s[2]+" "+s[3]; if(doors) doors.push(doorArcD(s)); }
+      else { d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; } }); return d; }
   // Shared middle of both exports (room fills + walls, structure boundary, labels) — one copy so the sketch and the layer can't drift.
-  function svgPlanBody(o, swS, swR, fs){
+  function svgPlanBody(o, swS, swR, fs){ var os=openSet(), doors=[];
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
       var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
       o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
-      var rp=""; edgesOf(set).forEach(function(s){ rp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
+      var rp=wallPathD(edgesOf(set), os, doors);
       if(rp) o.push('<path d="'+rp+'" fill="none" stroke="#111" stroke-width="'+swR+'" stroke-linecap="round" stroke-linejoin="round"/>'); });
-    var sp=""; boundaryEdges().forEach(function(s){ sp+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
+    var sp=wallPathD(boundaryEdges(), os, doors);
     if(sp) o.push('<path d="'+sp+'" fill="none" stroke="#111" stroke-width="'+swS+'" stroke-linecap="round" stroke-linejoin="round"/>');
+    if(doors.length) o.push('<path d="'+doors.join("")+'" fill="none" stroke="#111" stroke-opacity="0.5" stroke-width="'+Math.max(1,swR*0.9)+'" stroke-linecap="round" stroke-linejoin="round"/>');
     rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var lc=roomLabelCell(r.cells||[]);
       o.push('<text x="'+lc[0]+'" y="'+lc[1]+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
   /* Phase 4 plan LAYER: the same scene, TRANSPARENT (no paper, no grid; structure a light wash), framed on the floor's
@@ -618,6 +691,7 @@
   $("tRoom").addEventListener("click", function(){ if(cells.size===0){ setMode("structure"); return; } backToDraw(); setMode("room"); });
   $("modeToggle").addEventListener("click", function(){ backToDraw();
     if(mode==="structure"){ if(cells.size>0) setMode("room"); } else setMode("structure"); });
+  $("tOpening").addEventListener("click", function(){ if(busy||cells.size===0) return; backToDraw(); setMode(mode==="opening" ? "structure" : "opening"); });   // doors mode: suspend structure/room editing, toggle doors on wall units
   $("tAdd").addEventListener("click", function(){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); cv.style.cursor="crosshair"; });
   $("tErase").addEventListener("click", function(){ structOp="erase"; $("tErase").classList.add("on"); $("tAdd").classList.remove("on"); cv.style.cursor="cell"; });
   // ONE snap toggle — tap flips ½ ↔ 1 (persists for the session).
