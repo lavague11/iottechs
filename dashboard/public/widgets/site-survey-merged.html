@@ -184,6 +184,7 @@
 
   /* "Edit background" pill — top-left of the plan on the Background tab (clear of the bottom-left plan utils). */
   #changeBgBtn{position:absolute;left:14px;top:14px;z-index:9;display:none;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;padding:9px 13px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);font:600 13px var(--sans);backdrop-filter:blur(6px)}
+  body.ro #changeBgBtn, body.frozen #changeBgBtn{display:none!important}   /* read-only / submitted: the geometry is locked */
   #changeBgBtn span{white-space:nowrap}
   #changeBgBtn:hover{border-color:var(--gold)}
   #changeBgBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -645,9 +646,15 @@
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
+    // Reopen the map AS IT WAS LEVELED (the tool stashes it until Maps is ready). changed = enterBg() just
+    // (re)loaded the iframe → also post once it loads; otherwise the live frame gets it right away.
+    function postAerialRestore(changed){ if(!curFloorAerial) return; var ae=curFloorAerial, post=function(){ try{ satFrame.contentWindow.postMessage({type:"iotAerialRestore", aerial:ae}, "*"); }catch(e){} };
+      if(changed) satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); post(); });
+      post(); }
     // seed (optional) = a traced building outline {pts:[[x,y]..],aspect} → the draw tool opens with the
     // footprint already drawn as the canonical Structure (satellite trace → floor plan handoff).
     function enterDraw(seed){ var extra = (seed && seed.pts && seed.pts.length>=3) ? ("&seed="+encodeURIComponent(JSON.stringify(seed))) : "";
+      var lf=floors[curFloor]; if(lf && typeof lf.legacyIdx==="number" && isFinite(lf.legacyIdx)) extra+="&lidx="+lf.legacyIdx;   // pre-id saves only: the draw tool imports iot_struct_<pid>_<lidx> (its ORIGINAL index) once
       openBgTool(drawSrc()+"&floor="+curFloor+"&fid="+encodeURIComponent((floors[curFloor]&&floors[curFloor].id)||"")+extra, "draw"); }   // per-floor draft persistence
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
@@ -684,12 +691,9 @@
     document.getElementById("doorSample").addEventListener("click", loadSample);
     // "Edit background" → reopen the SAME tool that built this floor's plan so you can edit it in place:
     // a drawing resumes its grid geometry, satellite reopens the map. Upload has nothing to edit → chooser.
-    document.getElementById("changeBgBtn").addEventListener("click", function(){
+    document.getElementById("changeBgBtn").addEventListener("click", function(){ if(frozen()) return;
       if(curBgSource==="draw"){ this.style.display="none"; enterDraw(); return; }
-      if(curBgSource==="satellite"){ this.style.display="none"; enterBg();
-        if(curFloorAerial){ var ae=curFloorAerial, post=function(){ try{ satFrame.contentWindow.postMessage({type:"iotAerialRestore", aerial:ae}, "*"); }catch(e){} };   // reopen the map AS IT WAS LEVELED (the tool stashes it until Maps is ready)
-          satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); post(); }); post(); }
-        return; }
+      if(curBgSource==="satellite"){ this.style.display="none"; var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); return; }
       satFrame.style.display="none";
       this.style.display="none";
       document.getElementById("bgstep").style.display="";
@@ -716,17 +720,20 @@
     // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always
     // matched by floor id — never curFloor — so a reply/save can't land on the wrong floor.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotPlanReady"&&m.type!=="iotPlanSave")||(PID&&m.project!==PID)) return;
+      if(!ev.source || ev.source!==satFrame.contentWindow) return;   // only the embedded build tool speaks this protocol (null source = reject)
       var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
       if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} return; }
-      if(RO || !fl || !m.plan || typeof m.plan!=="object") return;
-      fl.plan=m.plan; queueSave(); });
+      if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
+      var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
+      if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
+      fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; queueSave(); });   // a real Structure now lives on the floor → stop passing lidx
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
     // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
     function applyBackground(dataUrl, skipSave, vector, scale, aerial){
       pendingBgScale = (scale && +scale.ftW>0 && +scale.ftH>0) ? { ftW:+scale.ftW, ftH:+scale.ftH } : null;   // real feet of this image, or unscaled
-      pendingBgAerial = (aerial && typeof aerial==="object") ? aerial : null;   // the capture transform that produced it (null for upload/draw)
+      pendingBgAerial = (aerial && typeof aerial==="object") ? aerial : (pendingBgSource==="draw" ? curFloorAerial : null);   // the capture transform that produced it; a Draw result keeps the floor's (trace → Use Outline → Done), an upload clears it
       if(!dataUrl){ finishBackground(null, skipSave); return; }
       // VECTOR plan (SVG from the draw tool): keep it as-is — never rasterize it. An SVG background scales
       // crisply at any zoom (paths + real text), and it's small enough to store inline. (BUG: blurry plan.)
@@ -1357,7 +1364,7 @@
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
-    function ensureFloorIds(){ floors.forEach(function(f){ if(f && !f.id) f.id=newFloorId(); }); }
+    function ensureFloorIds(){ var seen={}; floors.forEach(function(f){ if(!f) return; if(!f.id || seen[f.id]){ f.id=null; f.id=newFloorId(); } seen[f.id]=1; }); }   // backfill + dedupe (a later floor sharing an id gets a fresh one)
     ensureFloorIds();
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
@@ -1428,7 +1435,7 @@
       queueSave();
     }
     // Duplicate: a full copy (background, scale, capture, structure, devices) inserted right after the source, which stays untouched.
-    function duplicateFloor(i){ snapFloor(); var src=floors[i]; if(!src) return;
+    function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null,
         devices:cloneDevices(src.devices) };
@@ -1468,7 +1475,7 @@
       ren.addEventListener("click",function(e){ e.stopPropagation(); bar.remove(); renameInSheet(row,f); });
       dup.addEventListener("click",function(e){ e.stopPropagation(); closeFloorSheet(); duplicateFloor(i); });
       del.addEventListener("click",function(e){ e.stopPropagation(); closeFloorSheet(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
-      bar.appendChild(ren); bar.appendChild(dup); bar.appendChild(del);
+      bar.appendChild(ren); if(!frozen()) bar.appendChild(dup); bar.appendChild(del);
       row.parentNode.insertBefore(bar, row.nextSibling);
     }
     function renameInSheet(row,f){
@@ -1524,15 +1531,16 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale + draw geometry so the plan reopens correctly
-      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
       goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
       if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
       // Refresh mid-edit → reopen the build tool right where they left off (draw geometry is per-floor persisted).
-      if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ (st.bgTool==="draw"?enterDraw:enterBg)(); }
+      if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ if(st.bgTool==="draw") enterDraw(); else { var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); } }   // satellite reopens AS LEVELED
     }catch(e){ renderFloorTabs(); } }
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)

@@ -47,17 +47,32 @@ export function surveyHasData(raw) {
 // ---- Site survey v2 (localStorage key iottechs_survey2_<id>, tool "survey2") -----------------
 // New tool shape: floors[] each with a bg image + placed devices. A floor counts once it's been
 // started (bg chosen / device placed). The bg image is hashed so the fingerprint stays small.
+// FNV-1a 32-bit → hex: a compact, deterministic digest of a floor's Structure (draw-tool cells + rooms).
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16);
+}
+function planHash(plan) {
+  return (plan && Array.isArray(plan.cells) && plan.cells.length) ? fnv1a(JSON.stringify({ c: plan.cells, r: plan.rooms })) : null;
+}
+// Floor `id`, capture `aerial` and `legacyIdx` are bookkeeping, NOT meaning — backfilling them never voids an approval.
+// `planHash` is only present when the floor HAS a Structure, so floors without one hash exactly as before.
 function survey2Meaning(d) {
   if (!d || !Array.isArray(d.floors)) return null;
   const real = d.floors.filter(f => f && (f.started || f.bg || (f.devices || []).length));
   if (!real.length) return null;
   return {
     submitted: !!d.submitted,
-    floors: real.map(f => ({
-      name: f?.name || "",
-      bg: f?.bg ? hash(String(f.bg)) : null,
-      devices: (f?.devices || []).map(v => ({ k: v.k, x: Math.round(v.x || 0), y: Math.round(v.y || 0), aim: v.aim || 0, fov: v.fov || 0, range: v.range || 0, n: v.name || "" })),
-    })),
+    floors: real.map(f => {
+      const ph = planHash(f?.plan);
+      return {
+        name: f?.name || "",
+        bg: f?.bg ? hash(String(f.bg)) : null,
+        devices: (f?.devices || []).map(v => ({ k: v.k, x: Math.round(v.x || 0), y: Math.round(v.y || 0), aim: v.aim || 0, fov: v.fov || 0, range: v.range || 0, n: v.name || "" })),
+        ...(ph ? { planHash: ph } : {}),
+      };
+    }),
   };
 }
 export function survey2HasData(raw) {
