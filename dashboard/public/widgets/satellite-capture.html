@@ -337,8 +337,26 @@
     } catch(e){}
     initDraw();
     initNav();
-    search(($("q").value||DEMO).trim(), true);
+    if(pendingAerial){ var pa=pendingAerial; pendingAerial=null; applyAerial(pa); }   // a restored transform must not be overridden by the default geocode
+    else search(($("q").value||DEMO).trim(), true);
   };
+
+  /* ---------- restore a saved aerial transform (rotation + center + zoom) ---------- */
+  var pendingAerial=null;
+  function applyAerial(a){
+    if(!a) return;
+    if(!map){ pendingAerial=a; return; }   // maps not loaded yet → applied at the end of initMap instead of the default search
+    rotCoarse=norm(+a.rotationDeg||0); $("rot").value=0; applyRot();
+    if(a.center && Number.isFinite(+a.center.lat) && Number.isFinite(+a.center.lng)){
+      map.setCenter({ lat:+a.center.lat, lng:+a.center.lng });
+      if(Number.isFinite(+a.zoom)) map.setZoom(+a.zoom);
+    }
+    invalidateCapture();
+  }
+  window.addEventListener("message", function(e){
+    var d=e&&e.data; if(!d||d.type!=="iotAerialRestore") return;
+    applyAerial(d.aerial);
+  });
 
   /* ---------- screen-space navigation (pan + zoom), rotation-safe ----------
      Google's own gestures are disabled; this layer owns pan/zoom so a drag ALWAYS follows the finger
@@ -395,6 +413,7 @@
 
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
   var capturedCurrent=false, cropMode=false;
+  var capAerial=null;   // transform of the current capture (rotation/north, center, zoom, crop rect) — posted as `aerial` on every result
   var capMetersW=0, capMetersH=0;   // real-world size of the current capture (rect × meters-per-pixel) — the scale carried to the floor plan
   var preview=$("preview");
   document.body.appendChild($("popLevel"));   // lift the Level pop out of the (transformed) toolbar so it can dock as a fixed bottom bar on mobile
@@ -491,13 +510,16 @@
       // Real-world size of the captured region: rect is in stage CSS px, mppView is meters per CSS px
       // at this zoom/latitude. Scale is isotropic, so leveling rotation doesn't change it.
       capMetersW = rect.w * mppView; capMetersH = rect.h * mppView;
+      capAerial = { rotationDeg: norm(viewRot),
+        northDeg: norm(viewRot),   // north is this many degrees CLOCKWISE from screen-up (raw map is north-up; the view is CSS-rotated by viewRot)
+        center:{ lat:c.lat(), lng:c.lng() }, zoom: zView, rect:{ x:rect.x, y:rect.y, w:rect.w, h:rect.h }, stage:{ w:sw, h:sh }, mppView: mppView };
       capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92); resetCompare(); enhancedOnce=false; closeRev(); $("tEnhance").title="Enhance with AI"; msg(""); RES(true);
     });
   }); }
 
   /* ---------- finalized actions ---------- */
   function usePreview(){ var FT=3.28084, scale=(capMetersW>0&&capMetersH>0)?{ftW:+(capMetersW*FT).toFixed(2), ftH:+(capMetersH*FT).toFixed(2)}:null;
-    try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src, scale:scale}, "*"); }catch(e){} }
+    try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src, scale:scale, aerial: capAerial}, "*"); }catch(e){} }
   function downloadImg(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); }
 
   /* Auto before/after scanner — no dragging. #prevImg (enhanced) is the base; #cmpBefore (original)
@@ -759,7 +781,7 @@
       g.fillStyle="#fff"; g.fill(); g.lineWidth=2; g.strokeStyle="#b98a2e"; g.stroke(); }
   }
   function trUse(){ if(tracePts.length<3) return; trClosed=true; trPaint(); var R=trImgRect();   // auto-close the loop — no separate close tap needed
-    try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src,
+    try{ parent.postMessage({ type:"satellite-capture-result", dataUrl:$("prevImg").src, aerial: capAerial,
       // metersPerUnit: real meters spanned by 1.0 of the normalized trace space (the image height),
       // so the floor plan can resolve the outline to real feet. Omitted if the scale is unknown.
       outline:{ pts:tracePts.map(function(p){ return [p.x,p.y]; }), aspect:R.aspect, metersPerUnit:(capMetersH>0?capMetersH:0) } }, "*"); }catch(e){} }
