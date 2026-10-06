@@ -13,5 +13,22 @@ export const DEFAULT_AERIAL =
 export const DEFAULT_FLOORPLAN =
   "Turn this labeled sketch into a clean, professional architectural floor plan drawing, top-down, black lines on a white background. The faint photo and coloured lines show the layout: convert them into crisp walls, rooms and openings. Keep every room, wall, door and boundary in the same position, proportion and orientation as drawn. Honour the text labels by printing each as a clean name in its space. Draw doors as gaps or swing arcs and walls as double lines. Keep it a precise 2D architectural floor plan — not a 3D render, not perspective, not a photograph. Thin uniform line weight, simple drafting style.";
 
+// Site Intelligence (Phase 7): ANALYZE the real aerial — never regenerate it. The model returns
+// structured polygons (as image fractions) that become SUGGESTIONS the technician reviews; nothing
+// is applied automatically. The route validates every vertex and zone type before it is stored.
+export const DEFAULT_SITE_INTEL =
+  "You are analyzing a REAL straight-down aerial photograph of a property to help a security technician understand the site. This is an ANALYSIS task ONLY: you look at the existing photo and report what is there. Do NOT regenerate, redraw, repaint, enhance, describe changing, or hallucinate any pixels — the image is fixed evidence, not something to modify. " +
+  "COORDINATES: a measurement grid and site-coordinate overlay accompany this image; those grid/site coordinates are the AUTHORITATIVE spatial reference — defer to them for location and scale, do not second-guess them. Output every polygon vertex as a FRACTION of the image dimensions: x in [0,1] from the left edge, y in [0,1] from the top edge. Never output pixels. " +
+  "TRUSTED STRUCTURE: if a technician-confirmed Structure (the building footprint / primary structure) is provided in the context, TRUST it as given — do not rediscover, move, reshape, or replace it; analyze the site AROUND it. " +
+  "SITE BOUNDARY: any site/property boundary you return is an APPROXIMATE working outline to orient the technician. It is NOT a surveyed, legal, recorded, or parcel boundary and must NEVER be described or labeled as one. State it only as an approximate boundary and give it a confidence. " +
+  "ZONES: identify functional exterior zones using ONLY these supported types — street, sidewalk, curb, driveway, parking, front_yard, rear_yard, side_yard, alley, loading, entrance, pedestrian_approach, vehicle_approach. Do not invent other types. Return a polygon (image fractions) and a 0..1 confidence for each. " +
+  "ORIENTATION: where the evidence supports it, report which side of the image is the front, rear, left and right of the property (short labels), with a confidence. " +
+  "DO NOT INVENT: only report features you can actually see. If you are unsure a feature exists, omit it rather than guessing. When uncertain, lower the confidence; never fabricate a zone, boundary, or orientation to fill the schema. " +
+  "Return ONLY a JSON object, no markdown fences, no prose, of the shape: " +
+  "{ \"siteBoundary\": { \"polygon\": [[x,y],...], \"confidence\": 0..1 } | null, " +
+  "\"orientation\": { \"front\": string|null, \"rear\": string|null, \"left\": string|null, \"right\": string|null, \"confidence\": 0..1 } | null, " +
+  "\"zones\": [ { \"type\": one of the supported types, \"polygon\": [[x,y],...], \"confidence\": 0..1 } ] }. " +
+  "Every polygon must have at least 3 vertices. Confidence is always a number between 0 and 1.";
+
 // Keys under which admin overrides are stored in the vault (app_secrets).
-export const PROMPT_KEYS = { aerial: "SURVEY_PROMPT_AERIAL", floorplan: "SURVEY_PROMPT_FLOORPLAN" };
+export const PROMPT_KEYS = { aerial: "SURVEY_PROMPT_AERIAL", floorplan: "SURVEY_PROMPT_FLOORPLAN", SITE_INTEL: "SURVEY_PROMPT_SITE_INTEL" };

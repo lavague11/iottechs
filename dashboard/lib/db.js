@@ -1333,6 +1333,28 @@ function init() {
     for (const r of need) ins.run(r.access_id, r.stage, r.created_at || null);
   }
 
+  // ---- Site Intelligence runs (Phase 7) — one row per AI aerial-analysis pass. Suggestion-first:
+  // the payload is the VALIDATED suggestion set (boundary / orientation / zones as image-fraction
+  // polygons), never applied automatically. Keyed by (access, floor, source_hash) so an identical
+  // aerial+context reuses its stored run instead of re-billing OpenAI; a floor edit marks prior
+  // runs 'outdated'. New table, nothing migrated — fully backwards-compatible. ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS site_intel_runs (
+      id          TEXT PRIMARY KEY,                 -- runId
+      access_id   TEXT NOT NULL,
+      floor_id    TEXT,
+      source_hash TEXT,                             -- content hash of aerial + grid/transform/structure
+      provider    TEXT,                             -- 'openai'
+      model       TEXT,
+      status      TEXT NOT NULL DEFAULT 'done',     -- done | error | outdated
+      usage       TEXT,                             -- JSON token usage, when the model reports it
+      payload     TEXT,                             -- JSON validated suggestions
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      created_by  TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_site_intel_lookup ON site_intel_runs(access_id, floor_id, source_hash)");
+
   // ---- Company-wide default price book (single row) — the proposal gear "Default pricing" ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS price_book (
@@ -5972,6 +5994,65 @@ export function saveToolData(accessId, tool, data, byName) {
     DO UPDATE SET data=excluded.data, updated_by=excluded.updated_by, updated_at=excluded.updated_at
   `).run(String(accessId), String(tool), String(data), byName || null);
   return getToolData(accessId, tool);
+}
+
+// ---- Site Intelligence runs (Phase 7) -------------------------------------------------------
+// Each run stores its VALIDATED suggestion payload. payload/usage are JSON TEXT on disk and come
+// back parsed as objects. Reuse is keyed by source_hash so an identical aerial+context never
+// re-bills; markSiteIntelOutdated flags a floor's prior runs when the floor changes.
+function siteIntelRow(r) {
+  if (!r) return null;
+  let payload = null, usage = null;
+  try { payload = r.payload ? JSON.parse(r.payload) : null; } catch { payload = null; }
+  try { usage = r.usage ? JSON.parse(r.usage) : null; } catch { usage = null; }
+  return {
+    id: r.id, accessId: r.access_id, floorId: r.floor_id, sourceHash: r.source_hash,
+    provider: r.provider, model: r.model, status: r.status,
+    usage, payload, createdAt: r.created_at, createdBy: r.created_by,
+  };
+}
+export function saveSiteIntelRun(run) {
+  const r = run || {};
+  const id = String(r.id || r.runId || "");
+  if (!id) throw new Error("saveSiteIntelRun: id required");
+  const usage = r.usage == null ? null : (typeof r.usage === "string" ? r.usage : JSON.stringify(r.usage));
+  const payload = r.payload == null ? null : (typeof r.payload === "string" ? r.payload : JSON.stringify(r.payload));
+  db.prepare(`
+    INSERT INTO site_intel_runs (id, access_id, floor_id, source_hash, provider, model, status, usage, payload, created_at, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,datetime('now','localtime'),?)
+    ON CONFLICT(id) DO UPDATE SET
+      access_id=excluded.access_id, floor_id=excluded.floor_id, source_hash=excluded.source_hash,
+      provider=excluded.provider, model=excluded.model, status=excluded.status,
+      usage=excluded.usage, payload=excluded.payload, created_by=excluded.created_by
+  `).run(
+    id, r.accessId != null ? String(r.accessId) : null, r.floorId != null ? String(r.floorId) : null,
+    r.sourceHash != null ? String(r.sourceHash) : null, r.provider || null, r.model || null,
+    r.status || "done", usage, payload, r.createdBy != null ? String(r.createdBy) : null,
+  );
+  return getSiteIntelRunById(id);
+}
+export function getSiteIntelRunById(id) {
+  return siteIntelRow(db.prepare("SELECT * FROM site_intel_runs WHERE id=?").get(String(id)));
+}
+// Latest DONE run for an exact (access, floor, source_hash) — the cost-reuse lookup.
+export function getSiteIntelRunByHash(accessId, floorId, sourceHash) {
+  return siteIntelRow(db.prepare(
+    "SELECT * FROM site_intel_runs WHERE access_id=? AND floor_id IS ? AND source_hash=? AND status='done' ORDER BY created_at DESC, rowid DESC LIMIT 1"
+  ).get(String(accessId), floorId != null ? String(floorId) : null, sourceHash != null ? String(sourceHash) : null));
+}
+// Most recent run for a floor regardless of status/hash — what GET returns as `latest`.
+export function getLatestSiteIntelRun(accessId, floorId) {
+  return siteIntelRow(db.prepare(
+    "SELECT * FROM site_intel_runs WHERE access_id=? AND floor_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1"
+  ).get(String(accessId), floorId != null ? String(floorId) : null));
+}
+// Floor changed → prior done runs for it no longer describe the current source. Mark them outdated
+// (never delete — audit trail). Returns the count flipped.
+export function markSiteIntelOutdated(accessId, floorId) {
+  const res = db.prepare(
+    "UPDATE site_intel_runs SET status='outdated' WHERE access_id=? AND floor_id IS ? AND status='done'"
+  ).run(String(accessId), floorId != null ? String(floorId) : null);
+  return Number(res?.changes || 0);
 }
 
 // ---- Appointment reminders (24h) ------------------------------------------------------------
