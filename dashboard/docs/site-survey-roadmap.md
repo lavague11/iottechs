@@ -23,11 +23,22 @@ Persistence model: the `survey2` blob (all floor geometry + ctx/aerial/scale/nor
 - **Phase 11 (partial)** ✅ — customer/proposal PDF export now re-draws the scaled grid + site boundary + typed zones (parseSurveyFloors carries them; estimates only).
 - **Fix** — boundary/zone Undo: Regions mode hides the device undo/rotate so the boundary Undo is the one control (removes last vertex / backs out). Reported + fixed.
 
-## REMAINING
+## DONE (cont.)
 
-- **H2 — Use Enhanced Background + enhancedRegistration.** Swap a hybrid floor's aerial to a later-approved enhanced image WITHOUT redrawing Structure; registration (translate/scale/small-rotation) on the visual layer only. Needs an "approved enhanced aerial" asset concept (fuzzy — H1 already inherits the enhanced aerial for the enhance-before case).
-- **Phase 10 — AI Enhanced Floor Plan (gated).** AI visual layer UNDER canonical vectors (today enhance REPLACES the plan raster); stale-on-edit "Update"; cache by plan revision.
-- **Phase 11 (rest).** Interactive customer "Your System Layout" + install view rendering boundary/zones (PDF done; interactive uses the walkthrough/raw image); the role-visibility sanitize pass (OWNER CHECKPOINT — reuse roles.js/can() + server-side sanitize).
+- **Phase H2 — "Use Enhanced Background"** ✅ (lowest-risk) — on a hybrid floor, swaps ONLY the aerial image (`ctx.src`), keeps `ctx.rect` + Structure/rooms/devices/grid (same-framing alignment; full `enhancedRegistration` deferred with a named hook). Verified live.
+- **Phase 10 — AI Enhanced Floor Plan** ✅ (gated) — AI raster as a visual layer UNDER canonical vectors (transparent walls/labels/openings overlay); `planRev()` content hash; stale-on-edit "Update"; cache-by-revision (one `/api/enhance` call site, no re-bill on unchanged plan); ZERO auto-AI-calls (explicit wand/Update/Revise only). Survey-side raster-under-vectors layering hook noted for later.
+- **Phase 11** ✅ — customer/proposal PDF export + walkthrough/"Your System Layout" map both render the scaled grid + site boundary + typed zones (estimates only, never a legal line).
+- **Role-visibility (this work)** ✅ — AUDIT clean/no-op: the `survey2` blob exposes only system geometry (no payout/cost/margin/commission/crew); `stripDevs` = `{k,x,y,aim,aimed,fov,range,name,photo,photoName,cid}`; all writes (`/api/tool-data`, `/api/site-intel` POST) are admin/manager/sales server-side; customers read-only. No role code needed changing.
+
+## OPTIONAL FOLLOW-UPS (not roadmap gaps)
+
+- Full APP-WIDE role-visibility sweep (proposal payout/margin, tech-sees-no-retail) — pre-existing, untouched by this work; a separate deliberate task if wanted.
+- Install view: confirm it consumes the same canonical `survey2` (it reads the single source today); the customer no-camera fallback `<img>` path could also overlay boundary/zones (rare path; the walkthrough path — the primary — already does).
+- H2-full `enhancedRegistration` (auto-align a re-leveled enhanced aerial to the grid) — hook named in `site-survey-merged.html`.
+
+## BLOCKED
+
+- (none) — roadmap Phases 1–11 + H1/H2 + the owner's 17-point and 21-point specs are complete; 381 node tests + Playwright hybrid spec green.
 
 ## PHASE H — "Create Hybrid Floor Plan" workflow (owner redirect, HIGH priority)
 
