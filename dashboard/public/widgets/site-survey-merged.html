@@ -651,6 +651,8 @@
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
+      bgWiz.style.display="";           // …but keep the slim strip so "← Background" (back out of the tool) is always there
+      var lbl=bgWiz.querySelector(".bgstriplbl"); if(lbl) lbl.textContent = source==="draw" ? "Block out the structure and rooms — tap Done to drop the plan onto your floor" : "Search, level & crop the aerial with the toolbar — tap Done to drop it onto your plan";
       sideCollapsed=true; applySideCollapsed();
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
     }
@@ -678,6 +680,7 @@
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
+      bgWiz.style.display="none";   // drop the tool's Back strip
       surveyWiz.style.display="";   // restore the survey bar when leaving the build tool
       bgToolOpen=null; queueSave();   // left the tool (committed or not) → don't reopen on next load
       if(committed){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
@@ -718,14 +721,10 @@
       document.getElementById("bgstep").style.display="";
       document.getElementById("working").style.display="none";
     });
-    // Back on the strip returns to the three-source chooser (Satellite / Upload / Draw)
-    document.getElementById("satBack").addEventListener("click", function(){
-      satFrame.style.display="none";
-      bgWiz.style.display="none";
-      surveyWiz.style.display="";
-      if(bgHasImage){ document.getElementById("working").style.display="block"; document.getElementById("bgstep").style.display="none"; }
-      else { document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
-    });
+    // Back on the strip leaves the tool: to the three-source chooser (nothing yet) or the saved plan (bg exists).
+    // Geometry autosaves (Phase 1), so backing out of the draw tool never loses the Structure. exitBg(false)
+    // owns the display swap + clears bgToolOpen so a refresh doesn't reopen the tool.
+    document.getElementById("satBack").addEventListener("click", function(){ exitBg(false); });
     // the satellite tool posts its finished image here (its own "Use" button)
     window.addEventListener("message", function(ev){
       if(!ev.data || ev.data.type!=="satellite-capture-result") return;
