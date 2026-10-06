@@ -889,6 +889,9 @@ export function sanitizeProposal(row, role) {
     })),
   });
   if (role === "sales") return { ...base, payload: stripCost(payload), signedPayload: signedPayloadRaw ? stripCost(signedPayloadRaw) : null };
+  // Vendor sees ONLY shipment tracking + the job-site address (roles.js) — never the proposal. Without this
+  // branch a vendor falls through to the customer/retail path below and would receive the full retail proposal.
+  if (role === "vendor") return null;
   // customer / everyone else: drafts are invisible beyond their existence
   if (!CUSTOMER_VISIBLE_STATUS.has(row.status)) return { status: "draft", version: row.version };
   return { ...base, payload: stripCost(payload), signedPayload: signedPayloadRaw ? stripCost(signedPayloadRaw) : null };
