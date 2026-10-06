@@ -708,6 +708,14 @@
       if(ol && ol.pts && ol.pts.length>=3){ enterDraw(ol); return; }
       applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale);
     });
+    // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
+    // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always
+    // matched by floor id — never curFloor — so a reply/save can't land on the wrong floor.
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotPlanReady"&&m.type!=="iotPlanSave")||(PID&&m.project!==PID)) return;
+      var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
+      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} return; }
+      if(RO || !fl || !m.plan || typeof m.plan!=="object") return;
+      fl.plan=m.plan; queueSave(); });
 
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
@@ -1498,8 +1506,8 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale so the plan reopens correctly
-      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,plan:f.plan||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale + draw geometry so the plan reopens correctly
+      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,plan:null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();

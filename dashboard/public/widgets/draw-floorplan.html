@@ -153,14 +153,17 @@
 <script src="room-taxonomy.js?v=20260921-rooms"></script>
 <script>
   var _qs=new URLSearchParams(location.search);
-  var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0";
+  var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0", FID=_qs.get("fid")||"";   // FID = the survey floor's stable id
   // Context for intelligent room-name suggestions: canonical propertyType + business context
   // (customer/company + service line). Threaded down from the project via the survey shell.
   var PROP=(_qs.get("prop")||"").toLowerCase()==="residential"?"residential":"commercial";
   var BIZ=_qs.get("biz")||"";
-  // Per-floor draft: the structure/room geometry is stored per (project, floor) so re-opening Draw for a
-  // floor resumes exactly where it was left. The floor's rendered background image stays the survey's own.
-  var LSK = PID ? ("iot_struct_"+PID+"_"+FLOOR) : null;
+  // Per-floor geometry: the CANONICAL copy is the survey floor record's `plan` (reaches the server with the
+  // survey), delivered over postMessage (iotPlanReady → iotPlanLoad, iotPlanSave on every persist). This
+  // localStorage key — per (project, floor id) — is crash recovery only. LSK_OLD = the legacy index key.
+  var LSK_OLD = PID ? ("iot_struct_"+PID+"_"+FLOOR) : null;
+  var LSK = PID && FID ? ("iot_struct_"+PID+"_"+FID) : LSK_OLD;
+  var planState="loading";          // "loading" until the geometry is resolved (host plan / legacy / standalone)
   function $(id){return document.getElementById(id);}
   var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage");
   // STRUCTURE = grid blockout. The building is stored as OCCUPIED HALF-CELLS (a Set of integer "hc,hr"
@@ -299,8 +302,20 @@
   // ---- per-floor persistence ----
   // Only NAMED rooms are persisted — an unnamed room is never written to storage (also cleans legacy ones).
   function namedRooms(list){ return (list||[]).filter(function(r){ return r && (r.label||"").trim(); }); }
-  function persist(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx})); }catch(e){} }
-  function restore(){ if(!LSK) return; try{ var s=JSON.parse(localStorage.getItem(LSK)||"null"); if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }catch(e){} }
+  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx}; }
+  function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify({cells:Array.from(cells), rooms:namedRooms(rooms), metersPerPx:metersPerPx})); }catch(e){} }
+  function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
+  function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
+  // Replace (never merge) the in-memory geometry with a plan record (null → empty).
+  function applyPlan(s){ cells=new Set(); rooms=[]; metersPerPx=0; sel=null;
+    if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
+  // Local recovery copy: this floor's id key first, then the legacy index key (pre-floor-id drafts).
+  function localPlan(){ var s=readLS(LSK); if(!hasPlan(s) && LSK_OLD && LSK_OLD!==LSK) s=readLS(LSK_OLD); return hasPlan(s) ? s : null; }
+  // Canonical save → the survey floor record (debounced); flushPlan() forces it out now (Done / migration).
+  var _planT=null;
+  function postPlan(){ _planT=null; if(!FID || window.parent===window) return; try{ parent.postMessage({type:"iotPlanSave", project:PID, fid:FID, plan:planOut()}, "*"); }catch(e){} }
+  function flushPlan(){ if(_planT){ clearTimeout(_planT); postPlan(); } }
+  function persist(){ if(planState!=="loaded") return; writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); }
 
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms))}; }
@@ -324,7 +339,7 @@
       : "Draw the <b>rooms</b> inside and name each.";
     $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; updateTools(); redraw(); }
 
-  cv.addEventListener("pointerdown", function(e){ if(busy||$("preview").classList.contains("show")) return;
+  cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     var h=roomHit(pt.x,pt.y);
@@ -548,8 +563,9 @@
     var arr=planCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
     return { ftW:+pxToFeet(bb.w+2*m).toFixed(2), ftH:+pxToFeet(bb.h+2*m).toFixed(2) }; }
-  $("tDone").addEventListener("click", function(){ if(busy) return;
+  $("tDone").addEventListener("click", function(){ if(busy||planState!=="loaded") return;
     if(!hasSketch()){ msg("Block out the structure, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
+    closeLabel(); flushPlan();                     // the floor record holds the final geometry BEFORE the result lands
     var scale=planFeet();
     // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
     // at any zoom in the survey (no rasterization on the display path).
@@ -586,23 +602,40 @@
     return out;
   }
 
-  restore();                                        // resume this floor's saved structure/rooms
   try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
   applySnapUI();
   fitCanvas();                                       // size the canvas first → W()/H() valid for migration + trace seed
-  var _seeded=false;
-  (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
-    if(!S||!S.pts||S.pts.length<3) return;
-    if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
-    var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
-      if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
-    } })();
-  if(_seeded){ snap=1; applySnapUI(); }               // seed is box-aligned → continue editing on the full-box grid
-  reconcileRooms();                                  // migrate legacy rect rooms + clip every room to the structure
-  hist=[snapshot()]; hi=0;                           // baseline history on the reconciled (or seeded) state
-  setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
-  if(_seeded) persist();                             // autosave the seeded structure immediately
-  updateTools();
+  // Geometry resolves ONCE (host plan / legacy import / standalone), THEN the trace seed applies on top, then
+  // history + mode. Until then the canvas stays a neutral blank (no "block out" prompt, input ignored).
+  var _seeded=false, _planTO=null, _lateOK=false;
+  function initWithPlan(plan, migrated){ if(planState==="loaded") return; planState="loaded"; clearTimeout(_planTO);
+    applyPlan(plan);
+    (function(){ var raw=_qs.get("seed"); if(!raw) return; var S=null; try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){}
+      if(!S||!S.pts||S.pts.length<3) return;
+      if(cells.size && !window.confirm("Replace the current structure with the traced building outline?")) return;   // never silently overwrite
+      var out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
+        if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
+      } })();
+    if(_seeded){ snap=1; applySnapUI(); }             // seed is box-aligned → continue editing on the full-box grid
+    reconcileRooms();                                // migrate legacy rect rooms + clip every room to the structure
+    hist=[snapshot()]; hi=0;                         // baseline history on the reconciled (or seeded) state
+    setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
+    writeLS();                                       // recovery copy now mirrors the resolved geometry (overwrite, never merge)
+    if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
+    updateTools(); }
+  // Host reply: a non-null plan is authoritative (even an empty one). null → import a local draft once, else empty.
+  window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotPlanLoad"||m.fid!==FID) return;
+    var p=(m.plan && typeof m.plan==="object") ? m.plan : null;
+    if(planState==="loaded"){                        // reply after the 800 ms fallback: adopt it only if nothing was touched yet
+      if(_lateOK && p && hi===0 && !_qs.get("seed")){ applyPlan(p); reconcileRooms(); hist=[snapshot()]; hi=0; setMode(cells.size?"room":"structure"); writeLS(); }
+      return; }
+    if(p){ initWithPlan(p, false); return; }
+    var lp=localPlan(); initWithPlan(lp, !!lp); });
+  if(window.parent===window){ initWithPlan(localPlan(), false); }   // standalone / dev: localStorage as before
+  else {
+    _planTO=setTimeout(function(){ _lateOK=true; initWithPlan(localPlan(), false); }, 800);   // silent/broken host → never stay blank
+    try{ parent.postMessage({type:"iotPlanReady", project:PID, fid:FID}, "*"); }catch(e){ initWithPlan(localPlan(), false); }
+  }
 </script>
 </body>
 </html>
