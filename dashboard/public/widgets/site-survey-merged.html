@@ -1412,9 +1412,12 @@
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
+        scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null,   // real-world scale + capture + structure travel with the background (deep copies — never shared with the source)
         devices:(from&&withItems)?JSON.parse(JSON.stringify(from.devices||[])):[], started:!!(from&&from.bg) };
+      if(f.devices.length){ var used={}; floors.forEach(function(fl){ (fl.devices||[]).forEach(function(d){ if(d.cid) used[d.cid]=1; }); });   // cloned cameras get a fresh cid unique across ALL floors (proposal line items key on it)
+        f.devices.forEach(function(d){ if(!d.cid) return; var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(used[id]); used[id]=1; d.cid=id; }); }
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
-      goStep(f.started ? 1 : 0);   // carried a background over → straight to Setup; else the chooser
+      goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
       queueSave();
     }
     // New floor: if the current floor has a background, offer to import it (with or without the placed
