@@ -142,6 +142,13 @@
   #traceBar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:11;display:none;gap:8px;align-items:center;
     background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:7px 8px;box-shadow:0 8px 30px rgba(16,17,18,.2);backdrop-filter:blur(8px)}
   #preview.tracing #traceBar{display:flex}
+  /* While tracing, the main toolbar (Level/Crop/Trace/Done) docks in the same spot as the trace controls
+     and, being higher z-index, would hide them — hide it so Cancel/Redraw/Use Outline are reachable. */
+  #preview.tracing ~ .tbar{display:none}
+  /* Trace instruction — tells you what to do while tracing (non-obvious action); updates as you go. */
+  #traceHint{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:11;display:none;max-width:88%;text-align:center;
+    background:rgba(16,17,18,.82);color:#fff;font:600 12.5px/1.35 var(--sans);padding:7px 13px;border-radius:9px;box-shadow:0 4px 16px rgba(16,17,18,.3);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  #preview.tracing #traceHint{display:block}
   #traceBar button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:9px 14px;font:600 13px/1 var(--sans);cursor:pointer}
   #traceBar button:hover{border-color:var(--ink)}
   #traceBar button.use{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -252,6 +259,7 @@
       <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. clear the junk by the pool"><button id="revGo">Revise</button></div>
       <!-- Trace Building: tap corners to outline the roof, tap the first corner to close, drag to adjust -->
       <div id="trace"><canvas id="traceCv"></canvas></div>
+      <div id="traceHint"></div>
       <div id="traceBar">
         <button id="trCancel" type="button">Cancel</button>
         <button id="trRedraw" type="button">Redraw</button>
@@ -727,7 +735,12 @@
   function trToFrac(px,py){ var R=trImgRect(); return { x:Math.max(0,Math.min(1,(px-R.x)/R.w)), y:Math.max(0,Math.min(1,(py-R.y)/R.h)) }; }
   function trToPx(p){ var R=trImgRect(); return { x:R.x+p.x*R.w, y:R.y+p.y*R.h }; }
   function trNear(px,py){ for(var i=0;i<tracePts.length;i++){ var q=trToPx(tracePts[i]); if(Math.hypot(q.x-px,q.y-py)<=14) return i; } return -1; }
-  function trSync(){ $("trUse").disabled = !(trClosed && tracePts.length>=3); }
+  function trSync(){ $("trUse").disabled = !(trClosed && tracePts.length>=3); trHintUpdate(); }
+  // What to do right now — updates as the outline is built (tracing is a non-obvious action).
+  function trHintUpdate(){ var h=$("traceHint"); if(!h) return;
+    h.textContent = trClosed ? "Drag a dot to adjust, then “Use Outline”"
+      : (tracePts.length>=3 ? "Tap the first dot to close the building"
+      : "Tap each corner of the building"); }
   function enterTrace(){ exitCrop(); closePops(); tracePts=[]; trClosed=false; trDrag=-1; trHover=-1;
     preview.classList.add("tracing"); $("tTrace").classList.add("on"); trPaint(); trSync(); }
   function exitTrace(){ if(!preview.classList.contains("tracing")) return; preview.classList.remove("tracing"); $("tTrace").classList.remove("on"); }
