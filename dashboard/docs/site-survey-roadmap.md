@@ -14,16 +14,20 @@ One concise status file for the "one scaled site model" build. Canonical model: 
 
 Persistence model: the `survey2` blob (all floor geometry + ctx/aerial/scale/north/boundary/zones/sides/openings/devices + selected floor) mirrors to the server every 5s via `/api/tool-data` (8MB cap, server-side role check) and seeds fresh devices from the server → the server is the authoritative backup, localStorage is the working copy. Approval fingerprint (`survey2Meaning`) is an allow-list (name, bg-hash, devices, planHash) — boundary/zones/sides/view/lineage are NOT in it.
 
-## IN PROGRESS
+## DONE (cont.)
 
-- **Phase 7 — Site Intelligence (AI, gated).** `/api/site-intel` reusing the enhance OpenAI/vault infra; suggestion-first (AI suggestion → reviewed draft → canonical); ZERO AI calls except an explicit "Analyze Site" action; env-gated (off without `OPENAI_API_KEY`); persisted runs with cost protection (reuse by source hash, mark outdated on change, no auto-rerun); mocked in tests.
+- **Phase 7 — Site Intelligence (AI, gated)** ✅ — `/api/site-intel` (server + client); suggestion-first (draft → Apply writes canonical); ZERO AI calls except the explicit "Analyze Site" tap (verified live: load fires only a probe GET, never a POST); env-gated on `OPENAI_API_KEY`; persisted runs, cost-reuse by source hash, outdated-not-rerun; mocked tests.
+- **Phase 8 — Device Intelligence** ✅ — `lib/device-context.js` (device→room/zone, FOV∩zone coverage ranking, mounted side, facing) + in-widget name SUGGESTIONS (coverage→room→zone→side, Left/Right dedup, "<room> Speaker"); suggestion-first, never auto-overwrites.
+- **Phase 9 — Walkthrough + mobile** ✅ — canonical stops (cameras + speakers), desktop plan|detail, mobile swipe cards + thumbnails, selected-device coverage emphasis; wired into planner + customer + visualize.
+- **Phase H1 — "Create Hybrid Floor Plan"** ✅ — derived `· Hybrid` floor (inherits enhanced aerial + lineage, fresh device cids) → satellite level step → existing outline/draw/ctx engine; source floor untouched (verified).
+- **Phase 11 (partial)** ✅ — customer/proposal PDF export now re-draws the scaled grid + site boundary + typed zones (parseSurveyFloors carries them; estimates only).
+- **Fix** — boundary/zone Undo: Regions mode hides the device undo/rotate so the boundary Undo is the one control (removes last vertex / backs out). Reported + fixed.
 
-## PLANNED
+## REMAINING
 
-- **Phase 8 — Device Intelligence (deterministic-first).** Geometry utils (device→room/zone, FOV∩zones, mounted wall, facing); coverage-driven camera/speaker name SUGGESTIONS (never auto-overwrite a user name); AI naming separately gated/optional.
-- **Phase 9 — Walkthrough + mobile polish.** Consumes canonical floors/rooms/zones/devices/photos/FOV/speaker coverage; desktop map+media, mobile swipe cards (subtle slide/crossfade, no cinematic zoom); speakers as stops.
-- **Phase 10 — AI Enhanced Floor Plan (gated).** From canonical vectors (not a screenshot); AI visual layer UNDER canonical walls/labels/openings/devices; never alters geometry; stale-on-edit ("Update"); cache by plan revision.
-- **Phase 11 — Customer / Proposal / Install integration.** Same canonical survey; customer read-only polish (hide handles/confidence/tools); proposal + install consume canonical device names/locations/coverage; server-side role visibility; the deferred PDF/export ctx-plate + grid gap (`lib/survey2-export.js`).
+- **H2 — Use Enhanced Background + enhancedRegistration.** Swap a hybrid floor's aerial to a later-approved enhanced image WITHOUT redrawing Structure; registration (translate/scale/small-rotation) on the visual layer only. Needs an "approved enhanced aerial" asset concept (fuzzy — H1 already inherits the enhanced aerial for the enhance-before case).
+- **Phase 10 — AI Enhanced Floor Plan (gated).** AI visual layer UNDER canonical vectors (today enhance REPLACES the plan raster); stale-on-edit "Update"; cache by plan revision.
+- **Phase 11 (rest).** Interactive customer "Your System Layout" + install view rendering boundary/zones (PDF done; interactive uses the walkthrough/raw image); the role-visibility sanitize pass (OWNER CHECKPOINT — reuse roles.js/can() + server-side sanitize).
 
 ## PHASE H — "Create Hybrid Floor Plan" workflow (owner redirect, HIGH priority)
 
