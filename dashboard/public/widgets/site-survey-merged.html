@@ -67,6 +67,7 @@
   #regionLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
   #boundaryTag{position:absolute;left:14px;bottom:86px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;letter-spacing:.2px}
   body.regions .ctxbar,body.regions .showCtl,body.regions #dimBtn{display:none!important}   /* one primary mode: Regions suspends device placement + its chrome */
+  body.regions #undoBtn,body.regions #rotateBtn{display:none!important}   /* hide the DEVICE undo + rotate while drawing a boundary/zone — the boundary #bdUndo is the one undo (removes the last vertex / backs out) */
   body.regions #regionLayer{cursor:crosshair}
   /* Phase 5.2: site ZONES — filled translucent polygons under the boundary (display only; #regionLayer owns every pointer). Labels are HTML chips counter-scaled by zoom. */
   #zoneLayer{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;overflow:visible} #zoneTags{position:absolute;inset:0;z-index:4;pointer-events:none}
