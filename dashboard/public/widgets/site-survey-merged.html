@@ -68,15 +68,23 @@
   #boundaryTag{position:absolute;left:14px;bottom:86px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;letter-spacing:.2px}
   body.regions .ctxbar,body.regions .showCtl,body.regions #dimBtn{display:none!important}   /* one primary mode: Regions suspends device placement + its chrome */
   body.regions #regionLayer{cursor:crosshair}
+  /* Phase 5.2: site ZONES — filled translucent polygons under the boundary (display only; #regionLayer owns every pointer). Labels are HTML chips counter-scaled by zoom. */
+  #zoneLayer{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;overflow:visible} #zoneTags{position:absolute;inset:0;z-index:4;pointer-events:none}
+  .ztag{position:absolute;padding:2px 7px;border-radius:999px;background:rgba(16,20,24,.7);color:#fff;font:600 10px/1.3 system-ui,sans-serif;white-space:nowrap;transform-origin:50% 50%}
+  #rgBar{position:absolute;left:14px;bottom:116px;z-index:6;display:none;gap:6px;align-items:center} #rgBar #zoneName{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #zoneName.vbtn{height:34px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.9);font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12)}
+  #zoneDel.armed{background:#c0392b;color:#fff;border-color:#c0392b}
+  body.ro #rgBar,body.frozen #rgBar{display:none!important}
   .ubtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   #northArrow{position:absolute;top:58px;right:19px;width:26px;height:26px;z-index:6;pointer-events:none;display:none}
   .sidechip{position:absolute;z-index:6;display:none;padding:3px 9px;border-radius:999px;border:0;background:rgba(16,20,24,.72);color:rgba(255,255,255,.86);font:600 11px/1.3 system-ui,sans-serif;letter-spacing:.2px;white-space:nowrap;cursor:pointer;pointer-events:auto}   /* Phase 4.4: muted side tags, Hybrid only; centred per edge so they clear the north arrow (top-right) + scale label (bottom-left) */
   .sidechip.ro{cursor:default;pointer-events:none}
   .sidechip[data-side=top]{top:14px;left:50%;transform:translateX(-50%)} .sidechip[data-side=bottom]{bottom:58px;left:50%;transform:translateX(-50%)} .sidechip[data-side=left]{left:10px;top:50%;transform:translateY(-50%)} .sidechip[data-side=right]{right:10px;top:50%;transform:translateY(-50%)}
-  #sidePop{position:absolute;z-index:8;display:none;flex-direction:column;gap:6px;width:176px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
-  #sidePop.open{display:flex}
-  #sidePop .sp-list{display:flex;flex-wrap:wrap;gap:4px} #sidePop .sp-opt{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:3px 9px;font:600 11px/1.3 system-ui,sans-serif;cursor:pointer} #sidePop .sp-opt.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  #sidePop input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:500 12px system-ui,sans-serif;color:var(--ink)}
+  #sidePop,#zonePop{position:absolute;z-index:8;display:none;flex-direction:column;gap:6px;width:176px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
+  #sidePop.open,#zonePop.open{display:flex}
+  #sidePop .sp-list,#zonePop .sp-list{display:flex;flex-wrap:wrap;gap:4px} #sidePop .sp-opt,#zonePop .sp-opt{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:3px 9px;font:600 11px/1.3 system-ui,sans-serif;cursor:pointer} #sidePop .sp-opt.on,#zonePop .sp-opt.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #sidePop input,#zonePop input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:500 12px system-ui,sans-serif;color:var(--ink)}
+  #zonePop{width:206px} #zonePop .sp-opt i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:baseline}
   .stage-img{position:absolute;inset:0;background:#fff;background-repeat:no-repeat;background-size:contain;background-position:center}
   .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
   .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
@@ -519,9 +527,11 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
+          <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Zone</button></div><button class="vbtn" id="zoneName" aria-label="Edit zone" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete zone" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button></div>
+          <div id="zonePop" role="dialog" aria-label="Zone"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Zone name"></div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
@@ -533,9 +543,9 @@
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
             <div class="viewseg" id="viewSeg" role="group" aria-label="View" style="display:none"><button class="vbtn" data-v="satellite">Aerial</button><button class="vbtn" data-v="plan">Plan</button><button class="vbtn" data-v="hybrid">Hybrid</button></div>
             <button class="ubtn" id="fitBtn" title="Fit" aria-label="Fit plan to screen"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
-            <button class="ubtn" id="regionBtn" title="Boundary" aria-label="Boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
-            <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo boundary edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
-            <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo boundary edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
+            <button class="ubtn" id="regionBtn" title="Regions" aria-label="Regions" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
+            <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+            <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
           <div class="showCtl" id="showCtl">
@@ -895,6 +905,7 @@
     var RANGE=150, BR=24;                        // cone range (px); BR = border radius where the label + cone origin sit
     // Phase 5.1 boundary editor state (working copy of floor.boundary, in plate-%): regionMode gates device placement; bdHist is the add/move/delete/close undo stack.
     var regionMode=false, bdPts=[], bdClosed=false, bdDrag=-1, bdSel=-1, bdHist=[], bdHi=-1, bdDownPt=null;
+    var rgTarget={kind:"boundary"}, zpOpen=false;   // Phase 5.2: the bd* working copy edits THIS target — the single boundary, or one zone (id null = an un-typed draft)
     var ISZ=28, showFovState=false, showGridState=true, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium — the primary size) + FOV shading (default OFF) + panel collapse + all-angles display (default OFF — a placed camera is just its icon until you show/edit angles)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
@@ -1079,7 +1090,7 @@
 
     // ---- wheel / two-finger pinch zoom on the plan (Place + Angles); zooms toward the cursor ----
     var scene=document.getElementById("scene"), zScale=1, zTx=0, zTy=0;
-    function applyZoom(){ scene.style.transform="translate("+zTx+"px,"+zTy+"px) scale("+zScale+")"; }
+    function applyZoom(){ scene.style.setProperty("--zi", String(1/(zScale||1))); scene.style.transform="translate("+zTx+"px,"+zTy+"px) scale("+zScale+")"; }
     function zoomAt(mx,my,factor){ var z2=Math.max(1, Math.min(4, zScale*factor));
       // The plate (#scene) is centered in #working with an offset (left/top from fitScene), and its
       // transform-origin is its own top-left — so the zoom anchor must be measured from THAT origin, not
@@ -1134,39 +1145,102 @@
     function bdSnap(){ return { p:bdPts.map(function(q){ return [q.x,q.y]; }), c:bdClosed }; }
     function bdBtns(){ var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.disabled=!(bdHi>0); if(r) r.disabled=!(bdHi<bdHist.length-1); }
     // boundary is floor view-state like ctx/sides — written straight onto the floor row (NOT via snapFloor). ≥3 pts or null.
-    function bdCommit(){ var f=floors[curFloor]; if(!f) return; f.boundary=(bdPts.length>=3)?{ pts:bdPts.map(function(q){ return [q.x,q.y]; }) }:null; queueSave(); }
+    function bdCommit(){ var f=floors[curFloor]; if(!f) return;
+      if(rgTarget.kind==="zone"){ var zr=rgZone(rgTarget.id); if(zr && bdPts.length>=3){ zr.pts=bdPts.map(function(q){ return [q.x,q.y]; }); queueSave(); } return; }   // a zone writes into its own floor.zones row; an un-typed draft is not a zone yet
+      f.boundary=(bdPts.length>=3)?{ pts:bdPts.map(function(q){ return [q.x,q.y]; }) }:null; queueSave(); }
     function bdPush(){ bdHist=bdHist.slice(0,bdHi+1); bdHist.push(bdSnap()); if(bdHist.length>100) bdHist.shift(); bdHi=bdHist.length-1; bdBtns(); bdCommit(); renderBoundary(); }
     function bdGo(i){ if(i<0||i>=bdHist.length) return; bdHi=i; var s=bdHist[i]; bdPts=s.p.map(function(q){ return {x:q[0],y:q[1]}; }); bdClosed=s.c; bdSel=-1; bdDrag=-1; bdBtns(); bdCommit(); renderBoundary(); }
     function bdUndo(){ if(bdHi>0) bdGo(bdHi-1); }
     function bdRedo(){ if(bdHi<bdHist.length-1) bdGo(bdHi+1); }
     function bdClosable(hit){ return !bdClosed && bdPts.length>=3 && hit===0; }   // tapping the first dot (open, ≥3) closes the loop
     function bdClose(){ if(bdClosed||bdPts.length<3) return; bdClosed=true; bdSel=-1; bdPush(); }
-    function bdDelSel(){ if(bdSel<0||bdSel>=bdPts.length) return; bdPts.splice(bdSel,1); bdSel=-1; if(bdPts.length<3) bdClosed=false; bdPush(); }
+    function bdDelSel(){ if(bdSel<0||bdSel>=bdPts.length) return; if(rgTarget.kind=="zone" && rgTarget.id!=null && bdPts.length<=3){ bdSel=-1; renderBoundary(); return; }   // a zone keeps >=3 vertices (delete the zone itself via the bin)
+      bdPts.splice(bdSel,1); bdSel=-1; if(bdPts.length<3) bdClosed=false; bdPush(); }
     // Validate a stored boundary on restore: array of [num,num] clamped to [0,100], ≥3 pts, capped at 200 — else null.
     function bdValidBoundary(b){ if(!b||!b.pts||!b.pts.length) return null; var out=[]; for(var i=0;i<b.pts.length && out.length<200;i++){ var q=b.pts[i]; if(!q||q.length<2) continue; var x=+q[0], y=+q[1]; if(!isFinite(x)||!isFinite(y)) continue; out.push([Math.max(0,Math.min(100,x)),Math.max(0,Math.min(100,y))]); } return out.length>=3 ? { pts:out } : null; }
     // Pure %→SVG points string (viewBox 0 0 100 100 → user units are plate-%). Accepts {x,y} or [x,y].
     function boundaryToPath(pts){ return (pts||[]).map(function(p){ var x=(p.x!=null?p.x:p[0]), y=(p.y!=null?p.y:p[1]); return (Math.round(x*1000)/1000)+","+(Math.round(y*1000)/1000); }).join(" "); }
     // Load this floor's committed boundary into the working edit state (called from loadFloor).
-    function bdLoad(){ var b=floors[curFloor]&&floors[curFloor].boundary, pts=(b&&b.pts&&b.pts.length>=3)?b.pts:[]; bdPts=pts.map(function(q){ return {x:q[0],y:q[1]}; }); bdClosed=bdPts.length>=3; bdSel=-1; bdDrag=-1; bdHist=[bdSnap()]; bdHi=0; bdBtns(); }
+    function bdLoad(){ rgTarget={kind:"boundary"}; rgLoad(); }
+    // Load the ACTIVE target (boundary, or a zone by id; unknown id -> empty zone draft) into the working edit state.
+    function rgLoad(){ var f=floors[curFloor], pts=[], closed=false;
+      if(rgTarget.kind==="zone"){ var z=(rgTarget.id!=null)?rgZone(rgTarget.id):null; if(z){ pts=z.pts; closed=true; } else rgTarget={kind:"zone",id:null}; }
+      else { var b=f&&f.boundary; if(b&&b.pts&&b.pts.length>=3){ pts=b.pts; closed=true; } }
+      bdPts=pts.map(function(q){ return {x:q[0],y:q[1]}; }); bdClosed=closed; bdSel=-1; bdDrag=-1; bdHist=[bdSnap()]; bdHi=0; bdBtns(); }
+    /* ===== Phase 5.2 — site ZONES: many named, typed polygons per floor (floor.zones=[{id,label,type,pts}]), drawn with the SAME editor ===== */
+    var ZONE_TYPES=[["street","Street","120,132,148"],["driveway","Driveway","176,136,84"],["parking","Parking","74,126,206"],["front-yard","Front Yard","84,164,104"],["rear-yard","Rear Yard","138,172,64"],["side-yard","Side Yard","58,160,150"],["alley","Alley","154,102,170"],["loading","Loading","206,112,72"],["entrance","Entrance","200,84,114"]];
+    var ZONE_KEYS=ZONE_TYPES.map(function(t){ return t[0]; }), ZONE_COLORS={custom:"140,146,150"}, ZONE_MAX=40, ZONE_PTS_MAX=60;
+    ZONE_TYPES.forEach(function(t){ ZONE_COLORS[t[0]]=t[2]; });
+    function zTypeKey(t){ return ZONE_KEYS.indexOf(t)>=0 ? t : "custom"; }
+    function zTypeLabel(t){ for(var i=0;i<ZONE_TYPES.length;i++) if(ZONE_TYPES[i][0]===t) return ZONE_TYPES[i][1]; return "Zone"; }
+    function zLabel(l){ return String(l==null?"":l).trim().slice(0,40); }
+    function zEsc(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").split('"').join("&quot;"); }
+    function zNewId(zs){ var id, ok; do { id="z"+Math.random().toString(36).slice(2,9); ok=true; for(var i=0;i<zs.length;i++) if(zs[i].id===id) ok=false; } while(!ok); return id; }
+    // >=3 finite [x,y] clamped to [0,100], capped at ZONE_PTS_MAX — else null.
+    function zValidPts(pts){ if(!pts||!pts.length) return null; var out=[]; for(var i=0;i<pts.length && out.length<ZONE_PTS_MAX;i++){ var q=pts[i]; if(!q||q.length<2) continue; var x=+q[0], y=+q[1]; if(!isFinite(x)||!isFinite(y)) continue; out.push([Math.max(0,Math.min(100,x)),Math.max(0,Math.min(100,y))]); } return out.length>=3 ? out : null; }
+    // Validate stored zones on restore: junk rows dropped, type allow-listed (else "custom"), label <=40, ids unique strings, <=ZONE_MAX.
+    function zValidZones(list){ var out=[]; if(!Array.isArray(list)) return out;
+      for(var i=0;i<list.length && out.length<ZONE_MAX;i++){ var z=list[i]; if(!z||typeof z!=="object") continue; var pts=zValidPts(z.pts); if(!pts) continue;
+        var type=zTypeKey(z.type), label=zLabel(z.label)||zTypeLabel(type), id=(typeof z.id==="string"&&z.id&&z.id.length<=40)?z.id:zNewId(out);
+        for(var j=0;j<out.length;j++) if(out[j].id===id){ id=zNewId(out); break; }
+        out.push({ id:id, label:label, type:type, pts:pts }); }
+      return out; }
+    function zPointIn(pts,x,y){ var ins=false, n=pts.length; for(var i=0,j=n-1;i<n;j=i++){ var xi=(pts[i].x!=null?pts[i].x:pts[i][0]), yi=(pts[i].y!=null?pts[i].y:pts[i][1]), xj=(pts[j].x!=null?pts[j].x:pts[j][0]), yj=(pts[j].y!=null?pts[j].y:pts[j][1]); if(((yi>y)!==(yj>y)) && x<(xj-xi)*(y-yi)/(yj-yi)+xi) ins=!ins; } return ins; }
+    function zonePick(zs,x,y,skipId){ for(var i=(zs||[]).length-1;i>=0;i--){ var z=zs[i]; if(z.id!==skipId && z.pts && z.pts.length>=3 && zPointIn(z.pts,x,y)) return z; } return null; }   // topmost (last-drawn) zone under the point
+    // Area-weighted polygon centroid in plate-% (falls back to the vertex mean for a degenerate polygon).
+    function zoneCentroid(pts){ var a=0, cx=0, cy=0, n=pts.length, i, j, mx=0, my=0;
+      for(i=0;i<n;i++){ j=(i+1)%n; var x0=(pts[i].x!=null?pts[i].x:pts[i][0]), y0=(pts[i].y!=null?pts[i].y:pts[i][1]), x1=(pts[j].x!=null?pts[j].x:pts[j][0]), y1=(pts[j].y!=null?pts[j].y:pts[j][1]), c=x0*y1-x1*y0; a+=c; cx+=(x0+x1)*c; cy+=(y0+y1)*c; mx+=x0; my+=y0; }
+      if(Math.abs(a)<1e-6) return { x:n?mx/n:50, y:n?my/n:50 }; return { x:cx/(3*a), y:cy/(3*a) }; }
+    function rgZones(create){ var f=floors[curFloor]; if(!f) return []; if(!Array.isArray(f.zones)){ if(!create) return []; f.zones=[]; } return f.zones; }
+    function rgZone(id){ var zs=rgZones(false); for(var i=0;i<zs.length;i++) if(zs[i].id===id) return zs[i]; return null; }
+    function rgSetKind(k){ if(frozen()||!regionMode) return; closeZonePop(false); rgTarget=(k==="zone")?{kind:"zone",id:null}:{kind:"boundary"}; rgLoad(); renderBoundary(); updateRegionUI(); }
+    function rgSelectZone(id){ if(frozen()||!rgZone(id)) return; closeZonePop(false); rgTarget={kind:"zone",id:id}; rgLoad(); renderBoundary(); updateRegionUI(); }
+    function rgNewDraft(){ closeZonePop(false); rgTarget={kind:"zone",id:null}; rgLoad(); renderBoundary(); updateRegionUI(); }
+    // Close a typed draft into a real zone (the editor's history restarts on the new zone). Returns the zone or null.
+    function rgAddZone(type,label){ var f=floors[curFloor]; if(!f||frozen()||rgTarget.kind!=="zone"||rgTarget.id!=null||!bdClosed||bdPts.length<3) return null;
+      var zs=rgZones(true); if(zs.length>=ZONE_MAX) return null; var t=zTypeKey(type), z={ id:zNewId(zs), label:zLabel(label)||zTypeLabel(t), type:t, pts:bdPts.map(function(q){ return [q.x,q.y]; }) };
+      zs.push(z); rgTarget={kind:"zone",id:z.id}; bdHist=[bdSnap()]; bdHi=0; bdSel=-1; bdBtns(); queueSave(); renderBoundary(); updateRegionUI(); return z; }
+    // Retype / rename the selected zone (type null = keep). A label still equal to the old type's default follows the new type.
+    function rgRetype(type,label){ var z=(rgTarget.kind==="zone"&&rgTarget.id!=null)?rgZone(rgTarget.id):null; if(!z||frozen()) return null; var old=zTypeLabel(z.type), l=zLabel(label);
+      if(type!=null) z.type=zTypeKey(type); z.label = l || ((!z.label||z.label===old)?zTypeLabel(z.type):z.label); queueSave(); renderBoundary(); updateRegionUI(); return z; }
+    function rgApply(type,label){ if(rgTarget.kind!=="zone") return null; return (rgTarget.id==null) ? rgAddZone(type==null?"custom":type,label) : rgRetype(type,label); }
+    function rgDelZone(){ if(frozen()||rgTarget.kind!=="zone"||rgTarget.id==null) return false; var zs=rgZones(false), i, hit=false; for(i=0;i<zs.length;i++) if(zs[i].id===rgTarget.id){ zs.splice(i,1); hit=true; break; }
+      rgTarget={kind:"zone",id:null}; rgLoad(); queueSave(); renderBoundary(); updateRegionUI(); return hit; }
+    function closeZonePop(cancel){ var p=document.getElementById("zonePop"), was=zpOpen; zpOpen=false; if(p) p.classList.remove("open"); if(cancel && was && rgTarget.kind==="zone" && rgTarget.id==null && bdClosed) bdUndo(); }   // dismissing the picker for a NEW zone un-closes the loop
+    // Draw every zone as a closed translucent polygon (fill by type) + a centroid chip. The ACTIVE zone reads from the working bdPts so a drag shows live. Display only.
+    function renderZones(){ var zl=document.getElementById("zoneLayer"), tg=document.getElementById("zoneTags"); if(!zl) return;
+      var f=floors[curFloor]||{}, zs=Array.isArray(f.zones)?f.zones:[], act=(rgTarget.kind==="zone"&&rgTarget.id!=null)?rgTarget.id:null, s="", t="", i;
+      for(i=0;i<zs.length;i++){ var z=zs[i], on=(z.id===act), pts=(on&&bdPts.length>=3)?bdPts:z.pts, col=ZONE_COLORS[z.type]||ZONE_COLORS.custom, c=zoneCentroid(pts);
+        s += '<polygon points="'+boundaryToPath(pts)+'" fill="rgba('+col+','+(on?0.3:0.18)+')" stroke="rgb('+col+')" stroke-width="'+(on?2:1.2)+'" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+        t += '<span class="ztag" style="left:'+c.x+'%;top:'+c.y+'%;transform:translate(-50%,-50%) scale(var(--zi,1))">'+zEsc(z.label)+'</span>'; }
+      zl.innerHTML=s; if(tg) tg.innerHTML=t; }
     // Render floor.boundary (via the working bdPts) into #regionLayer: a closed dashed polygon + "Estimated boundary" chip. Handles/× only while editing.
-    function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;
-      var n=bdPts.length, has=n>=3, edit=regionMode && !frozen(), z=(typeof zScale==="number"&&zScale>0)?zScale:1;
+    function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return; renderZones();
+      var zt=(rgTarget.kind==="zone"), f=floors[curFloor]||{}, bp=zt?((f.boundary&&f.boundary.pts)||[]):bdPts, bcl=zt?(bp.length>=3):bdClosed,   // editing a zone -> the stored boundary draws static; editing the boundary -> its working copy
+          n=bp.length, has=n>=3, edit=regionMode && !frozen(), z=(typeof zScale==="number"&&zScale>0)?zScale:1, s="", i;
       if(tag){ tag.textContent="Estimated boundary"; tag.style.display=has?"block":"none"; }
-      if(!n){ rl.innerHTML=""; return; }
-      var path=boundaryToPath(bdPts), s="", dash='stroke="#b98a2e" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"';
-      s += (bdClosed&&has) ? '<polygon points="'+path+'" fill="rgba(185,138,46,.06)" '+dash+'/>' : '<polyline points="'+path+'" fill="none" '+dash+'/>';
-      if(edit){ var hr=1.6/z, i;                                                         // counter-scale handles by zoom so they stay ~constant on-screen
-        for(i=0;i<n;i++){ var p=bdPts[i], sel=(i===bdSel), first=(i===0 && !bdClosed && n>=3);
-          s += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(sel?hr*1.3:hr)+'" fill="'+(sel?"#b98a2e":"#fff")+'" stroke="'+(first?"#2a8a4e":"#b98a2e")+'" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'; }
-        if(bdSel>=0 && bdSel<n){ var sp=bdPts[bdSel], bx=sp.x+3/z, by=sp.y-3/z, br=1.9/z, bl=br*0.5;
+      var dash='stroke="#b98a2e" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"';
+      if(n){ var path=boundaryToPath(bp); s += (bcl&&has) ? '<polygon points="'+path+'" fill="rgba(185,138,46,.06)" '+dash+'/>' : '<polyline points="'+path+'" fill="none" '+dash+'/>'; }
+      var zz=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, hc="#b98a2e";
+      if(zt){ var zc=zz?(ZONE_COLORS[zz.type]||ZONE_COLORS.custom):"159,176,184"; hc="rgb("+zc+")";
+        if(!zz && bdPts.length){ var wp=boundaryToPath(bdPts), zd='stroke="'+hc+'" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"';   // an un-typed draft (a typed zone is drawn by renderZones)
+          s += (bdClosed&&bdPts.length>=3) ? '<polygon points="'+wp+'" fill="rgba('+zc+',.18)" '+zd+'/>' : '<polyline points="'+wp+'" fill="none" '+zd+'/>'; } }
+      var m=bdPts.length;
+      if(edit && m){ var hr=1.6/z;                                                        // counter-scale handles by zoom so they stay ~constant on-screen
+        for(i=0;i<m;i++){ var p=bdPts[i], sel=(i===bdSel), first=(i===0 && !bdClosed && m>=3);
+          s += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(sel?hr*1.3:hr)+'" fill="'+(sel?hc:"#fff")+'" stroke="'+(first?"#2a8a4e":hc)+'" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'; }
+        if(bdSel>=0 && bdSel<m){ var sp=bdPts[bdSel], bx=sp.x+3/z, by=sp.y-3/z, br=1.9/z, bl=br*0.5;
           s += '<g class="bdDel" style="pointer-events:all;cursor:pointer"><circle cx="'+bx+'" cy="'+by+'" r="'+br+'" fill="#c0392b" stroke="#fff" stroke-width="1.4" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by-bl)+'" x2="'+(bx+bl)+'" y2="'+(by+bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/><line x1="'+(bx-bl)+'" y1="'+(by+bl)+'" x2="'+(bx+bl)+'" y2="'+(by-bl)+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g>'; } }
       rl.innerHTML=s; }
     // regionBtn visible only to staff, on the Setup step, once a background exists; undo/redo only while editing.
     function updateRegionUI(){ var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.style.display=(bgData && !frozen() && curStep===1)?"":"none"; rbn.classList.toggle("on", regionMode); }
-      var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns(); }
+      var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns();
+      var bar=document.getElementById("rgBar"); if(bar){ var zt=(rgTarget.kind==="zone"), zs=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, nm=document.getElementById("zoneName"), dl=document.getElementById("zoneDel");   // sub-selector (Boundary | Zone) + the selected zone's name / bin
+        bar.style.display=(regionMode&&!frozen())?"flex":"none"; [].forEach.call(bar.querySelectorAll("#rgKind .vbtn"), function(b){ var on=(b.getAttribute("data-k")===(zt?"zone":"boundary")); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
+        if(nm){ nm.style.display=zs?"":"none"; nm.textContent=zs?zs.label:""; } if(dl){ dl.style.display=zs?"":"none"; dl.classList.remove("armed"); } } }
     function setRegionMode(on){ regionMode=!!on && !frozen() && !!bgData;
       if(regionMode){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); devMenu.classList.remove("show"); }
-      else { bdSel=-1; bdDrag=-1; bdDownPt=null; }
+      else { bdSel=-1; bdDrag=-1; bdDownPt=null; closeZonePop(false); if(rgTarget.kind!=="boundary"){ rgTarget={kind:"boundary"}; rgLoad(); } }   // leaving Regions -> back to the boundary target (an unfinished zone draft is dropped)
       document.body.classList.toggle("regions", regionMode);
       var rl=document.getElementById("regionLayer"); if(rl) rl.style.pointerEvents=regionMode?"auto":"none";
       updateRegionUI(); renderBoundary(); }
@@ -1185,7 +1259,8 @@
       rl.addEventListener("pointerup", function(e){ if(!regionMode||frozen()) return; var dp=bdDownPt; bdDownPt=null;
         if(bdDrag>=0){ var di=bdDrag, moved=dp&&dp.moved; bdDrag=-1; if(moved) bdPush(); else { bdSel=di; renderBoundary(); } return; }   // moved → one undo step; clean tap on a dot → select it (shows ×)
         if(!dp) return; var hit=bdNear(e.clientX,e.clientY);
-        if(bdClosable(hit)){ bdClose(); return; }                                         // tap the first dot → close
+        if(bdClosable(hit)){ bdClose(); if(rgTarget.kind==="zone" && rgTarget.id==null) openZonePop(); return; }   // closing a NEW zone -> type picker                                         // tap the first dot → close
+        if(hit<0 && rgTarget.kind==="zone" && rgZoneTap(e.clientX,e.clientY)) return;   // zone target: tap another zone's fill -> select it; tap empty beside a selected zone -> deselect (new draft)
         if(hit<0){ if(bdSel>=0){ bdSel=-1; renderBoundary(); } else if(!bdClosed){ var p=bdPt(e.clientX,e.clientY); bdPts.push({x:p.x,y:p.y}); bdPush(); } }   // empty tap: a selected dot ONLY deselects (no stray vertex); else add
         else { bdSel=hit; renderBoundary(); } });                                         // tapped an existing dot → select
       rl.addEventListener("pointercancel", function(){ bdDrag=-1; bdDownPt=null; });
@@ -1194,10 +1269,31 @@
       var ub=document.getElementById("bdUndo"), rbtn=document.getElementById("bdRedo");
       if(ub){ ub.addEventListener("pointerdown", function(e){ e.stopPropagation(); }); ub.addEventListener("click", function(e){ e.stopPropagation(); if(regionMode) bdUndo(); }); }
       if(rbtn){ rbtn.addEventListener("pointerdown", function(e){ e.stopPropagation(); }); rbtn.addEventListener("click", function(e){ e.stopPropagation(); if(regionMode) bdRedo(); }); }
+      // Phase 5.2 — zone routing + chrome. rgZoneTap reuses bdPt; the pointer handlers above are NOT duplicated, they just branch on rgTarget.
+      function rgZoneTap(cx,cy){ if(bdSel>=0) return false; if(!(bdClosed||!bdPts.length)) return false; var p=bdPt(cx,cy);   // an open draft / a selected vertex -> the normal add / deselect path
+        if(bdClosed && rgTarget.id!=null && zPointIn(bdPts,p.x,p.y)) return true;                                       // tap inside the selected zone -> keep it
+        var z=zonePick(rgZones(false),p.x,p.y,rgTarget.id); if(z){ rgSelectZone(z.id); return true; }
+        if(bdClosed){ rgNewDraft(); return true; } return false; }
+      var zbar=document.getElementById("rgBar"), zpop=document.getElementById("zonePop"), zlist=document.getElementById("zonePopList"), zinp=document.getElementById("zonePopInput"), zwork=document.getElementById("working");
+      function openZonePop(){ if(!zpop||!zlist||!zinp||!zwork||frozen()) return; var z=(rgTarget.kind==="zone"&&rgTarget.id!=null)?rgZone(rgTarget.id):null;
+        Array.prototype.forEach.call(zlist.children,function(b){ b.classList.toggle("on", !!z && b.getAttribute("data-t")===z.type); }); zinp.value=(z && z.label!==zTypeLabel(z.type))?z.label:"";
+        zpop.classList.add("open"); zpOpen=true; var wr=zwork.getBoundingClientRect(), br=zbar.getBoundingClientRect(), pw=zpop.offsetWidth, ph=zpop.offsetHeight, x=br.left-wr.left, y=br.top-wr.top-ph-6; if(y<8) y=br.bottom-wr.top+6;
+        zpop.style.left=Math.max(8,Math.min(x,wr.width-pw-8))+"px"; zpop.style.top=Math.max(8,Math.min(y,wr.height-ph-8))+"px"; }
+      if(zpop && zlist && zinp && zbar){
+        ZONE_TYPES.forEach(function(t){ var b=document.createElement("button"); b.type="button"; b.className="sp-opt"; b.setAttribute("data-t",t[0]); b.innerHTML='<i style="background:rgb('+t[2]+')"></i>'+t[1]; b.addEventListener("click",function(e){ e.stopPropagation(); rgApply(t[0],zinp.value); closeZonePop(false); }); zlist.appendChild(b); });
+        zpop.addEventListener("pointerdown",function(e){ e.stopPropagation(); }); zpop.addEventListener("click",function(e){ e.stopPropagation(); });
+        zinp.addEventListener("keydown",function(e){ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); rgApply(null,zinp.value); closeZonePop(false); } else if(e.key==="Escape"){ closeZonePop(true); } });
+        document.addEventListener("pointerdown",function(e){ if(!zpOpen||zpop.contains(e.target)||zbar.contains(e.target)) return; closeZonePop(true); if(rl.contains(e.target)){ e.stopPropagation(); e.preventDefault(); } }, true);   // outside tap dismisses (and is swallowed on the plate so it can't drop a vertex)
+        [].forEach.call(zbar.querySelectorAll("#rgKind .vbtn"), function(b){ b.addEventListener("click",function(e){ e.stopPropagation(); rgSetKind(b.getAttribute("data-k")); }); });
+        var znm=document.getElementById("zoneName"), zdl=document.getElementById("zoneDel"), zt0=null;
+        zbar.addEventListener("pointerdown",function(e){ e.stopPropagation(); });
+        if(znm) znm.addEventListener("click",function(e){ e.stopPropagation(); if(zpOpen) closeZonePop(false); else openZonePop(); });
+        if(zdl) zdl.addEventListener("click",function(e){ e.stopPropagation(); clearTimeout(zt0);   // two-step: first tap arms, second deletes
+          if(zdl.classList.contains("armed")){ zdl.classList.remove("armed"); rgDelZone(); } else { zdl.classList.add("armed"); zt0=setTimeout(function(){ zdl.classList.remove("armed"); },3000); } }); }
       document.addEventListener("keydown", function(e){ if(!regionMode||frozen()) return; var mod=e.ctrlKey||e.metaKey;
         if(mod && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(e.shiftKey) bdRedo(); else bdUndo(); }
         else if(mod && (e.key==="y"||e.key==="Y")){ e.preventDefault(); bdRedo(); }
-        else if(e.key==="Escape"){ setRegionMode(false); } });
+        else if(e.key==="Escape"){ if(zpOpen) closeZonePop(true); else setRegionMode(false); } });
     })();
 
     // ---- Fit: toggle whole-plan (contain) vs fill-screen (cover). A portrait plan on a wide canvas
@@ -1644,7 +1740,7 @@
       if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
-      regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; bdLoad();   // leave edit mode + load this floor's boundary
+      regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
@@ -1658,7 +1754,7 @@
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null,   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
         derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
@@ -1669,7 +1765,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null,
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
         derivedFromFloorId:src.id||null,   // lineage only — the copy is fully independent (deep copies + fresh ids)
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); flushNow(); }   // discrete action → immediate server flush
@@ -1765,7 +1861,7 @@
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showGridState=st.showGrid!==false; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,boundary:bdValidBoundary(f.boundary),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);

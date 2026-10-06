@@ -26,7 +26,7 @@ function extractFn(src, name) {
 }
 
 const FN_NAMES = ["bdSnap", "bdBtns", "bdCommit", "bdPush", "bdGo", "bdUndo", "bdRedo",
-  "bdClosable", "bdClose", "bdDelSel", "bdValidBoundary", "boundaryToPath", "bdLoad"];
+  "bdClosable", "bdClose", "bdDelSel", "bdValidBoundary", "boundaryToPath", "bdLoad", "rgLoad", "rgZones", "rgZone"];
 const FNS = FN_NAMES.map((n) => extractFn(survey, n)).join("\n");
 
 // One sandbox per test. document is stubbed (getElementById → fake elements with .disabled); queueSave + renderBoundary
@@ -37,7 +37,7 @@ function sandbox() {
   const calls = { save: 0, paint: 0 };
   const factory = new Function(
     "document", "queueSave", "renderBoundary",
-    `var regionMode=false,bdPts=[],bdClosed=false,bdDrag=-1,bdSel=-1,bdHist=[],bdHi=-1,bdDownPt=null;
+    `var regionMode=false,bdPts=[],bdClosed=false,bdDrag=-1,bdSel=-1,bdHist=[],bdHi=-1,bdDownPt=null,rgTarget={kind:"boundary"};
      var floors=[{}],curFloor=0;
      ${FNS}
      return {
@@ -236,8 +236,8 @@ test("bdLoad: a floor with no / sub-3 boundary loads empty and open", () => {
 
 // ---------- source-reads: wiring the pure logic into the live widget ----------
 test("#regionLayer is an SVG inside #scene at viewBox 0 0 100 100 (plate-% user units)", () => {
-  assert.ok(survey.includes('<div id="gridLayer"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none"'),
-    "#regionLayer sits inside #scene, after #gridLayer");
+  assert.ok(survey.includes('<svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none"'),
+    "#regionLayer sits inside #scene, above the zone layer");
   assert.ok(/#regionLayer\{[^}]*pointer-events:none/.test(survey), "#regionLayer is pointer-events:none for display");
 });
 
@@ -245,8 +245,8 @@ test("#regionBtn lives in .utils, icon-only with an aria-label (UI constitution)
   const utils = survey.slice(survey.indexOf('class="utils"'), survey.indexOf("</div>", survey.indexOf('id="bdRedo"')));
   assert.ok(utils.includes('id="regionBtn"'), "regionBtn is in the .utils bar");
   assert.ok(utils.includes('id="bdUndo"') && utils.includes('id="bdRedo"'), "undo/redo live beside it");
-  assert.ok(/id="regionBtn"[^>]*aria-label="Boundary"/.test(survey), "regionBtn has an aria-label");
-  assert.ok(/id="regionBtn"[^>]*title="Boundary"/.test(survey), "regionBtn has a tooltip");
+  assert.ok(/id="regionBtn"[^>]*aria-label="Regions"/.test(survey), "regionBtn has an aria-label");
+  assert.ok(/id="regionBtn"[^>]*title="Regions"/.test(survey), "regionBtn has a tooltip");
 });
 
 test("renderView and fitScene both redraw the boundary", () => {
