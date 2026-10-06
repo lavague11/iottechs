@@ -880,7 +880,10 @@
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotPlanReady"&&m.type!=="iotPlanSave")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;   // only the embedded build tool speaks this protocol (null source = reject)
       var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
-      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster(); return; }
+      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster();
+        // Phase 2 (grid-first): hand the draw tool this floor's enhanced/leveled aerial so Building cells are painted ON the roof — the tool positions it through its own seed transform (ctxVB), behind the grid + cells.
+        try{ satFrame.contentWindow.postMessage({type:"iotDrawBackdrop", fid:fid, src:(fl&&fl.ctx&&fl.ctx.src)||null}, "*"); }catch(e){}
+        return; }
       if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)

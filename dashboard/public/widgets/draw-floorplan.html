@@ -179,6 +179,7 @@
         <button class="tb ico on" id="tAdd" title="Add" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
         <button class="tb ico snap on" id="tSnap" title="Snap: half grid" aria-label="Snap: half grid">½</button>
+        <button class="tb ico" id="tAerial" title="Aerial" aria-label="Aerial backdrop" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg></button>
       </span>
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
@@ -236,6 +237,16 @@
   // seeded from a satellite trace; persisted with the floor. See lib/floor-scale.js (inlined below).
   var metersPerPx=0, _seedSc=0, M_PER_FT=0.3048;
   var _seed=null;   // the outline seed transform {sc,offx,offy,aspect}: aerial fraction (x·aspect, y) → plan px = ·sc + off; persisted in the plan
+  // Phase 2 (grid-first): the enhanced aerial as a backdrop behind the grid + cells, so Building cells are
+  // painted ON the roof. Positioned through the SAME seed transform ctxVB uses (full aerial fraction → canvas
+  // px: fraction·aspect·sc+offx, fraction·sc+offy), so the building under the cells lines up 1:1. No new math.
+  var _bdImg=null, _bdMode=1;   // 0 off · 1 light · 2 full — default light so painted cells read over the photo
+  function bdAlpha(){ return _bdMode===2?0.82:(_bdMode===1?0.45:0); }
+  function drawBackdrop(){ if(!_bdImg||!_bdMode||!_seed||!(+_seed.sc>0)) return; var a=+_seed.aspect||1, sc=+_seed.sc;
+    ctx.save(); ctx.globalAlpha=bdAlpha(); try{ ctx.drawImage(_bdImg, +_seed.offx||0, +_seed.offy||0, a*sc, sc); }catch(e){} ctx.restore(); }
+  function updateAerialBtn(){ var b=$("tAerial"); if(!b) return; var on=!!(_bdImg&&_seed&&+_seed.sc>0);
+    b.style.display=on?"":"none"; b.classList.toggle("on", on && _bdMode>0); b.setAttribute("aria-pressed", (on&&_bdMode>0)?"true":"false");
+    b.title=_bdMode===2?"Aerial: full":(_bdMode===1?"Aerial: light":"Aerial: off"); }
   function pxToFeet(px){ return metersPerPx>0 ? (px*metersPerPx)/M_PER_FT : 0; }
   function cellsSqFt(n){ var h=pxToFeet(HALF); return metersPerPx>0 ? n*h*h : 0; }
   // Feet per full grid box — inline copy of lib/site-transform.js gridBoxFeet(); tests/site-transform-drift.test.mjs keeps the formula identical.
@@ -400,6 +411,7 @@
     }
   }
   function redraw(){ ctx.clearRect(0,0,W(),H());
+    drawBackdrop();
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawPreview();
@@ -761,6 +773,9 @@
     b.textContent = half ? "½" : "1"; b.title = lbl; b.setAttribute("aria-label", lbl); }
   $("tSnap").addEventListener("click", function(){ snap = snap===0.5 ? 1 : 0.5; applySnapUI();
     try{ localStorage.setItem("iot_struct_snap", String(snap)); }catch(e){} redraw(); });
+  // Aerial backdrop: cycle Off → Light → Full (see the roof while painting Building cells). Session-persisted.
+  (function(){ try{ var m=localStorage.getItem("iot_struct_aerial"); if(m!=null && isFinite(+m)) _bdMode=Math.max(0,Math.min(2,+m)); }catch(e){} })();
+  $("tAerial").addEventListener("click", function(){ _bdMode=(_bdMode+1)%3; try{ localStorage.setItem("iot_struct_aerial", String(_bdMode)); }catch(e){} updateAerialBtn(); redraw(); });
   // Undo: while the Enhance preview is up, the first Undo dismisses it (back to the drawing) — the
   // enhance overlay isn't a cells/rooms edit, so plain undo() couldn't reach it; that left it stuck.
   $("tUndo").addEventListener("click", function(){ if(busy) return; if(backToDraw()) return; undo(); });
@@ -897,7 +912,7 @@
       writeLS();                                     // recovery copy now mirrors the resolved geometry (overwrite, never merge)
       if(fromKey===LSK_OLD && LSK_OLD && LSK_OLD!==LSK && hasPlan(readLS(LSK))){ try{ localStorage.removeItem(LSK_OLD); }catch(e){} }   // legacy draft now lives under the fid key → never imported twice
       if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
-      updateTools(); }
+      updateTools(); updateAerialBtn(); redraw(); }   // geometry (and its seed transform) resolved → the aerial backdrop can now position + show its toggle
     var raw=_qs.get("seed"), S=null; if(raw){ try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){} }
     if(!S||!S.pts||S.pts.length<3){ finish(); return; }
     function seed(){ var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
@@ -921,6 +936,10 @@
     if(p){ var lc=readLS(LSK); if(hasPlan(p) && hasPlan(lc) && (+lc.t||0) > (+p.t||0)+1500){ initWithPlan(lc, true); return; }   // unsent local edits win, and are posted
       initWithPlan(p, false); return; }
     var lp=localPlan(); initWithPlan(lp, !!lp, _lpKey); });
+  // Phase 2 (grid-first): the host hands this floor's enhanced/leveled aerial to paint Building cells on the roof.
+  window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawBackdrop"||m.fid!==FID) return;
+    if(!m.src || typeof m.src!=="string"){ _bdImg=null; updateAerialBtn(); redraw(); return; }
+    var img=new Image(); img.onload=function(){ _bdImg=img; updateAerialBtn(); redraw(); }; img.onerror=function(){ _bdImg=null; updateAerialBtn(); }; img.src=m.src; });
   if(window.parent===window){ var lp0=localPlan(); initWithPlan(lp0, false, _lpKey); }   // standalone / dev: localStorage as before
   else {
     // Silent/slow host: a local copy → use it at 800 ms. Nothing local → keep the canvas blocked ("Loading plan…")
