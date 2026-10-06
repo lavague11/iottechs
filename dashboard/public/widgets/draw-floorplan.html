@@ -47,6 +47,18 @@
   #preview{position:absolute;inset:0;background:#fff;display:none;z-index:9}
   #preview.show{display:block}
   #prevImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  /* Canonical vectors re-drawn OVER the AI raster — same tight bbox+margin frame, same object-fit:contain, so walls/labels/doors land 1:1 on the PNG (proves the AI moved nothing). */
+  #prevVec{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;display:none}
+  #prevVec.on{display:block}
+  #prevBar{position:absolute;top:12px;right:12px;z-index:11;display:flex;gap:8px}
+  .pvb{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.95);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
+  .pvb:hover{border-color:var(--ink)} .pvb.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pvb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  /* STALE badge + explicit Update — the geometry changed since the raster was made; never auto-regenerated. */
+  #prevStale{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:11;display:none;align-items:center;gap:8px;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:10px;padding:5px 6px 5px 11px;box-shadow:0 6px 22px rgba(16,17,18,.2)}
+  #prevStale.on{display:flex}
+  #prevStale span{font:700 12px var(--sans);color:#c4553d}
+  #prevStale button{border:0;background:var(--gold);color:#fff;border-radius:8px;padding:7px 12px;font:700 12.5px var(--sans);cursor:pointer}
   #scan{position:absolute;inset:0;z-index:10;display:none;overflow:hidden;background:rgba(12,14,16,.28)}
   #scan.on{display:block}
   #scan .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(185,138,46,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(185,138,46,.16) 1px,transparent 1px);background-size:28px 28px;-webkit-mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);mask:radial-gradient(circle at 50% 45%,#000,transparent 78%);animation:gp 1.7s ease-in-out infinite}
@@ -134,7 +146,12 @@
       <div class="lplist" id="lpList"></div>
     </div>
 
-    <div id="preview"><img id="prevImg" alt="floor plan">
+    <div id="preview"><img id="prevImg" alt="floor plan"><img id="prevVec" alt="" aria-hidden="true">
+      <div id="prevBar">
+        <button class="pvb on" id="pvVec" type="button" title="Overlay" aria-label="Overlay" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button class="pvb" id="pvRevise" type="button" title="Revise" aria-label="Revise"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg></button>
+      </div>
+      <div id="prevStale"><span>Stale</span><button id="pvUpdate" type="button">Update</button></div>
       <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Drawing your floor plan…</div></div>
     </div>
     <div id="msg"></div>
@@ -166,7 +183,7 @@
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
         <div class="moremenu" id="moreMenu">
-          <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> Enhance</button>
+          <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> <span id="mCleanTxt">Enhance</span></button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           <button id="mMergeRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
           <button id="mDeleteRoom" class="danger" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteRoomTxt">Delete room</span></button>
@@ -211,7 +228,10 @@
   var openings=[], hoverWall=null;
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
-  var enhancedURL=null, enhancedOnce=false, busy=false;
+  // enhancedURL = the AI raster (data: PNG); enhancedRev = the planRev() of the geometry it was generated from
+  // (a content hash, NOT a timestamp) → the plan can tell whether the raster is still current. Both PERSIST in the
+  // plan record (enhanced:{src,rev}) so a cached raster survives reload; never regenerated automatically.
+  var enhancedURL=null, enhancedRev=null, enhancedOnce=false, busy=false;
   // Real-world scale: metres per canvas pixel (0 = unknown / hand-drawn). Set when the structure is
   // seeded from a satellite trace; persisted with the floor. See lib/floor-scale.js (inlined below).
   var metersPerPx=0, _seedSc=0, M_PER_FT=0.3048;
@@ -431,14 +451,31 @@
   // t = when this geometry was last EDITED (not written): the recovery copy and the posted plan share it, a
   // loaded plan keeps its own — so a local copy is only "newer" when edits never reached the survey.
   var _planStamp=0;
-  function planOut(){ return {v:1, cells:Array.from(cells), rooms:namedRooms(rooms), openings:sanitizeOpenings(openings), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp}; }
+  // CONTENT hash (FNV-1a, 32-bit) of the CANONICAL geometry — NOT the timestamp. Identical geometry → identical rev,
+  // so an unchanged plan reuses its enhanced raster (no re-bill); any cell / room(label+cells) / opening change flips
+  // it. Order-independent: cells, each room's (label|sorted cells), and the openings keys are all sorted before hashing.
+  function _fnv(h,s){ h=h>>>0; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*16777619)>>>0; } return h>>>0; }
+  function planRev(){ var h=2166136261>>>0;
+    h=_fnv(h,"C:"+Array.from(cells).sort().join(";"));
+    var rs=(rooms||[]).map(function(r){ return ((r&&r.label||"").trim())+"|"+((r&&r.cells)||[]).slice().sort().join(","); }).sort();
+    h=_fnv(h,"R:"+rs.join(";"));
+    h=_fnv(h,"O:"+(openings||[]).map(function(o){ return openKey(o); }).sort().join(";"));
+    return ("0000000"+h.toString(16)).slice(-8); }
+  // Validate a restored enhanced record: an object with a data:image/ src + its generation rev (coerced to string). null otherwise.
+  function sanitizeEnhanced(e){ if(!e||typeof e!=="object") return null; var src=typeof e.src==="string"?e.src:"";
+    if(src.slice(0,11)!=="data:image/") return null; var rev=(typeof e.rev==="string"||typeof e.rev==="number")?String(e.rev):""; return {src:src, rev:rev}; }
+  // True only when a raster exists AND the geometry has changed since it was generated (so the raster is out of date).
+  function enhanceStale(){ return !!(enhancedURL && String(enhancedRev)!==planRev()); }
+  function planOut(){ var o={v:1, cells:Array.from(cells), rooms:namedRooms(rooms), openings:sanitizeOpenings(openings), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp};
+    if(enhancedURL && enhancedRev!=null) o.enhanced={src:enhancedURL, rev:String(enhancedRev)}; return o; }   // the cached AI raster + the rev it was made from — survives reload, never re-fetched
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; metersPerPx=0; sel=null; _planStamp=(s&&+s.t)||0;
+  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
     _seed=(s && s.seed && +s.seed.sc>0) ? { sc:+s.seed.sc, offx:+s.seed.offx||0, offy:+s.seed.offy||0, aspect:(+s.seed.aspect>0)?+s.seed.aspect:1 } : null;
-    if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(Array.isArray(s.openings)) openings=sanitizeOpenings(s.openings); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx; } }
+    if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(Array.isArray(s.openings)) openings=sanitizeOpenings(s.openings); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx;
+      var en=sanitizeEnhanced(s.enhanced); if(en){ enhancedURL=en.src; enhancedRev=en.rev; enhancedOnce=true; } } }   // restore the cached raster (NO fetch) — explicit controls still gate any regeneration
   // Local recovery copy: this floor's id key first, then the legacy index key (only with &lidx). _lpKey = where it came from.
   var _lpKey=null;
   function localPlan(){ var s=readLS(LSK); _lpKey=LSK; if(!hasPlan(s) && LSK_OLD && LSK_OLD!==LSK){ s=readLS(LSK_OLD); _lpKey=LSK_OLD; } if(!hasPlan(s)){ _lpKey=null; return null; } return s; }
@@ -446,7 +483,7 @@
   var _planT=null;
   function postPlan(){ _planT=null; if(!FID || window.parent===window) return; try{ parent.postMessage({type:"iotPlanSave", project:PID, fid:FID, plan:planOut()}, "*"); }catch(e){} }
   function flushPlan(){ if(_planT){ clearTimeout(_planT); postPlan(); } }
-  function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); }
+  function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); refreshPrevStale(); }   // any edit while the enhanced preview is up flips it to STALE (never silently keeps showing a current-looking raster)
 
   // ---- history (undo/redo) ----
   function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), openings:JSON.parse(JSON.stringify(openings))}; }
@@ -656,13 +693,33 @@
     svgPlanBody(o, swS, swR, fs);
     o.push("</svg>");
     var u="data:image/svg+xml,"+encodeURIComponent(o.join("")); return u.length<=400000 ? u : null; }   // the survey's cap — over it, no layer rather than a rejected one
+  /* Preview overlay (Phase 10): the canonical vectors — light structure wash + room walls + labels + door openings —
+     TRANSPARENT, framed on the SAME tight bbox + 6% margin the enhanced raster was rendered from (sketchPNG/sketchSVG
+     default). Drawn 1:1 over the AI PNG (both object-fit:contain, matched aspect, preserveAspectRatio meet) it proves
+     the AI added/moved/removed nothing — the authoritative walls sit on top. Reuses svgPlanBody so it can't drift. */
+  function overlaySVG(){ var arr=planCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
+    var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06)), x0=bb.x-m, y0=bb.y-m, vw=bb.w+2*m, vh=bb.h+2*m;
+    var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
+    var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="xMidYMid meet" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
+    var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+    if(sf) o.push('<g fill="#b98a2e" fill-opacity="0.08">'+sf+'</g>');   // faint wash only — no opaque paper, no grid (the AI raster is the background)
+    svgPlanBody(o, swS, swR, fs);
+    o.push("</svg>"); return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
 
   // ---- enhance: sketch → real floor plan via /api/enhance (mode=floorplan) ----
   function scanOn(on){ $("scan").classList.toggle("on",on); }
   function msg(m){ var el=$("msg"); if(!m){ el.classList.remove("on"); return; } el.textContent=m; el.classList.add("on"); }
+  // Paint the canonical vectors over the raster; mirror the overlay-toggle state onto the layer.
+  function setOverlay(){ var v=$("prevVec"), u=overlaySVG(); if(u) v.src=u; else v.removeAttribute("src"); v.classList.toggle("on", $("pvVec").classList.contains("on")); }
+  // Show the STALE badge only while the enhanced preview is up AND the geometry has drifted from the raster.
+  function refreshPrevStale(){ $("prevStale").classList.toggle("on", $("preview").classList.contains("show") && enhanceStale()); }
+  // Reuse the CACHED raster — no /api/enhance call (the cache-by-rev path). Explicit only (wand "View").
+  function showEnhanced(){ if(!enhancedURL) return; closeLabel(); $("prevImg").src=enhancedURL; setOverlay();
+    $("preview").classList.add("show"); $("hint").style.display="none"; $("tUndo").style.display="inline-flex"; refreshPrevStale(); }
   function enhance(revision){
     if(!hasSketch()){ msg("Block out the structure first, then rooms."); setTimeout(function(){msg("");},2400); return; }
-    var w=$("mClean"); busy=true; w.classList.add("busy"); scanOn(true); $("preview").classList.add("show"); $("hint").style.display="none"; closeLabel();
+    var w=$("mClean"), genRev=planRev(); busy=true; w.classList.add("busy"); scanOn(true); $("preview").classList.add("show"); $("hint").style.display="none"; closeLabel();
+    $("prevStale").classList.remove("on");   // a fresh generation is never stale
     $("tUndo").style.display="inline-flex";   // Undo now dismisses the Enhance preview → back to the drawing
     var labels=[], meta=[];
     rooms.forEach(function(r){ var n=(r.label||"").trim(); if(n){ labels.push(n); meta.push({name:n, type:r.semanticType||"custom"}); } });
@@ -671,13 +728,17 @@
       if(meta.length) fd.append("roomsMeta", JSON.stringify(meta));   // name + semanticType → richer AI generation (§40)
       if(labels.length) fd.append("labels",labels.join(", ")); if(revision) fd.append("revision",revision);
       fetch("/api/enhance",{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){ if(d.error) throw new Error(d.error);
-        var img=new Image(); img.onload=function(){ enhancedURL="data:image/png;base64,"+d.b64; $("prevImg").src=enhancedURL;
+        var img=new Image(); img.onload=function(){ enhancedURL="data:image/png;base64,"+d.b64; enhancedRev=genRev; $("prevImg").src=enhancedURL;
+          setOverlay(); refreshPrevStale(); persist();   // record the rev it was made from + cache it (survives reload)
           scanOn(false); w.classList.remove("busy"); busy=false; enhancedOnce=true; };
         img.onerror=function(){ scanOn(false); w.classList.remove("busy"); busy=false; msg("Couldn't load the result."); };
         img.src="data:image/png;base64,"+d.b64;
       }).catch(function(e){ scanOn(false); w.classList.remove("busy"); busy=false; if(!enhancedURL){ $("preview").classList.remove("show"); $("hint").style.display="block"; }
         msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2600); });
     },"image/png"); }
+  $("pvVec").addEventListener("click", function(){ var on=!$("pvVec").classList.contains("on"); $("pvVec").classList.toggle("on",on); $("pvVec").setAttribute("aria-pressed",on?"true":"false"); $("prevVec").classList.toggle("on",on); });
+  $("pvRevise").addEventListener("click", function(){ if(busy) return; $("revBox").classList.contains("on")?closeRev():openRev(); });   // revise → explicit new enhance with a prompt
+  $("pvUpdate").addEventListener("click", function(){ if(busy) return; enhance(""); });   // explicit Update → regenerate for the changed geometry
   function openRev(){ $("revBox").classList.add("on"); var i=$("revIn"); i.value=""; i.focus(); }
   function closeRev(){ $("revBox").classList.remove("on"); }
   function runRev(){ var v=$("revIn").value.trim(); closeRev(); enhance(v); }
@@ -685,7 +746,8 @@
   $("revIn").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runRev(); } else if(e.key==="Escape") closeRev(); });
 
   // ---- toolbar ----
-  function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); enhancedURL=null; enhancedOnce=false; updateTools(); redraw(); return true; } return false; }
+  // Dismiss the preview back to the drawing — but KEEP enhancedURL/enhancedRev as the cache (reused on an unchanged plan, marked stale once edited). Only Delete clears the raster.
+  function backToDraw(){ if($("preview").classList.contains("show")){ $("preview").classList.remove("show"); $("prevVec").classList.remove("on"); $("prevStale").classList.remove("on"); closeRev(); updateTools(); redraw(); return true; } return false; }
   function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; var dr=$("mDeleteRoomTxt"); if(dr) dr.textContent="Delete room"; }
   $("tStructure").addEventListener("click", function(){ backToDraw(); setMode("structure"); });   // re-enter shell edit
   $("tRoom").addEventListener("click", function(){ if(cells.size===0){ setMode("structure"); return; } backToDraw(); setMode("room"); });
@@ -710,7 +772,8 @@
   // More menu (secondary tools) — toggle + outside-close. "Delete room" appears only with a room selected
   // (naming is for naming; deletion lives here per the redesign).
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu();
-    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)); $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none"; }
+    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)); $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none";
+      var mc=$("mCleanTxt"); if(mc) mc.textContent = !enhancedURL ? "Enhance" : (enhanceStale() ? "Update" : "View"); }   // the wand IS the stale indicator in draw mode: Enhance (none) / Update (stale) / View (fresh cache)
     $("moreMenu").classList.toggle("on"); });
   $("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge(); });
   $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
@@ -745,15 +808,16 @@
   window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotFloors"||window.parent===window||ev.source!==parent) return;   // only the hosting survey speaks this
     _floors=floorRoster(m.floors, FID, _flIdx); renderFloorSel(); });
   renderFloorSel();
-  $("mClean").addEventListener("click", function(){ if(busy) return; closeMore();
-    if(enhancedOnce){ $("revBox").classList.contains("on")?closeRev():openRev(); return; } enhance(""); });
+  $("mClean").addEventListener("click", function(){ if(busy) return; closeMore();   // the ONLY auto-less gate on /api/enhance
+    if(!enhancedURL || enhanceStale()){ enhance(""); return; }   // first generation OR explicit Update for changed geometry (the only fetches)
+    showEnhanced(); });                                          // fresh cached raster → reuse, NO re-fetch (unchanged plan never re-billed)
   $("mExport").addEventListener("click", function(){ closeMore(); var url=enhancedURL || sketchPNG().toDataURL("image/png");
     var a=document.createElement("a"); a.href=url; a.download="floor-plan.png"; a.click(); });
   // Delete — two-tap confirm inside the menu (destructive, infrequent).
   $("mDelete").addEventListener("click", function(){ if(busy) return; var t=$("mDeleteTxt");
     if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
-    cells=new Set(); rooms=[]; sel=null; draft=null; enhancedURL=null; enhancedOnce=false;
-    $("preview").classList.remove("show"); closeLabel(); closeMore(); pushHist(); setMode("structure"); });
+    cells=new Set(); rooms=[]; sel=null; draft=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false;
+    $("preview").classList.remove("show"); $("prevVec").classList.remove("on"); $("prevStale").classList.remove("on"); closeLabel(); closeMore(); pushHist(); setMode("structure"); });
   // Done → hand the final plan (enhanced if made, else the sketch) to the survey; it drops it as the
   // floor background AND saves it to the shared library (same contract the satellite tool uses).
   // Real-world size (feet) of the EXPORTED image — the plan bbox + the same ~6% margin sketchPNG/SVG use —
