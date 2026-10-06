@@ -1570,6 +1570,21 @@
     function sugOk(v){ return v!=null && v!=="" && isFinite(+v); }
     function sugZones(f){ var zs=(f&&Array.isArray(f.zones))?f.zones:[]; return zs.filter(function(z){ return z && Array.isArray(z.pts) && z.pts.length>=3; }); }
     function sugZoneName(z){ var l=zLabel(z.label); return l || ((z.type && z.type!=="custom") ? zTypeLabel(z.type) : ""); }
+    // Phase 4 (grid-first): zones are CELLS now. One flat map "c,r" → type (built once per floor), so a
+    // device's zone and its coverage read the SAME cells as the structure/rooms. "site" is the property
+    // base, not a place-name → never a device name.
+    function zcMapOf(zoneCells){ if(!zoneCells||typeof zoneCells!=="object") return null; var m={}, any=false; for(var t in zoneCells){ if(t==="site"||!Array.isArray(zoneCells[t])) continue; for(var i=0;i<zoneCells[t].length;i++){ m[zoneCells[t][i]]=t; any=true; } } return any?m:null; }
+    function devCellKey(d,vb){ if(!vb||!(vb.vw>0)||!(vb.vh>0)) return null; var px=vb.x0+(+d.x)/100*vb.vw, py=vb.y0+(+d.y)/100*vb.vh; return Math.floor(px/SUG_HALF)+","+Math.floor(py/SUG_HALF); }
+    // the zone type of the cell the device stands in (cell zones) → its label; "" when none
+    function sugZoneCellAt(d,o){ var m=o&&o.zcMap, vb=o&&o.vb; if(!m||!vb) return ""; var k=devCellKey(d,vb); var t=k?m[k]:null; return t?zTypeLabel(t):""; }
+    // coverage over cell zones: sample the wedge (plate-%), map each sample to a plan-px cell, tally non-site types, pick the dominant one (≥SUG_MIN)
+    function sugCoverCellZone(d,o){ var m=o&&o.zcMap, vb=o&&o.vb; if(!m||!vb) return "";
+      var wedge=sugWedge(d,sugReach(d,o.scale,o),o.aspect); if(!wedge) return "";
+      var minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9,i,j; for(i=0;i<wedge.length;i++){ minX=Math.min(minX,wedge[i][0]); maxX=Math.max(maxX,wedge[i][0]); minY=Math.min(minY,wedge[i][1]); maxY=Math.max(maxY,wedge[i][1]); }
+      var w=maxX-minX,h=maxY-minY; if(!(w>0)||!(h>0)) return ""; var cnt={}, tot=0;
+      for(i=0;i<SUG_GRID;i++) for(j=0;j<SUG_GRID;j++){ var sx=minX+(i+0.5)/SUG_GRID*w, sy=minY+(j+0.5)/SUG_GRID*h; if(!zPointIn(wedge,sx,sy)) continue; tot++;
+        var px=vb.x0+sx/100*vb.vw, py=vb.y0+sy/100*vb.vh, t=m[Math.floor(px/SUG_HALF)+","+Math.floor(py/SUG_HALF)]; if(t) cnt[t]=(cnt[t]||0)+1; }
+      if(!tot) return ""; var best="", bn=0; for(var t2 in cnt){ if(cnt[t2]>bn){ bn=cnt[t2]; best=t2; } } return (best && bn/tot>=SUG_MIN)?zTypeLabel(best):""; }
     // reach in plate-% of the plate WIDTH: scaled → range ft ÷ plate ft; unscaled → legacy px ÷ plate px (else the 8.1 fixed 14%)
     function sugReach(d,sc,o){ var r=+d.range; if(!(r>0)) return 0; if(sc && +sc.ftW>0) return Math.min(r/(+sc.ftW)*100,300); return (o && o.sceneW>0) ? Math.min(r/o.sceneW*100,35) : SUG_REACH; }
     // the coverage footprint in plate-% (apex at x,y; asp = plate w/h so a y-% reaches as far in px as an x-%); ring/360 → circle; null when unknown
@@ -1601,8 +1616,9 @@
     function sugBase(d,f,o,zs){ var ring, aimed, it, place="", suffix="";
       if(!d || !sugOk(d.x) || !sugOk(d.y)) return "";
       ring=!!(d.ring||+d.fov>=360); aimed=!!d.cone && !ring; it=o.cat?o.cat(d.k):null;
-      function inZone(){ for(var j=0;j<zs.length;j++){ if(zPointIn(zs[j].pts,+d.x,+d.y)){ var zn=sugZoneName(zs[j]); if(zn) return zn; } } return ""; }
-      function covers(){ var cv=sugCoverage(zs,sugWedge(d,sugReach(d,o.scale,o),o.aspect)), j, zn; for(j=0;j<cv.length;j++){ if(cv[j].overlap<SUG_MIN) break; zn=sugZoneName(cv[j].zone); if(zn) return zn; } return ""; }
+      // Zones are CELLS now → read them first (the same cells as the structure/rooms); fall back to the legacy polygon zones on un-migrated floors.
+      function inZone(){ var zc=sugZoneCellAt(d,o); if(zc) return zc; for(var j=0;j<zs.length;j++){ if(zPointIn(zs[j].pts,+d.x,+d.y)){ var zn=sugZoneName(zs[j]); if(zn) return zn; } } return ""; }
+      function covers(){ var zc=sugCoverCellZone(d,o); if(zc) return zc; var cv=sugCoverage(zs,sugWedge(d,sugReach(d,o.scale,o),o.aspect)), j, zn; for(j=0;j<cv.length;j++){ if(cv[j].overlap<SUG_MIN) break; zn=sugZoneName(cv[j].zone); if(zn) return zn; } return ""; }
       if(aimed) place=covers() || sugRoom(d,f,o) || inZone() || sugSide(d,f);
       else place=sugRoom(d,f,o) || inZone() || ((ring||d.cone) ? covers() : "") || sugSide(d,f);
       if(!place) return "";
@@ -1621,7 +1637,7 @@
       return out; }
     function suggestDeviceName(d,f,all,o){ var list=Array.isArray(all)?all:[d], i=list.indexOf(d); if(i<0){ list=list.concat([d]); i=list.length-1; } return suggestDeviceNames(list,f,o)[i]||""; }
     // widget glue — memoised per panel render (O(n) coverage runs, not O(n²)); invalidated on renderPanel / any queueSave
-    function sugOpts(f){ return { vb:(f&&hybridCapable(f))?planViewBox(f.planSvg):null, scale:curFloorScale||(f&&f.scale)||null, aspect:sceneAspect>0?sceneAspect:1, sceneW:scene?scene.clientWidth:0, cat:cat }; }
+    function sugOpts(f){ return { vb:(f&&hybridCapable(f))?planViewBox(f.planSvg):null, scale:curFloorScale||(f&&f.scale)||null, aspect:sceneAspect>0?sceneAspect:1, sceneW:scene?scene.clientWidth:0, cat:cat, zcMap:(f&&f.plan)?zcMapOf(f.plan.zoneCells):null }; }
     function sugFor(d){ if(!sugMap){ var f=floors[curFloor]||{}, nm=[]; try{ nm=suggestDeviceNames(devices,f,sugOpts(f)); }catch(e){} sugMap={}; devices.forEach(function(x,i){ sugMap[x.id]=nm[i]||""; }); } return sugMap[d.id]||""; }
     function sugShown(d){ var s=sugFor(d); return (!frozen() && s && s.toLowerCase()!==String(d.name||"").trim().toLowerCase()) ? s : ""; }   // staff only, and only when it adds something
     function paintSug(card,d){ var row=card.querySelector(".sug"), s; if(!row) return; s=sugShown(d); row.style.display=s?"flex":"none"; row.querySelector(".sv").textContent=s; }

@@ -23,13 +23,14 @@ function extractFn(src, name) {
   throw new Error("unbalanced braces in " + name);
 }
 
-const NAMES = ["sugOk", "sugZones", "sugZoneName", "sugReach", "sugWedge", "sugCoverage", "sugRoom", "sugSide", "sugBase", "sugQualify",
+const NAMES = ["sugOk", "sugZones", "sugZoneName", "zcMapOf", "devCellKey", "sugZoneCellAt", "sugCoverCellZone",
+  "sugReach", "sugWedge", "sugCoverage", "sugRoom", "sugSide", "sugBase", "sugQualify",
   "suggestDeviceNames", "suggestDeviceName", "zPointIn", "zLabel", "zTypeLabel", "defaultSides", "sidesOf"];
 const FNS = NAMES.map((n) => extractFn(survey, n)).join("\n");
 const ZT = survey.slice(survey.indexOf("var ZONE_TYPES="), survey.indexOf("var ZONE_KEYS="));
 const CONSTS = `var SUG_MIN=0.15, SUG_GRID=40, SUG_REACH=14, SUG_HALF=13; var SIDE_KEYS=["top","right","bottom","left"]; ${ZT}`;
-const api = new Function(`${CONSTS}\n${FNS}\nreturn { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn };`)();
-const { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn } = api;
+const api = new Function(`${CONSTS}\n${FNS}\nreturn { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn, zcMapOf, devCellKey, sugZoneCellAt, sugCoverCellZone };`)();
+const { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn, zcMapOf, devCellKey, sugZoneCellAt, sugCoverCellZone } = api;
 
 const CAT = { cam: { name: "Camera" }, spk: { name: "Speaker" }, nvr: { name: "NVR" }, motion: { name: "Motion" }, pos: { name: "POS Terminal" } };
 const O = { cat: (k) => CAT[k] };
@@ -40,7 +41,7 @@ const DRIVE = { id: "z1", label: "Driveway", type: "driveway", pts: rect(0, 60, 
 const PARK = { id: "z2", label: "Parking", type: "parking", pts: rect(0, 0, 100, 30) };
 const BOUND = { pts: rect(20, 20, 80, 80) };
 const ROOMFLOOR = { plan: { rooms: [{ cells: ["4,4"], label: "Lobby", semanticType: "lobby" }] } };
-const VB = { x0: 0, y0: 0, vw: 260, vh: 260 };   // device (22.5,22.5)% → plan px (58.5,58.5) → half-cell 4,4
+const VB4 = { x0: 0, y0: 0, vw: 260, vh: 260 };   // device (22.5,22.5)% → plan px (58.5,58.5) → half-cell 4,4
 
 test("pointInPolygon (the widget's zPointIn): inside / outside / array + {x,y} vertices", () => {
   const sq = rect(10, 10, 50, 50);
@@ -54,12 +55,12 @@ test("camera aimed at a driveway zone → 'Driveway' (coverage beats mount/room)
   const f = { zones: [DRIVE, PARK], boundary: BOUND };
   assert.equal(suggestDeviceName(c, f, [c], O), "Driveway");
   const c2 = cam(50, 65, 90);
-  assert.equal(suggestDeviceName(c2, Object.assign({ plan: ROOMFLOOR.plan }, f), [c2], Object.assign({ vb: VB }, O)), "Driveway", "coverage still beats a room");
+  assert.equal(suggestDeviceName(c2, Object.assign({ plan: ROOMFLOOR.plan }, f), [c2], Object.assign({ vb: VB4 }, O)), "Driveway", "coverage still beats a room");
 });
 
 test("camera that covers nothing falls to its room, then the zone it stands in, then the mounted side", () => {
   const room = cam(22.5, 22.5, 0);
-  assert.equal(suggestDeviceName(room, ROOMFLOOR, [room], Object.assign({ vb: VB }, O)), "Lobby");
+  assert.equal(suggestDeviceName(room, ROOMFLOOR, [room], Object.assign({ vb: VB4 }, O)), "Lobby");
   const inz = cam(50, 90, 90);                                  // standing in Driveway, aimed off the plate edge → wedge reaches nothing useful? still inside → zone
   assert.equal(suggestDeviceName(inz, { zones: [DRIVE] }, [inz], O), "Driveway");
   const side = cam(50, 22, 270);                                // on the structure's top edge, aimed away from any zone
@@ -95,7 +96,7 @@ test("dedup: vertical split → Front/Back; three → Left/Center/Right; four or
 
 test("speaker in a room → '<Room> Speaker'; in a zone → '<Zone> Speaker'; else mounted side", () => {
   const s = spk(22.5, 22.5);
-  assert.equal(suggestDeviceName(s, ROOMFLOOR, [s], Object.assign({ vb: VB }, O)), "Lobby Speaker");
+  assert.equal(suggestDeviceName(s, ROOMFLOOR, [s], Object.assign({ vb: VB4 }, O)), "Lobby Speaker");
   const patio = { id: "z9", label: "Patio", type: "custom", pts: rect(60, 60, 100, 100) };
   const p = spk(80, 80);
   assert.equal(suggestDeviceName(p, { zones: [patio] }, [p], O), "Patio Speaker");
@@ -107,7 +108,7 @@ test("speaker in a room → '<Room> Speaker'; in a zone → '<Zone> Speaker'; el
 
 test("other kinds: place + kind name; unnamed custom zone is skipped, not invented", () => {
   const n = { k: "nvr", cone: false, x: 22.5, y: 22.5, aim: 0, fov: 30, range: 150 };
-  assert.equal(suggestDeviceName(n, ROOMFLOOR, [n], Object.assign({ vb: VB }, O)), "Lobby NVR");
+  assert.equal(suggestDeviceName(n, ROOMFLOOR, [n], Object.assign({ vb: VB4 }, O)), "Lobby NVR");
   const anon = { id: "z3", label: "", type: "custom", pts: rect(0, 0, 100, 100) };
   const c = cam(50, 50, 0);
   assert.equal(suggestDeviceName(c, { zones: [anon] }, [c], O), "");
@@ -120,7 +121,7 @@ test("empty signal → '' (no zones/rooms/boundary, no coordinates, no transform
   assert.equal(suggestDeviceName({ k: "cam", cone: true }, { zones: [DRIVE] }, null, O), "", "no x/y");
   assert.equal(suggestDeviceName(cam(22.5, 22.5, 0), ROOMFLOOR, null, O), "", "rooms but no viewBox (unscaled/legacy) → degrade, no throw");
   assert.deepEqual(suggestDeviceNames([], {}, O), []);
-  assert.doesNotThrow(() => suggestDeviceNames([cam(50, 50, 0)], { zones: [{ pts: "junk" }, null, { pts: [[0, 0]] }], plan: { rooms: [null, { cells: 5 }] }, boundary: { pts: [[1]] } }, Object.assign({ vb: VB }, O)));
+  assert.doesNotThrow(() => suggestDeviceNames([cam(50, 50, 0)], { zones: [{ pts: "junk" }, null, { pts: [[0, 0]] }], plan: { rooms: [null, { cells: 5 }] }, boundary: { pts: [[1]] } }, Object.assign({ vb: VB4 }, O)));
 });
 
 test("scaled floors: reach comes from real feet; a short range stops short of a far zone", () => {
@@ -160,6 +161,43 @@ test("suggestion-first: a name changes ONLY on the Apply click — never in rend
   const card = survey.slice(mc, survey.indexOf("if(showFov){", mc));
   assert.doesNotMatch(card, /suggestDeviceName/, "makeCard builds no suggestion itself");
   assert.equal((card.match(/sugShown\(/g) || []).length, 1, "the card only reads a suggestion inside the Apply click");
+});
+
+// Phase 4 (grid-first): device naming reads the ZONE CELLS (the same cells as the structure/rooms), with
+// the polygon zones as the fallback. ctx viewBox: plate 0..100% → plan-px 0..260 (vb {x0:0,y0:0,vw:260,vh:260}); HALF=13 → 20 cells across.
+const VBZ = { x0: 0, y0: 0, vw: 260, vh: 260 };
+// driveway occupies the left columns (cells c 0..4, all rows); "site" fills the rest (must be ignored for names).
+const dvyCells = [], siteCells = [];
+for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) (c <= 4 ? dvyCells : siteCells).push(c + "," + r);
+const ZCMAP = api.zcMapOf({ driveway: dvyCells, site: siteCells });
+
+test("zcMapOf: flattens cells → type, dropping 'site' (property base, never a device name)", () => {
+  assert.equal(ZCMAP["0,0"], "driveway");
+  assert.equal(ZCMAP["10,10"], undefined, "a site cell is not in the name map");
+});
+
+test("a camera standing in a driveway cell → 'Driveway' (cell zones)", () => {
+  const o = { vb: VBZ, zcMap: ZCMAP, scale: null, aspect: 1, sceneW: 0, cat: () => null };
+  // device at x=10% → plan-px 26 → cell col 2 (driveway); y=50% → row 10
+  assert.equal(api.sugZoneCellAt({ x: 10, y: 50 }, o), "Driveway");
+  // device at x=80% → col ~12 (site) → no name
+  assert.equal(api.sugZoneCellAt({ x: 80, y: 50 }, o), "");
+});
+
+test("a camera whose coverage falls over driveway cells → 'Driveway' (cell coverage)", () => {
+  const o = { vb: VBZ, zcMap: ZCMAP, scale: null, aspect: 1, sceneW: 0, cat: () => null };
+  // a ring device near the driveway with a reach that mostly covers driveway columns
+  const name = api.sugCoverCellZone({ x: 8, y: 50, ring: true, fov: 360, range: 12 }, o);
+  assert.equal(name, "Driveway");
+});
+
+test("cell zones are preferred but fall back to polygon zones when absent", () => {
+  const polyFloor = { zones: [{ type: "parking", label: "", pts: [[0, 0], [40, 0], [40, 100], [0, 100]] }], plan: null };
+  const o = { vb: null, zcMap: null, scale: null, aspect: 1, sceneW: 100, cat: () => null };
+  // no zcMap → sugZoneCellAt is silent; suggestDeviceNames uses the polygon zone
+  assert.equal(api.sugZoneCellAt({ x: 10, y: 50 }, o), "");
+  const names = suggestDeviceNames([{ k: "cam", x: 10, y: 50, cone: false }], polyFloor, o);
+  assert.equal(names[0], "Parking");
 });
 
 test("inline scripts still parse", () => {
