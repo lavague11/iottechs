@@ -105,3 +105,14 @@ test("background tools always show the Back strip, and Back leaves the tool via 
   assert.ok(exit.includes('bgWiz.style.display="none";'), "exitBg hides the Back strip");
   assert.ok(/getElementById\("satBack"\)\.addEventListener\("click", function\(\)\{ exitBg\(false\); \}\)/.test(survey), "Back → exitBg(false)");
 });
+
+test("derived floors record lineage (derivedFromFloorId) and discrete actions flush to the server now", () => {
+  const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
+  // Lineage: both createFloor(from) and duplicateFloor set derivedFromFloorId to the source id (bookkeeping — carried by the restore spread, off the fingerprint).
+  assert.ok(survey.includes("derivedFromFloorId:(from&&from.id)?from.id:null"), "createFloor records lineage");
+  assert.ok(survey.includes("derivedFromFloorId:src.id||null"), "duplicateFloor records lineage");
+  // Immediate server flush for discrete actions (not just the 5s poll).
+  assert.ok(/function flushNow\(\)\{ save\(\);/.test(survey), "flushNow exists and saves first");
+  assert.ok(survey.includes('tool:"survey2",data:localStorage.getItem(PKEY)'), "flushNow posts the survey2 blob");
+  assert.ok(survey.includes("snapFloor(); flushNow(); renderFloorTabs();"), "Done/background set flushes now");
+});

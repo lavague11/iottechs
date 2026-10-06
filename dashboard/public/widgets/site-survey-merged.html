@@ -752,7 +752,7 @@
       var ol = ev.data.outline;
       if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]){ floors[curFloor].outlineDraft=null; floors[curFloor].ctx=validCtx(ev.data.ctx);
           // The ctx aerial crop is a ~MB JPEG — push it to /api/media (like bg) and keep the URL, so a few outlined floors don't blow the ~5MB localStorage budget and silently drop the survey. Inline src stays as the fallback until the upload returns.
-          var cf=floors[curFloor]; if(cf.ctx && typeof cf.ctx.src==="string" && cf.ctx.src.indexOf("data:")===0) uploadBackground(cf.ctx.src, function(url){ if(url && cf.ctx){ cf.ctx.src=url; queueSave(); } }); } queueSave(); enterDraw(ol); return; }   // Use Outline consumed the unfinished draft; ctx = the context crop every view of this floor shares
+          var cf=floors[curFloor]; if(cf.ctx && typeof cf.ctx.src==="string" && cf.ctx.src.indexOf("data:")===0) uploadBackground(cf.ctx.src, function(url){ if(url && cf.ctx){ cf.ctx.src=url; flushNow(); } }); } flushNow(); enterDraw(ol); return; }   // Use Outline is discrete → flush the ctx/outline to the server now; ctx = the viewport every view of this floor shares
       // A draw result carries the transparent plan layer (null when it has no seed/ctx, or an AI raster); any other new background invalidates both layers.
       if(floors[curFloor]){ if(pendingBgSource==="draw"){ floors[curFloor].planSvg=validPlanSvg(ev.data.planSvg); floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true); } else clearCtx(floors[curFloor]); }
       // A ctx-framed bg spans the context crop, not the draw tool's tight bbox+6% — so its real scale is the ctx feet (what pxPerFt/coverage must use), not planFeet.
@@ -843,7 +843,7 @@
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
-      snapFloor(); queueSave(); renderFloorTabs();   // this background is now this floor's plan — persist it right away
+      snapFloor(); flushNow(); renderFloorTabs();   // this background is now this floor's plan — persist it to the server right away (discrete action)
       sideCollapsed=(window.innerWidth<=900); applySideCollapsed();   // reveal the device panel on desktop; on mobile keep the drawer closed (rail ▸ opens it) so the canvas stays usable
       goStep(1);   // → Place
     }
@@ -1519,6 +1519,9 @@
     function save(){ try{ snapFloor(); localStorage.setItem(PKEY, JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, showGrid:showGridState, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen })); saveErr(false); }catch(e){ saveErr(true); } reportHost(); }
     // Quota (or any write) failure used to be swallowed → the survey silently stopped saving and was lost on reload. Surface it instead.
     function saveErr(on){ var b=document.getElementById("saveErr"); if(!b){ if(!on) return; b=document.createElement("div"); b.id="saveErr"; b.textContent="Storage full — changes aren’t being saved."; document.body.appendChild(b); } b.style.display=on?"block":"none"; }
+    // Immediate server flush for DISCRETE actions (Use Outline, Done/background set, duplicate, delete) — the 5s autosync poll
+    // otherwise means a fast tab-close could lose them. localStorage stays the working copy; this just also pushes it right now.
+    function flushNow(){ save(); if(RO||!PID) return; try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:localStorage.getItem(PKEY)})}).catch(function(){}); }catch(e){} }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
     document.getElementById("dimBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });   // never fall through to placement
     document.getElementById("dimBtn").addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); });
@@ -1656,18 +1659,20 @@
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
         ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null,   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
+        derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
-      queueSave();
+      flushNow();   // discrete action → push to the server now, don't wait for the 5s poll
     }
     // Duplicate: a full copy (background, scale, capture, structure, devices) inserted right after the source, which stays untouched.
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
         ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null,
+        derivedFromFloorId:src.id||null,   // lineage only — the copy is fully independent (deep copies + fresh ids)
         devices:cloneDevices(src.devices) };
-      floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); queueSave(); }
+      floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); flushNow(); }   // discrete action → immediate server flush
     // New floor: if the current floor has a background, offer to import it (with or without the placed
     // items) — buildings often reuse the same plan, but not always, so it's a choice, never automatic.
     function addFloor(){ snapFloor(); var prev=floors[curFloor];
@@ -1724,7 +1729,7 @@
       floors.splice(i,1);
       floors.forEach(function(f,idx){ if(/^Floor \d+$/.test(f.name)) f.name="Floor "+(idx+1); });   // renumber only default-named floors; keep custom names
       if(curFloor>i) curFloor--; else if(wasCur) curFloor=Math.min(i, floors.length-1);
-      loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave();
+      loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); flushNow();   // delete is discrete + destructive → flush now
     }
     // A submitted survey is locked for editing (staff must Unsubmit to change it) — same as the customer's
     // read-only view, but staff keep the Unsubmit control. frozen() gates every edit action below.
