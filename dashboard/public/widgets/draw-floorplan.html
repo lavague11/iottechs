@@ -184,6 +184,8 @@
   var metersPerPx=0, _seedSc=0, M_PER_FT=0.3048;
   function pxToFeet(px){ return metersPerPx>0 ? (px*metersPerPx)/M_PER_FT : 0; }
   function cellsSqFt(n){ var h=pxToFeet(HALF); return metersPerPx>0 ? n*h*h : 0; }
+  // Feet per full grid box — inline copy of lib/site-transform.js gridBoxFeet(); tests/site-transform-drift.test.mjs keeps the formula identical.
+  function gridBoxFeet(metersPerPx, fullPx){ fullPx = fullPx || FULL; return metersPerPx > 0 ? (fullPx * metersPerPx) / M_PER_FT : 0; }
 
   function fitCanvas(){ var r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
     cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));

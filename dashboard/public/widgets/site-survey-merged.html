@@ -61,6 +61,7 @@
 
   /* device + FOV (used when a background is set) */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
+  #northArrow{position:absolute;top:8px;right:8px;width:26px;height:26px;z-index:2;pointer-events:none;display:none}
   .stage-img{position:absolute;inset:0;background:#fff;background-repeat:no-repeat;background-size:contain;background-position:center}
   .dev{position:absolute;left:33%;top:55%;transform:translate(-50%,-50%);z-index:3}
   .devDot{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px rgba(16,17,18,.14);display:flex;align-items:center;justify-content:center}
@@ -498,7 +499,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div></div>
+          <div id="scene"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg></div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
@@ -1036,6 +1037,11 @@
     function pxPerFt(){ var f=curFloorScale; if(!f||!(+f.ftW>0)) return 0; var w=(scene&&scene.clientWidth)||0; return w ? w/(+f.ftW) : 0; }
     // A device's coverage reach in plate pixels: range×px/ft when scaled (range is feet), else legacy px.
     function devReachPx(d){ var p=pxPerFt(); return p>0 ? Math.max(0,(+d.range||0))*p : (+d.range||RANGE); }
+    // Inline copies of lib/site-transform.js norm()/northArrowAngle() — tests/site-transform-drift.test.mjs keeps the bodies identical.
+    function norm(deg){ return ((deg + 180) % 360 + 360) % 360 - 180; }
+    function northArrowAngle(aerialNorthDeg, planRotationDeg){ return norm((+aerialNorthDeg || 0) + (+planRotationDeg || 0)); }
+    // North indicator on the plate: only when this floor's capture recorded a north (curFloorAerial.northDeg); otherwise hidden.
+    function renderNorthArrow(){ var el=document.getElementById("northArrow"); if(!el) return; if(curFloorAerial && Number.isFinite(+curFloorAerial.northDeg)){ el.style.display="block"; el.style.transform="rotate("+northArrowAngle(curFloorAerial.northDeg)+"deg)"; } else { el.style.display="none"; } }
     // Coverage cap: scaled floors render real feet truthfully (a camera can see past the plan edge), so
     // only a generous runaway guard (2× the plate) applies; unscaled px keeps the old 35%-of-plate cap.
     function reachCapPx(){ if(pxPerFt()>0){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? m*2 : 2000; } return maxReach(); }
@@ -1392,6 +1398,7 @@
     function fitScene(){
       var scene=document.getElementById("scene"), host=document.getElementById("working");
       if(!scene||!host) return;
+      renderNorthArrow();
       if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; return; }  // no image → CSS inset:0 (full)
       if(!sceneAspect){ var im=new Image(); im.onload=function(){ sceneAspect=(im.naturalWidth/im.naturalHeight)||1; fitScene(); }; im.onerror=function(){ sceneAspect=1; fitScene(); }; im.src=bgData; return; }
       var cw=host.clientWidth, ch=host.clientHeight; if(!cw||!ch) return;
@@ -1416,7 +1423,7 @@
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
-      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
+      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
