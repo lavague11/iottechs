@@ -762,14 +762,20 @@
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
     // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always
     // matched by floor id — never curFloor — so a reply/save can't land on the wrong floor.
+    // Floor roster for the draw tool's floor selector (separate message: the iotPlanLoad literal stays as is). Re-sent on every iotPlanReady, i.e. each (re)open of the tool.
+    function postFloorRoster(){ try{ satFrame.contentWindow.postMessage({type:"iotFloors", floors:floors.map(function(f,i){ return {i:i, id:(f&&f.id)||null, name:(f&&f.name)||("Floor "+(i+1))}; }), cur:curFloor}, "*"); }catch(e){} }
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotPlanReady"&&m.type!=="iotPlanSave")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;   // only the embedded build tool speaks this protocol (null source = reject)
       var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
-      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} return; }
+      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster(); return; }
       if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
       fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; queueSave(); });   // a real Structure now lives on the floor → stop passing lidx
+    // Draw tool's floor selector: it already flushed its plan (iotPlanSave, ordered before this) -> save this floor, switch, and reopen the structure editor on the new one (new &floor/&fid = fresh iotPlanReady/Load).
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawFloor"||!ev.source||ev.source!==satFrame.contentWindow) return;
+      var i=m.i; if(frozen()||bgToolOpen!=="draw"||typeof i!=="number"||i%1!==0||i<0||i>=floors.length||i===curFloor) return;
+      snapFloor(); curFloor=i; loadFloor(i); renderFloorTabs(); queueSave(); enterDraw(); });
     // Unfinished "Outline Building" corners (image fractions of this floor's capture) — view-state on the floor so a refresh mid-outline restores them.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotOutlineSave"&&m.type!=="iotOutlineReady")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;
