@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const draw = readFileSync(new URL("../public/widgets/draw-floorplan.html", import.meta.url), "utf8");
+const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 
 function extractFn(s, name) {
   const start = s.indexOf("function " + name + "(");
@@ -76,6 +77,12 @@ test("3b: zone cells bake into every plan SVG, as the lowest content layer (unde
   };
   assert.ok(draw.split("var zc=zoneCellsSVG(); if(zc) o.push(zc);").length - 1 >= 3, "zones baked into all three SVG builders");
   assert.ok(draw.includes("!(hasSketch()||zoneHasCells())"), "a zones-only floor still emits a Hybrid plan layer");
+});
+
+test("explicit Interior + Exterior classifications exist (after Site) and are excluded from device names", () => {
+  assert.ok(draw.includes('["interior","Interior","206,178,132"],["exterior","Exterior","132,176,140"]'), "Interior + Exterior added to the taxonomy, right after Site");
+  assert.ok(survey.includes("var ZC_NONAME={site:1,interior:1,exterior:1}"), "the three structural categories are not device place-names");
+  assert.ok(survey.includes("if(ZC_NONAME[t]||!Array.isArray(zoneCells[t])) continue;"), "zcMapOf skips the structural categories");
 });
 
 test("Zones mode UI: segment button + type picker exist and are wired", () => {

@@ -235,7 +235,7 @@
   // building (independent of `cells` — a zone cell is property/driveway/yard, not building). One class per
   // cell (painting a type removes the cell from every other type). Taxonomy + colours mirror the survey's
   // ZONE_TYPES, plus "site" for the overall usable property. zoneCells: { typeKey -> Set("c,r") }.
-  var ZCLASS=[["site","Site","150,156,160"],["driveway","Driveway","176,136,84"],["parking","Parking","74,126,206"],["front-yard","Front Yard","84,164,104"],["rear-yard","Rear Yard","138,172,64"],["side-yard","Side Yard","58,160,150"],["street","Street","120,132,148"],["alley","Alley","154,102,170"],["loading","Loading","206,112,72"],["entrance","Entrance","200,84,114"]];
+  var ZCLASS=[["site","Site","150,156,160"],["interior","Interior","206,178,132"],["exterior","Exterior","132,176,140"],["driveway","Driveway","176,136,84"],["parking","Parking","74,126,206"],["front-yard","Front Yard","84,164,104"],["rear-yard","Rear Yard","138,172,64"],["side-yard","Side Yard","58,160,150"],["street","Street","120,132,148"],["alley","Alley","154,102,170"],["loading","Loading","206,112,72"],["entrance","Entrance","200,84,114"]];
   var ZCOL={}; ZCLASS.forEach(function(t){ ZCOL[t[0]]=t[2]; });
   function zClassLabel(t){ for(var i=0;i<ZCLASS.length;i++) if(ZCLASS[i][0]===t) return ZCLASS[i][1]; return "Zone"; }
   var zoneCells={}, zoneType="site";

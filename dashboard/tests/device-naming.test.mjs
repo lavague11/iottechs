@@ -28,7 +28,7 @@ const NAMES = ["sugOk", "sugZones", "sugZoneName", "zcMapOf", "devCellKey", "sug
   "suggestDeviceNames", "suggestDeviceName", "zPointIn", "zLabel", "zTypeLabel", "defaultSides", "sidesOf"];
 const FNS = NAMES.map((n) => extractFn(survey, n)).join("\n");
 const ZT = survey.slice(survey.indexOf("var ZONE_TYPES="), survey.indexOf("var ZONE_KEYS="));
-const CONSTS = `var SUG_MIN=0.15, SUG_GRID=40, SUG_REACH=14, SUG_HALF=13; var SIDE_KEYS=["top","right","bottom","left"]; ${ZT}`;
+const CONSTS = `var SUG_MIN=0.15, SUG_GRID=40, SUG_REACH=14, SUG_HALF=13; var SIDE_KEYS=["top","right","bottom","left"]; var ZC_NONAME={site:1,interior:1,exterior:1}; ${ZT}`;
 const api = new Function(`${CONSTS}\n${FNS}\nreturn { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn, zcMapOf, devCellKey, sugZoneCellAt, sugCoverCellZone };`)();
 const { suggestDeviceNames, suggestDeviceName, sugCoverage, sugWedge, sugZones, zPointIn, zcMapOf, devCellKey, sugZoneCellAt, sugCoverCellZone } = api;
 

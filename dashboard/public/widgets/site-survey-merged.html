@@ -1573,7 +1573,8 @@
     // Phase 4 (grid-first): zones are CELLS now. One flat map "c,r" → type (built once per floor), so a
     // device's zone and its coverage read the SAME cells as the structure/rooms. "site" is the property
     // base, not a place-name → never a device name.
-    function zcMapOf(zoneCells){ if(!zoneCells||typeof zoneCells!=="object") return null; var m={}, any=false; for(var t in zoneCells){ if(t==="site"||!Array.isArray(zoneCells[t])) continue; for(var i=0;i<zoneCells[t].length;i++){ m[zoneCells[t][i]]=t; any=true; } } return any?m:null; }
+    var ZC_NONAME={site:1,interior:1,exterior:1};   // structural categories — classifications, not device place-names (a device prefers a room / specific zone / side)
+    function zcMapOf(zoneCells){ if(!zoneCells||typeof zoneCells!=="object") return null; var m={}, any=false; for(var t in zoneCells){ if(ZC_NONAME[t]||!Array.isArray(zoneCells[t])) continue; for(var i=0;i<zoneCells[t].length;i++){ m[zoneCells[t][i]]=t; any=true; } } return any?m:null; }
     function devCellKey(d,vb){ if(!vb||!(vb.vw>0)||!(vb.vh>0)) return null; var px=vb.x0+(+d.x)/100*vb.vw, py=vb.y0+(+d.y)/100*vb.vh; return Math.floor(px/SUG_HALF)+","+Math.floor(py/SUG_HALF); }
     // the zone type of the cell the device stands in (cell zones) → its label; "" when none
     function sugZoneCellAt(d,o){ var m=o&&o.zcMap, vb=o&&o.vb; if(!m||!vb) return ""; var k=devCellKey(d,vb); var t=k?m[k]:null; return t?zTypeLabel(t):""; }
