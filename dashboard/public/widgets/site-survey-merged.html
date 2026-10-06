@@ -883,6 +883,8 @@
       if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster();
         // Phase 2 (grid-first): hand the draw tool this floor's enhanced/leveled aerial so Building cells are painted ON the roof — the tool positions it through its own seed transform (ctxVB), behind the grid + cells.
         try{ satFrame.contentWindow.postMessage({type:"iotDrawBackdrop", fid:fid, src:(fl&&fl.ctx&&fl.ctx.src)||null}, "*"); }catch(e){}
+        // Phase 3c: hand over the legacy polygon boundary + zones (plate-%) so the tool can migrate them to cells.
+        try{ satFrame.contentWindow.postMessage({type:"iotZonePolys", fid:fid, boundary:(fl&&fl.boundary)||null, zones:(fl&&fl.zones)||[]}, "*"); }catch(e){}
         return; }
       if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
@@ -892,6 +894,12 @@
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawFloor"||!ev.source||ev.source!==satFrame.contentWindow) return;
       var i=m.i; if(frozen()||bgToolOpen!=="draw"||typeof i!=="number"||i%1!==0||i<0||i>=floors.length||i===curFloor) return;
       snapFloor(); curFloor=i; loadFloor(i); renderFloorTabs(); queueSave(); enterDraw(); });
+    // Phase 3c: the draw tool migrated this floor's polygon zones → cells. Flag it so the survey retires the
+    // polygon render + editor for this floor (the cells now render via planSvg). The polygons stay in the
+    // record as a reversible backup (clearing zonesMigrated restores the legacy display).
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotZonesMigrated"||!ev.source||ev.source!==satFrame.contentWindow) return;
+      var fl=m.fid ? floors.filter(function(f){ return f&&f.id===m.fid; })[0] : floors[curFloor]; if(!fl) return;
+      fl.zonesMigrated=true; queueSave(); renderBoundary(); });
     // Unfinished "Outline Building" corners (image fractions of this floor's capture) — view-state on the floor so a refresh mid-outline restores them.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotOutlineSave"&&m.type!=="iotOutlineReady")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;
@@ -1332,7 +1340,10 @@
         t += '<span class="ztag" style="left:'+c.x+'%;top:'+c.y+'%;transform:translate(-50%,-50%) scale(var(--zi,1))">'+zEsc(z.label)+'</span>'; }
       zl.innerHTML=s; if(tg) tg.innerHTML=t; }
     // Render floor.boundary (via the working bdPts) into #regionLayer: a closed dashed polygon + "Estimated boundary" chip. Handles/× only while editing.
-    function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return; renderZones();
+    function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;
+      var _mf=floors[curFloor];
+      if(_mf && _mf.zonesMigrated){ rl.innerHTML=""; var _zl=document.getElementById("zoneLayer"); if(_zl) _zl.innerHTML=""; var _ztg=document.getElementById("zoneTags"); if(_ztg) _ztg.innerHTML=""; if(tag) tag.style.display="none"; return; }   // Phase 3c: zones live as cells now (rendered via planSvg) — don't double-draw the legacy polygons
+      renderZones();
       var zt=(rgTarget.kind==="zone"), f=floors[curFloor]||{}, bp=zt?((f.boundary&&f.boundary.pts)||[]):bdPts, bcl=zt?(bp.length>=3):bdClosed,   // editing a zone -> the stored boundary draws static; editing the boundary -> its working copy
           n=bp.length, has=n>=3, edit=regionMode && !frozen(), z=(typeof zScale==="number"&&zScale>0)?zScale:1, s="", i;
       if(tag){ tag.textContent="Estimated boundary"; tag.style.display=has?"block":"none"; }
@@ -1352,7 +1363,7 @@
       // Keep the "Clear boundary" bin in sync with the live vertex count (boundary target, ≥1 point, editing).
       var bdl=document.getElementById("bdDel"); if(bdl){ var showBdl=(!zt && bdPts.length>0 && regionMode && !frozen()); bdl.style.display=showBdl?"":"none"; if(!showBdl) bdl.classList.remove("armed"); } }
     // regionBtn visible only to staff, on the Setup step, once a background exists; undo/redo only while editing.
-    function updateRegionUI(){ var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.style.display=(bgData && !frozen() && curStep===1)?"":"none"; rbn.classList.toggle("on", regionMode); }
+    function updateRegionUI(){ var rbn=document.getElementById("regionBtn"); if(rbn){ rbn.style.display=(bgData && !frozen() && curStep===1 && !hybridCapable(floors[curFloor]))?"":"none"; rbn.classList.toggle("on", regionMode); }   // Phase 3c: the polygon editor is retired on floors with a cell grid — classify zones as cells in the structure tool instead
       var u=document.getElementById("bdUndo"), r=document.getElementById("bdRedo"); if(u) u.style.display=regionMode?"":"none"; if(r) r.style.display=regionMode?"":"none"; bdBtns();
       var bar=document.getElementById("rgBar"); if(bar){ var zt=(rgTarget.kind==="zone"), zs=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, nm=document.getElementById("zoneName"), dl=document.getElementById("zoneDel");   // sub-selector (Boundary | Zone) + the selected zone's name / bin
         bar.style.display=(regionMode&&!frozen())?"flex":"none"; [].forEach.call(bar.querySelectorAll("#rgKind .vbtn"), function(b){ var on=(b.getAttribute("data-k")===(zt?"zone":"boundary")); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
@@ -1972,7 +1983,7 @@
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(from&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(from&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, zonesMigrated:!!(from&&from.zonesMigrated), boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
         derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
@@ -1983,7 +1994,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null, zonesMigrated:!!src.zonesMigrated, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
         derivedFromFloorId:src.id||null,   // lineage only — the copy is fully independent (deep copies + fresh ids)
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); flushNow(); }   // discrete action → immediate server flush
@@ -2082,7 +2093,7 @@
       applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),zonesMigrated:!!f.zonesMigrated,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);

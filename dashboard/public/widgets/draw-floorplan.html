@@ -188,6 +188,7 @@
         <div class="moremenu" id="moreMenu">
           <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> <span id="mCleanTxt">Enhance</span></button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
+          <button id="mImportZones" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 13v5m-2-3 2-2 2 2"/></svg> Import zones</button>
           <button id="mMergeRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
           <button id="mDeleteRoom" class="danger" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteRoomTxt">Delete room</span></button>
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
@@ -419,7 +420,7 @@
       ctx.fillStyle="rgba(185,138,46,.32)";
       rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
     }
-    if(mode==="zone" && dragging && startPt && dragCur){   // classify-paint preview in the active type's colour
+    if(mode==="zone" && dragging && startPt && dragCur){   // classify-paint preview in the active zone colour
       var zl=dragCells(startPt,dragCur), zcl=ZCOL[zoneType]||ZCOL.site;
       ctx.fillStyle = structOp==="erase" ? "rgba(196,85,61,.26)" : "rgba("+zcl+",.4)";
       zl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
@@ -689,8 +690,14 @@
   // Phase 3b: SITE + exterior zone cells as the lowest content layer of every plan SVG (translucent by
   // type, UNDER the structure) — so Plan / Hybrid / the PDF / the AI overlay all show zones with no
   // consumer changes. Baked on Done, exactly like the structure + rooms.
-  function zoneCellsSVG(){ var out=""; for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site, rects="";
-      set.forEach(function(k){ var a=k.split(","); rects+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+  // Zone cells → SVG, coalescing each row's consecutive columns into ONE rect (a solid zone area becomes a
+  // handful of rects, not thousands) so a large migrated Site/boundary stays well under the planSvg size cap.
+  function zoneCellsSVG(){ var out=""; for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
+      var byRow={}; set.forEach(function(k){ var a=k.split(","); (byRow[a[1]]=byRow[a[1]]||[]).push(+a[0]); });
+      var rects=""; for(var r in byRow){ var cols=byRow[r].sort(function(a,b){return a-b;}), start=cols[0], prev=cols[0], ry=+r*HALF;
+        for(var i=1;i<=cols.length;i++){ var c=cols[i];
+          if(c===prev+1){ prev=c; continue; }
+          rects+='<rect x="'+(start*HALF)+'" y="'+ry+'" width="'+((prev-start+1)*HALF)+'" height="'+HALF+'"/>'; start=c; prev=c; } }
       out+='<g fill="rgb('+col+')" fill-opacity="0.22">'+rects+'</g>'; } return out; }
   function sketchSVG(vb){
     var x0,y0,vw,vh;
@@ -879,6 +886,11 @@
     showEnhanced(); });                                          // fresh cached raster → reuse, NO re-fetch (unchanged plan never re-billed)
   $("mExport").addEventListener("click", function(){ closeMore(); var url=enhancedURL || sketchPNG().toDataURL("image/png");
     var a=document.createElement("a"); a.href=url; a.download="floor-plan.png"; a.click(); });
+  // Import zones: rasterise the survey's legacy polygon boundary/zones into editable cells (undo-able).
+  $("mImportZones").addEventListener("click", function(){ if(busy) return; closeMore(); backToDraw();
+    if(importZonePolys()){ msg("Zones imported as cells — refine with Add / Erase."); setTimeout(function(){msg("");},2600); }
+    else { msg("No survey zones to import for this floor."); setTimeout(function(){msg("");},2200); }
+    updateImportZonesBtn(); });
   // Delete — two-tap confirm inside the menu (destructive, infrequent).
   $("mDelete").addEventListener("click", function(){ if(busy) return; var t=$("mDeleteTxt");
     if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
@@ -934,6 +946,23 @@
     }
     return out;
   }
+  // Phase 3c: migrate the survey's legacy POLYGON boundary + zones (plate-% of the ctx plate) into zone
+  // CELLS. INLINE copy of lib/zone-migrate.js (half-cell centre rasterisation) — tests/zone-migrate-drift
+  // keeps the two identical. Plate-% → plan-px through ctxVB (the same transform the plan layer uses).
+  var _zonePolys=null;   // {boundary:{pts}, zones:[{type,pts}]} in plate-%, from the survey
+  function polyPctToPlanPx(pts, vb){ return pts.map(function(p){ var px=(p[0]!=null?+p[0]:+p.x), py=(p[1]!=null?+p[1]:+p.y); return {x:vb.x0+px/100*vb.vw, y:vb.y0+py/100*vb.vh}; }); }
+  function rasterPolyToHalfCells(pts, vb){ if(!vb||!(+vb.vw>0)||!(+vb.vh>0)||!pts||pts.length<3) return [];
+    var poly=polyPctToPlanPx(pts, vb), pxs=poly.map(function(p){return p.x;}), pys=poly.map(function(p){return p.y;});
+    var c0=Math.floor(Math.min.apply(null,pxs)/HALF), c1=Math.ceil(Math.max.apply(null,pxs)/HALF), r0=Math.floor(Math.min.apply(null,pys)/HALF), r1=Math.ceil(Math.max.apply(null,pys)/HALF), out=[], lim=20000;
+    for(var r=r0;r<=r1;r++) for(var c=c0;c<=c1;c++){ if(out.length>=lim) return out; if(pointInPoly(c*HALF+HALF/2, r*HALF+HALF/2, poly)) out.push(c+","+r); } return out; }
+  function importableZones(){ return !!(_zonePolys && ctxVB() && ((_zonePolys.boundary&&_zonePolys.boundary.pts&&_zonePolys.boundary.pts.length>=3) || (_zonePolys.zones&&_zonePolys.zones.length))); }
+  function importZonePolys(){ var vb=ctxVB(); if(!_zonePolys||!vb) return false;
+    var owner={}; function paint(pts,type){ rasterPolyToHalfCells(pts,vb).forEach(function(k){ owner[k]=type; }); }   // boundary first (site base), zones override — one class per cell
+    if(_zonePolys.boundary && _zonePolys.boundary.pts) paint(_zonePolys.boundary.pts, "site");
+    (_zonePolys.zones||[]).forEach(function(z){ if(z&&z.pts&&z.type&&ZCOL[z.type]) paint(z.pts, z.type); });
+    var any=false; for(var k in owner){ zcGet(owner[k]).add(k); any=true; }
+    if(any){ setMode("zone"); pushHist(); redraw(); try{ parent.postMessage({type:"iotZonesMigrated", project:PID, fid:FID}, "*"); }catch(e){} } return any; }
+  function updateImportZonesBtn(){ var b=$("mImportZones"); if(b) b.style.display = importableZones() ? "flex" : "none"; }
 
   try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
   applySnapUI();
@@ -963,7 +992,7 @@
       writeLS();                                     // recovery copy now mirrors the resolved geometry (overwrite, never merge)
       if(fromKey===LSK_OLD && LSK_OLD && LSK_OLD!==LSK && hasPlan(readLS(LSK))){ try{ localStorage.removeItem(LSK_OLD); }catch(e){} }   // legacy draft now lives under the fid key → never imported twice
       if(_seeded || migrated){ persist(); flushPlan(); }   // seeded / imported legacy draft → create the floor's server copy now
-      updateTools(); updateAerialBtn(); redraw(); }   // geometry (and its seed transform) resolved → the aerial backdrop can now position + show its toggle
+      updateTools(); updateAerialBtn(); updateImportZonesBtn(); redraw(); }   // geometry + its seed transform resolved → the aerial backdrop + zone-import can position / show
     var raw=_qs.get("seed"), S=null; if(raw){ try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){} }
     if(!S||!S.pts||S.pts.length<3){ finish(); return; }
     function seed(){ var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
@@ -991,6 +1020,10 @@
   window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawBackdrop"||m.fid!==FID) return;
     if(!m.src || typeof m.src!=="string"){ _bdImg=null; updateAerialBtn(); redraw(); return; }
     var img=new Image(); img.onload=function(){ _bdImg=img; updateAerialBtn(); redraw(); }; img.onerror=function(){ _bdImg=null; updateAerialBtn(); }; img.src=m.src; });
+  // Phase 3c: the survey hands over its legacy polygon boundary + zones so they can be migrated to cells.
+  window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotZonePolys"||m.fid!==FID) return;
+    _zonePolys = (m.boundary||m.zones) ? { boundary:(m.boundary&&m.boundary.pts)?{pts:m.boundary.pts}:null, zones:Array.isArray(m.zones)?m.zones:[] } : null;
+    updateImportZonesBtn(); });
   if(window.parent===window){ var lp0=localPlan(); initWithPlan(lp0, false, _lpKey); }   // standalone / dev: localStorage as before
   else {
     // Silent/slow host: a local copy → use it at 800 ms. Nothing local → keep the canvas blocked ("Loading plan…")
