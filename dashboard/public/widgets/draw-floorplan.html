@@ -995,7 +995,10 @@
       updateTools(); updateAerialBtn(); updateImportZonesBtn(); redraw(); }   // geometry + its seed transform resolved → the aerial backdrop + zone-import can position / show
     var raw=_qs.get("seed"), S=null; if(raw){ try{ S=JSON.parse(decodeURIComponent(raw)); }catch(e){} }
     if(!S||!S.pts||S.pts.length<3){ finish(); return; }
-    function seed(){ var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){ cells=out; rooms=[]; _seeded=true;
+    function seed(){ var prevSeed=_seed, out=outlineToCells(S.pts, S.aspect); if(out && out.size){
+        if(S.base){ zoneCells={ site:out }; cells=new Set(); rooms=[]; }   // Define Project Base: the polygon is the WORKING AREA → fill it as Site cells (grid extent set by the seed); Building is painted in Setup
+        else { cells=out; rooms=[]; }
+        _seeded=true;
         if(+S.metersPerUnit>0 && _seedSc>0) metersPerPx = (+S.metersPerUnit)/_seedSc;   // real scale from the aerial
       } else _seed=prevSeed;   // nothing seeded → the loaded plan's transform still describes its geometry
       finish(); }

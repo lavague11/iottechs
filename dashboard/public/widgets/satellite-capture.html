@@ -826,7 +826,7 @@
   function trHintUpdate(){ var h=$("traceHint"); if(!h) return;
     h.textContent = trClosed ? "Drag a dot to adjust, then “Use Outline”"
       : (tracePts.length>=3 ? "Tap “Use Outline” — or tap the first dot to close"
-      : "Tap each corner of the building, then Use Outline"); }
+      : "Outline the working area (property / lot), then Use Outline"); }
   /* Undo/redo + autosave: trHist holds {p:[[x,y]…],c:closed} snapshots, trHi the current one. Every history change
      (and nothing else) re-posts the unfinished outline to the parent (debounced), which stores it per floor. */
   function trSnap(){ return { p:tracePts.map(function(q){ return [q.x,q.y]; }), c:trClosed }; }

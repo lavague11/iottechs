@@ -83,7 +83,7 @@ test("Use Outline still routes to enterDraw on the CURRENT floor (in-place hando
   // the satellite-capture-result handler: an outline result → set the floor's ctx + hand off to the Structure editor
   has("if(ol && ol.pts && ol.pts.length>=3){", "outline branch present");
   has("floors[curFloor].ctx=validCtx(ev.data.ctx)", "the outline sets THIS floor's ctx (same curFloor, no switch)");
-  has("flushNow(); enterDraw(ol); return;", "Use Outline flushes then enters the Structure editor in place");
+  has("flushNow(); ol.base=true; enterDraw(ol); return;", "Use Outline flushes, marks the outline as the Project Base, then enters the editor in place");
 });
 
 test("Build Floor Plan → Change background delegate to the existing enterBg/enterDraw/postAerialRestore engine", () => {

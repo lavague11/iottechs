@@ -79,8 +79,8 @@ test("satellite — outline-only hides the full-capture chrome (address/search +
   assert.ok(sat.includes("#preview.tracing #traceHint{display:block}"), "the outline hint stays");
 });
 
-test("satellite — the outline hint tells the user what to do", () => {
-  assert.ok(sat.includes("Tap each corner of the building, then Use Outline"), "clear outline hint present");
+test("satellite — the outline hint tells the user to outline the working area (Define Project Base)", () => {
+  assert.ok(sat.includes("Outline the working area (property / lot), then Use Outline"), "project-base outline hint present");
 });
 
 test("satellite — Cancel in outline-only abandons back to the floor (posts iotCaptureCancel), survey closes the tool", () => {
