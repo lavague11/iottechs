@@ -630,6 +630,7 @@
     // Real-world scale of this floor's background image, {ftW, ftH} in feet (from a trace/aerial), or null
     // (uploaded/unscaled). Lets coverage (camera throw, speaker radius) render in real feet. See pxPerFt().
     var curFloorScale=null, pendingBgScale=null;
+    var curFloorAerial=null, pendingBgAerial=null;   // the satellite capture transform (rotation/north/center/zoom) as it was leveled — reopened by "Edit background"
     var REACH_FT={ cam:40, motion:30, glass:20, spk:18 };   // default real-world reach (ft) for new coverage devices
 
     // enter background-build mode: satellite tool fills the canvas, its bar takes the bottom
@@ -685,7 +686,10 @@
     // a drawing resumes its grid geometry, satellite reopens the map. Upload has nothing to edit → chooser.
     document.getElementById("changeBgBtn").addEventListener("click", function(){
       if(curBgSource==="draw"){ this.style.display="none"; enterDraw(); return; }
-      if(curBgSource==="satellite"){ this.style.display="none"; enterBg(); return; }
+      if(curBgSource==="satellite"){ this.style.display="none"; enterBg();
+        if(curFloorAerial){ var ae=curFloorAerial, post=function(){ try{ satFrame.contentWindow.postMessage({type:"iotAerialRestore", aerial:ae}, "*"); }catch(e){} };   // reopen the map AS IT WAS LEVELED (the tool stashes it until Maps is ready)
+          satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); post(); }); post(); }
+        return; }
       satFrame.style.display="none";
       this.style.display="none";
       document.getElementById("bgstep").style.display="";
@@ -705,8 +709,8 @@
       // Trace Building → "Use Outline": hand the footprint to the Structure editor (seeded), rather than
       // dropping the aerial as a flat background. The draw tool produces the plan from the seeded shape.
       var ol = ev.data.outline;
-      if(ol && ol.pts && ol.pts.length>=3){ enterDraw(ol); return; }
-      applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale);
+      if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; queueSave(); } enterDraw(ol); return; }
+      applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale, ev.data.aerial);
     });
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
     // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always
@@ -720,8 +724,9 @@
     // A raw satellite/upload background can be 1–2 MB as a data URL — too big to reliably fit
     // localStorage (the survey draft would fail to save and vanish on reload). Downscale to a
     // sane max edge + JPEG before storing so captures persist; keep whichever is smaller.
-    function applyBackground(dataUrl, skipSave, vector, scale){
+    function applyBackground(dataUrl, skipSave, vector, scale, aerial){
       pendingBgScale = (scale && +scale.ftW>0 && +scale.ftH>0) ? { ftW:+scale.ftW, ftH:+scale.ftH } : null;   // real feet of this image, or unscaled
+      pendingBgAerial = (aerial && typeof aerial==="object") ? aerial : null;   // the capture transform that produced it (null for upload/draw)
       if(!dataUrl){ finishBackground(null, skipSave); return; }
       // VECTOR plan (SVG from the draw tool): keep it as-is — never rasterize it. An SVG background scales
       // crisply at any zoom (paths + real text), and it's small enough to store inline. (BUG: blurry plan.)
@@ -767,7 +772,7 @@
       }catch(e){ cb(null); }
     }
     function finishBackground(dataUrl, skipSave){
-      bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource; curFloorScale=pendingBgScale; pendingBgScale=null;
+      bgHasImage=true; bgData=dataUrl||null; curBgSource=pendingBgSource; curFloorScale=pendingBgScale; pendingBgScale=null; curFloorAerial=pendingBgAerial; pendingBgAerial=null;
       var img=document.getElementById("stageImg");
       if(dataUrl){ img.style.background=""; img.style.backgroundImage='url("'+dataUrl+'")'; img.style.backgroundRepeat="no-repeat"; img.style.backgroundSize="cover"; img.style.backgroundPosition="center"; }
       else { img.style.backgroundImage=""; img.style.background="#fff"; }
@@ -1355,7 +1360,7 @@
     function ensureFloorIds(){ floors.forEach(function(f){ if(f && !f.id) f.id=newFloorId(); }); }
     ensureFloorIds();
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
-    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.devices=stripDevs(); }
+    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
@@ -1403,23 +1408,31 @@
     window.addEventListener("resize", fitScene);
     function loadFloor(i){ curFloor=i; var f=floors[i]||{};
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
+      devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount();
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
     }
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
+    function cloneDevices(devs){ var out=JSON.parse(JSON.stringify(devs||[]));
+      if(out.length){ var used={}; floors.forEach(function(fl){ (fl.devices||[]).forEach(function(d){ if(d.cid) used[d.cid]=1; }); });   // cloned cameras get a fresh cid unique across ALL floors (proposal line items key on it)
+        out.forEach(function(d){ if(!d.cid) return; var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(used[id]); used[id]=1; d.cid=id; }); }
+      return out; }
     function createFloor(from, withItems){
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null,   // real-world scale + capture + structure travel with the background (deep copies — never shared with the source)
-        devices:(from&&withItems)?JSON.parse(JSON.stringify(from.devices||[])):[], started:!!(from&&from.bg) };
-      if(f.devices.length){ var used={}; floors.forEach(function(fl){ (fl.devices||[]).forEach(function(d){ if(d.cid) used[d.cid]=1; }); });   // cloned cameras get a fresh cid unique across ALL floors (proposal line items key on it)
-        f.devices.forEach(function(d){ if(!d.cid) return; var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(used[id]); used[id]=1; d.cid=id; }); }
+        devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
       queueSave();
     }
+    // Duplicate: a full copy (background, scale, capture, structure, devices) inserted right after the source, which stays untouched.
+    function duplicateFloor(i){ snapFloor(); var src=floors[i]; if(!src) return;
+      var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
+        scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null,
+        devices:cloneDevices(src.devices) };
+      floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); queueSave(); }
     // New floor: if the current floor has a background, offer to import it (with or without the placed
     // items) — buildings often reuse the same plan, but not always, so it's a choice, never automatic.
     function addFloor(){ snapFloor(); var prev=floors[curFloor];
@@ -1450,10 +1463,12 @@
       clearRowActions(); if(had) return;
       var bar=document.createElement("div"); bar.className="fsActions";
       var ren=document.createElement("button"); ren.textContent="Rename";
+      var dup=document.createElement("button"); dup.textContent="Duplicate";
       var del=document.createElement("button"); del.className="fsDel"; del.textContent="Delete";
       ren.addEventListener("click",function(e){ e.stopPropagation(); bar.remove(); renameInSheet(row,f); });
+      dup.addEventListener("click",function(e){ e.stopPropagation(); closeFloorSheet(); duplicateFloor(i); });
       del.addEventListener("click",function(e){ e.stopPropagation(); closeFloorSheet(); askConfirm("Delete "+f.name+"? Its background and devices will be removed.", function(){ deleteFloor(i); }); });
-      bar.appendChild(ren); bar.appendChild(del);
+      bar.appendChild(ren); bar.appendChild(dup); bar.appendChild(del);
       row.parentNode.insertBefore(bar, row.nextSibling);
     }
     function renameInSheet(row,f){
@@ -1509,8 +1524,8 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,plan:f.plan||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale + draw geometry so the plan reopens correctly
-      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,plan:null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale + draw geometry so the plan reopens correctly
+      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
