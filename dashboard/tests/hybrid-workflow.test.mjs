@@ -10,17 +10,17 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("one primary action: Build Floor Plan (gold primary, inline-SVG icon, the one deliberate longer label)", () => {
+test("one primary action: Create Hybrid Floor Plan (gold primary, inline-SVG icon, the one deliberate longer label)", () => {
   has('<button id="buildPlanBtn"', "build button element");
-  has("Build Floor Plan", "primary workflow label");
+  has("Create Hybrid Floor Plan", "primary workflow label");
   const i = survey.indexOf('<button id="buildPlanBtn"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
   // gold-filled primary styling
   assert.ok(/#buildPlanBtn\{[^}]*background:var\(--gold\)/.test(survey), "Build Floor Plan is the gold primary");
-  // the OLD derived-floor entry is gone — no more "Create Hybrid", #hybridBtn, derived/"· Hybrid" floors
-  assert.ok(!survey.includes("Create Hybrid"), "the old Create Hybrid label is gone");
+  // the OLD derived-floor entry is gone — no #hybridBtn, derived/"· Hybrid" floors, canCreateHybrid.
+  // ("Create Hybrid Floor Plan" is the NEW in-place primary label, verified above — not the old derived flow.)
   assert.ok(!survey.includes('id="hybridBtn"'), "the old #hybridBtn element is gone");
   assert.ok(!survey.includes('" · Hybrid"') && !survey.includes("· Hybrid"), "no '· Hybrid' floor naming anywhere");
   assert.ok(!survey.includes("canCreateHybrid"), "the old canCreateHybrid gate is gone");

@@ -35,7 +35,7 @@ test("4.3 survey: #gridLayer sits after .dimOverlay inside #scene; #gridScale is
   // Phase 5.1 adds #regionLayer inside #scene right after #gridLayer; #gridScale still closes out #scene.
   assert.match(survey, /<div class="dimOverlay"><\/div><div id="gridLayer"><\/div><svg id="zoneLayer"[^>]*><\/svg><div id="zoneTags"><\/div><svg id="regionLayer"[^>]*><\/svg><\/div><div id="gridScale"><\/div>/);
   assert.match(survey, /#gridLayer\{[^}]*pointer-events:none[^}]*z-index:2|#gridLayer\{[^}]*z-index:2[^}]*pointer-events:none/);
-  assert.match(survey, /\.devNode\{[^}]*z-index:3/, "devices stay above the grid");
+  assert.match(survey, /\.devNode\{[^}]*z-index:5/, "device markers sit above the grid (z2), zone (z3) and boundary (z4) layers");
 });
 
 test("3d survey: Grid is a 3-level Off/Light/Full control, default Full, applySettings reflects it, save/restore persist + migrate", () => {

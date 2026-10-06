@@ -754,7 +754,7 @@
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="none" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
     var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure — transparent layer, shows over the aerial in Hybrid
     var sf=""; cells.forEach(function(k){ var c=k.split(","); sf+='<rect x="'+(+c[0]*HALF)+'" y="'+(+c[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
-    if(sf) o.push('<g fill="#ffffff" fill-opacity="0.85">'+sf+'</g>');
+    if(sf) o.push('<g fill="#ffffff" fill-opacity="0.95">'+sf+'</g>');   // INSIDE the structure = a near-white planning canvas (readable rooms/labels); OUTSIDE stays full-colour aerial
     svgPlanBody(o, swS, swR, fs);
     o.push("</svg>");
     var u="data:image/svg+xml,"+encodeURIComponent(o.join("")); return u.length<=400000 ? u : null; }   // the survey's cap — over it, no layer rather than a rejected one
