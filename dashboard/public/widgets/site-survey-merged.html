@@ -269,11 +269,16 @@
      centre, so scaling it radiates from that point). Runs once on load + a replay on select/walkthrough. */
   .devNode .ringWrap.grow{animation:ringGrow .75s cubic-bezier(.2,.85,.25,1)}
   @keyframes ringGrow{from{transform:scale(.18);opacity:.12}60%{opacity:1}to{transform:scale(1);opacity:1}}
+  /* One soft sound-wave ripple on reveal: expands from the speaker and fades out at the coverage edge.
+     Single play (no sonar loop); hidden at rest. Sized to the final radius in renderDevice. */
+  .devNode .ringRipple{position:absolute;border-radius:50%;border:1.5px solid rgba(96,165,250,.6);box-sizing:border-box;opacity:0;pointer-events:none;transform-origin:center}
+  .devNode .ringWrap.grow .ringRipple{animation:ringRipple .9s ease-out}
+  @keyframes ringRipple{from{transform:scale(.1);opacity:.5}to{transform:scale(1);opacity:0}}
   /* Desktop hover: a restrained coverage emphasis (no re-reveal, no motion) */
   @media (hover:hover){ .devNode .coneSvg,.devNode .ringC{transition:filter .2s}
     .devNode:hover .coneSvg,.devNode:hover .ringC{filter:brightness(1.08) saturate(1.05)} }
   /* Respect reduced-motion: show the final coverage immediately, no expand */
-  @media (prefers-reduced-motion:reduce){ .devNode .fovGrow.grow,.devNode .ringWrap.grow{animation:none} }
+  @media (prefers-reduced-motion:reduce){ .devNode .fovGrow.grow,.devNode .ringWrap.grow,.devNode .ringWrap.grow .ringRipple{animation:none} }
   .devNode .ringGrip{position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #60a5fa;box-shadow:0 1px 4px rgba(16,17,18,.3);cursor:ew-resize;display:none;pointer-events:auto;touch-action:none}
   .devNode.sel .ringGrip{display:block}
   body.ro .devNode .ringGrip{display:none}
@@ -1088,7 +1093,7 @@
       var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
-        (d.ring?'<div class="ringWrap"><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
+        (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
         '<div class="viewBadge" title="View photo"></div>';
       document.getElementById("scene").appendChild(el);
@@ -1128,10 +1133,11 @@
         s0.setAttribute("stop-color",d.color); s0.setAttribute("stop-opacity",".42");   // darker at the camera
         s1.setAttribute("stop-color",d.color); s1.setAttribute("stop-opacity",".08");
         line.style.left=ap+"px"; line.style.width=R+"px"; line.style.color=d.color; }
-      if(d.ring){ var rw=el.querySelector(".ringWrap"), rc=el.querySelector(".ringC"), rg=el.querySelector(".ringGrip");
+      if(d.ring){ var rw=el.querySelector(".ringWrap"), rc=el.querySelector(".ringC"), rg=el.querySelector(".ringGrip"), rp=el.querySelector(".ringRipple");
         var cenR=ISZ/2, RR=Math.max(cenR+8, Math.min(devReachPx(d), reachCapPx()));
         rw.style.left=cenR+"px"; rw.style.top=cenR+"px";
         rc.style.width=(2*RR)+"px"; rc.style.height=(2*RR)+"px"; rc.style.left=(-RR)+"px"; rc.style.top=(-RR)+"px";
+        if(rp){ rp.style.width=(2*RR)+"px"; rp.style.height=(2*RR)+"px"; rp.style.left=(-RR)+"px"; rp.style.top=(-RR)+"px"; }   // ripple matches the final radius → fades right at the coverage edge
         if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; rg.title = pxPerFt()>0 ? (Math.round(d.range)+" ft radius") : "Drag to size the coverage"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
