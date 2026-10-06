@@ -145,6 +145,11 @@
   .card .fov label{font-size:11px;color:var(--muted);width:28px}
   .card .fov input{flex:1;accent-color:var(--gold)}
   .card .fov .v{font-size:12px;width:34px;text-align:right}
+  .card .sug{align-items:center;gap:7px;margin-top:7px;padding:0 0 0 6px;font-size:12px;color:var(--muted)}
+  .card .sug .sv{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-weight:600}
+  .card .sug .sa{width:26px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--soft);color:var(--gold);border-radius:6px;cursor:pointer;padding:0}
+  .card .sug .sa:hover{border-color:var(--gold)}
+  .card .sug .sa svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--muted);padding:26px}
   .empty svg{width:28px;height:28px;stroke:var(--line);fill:none;stroke-width:1.5}
   .empty p{margin:0;font-size:13px;max-width:180px}
@@ -1470,6 +1475,67 @@
     // Move the selected-card highlight in the side panel WITHOUT rebuilding every card (used on pick) —
     // the panel list is unchanged on a selection, only which card is highlighted.
     function selectPanelCard(id){ try{ [].forEach.call(panelBody.querySelectorAll(".card"), function(c){ c.classList.toggle("sel", c.dataset.devId!=null && +c.dataset.devId===id); }); }catch(e){} }
+    /* ===== Phase 8.2 — deterministic device-NAME suggestions. SUGGESTION-FIRST: nothing here ever writes d.name — only the Apply click does. Rules mirror lib/device-context.js (8.1) on the widget's own geometry: zones/boundary are plate-% (same space as device x,y); rooms are plan-px half-cells reached through the grid's planSvg viewBox; the coverage wedge is the same apex+arc (ring = circle) the planner draws. Pure + null-safe: no signal → "". ===== */
+    var SUG_MIN=0.15, SUG_GRID=40, SUG_REACH=14, SUG_HALF=13, sugMap=null, sugT=null;
+    function sugOk(v){ return v!=null && v!=="" && isFinite(+v); }
+    function sugZones(f){ var zs=(f&&Array.isArray(f.zones))?f.zones:[]; return zs.filter(function(z){ return z && Array.isArray(z.pts) && z.pts.length>=3; }); }
+    function sugZoneName(z){ var l=zLabel(z.label); return l || ((z.type && z.type!=="custom") ? zTypeLabel(z.type) : ""); }
+    // reach in plate-% of the plate WIDTH: scaled → range ft ÷ plate ft; unscaled → legacy px ÷ plate px (else the 8.1 fixed 14%)
+    function sugReach(d,sc,o){ var r=+d.range; if(!(r>0)) return 0; if(sc && +sc.ftW>0) return Math.min(r/(+sc.ftW)*100,300); return (o && o.sceneW>0) ? Math.min(r/o.sceneW*100,35) : SUG_REACH; }
+    // the coverage footprint in plate-% (apex at x,y; asp = plate w/h so a y-% reaches as far in px as an x-%); ring/360 → circle; null when unknown
+    function sugWedge(d,reach,asp){ var cx=+d.x, cy=+d.y, ring=!!(d.ring||+d.fov>=360), fov=Math.max(0,Math.min(359.9,+d.fov||0)), a0=+d.aim||0, p=[], i, a;
+      if(!(reach>0)) return null; asp=asp>0?asp:1;
+      if(ring){ for(i=0;i<24;i++){ a=i/24*2*Math.PI; p.push([cx+reach*Math.cos(a), cy+reach*Math.sin(a)*asp]); } return p; }
+      if(!(fov>0)) return null; p.push([cx,cy]);
+      for(i=0;i<=12;i++){ a=(a0-fov/2+fov*i/12)*Math.PI/180; p.push([cx+reach*Math.cos(a), cy+reach*Math.sin(a)*asp]); }
+      return p; }
+    // per zone, the fraction of the wedge's area inside it (deterministic SUG_GRID² sampling over the wedge bbox), ranked high→low, ties by floor order
+    function sugCoverage(zs,wedge){ var minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9, ins=[], out=[], i, j, w, h, sx, sy;
+      if(!wedge || !zs.length) return out;
+      for(i=0;i<wedge.length;i++){ minX=Math.min(minX,wedge[i][0]); maxX=Math.max(maxX,wedge[i][0]); minY=Math.min(minY,wedge[i][1]); maxY=Math.max(maxY,wedge[i][1]); }
+      w=maxX-minX; h=maxY-minY; if(!(w>0) || !(h>0)) return out;
+      for(i=0;i<SUG_GRID;i++) for(j=0;j<SUG_GRID;j++){ sx=minX+(i+0.5)/SUG_GRID*w; sy=minY+(j+0.5)/SUG_GRID*h; if(zPointIn(wedge,sx,sy)) ins.push([sx,sy]); }
+      if(!ins.length) return out;
+      zs.forEach(function(z,zi){ var both=0, k; for(k=0;k<ins.length;k++) if(zPointIn(z.pts,ins[k][0],ins[k][1])) both++; out.push({ zone:z, overlap:both/ins.length, i:zi }); });
+      out.sort(function(a,b){ return (b.overlap-a.overlap) || (a.i-b.i); }); return out; }
+    // the room whose half-cell set holds the device: plate-% → plan-px via the planSvg viewBox (o.vb); no transform / no rooms → ""
+    function sugRoom(d,f,o){ var vb=o&&o.vb, rooms=f&&f.plan&&f.plan.rooms, px, py, key, i, r; if(!vb || !(vb.vw>0) || !(vb.vh>0) || !Array.isArray(rooms) || !rooms.length) return "";
+      px=vb.x0+(+d.x)/100*vb.vw; py=vb.y0+(+d.y)/100*vb.vh; key=Math.floor(px/SUG_HALF)+","+Math.floor(py/SUG_HALF);
+      for(i=0;i<rooms.length;i++){ r=rooms[i]; if(r && Array.isArray(r.cells) && r.cells.indexOf(key)>=0) return zLabel(r.label); } return ""; }
+    // the exterior side nearest the device, measured against the structure boundary's bbox (no boundary → "": the plate edge isn't a meaningful reference)
+    function sugSide(d,f){ var b=f&&f.boundary&&f.boundary.pts, minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9, i, x, y, e; if(!Array.isArray(b) || b.length<3) return "";
+      for(i=0;i<b.length;i++){ x=(b[i].x!=null?b[i].x:b[i][0]); y=(b[i].y!=null?b[i].y:b[i][1]); if(!sugOk(x)||!sugOk(y)) continue; minX=Math.min(minX,+x); maxX=Math.max(maxX,+x); minY=Math.min(minY,+y); maxY=Math.max(maxY,+y); }
+      if(!(maxX>minX) || !(maxY>minY)) return "";
+      e=[["top",+d.y-minY],["right",maxX-(+d.x)],["bottom",maxY-(+d.y)],["left",+d.x-minX]]; e.sort(function(a,c){ return a[1]-c[1]; }); return sidesOf(f)[e[0][0]].label; }
+    // the BASE name of one device (before dedup). Aimed cones: what it COVERS → room → zone it stands in → mounted side. Everything else: room → zone it's in → (ring) what it covers → side. "" = no signal.
+    function sugBase(d,f,o,zs){ var ring, aimed, it, place="", suffix="";
+      if(!d || !sugOk(d.x) || !sugOk(d.y)) return "";
+      ring=!!(d.ring||+d.fov>=360); aimed=!!d.cone && !ring; it=o.cat?o.cat(d.k):null;
+      function inZone(){ for(var j=0;j<zs.length;j++){ if(zPointIn(zs[j].pts,+d.x,+d.y)){ var zn=sugZoneName(zs[j]); if(zn) return zn; } } return ""; }
+      function covers(){ var cv=sugCoverage(zs,sugWedge(d,sugReach(d,o.scale,o),o.aspect)), j, zn; for(j=0;j<cv.length;j++){ if(cv[j].overlap<SUG_MIN) break; zn=sugZoneName(cv[j].zone); if(zn) return zn; } return ""; }
+      if(aimed) place=covers() || sugRoom(d,f,o) || inZone() || sugSide(d,f);
+      else place=sugRoom(d,f,o) || inZone() || ((ring||d.cone) ? covers() : "") || sugSide(d,f);
+      if(!place) return "";
+      if(d.k==="spk") suffix=" Speaker"; else if(d.k!=="cam" && it && it.name) suffix=" "+it.name;
+      return place+suffix; }
+    // two or more devices with the same base → tell them apart by position: Left/Right (x) or Front/Back (y) for 2–3, else a number; ordered by x,y,index → stable
+    function sugQualify(b,g,devs,out){ var n=g.length, xs=g.map(function(i){ return +devs[i].x; }), ys=g.map(function(i){ return +devs[i].y; }), sx=Math.max.apply(null,xs)-Math.min.apply(null,xs), sy=Math.max.apply(null,ys)-Math.min.apply(null,ys), horiz=sx>=sy, key=horiz?"x":"y", i, ok, names;
+      var ord=g.slice().sort(function(a,c){ return (+devs[a][key]-(+devs[c][key])) || (+devs[a].x-(+devs[c].x)) || (+devs[a].y-(+devs[c].y)) || (a-c); });
+      names=horiz?(n===2?["Left","Right"]:n===3?["Left","Center","Right"]:null):(n===2?["Front","Back"]:n===3?["Front","Middle","Back"]:null); ok=!!names;
+      for(i=1;ok && i<n;i++) if(+devs[ord[i]][key]-(+devs[ord[i-1]][key])<1) ok=false;   // too close to call by side → number them
+      ord.forEach(function(di,r){ out[di]=b+" "+(ok?names[r]:(r+1)); }); }
+    // Suggested names for a whole floor's devices (parallel array; "" = nothing to suggest). o = { vb (planSvg viewBox), scale {ftW}, aspect (plate w/h), sceneW (px), cat(k) }.
+    function suggestDeviceNames(devs,f,o){ var zs, out=[], groups={}, order=[], i, b; o=o||{}; f=f||{}; devs=devs||[]; zs=sugZones(f);
+      for(i=0;i<devs.length;i++){ b=sugBase(devs[i],f,o,zs); out.push(b); if(b){ if(!groups["k:"+b]){ groups["k:"+b]=[]; order.push(b); } groups["k:"+b].push(i); } }
+      order.forEach(function(nm){ var g=groups["k:"+nm]; if(g.length>1) sugQualify(nm,g,devs,out); });
+      return out; }
+    function suggestDeviceName(d,f,all,o){ var list=Array.isArray(all)?all:[d], i=list.indexOf(d); if(i<0){ list=list.concat([d]); i=list.length-1; } return suggestDeviceNames(list,f,o)[i]||""; }
+    // widget glue — memoised per panel render (O(n) coverage runs, not O(n²)); invalidated on renderPanel / any queueSave
+    function sugOpts(f){ return { vb:(f&&hybridCapable(f))?planViewBox(f.planSvg):null, scale:curFloorScale||(f&&f.scale)||null, aspect:sceneAspect>0?sceneAspect:1, sceneW:scene?scene.clientWidth:0, cat:cat }; }
+    function sugFor(d){ if(!sugMap){ var f=floors[curFloor]||{}, nm=[]; try{ nm=suggestDeviceNames(devices,f,sugOpts(f)); }catch(e){} sugMap={}; devices.forEach(function(x,i){ sugMap[x.id]=nm[i]||""; }); } return sugMap[d.id]||""; }
+    function sugShown(d){ var s=sugFor(d); return (!frozen() && s && s.toLowerCase()!==String(d.name||"").trim().toLowerCase()) ? s : ""; }   // staff only, and only when it adds something
+    function paintSug(card,d){ var row=card.querySelector(".sug"), s; if(!row) return; s=sugShown(d); row.style.display=s?"flex":"none"; row.querySelector(".sv").textContent=s; }
+    function refreshSugs(){ sugMap=null; try{ [].forEach.call(panelBody.querySelectorAll(".card"), function(c){ var d=byIdDev(+c.dataset.devId); if(d) paintSug(c,d); }); }catch(e){} }   // display only — never touches d.name
     // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
     function makeCard(d){
       var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":""); card.dataset.devId=d.id;
@@ -1478,6 +1544,7 @@
       var showFov=(angleMode && d.cone);
       var CAMSVG='<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>';
       card.innerHTML='<div class="r1"><div class="chip" style="background:'+d.color+'">'+(d.tag||'')+'</div><input class="nm" type="text" spellcheck="false"><div class="x">&times;</div></div>'+
+        '<div class="sug" style="display:none"><span class="sl">Suggested</span><span class="sv"></span><button class="sa" type="button" title="Apply" aria-label="Apply suggested name"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></div>'+
         (showFov?'<div class="fov"><label>FOV</label><input class="fovR" type="range" min="20" max="180" value="'+d.fov+'"><div class="v">'+d.fov+'&deg;</div></div>':'')+
         (d.photoBusy
           ? '<div class="pv"><button class="pvAdd" type="button" disabled>'+CAMSVG+'Adding photo…</button></div>'
@@ -1487,6 +1554,9 @@
       card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
       card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
       var nmi=card.querySelector(".nm"); nmi.value=d.name;
+      var sga=card.querySelector(".sa"); paintSug(card,d);   // suggestion-first: shown only when it differs; the name changes ONLY on this click
+      sga.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      sga.addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return; var sv=sugShown(d); if(!sv) return; d.name=cap(sv); renderDevice(d); renderPanel(); queueSave(); });
       nmi.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
       nmi.addEventListener("input", function(){ d.name=nmi.value; queueSave(); });
       // Enter → jump to the next device's name field (rapid-name the whole list); last one just commits.
@@ -1595,6 +1665,7 @@
     var _rdT=null;
     function reportDevicesSoon(){ clearTimeout(_rdT); _rdT=setTimeout(reportDevices, 120); }
     function renderPanel(){
+      sugMap=null;   // suggestions are recomputed lazily for this render
       reportDevicesSoon();   // keep the outside panel in sync (coalesced)
       var others=floors.reduce(function(n,f,i){ return i===curFloor?n:n+((f.devices&&f.devices.length)||0); },0);
       if(!devices.length && !others){ panelBody.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.4-7-11a7 7 0 0114 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><p>Set a background, then place cameras and devices here.</p></div>'; return; }
@@ -1649,7 +1720,7 @@
     ensureFloorIds();
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
-    function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
+    function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); clearTimeout(sugT); sugT=setTimeout(refreshSugs,350); }   // refreshSugs repaints the suggestion rows only (a move/aim/zone edit can change them)
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
