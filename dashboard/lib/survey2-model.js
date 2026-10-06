@@ -40,6 +40,9 @@ export function parseSurveyFloors(raw) {
         scale: (f.scale && +f.scale.ftW > 0 && +f.scale.ftH > 0) ? { ftW: +f.scale.ftW, ftH: +f.scale.ftH } : null,   // real-world size of the plan image (feet), for coverage scaling
         // Persisted capture transform: north is drawn ONLY when known (older floors carry none).
         aerial: (f.aerial && Number.isFinite(+f.aerial.northDeg)) ? { northDeg: +f.aerial.northDeg, rotationDeg: Number.isFinite(+f.aerial.rotationDeg) ? +f.aerial.rotationDeg : 0 } : null,
+        // Site boundary + zones (plate-% polygons) so the customer layout / PDF can render the same estimated site context the planner shows.
+        boundary: (f.boundary && Array.isArray(f.boundary.pts) && f.boundary.pts.length >= 3) ? { pts: f.boundary.pts } : null,
+        zones: Array.isArray(f.zones) ? f.zones.filter((z) => z && Array.isArray(z.pts) && z.pts.length >= 3).map((z) => ({ label: z.label || "", type: z.type || "custom", pts: z.pts })) : [],
         devices: Array.isArray(f.devices) ? f.devices.filter((x) => x && x.k) : [] }));
   } catch { return []; }
 }

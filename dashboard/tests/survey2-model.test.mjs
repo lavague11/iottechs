@@ -98,3 +98,19 @@ test("scope mismatch: 9 planner speakers vs 10 quoted is surfaced, never changed
   assert.deepEqual(scopeMismatches(floors, opt(9)), []);
   assert.ok(PDF_PAGE.BOTTOM > 700, "survey pages share the same safe area");
 });
+
+test("parseSurveyFloors carries site boundary + zones (for the customer/PDF site context)", () => {
+  const raw = JSON.stringify({ floors: [{ name: "F1", bg: "data:image/svg+xml,x",
+    boundary: { pts: [[10,10],[90,10],[50,90]] },
+    zones: [{ id: "z1", label: "Driveway", type: "driveway", pts: [[20,60],[40,60],[40,85],[20,85]] },
+            { id: "z2", label: "", type: "custom", pts: [[1,1]] }],   // <3 pts → dropped
+    devices: [] }] });
+  const f = parseSurveyFloors(raw)[0];
+  assert.ok(f.boundary && f.boundary.pts.length === 3, "boundary carried");
+  assert.equal(f.zones.length, 1, "only the valid (>=3 pt) zone survives");
+  assert.equal(f.zones[0].type, "driveway");
+  // a boundary with <3 pts is dropped to null
+  const f2 = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "data:image/svg+xml,x", boundary: { pts: [[0,0]] } }] }))[0];
+  assert.equal(f2.boundary, null);
+  assert.deepEqual(f2.zones, []);
+});

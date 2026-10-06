@@ -40,6 +40,8 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       // customer PDF would lose the "1 box = N ft" scale cue. Re-draw the SAME grid here. Skipped for a plain
       // hand-drawn plan (it keeps its own baked grid — avoid doubling) and for raster/aerial backgrounds.
       drawExportGrid(ctx, f.bg, (f.scale && f.scale.ftW > 0) ? f.scale.ftW : 0, W, H);
+      // Layer 1c — estimated site context: zones (translucent, labeled) + boundary (dashed). Same plate-% polygons the planner draws.
+      drawExportRegions(ctx, f, W, H);
       // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
       const pxPerFt = (f.scale && f.scale.ftW > 0) ? W / f.scale.ftW : 0;
       const scene = surveyScene(floors, fi, W, H, { pxPerFt });
@@ -142,6 +144,34 @@ function drawExportGrid(ctx, bg, ftW, W, H) {
     ctx.fillText(txt, 8 + pad, H - bh / 2 - 8);
     ctx.restore();
   } catch (e) { /* export grid is cosmetic — never break the PDF over it */ }
+}
+
+// Estimated site boundary + zones on the export (plate-% polygons → export px). Zones are translucent, type-colored,
+// labeled; the boundary is a dashed gold loop. Estimates — never drawn or labeled as a legal/parcel line.
+const EXPORT_ZONE_RGB = { street: "120,132,148", driveway: "176,136,84", parking: "74,126,206", "front-yard": "84,164,104", "rear-yard": "138,172,64", "side-yard": "58,160,150", alley: "154,102,170", loading: "206,112,72", entrance: "200,84,114", custom: "140,146,150" };
+function drawExportRegions(ctx, f, W, H) {
+  try {
+    const toPx = (p) => [((Array.isArray(p) ? p[0] : p.x) || 0) / 100 * W, ((Array.isArray(p) ? p[1] : p.y) || 0) / 100 * H];
+    const poly = (pts) => { ctx.beginPath(); pts.forEach((p, i) => { const q = toPx(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); };
+    (f.zones || []).forEach((z) => {
+      if (!Array.isArray(z.pts) || z.pts.length < 3) return;
+      const rgb = EXPORT_ZONE_RGB[z.type] || EXPORT_ZONE_RGB.custom;
+      poly(z.pts); ctx.fillStyle = `rgba(${rgb},0.18)`; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(${rgb},0.9)`; ctx.stroke();
+      const label = (z.label || "").trim(); if (!label) return;
+      let cx = 0, cy = 0; z.pts.forEach((p) => { const q = toPx(p); cx += q[0]; cy += q[1]; }); cx /= z.pts.length; cy /= z.pts.length;
+      ctx.font = `700 ${Math.max(9, Math.round(Math.min(W, H) * 0.022))}px system-ui, "Segoe UI", sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const tw = ctx.measureText(label).width, ph = Math.max(14, Math.round(Math.min(W, H) * 0.034));
+      ctx.fillStyle = "rgba(16,20,24,.72)"; roundRect(ctx, cx - tw / 2 - 5, cy - ph / 2, tw + 10, ph, 4); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.fillText(label, cx, cy);
+    });
+    if (f.boundary && Array.isArray(f.boundary.pts) && f.boundary.pts.length >= 3) {
+      ctx.save(); poly(f.boundary.pts);
+      ctx.setLineDash([Math.max(4, W * 0.01), Math.max(3, W * 0.007)]);
+      ctx.lineWidth = Math.max(1.5, Math.min(W, H) * 0.004); ctx.strokeStyle = "#b98a2e"; ctx.stroke();
+      ctx.restore();
+    }
+  } catch (e) { /* site context is cosmetic — never break the PDF over it */ }
 }
 
 function hexA(hex, a) {
