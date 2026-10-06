@@ -24,8 +24,8 @@ test("draw tool receives the backdrop and loads it as an image", () => {
 });
 
 test("backdrop draws BEHIND the cells (after clearRect, before drawStructure) via the seed transform", () => {
-  assert.ok(/clearRect\(0,0,W\(\),H\(\)\);\s*drawBackdrop\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")),
-    "redraw order: clear -> backdrop -> structure");
+  assert.ok(/clearRect\(0,0,W\(\),H\(\)\);\s*drawBackdrop\(\);\s*drawZoneCells\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")),
+    "redraw order: clear -> backdrop -> zone cells -> structure");
   assert.ok(draw.includes("ctx.drawImage(_bdImg, +_seed.offx||0, +_seed.offy||0, a*sc, sc)"),
     "positioned through the same seed transform ctxVB uses (full aerial fraction -> canvas px)");
 });

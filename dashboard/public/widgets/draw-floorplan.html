@@ -168,6 +168,7 @@
       <div class="seg" id="modeSeg">
         <button class="segb on" id="tStructure" title="Structure — the building shell" aria-label="Structure">Structure</button>
         <button class="segb" id="tRoom" title="Draw rooms inside" aria-label="Room">Room</button>
+        <button class="segb" id="tZones" title="Classify site & exterior zones" aria-label="Zones">Zones</button>
       </div>
       <!-- Narrow phones: the segmented control collapses to one toggle so the dock never clips Done. -->
       <button class="segToggle" id="modeToggle" title="Switch mode" aria-label="Switch Structure / Room">
@@ -180,6 +181,7 @@
         <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
         <button class="tb ico snap on" id="tSnap" title="Snap: half grid" aria-label="Snap: half grid">½</button>
         <button class="tb ico" id="tAerial" title="Aerial" aria-label="Aerial backdrop" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg></button>
+        <select id="zoneTypeSel" title="Zone type" aria-label="Zone type" style="display:none;height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:600 13px var(--sans);padding:0 8px;cursor:pointer"></select>
       </span>
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
@@ -228,6 +230,18 @@
   // not editor chrome. hoverWall = the wall unit under the cursor while in opening mode.
   var openings=[], hoverWall=null;
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
+  // Phase 3 (grid-first): SITE + exterior ZONE classification painted on the SAME half-cell grid as the
+  // building (independent of `cells` — a zone cell is property/driveway/yard, not building). One class per
+  // cell (painting a type removes the cell from every other type). Taxonomy + colours mirror the survey's
+  // ZONE_TYPES, plus "site" for the overall usable property. zoneCells: { typeKey -> Set("c,r") }.
+  var ZCLASS=[["site","Site","150,156,160"],["driveway","Driveway","176,136,84"],["parking","Parking","74,126,206"],["front-yard","Front Yard","84,164,104"],["rear-yard","Rear Yard","138,172,64"],["side-yard","Side Yard","58,160,150"],["street","Street","120,132,148"],["alley","Alley","154,102,170"],["loading","Loading","206,112,72"],["entrance","Entrance","200,84,114"]];
+  var ZCOL={}; ZCLASS.forEach(function(t){ ZCOL[t[0]]=t[2]; });
+  function zClassLabel(t){ for(var i=0;i<ZCLASS.length;i++) if(ZCLASS[i][0]===t) return ZCLASS[i][1]; return "Zone"; }
+  var zoneCells={}, zoneType="site";
+  function zcGet(t){ if(!zoneCells[t]) zoneCells[t]=new Set(); return zoneCells[t]; }
+  function zcOut(){ var o={}; for(var t in zoneCells){ if(zoneCells[t]&&zoneCells[t].size) o[t]=Array.from(zoneCells[t]); } return o; }
+  function zcIn(o){ var z={}; if(o&&typeof o==="object"){ for(var t in o){ if(ZCOL[t]&&Array.isArray(o[t])) z[t]=new Set(o[t]); } } return z; }
+  function zcClone(z){ var o={}; for(var t in z){ o[t]=new Set(z[t]); } return o; }
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
   // enhancedURL = the AI raster (data: PNG); enhancedRev = the planRev() of the geometry it was generated from
   // (a content hash, NOT a timestamp) → the plan can tell whether the raster is still current. Both PERSIST in the
@@ -405,13 +419,23 @@
       ctx.fillStyle="rgba(185,138,46,.32)";
       rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
     }
+    if(mode==="zone" && dragging && startPt && dragCur){   // classify-paint preview in the active type's colour
+      var zl=dragCells(startPt,dragCur), zcl=ZCOL[zoneType]||ZCOL.site;
+      ctx.fillStyle = structOp==="erase" ? "rgba(196,85,61,.26)" : "rgba("+zcl+",.4)";
+      zl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
+      var zrc=dragRectPx(startPt,dragCur); ctx.setLineDash([6,5]); ctx.strokeStyle = structOp==="erase" ? "#c4553d" : "rgb("+zcl+")"; ctx.lineWidth=1.5;
+      ctx.strokeRect(zrc.x,zrc.y,zrc.w,zrc.h); ctx.setLineDash([]);
+    }
     if(mode==="opening" && hoverWall){   // the wall unit under the cursor, ready to toggle a door
       ctx.save(); ctx.strokeStyle="rgba(185,138,46,.9)"; ctx.lineWidth=4; ctx.lineCap="round";
       ctx.beginPath(); ctx.moveTo(hoverWall.a[0],hoverWall.a[1]); ctx.lineTo(hoverWall.b[0],hoverWall.b[1]); ctx.stroke(); ctx.restore();
     }
   }
+  function drawZoneCells(){ for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
+      ctx.fillStyle="rgba("+col+",.26)"; set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); } }
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawBackdrop();
+    drawZoneCells();
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawPreview();
@@ -479,12 +503,14 @@
   // True only when a raster exists AND the geometry has changed since it was generated (so the raster is out of date).
   function enhanceStale(){ return !!(enhancedURL && String(enhancedRev)!==planRev()); }
   function planOut(){ var o={v:1, cells:Array.from(cells), rooms:namedRooms(rooms), openings:sanitizeOpenings(openings), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp};
+    var zc=zcOut(); for(var _z in zc){ o.zoneCells=zc; break; }   // SITE + exterior zone classification cells (omitted when none)
     if(enhancedURL && enhancedRev!=null) o.enhanced={src:enhancedURL, rev:String(enhancedRev)}; return o; }   // the cached AI raster + the rev it was made from — survives reload, never re-fetched
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
+  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; zoneCells={}; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
+    zoneCells=zcIn(s&&s.zoneCells);
     _seed=(s && s.seed && +s.seed.sc>0) ? { sc:+s.seed.sc, offx:+s.seed.offx||0, offy:+s.seed.offy||0, aspect:(+s.seed.aspect>0)?+s.seed.aspect:1 } : null;
     if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(Array.isArray(s.openings)) openings=sanitizeOpenings(s.openings); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx;
       var en=sanitizeEnhanced(s.enhanced); if(en){ enhancedURL=en.src; enhancedRev=en.rev; enhancedOnce=true; } } }   // restore the cached raster (NO fetch) — explicit controls still gate any regeneration
@@ -498,10 +524,10 @@
   function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); refreshPrevStale(); }   // any edit while the enhanced preview is up flips it to STALE (never silently keeps showing a current-looking raster)
 
   // ---- history (undo/redo) ----
-  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), openings:JSON.parse(JSON.stringify(openings))}; }
+  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), openings:JSON.parse(JSON.stringify(openings)), zoneCells:zcClone(zoneCells)}; }
   var hist=[snapshot()], hi=0;
   function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
-  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); sel=null; closeLabel(); }
+  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); zoneCells=zcClone(s.zoneCells||{}); sel=null; closeLabel(); }
   function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } persist(); } }   // an undo is an edit → saved like one
   function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); persist(); } }
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
@@ -510,13 +536,16 @@
   function setMode(m){ mode=m; if(m!=="opening") hoverWall=null; $("tStructure").classList.toggle("on",m==="structure"); $("tRoom").classList.toggle("on",m==="room");
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     $("tRoom").classList.toggle("locked", cells.size===0);
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Openings" : "Room");
-    var edit = m==="structure";                     // Add/Erase are structure-only; the snap toggle stays in both
+    var tz=$("tZones"); if(tz) tz.classList.toggle("on",m==="zone");
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Openings" : (m==="zone" ? "Zones" : "Room"));
+    var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
+    var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display = m==="zone" ? "inline-flex" : "none";
     cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening" ? "pointer" : "crosshair");
     $("hint").innerHTML = m==="opening" ? "Tap a wall to add a door."
-      : edit ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
+      : m==="zone" ? ("Paint <b>"+zClassLabel(zoneType)+"</b> cells on the grid.")
+      : m==="structure" ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
       : "Draw the <b>rooms</b> inside and name each.";
     $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; updateTools(); redraw(); }
 
@@ -524,7 +553,7 @@
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="opening"){ toggleOpeningAt(pt.x,pt.y); return; }   // tap a wall unit → toggle a door (structure/room editing suspended)
-    if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
+    if(mode==="structure"||mode==="zone"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap a room → name it
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
@@ -532,6 +561,14 @@
     if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
   cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
+    if(mode==="zone"){
+      var zcl=dragCells(startPt,dragCur||startPt), zch=false, set=zcGet(zoneType);
+      zcl.forEach(function(cr){ var k=key(cr[0],cr[1]);
+        if(structOp==="erase"){ if(set.delete(k)) zch=true; }
+        else { for(var t in zoneCells){ if(t!==zoneType && zoneCells[t].delete(k)) zch=true; }   // one class per cell
+          if(!set.has(k)){ set.add(k); zch=true; } } });
+      startPt=dragCur=null; if(zch) pushHist(); updateTools(); redraw(); return;
+    }
     if(mode==="structure"){
       var wasEmpty=cells.size===0, list=dragCells(startPt,dragCur||startPt), changed=false;
       list.forEach(function(cr){ var k=key(cr[0],cr[1]);
@@ -766,6 +803,10 @@
   $("modeToggle").addEventListener("click", function(){ backToDraw();
     if(mode==="structure"){ if(cells.size>0) setMode("room"); } else setMode("structure"); });
   $("tOpening").addEventListener("click", function(){ if(busy||cells.size===0) return; backToDraw(); setMode(mode==="opening" ? "structure" : "opening"); });   // doors mode: suspend structure/room editing, toggle doors on wall units
+  // Zones: classify site + exterior zone cells (one class per cell). The type picker lists the taxonomy.
+  (function(){ var sel=$("zoneTypeSel"); if(!sel) return; ZCLASS.forEach(function(t){ var o=document.createElement("option"); o.value=t[0]; o.textContent=t[1]; sel.appendChild(o); }); sel.value=zoneType;
+    sel.addEventListener("change", function(){ zoneType=sel.value; if(structOp==="erase"){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); } $("hint").innerHTML="Paint <b>"+zClassLabel(zoneType)+"</b> cells on the grid."; redraw(); }); })();
+  $("tZones").addEventListener("click", function(){ if(busy) return; backToDraw(); setMode(mode==="zone" ? "structure" : "zone"); });
   $("tAdd").addEventListener("click", function(){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); cv.style.cursor="crosshair"; });
   $("tErase").addEventListener("click", function(){ structOp="erase"; $("tErase").classList.add("on"); $("tAdd").classList.remove("on"); cv.style.cursor="cell"; });
   // ONE snap toggle — tap flips ½ ↔ 1 (persists for the session).

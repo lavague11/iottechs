@@ -39,6 +39,8 @@ const api = new Function(`
   var HALF=${HALF}, FULL=${FULL};
   var cells=new Set(), rooms=[], openings=[], metersPerPx=0, _seed=null, _planStamp=0;
   var enhancedURL=null, enhancedRev=null, enhancedOnce=false, sel=null, _pushes=0;
+  var zoneCells={};   // Phase 3: zone-classification cells — stubbed here (these tests cover the enhanced raster, not zones)
+  function zcOut(){ return {}; } function zcIn(){ return {}; } function zcClone(){ return {}; }
   function pushHist(){ _pushes++; } function redraw(){} function persist(){}
   ${PURE}
   return {
