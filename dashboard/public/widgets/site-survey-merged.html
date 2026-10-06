@@ -732,7 +732,9 @@
       if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]){ floors[curFloor].outlineDraft=null; floors[curFloor].ctx=validCtx(ev.data.ctx); } queueSave(); enterDraw(ol); return; }   // Use Outline consumed the unfinished draft; ctx = the context crop every view of this floor shares
       // A draw result carries the transparent plan layer (null when it has no seed/ctx, or an AI raster); any other new background invalidates both layers.
       if(floors[curFloor]){ if(pendingBgSource==="draw"){ floors[curFloor].planSvg=validPlanSvg(ev.data.planSvg); floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true); } else clearCtx(floors[curFloor]); }
-      applyBackground(ev.data.dataUrl, false, ev.data.vector, ev.data.scale, ev.data.aerial);
+      // A ctx-framed bg spans the context crop, not the draw tool's tight bbox+6% — so its real scale is the ctx feet (what pxPerFt/coverage must use), not planFeet.
+      var fc=floors[curFloor], bgScale=(fc && fc.bgCtx && fc.ctx && +fc.ctx.ftW>0 && +fc.ctx.ftH>0) ? {ftW:+fc.ctx.ftW, ftH:+fc.ctx.ftH} : ev.data.scale;
+      applyBackground(ev.data.dataUrl, false, ev.data.vector, bgScale, ev.data.aerial);
     });
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
     // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always

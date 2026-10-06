@@ -86,3 +86,9 @@ test("4.2 survey: the Aerial · Plan · Hybrid view pill is wired with the three
   assert.ok(survey.includes('class="vbtn" data-v="hybrid">Hybrid'), "Hybrid = hybrid");
   assert.ok(survey.includes('f.view=b.getAttribute("data-v"); renderView(); queueSave();'), "clicking a segment sets the floor's view, re-renders and persists");
 });
+
+test("a ctx-framed (bgCtx) draw result uses the context-crop feet as the floor scale, not planFeet", () => {
+  // The plate spans the ctx extent, so coverage (pxPerFt) must scale by ctx.ftW/ftH, not the draw tool's tight bbox+6%.
+  assert.ok(survey.includes("fc.bgCtx && fc.ctx && +fc.ctx.ftW>0 && +fc.ctx.ftH>0"), "ctx-feet override guard present");
+  assert.ok(/applyBackground\(ev\.data\.dataUrl, false, ev\.data\.vector, bgScale, ev\.data\.aerial\)/.test(survey), "applyBackground uses the resolved bgScale");
+});
