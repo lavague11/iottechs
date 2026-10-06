@@ -28,3 +28,13 @@ test("the satellite hint asks for the working area, not the building", () => {
   assert.ok(sat.includes("Outline the working area (property / lot), then Use Outline"));
   assert.ok(!sat.includes("Tap each corner of the building"), "old building-outline hint removed");
 });
+
+test("precision loupe on the project-base vertices (shared design with the camera loupe)", () => {
+  assert.ok(sat.includes('#trLoupe{') && sat.includes("function trLoupeShow(") && sat.includes("function trLoupeHide("), "loupe element + show/hide exist");
+  // magnifies the enhanced aerial (#prevImg) at the vertex image-fraction, centred crosshair
+  assert.ok(sat.includes("lp.style.backgroundImage='url(\"'+src+'\"")  && sat.includes("L/2 - frac.x*Wd*Z"), "centres the aerial on the vertex fraction");
+  assert.ok(sat.includes('class="lxh"'), "crosshair");
+  // shown while grabbing / dragging a vertex; hidden on pan / pinch / release
+  assert.ok(sat.includes("trLoupeShow(p, tracePts[hit])") && sat.includes("trLoupeShow(p, tracePts[trDrag])"), "loupe follows the vertex anchor on grab + drag");
+  assert.ok(/function trEnd\(e\)\{[^]*?trLoupeHide\(\);/.test(sat), "hidden on release");
+});

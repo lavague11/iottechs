@@ -157,6 +157,15 @@
   #traceHint{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:11;display:none;max-width:88%;text-align:center;
     background:rgba(16,17,18,.82);color:#fff;font:600 12.5px/1.35 var(--sans);padding:7px 13px;border-radius:9px;box-shadow:0 4px 16px rgba(16,17,18,.3);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
   #preview.tracing #traceHint{display:block}
+  /* Precision-placement loupe (shared design with the planner's camera loupe): magnifies the enhanced
+     aerial under the vertex anchor, centred crosshair = exactly where the point lands, offset above the
+     pointer/finger. Follows the ANCHOR, not the cursor. Works for dropping and dragging a project-base corner. */
+  #trLoupe{position:absolute;z-index:12;width:120px;height:120px;border-radius:50%;border:3px solid #fff;box-shadow:0 8px 26px rgba(16,20,24,.5);background:#e9ebef no-repeat;display:none;pointer-events:none;overflow:hidden}
+  #trLoupe.on{display:block}
+  #trLoupe .lxh{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);box-shadow:0 0 0 1px rgba(255,255,255,.55)}
+  #trLoupe .lxh::before,#trLoupe .lxh::after{content:"";position:absolute;background:rgba(185,138,46,.95)}
+  #trLoupe .lxh::before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
+  #trLoupe .lxh::after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%)}
   #traceBar button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:9px 14px;font:600 13px/1 var(--sans);cursor:pointer}
   #traceBar button:hover{border-color:var(--ink)}
   #traceBar button.ic{padding:9px;display:inline-flex;align-items:center;justify-content:center}
@@ -820,6 +829,19 @@
   function trPanBy(dx,dy){ trZ.tx+=dx; trZ.ty+=dy; trZClamp(); trZApply(); trPaint(); }
   // hit-test in SCREEN px so the 14px grab radius is the same at every zoom
   function trNear(px,py){ for(var i=0;i<tracePts.length;i++){ var q=trC2S(trToPx(tracePts[i])); if(Math.hypot(q.x-px,q.y-py)<=14) return i; } return -1; }
+  // Precision loupe: magnify the enhanced aerial at image-fraction `frac` (the vertex anchor), Z× the
+  // on-screen display, centred under the crosshair; the bubble sits above the pointer `scr` (screen px in
+  // #preview space). Vertices ARE image fractions, so the loupe centre is exactly the saved point.
+  var trLoupeEl=null;
+  function ensureTrLoupe(){ if(trLoupeEl) return trLoupeEl; trLoupeEl=document.createElement("div"); trLoupeEl.id="trLoupe"; trLoupeEl.innerHTML='<div class="lxh"></div>'; preview.appendChild(trLoupeEl); return trLoupeEl; }
+  function trLoupeShow(scr, frac){ var src=$("prevImg").src; if(!src||!frac) return; var lp=ensureTrLoupe(), L=120, Z=2.6;
+    var R=trImgRect(), Wd=R.w*trZ.s, Hd=R.h*trZ.s;                                  // the aerial's on-screen size (rides zoom/pan)
+    lp.style.backgroundImage='url("'+src+'")'; lp.style.backgroundRepeat="no-repeat";
+    lp.style.backgroundSize=(Wd*Z)+"px "+(Hd*Z)+"px";
+    lp.style.backgroundPosition=(L/2 - frac.x*Wd*Z)+"px "+(L/2 - frac.y*Hd*Z)+"px";
+    var pw=preview.clientWidth, left=Math.max(6, Math.min(scr.x-L/2, pw-L-6)), top=scr.y-L-22; if(top<6) top=scr.y+22;   // above the fingertip, flip below near the top
+    lp.style.left=left+"px"; lp.style.top=top+"px"; lp.classList.add("on"); }
+  function trLoupeHide(){ if(trLoupeEl) trLoupeEl.classList.remove("on"); }
   // Use Outline is ready once there are 3+ corners — closing the loop is optional (Use Outline auto-closes).
   function trSync(){ $("trUse").disabled = !(tracePts.length>=3); trHintUpdate(); }
   // What to do right now — updates as the outline is built (tracing is a non-obvious action).
@@ -901,12 +923,13 @@
     layer.addEventListener("pointerdown", function(e){ e.preventDefault(); try{layer.setPointerCapture(e.pointerId);}catch(_){ }
       if(e.isPrimary){ ptrs.clear(); trPinch=false; tap=null; trDrag=-1; }             // a fresh gesture — drop any stale pointers
       var p=trXY(e); ptrs.set(e.pointerId,p);
-      if(ptrs.size>=2){ trPinch=true; tap=null; if(trDrag>=0){ if(dg&&dg.moved) trPush(); trDrag=-1; dg=null; trPaint(); } return; }   // second finger → pinch, never a corner
+      if(ptrs.size>=2){ trPinch=true; tap=null; trLoupeHide(); if(trDrag>=0){ if(dg&&dg.moved) trPush(); trDrag=-1; dg=null; trPaint(); } return; }   // second finger → pinch, never a corner
       var hit=trNear(p.x,p.y);
       // tapping the FIRST corner (3+ pts, still open) closes the polygon on release — so it isn't
       // mistaken for starting a drag of corner 0.
-      if(hit>=0 && !closable(hit)){ trDrag=hit; dg={x:p.x,y:p.y,moved:false}; tap=null; trPaint(); return; }   // grab a corner to move it (a drag that never leaves 4px is a tap → selects it)
-      tap={ id:e.pointerId, x0:p.x, y0:p.y, hit:hit, moved:false }; });
+      if(hit>=0 && !closable(hit)){ trDrag=hit; dg={x:p.x,y:p.y,moved:false}; tap=null; trLoupeShow(p, tracePts[hit]); trPaint(); return; }   // grab a corner to move it (loupe on the vertex); a drag <4px is a tap → selects it
+      tap={ id:e.pointerId, x0:p.x, y0:p.y, hit:hit, moved:false };
+      if(hit<0 && !trClosed){ var cc=trS2C(p.x,p.y); trLoupeShow(p, trToFrac(cc.x,cc.y)); } });   // pressing empty space to drop a corner → loupe at the drop point
     layer.addEventListener("pointermove", function(e){ var p=trXY(e);
       if(!ptrs.has(e.pointerId)){ var h=trNear(p.x,p.y); if(h!==trHover){ trHover=h; trPaint(); } return; }   // hover (mouse, no button)
       var prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,p);
@@ -917,10 +940,10 @@
         return;
       }
       if(trDrag>=0){ if(dg && !dg.moved){ if(Math.hypot(p.x-dg.x,p.y-dg.y)<=4) return; dg.moved=true; }
-        var c=trS2C(p.x,p.y); tracePts[trDrag]=trToFrac(c.x,c.y); trPaint(); return; }
-      if(tap && tap.id===e.pointerId && !tap.moved){ if(Math.hypot(p.x-tap.x0,p.y-tap.y0)<=6) return; tap.moved=true; prev={x:tap.x0,y:tap.y0}; }
+        var c=trS2C(p.x,p.y); tracePts[trDrag]=trToFrac(c.x,c.y); trLoupeShow(p, tracePts[trDrag]); trPaint(); return; }   // loupe follows the dragged vertex (the anchor, not the cursor)
+      if(tap && tap.id===e.pointerId && !tap.moved){ if(Math.hypot(p.x-tap.x0,p.y-tap.y0)<=6) return; tap.moved=true; prev={x:tap.x0,y:tap.y0}; trLoupeHide(); }   // the gesture became a pan → drop the loupe
       trPanBy(p.x-prev.x, p.y-prev.y); });                                  // one finger on empty space → pan
-    function trEnd(e){ var p=trXY(e), t=tap; ptrs.delete(e.pointerId); try{layer.releasePointerCapture(e.pointerId);}catch(_){ }
+    function trEnd(e){ var p=trXY(e), t=tap; ptrs.delete(e.pointerId); try{layer.releasePointerCapture(e.pointerId);}catch(_){ } trLoupeHide();
       if(trDrag>=0 && !ptrs.size){ var di=trDrag, dm=dg&&dg.moved; trDrag=-1; dg=null;
         if(dm) trPush(); else if(e.type==="pointerup") trSel=di;     // moved → one undo step; clean tap on a dot → select it (shows ×)
         trPaint(); }
