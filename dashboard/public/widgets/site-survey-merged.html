@@ -647,7 +647,7 @@
     // seed (optional) = a traced building outline {pts:[[x,y]..],aspect} → the draw tool opens with the
     // footprint already drawn as the canonical Structure (satellite trace → floor plan handoff).
     function enterDraw(seed){ var extra = (seed && seed.pts && seed.pts.length>=3) ? ("&seed="+encodeURIComponent(JSON.stringify(seed))) : "";
-      openBgTool(drawSrc()+"&floor="+curFloor+extra, "draw"); }   // per-floor draft persistence
+      openBgTool(drawSrc()+"&floor="+curFloor+"&fid="+encodeURIComponent((floors[curFloor]&&floors[curFloor].id)||"")+extra, "draw"); }   // per-floor draft persistence
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       satFrame.style.display="none";
@@ -670,6 +670,7 @@
         { k:"cam", x:50, y:31, aim:15,  aimed:true, fov:52, range:R, name:"Pool (patio side)", photo:A+"cam-3-pool-a.jpg",   photoName:"Pool",           cid:"cSAMPLE03" },
         { k:"cam", x:63, y:18, aim:205, aimed:true, fov:52, range:R, name:"Pool (yard side)",  photo:A+"cam-4-pool-b.jpg",   photoName:"Pool",           cid:"cSAMPLE04" }
       ] }];
+      ensureFloorIds();
       curFloor=0; loadFloor(0); renderFloorTabs(); goStep(1); save();
       // Push the survey to the server now so /api/project-cameras is fresh — the CCTV mockup + the
       // Visualize walkthrough BOTH derive each camera's photo from the survey (single source of truth),
@@ -1342,6 +1343,9 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
+    function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
+    function ensureFloorIds(){ floors.forEach(function(f){ if(f && !f.id) f.id=newFloorId(); }); }
+    ensureFloorIds();
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); }
@@ -1399,7 +1403,7 @@
     }
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
     function createFloor(from, withItems){
-      var f={ name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
+      var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         devices:(from&&withItems)?JSON.parse(JSON.stringify(from.devices||[])):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
       goStep(f.started ? 1 : 0);   // carried a background over → straight to Setup; else the chooser
@@ -1454,7 +1458,7 @@
     function openFloorSheet(){ if(RO) return; buildFloorSheet(); document.getElementById("floorSheet").classList.add("on"); }
     function closeFloorSheet(){ var s=document.getElementById("floorSheet"); if(s){ s.classList.remove("on"); clearRowActions(); } }
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
-      if(floors.length<=1){ floors=[{name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
+      if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
       var wasCur=(curFloor===i);
       floors.splice(i,1);
       floors.forEach(function(f,idx){ if(/^Floor \d+$/.test(f.name)) f.name="Floor "+(idx+1); });   // renumber only default-named floors; keep custom names
@@ -1494,8 +1498,9 @@
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles; applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale so the plan reopens correctly
-      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      if(st.floors&&st.floors.length){ floors=st.floors.map(function(f){ return {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,devices:f.devices||[],started:!!f.started}; }); }   // keep bgSource + real-world scale so the plan reopens correctly
+      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+      ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);
       loadFloor(curFloor); renderFloorTabs();
       goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
