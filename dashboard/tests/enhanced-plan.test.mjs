@@ -39,8 +39,10 @@ const api = new Function(`
   var HALF=${HALF}, FULL=${FULL};
   var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), metersPerPx=0, _seed=null, _planStamp=0;
   var enhancedURL=null, enhancedRev=null, enhancedOnce=false, sel=null, _pushes=0;
-  var zoneCells={};   // Phase 3: zone-classification cells — stubbed here (these tests cover the enhanced raster, not zones)
+  var zoneCells={}, areas=[];   // Phase 3 zone cells + named Areas — stubbed here (these tests cover the enhanced raster, not areas)
   function zcOut(){ return {}; } function zcIn(){ return {}; } function zcClone(){ return {}; } function zoneCellsSVG(){ return ""; }
+  function namedAreas(l){ return (l||[]).filter(function(a){ return a && (a.label||"").trim() && (a.cells||[]).length; }); }
+  function sanitizeAreas(l){ return Array.isArray(l)?l:[]; } function areasFromZoneCells(){ return []; } function syncZoneCellsFromAreas(){}
   function pushHist(){ _pushes++; } function redraw(){} function persist(){}
   ${PURE}
   return {

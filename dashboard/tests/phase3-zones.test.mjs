@@ -53,18 +53,19 @@ test("zClassLabel maps a type key to its display label", () => {
   assert.equal(e.zClassLabel("nope"), "Area");
 });
 
-test("zone cells serialize + ride history", () => {
-  assert.ok(draw.includes("o.zoneCells=zc"), "planOut emits zoneCells");
-  assert.ok(draw.includes("zoneCells=zcIn(s&&s.zoneCells)"), "applyPlan restores zoneCells");
-  assert.ok(draw.includes("zoneCells:zcClone(zoneCells)"), "snapshot copies zoneCells");
-  assert.ok(draw.includes("zoneCells=zcClone(s.zoneCells||{})"), "applySnap restores zoneCells");
+test("named areas serialize + ride history; zoneCells is derived for the export", () => {
+  assert.ok(draw.includes("areas:namedAreas(areas)") && draw.includes("o.zoneCells=zc"), "planOut emits named areas + a derived zoneCells cache");
+  assert.ok(draw.includes("areasFromZoneCells(zcIn(s.zoneCells))"), "applyPlan migrates a legacy typed zoneCells → named areas");
+  assert.ok(draw.includes("sanitizeAreas(s.areas)"), "applyPlan loads persisted areas");
+  assert.ok(draw.includes("areas:JSON.parse(JSON.stringify(areas))"), "snapshot copies areas");
+  assert.ok(draw.includes("syncZoneCellsFromAreas()"), "zoneCells is rebuilt from the areas");
 });
 
-test("zone paint is one-class-per-cell and draws UNDER the structure", () => {
-  assert.ok(draw.includes('if(mode==="zone"){'), "pointerup has a zone branch");
-  assert.ok(draw.includes("for(var t in zoneCells){ if(t!==zoneType && zoneCells[t].delete(k)) zch=true; }"),
-    "painting a type removes the cell from every other type");
-  assert.ok(/drawZoneCells\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")), "zone fills render beneath the structure");
+test("Area mode is draw-and-name (like a room) and areas render UNDER the structure", () => {
+  assert.ok(draw.includes('if(mode==="zone"){'), "pointerup has an Area branch");
+  assert.ok(draw.includes("var al=areaDragCells(startPt,dragCur||startPt)") && draw.includes("openLabel(ash,true)"), "a drag outside the structure creates an area, then names it");
+  assert.ok(draw.includes("function areaDragCells(") && /return dragCells\(a,b\)\.filter\(function\(cr\)\{ return !has\(cr\[0\],cr\[1\]\)/.test(draw), "area cells are the dragged cells OUTSIDE the building (Structure wins)");
+  assert.ok(/drawAreas\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")), "area fills render beneath the structure");
 });
 
 test("3b: zone cells bake into every plan SVG, as the lowest content layer (under the structure)", () => {

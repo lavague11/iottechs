@@ -120,7 +120,7 @@ test("a named room selects on click; naming only auto-opens when unnamed", () =>
   assert.ok(!pd.includes("sel=h; redraw(); openLabel(h); return;"), "a named room no longer re-opens rename on click");
 });
 test("rename is explicit: ••• Rename, or desktop double-click; right-click only selects", () => {
-  assert.ok(src.includes('$("mRenameRoom").addEventListener("click"') && src.includes("openLabel(sel)"), "••• Rename opens the naming UI");
+  assert.ok(src.includes('$("mRenameRoom").addEventListener("click"') && src.includes("openLabel(sel, isAreaSel())"), "••• Rename opens the naming UI (room or area)");
   assert.ok(src.includes('cv.addEventListener("dblclick"'), "desktop double-click → rename");
   const cm = src.slice(src.indexOf('cv.addEventListener("contextmenu"'), src.indexOf('cv.addEventListener("dblclick"'));
   assert.ok(cm.includes("sel=h; redraw();") && !cm.includes("openLabel"), "right-click selects, never opens rename");

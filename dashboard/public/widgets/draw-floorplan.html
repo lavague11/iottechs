@@ -263,6 +263,37 @@
   function zcOut(){ var o={}; for(var t in zoneCells){ if(zoneCells[t]&&zoneCells[t].size) o[t]=Array.from(zoneCells[t]); } return o; }
   function zcIn(o){ var z={}; if(o&&typeof o==="object"){ for(var t in o){ if(ZCOL[t]&&Array.isArray(o[t])) z[t]=new Set(o[t]); } } return z; }
   function zcClone(z){ var o={}; for(var t in z){ o[t]=new Set(z[t]); } return o; }
+  // AREAS = named cell-union regions OUTSIDE the structure (the outdoor counterpart of Rooms): {cells, label, semanticType}.
+  // areas[] is the source of truth for the NAME; zoneCells is kept as a TYPED cache (semanticType → cells) synced from
+  // areas, so the existing export / colour pipeline (zoneCellsSVG, survey, PDF) keeps working unchanged. Outdoor device
+  // naming reads areas[] (by cell) for the free name — see the survey location model.
+  var areas=[];
+  var AREA_NAMES=["Driveway","Parking","Front Yard","Rear Yard","Backyard","Side Yard","Patio","Pool Area","Loading Area","Alley","Entrance","Sidewalk","Walkway","Garden","Courtyard","Deck","Porch"];
+  // Map a free area name → a ZCLASS type key, for the fill colour + the typed zoneCells cache (exterior = generic fallback).
+  function areaTypeFor(name){ var n=String(name||"").toLowerCase();
+    if(/drive/.test(n)) return "driveway";
+    if(/park/.test(n)) return "parking";
+    if(/front\s*yard/.test(n)) return "front-yard";
+    if(/(rear|back)\s*yard|backyard/.test(n)) return "rear-yard";
+    if(/side\s*yard/.test(n)) return "side-yard";
+    if(/street|road/.test(n)) return "street";
+    if(/alley/.test(n)) return "alley";
+    if(/load|dock/.test(n)) return "loading";
+    if(/entr|entry|lobby|sidewalk|walkway/.test(n)) return "entrance";
+    return "exterior"; }
+  function namedAreas(list){ return (list||[]).filter(function(a){ return a && Array.isArray(a.cells) && a.cells.length && (a.label||"").trim(); }); }
+  function areaHit(x,y){ var cc=cellAt(x,y), k=key(cc[0],cc[1]); for(var i=areas.length-1;i>=0;i--){ if((areas[i].cells||[]).indexOf(k)>=0) return areas[i]; } return null; }
+  function isAreaSel(){ return !!(sel && areas.indexOf(sel)>=0); }
+  // Rebuild the typed zoneCells cache from the named areas (one class per cell) — for export / colour only.
+  function syncZoneCellsFromAreas(){ zoneCells={}; (areas||[]).forEach(function(a){ if(!(a.label||"").trim()) return; var t=a.semanticType||areaTypeFor(a.label); if(!ZCOL[t]) t="exterior"; var s=zcGet(t); (a.cells||[]).forEach(function(k){ s.add(k); }); }); }
+  // Migrate legacy typed zoneCells → one named Area per type (label = the type display name). Keeps old surveys working.
+  function areasFromZoneCells(zc){ var out=[]; for(var t in zc){ var arr=(zc[t] instanceof Set)?Array.from(zc[t]):(Array.isArray(zc[t])?zc[t]:[]); if(!arr.length) continue; out.push({ cells:arr.slice(), label:zClassLabel(t), semanticType:t }); } return out; }
+  function sanitizeAreas(list){ var out=[], i; if(!Array.isArray(list)) return out;
+    for(i=0;i<list.length && out.length<120;i++){ var a=list[i]; if(!a||!Array.isArray(a.cells)) continue; var cl=a.cells.filter(function(k){ return typeof k==="string" && /^-?\d+,-?\d+$/.test(k); }); if(!cl.length) continue;
+      out.push({ cells:cl, label:String(a.label==null?"":a.label).slice(0,40), semanticType:(a.semanticType&&ZCOL[a.semanticType])?a.semanticType:areaTypeFor(a.label) }); }
+    return out; }
+  // Area drag → the cells the drag covers that are OUTSIDE the building (AREA ⊄ STRUCTURE — Structure wins on overlap).
+  function areaDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return !has(cr[0],cr[1]); }); }
   var dragging=false, startPt=null, dragCur=null, hoverPt=null;
   // enhancedURL = the AI raster (data: PNG); enhancedRev = the planRev() of the geometry it was generated from
   // (a content hash, NOT a timestamp) → the plan can tell whether the raster is still current. Both PERSIST in the
@@ -508,6 +539,19 @@
         ou.forEach(function(u){ ctx.beginPath(); ctx.moveTo(u.a[0],u.a[1]); ctx.lineTo(u.b[0],u.b[1]); ctx.stroke(); }); ctx.setLineDash([]); ctx.restore(); }
     }
   }
+  // Named AREAS over the aerial: a subtle fill + a light MAP-STYLE outline (never architectural walls) + the name.
+  function drawAreas(){ (areas||[]).forEach(function(a){ var set=new Set(a.cells||[]); if(!set.size) return; var on=(a===sel), col=ZCOL[a.semanticType]||ZCOL.exterior||"132,176,140";
+    ctx.fillStyle="rgba("+col+","+(on?0.26:0.12)+")";
+    set.forEach(function(k){ var p=k.split(","); ctx.fillRect(+p[0]*HALF,+p[1]*HALF,HALF,HALF); });
+    ctx.save(); ctx.strokeStyle="rgba("+col+","+(on?0.95:0.55)+")"; ctx.lineWidth=on?2:1.3; ctx.setLineDash(on?[]:[4,3]); ctx.lineCap="round"; ctx.lineJoin="round";
+    edgesOf(set).forEach(function(s){ ctx.beginPath(); ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); ctx.stroke(); });
+    ctx.setLineDash([]); ctx.restore();
+    var name=(a.label||"").trim(); if(name){ var lc=roomLabelCell(a.cells||[]), bb=cellsBBoxPx(a.cells||[]), maxW=Math.max(20,bb.w-10), sqft=cellsSqFt((a.cells||[]).length);
+      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.lineJoin="round"; ctx.lineWidth=3; ctx.strokeStyle="rgba(255,255,255,.85)";   // white halo so the name reads over the aerial
+      if(sqft>0){ ctx.font="600 13px "+fontFam(); ctx.strokeText(name,lc[0],lc[1]-7,maxW); ctx.fillStyle="#2b2f36"; ctx.fillText(name,lc[0],lc[1]-7,maxW);
+        ctx.font="600 10px "+fontFam(); ctx.strokeText(Math.round(sqft)+" sq ft",lc[0],lc[1]+8,maxW); ctx.fillStyle="#6b7076"; ctx.fillText(Math.round(sqft)+" sq ft",lc[0],lc[1]+8,maxW); }
+      else { ctx.font="600 13px "+fontFam(); ctx.strokeText(name,lc[0],lc[1],maxW); ctx.fillStyle="#2b2f36"; ctx.fillText(name,lc[0],lc[1],maxW); } }
+  }); }
   function drawZoneCells(){ for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
       ctx.fillStyle="rgba("+col+",.26)"; set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); } }
   // Contextual grid: the grid is ALWAYS mathematically there (snap is unaffected), but drawn only while editing the
@@ -529,7 +573,7 @@
     ctx.stroke(); ctx.restore(); }
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawBackdrop();
-    drawZoneCells();
+    drawAreas();
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawGrid();
@@ -556,7 +600,11 @@
       if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
         return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem }; }
       return { cells:[], label:(r&&r.label)||"", semanticType:sem };
-    }).filter(function(r){ return r.cells.length>0; }); reconcileOpenings(); reconcileOpenWalls(); }   // a door / open-wall whose wall no longer exists drops with it
+    }).filter(function(r){ return r.cells.length>0; }); reconcileOpenings(); reconcileOpenWalls(); reconcileAreas(); }   // a door / open-wall whose wall no longer exists drops with it; an area cell now inside the building drops (Structure wins)
+  // AREA ⊄ STRUCTURE: drop any area cell the building now occupies (so a device there stays INDOOR, never outdoor).
+  function reconcileAreas(){ var ch=false; (areas||[]).forEach(function(a){ var n=(a.cells||[]).length; a.cells=(a.cells||[]).filter(function(k){ var p=k.split(","); return !has(+p[0],+p[1]); }); if(a.cells.length!==n) ch=true; });
+    var before=areas.length; areas=areas.filter(function(a){ return (a.cells||[]).length>0; }); if(sel && areas.indexOf(sel)<0 && isAreaSelCandidate(sel)) sel=null; if(ch||areas.length!==before) syncZoneCellsFromAreas(); }
+  function isAreaSelCandidate(s){ return s && Array.isArray(s.cells) && rooms.indexOf(s)<0; }
 
   // Pure room-union: A ∪ B cells (unique, A's order first), keep A's label else B's, keep A's semanticType unless A
   // is empty/custom and B has a real one. Shared walls fall out on their own — edgesOf derives them from the merged set.
@@ -592,21 +640,25 @@
     h=_fnv(h,"R:"+rs.join(";"));
     h=_fnv(h,"O:"+(openings||[]).map(function(o){ return openKey(o); }).sort().join(";"));
     h=_fnv(h,"W:"+Array.from(openWalls).sort().join(";"));   // open (hidden) walls change the rendered plan → invalidate the raster
+    var as=(areas||[]).map(function(a){ return ((a&&a.label||"").trim())+"|"+((a&&a.cells)||[]).slice().sort().join(","); }).sort();
+    h=_fnv(h,"A:"+as.join(";"));   // named areas change the rendered plan too
     return ("0000000"+h.toString(16)).slice(-8); }
   // Validate a restored enhanced record: an object with a data:image/ src + its generation rev (coerced to string). null otherwise.
   function sanitizeEnhanced(e){ if(!e||typeof e!=="object") return null; var src=typeof e.src==="string"?e.src:"";
     if(src.slice(0,11)!=="data:image/") return null; var rev=(typeof e.rev==="string"||typeof e.rev==="number")?String(e.rev):""; return {src:src, rev:rev}; }
   // True only when a raster exists AND the geometry has changed since it was generated (so the raster is out of date).
   function enhanceStale(){ return !!(enhancedURL && String(enhancedRev)!==planRev()); }
-  function planOut(){ var o={v:1, cells:Array.from(cells), rooms:namedRooms(rooms), openings:sanitizeOpenings(openings), openWalls:sanitizeOpenWalls(Array.from(openWalls)), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp};
-    var zc=zcOut(); for(var _z in zc){ o.zoneCells=zc; break; }   // SITE + exterior zone classification cells (omitted when none)
+  function planOut(){ var o={v:1, cells:Array.from(cells), rooms:namedRooms(rooms), areas:namedAreas(areas), openings:sanitizeOpenings(openings), openWalls:sanitizeOpenWalls(Array.from(openWalls)), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp};
+    syncZoneCellsFromAreas(); var zc=zcOut(); for(var _z in zc){ o.zoneCells=zc; break; }   // typed cache derived from the named areas — the existing export/colour pipeline reads it (omitted when none)
     if(enhancedURL && enhancedRev!=null) o.enhanced={src:enhancedURL, rev:String(enhancedRev)}; return o; }   // the cached AI raster + the rev it was made from — survives reload, never re-fetched
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
   function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; openings=[]; openWalls=new Set(); zoneCells={}; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
-    zoneCells=zcIn(s&&s.zoneCells);
+  function applyPlan(s){ cells=new Set(); rooms=[]; areas=[]; openings=[]; openWalls=new Set(); zoneCells={}; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
+    // Areas are the source of truth; a legacy floor with only typed zoneCells migrates to one named Area per type. zoneCells is then re-derived.
+    areas = (s && Array.isArray(s.areas)) ? sanitizeAreas(s.areas) : ((s && s.zoneCells) ? areasFromZoneCells(zcIn(s.zoneCells)) : []);
+    syncZoneCellsFromAreas();
     _seed=(s && s.seed && +s.seed.sc>0) ? { sc:+s.seed.sc, offx:+s.seed.offx||0, offy:+s.seed.offy||0, aspect:(+s.seed.aspect>0)?+s.seed.aspect:1 } : null;
     if(s){ if(Array.isArray(s.cells)) cells=new Set(s.cells); if(Array.isArray(s.rooms)) rooms=namedRooms(s.rooms); if(Array.isArray(s.openings)) openings=sanitizeOpenings(s.openings); if(Array.isArray(s.openWalls)) openWalls=new Set(sanitizeOpenWalls(s.openWalls)); if(+s.metersPerPx>0) metersPerPx=+s.metersPerPx;
       var en=sanitizeEnhanced(s.enhanced); if(en){ enhancedURL=en.src; enhancedRev=en.rev; enhancedOnce=true; } } }   // restore the cached raster (NO fetch) — explicit controls still gate any regeneration
@@ -620,10 +672,11 @@
   function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); refreshPrevStale(); }   // any edit while the enhanced preview is up flips it to STALE (never silently keeps showing a current-looking raster)
 
   // ---- history (undo/redo) ----
-  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), openings:JSON.parse(JSON.stringify(openings)), openWalls:Array.from(openWalls), zoneCells:zcClone(zoneCells)}; }
+  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), areas:JSON.parse(JSON.stringify(areas)), openings:JSON.parse(JSON.stringify(openings)), openWalls:Array.from(openWalls), zoneCells:zcClone(zoneCells)}; }
   var hist=[snapshot()], hi=0;
   function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
-  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); openWalls=new Set(sanitizeOpenWalls(s.openWalls||[])); zoneCells=zcClone(s.zoneCells||{}); sel=null; closeLabel(); }
+  function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); openWalls=new Set(sanitizeOpenWalls(s.openWalls||[]));
+    areas = Array.isArray(s.areas) ? sanitizeAreas(s.areas) : areasFromZoneCells(zcIn(s.zoneCells||{})); syncZoneCellsFromAreas(); sel=null; closeLabel(); }
   function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } persist(); } }   // an undo is an edit → saved like one
   function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); persist(); } }
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
@@ -638,11 +691,11 @@
     var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
-    var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display = m==="zone" ? "inline-flex" : "none";
+    var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display="none";   // Areas are named like rooms now — no type picker
     cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
     $("hint").innerHTML = m==="opening" ? "Tap a wall to add a door."
       : m==="removewall" ? "Tap a <b>wall</b> to open it — tap again to restore."
-      : m==="zone" ? ("Paint the <b>"+zClassLabel(zoneType)+"</b> area on the grid.")
+      : m==="zone" ? "Draw an <b>area</b> outside and name it."
       : m==="structure" ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
       : "Draw the <b>rooms</b> inside and name each.";
     $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; updateTools(); redraw(); }
@@ -652,27 +705,41 @@
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="opening"){ toggleOpeningAt(pt.x,pt.y); return; }   // tap a wall unit → toggle a door (structure/room editing suspended)
     if(mode==="removewall"){ toggleOpenWallAt(pt.x,pt.y); return; }   // tap an interior wall → open / restore it (geometry never changes)
-    if(mode==="structure"||mode==="zone"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
+    if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
+    if(mode==="zone"){   // AREA: erase drags to remove cells; else tap a named area to SELECT (unnamed → name), empty drag draws a new one
+      if(structOp==="erase"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
+      var ah=areaHit(pt.x,pt.y);
+      if(ah){ sel=ah; redraw(); if(!(ah.label||"").trim()) openLabel(ah,true); return; }   // UNNAMED → name it; NAMED → just select (rename is explicit)
+      closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); return;
+    }
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); if(!(h.label||"").trim()) openLabel(h); return; }   // UNNAMED → name it; NAMED → just select (rename is an explicit action: ••• Rename, or double-click)
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
-  // Right-click a room → select it (its actions live under •••). Room mode only; never while picking a merge target.
-  cv.addEventListener("contextmenu", function(e){ e.preventDefault(); if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mode!=="room"||mergeArmed) return;
-    var pt=rel(e), h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); } });
-  // Desktop double-click a room → rename it (mobile renames via ••• Rename — never needs a double-tap).
-  cv.addEventListener("dblclick", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mode!=="room"||mergeArmed) return;
-    var pt=rel(e), h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); openLabel(h); } });
+  // Right-click a room/area → select it (its actions live under •••). Never while picking a merge target.
+  cv.addEventListener("contextmenu", function(e){ e.preventDefault(); if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed) return;
+    var pt=rel(e); if(mode==="room"){ var h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); } } else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a){ sel=a; redraw(); } } });
+  // Desktop double-click a room/area → rename it (mobile renames via ••• Rename — never needs a double-tap).
+  cv.addEventListener("dblclick", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed) return;
+    var pt=rel(e); if(mode==="room"){ var h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); openLabel(h); } } else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a){ sel=a; redraw(); openLabel(a,true); } } });
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
     if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); } return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
   cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
     if(mode==="zone"){
-      var zcl=dragCells(startPt,dragCur||startPt), zch=false, set=zcGet(zoneType);
-      zcl.forEach(function(cr){ var k=key(cr[0],cr[1]);
-        if(structOp==="erase"){ if(set.delete(k)) zch=true; }
-        else { for(var t in zoneCells){ if(t!==zoneType && zoneCells[t].delete(k)) zch=true; }   // one class per cell
-          if(!set.has(k)){ set.add(k); zch=true; } } });
-      startPt=dragCur=null; if(zch) pushHist(); updateTools(); redraw(); return;
+      if(structOp==="erase"){   // erase drags cells out of any area they overlap
+        var ecl=dragCells(startPt,dragCur||startPt), ech=false; startPt=dragCur=null;
+        ecl.forEach(function(cr){ var k=key(cr[0],cr[1]); areas.forEach(function(a){ var i=a.cells.indexOf(k); if(i>=0){ a.cells.splice(i,1); ech=true; } }); });
+        if(ech){ areas=areas.filter(function(a){ return (a.cells||[]).length>0; }); if(sel && areas.indexOf(sel)<0) sel=null; syncZoneCellsFromAreas(); pushHist(); }
+        updateTools(); redraw(); return;
+      }
+      // draw a NEW area from the cells OUTSIDE the structure, then name it (like a room)
+      var al=areaDragCells(startPt,dragCur||startPt); startPt=dragCur=null;
+      if(al.length){ var ak=al.map(function(cr){ return key(cr[0],cr[1]); });
+        areas.forEach(function(o){ o.cells=(o.cells||[]).filter(function(k){ return ak.indexOf(k)<0; }); });   // a cell belongs to one area
+        areas=areas.filter(function(o){ return (o.cells||[]).length>0; });
+        var ash={cells:ak, label:"", semanticType:""}; areas.push(ash); sel=ash; syncZoneCellsFromAreas(); pushHist(); redraw(); openLabel(ash,true); }
+      else redraw();
+      return;
     }
     if(mode==="structure"){
       var wasEmpty=cells.size===0, list=dragCells(startPt,dragCur||startPt), changed=false;
@@ -696,7 +763,7 @@
   // ---- intelligent room-name combobox (rooms only; the structure shell needs no name) ----
   // Type → 3–5 context-ranked suggestions → Enter / click / click-away saves; Escape cancels.
   // Title Case is applied automatically; the label renders as plain canvas text once saved (no input chrome).
-  var lpRoom=null, lpOrig="", lpActive=-1, lpOpts=[], lpTC=(window.IOTRooms&&IOTRooms.titleCase)||function(s){return String(s||"").trim();};
+  var lpRoom=null, lpIsArea=false, lpOrig="", lpActive=-1, lpOpts=[], lpTC=(window.IOTRooms&&IOTRooms.titleCase)||function(s){return String(s||"").trim();};
   function otherRoomNames(r){ var out=[]; rooms.forEach(function(x){ if(x!==r){ var n=(x.label||"").trim(); if(n) out.push(n); } }); return out; }
   // Collision-aware placement: keep the popup inside the viewport and clear of the bottom toolbar/keyboard.
   function positionLabel(r){
@@ -717,10 +784,15 @@
   function renderLabelOpts(){
     var inp=$("lpInput"), list=$("lpList"), q=inp.value;
     lpRoom.label=lpTC(q); redraw();                                        // live Title Case preview (not persisted yet)
-    var sug=(window.IOTRooms?IOTRooms.suggest({query:q,propertyType:PROP,biz:BIZ,existingNames:otherRoomNames(lpRoom),limit:5}):[]);
     lpOpts=[]; var tc=lpTC(q), seen={};
-    sug.forEach(function(s){ if(seen[s.label.toLowerCase()])return; seen[s.label.toLowerCase()]=1; lpOpts.push({label:s.label, sem:s.semanticType, custom:false}); });
-    if(tc && !seen[tc.toLowerCase()]) lpOpts.unshift({label:tc, sem:(window.IOTRooms?IOTRooms.semanticFor(tc):"custom"), custom:true}); // always allow the exact typed name
+    if(lpIsArea){   // AREA names: a short curated outdoor list (filtered by what's typed)
+      var ql=q.toLowerCase().trim();
+      AREA_NAMES.forEach(function(nm){ var nl=nm.toLowerCase(); if(seen[nl]) return; if(ql && nl.indexOf(ql)<0) return; seen[nl]=1; lpOpts.push({label:nm, sem:areaTypeFor(nm), custom:false}); });
+    } else {
+      var sug=(window.IOTRooms?IOTRooms.suggest({query:q,propertyType:PROP,biz:BIZ,existingNames:otherRoomNames(lpRoom),limit:5}):[]);
+      sug.forEach(function(s){ if(seen[s.label.toLowerCase()])return; seen[s.label.toLowerCase()]=1; lpOpts.push({label:s.label, sem:s.semanticType, custom:false}); });
+    }
+    if(tc && !seen[tc.toLowerCase()]) lpOpts.unshift({label:tc, sem:(lpIsArea?areaTypeFor(tc):(window.IOTRooms?IOTRooms.semanticFor(tc):"custom")), custom:true}); // always allow the exact typed name
     lpOpts=lpOpts.slice(0,5);
     list.innerHTML="";
     lpOpts.forEach(function(o,i){ var b=document.createElement("div"); b.className="lpopt"+(o.custom?" custom":"")+(i===lpActive?" active":"");
@@ -732,13 +804,13 @@
   // Picking a suggestion mirrors it into the input, then finishLabel reads the input as the single source
   // of truth (so a chosen suggestion isn't overwritten by the half-typed text).
   function commitLabel(o){ if(o) $("lpInput").value=lpTC(o.label); finishLabel(true); }
-  function openLabel(r){ lpRoom=r; lpOrig=r.label||""; lpActive=-1;
-    var inp=$("lpInput"); inp.value=lpOrig;
+  function openLabel(r, isArea){ lpRoom=r; lpIsArea=!!isArea; lpOrig=r.label||""; lpActive=-1;
+    var inp=$("lpInput"); inp.value=lpOrig; inp.placeholder = lpIsArea ? "Name area" : "Name room";
     positionLabel(r);
-    // Merge / Delete live right here on an already-named room (a fresh unnamed draft is discarded by leaving it blank).
+    // Merge / Delete live right here on an already-named room (a fresh unnamed draft is discarded by leaving it blank). Areas don't merge.
     var existing=!!(lpOrig||"").trim();
     $("lpDel").style.display=existing?"":"none"; lpDelDisarm();
-    $("lpMerge").style.display=(existing && rooms.length>1)?"":"none";
+    $("lpMerge").style.display=(!lpIsArea && existing && rooms.length>1)?"":"none";
     inp.oninput=function(){ lpActive=-1; renderLabelOpts(); };
     inp.onkeydown=function(e){
       if(e.key==="Enter"){ e.preventDefault(); commitLabel(lpActive>=0?lpOpts[lpActive]:null); }
@@ -751,13 +823,14 @@
   // Click-away (or Done/Enhance) saves the currently-typed value if it changed. Escape uses finishLabel(false).
   function closeLabel(){ if($("labelPop").classList.contains("on")) finishLabel(true); }
   function finishLabel(save){ var pop=$("labelPop"); if(!pop.classList.contains("on")) return; pop.classList.remove("on");
-    var r=lpRoom;
-    if(save && r){ var name=lpTC($("lpInput").value); r.label=name; r.semanticType=name?(window.IOTRooms?IOTRooms.semanticFor(name):"custom"):""; }
-    // A room with no name is never kept — leaving the name blank (click-away, Escape, empty Enter) discards it.
+    var r=lpRoom, isA=lpIsArea;
+    if(save && r){ var name=lpTC($("lpInput").value); r.label=name; r.semanticType = name ? (isA ? areaTypeFor(name) : (window.IOTRooms?IOTRooms.semanticFor(name):"custom")) : ""; }
+    // A room/area with no name is never kept — leaving the name blank (click-away, Escape, empty Enter) discards it.
     var removed=false;
-    if(r && !(r.label||"").trim()){ rooms=rooms.filter(function(x){ return x!==r; }); if(sel===r) sel=null; removed=true; }
+    if(r && !(r.label||"").trim()){ if(isA){ areas=areas.filter(function(x){ return x!==r; }); } else { rooms=rooms.filter(function(x){ return x!==r; }); } if(sel===r) sel=null; removed=true; }
+    if(isA) syncZoneCellsFromAreas();   // keep the typed cache in sync with the named areas
     var changed = removed || (r && (r.label||"")!==lpOrig);
-    lpRoom=null; redraw(); persist();
+    lpRoom=null; lpIsArea=false; redraw(); persist();
     if(changed) pushHist();
   }
 
@@ -956,28 +1029,29 @@
   // More menu (secondary tools) — toggle + outside-close. "Delete room" appears only with a room selected
   // (naming is for naming; deletion lives here per the redesign).
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu();
-    var on=!$("moreMenu").classList.contains("on"); if(on){ var hasRoom=!!(sel && Array.isArray(sel.cells)), hasInt=hasRoom && roomInteriorUnits(sel).length>0;
-      $("mRenameRoom").style.display=hasRoom?"":"none";
-      $("mDeleteRoom").style.display=hasRoom?"":"none"; $("mDeleteRoomTxt").textContent="Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none";
-      $("mRemoveWall").style.display=(hasRoom&&hasInt)?"":"none"; $("mRemoveWallTxt").textContent=(mode==="removewall"?"Done":"Remove wall");   // only when the room has an interior (removable) wall
+    var on=!$("moreMenu").classList.contains("on"); if(on){ var area=isAreaSel(), hasRoom=!!(sel && !area && Array.isArray(sel.cells)), sel2=hasRoom||area, hasInt=hasRoom && roomInteriorUnits(sel).length>0;
+      $("mRenameRoom").style.display=sel2?"":"none";   // Rename works for a room OR an area
+      $("mDeleteRoom").style.display=sel2?"":"none"; $("mDeleteRoomTxt").textContent=area?"Delete area":"Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none";
+      $("mRemoveWall").style.display=(hasRoom&&hasInt)?"":"none"; $("mRemoveWallTxt").textContent=(mode==="removewall"?"Done":"Remove wall");   // rooms only
       var allOpen=hasInt && roomInteriorUnits(sel).every(function(u){ return openWalls.has(u.k); });
       $("mRemoveAllWalls").style.display=(mode==="removewall"&&hasInt)?"":"none"; $("mRemoveAllWallsTxt").textContent=allOpen?"Restore all":"Remove all";
       var mc=$("mCleanTxt"); if(mc) mc.textContent = !enhancedURL ? "Enhance" : (enhanceStale() ? "Update" : "View"); }   // the wand IS the stale indicator in draw mode: Enhance (none) / Update (stale) / View (fresh cache)
     $("moreMenu").classList.toggle("on"); });
-  $("mRenameRoom").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); openLabel(sel); });   // explicit rename
+  $("mRenameRoom").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); openLabel(sel, isAreaSel()); });   // explicit rename (room or area)
   $("mRemoveWall").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); setMode(mode==="removewall" ? "room" : "removewall"); });
   $("mRemoveAllWalls").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); removeAllWalls(sel); });
   $("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge(); });
   $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
-    if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
-    rooms=rooms.filter(function(x){return x!==sel;}); sel=null; finishLabel(false); closeMore(); pushHist(); redraw(); });
+    if(t.textContent.indexOf("Confirm")<0){ t.textContent="Confirm delete"; return; }
+    if(isAreaSel()){ areas=areas.filter(function(x){return x!==sel;}); syncZoneCellsFromAreas(); } else { rooms=rooms.filter(function(x){return x!==sel;}); }
+    sel=null; finishLabel(false); closeMore(); pushHist(); redraw(); });
   // In-pop Merge / Delete (the easy way — right where you tap a room). pointerdown+preventDefault so the input never blur-commits mid-action.
   var lpDelArmed=false;
   function lpDelDisarm(){ lpDelArmed=false; var b=$("lpDel"); if(!b) return; b.classList.remove("arm"); b.title="Delete"; b.setAttribute("aria-label","Delete room"); }
   $("lpMerge").addEventListener("pointerdown", function(e){ e.preventDefault(); if(busy||!lpRoom) return; finishLabel(true); if(sel) startMerge(); });   // keep the name, then arm "tap a room to merge"
   $("lpDel").addEventListener("pointerdown", function(e){ e.preventDefault(); if(busy||!lpRoom) return;
     if(!lpDelArmed){ lpDelArmed=true; var b=$("lpDel"); b.classList.add("arm"); b.title="Confirm delete"; b.setAttribute("aria-label","Confirm delete"); return; }   // two-tap confirm (undoable)
-    var r=lpRoom; rooms=rooms.filter(function(x){return x!==r;}); if(sel===r) sel=null; $("labelPop").classList.remove("on"); lpRoom=null; lpDelDisarm(); redraw(); persist(); pushHist(); });
+    var r=lpRoom, wasA=lpIsArea; if(wasA){ areas=areas.filter(function(x){return x!==r;}); syncZoneCellsFromAreas(); } else { rooms=rooms.filter(function(x){return x!==r;}); } if(sel===r) sel=null; $("labelPop").classList.remove("on"); lpRoom=null; lpIsArea=false; lpDelDisarm(); redraw(); persist(); pushHist(); });
   document.addEventListener("click", function(e){ if(!$("moreMenu").contains(e.target) && e.target!==$("tMore") && !$("tMore").contains(e.target)) closeMore(); });
   // Floor selector — the HOST owns the floor list and sends it (iotFloors); a pick autosaves this plan (flushPlan) then asks the host to reopen the tool on that floor (iotDrawFloor).
   // Pure: sanitize the roster -> [{i,id,name,cur}]; cur = this frame's own floor (by id, else index). Names render via textContent only.
