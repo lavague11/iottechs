@@ -66,10 +66,14 @@ test("site survey PDF: one page per floor, device list, canonical name; empty �
   ];
   const r = render((m) => downloadSurveyPdf({ fileBase: base, customerName: "Maribel Santos", projectId: "ASC0046", surveyImages, meta: { __trace: m.__trace, __footers: m.__footers, __return: true, __warnings: [] } }));
   assert.equal(r.name, "Maribel Santos - CCTV - 0046 - Site Survey.pdf");
-  assert.equal(r.pages, 2);
-  assert.ok(r.texts.includes("SITE SURVEY — Exterior   ·   Maribel Santos"));
+  assert.equal(r.pages, 2);   // one LANDSCAPE sheet per floor
+  // Landscape sheet header: SITE SURVEY eyebrow + the floor + customer in the context line.
+  assert.ok(r.texts.includes("SITE SURVEY"));
+  assert.ok(r.texts.includes("Exterior") && r.texts.includes("Floor 2"));
+  assert.ok(r.texts.some((t) => t.includes("Maribel Santos")));
   for (const code of ["S1", "S2", "C1"]) assert.ok(r.texts.includes(code), code);
   assert.ok(r.texts.includes("Speaker 1") && r.texts.some((t) => t.startsWith("Front Door")));
+  // Landscape pages are 612 tall, well above the portrait footer line — nothing is painted under it.
   assert.deepEqual(r.trace.filter((t) => t.y > BOTTOM), []);
   assert.equal(downloadSurveyPdf({ fileBase: base, surveyImages: [] }), null, "no survey → null, not an empty PDF");
 });

@@ -10,10 +10,15 @@ export function downloadSurveyPdf({ fileBase, customerName, customerAddress, pro
   const floors = (surveyImages || []).filter((f) => f && f.img);
   if (!floors.length) return null;
   const rightLines = [projectId ? `Project ${projectId}` : null, new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), `${floors.length} floor${floors.length === 1 ? "" : "s"}`];
-  const c = createBrandDoc({ docLabel: "SITE SURVEY", rightLines, section: "Survey", meta });
+  const c = createBrandDoc({ docLabel: "SITE SURVEY", rightLines, section: "Survey", meta, orientation: "landscape" });
   const missing = floors.filter((f) => f.counts && f.counts.canonical !== f.counts.rendered);
   if (missing.length) { for (const f of missing) { const msg = `Site survey "${f.name}": planner devices ${f.counts.canonical}, rendered ${f.counts.rendered}`; console.error("[survey-pdf] " + msg); if (meta.__warnings) meta.__warnings.push(msg); } }
-  floors.forEach((f) => c.surveyFloor(f, "SITE SURVEY" + (floors.length > 1 && f.name ? " — " + f.name : "") + (customerName ? `   ·   ${customerName}` : "")));
+  const dateLine = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  floors.forEach((f, i) => c.surveyFloor(f, {
+    eyebrow: "SITE SURVEY",
+    floorLabel: floors.length > 1 ? (f.name || `Floor ${i + 1}`) : "",
+    metaLines: [customerName, projectId ? `Project ${projectId}` : null, dateLine],
+  }));
   void customerAddress; void MUTED;
   return c.finish(documentFilename(fileBase || { identity: customerName || "Client", service: "Custom System", last4: String(projectId || "").slice(-4) }, { type: DOC.SITE_SURVEY }));
 }

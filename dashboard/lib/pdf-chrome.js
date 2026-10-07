@@ -10,9 +10,66 @@ export const PDF = Object.freeze({ W: 612, H: 792, HEAD_H: 80, FOOTER_H: 30.24, 
 export const INK = [11, 15, 26], GOLD = [201, 169, 110], GOLD_D = [160, 120, 64], SLATE = [44, 51, 71], CREAM = [250, 248, 244], MIST = [240, 237, 232], WHITE = [255, 255, 255], MUTED = [74, 82, 112];
 export const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Landscape Site Survey sheet (US letter, 792 × 612). The plan imagery is the hero, so the brand band
+// is a sliver of the portrait masthead and the plan fills the page above a compact device legend. Shared
+// by the standalone Site Survey PDF and the proposal's survey appendix so both render identically.
+export const LAND = Object.freeze({ W: 792, H: 612, FOOTER_H: 34, MARGIN: 30, BAND_H: 46 });
+
+// Draw ONE landscape survey floor's body (slim brand band + "SITE SURVEY" title + the auto-fit plan +
+// a compact legend) on the CURRENT page. The caller adds the landscape page and paints the footer, so
+// each document keeps its own traced, section-numbered footer. The plan is fit to the page (aspect
+// preserved — never stretched) inside a professional margin; the legend lists each device by code and
+// its canonical location name (the same names the planner shows), columns scaling with device count.
+export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = "", metaLines = [] } = {}) {
+  const { W, H, FOOTER_H, MARGIN, BAND_H } = LAND;
+  // Slim brand band — a fraction of the portrait masthead so the plan dominates.
+  doc.setFillColor(...INK); doc.rect(0, 0, W, BAND_H, "F");
+  doc.setFillColor(...GOLD); doc.rect(0, BAND_H, W, 2, "F");
+  doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(...WHITE);
+  doc.text("IOT TECHS", MARGIN, 21);
+  doc.setFontSize(5.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
+  doc.text("MAKE TOMORROW SAFER TODAY", MARGIN, 30, { charSpace: 1 });
+  doc.setFontSize(5.5); doc.setTextColor(150, 150, 150);
+  doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", MARGIN, 39);
+  // Right: the page title — SITE SURVEY eyebrow, the floor, and small context lines.
+  doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
+  doc.text(eyebrow, W - MARGIN, 19, { align: "right", charSpace: 1.6 });
+  if (floorLabel) { doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...WHITE); doc.text(String(floorLabel), W - MARGIN, 34, { align: "right" }); }
+  const ml = (metaLines || []).filter(Boolean);
+  if (ml.length) { doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(170, 170, 170); doc.text(ml.join("   ·   "), W - MARGIN, floorLabel ? 43 : 32, { align: "right" }); }
+
+  // Legend geometry (pinned to the bottom); the plan takes everything between the band and the legend.
+  const devs = Array.isArray(f.devices) ? f.devices : [];
+  const cols = devs.length > 24 ? 5 : devs.length > 12 ? 4 : 3;
+  const lineH = 12, rows = devs.length ? Math.ceil(devs.length / cols) : 0;
+  const legendH = rows ? rows * lineH + 12 : 0, colW = (W - 2 * MARGIN) / cols;
+  const legendTop = H - FOOTER_H - legendH;
+
+  const top = BAND_H + 14, pad = 6, availW = W - 2 * MARGIN, availH = (legendTop - 8) - top;
+  let d = null;
+  try { const pr = doc.getImageProperties(f.img); let w = availW - 2 * pad, h = (w * pr.height) / pr.width; if (h > availH - 2 * pad) { h = availH - 2 * pad; w = (h * pr.width) / pr.height; } d = { w, h }; } catch { d = null; }
+  if (d) {
+    const imgX = MARGIN + (availW - d.w) / 2, imgY = top + (availH - d.h) / 2;
+    doc.setDrawColor(...GOLD_D); doc.setLineWidth(1); doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
+    try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image — skip, keep the page */ }
+  }
+  if (rows) {
+    const ly = legendTop + 12;
+    doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.4); doc.line(MARGIN, legendTop + 3, W - MARGIN, legendTop + 3);
+    doc.setFontSize(7.5);
+    devs.forEach((dv, i) => {
+      const cx = MARGIN + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...INK); doc.text(String(dv.code || ""), cx, cy);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(String(dv.label || "").slice(0, 34), cx + 20, cy);
+    });
+  }
+}
+
 // docLabel: "WORK ORDER" / "SITE SURVEY"; rightLines: metadata under it; section: footer label.
-export function createBrandDoc({ docLabel, rightLines = [], section = "Document", meta = {} } = {}) {
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+// orientation "landscape" makes the whole document landscape (the Site Survey, which is all plan
+// sheets) — portrait helpers (drawHeader/table/…) aren't used there, so they stay portrait-sized.
+export function createBrandDoc({ docLabel, rightLines = [], section = "Document", meta = {}, orientation = "portrait" } = {}) {
+  const doc = new jsPDF({ orientation, unit: "pt", format: "letter" });
   const { W, H, HEAD_H, FOOTER_H, SAFE_GAP } = PDF;
   const BOTTOM = H - FOOTER_H - SAFE_GAP, TOP = HEAD_H + 18;
   const lm = 57.6, rw = W - lm - 28.8;
@@ -63,6 +120,18 @@ export function createBrandDoc({ docLabel, rightLines = [], section = "Document"
   }
   let started = false;
   function newPage() { if (started) doc.addPage(); started = true; drawHeader(); drawFooter(); return TOP; }
+  // Landscape footer for the Site Survey sheets — same ink/gold band, section-numbered, traced.
+  function landFooter() {
+    chrome = true;
+    const { W: LW, H: LH, FOOTER_H: FH, MARGIN: LMg } = LAND;
+    doc.setFillColor(...INK); doc.rect(0, LH - FH, LW, FH, "F");
+    doc.setFillColor(...GOLD); doc.rect(0, LH - FH, LW, 1.44, "F");
+    doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
+    doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential", LW / 2, LH - 11, { align: "center" });
+    doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
+    doc.text(section + " | " + doc.getNumberOfPages(), LW - LMg, LH - 11, { align: "right" });
+    chrome = false;
+  }
   const ensureRoom = (y, need) => (y + need > BOTTOM ? newPage() : y);
   const sectionHeader = (title, y) => {
     doc.setFillColor(...SLATE); doc.rect(lm, y, rw, 22, "F");
@@ -105,37 +174,14 @@ export function createBrandDoc({ docLabel, rightLines = [], section = "Document"
     });
     return y;
   };
-  // One Site Survey floor: section bar, the rasterized plan (every device drawn by lib/survey2-export),
-  // and the device list (code → name · kind) under it, all inside the safe area.
-  const surveyFloor = (f, title) => {
-    let y = newPage();
-    const margin = 28.8, availW = W - 2 * margin, pad = 8;
-    doc.setFillColor(...SLATE); doc.rect(margin, y, availW, 22, "F");
-    doc.setFillColor(...GOLD); doc.rect(margin, y, 3, 22, "F");
-    doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
-    doc.text(title, margin + 10, y + 14.4);
-    y += 22 + 14;
-    const devs = Array.isArray(f.devices) ? f.devices : [];
-    const cols = 3, colW = availW / cols, lineH = 11;
-    const listRows = devs.length ? Math.ceil(devs.length / cols) : 0;
-    const listH = listRows ? listRows * lineH + 12 : 0;
-    const availH = (BOTTOM - listH) - y;
-    let d = null;
-    try { const pr = doc.getImageProperties(f.img); let w = availW - 2 * pad, h = (w * pr.height) / pr.width; if (h > availH - 2 * pad) { h = availH - 2 * pad; w = (h * pr.width) / pr.height; } d = { w, h }; } catch { d = null; }
-    if (d) {
-      const imgX = margin + (availW - d.w) / 2, imgY = y + (availH - d.h) / 2;
-      doc.setDrawColor(...GOLD_D); doc.setLineWidth(1); doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
-      try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image */ }
-    }
-    if (listRows) {
-      const ly = y + availH + 8;
-      doc.setFontSize(7.5); doc.setTextColor(...INK);
-      devs.forEach((dv, i) => {
-        const cx = margin + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
-        doc.setFont("helvetica", "bold"); doc.text(dv.code, cx, cy);
-        doc.setFont("helvetica", "normal"); doc.text(`${dv.label}${dv.kind && !new RegExp(dv.kind, "i").test(dv.label) ? ` · ${dv.kind}` : ""}`.slice(0, 40), cx + 22, cy);
-      });
-    }
+  // One Site Survey floor on its own LANDSCAPE sheet: slim brand band, the rasterized plan as the hero
+  // (every device drawn by lib/survey2-export, auto-fit), and a compact code · location legend beneath.
+  // The doc is created landscape, so the first floor uses page 1 and each later floor adds a page.
+  const surveyFloor = (f, opts = {}) => {
+    if (started) doc.addPage("letter", "landscape");
+    started = true;
+    surveySheetBody(doc, f, opts);
+    landFooter();
   };
   const finish = (fileName) => { if (meta.__return) { doc.__fileName = fileName; return doc; } doc.save(fileName); return doc; };
   return { doc, W, H, lm, rw, BOTTOM, TOP, newPage, ensureRoom, sectionHeader, infoStrip, table, surveyFloor, finish };
