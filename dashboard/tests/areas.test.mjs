@@ -103,7 +103,7 @@ test("Area mode = draw outside → name it (like a room); named area selects, re
   const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 1600);
   assert.ok(pu.includes("var al=areaDragCells(startPt,dragCur||startPt)") && pu.includes("openLabel(ash,true)"), "a drag outside creates an area then opens naming");
   const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("contextmenu"'));
-  assert.ok(pd.includes('var ah=areaHit(pt.x,pt.y)') && pd.includes('if(!(ah.label||"").trim()) openLabel(ah,true)'), "named area selects on click; unnamed names");
+  assert.ok(pd.includes('var ah=areaHit(pt.x,pt.y)') && pd.includes('var an=(ah.label||"").trim()') && pd.includes('if(!an) openLabel(ah,true)'), "named area selects on click; unnamed names");
 });
 test("areas persist + migrate + ride history; outdoor label is free text, placement is OUTSIDE structure", () => {
   assert.ok(src.includes("areas:namedAreas(areas)"), "planOut persists named areas");

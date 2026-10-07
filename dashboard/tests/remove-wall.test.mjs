@@ -139,14 +139,48 @@ test("openWalls rides the plan record, history snapshots, and the raster rev", (
 // ---------- interaction: click selects a NAMED room; rename is explicit ----------
 test("a named room selects on click; naming only auto-opens when unnamed", () => {
   const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("contextmenu"'));
-  assert.ok(pd.includes("if(!(h.label||\"\").trim()) openLabel(h)"), "only an UNNAMED room auto-opens the naming UI");
+  assert.ok(pd.includes('var hn=(h.label||"").trim()') && pd.includes("if(!hn) openLabel(h)"), "only an UNNAMED room auto-opens the naming UI");
   assert.ok(!pd.includes("sel=h; redraw(); openLabel(h); return;"), "a named room no longer re-opens rename on click");
+  assert.ok(!pd.includes("openRoomMenu(h,false); }") || pd.includes('e.pointerType!=="mouse"'), "a mouse single-click never opens the actions menu");
 });
-test("rename is explicit: ••• Rename, or desktop double-click; right-click only selects", () => {
-  assert.ok(src.includes('$("mRenameRoom").addEventListener("click"') && src.includes("openLabel(sel, isAreaSel())"), "••• Rename opens the naming UI (room or area)");
-  assert.ok(src.includes('cv.addEventListener("dblclick"'), "desktop double-click → rename");
-  const cm = src.slice(src.indexOf('cv.addEventListener("contextmenu"'), src.indexOf('cv.addEventListener("dblclick"'));
-  assert.ok(cm.includes("sel=h; redraw();") && !cm.includes("openLabel"), "right-click selects, never opens rename");
+
+// ---------- Room Actions menu: double-click / second-tap opens actions; Rename is explicit ----------
+test("single click selects only — it does not open Rename or the actions menu (mouse)", () => {
+  const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("contextmenu"'));
+  // the only auto-open on a plain click is the UNNAMED naming field; the actions menu is gated on a non-mouse second tap
+  assert.ok(pd.includes('if(h===sel && hn && e.pointerType!=="mouse"){ openRoomMenu(h,false); return; }'), "touch second-tap on the selected room opens actions; mouse does not");
+  assert.ok(pd.includes("sel=h; redraw(); if(!hn) openLabel(h);"), "a plain click just selects (names only if unnamed)");
+});
+test("double-click opens the Room Actions menu — never the Rename field directly", () => {
+  const dc = src.slice(src.indexOf('cv.addEventListener("dblclick"'), src.indexOf('cv.addEventListener("pointermove"'));
+  assert.ok(dc.includes("if(h) openRoomMenu(h,false)") && dc.includes("if(a) openRoomMenu(a,true)"), "double-click a room/area opens the actions menu");
+  assert.ok(!dc.includes("openLabel"), "double-click no longer opens the rename input directly");
+});
+test("Room Actions menu order is Merge, Remove wall, Rename, then a separated Delete", () => {
+  const menu = src.slice(src.indexOf('id="roomMenu"'), src.indexOf('id="roomMenu"') + 700);
+  const order = ["rmMerge", "rmRemoveWall", "rmRename", "rmsep", "rmDelete"].map((id) => menu.indexOf(id));
+  assert.ok(order.every((i) => i >= 0), "all actions + the separator are present");
+  for (let i = 1; i < order.length; i++) assert.ok(order[i] > order[i - 1], "actions are in Merge → Remove wall → Rename → ─ → Delete order");
+  assert.ok(/id="rmDelete"[^>]*class="danger"/.test(menu), "Delete is the destructive (danger) action");
+});
+test("Rename opens the naming field ONLY when chosen from the menu; it is a pure name input (no inline Merge/Delete)", () => {
+  assert.ok(src.includes('$("rmRename").addEventListener("click"') && src.includes("openLabel(r, a); })"), "Rename action opens the naming UI");
+  assert.ok(!src.includes('id="lpMerge"') && !src.includes('id="lpDel"'), "the rename popover's inline Merge/Delete icons are gone");
+  const ol = extractFn(src, "openLabel");
+  assert.ok(!ol.includes("lpDel") && !ol.includes("lpMerge"), "openLabel no longer wires inline action icons");
+});
+test("Merge / Remove wall actions route into the existing workflows", () => {
+  assert.ok(src.includes('$("rmMerge").addEventListener("click"') && src.includes("if(sel) startMerge(); })"), "Merge enters the existing merge workflow");
+  assert.ok(src.includes('$("rmRemoveWall").addEventListener("click"') && src.includes('setMode(mode==="removewall" ? "room" : "removewall")'), "Remove wall enters the wall-selection mode");
+});
+test("Delete uses a destructive confirm; closing the menu is wired to outside-click and Escape", () => {
+  assert.ok(src.includes('$("rmDelete").addEventListener("click"') && src.includes("askConfirm({ title:a?\"Delete area?\":\"Delete room?\", ok:\"Delete\", danger:true }"), "Delete runs the destructive confirm");
+  assert.ok(src.includes('if(!$("roomMenu").contains(e.target)) closeRoomMenu();'), "an outside pointerdown closes the menu");
+  assert.ok(src.includes('if(e.key==="Escape" && $("roomMenu").classList.contains("on"))'), "Escape closes the menu");
+});
+test("newly created rooms/areas still auto-open naming (first-creation naming is unchanged)", () => {
+  const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 2000);
+  assert.ok(pu.includes("openLabel(shape)") || pu.includes("openLabel(ash,true)"), "a freshly drawn room/area opens the naming UI on creation");
 });
 test("Remove Wall is a room mode: a menu action, its own hint, pointer cursor, tap toggles a wall", () => {
   assert.ok(src.includes('$("mRemoveWall").addEventListener') && src.includes('setMode(mode==="removewall" ? "room" : "removewall")'), "••• Remove wall toggles the mode");
