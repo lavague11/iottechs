@@ -11,6 +11,25 @@ import { LAND, surveySheetBody } from "./pdf-chrome.js";
 // per-service proposal data model instead of the legacy flat LABOR/EQUIPMENT sections.
 const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Terms & Conditions — the standard contract language printed last in every proposal. Edit here to change
+// the wording (one source). Each clause = a short heading + body; rendered as numbered, paginated portrait
+// pages after the survey + mockup appendix. These are sensible industry defaults — have counsel review.
+export const PROPOSAL_TERMS = [
+  { h: "Acceptance & Scope", b: "This proposal defines the agreed scope of work, equipment, and pricing. Only the items listed are included; anything not expressly stated is excluded and requires a written change order. Signing the Acceptance, issuing a deposit, or authorizing work constitutes acceptance of these terms." },
+  { h: "Pricing & Validity", b: "Prices are valid for 30 days from the issue date and may be revised after that period or if quantities, materials, or site conditions change. Prices exclude applicable sales tax unless stated." },
+  { h: "Payment", b: "Payment is due per the Payment Terms schedule above. Past-due balances may accrue a service charge of 1.5% per month (or the maximum allowed by law), and work may be suspended until the account is current. Deposits are applied to the final balance." },
+  { h: "Change Orders", b: "Changes to the scope, materials, device locations, or conditions discovered during the work are billed as additions at then-current rates and may affect the schedule. No change is binding until documented." },
+  { h: "Site Access & Conditions", b: "The customer provides safe, timely access to all work areas, adequate 120V power, and a cleared work space. Delays, concealed conditions (e.g., inaccessible cable paths, hazardous materials, inadequate structure), or network/internet issues outside our control may incur additional charges." },
+  { h: "Permits, Codes & Approvals", b: "Installation is performed to applicable codes and manufacturer specifications. Permit fees, inspections, HOA or landlord approvals, and any required low-voltage licensing fees are the customer's responsibility unless expressly included." },
+  { h: "Equipment & Title", b: "Title to equipment passes to the customer upon receipt of full payment; risk of loss passes upon delivery or installation. We may substitute equipment of equal or greater capability when a specified item is unavailable." },
+  { h: "Warranty", b: "Workmanship is warranted for 12 months from completion (or as stated for the project). Manufacturer warranties pass through to the customer. Warranty excludes damage from misuse, power surges or outages, acts of nature, tampering, relocation, or changes made by others." },
+  { h: "Monitoring & Service", b: "Ongoing monitoring, maintenance, and service plans, where applicable, are governed by separate agreements and are not included in this proposal unless expressly stated." },
+  { h: "Data, Recording & Privacy", b: "The customer is solely responsible for lawful use of cameras, recordings, and audio, including any notices or consent required by law, and for safeguarding access credentials and recorded footage." },
+  { h: "Limitation of Liability", b: "Security and low-voltage systems reduce but do not eliminate risk, and IOT TECHS is not an insurer. To the maximum extent permitted by law, our total liability is limited to the amount paid for the work, and we are not liable for indirect, incidental, or consequential damages, including loss or theft of property." },
+  { h: "Cancellation", b: "Cancellation after acceptance may incur charges for work already performed, non-returnable or special-order items, restocking fees, and a reasonable cancellation fee. Refund of any remaining deposit is net of these amounts." },
+  { h: "Entire Agreement", b: "This proposal, together with the Payment Terms and Acceptance, is the entire agreement and supersedes prior discussions. It is governed by the laws of the state where the work is performed. If any provision is unenforceable, the remainder stays in effect." },
+];
+
 // attachments (optional): { mockupPhotos: [dataURL...], surveyImages: [{name, img:dataURL}...] }.
 // Both are appended after the priced options — the mockup photos and the pinned site-survey floor
 // plans — so the customer's downloaded proposal carries the visual context, not just the numbers.
@@ -789,21 +808,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const surveyImages = (attachments.surveyImages || []).filter((f) => f && f.img);
   const margin = 28.8, availW = W - 2 * margin, pad = 8;
 
-  if (mockupImages.length) {
-    currentSection = "Mockup";
-    let y = 0;
-    mockupImages.forEach((src, i) => {
-      const d = fit(src, availW - 2 * pad, 250);   // cap height so two stack on one page
-      if (!d) return;
-      if (i % 2 === 0) { y = newPage(); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
-      const imgX = margin + (availW - d.w) / 2;
-      doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
-      doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
-      try { doc.addImage(src, "JPEG", imgX, y, d.w, d.h); } catch { /* bad image */ }
-      y += d.h + 2 * pad + 16;
-    });
-  }
-
+  // Document order after the priced proposal: Site Survey → System Mockup → Terms & Conditions (last).
   if (surveyImages.length) {
     currentSection = "Survey";
     // Validation: every floor image must carry every planner device it holds (never a background-only
@@ -827,6 +832,45 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       landFooter();
     });
   }
+
+  if (mockupImages.length) {
+    currentSection = "Mockup";
+    let y = 0;
+    mockupImages.forEach((src, i) => {
+      const d = fit(src, availW - 2 * pad, 250);   // cap height so two stack on one page
+      if (!d) return;
+      if (i % 2 === 0) { y = newPage(); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
+      const imgX = margin + (availW - d.w) / 2;
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
+      doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
+      try { doc.addImage(src, "JPEG", imgX, y, d.w, d.h); } catch { /* bad image */ }
+      y += d.h + 2 * pad + 16;
+    });
+  }
+
+  // Terms & Conditions — the standard contract language, LAST in the document (portrait). Numbered clauses,
+  // each a short bold heading kept with its first lines, then the body; paginated like the rest.
+  {
+    currentSection = "Terms";
+    let y = newPage(); y = sectionHeader("TERMS & CONDITIONS", y) + 12;
+    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(110, 114, 120);
+    doc.splitTextToSize("The following terms govern the work described in this proposal and, upon acceptance, form part of the agreement between the customer and IOT TECHS.", rw)
+      .forEach((ln) => { y = ensureRoom(y, LINE_H); doc.text(ln, lm, y + 7.5); y += LINE_H; });
+    y += 8;
+    PROPOSAL_TERMS.forEach((t, i) => {
+      const heading = `${i + 1}.  ${t.h}`;
+      doc.setFontSize(8.5); doc.setFont("helvetica", "bold");
+      const bodyLines = (doc.setFont("helvetica", "normal"), doc.setFontSize(8), doc.splitTextToSize(t.b, rw - 4));
+      // keep the heading with at least its first two body lines (no orphaned heading at a page foot)
+      y = ensureRoom(y, LINE_H + Math.min(2, bodyLines.length) * LINE_H + 6);
+      doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+      doc.text(heading, lm, y + 8); y += LINE_H + 2;
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55);
+      bodyLines.forEach((ln) => { y = ensureRoom(y, LINE_H); doc.text(ln, lm + 14, y + 7.5); y += LINE_H; });
+      y += 8;
+    });
+  }
+
   // Planner ↔ proposal scope check (internal, never alters either): 9 speakers placed vs 10 quoted.
   if (attachments.surveyFloors) {
     for (const m of scopeMismatches(attachments.surveyFloors, renderOptions[0])) { console.warn("[proposal-pdf] scope mismatch — " + m); if (meta.__warnings) meta.__warnings.push("Scope mismatch — " + m); }
