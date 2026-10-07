@@ -179,7 +179,7 @@
     </div>
 
     <div class="tbar" id="tbar">
-      <!-- ONE compact drawing-mode selector (drop-up): Structure / Room / Area. Keeps the dock narrow. -->
+      <!-- ONE compact drawing-mode selector (drop-up) — "What am I drawing?": Structure / Room / Area / Opening. Keeps the dock narrow. -->
       <div class="morewrap" id="modeWrap">
         <button class="segToggle" id="modeSel" aria-haspopup="true" aria-expanded="false" title="Drawing mode" aria-label="Drawing mode">
           <span id="modeToggleName">Structure</span>
@@ -189,9 +189,9 @@
           <button data-m="structure" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Structure</button>
           <button data-m="room" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Room</button>
           <button data-m="zone" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Area</button>
+          <button data-m="opening" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Opening</button>
         </div>
       </div>
-      <button class="tb ico" id="tOpening" title="Openings" aria-label="Openings"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 20V5l8-1.5V20"/><path d="M15 20a8 8 0 0 0-8-8"/><path d="M11 12h.01"/></svg></button>
       <span id="structTools" class="stools">
         <button class="tb ico on" id="tAdd" title="Add" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
@@ -685,9 +685,9 @@
   function setMode(m){ mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     // reflect the active PRIMARY (Structure / Room / Area) in the compact selector — opening + remove-wall stay under Room
-    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : "room";
+    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : "room";
     [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.classList.toggle("on", b.getAttribute("data-m")===prim); });
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Openings" : (m==="zone" ? "Area" : (m==="removewall" ? "Remove wall" : "Room")));
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="removewall" ? "Remove wall" : "Room")));
     var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
@@ -1010,10 +1010,10 @@
   function closeModeMenu(){ var mm=$("modeMenu"); if(mm) mm.classList.remove("on"); var b=$("modeSel"); if(b) b.setAttribute("aria-expanded","false"); }
   $("modeSel").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu(); closeMore(); var mm=$("modeMenu"), on=!mm.classList.contains("on"); mm.classList.toggle("on",on); this.setAttribute("aria-expanded",on?"true":"false"); });
   [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var m=b.getAttribute("data-m"); closeModeMenu(); if(busy) return; backToDraw();
-    if(m==="room" && cells.size===0){ setMode("structure"); return; }   // a room needs a building first
+    if((m==="room"||m==="opening") && cells.size===0){ setMode("structure"); return; }   // a room / an opening needs a building first
     setMode(m); }); });
   document.addEventListener("click", function(e){ var w=$("modeWrap"); if(w && !w.contains(e.target)) closeModeMenu(); });
-  $("tOpening").addEventListener("click", function(){ if(busy||cells.size===0) return; backToDraw(); setMode(mode==="opening" ? "structure" : "opening"); });   // doors mode: suspend structure/room editing, toggle doors on wall units
+  // (Opening mode is now a choice in the compact draw-mode selector — no separate toolbar button.)
   // Area: classify site + exterior area cells (one class per cell). The type picker lists the taxonomy.
   (function(){ var sel=$("zoneTypeSel"); if(!sel) return; ZCLASS.forEach(function(t){ var o=document.createElement("option"); o.value=t[0]; o.textContent=t[1]; sel.appendChild(o); }); sel.value=zoneType;
     sel.addEventListener("change", function(){ zoneType=sel.value; if(structOp==="erase"){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); } $("hint").innerHTML="Paint the <b>"+zClassLabel(zoneType)+"</b> area on the grid."; redraw(); }); })();

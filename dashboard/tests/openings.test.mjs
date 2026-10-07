@@ -172,24 +172,18 @@ test("svgPlanBody: a full-cell door leaves ONE continuous gap (no mid-wall stub)
 });
 
 // ---------- source-reads: wiring the pure logic into the live widget ----------
-test("Openings mode: an icon-only toolbar button, aria + title 'Openings', inline SVG, no emoji", () => {
-  const i = src.indexOf('id="tOpening"');
-  assert.ok(i >= 0, "the Openings button exists");
-  const bs = src.lastIndexOf("<button", i), btn = src.slice(bs, src.indexOf("</button>", bs));
-  assert.ok(/class="tb ico"/.test(btn), "icon-only tb button");
-  assert.ok(/aria-label="Openings"/.test(btn) && /title="Openings"/.test(btn), "aria-label + title");
-  assert.ok(/<svg /.test(btn), "inline SVG icon");
-  assert.equal(btn.replace(/<[^>]*>/g, "").trim(), "", "no text label — icon only");
-  assert.ok(!/[\u{1F000}-\u{1FAFF}☀-➿]/u.test(btn), "no emoji");
+test("Opening is a choice in the compact draw-mode selector — no separate Openings toolbar button", () => {
+  assert.ok(/<button data-m="opening"[^>]*>[\s\S]*?Opening\s*<\/button>/.test(src), "the selector menu offers Opening (Structure / Room / Area / Opening)");
+  assert.ok(!src.includes('id="tOpening"'), "the separate Openings toolbar button is removed");
+  assert.ok(src.includes('if((m==="room"||m==="opening") && cells.size===0){ setMode("structure"); return; }'), "an opening needs a building first (shared selector guard)");
 });
-test("setMode supports 'opening': toggles the button on, shows the door hint, pointer cursor", () => {
+test("setMode supports 'opening': shows the door hint + pointer cursor; the selector reflects the mode", () => {
   const setMode = extractFn(src, "setMode");
-  assert.ok(setMode.includes('to.classList.toggle("on",m==="opening")'), "the Openings button reflects the mode");
   assert.ok(setMode.includes("Tap a wall to add a door."), "opening-mode hint");
   assert.ok(setMode.includes('m==="opening"||m==="removewall" ? "pointer"'), "pointer cursor in opening (and remove-wall) mode");
   assert.ok(setMode.includes('if(m!=="opening") hoverWall=null'), "leaving opening mode clears the hover highlight");
-  assert.ok(src.includes('setMode(mode==="opening" ? "structure" : "opening")'), "the button toggles the mode");
-  assert.ok(src.includes('$("tOpening").addEventListener("click"') && src.includes("cells.size===0) return"), "guarded: no doors without walls");
+  assert.ok(setMode.includes('(m==="opening") ? "opening" : "room"'), "the selector check reflects opening mode");
+  assert.ok(setMode.includes('m==="opening" ? "Opening"'), "the selector label shows Opening");
 });
 test("pointerdown taps a wall (toggleOpeningAt) in opening mode; structure/room editing is suspended", () => {
   const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("pointermove"'));
