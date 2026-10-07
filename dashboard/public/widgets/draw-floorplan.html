@@ -476,11 +476,11 @@
       ctx.moveTo(x1,y1); ctx.lineTo(x1+nx*dw,y1+ny*dw); ctx.stroke();                                                                       // door leaf
       ctx.beginPath(); ctx.arc(x1,y1,dw,Math.atan2(uy,ux),Math.atan2(ny,nx),false); ctx.stroke(); }); ctx.restore(); }
   function drawStructure(){ if(!cells.size) return;
-    ctx.fillStyle="rgba(185,138,46,.18)";   // a touch stronger so painted Building cells still read over a full-colour aerial
+    ctx.fillStyle="rgba(255,255,255,.80)";   // the floor plan reads WHITE over the full-colour aerial (a wash, not fully opaque)
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
     paintWalls(boundaryEdges(), "#111", 3.5); }
   function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;
-    ctx.fillStyle= on ? "rgba(185,138,46,.14)" : "rgba(16,17,18,.05)";
+    ctx.fillStyle= on ? "rgba(255,255,255,.94)" : "rgba(255,255,255,.88)";   // white interior; selection shows via the gold wall + contextual grid, not a dark tint
     set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
     paintWalls(edgesOf(set), on ? "#b98a2e" : "#2b2f36", on ? 2.4 : 2);
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
