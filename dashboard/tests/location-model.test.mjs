@@ -67,4 +67,5 @@ test("the map label prefers the location name; identity is the fallback", () => 
   assert.ok(survey.includes("lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag)"), "canvas emphasizes WHERE");
   assert.ok(survey.includes('function sugShown(d){ if(d && d.k==="cam") return ""'), "camera suggestion row yields to the auto location name");
   assert.ok(survey.includes('locName:d.locName||"",placementType:d.placementType||""'), "location + placement persist");
+  assert.ok(survey.includes('locName:d.locName||"", placementType:d.placementType||"", cone:'), "the roster push to the page carries location + placement");
 });

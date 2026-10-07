@@ -23,7 +23,19 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
   const total = floors.reduce((n, f) => n + (f.devices?.length || 0), 0);
   const curDevices = floors[curFloor]?.devices || [];
   const cams = curDevices.filter((d) => d.k === "cam");
-  const label = (d, i) => (d.name && d.name.trim()) || d.tag || `${d.kind || "Device"} ${i + 1}`;
+  // The list emphasizes WHERE the device is (its geometry-derived location name "Dining 1"); the permanent
+  // identity (name/code) + Inside/Outside placement sit on a quiet sub-line. Falls back to identity when no location.
+  const label = (d, i) => (d.locName && d.locName.trim()) || (d.name && d.name.trim()) || d.tag || `${d.kind || "Device"} ${i + 1}`;
+  const subLabel = (d) => {
+    const hasLoc = !!(d.locName && d.locName.trim());
+    const place = d.placementType === "inside" ? "Inside" : d.placementType === "outside" ? "Outside" : "";
+    const kind = d.k === "cam" ? "Camera" : (d.kind || "Device");
+    const ident = (hasLoc && d.name && d.name.trim()) ? d.name.trim() : (d.tag || "");   // show the identity here only when the location is the headline
+    const parts = [];
+    if (place) parts.push(`${place} ${kind}`); else if (hasLoc) parts.push(kind);
+    if (ident) parts.push(ident);
+    return parts.join(" · ");
+  };
 
   const upload = useCallback(async (file) => {
     const fd = new FormData(); fd.append("file", file, file.name || "photo.jpg");
@@ -188,7 +200,10 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = d.name || ""; e.currentTarget.blur(); } }}
                                 onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); setEditingId(null); }} />
                             ) : (
-                              <span className="sd-nm-txt" title={nm} onClick={() => { if (!locked) setEditingId(d.id); }}>{nm}</span>
+                              <span className="sd-nm-wrap">
+                                <span className="sd-nm-txt" title={nm} onClick={() => { if (!locked) setEditingId(d.id); }}>{nm}</span>
+                                {subLabel(d) && <span className="sd-nm-sub">{subLabel(d)}</span>}
+                              </span>
                             )}
                             {!locked && (
                               <div className="sd-menuwrap">
@@ -278,7 +293,9 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-dev-ph{display:flex;align-items:center;justify-content:center;opacity:.85}
         .sd-tile-msg{color:var(--muted,#6f7686)}
         .sd-foot{display:flex;align-items:center;gap:4px;padding:7px 8px 7px 10px}
-        .sd-nm-txt{flex:1;min-width:0;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+        .sd-nm-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+        .sd-nm-txt{min-width:0;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+        .sd-nm-sub{min-width:0;font-size:.66rem;font-weight:500;color:var(--muted,#8a8f98);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
         .sd-nm-in{flex:1;min-width:0;border:1px solid var(--gold,#c9a96e);border-radius:6px;padding:4px 6px;font-size:.8rem;font-weight:600;color:var(--ink,#1a1a1a);font-family:inherit;background:#fff}
         .sd-nm-in:focus{outline:none}
         .sd-menuwrap{position:relative;flex:none}

@@ -1809,7 +1809,7 @@
         return { name:f.name||("Floor "+(fi+1)), current:isCur, devices:list.map(function(d,di){
           var it=cat(d.k)||{};
           return { id:isCur?d.id:null, cid:d.cid||null, floor:fi, di:di, k:d.k, kind:(it.name||d.k),
-                   tag:d.tag||"", name:d.name||"", cone:!!(isCur?d.cone:it.cone), fov:d.fov||it.fov||0,
+                   tag:d.tag||"", name:d.name||"", locName:d.locName||"", placementType:d.placementType||"", cone:!!(isCur?d.cone:it.cone), fov:d.fov||it.fov||0,
                    color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed,
                    photo:d.photo||null, photoName:d.photoName||null, busy:!!d.photoBusy }; }) };
       });
