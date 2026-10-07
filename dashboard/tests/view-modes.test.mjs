@@ -94,3 +94,12 @@ test("a ctx-framed (bgCtx) draw result uses the context-crop feet as the floor s
   assert.ok(survey.includes("fc.bgCtx && fc.ctx && +fc.ctx.ftW>0 && +fc.ctx.ftH>0"), "ctx-feet override guard present");
   assert.ok(/applyBackground\(ev\.data\.dataUrl, false, ev\.data\.vector, bgScale, ev\.data\.aerial\)/.test(survey), "applyBackground uses the resolved bgScale");
 });
+
+test("Focus ⇄ Full is a pure viewport toggle (zoom only, no geometry/crop change)", () => {
+  assert.ok(survey.includes('id="focusBtn"') && survey.includes('id="focusBtnTxt"'), "a Focus button beside Show");
+  const fv = extractFn(survey, "focusView");
+  assert.ok(fv.includes("resetZoom()") && fv.includes("zoomAt(cx,cy,1.6)"), "Full = reset; Focus = zoom toward the plate centre");
+  assert.ok(!fv.includes("ctx.rect") && !fv.includes("f.plan"), "focusView touches only pan/zoom — never the geometry/crop");
+  assert.ok(survey.includes("focusMode=false; updateFocusBtn();"), "each floor opens in Full view");
+  assert.ok(survey.includes('t.textContent=focusMode?"Full":"Focus"'), "the button toggles its label Focus ⇄ Full");
+});

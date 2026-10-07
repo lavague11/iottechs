@@ -621,7 +621,10 @@
               <div class="showRow"><label>FOV</label><button class="settog" id="showFovTog" title="Show the shaded coverage"><span class="knob"></span></button></div>
               <div class="showRow"><label>Grid</label><div class="viewseg" id="gridSeg" role="group" aria-label="Grid"><button class="vbtn" type="button" data-g="0">Off</button><button class="vbtn" type="button" data-g="1">Light</button><button class="vbtn" type="button" data-g="2">Full</button></div></div>
             </div>
-            <button class="showBtn" id="showBtn" title="Show angles / FOV"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Show</button>
+            <div style="display:flex;gap:8px">
+              <button class="showBtn" id="focusBtn" title="Zoom to the structure / back to the full view"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span id="focusBtnTxt">Focus</span></button>
+              <button class="showBtn" id="showBtn" title="Show angles / FOV"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Show</button>
+            </div>
           </div>
         </div>
 
@@ -1241,6 +1244,14 @@
       var W=work.clientWidth, H=work.clientHeight;                     // keep the scene covering the viewport
       zTx=Math.min(0, Math.max(W-W*zScale, zTx)); zTy=Math.min(0, Math.max(H-H*zScale, zTy)); applyZoom(); }   // always clamp + apply, even on a pure pan
     function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(); }
+    // Focus ⇄ Full: a pure VIEWPORT action (no geometry/crop change). Full = fit the whole plate (default); Focus zooms
+    // in on the structure (the plate centre), anchored so devices stay pixel-aligned. Manual pinch/wheel still work.
+    var focusMode=false;
+    function updateFocusBtn(){ var t=document.getElementById("focusBtnTxt"), b=document.getElementById("focusBtn"); if(t) t.textContent=focusMode?"Full":"Focus"; if(b) b.classList.toggle("on",focusMode); }
+    function focusView(on){ focusMode=!!on; resetZoom();
+      if(focusMode){ var cx=(scene.offsetLeft||0)+scene.clientWidth/2, cy=(scene.offsetTop||0)+scene.clientHeight/2; zoomAt(cx,cy,1.6); }   // zoom toward the plate centre (the structure)
+      updateFocusBtn(); }
+    (function(){ var fb=document.getElementById("focusBtn"); if(fb) fb.addEventListener("click", function(e){ e.stopPropagation(); focusView(!focusMode); }); })();
     // A camera's reach (cone length) is capped to ~half the plan's longer side — enough for a realistic
     // cone, but it can never shoot across the whole aerial (and off into the panel) from a far/stray tap.
     function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.35) : 420; }
@@ -2099,6 +2110,7 @@
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
+      focusMode=false; updateFocusBtn();   // each floor opens in Full view
       setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations();   // resolve/refresh location names for this floor's cameras against its plan
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
