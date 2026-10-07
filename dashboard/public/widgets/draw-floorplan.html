@@ -199,6 +199,7 @@
           <button data-m="room" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Room</button>
           <button data-m="zone" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Area</button>
           <button data-m="opening" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Opening</button>
+          <button data-m="eraser" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Eraser</button>
         </div>
       </div>
       <span id="structTools" class="stools">
@@ -628,14 +629,14 @@
   // Room drag → the cells inside the drag rect that ALSO belong to the structure (the clamp that keeps rooms inside).
   function roomDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return has(cr[0],cr[1]); }); }
   function drawPreview(){
-    if(dragging && mode==="structure" && startPt && dragCur){
+    if(dragging && (mode==="structure"||mode==="eraser") && startPt && dragCur){
       var list=dragCells(startPt,dragCur);
       ctx.fillStyle = structOp==="erase" ? "rgba(196,85,61,.24)" : "rgba(185,138,46,.32)";
       list.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
       var rc=dragRectPx(startPt,dragCur); ctx.setLineDash([6,5]);
       ctx.strokeStyle = structOp==="erase" ? "#c4553d" : "#b98a2e"; ctx.lineWidth=1.5;
       ctx.strokeRect(rc.x,rc.y,rc.w,rc.h); ctx.setLineDash([]);
-    } else if(mode==="structure" && !dragging && hoverPt){
+    } else if((mode==="structure"||mode==="eraser") && !dragging && hoverPt){
       var s=step(), x=Math.floor(hoverPt.x/s)*s, y=Math.floor(hoverPt.y/s)*s;   // snapped cursor
       ctx.strokeStyle="rgba(185,138,46,.75)"; ctx.lineWidth=1.5; ctx.strokeRect(x+0.5,y+0.5,s-1,s-1);
     }
@@ -706,7 +707,7 @@
   // geometry that benefits from it — clipped to that region so finished rooms stay clean. Returns the clip cell-set,
   // null for the whole canvas, or false for "no grid".
   function gridClip(){
-    if(mode==="structure") return null;                                  // blocking out the building → full grid
+    if(mode==="structure"||mode==="eraser") return null;                 // blocking out / erasing the building → full grid
     if(dragging && (mode==="room"||mode==="zone")) return null;          // drawing a new room/area → grid to snap against
     if((mode==="room"||mode==="removewall") && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected room → its local grid only
     if(mode==="zone" && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected area → its local grid only
@@ -832,16 +833,20 @@
 
   function setMode(m){ closeRoomMenu(); closeDoorMenu(); cancelDoorCycle(); pendingWall=null; wallDrag=null; wallHover=null; mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
-    // reflect the active PRIMARY (Structure / Room / Area) in the compact selector — opening + remove-wall stay under Room
-    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : "room";
+    // Eraser is a dedicated block-erase tool: it forces erase; Structure always re-enters in add. The two are
+    // separate dropdown entries, so the shared Add/Erase toggle tracks whichever we entered.
+    if(m==="eraser") structOp="erase"; else if(m==="structure") structOp="add";
+    // reflect the active PRIMARY (Structure / Room / Area / Eraser) in the compact selector — opening + remove-wall stay under Room
+    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : (m==="eraser") ? "eraser" : "room";
     [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.classList.toggle("on", b.getAttribute("data-m")===prim); });
-    // The PRIMARY selector always names the geometry type — Remove wall is a contextual Room action, never a top-level mode label.
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : "Room"));
-    var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones
+    // The PRIMARY selector names the geometry type (or Eraser) — Remove wall is a contextual Room action, never a top-level label.
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="eraser" ? "Eraser" : "Room")));
+    var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones. Eraser is erase-only (no toggle).
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
+    if(edit){ $("tAdd").classList.toggle("on", structOp!=="erase"); $("tErase").classList.toggle("on", structOp==="erase"); }   // keep the toggle visual in sync
     var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display="none";   // Areas are named like rooms now — no type picker
-    cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
+    cv.style.cursor = (edit||m==="eraser") ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
     // No instructional hint copy — the controls speak for themselves (assume a competent user). The one
     // exception is the very first empty canvas, where there is nothing on screen to act on yet.
     var h=$("hint"); if(h){ var firstRun = m==="structure" && !cells.size;
@@ -857,7 +862,7 @@
       if(sel && nearestInteriorUnit(sel,pt.x,pt.y)){ toggleOpenWallAt(pt.x,pt.y); return; }   // tapped a wall of the selected room → open / restore it
       var rhw=roomHit(pt.x,pt.y); if(rhw && rhw!==sel){ sel=rhw; redraw(); }                   // tapped another room → it becomes the Remove-wall target (Remove wall stays active)
       return; }
-    if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
+    if(mode==="structure"||mode==="eraser"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }   // eraser drags like structure, forced to erase
     if(mode==="zone"){   // AREA: erase drags to remove cells; else tap a named area to SELECT (unnamed → name), empty drag draws a new one
       if(structOp==="erase"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
       var ah=areaHit(pt.x,pt.y);
@@ -888,7 +893,7 @@
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
     if(pendingWall && (Math.abs(pt.x-pendingWall.start.x)+Math.abs(pt.y-pendingWall.start.y) > 6)){ wallDrag={run:pendingWall.run}; pendingWall=null; }   // movement past a tap → it's a drag
     if(wallDrag){ wallDrag.cur=pt; redraw(); return; }
-    if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
+    if(!dragging){ if(mode==="structure"||mode==="eraser") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
       else if(mode==="room" && sel){ var nh=wallRunAt(sel,pt.x,pt.y); cv.style.cursor = nh ? (nh.orient==="v"?"ew-resize":"ns-resize") : "crosshair"; if(wallKeyOf(nh)!==wallKeyOf(wallHover)){ wallHover=nh; redraw(); } }
       return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
@@ -912,7 +917,7 @@
       else redraw();
       return;
     }
-    if(mode==="structure"){
+    if(mode==="structure"||mode==="eraser"){
       var wasEmpty=cells.size===0, list=dragCells(startPt,dragCur||startPt), changed=false;
       list.forEach(function(cr){ var k=key(cr[0],cr[1]);
         if(structOp==="erase"){ if(cells.delete(k)) changed=true; }
@@ -1200,7 +1205,7 @@
   function closeModeMenu(){ var mm=$("modeMenu"); if(mm) mm.classList.remove("on"); var b=$("modeSel"); if(b) b.setAttribute("aria-expanded","false"); }
   $("modeSel").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu(); closeMore(); var mm=$("modeMenu"), on=!mm.classList.contains("on"); mm.classList.toggle("on",on); this.setAttribute("aria-expanded",on?"true":"false"); });
   [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var m=b.getAttribute("data-m"); closeModeMenu(); if(busy) return; backToDraw();
-    if((m==="room"||m==="opening") && cells.size===0){ setMode("structure"); return; }   // a room / an opening needs a building first
+    if((m==="room"||m==="opening"||m==="eraser") && cells.size===0){ setMode("structure"); return; }   // a room / opening / eraser needs a building first
     setMode(m); }); });
   document.addEventListener("click", function(e){ var w=$("modeWrap"); if(w && !w.contains(e.target)) closeModeMenu(); });
   // (Opening mode is now a choice in the compact draw-mode selector — no separate toolbar button.)

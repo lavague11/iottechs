@@ -203,5 +203,5 @@ test("Remove wall is entered from the Room Actions menu, not the ••• menu;
 test("the PRIMARY selector always names the geometry type — Remove wall is never the dock label", () => {
   const sm = extractFn(src, "setMode");
   assert.ok(!sm.includes('"Remove wall"'), "the mode toggle never shows 'Remove wall'");
-  assert.ok(sm.includes('m==="zone" ? "Area" : "Room"'), "remove-wall falls back to the Room label");
+  assert.ok(sm.includes('m==="zone" ? "Area" :') && sm.includes('"Room"'), "remove-wall falls back to the Room label");
 });

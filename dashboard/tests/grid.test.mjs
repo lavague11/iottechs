@@ -88,7 +88,7 @@ test("draw: the CSS graph-paper is retired; the grid is drawn on the canvas, con
 });
 test("draw: gridClip is editing-driven — full while structure/drawing, clipped to a selected room/area, else none", () => {
   const gc = extractFn(draw, "gridClip");
-  assert.ok(gc.includes('if(mode==="structure") return null;'), "structure editing → full grid");
+  assert.ok(gc.includes('if(mode==="structure"||mode==="eraser") return null;'), "structure/eraser editing → full grid");
   assert.ok(gc.includes('dragging && (mode==="room"||mode==="zone")) return null;'), "drawing a new room/area → full grid to snap against");
   assert.ok(gc.includes('(mode==="room"||mode==="removewall") && sel') && gc.includes("return new Set(sel.cells)"), "a selected room → its local grid only");
   assert.ok(gc.includes('mode==="zone" && sel') && gc.includes("new Set(sel.cells)"), "a selected area → its local grid only");

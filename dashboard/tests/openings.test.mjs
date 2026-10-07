@@ -242,14 +242,14 @@ test("svgPlanBody: swing side B mirrors side A; flipping the hinge changes the a
 test("Opening is a choice in the compact draw-mode selector — no separate Openings toolbar button", () => {
   assert.ok(/<button data-m="opening"[^>]*>[\s\S]*?Opening\s*<\/button>/.test(src), "the selector menu offers Opening (Structure / Room / Area / Opening)");
   assert.ok(!src.includes('id="tOpening"'), "the separate Openings toolbar button is removed");
-  assert.ok(src.includes('if((m==="room"||m==="opening") && cells.size===0){ setMode("structure"); return; }'), "an opening needs a building first (shared selector guard)");
+  assert.ok(src.includes('if((m==="room"||m==="opening"||m==="eraser") && cells.size===0){ setMode("structure"); return; }'), "an opening / eraser needs a building first (shared selector guard)");
 });
 test("setMode supports 'opening': shows the door hint + pointer cursor; the selector reflects the mode", () => {
   const setMode = extractFn(src, "setMode");
   assert.ok(!setMode.includes("Draw the") && !setMode.includes("Tap a wall for a door"), "no instructional hint copy — controls speak for themselves");
   assert.ok(setMode.includes('m==="opening"||m==="removewall" ? "pointer"'), "pointer cursor in opening (and remove-wall) mode");
   assert.ok(setMode.includes('if(m!=="opening") hoverWall=null'), "leaving opening mode clears the hover highlight");
-  assert.ok(setMode.includes('(m==="opening") ? "opening" : "room"'), "the selector check reflects opening mode");
+  assert.ok(setMode.includes('(m==="opening") ? "opening" :'), "the selector check reflects opening mode");
   assert.ok(setMode.includes('m==="opening" ? "Opening"'), "the selector label shows Opening");
 });
 test("opening mode: pointerdown is consumed (no drag); a click places/cycles a door, a double-click opens the door menu", () => {
