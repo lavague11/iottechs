@@ -12,36 +12,23 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("Enhance is a direct top-left button (icon + one-word label, descriptive aria, no emoji)", () => {
-  has('<button id="enhBtn"', "enhance is a direct button");
-  const i = survey.indexOf('<button id="enhBtn"');
-  const btn = survey.slice(i, survey.indexOf("</button>", i));
-  assert.ok(btn.includes("<svg"), "icon is inline SVG");
-  assert.ok(btn.includes("<span>Enhance</span>"), "short visible label");
-  assert.ok(btn.includes('aria-label="Enhance aerial"'), "descriptive aria-label for the action");
-  assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // the top-left actions cluster (which holds this button) is locked out for read-only / submitted
+test("there is no standalone Enhance button — enhancing happens inside the Edit-background flow", () => {
+  assert.ok(!survey.includes('id="enhBtn"'), "the Enhance button is removed from the plan");
+  has('<span>Edit background</span>', "Edit background (the entry point that reopens the satellite to re-enhance) remains");
   has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "read-only / submitted hide the floor actions");
 });
 
-test("gating: Enhance shows whenever the floor has an aerial, re-gated on step/floor/frozen change", () => {
-  has('ea.style.display = (show && floorHasAerial(f)) ? "inline-flex" : "none"', "updateBgActions shows Enhance when there's an aerial");
-  has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
-  const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
-  assert.ok(setStatus.includes("updateBgActions()"), "setStatus re-gates on frozen change");
-  // hybridCapable contract unchanged — only a hybrid floor gets the src-only swap (below); a plain aerial enhances+replaces
+test("hybridCapable contract unchanged — only a hybrid floor gets the src-only swap; a plain aerial enhances+replaces", () => {
   const capable = (f) => !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx);
   assert.equal(capable({ ctx: { src: "x" } }), false, "aerial-only (no Structure) is not hybrid-capable");
   assert.equal(capable({ ctx: { src: "x" }, planSvg: "y", bgCtx: true }), true, "a built Structure plan is hybrid-capable");
 });
 
-test("click: a hybrid-capable floor sets pendingCtxSwap, then reopens the satellite at the inherited capture", () => {
-  const h = survey.slice(survey.indexOf('getElementById("enhBtn").addEventListener'), survey.indexOf('getElementById("enhBtn").addEventListener') + 420);
+test("Edit background on a HYBRID floor flags the src-only swap, then reopens the satellite at the inherited capture", () => {
+  const h = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 520);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
-  assert.ok(h.includes("if(!f || !floorHasAerial(f)) return;"), "guards: only an aerial floor");
-  assert.ok(h.includes("if(hybridCapable(f)) pendingCtxSwap=true;"), "ONLY a hybrid floor flags the src-only swap (a plain aerial floor enhances+replaces via the normal path)");
-  assert.ok(h.includes("enterBg(); postAerialRestore(true);"), "reopens the satellite + restores the inherited leveled aerial (SAME framing)");
-  // in-memory flag declared
+  assert.ok(h.includes('if(curBgSource==="satellite"){ var was=bgToolSrc; if(hybridCapable(floors[curFloor])) pendingCtxSwap=true;'), "ONLY a hybrid floor flags the src-only swap (a plain aerial floor re-captures via the normal path)");
+  assert.ok(h.includes("enterBg(); postAerialRestore(bgToolSrc!==was);"), "reopens the satellite + restores the inherited leveled aerial (SAME framing)");
   assert.ok(/var pendingCtxSwap=false;/.test(survey), "pendingCtxSwap declared false by default");
 });
 

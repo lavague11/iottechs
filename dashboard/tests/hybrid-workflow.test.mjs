@@ -26,14 +26,11 @@ test("Create Hybrid Floor Plan is the item in the bottom-right ••• drop-up
   assert.ok(!survey.includes("canCreateHybrid"), "the old canCreateHybrid gate is gone");
 });
 
-test("top-left = Edit background + Enhance (direct); Create Hybrid lives in a bottom-right ••• drop-up", () => {
-  // top-left: two direct buttons, Edit background first, no ••• here
+test("top-left = Edit background (direct); Create Hybrid lives in a bottom-right ••• drop-up", () => {
+  // top-left: one direct button, no ••• here, no standalone Enhance (it lives in the Edit-background flow)
   has('<button id="changeBgBtn"', "Edit background is a direct button");
   has("<span>Edit background</span>", "Edit background label");
-  has('<button id="enhBtn"', "Enhance is a direct button");
-  has("<span>Enhance</span>", "Enhance label (short)");
-  has('aria-label="Enhance aerial"', "Enhance keeps a descriptive aria-label");
-  assert.ok(survey.indexOf('id="changeBgBtn"') < survey.indexOf('id="enhBtn"'), "Edit background comes first");
+  assert.ok(!survey.includes('id="enhBtn"'), "no standalone Enhance button");
   // bottom-right ••• drop-up
   has('<div id="planMore">', "bottom-right overflow container");
   assert.ok(/#planMore\{position:absolute;right:14px;bottom:56px/.test(survey), "••• sits bottom-right (above the Show control)");
@@ -54,7 +51,6 @@ test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, 
   has('var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);', "cluster shows on the Background tab over a real floor, outside any tool");
   has('pm.style.display = canB ? "flex" : "none"', "the ••• (Create Hybrid) shows only when canBuild");
   has('canB=(show && canBuild(f))', "••• gates on canBuild(current floor)");
-  has('ea.style.display = (show && floorHasAerial(f)) ? "inline-flex" : "none"', "Enhance shows only when there's an aerial");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
   has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
   const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
@@ -99,7 +95,7 @@ test("Use Outline still routes to enterDraw on the CURRENT floor (in-place hando
 test("Build Floor Plan → Change background delegate to the existing enterBg/enterDraw/postAerialRestore engine", () => {
   const cb = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 450);
   assert.ok(cb.includes("if(curBgSource===\"draw\"){ enterDraw(); return; }"), "a drawn floor resumes the draw tool");
-  assert.ok(cb.includes("if(curBgSource===\"satellite\"){ var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); return; }"), "an aerial floor reopens the satellite as leveled");
+  assert.ok(cb.includes("if(curBgSource===\"satellite\"){ var was=bgToolSrc; if(hybridCapable(floors[curFloor])) pendingCtxSwap=true; enterBg(); postAerialRestore(bgToolSrc!==was); return; }"), "an aerial floor reopens the satellite as leveled (hybrid floor flags the src-only swap)");
   // Cancel from outline-only closes the tool back to the floor (no derived floor to discard)
   has('ev.data.type!=="iotCaptureCancel"', "the parent handles the outline-only Cancel");
   has("exitBg(false); });", "Cancel exits the tool without committing");
