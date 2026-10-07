@@ -1028,7 +1028,7 @@
     // Phase 5.1 boundary editor state (working copy of floor.boundary, in plate-%): regionMode gates device placement; bdHist is the add/move/delete/close undo stack.
     var regionMode=false, bdPts=[], bdClosed=false, bdDrag=-1, bdSel=-1, bdHist=[], bdHi=-1, bdDownPt=null, bdHover=-1, bdPlacing=false;
     var rgTarget={kind:"boundary"}, zpOpen=false;   // Phase 5.2: the bd* working copy edits THIS target — the single boundary, or one zone (id null = an un-typed draft)
-    var ISZ=28, showFovState=false, gridMode=2, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium) + FOV shading (default OFF) + panel collapse + all-angles (default OFF) + grid display 0 off·1 light·2 full (default full)
+    var ISZ=28, showFovState=false, gridMode=0, sideCollapsed=true, showAllAngles=false;   // icon size (default Medium) + FOV shading (default OFF) + panel collapse + all-angles (default OFF) + grid display 0 off·1 light·2 full (default OFF — the finished plan should look finished; Show ▸ Grid turns it on)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
     var collapsedFloors={};   // floor index → collapsed? (the SURVEY panel shows every floor under a divider)
@@ -2193,7 +2193,7 @@
     function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
       dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
       if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles;
-      gridMode = (typeof st.gridMode==="number") ? Math.max(0,Math.min(2,st.gridMode|0)) : (st.showGrid===false?0:2);   // migrate the legacy on/off grid: on→Full, off→Off
+      gridMode = (typeof st.gridMode==="number") ? Math.max(0,Math.min(2,st.gridMode|0)) : (st.showGrid===true?2:0);   // migrate the legacy on/off grid: on→Full, else Off (new default OFF)
       applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled

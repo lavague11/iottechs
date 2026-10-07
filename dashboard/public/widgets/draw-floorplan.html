@@ -12,7 +12,8 @@
   body{font:15px/1.45 var(--sans);color:var(--ink);background:#fff;display:flex;flex-direction:column;overflow:hidden}
 
   .stage{flex:1;position:relative;min-height:0;background:#fbfbfa;overflow:hidden}
-  #grid{position:absolute;inset:0;background-image:linear-gradient(#eceae4 1px,transparent 1px),linear-gradient(90deg,#eceae4 1px,transparent 1px);background-size:26px 26px;pointer-events:none}
+  /* the grid is CONTEXTUAL now — drawn on the canvas, clipped to the region being edited (see drawGrid). The CSS graph-paper is retired so finished geometry looks finished. */
+  #grid{display:none}
   #cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
   #hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);max-width:calc(100vw - 120px);text-align:center;color:var(--muted);font-size:12.5px;pointer-events:none;z-index:2;
     background:rgba(251,251,250,.86);padding:4px 12px;border-radius:99px;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
@@ -509,11 +510,29 @@
   }
   function drawZoneCells(){ for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
       ctx.fillStyle="rgba("+col+",.26)"; set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); } }
+  // Contextual grid: the grid is ALWAYS mathematically there (snap is unaffected), but drawn only while editing the
+  // geometry that benefits from it — clipped to that region so finished rooms stay clean. Returns the clip cell-set,
+  // null for the whole canvas, or false for "no grid".
+  function gridClip(){
+    if(mode==="structure") return null;                                  // blocking out the building → full grid
+    if(dragging && (mode==="room"||mode==="zone")) return null;          // drawing a new room/area → grid to snap against
+    if((mode==="room"||mode==="removewall") && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected room → its local grid only
+    if(mode==="zone" && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected area → its local grid only
+    return false;                                                        // idle / finished → no grid
+  }
+  function drawGrid(){ var clip=gridClip(); if(clip===false) return; var w=W(), h=H();
+    ctx.save();
+    if(clip){ ctx.beginPath(); clip.forEach(function(k){ var a=k.split(","); ctx.rect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); ctx.clip(); }
+    ctx.strokeStyle="rgba(16,17,18,.12)"; ctx.lineWidth=1; ctx.beginPath();
+    for(var x=0;x<=w;x+=FULL){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,h); }
+    for(var y=0;y<=h;y+=FULL){ ctx.moveTo(0,y+0.5); ctx.lineTo(w,y+0.5); }
+    ctx.stroke(); ctx.restore(); }
   function redraw(){ ctx.clearRect(0,0,W(),H());
     drawBackdrop();
     drawZoneCells();
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
+    drawGrid();
     drawPreview();
     drawFootprintDims(); }
   // Overall footprint size, shown only when the floor has a real scale (seeded from a trace).

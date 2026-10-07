@@ -38,13 +38,13 @@ test("4.3 survey: #gridLayer sits after .dimOverlay inside #scene; #gridScale is
   assert.match(survey, /\.devNode\{[^}]*z-index:5/, "device markers sit above the grid (z2), zone (z3) and boundary (z4) layers");
 });
 
-test("3d survey: Grid is a 3-level Off/Light/Full control, default Full, applySettings reflects it, save/restore persist + migrate", () => {
+test("3d survey: Grid is a 3-level Off/Light/Full control, default OFF, applySettings reflects it, save/restore persist + migrate", () => {
   assert.match(survey, /<label>Grid<\/label><div class="viewseg" id="gridSeg"[\s\S]*data-g="0">Off<[\s\S]*data-g="1">Light<[\s\S]*data-g="2">Full</);
-  assert.match(survey, /gridMode=2/);                                   // default Full
+  assert.match(survey, /gridMode=0/);                                   // default OFF — a finished plan looks finished; Show ▸ Grid turns it on
   assert.ok(extractFn(survey, "applySettings").includes('getElementById("gridSeg")') && extractFn(survey, "applySettings").includes("renderGrid()"));
   assert.match(survey, /gridMode=Math\.max\(0,Math\.min\(2,\+b\.getAttribute\("data-g"\)\|\|0\)\)/);   // segment sets the mode
   assert.ok(extractFn(survey, "save").includes("gridMode:gridMode"));
-  assert.ok(extractFn(survey, "restore").includes('(typeof st.gridMode==="number")') && extractFn(survey, "restore").includes("st.showGrid===false?0:2"), "persists gridMode; migrates legacy on→Full / off→Off");
+  assert.ok(extractFn(survey, "restore").includes('(typeof st.gridMode==="number")') && extractFn(survey, "restore").includes("st.showGrid===true?2:0"), "persists gridMode; migrates legacy on→Full, else Off (new default OFF)");
   const rg = extractFn(survey, "renderGrid");
   assert.ok(rg.includes("if(!gridMode||!hasGrid") && rg.includes('gridMode===1 ? "0.5" : "1"'), "Off hides; Light faint; Full base weight");
 });
@@ -78,4 +78,21 @@ test("4.3 survey: grid box feet label math (FULL * metersPerPx / 0.3048, 1 decim
 test("4.3 survey: Rotate is hidden for hybrid-capable floors", () => {
   assert.ok(extractFn(survey, "renderView").includes('rb.style.display=cap?"none":""'));
   assert.match(survey, /id="rotateBtn"/);
+});
+
+// Contextual grid in the draw tool: grid data is always there (snap unaffected), but drawn only while editing.
+test("draw: the CSS graph-paper is retired; the grid is drawn on the canvas, contextually", () => {
+  assert.ok(/#grid\{display:none\}/.test(draw), "the always-on CSS grid is gone (finished geometry looks finished)");
+  assert.ok(draw.includes("function drawGrid(") && draw.includes("function gridClip("), "a contextual canvas grid replaces it");
+  assert.ok(extractFn(draw, "redraw").includes("drawGrid()"), "redraw paints the contextual grid");
+});
+test("draw: gridClip is editing-driven — full while structure/drawing, clipped to a selected room/area, else none", () => {
+  const gc = extractFn(draw, "gridClip");
+  assert.ok(gc.includes('if(mode==="structure") return null;'), "structure editing → full grid");
+  assert.ok(gc.includes('dragging && (mode==="room"||mode==="zone")) return null;'), "drawing a new room/area → full grid to snap against");
+  assert.ok(gc.includes('(mode==="room"||mode==="removewall") && sel') && gc.includes("return new Set(sel.cells)"), "a selected room → its local grid only");
+  assert.ok(gc.includes('mode==="zone" && sel') && gc.includes("new Set(sel.cells)"), "a selected area → its local grid only");
+  assert.ok(gc.trim().endsWith("return false;\n  }") || gc.includes("return false;"), "idle / finished → no grid");
+  // the grid clips to the cell union when a region is selected
+  assert.ok(extractFn(draw, "drawGrid").includes("ctx.clip()"), "the grid is clipped to the editing region");
 });
