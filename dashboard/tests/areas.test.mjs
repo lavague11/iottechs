@@ -100,7 +100,7 @@ test("reconcileAreas drops area cells the building now occupies (a device there 
 
 // ---------- interaction + persistence (source reads) ----------
 test("Area mode = draw outside → name it (like a room); named area selects, rename is explicit", () => {
-  const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 1600);
+  const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerleave"'));
   assert.ok(pu.includes("var al=areaDragCells(startPt,dragCur||startPt)") && pu.includes("openLabel(ash,true)"), "a drag outside creates an area then opens naming");
   const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("contextmenu"'));
   assert.ok(pd.includes('var ah=areaHit(pt.x,pt.y)') && pd.includes('var an=(ah.label||"").trim()') && pd.includes('if(!an) openLabel(ah,true)'), "named area selects on click; unnamed names");

@@ -259,6 +259,7 @@
   // not editor chrome. hoverWall = the wall unit under the cursor while in opening mode.
   var openings=[], hoverWall=null;
   var openWalls=new Set(), owHover=null;   // Remove Wall: hidden interior-partition wall keys + the hovered unit in removewall mode
+  var pendingWall=null, wallDrag=null, wallHover=null;   // direct wall drag (room mode): a grabbed interior wall run, its live drag, and the hovered run
   var structOp="add", snap=0.5;     // ½ grid by default; erase toggles structOp
   // Phase 3 (grid-first): SITE + exterior ZONE classification painted on the SAME half-cell grid as the
   // building (independent of `cells` — a zone cell is property/driveway/yard, not building). One class per
@@ -496,6 +497,70 @@
     for(i=0;i<list.length && out.length<400;i++){ var k=list[i]; if(typeof k!=="string") continue; if(!/^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(k)) continue; if(seen[k]) continue; seen[k]=1; out.push(k); }
     return out; }
 
+  // ---- Direct wall drag: reposition an interior partition (resizes the rooms on BOTH sides) ----
+  // A draggable wall = a maximal straight run of the SELECTED room's interior boundary (never the structure
+  // shell). Dragging it perpendicular transfers a strip of cells: growing the room claims cells from the
+  // neighbour (or empty structure), shrinking hands them to the neighbour — one physical wall, both rooms
+  // stay consistent (no gaps/overlaps). Snaps to the ½/1 grid, clamped inside the structure, never empties a room.
+  function splitRuns(sorted){ var out=[]; if(!sorted.length) return out; var s=sorted[0], p=sorted[0];
+    for(var i=1;i<sorted.length;i++){ if(sorted[i]===p+1) p=sorted[i]; else { out.push([s,p]); s=p=sorted[i]; } } out.push([s,p]); return out; }
+  // Interior boundary of `room` grouped into straight runs. Each: orient v|h, b = boundary half-index (the
+  // moving axis), [lo,hi] = span half-indices on the fixed axis, and x0..y1 = the run's px segment.
+  function wallRuns(room){ var units=roomInteriorUnits(room), vmap={}, hmap={}, runs=[];
+    units.forEach(function(u){ if(u.a[0]===u.b[0]){ var x=u.a[0]; (vmap[x]=vmap[x]||[]).push(Math.min(u.a[1],u.b[1])/HALF); }
+      else { var y=u.a[1]; (hmap[y]=hmap[y]||[]).push(Math.min(u.a[0],u.b[0])/HALF); } });
+    Object.keys(vmap).forEach(function(xs){ var x=+xs; splitRuns(vmap[xs].sort(function(a,b){return a-b;})).forEach(function(s){
+      runs.push({orient:"v", b:Math.round(x/HALF), lo:s[0], hi:s[1], x0:x, y0:s[0]*HALF, x1:x, y1:(s[1]+1)*HALF}); }); });
+    Object.keys(hmap).forEach(function(ys){ var y=+ys; splitRuns(hmap[ys].sort(function(a,b){return a-b;})).forEach(function(s){
+      runs.push({orient:"h", b:Math.round(y/HALF), lo:s[0], hi:s[1], x0:s[0]*HALF, y0:y, x1:(s[1]+1)*HALF, y1:y}); }); });
+    return runs; }
+  function wallRunAt(room,x,y){ if(!room) return null; var runs=wallRuns(room), best=null, bd=1/0, tol=HALF*0.75;
+    runs.forEach(function(rn){ var d=segDistSq(x,y,rn.x0,rn.y0,rn.x1,rn.y1); if(d<bd){ bd=d; best=rn; } });
+    return (best && bd<=tol*tol) ? best : null; }
+  // "neg" = the room is on the low side of the boundary (owns index b-1); "pos" = high side (owns index b).
+  function wallASide(room, run){ var set=new Set(room.cells||[]);
+    return run.orient==="v" ? (set.has(key(run.b-1,run.lo))?"neg":"pos") : (set.has(key(run.lo,run.b-1))?"neg":"pos"); }
+  function ownerIdxAt(c,r){ var k=key(c,r); for(var i=0;i<rooms.length;i++){ if((rooms[i].cells||[]).indexOf(k)>=0) return i; } return -1; }
+  // Cells that would be reassigned moving run.b → b2 (grow claims from the other side; shrink hands to the
+  // neighbour across the original boundary). Returns {b2 clamped to the structure, moves:[[cellKey, ownerIdx|-1]]}.
+  function wallMovePlan(room, run, b2){
+    var aSide=wallASide(room,run), b=run.b, lo=run.lo, hi=run.hi, orient=run.orient, aIdx=rooms.indexOf(room), moves=[];
+    var cr=function(mi,fi){ return orient==="v" ? [mi,fi] : [fi,mi]; };
+    var grow = (aSide==="neg") ? (b2>b) : (b2<b);
+    if(grow){
+      var dir=(aSide==="neg")?1:-1, mi=(aSide==="neg")?b:(b-1), end=(aSide==="neg")?(b2-1):b2, stop=false;
+      for(; (aSide==="neg")?mi<=end:mi>=end; mi+=dir){
+        for(var fi=lo; fi<=hi; fi++){ var p=cr(mi,fi); if(!has(p[0],p[1])){ stop=true; break; } }   // clamp at the structure edge
+        if(stop) break;
+        for(var f=lo; f<=hi; f++){ var q=cr(mi,f); moves.push([key(q[0],q[1]), aIdx]); } }
+      b2 = (aSide==="neg") ? mi : (mi+1);
+    } else {
+      var dir2=(aSide==="neg")?-1:1, mi2=(aSide==="neg")?(b-1):b, end2=(aSide==="neg")?b2:(b2-1), nbMi=(aSide==="neg")?b:(b-1);
+      for(; (aSide==="neg")?mi2>=end2:mi2<=end2; mi2+=dir2){
+        for(var g=lo; g<=hi; g++){ var v=cr(mi2,g), nbp=cr(nbMi,g); moves.push([key(v[0],v[1]), ownerIdxAt(nbp[0],nbp[1])]); } }
+      b2 = (aSide==="neg") ? end2 : (end2+1);
+    }
+    return { b2:b2, moves:moves }; }
+  function roomCellsClone(){ return rooms.map(function(r){ return (r.cells||[]).slice(); }); }
+  function roomCellsRestore(snap){ rooms.forEach(function(r,i){ if(snap[i]) r.cells=snap[i].slice(); }); }
+  function applyWallMoves(moves){ moves.forEach(function(m){ var k=m[0];
+    rooms.forEach(function(rm){ var j=(rm.cells||[]).indexOf(k); if(j>=0) rm.cells.splice(j,1); });
+    if(m[1]>=0 && rooms[m[1]]) rooms[m[1]].cells.push(k); }); }
+  function roomsAllNonEmpty(){ for(var i=0;i<rooms.length;i++){ if(!(rooms[i].cells||[]).length) return false; } return true; }
+  // The sq-ft room A would have at boundary b2 (for the live drag readout) — computed on a clone, no mutation.
+  function wallMovePreviewSqft(room, run, b2){ var snap=roomCellsClone(), plan=wallMovePlan(room,run,b2); applyWallMoves(plan.moves);
+    var n=(room.cells||[]).length; roomCellsRestore(snap); return { sqft:cellsSqFt(n), b2:plan.b2 }; }
+  // Commit a wall move to boundary b2. Steps back toward the original if the full move would empty a room,
+  // so the result is always valid (A non-empty, no neighbour erased). Returns true if anything moved.
+  function commitWallMove(room, run, b2){ if(b2===run.b) return false; var dir = b2>run.b ? -1 : 1;
+    for(var t=b2; t!==run.b; t+=dir){ var snap=roomCellsClone(), plan=wallMovePlan(room, run, t);
+      if(!plan.moves.length){ continue; } applyWallMoves(plan.moves);
+      if(roomsAllNonEmpty() && (room.cells||[]).length){ reconcileOpenings(); reconcileOpenWalls(); pushHist(); redraw(); return true; }
+      roomCellsRestore(snap); }
+    return false; }
+  // Cursor coord → snapped boundary half-index (½ or 1 grid per the Snap setting).
+  function snappedWallB(run, x, y){ var coord = run.orient==="v" ? x : y, s=step(); return Math.round((Math.round(coord/s)*s)/HALF); }
+
   // ---- draw ----
   // Stroke a set of wall edges; at each edge carrying a door, leave the middle ~60% as a gap and draw a light
   // door-swing arc + jamb ticks. Edges with NO door stroke byte-identically to the old single-path stroke (the
@@ -596,6 +661,23 @@
       var ou=roomInteriorUnits(sel).filter(function(u){ return openWalls.has(u.k); });
       if(ou.length){ ctx.save(); ctx.setLineDash([3,4]); ctx.strokeStyle="rgba(16,17,18,.22)"; ctx.lineWidth=1.3; ctx.lineCap="round";
         ou.forEach(function(u){ ctx.beginPath(); ctx.moveTo(u.a[0],u.a[1]); ctx.lineTo(u.b[0],u.b[1]); ctx.stroke(); }); ctx.setLineDash([]); ctx.restore(); }
+    }
+    // Direct wall drag: original wall (subtle) + ghost at the snapped landing + the room's proposed sq ft.
+    if(wallDrag && wallDrag.cur && sel){
+      var wrn=wallDrag.run, pv=wallMovePreviewSqft(sel, wrn, snappedWallB(wrn, wallDrag.cur.x, wallDrag.cur.y)), gb=pv.b2;
+      ctx.save(); ctx.lineCap="round";
+      ctx.setLineDash([3,4]); ctx.strokeStyle="rgba(16,17,18,.3)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(wrn.x0,wrn.y0); ctx.lineTo(wrn.x1,wrn.y1); ctx.stroke();
+      ctx.setLineDash([]); ctx.strokeStyle="rgba(185,138,46,.95)"; ctx.lineWidth=3; ctx.beginPath();
+      if(wrn.orient==="v"){ ctx.moveTo(gb*HALF,wrn.y0); ctx.lineTo(gb*HALF,wrn.y1); } else { ctx.moveTo(wrn.x0,gb*HALF); ctx.lineTo(wrn.x1,gb*HALF); }
+      ctx.stroke();
+      if(pv.sqft>0){ var mx=wrn.orient==="v"?gb*HALF:(wrn.x0+wrn.x1)/2, my=wrn.orient==="v"?(wrn.y0+wrn.y1)/2:gb*HALF, txt=Math.round(pv.sqft)+" sq ft";
+        ctx.font="600 11px "+fontFam(); var tw=ctx.measureText(txt).width;
+        ctx.fillStyle="rgba(16,17,18,.85)"; ctx.fillRect(mx-tw/2-5, my-9, tw+10, 18);
+        ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(txt, mx, my); }
+      ctx.restore();
+    } else if(mode==="room" && sel && wallHover && !dragging){   // hovered interior wall → it's draggable
+      ctx.save(); ctx.strokeStyle="rgba(185,138,46,.8)"; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(wallHover.x0,wallHover.y0); ctx.lineTo(wallHover.x1,wallHover.y1); ctx.stroke(); ctx.restore();
     }
   }
   // Named AREAS over the aerial: a subtle fill + a light MAP-STYLE outline (never architectural walls) + the name.
@@ -741,7 +823,7 @@
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
   function updateTools(){ $("tUndo").style.display = hi>0 ? "inline-flex" : "none"; $("tRedo").style.display = hi<hist.length-1 ? "inline-flex" : "none"; var to=$("tOpening"); if(to) to.classList.toggle("locked", cells.size===0); }
 
-  function setMode(m){ closeRoomMenu(); closeDoorMenu(); cancelDoorCycle(); mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
+  function setMode(m){ closeRoomMenu(); closeDoorMenu(); cancelDoorCycle(); pendingWall=null; wallDrag=null; wallHover=null; mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     // reflect the active PRIMARY (Structure / Room / Area) in the compact selector — opening + remove-wall stay under Room
     var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : "room";
@@ -777,6 +859,7 @@
         sel=ah; redraw(); if(!an) openLabel(ah,true); return; }   // UNNAMED → name it; NAMED → just select
       closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); return;
     }
+    if(sel){ var wr=wallRunAt(sel,pt.x,pt.y); if(wr){ pendingWall={run:wr, start:pt}; return; } }   // grabbed an interior wall of the selected room → maybe a drag (resolve on move/up)
     var h=roomHit(pt.x,pt.y);
     if(h){ var hn=(h.label||"").trim();
       if(h===sel && hn && e.pointerType!=="mouse"){ openRoomMenu(h,false); return; }   // touch: second tap on the selected room → actions
@@ -794,10 +877,18 @@
     var pt=rel(e); if(mode==="room"||mode==="removewall"){ var h=roomHit(pt.x,pt.y); if(h) openRoomMenu(h,false); }   // Room Actions open even while Remove wall is active
     else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a) openRoomMenu(a,true); }
     else if(mode==="opening"){ var d=doorAt(pt.x,pt.y); if(d){ cancelDoorCycle(); openDoorMenu(d,pt.x,pt.y); } } });
+  var wallKeyOf=function(r){ return r ? (r.orient+r.b+":"+r.lo+"-"+r.hi) : ""; };
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
-    if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); } return; }
+    if(pendingWall && (Math.abs(pt.x-pendingWall.start.x)+Math.abs(pt.y-pendingWall.start.y) > 6)){ wallDrag={run:pendingWall.run}; pendingWall=null; }   // movement past a tap → it's a drag
+    if(wallDrag){ wallDrag.cur=pt; redraw(); return; }
+    if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
+      else if(mode==="room" && sel){ var nh=wallRunAt(sel,pt.x,pt.y); cv.style.cursor = nh ? (nh.orient==="v"?"ew-resize":"ns-resize") : "crosshair"; if(wallKeyOf(nh)!==wallKeyOf(wallHover)){ wallHover=nh; redraw(); } }
+      return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
-  cv.addEventListener("pointerup", function(e){ if(!dragging) return; dragging=false;
+  cv.addEventListener("pointerup", function(e){
+    if(wallDrag){ var b2=snappedWallB(wallDrag.run, wallDrag.cur.x, wallDrag.cur.y); commitWallMove(sel, wallDrag.run, b2); wallDrag=null; pendingWall=null; redraw(); return; }
+    if(pendingWall){ var pw=pendingWall; pendingWall=null; var hh=roomHit(pw.start.x,pw.start.y); if(hh && hh!==sel){ sel=hh; redraw(); } return; }   // a tap on a wall (no drag) just (re)selects
+    if(!dragging) return; dragging=false;
     if(mode==="zone"){
       if(structOp==="erase"){   // erase drags cells out of any area they overlap
         var ecl=dragCells(startPt,dragCur||startPt), ech=false; startPt=dragCur=null;
@@ -831,7 +922,7 @@
       rooms=rooms.filter(function(o){ return (o.cells||[]).length>0; });
       var shape={cells:rk, label:""}; rooms.push(shape); sel=shape; pushHist(); redraw(); openLabel(shape); }
     else { redraw(); } });
-  cv.addEventListener("pointerleave", function(){ hoverPt=null; hoverWall=null; if(!dragging) redraw(); });
+  cv.addEventListener("pointerleave", function(){ hoverPt=null; hoverWall=null; if(wallHover){ wallHover=null; cv.style.cursor="crosshair"; } if(!dragging && !wallDrag) redraw(); });
 
   // ---- intelligent room-name combobox (rooms only; the structure shell needs no name) ----
   // Type → 3–5 context-ranked suggestions → Enter / click / click-away saves; Escape cancels.
