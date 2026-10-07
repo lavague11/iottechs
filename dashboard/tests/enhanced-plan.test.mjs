@@ -31,7 +31,7 @@ const HALF = 13, FULL = 26;
 // widget sees them. pushHist/redraw/persist are stubbed counters; the enhance-state vars are plain locals.
 const NAMES = [
   "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "sanitizeOpenWalls", "segDistSq",
-  "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "svgPlanBody",
+  "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "structFill", "svgPlanBody",
   "namedRooms", "planCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");

@@ -29,10 +29,12 @@ test("the satellite hint asks for the working area, not the building", () => {
   assert.ok(!sat.includes("Tap each corner of the building"), "old building-outline hint removed");
 });
 
-test("Hybrid rule: inside the structure is a near-white planning canvas (outside stays full-colour aerial)", () => {
-  // the transparent Hybrid plan layer fills the structure cells near-white so rooms/labels read; exterior has no fill → aerial shows
-  assert.ok(draw.includes('<g fill="#ffffff" fill-opacity="0.95">'), "structure interior ~white in planLayerSVG");
-  assert.ok(!draw.includes('<g fill="#ffffff" fill-opacity="0.85">'), "the old 0.85 see-through fill is gone");
+test("Layered rule: inside the structure is a CLEAN opaque-white canvas (one coalesced shape, no seam-grid)", () => {
+  // the Layered plan layer fills the structure as ONE coalesced opaque-white shape (structFill) so there is no
+  // seam 'grid' from per-cell rects; exterior has no fill → aerial shows. In Full view it multiplies, so the aerial returns.
+  assert.ok(draw.includes('var sf=structFill(0.4); if(sf) o.push(\'<g fill="#ffffff">\''), "Layered structure interior = one coalesced opaque-white shape (structFill, overlapping → no seams)");
+  assert.ok(!draw.includes('<g fill="#ffffff" fill-opacity="0.95">') && !draw.includes('<g fill="#ffffff" fill-opacity="0.85">'), "the old per-cell translucent fill (seam-grid) is gone");
+  assert.ok(draw.includes("function structFill(e)") && draw.includes("prev-start+1"), "structFill coalesces adjacent columns into runs");
 });
 
 test("device markers layer ABOVE the boundary/zone/grid, but don't block boundary editing", () => {

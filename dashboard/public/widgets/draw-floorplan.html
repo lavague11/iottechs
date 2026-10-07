@@ -898,6 +898,14 @@
     if(d) o+='<path d="'+d+'" fill="none" stroke="rgb('+col+')" stroke-opacity="0.9" stroke-width="1.3" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
     var name=(a.label||"").trim(); if(name){ var lc=roomLabelCell(a.cells||[]); o+='<text x="'+lc[0]+'" y="'+lc[1]+'" font-size="'+fs+'" font-weight="600" fill="#1a1d20" stroke="#ffffff" stroke-width="2.6" paint-order="stroke" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'; }
   }); return o; }
+  // Structure fill as COALESCED per-row runs (not hundreds of half-cell rects) so a filled interior has no seam
+  // "grid". `e` expands each run a hair to overlap neighbours — use it only for an OPAQUE fill (overlap darkens a
+  // translucent one). Returns the <rect> string; wrap it in a <g fill=...>.
+  function structFill(e){ e=e||0; var byRow={}; cells.forEach(function(k){ var a=k.split(","); (byRow[a[1]]=byRow[a[1]]||[]).push(+a[0]); }); var out="";
+    for(var r in byRow){ var cols=byRow[r].sort(function(a,b){return a-b;}), start=cols[0], prev=cols[0], ry=+r*HALF, i;
+      for(i=1;i<=cols.length;i++){ var c=cols[i]; if(c===prev+1){ prev=c; continue; }
+        out+='<rect x="'+(start*HALF-e)+'" y="'+(ry-e)+'" width="'+((prev-start+1)*HALF+2*e)+'" height="'+(HALF+2*e)+'"/>'; start=c; prev=c; } }
+    return out; }
   function sketchSVG(vb){
     var x0,y0,vw,vh;
     if(vb){ x0=vb.x0; y0=vb.y0; vw=vb.vw; vh=vb.vh; }
@@ -912,8 +920,7 @@
     if(!vb){ o.push('<defs><pattern id="pg" width="'+FULL+'" height="'+FULL+'" patternUnits="userSpaceOnUse"><path d="M '+FULL+' 0 H 0 V '+FULL+'" fill="none" stroke="#eceae4" stroke-width="0.8"/></pattern></defs>');
       o.push('<rect x="'+x0+'" y="'+y0+'" width="'+vw+'" height="'+vh+'" fill="url(#pg)"/>'); }
     var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure
-    var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
-    if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');
+    var sf=structFill(0); if(sf) o.push('<g fill="#000000" fill-opacity="0.04">'+sf+'</g>');   // coalesced → no seam-grid
     svgPlanBody(o, swS, swR, fs);
     var av=areasSVG(fs); if(av) o.push(av);   // area perimeters + labels on top
     o.push("</svg>");
@@ -960,8 +967,7 @@
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="none" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
     var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure — transparent layer, shows over the aerial in Hybrid
-    var sf=""; cells.forEach(function(k){ var c=k.split(","); sf+='<rect x="'+(+c[0]*HALF)+'" y="'+(+c[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
-    if(sf) o.push('<g fill="#ffffff" fill-opacity="0.95">'+sf+'</g>');   // INSIDE the structure = a near-white planning canvas (readable rooms/labels); OUTSIDE stays full-colour aerial
+    var sf=structFill(0.4); if(sf) o.push('<g fill="#ffffff">'+sf+'</g>');   // INSIDE the structure = a CLEAN opaque-white planning canvas (one coalesced shape, no seam-grid); OUTSIDE stays full-colour aerial. Grid lines come ONLY from the Grid toggle. In FULL view the plan layer multiplies, so this white drops out and the aerial shows.
     svgPlanBody(o, swS, swR, fs);
     var av=areasSVG(fs); if(av) o.push(av);   // area perimeters + labels on top (over the aerial, outside the structure)
     o.push("</svg>");
@@ -975,8 +981,7 @@
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="xMidYMid meet" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];
     var zc=zoneCellsSVG(); if(zc) o.push(zc);   // zones under the structure wash
-    var sf=""; cells.forEach(function(k){ var a=k.split(","); sf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
-    if(sf) o.push('<g fill="#b98a2e" fill-opacity="0.08">'+sf+'</g>');   // faint wash only — no opaque paper, no grid (the AI raster is the background)
+    var sf=structFill(0); if(sf) o.push('<g fill="#b98a2e" fill-opacity="0.08">'+sf+'</g>');   // coalesced → no seam-grid   // faint wash only — no opaque paper, no grid (the AI raster is the background)
     svgPlanBody(o, swS, swR, fs);
     var av=areasSVG(fs); if(av) o.push(av);   // area perimeters + labels on top
     o.push("</svg>"); return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
