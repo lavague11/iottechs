@@ -42,7 +42,7 @@ const api = new Function(`
   var zoneCells={}, areas=[];   // Phase 3 zone cells + named Areas — stubbed here (these tests cover the enhanced raster, not areas)
   function zcOut(){ return {}; } function zcIn(){ return {}; } function zcClone(){ return {}; } function zoneCellsSVG(){ return ""; }
   function namedAreas(l){ return (l||[]).filter(function(a){ return a && (a.label||"").trim() && (a.cells||[]).length; }); }
-  function sanitizeAreas(l){ return Array.isArray(l)?l:[]; } function areasFromZoneCells(){ return []; } function syncZoneCellsFromAreas(){}
+  function sanitizeAreas(l){ return Array.isArray(l)?l:[]; } function areasFromZoneCells(){ return []; } function syncZoneCellsFromAreas(){} function areasSVG(){ return ""; }
   function pushHist(){ _pushes++; } function redraw(){} function persist(){}
   ${PURE}
   return {

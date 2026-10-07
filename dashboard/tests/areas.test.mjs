@@ -112,3 +112,13 @@ test("areas persist + migrate + ride history; outdoor label is free text, placem
   assert.ok(extractFn(src, "planRev").includes('"A:"'), "the raster rev includes the named areas");
   assert.ok(extractFn(src, "reconcileRooms").includes("reconcileAreas()"), "structural edits reconcile areas (Structure wins)");
 });
+
+// #2: drawn Areas must READ as drawn — a continuous perimeter + label baked into the plan SVG, over a subtle fill.
+test("areasSVG bakes a continuous area perimeter + label into every plan SVG builder", () => {
+  const fn = extractFn(src, "areasSVG");
+  assert.ok(fn.includes('fill="none" stroke="rgb(') && fn.includes('stroke-width="1.3"') && !fn.includes("stroke-dasharray"), "a thin CONTINUOUS perimeter (not dashed, not a wall)");
+  assert.ok(fn.includes('paint-order="stroke"') && fn.includes("esc(name)"), "the area name with a white halo at a valid interior point");
+  ["sketchSVG", "planLayerSVG", "overlaySVG"].forEach((b) => assert.ok(extractFn(src, b).includes("areasSVG(fs)"), b + " pushes the area perimeter+label layer"));
+  // the editor outline is continuous too
+  assert.ok(extractFn(src, "drawAreas").includes("thin CONTINUOUS perimeter"), "editor draws a continuous area outline");
+});

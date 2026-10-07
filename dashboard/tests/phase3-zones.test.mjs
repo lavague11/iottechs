@@ -70,7 +70,7 @@ test("Area mode is draw-and-name (like a room) and areas render UNDER the struct
 
 test("3b: zone cells bake into every plan SVG, as the lowest content layer (under the structure)", () => {
   // zoneCellsSVG emitted (translucent by type) and pushed before the structure wash in each builder
-  assert.ok(draw.includes('out+=\'<g fill="rgb(\'+col+\')" fill-opacity="0.22">\'+rects+\'</g>\';'), "zone fills are translucent rgb groups");
+  assert.ok(draw.includes('out+=\'<g fill="rgb(\'+col+\')" fill-opacity="0.12">\'+rects+\'</g>\';'), "area fills are a subtle translucent rgb group (perimeter + label added on top by areasSVG)");
   // sketchSVG (Plan/PDF opaque bg), planLayerSVG (Hybrid transparent), overlaySVG (AI) each push zones before the structure cells
   const order = (anchor) => {
     const i = draw.indexOf("var zc=zoneCellsSVG(); if(zc) o.push(zc);", draw.indexOf(anchor));
