@@ -10,32 +10,41 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("one primary action: Create Hybrid Floor Plan (gold primary, inline-SVG icon, the one deliberate longer label)", () => {
+test("Create Hybrid Floor Plan is the item in the bottom-right ••• drop-up (inline-SVG, gold icon, no emoji)", () => {
   has('<button id="buildPlanBtn"', "build button element");
-  has("Create Hybrid Floor Plan", "primary workflow label");
+  has("Create Hybrid Floor Plan", "primary workflow label (kept)");
   const i = survey.indexOf('<button id="buildPlanBtn"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // gold-filled primary styling
-  assert.ok(/#buildPlanBtn\{[^}]*background:var\(--gold\)/.test(survey), "Build Floor Plan is the gold primary");
+  // it lives inside the ••• menu now (not a top-left gold button); its icon carries the gold accent
+  assert.ok(survey.includes('<div id="bgMenu" role="menu"><button id="buildPlanBtn"'), "Create Hybrid Floor Plan is the ••• menu item");
+  assert.ok(/#bgMenu #buildPlanBtn svg\{[^}]*color:var\(--gold\)/.test(survey), "the build item's icon carries the gold accent");
   // the OLD derived-floor entry is gone — no #hybridBtn, derived/"· Hybrid" floors, canCreateHybrid.
-  // ("Create Hybrid Floor Plan" is the NEW in-place primary label, verified above — not the old derived flow.)
   assert.ok(!survey.includes('id="hybridBtn"'), "the old #hybridBtn element is gone");
   assert.ok(!survey.includes('" · Hybrid"') && !survey.includes("· Hybrid"), "no '· Hybrid' floor naming anywhere");
   assert.ok(!survey.includes("canCreateHybrid"), "the old canCreateHybrid gate is gone");
 });
 
-test("the rarer actions are folded under a single ••• overflow (Change background · Enhance aerial)", () => {
-  has('<button id="bgMore"', "overflow trigger present");
+test("top-left = Edit background + Enhance (direct); Create Hybrid lives in a bottom-right ••• drop-up", () => {
+  // top-left: two direct buttons, Edit background first, no ••• here
+  has('<button id="changeBgBtn"', "Edit background is a direct button");
+  has("<span>Edit background</span>", "Edit background label");
+  has('<button id="enhBtn"', "Enhance is a direct button");
+  has("<span>Enhance</span>", "Enhance label (short)");
+  has('aria-label="Enhance aerial"', "Enhance keeps a descriptive aria-label");
+  assert.ok(survey.indexOf('id="changeBgBtn"') < survey.indexOf('id="enhBtn"'), "Edit background comes first");
+  // bottom-right ••• drop-up
+  has('<div id="planMore">', "bottom-right overflow container");
+  assert.ok(/#planMore\{position:absolute;right:14px;bottom:56px/.test(survey), "••• sits bottom-right (above the Show control)");
+  has('<button id="bgMore"', "••• trigger present");
   has('aria-haspopup="true"', "••• declares a menu popup");
-  has('<div id="bgMenu" role="menu">', "overflow menu present");
-  has('<button id="changeBgBtn" role="menuitem"', "Change background is a menu item");
-  has("Change background", "Change background label");
-  has('<button id="enhBtn" role="menuitem"', "Enhance aerial is a menu item");
-  has("Enhance aerial", "Enhance aerial label");
-  // the whole cluster is locked out for read-only / submitted
-  has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "locked states hide the floor actions");
+  has('#planMore.menu #bgMenu{display:flex}', "the drop-up opens from the ••• container");
+  // the old Fit/Fill button is gone
+  assert.ok(!survey.includes('id="fitBtn"'), "the Fit/Fill button is removed");
+  // locked states hide both clusters
+  has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "locked states hide the top-left actions");
+  has("body.ro #planMore, body.frozen #planMore{display:none!important}", "locked states hide the ••• overflow");
 });
 
 test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, and not frozen", () => {
@@ -43,8 +52,9 @@ test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, 
   has("function canBuild(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }", "canBuild composes floorHasAerial AND !hybridCapable AND !frozen");
   // updateBgActions drives visibility: cluster on the Background step over a real floor; Build only when canBuild
   has('var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);', "cluster shows on the Background tab over a real floor, outside any tool");
-  has('bp.style.display = canBuild(f) ? "inline-flex" : "none"', "Build Floor Plan gates on canBuild(current floor)");
-  has('ea.style.display = floorHasAerial(f) ? "flex" : "none"', "Enhance aerial shows only when there's an aerial");
+  has('pm.style.display = canB ? "flex" : "none"', "the ••• (Create Hybrid) shows only when canBuild");
+  has('canB=(show && canBuild(f))', "••• gates on canBuild(current floor)");
+  has('ea.style.display = (show && floorHasAerial(f)) ? "inline-flex" : "none"', "Enhance shows only when there's an aerial");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
   has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
   const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);

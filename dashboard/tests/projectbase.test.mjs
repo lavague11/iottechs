@@ -10,7 +10,7 @@ const sat = readFileSync(new URL("../public/widgets/satellite-capture.html", imp
 
 test("the primary action is 'Create Hybrid Floor Plan' (outline = the working area / project base)", () => {
   assert.ok(survey.includes("<span>Create Hybrid Floor Plan</span>"), "button labeled Create Hybrid Floor Plan");
-  assert.ok(survey.includes("Create the Hybrid floor plan from the enhanced aerial"), "tooltip set");
+  assert.ok(survey.includes('title="Outline the working area, set the grid, draw the structure"'), "tooltip set");
 });
 
 test("Use Outline marks the outline as the Project Base before handing off", () => {

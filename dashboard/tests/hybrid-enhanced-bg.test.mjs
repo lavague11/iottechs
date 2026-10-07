@@ -12,20 +12,20 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("Enhance aerial is a ••• overflow menu item (icon + two-word label, descriptive aria, no emoji)", () => {
-  has('<button id="enhBtn" role="menuitem"', "enhance is a menu item in the ••• overflow");
+test("Enhance is a direct top-left button (icon + one-word label, descriptive aria, no emoji)", () => {
+  has('<button id="enhBtn"', "enhance is a direct button");
   const i = survey.indexOf('<button id="enhBtn"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
-  assert.ok(btn.includes("<span>Enhance aerial</span>"), "two-word visible label");
+  assert.ok(btn.includes("<span>Enhance</span>"), "short visible label");
   assert.ok(btn.includes('aria-label="Enhance aerial"'), "descriptive aria-label for the action");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // the whole floor-actions cluster (which holds this item) is locked out for read-only / submitted
+  // the top-left actions cluster (which holds this button) is locked out for read-only / submitted
   has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "read-only / submitted hide the floor actions");
 });
 
-test("gating: Enhance aerial shows whenever the floor has an aerial (under •••), re-gated on step/floor/frozen change", () => {
-  has('ea.style.display = floorHasAerial(f) ? "flex" : "none"', "updateBgActions shows Enhance aerial when there's an aerial");
+test("gating: Enhance shows whenever the floor has an aerial, re-gated on step/floor/frozen change", () => {
+  has('ea.style.display = (show && floorHasAerial(f)) ? "inline-flex" : "none"', "updateBgActions shows Enhance when there's an aerial");
   has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
   const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
   assert.ok(setStatus.includes("updateBgActions()"), "setStatus re-gates on frozen change");
