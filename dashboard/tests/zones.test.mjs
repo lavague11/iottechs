@@ -167,11 +167,11 @@ test("delete a zone removes only that row and returns to an empty draft", () => 
   assert.equal(e.rgDelZone(), false, "nothing selected -> no-op");
 });
 
-test("a zone keeps >=3 vertices: deleting a vertex at 3 points is refused (boundary keeps its old behaviour)", () => {
+test("a closed polygon (zone OR boundary) keeps >=3 vertices: deleting at 3 points is refused", () => {
   const e = sandbox(); e.rgSetKind("zone"); add(e, 0, 0); add(e, 10, 0); add(e, 10, 10); e.bdClose(); e.rgApply("street");
   e.bdSel = 1; e.bdDelSel(); assert.equal(e.floors[0].zones[0].pts.length, 3); assert.equal(e.bdSel, -1);
   const b = sandbox(); add(b, 0, 0); add(b, 10, 0); add(b, 10, 10); b.bdClose(); b.bdSel = 1; b.bdDelSel();
-  assert.equal(b.bdPts.length, 2, "boundary vertex delete unchanged"); assert.equal(b.bdClosed, false);
+  assert.equal(b.bdPts.length, 3, "a closed 3-gon boundary refuses deletion too"); assert.equal(b.bdClosed, true);
 });
 
 test("zone cap: ZONE_MAX zones, then rgAddZone refuses", () => {

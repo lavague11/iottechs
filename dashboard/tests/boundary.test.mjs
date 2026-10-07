@@ -139,15 +139,24 @@ test("bdClosable: only the first dot of an open ≥3 polygon", () => {
   assert.equal(e.bdClosable(0), false, "closed → not closable again");
 });
 
-test("delete selected vertex; dropping below 3 re-opens the polygon", () => {
+test("delete selected vertex from a closed polygon keeps it valid (≥3); a closed 3-gon refuses", () => {
   const e = sandbox();
-  add(e, 10, 10); add(e, 90, 10); add(e, 50, 90); e.bdClose();
-  e.bdSel = 1;
-  e.bdDelSel();
-  assert.equal(e.bdPts.length, 2);
-  assert.equal(e.bdClosed, false, "below 3 → re-opened");
+  add(e, 10, 10); add(e, 90, 10); add(e, 50, 90); add(e, 20, 60); e.bdClose();   // closed quad
+  e.bdSel = 1; e.bdDelSel();
+  assert.equal(e.bdPts.length, 3, "a vertex is removed");
+  assert.equal(e.bdClosed, true, "still a valid closed polygon");
   assert.equal(e.bdSel, -1, "selection cleared after delete");
-  assert.equal(e.floors[0].boundary, null, "under 3 → boundary null");
+  e.bdSel = 0; e.bdDelSel();                                                      // now a closed triangle
+  assert.equal(e.bdPts.length, 3, "a closed 3-gon refuses deletion (min valid polygon)");
+  assert.equal(e.bdClosed, true, "stays closed");
+  assert.equal(e.bdSel, -1, "selection cleared");
+});
+test("delete selected vertex while still drawing (open) removes it", () => {
+  const e = sandbox();
+  add(e, 10, 10); add(e, 90, 10); add(e, 50, 90);   // open polyline, not closed
+  e.bdSel = 1; e.bdDelSel();
+  assert.equal(e.bdPts.length, 2, "open polyline can drop below 3 while drawing");
+  assert.equal(e.bdSel, -1, "selection cleared after delete");
 });
 
 test("delete is a no-op with nothing selected or an out-of-range index", () => {
@@ -277,7 +286,7 @@ test("empty-tap with a selected vertex only deselects — never drops a stray ve
 });
 
 test("two-finger gestures fall through to pinch-zoom (never a vertex)", () => {
-  assert.ok(survey.includes("if(activePtrs.size>1){ bdDrag=-1; return; }"), "multi-touch bails out of the region handlers");
+  assert.ok(survey.includes("if(activePtrs.size>1){ bdDrag=-1; bdPlacing=false; hideLoupe(); return; }"), "multi-touch bails out of the region handlers (and cancels any placement/loupe)");
 });
 
 test("boundary is carried through restore, create and duplicate — and kept OFF snapFloor", () => {
@@ -290,4 +299,28 @@ test("boundary is carried through restore, create and duplicate — and kept OFF
 test("undo/redo is keyboard-mapped while in Regions mode", () => {
   assert.ok(survey.includes('e.key==="z"||e.key==="Z"') && survey.includes("if(e.shiftKey) bdRedo(); else bdUndo();"), "Ctrl/Cmd+Z and Shift+Z");
   assert.ok(survey.includes('e.key==="y"||e.key==="Y"'), "Ctrl/Cmd+Y redo");
+});
+
+// ---------- precision boundary-vertex UX (tiny neutral nodes + shared loupe) ----------
+test("vertices are tiny neutral charcoal dots — no giant white/gold handle, no inline red X", () => {
+  const rb = extractFn(survey, "renderBoundary");
+  assert.ok(rb.includes('fill="#2b2f36"'), "the node is a charcoal dot");
+  assert.ok(!rb.includes('fill="'+'"'+'+(sel?hc:"#fff")') && !/r="\(sel\?hr\*1\.3:hr\)"/.test(rb), "the old white/gold selectable handle is gone");
+  assert.ok(!rb.includes("#c0392b") && !rb.includes('class="bdDel"'), "no inline red X delete control on the canvas");
+  assert.ok(rb.includes("px*100/_sw"), "dot size is a fixed px converted to plate-% (stays tiny at any zoom)");
+});
+test("the shared precision loupe is reused for boundary vertices (grab + drag), hidden on release", () => {
+  // showLoupe/hideLoupe is the SAME camera-placement loupe (one implementation, not a boundary copy)
+  assert.ok(survey.includes("function showLoupe(") && survey.includes("function hideLoupe("), "the shared loupe exists");
+  const pd = survey.slice(survey.indexOf('rl.addEventListener("pointerdown"'), survey.indexOf('rl.addEventListener("pointercancel"'));
+  assert.ok(/bdDrag=hit;[^]*?showLoupe\(e\.clientX,e\.clientY\)/.test(pd), "loupe shows on grabbing a vertex");
+  assert.ok(pd.includes("bdPts[bdDrag]={x:p.x,y:p.y}; showLoupe(e.clientX,e.clientY)"), "loupe tracks the vertex while dragging");
+  assert.ok(pd.includes("bdDrag=-1; hideLoupe();"), "loupe hides on release");
+});
+test("a large invisible grab radius keeps the tiny dot easy to hit (coarse pointer gets more)", () => {
+  assert.ok(survey.includes('matchMedia("(pointer:coarse)").matches)?20:15'), "15px mouse / 20px touch grab radius, independent of the ~6px dot");
+});
+test("the bin deletes the selected vertex (contextual), else two-step clears the whole boundary", () => {
+  assert.ok(survey.includes("if(bdSel>=0){ bdl.classList.remove(\"armed\"); bdDelSel(); return; }"), "a selected vertex → the bin deletes just that point");
+  assert.ok(survey.includes('(e.key==="Delete"||e.key==="Backspace") && bdSel>=0'), "Delete/Backspace removes the selected vertex too");
 });
