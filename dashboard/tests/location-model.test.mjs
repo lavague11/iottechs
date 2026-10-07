@@ -43,6 +43,16 @@ test("a camera in an exterior zone → outside + the zone name (site/interior/ex
   assert.equal(r.base, "Driveway");
 });
 
+test("a camera over a NAMED area → outside + the area's free name (wins over the legacy typed zone)", () => {
+  const withArea = { ...PLAN, areas: [{ cells: range(6, 9, 10, 12), label: "Backyard", semanticType: "rear-yard" }] };
+  const r = api.rmDevCtx(cell(7, 11), { plan: withArea }, o);
+  assert.equal(r.placementType, "outside");
+  assert.equal(r.base, "Backyard", "the free area name is the location base → 'Backyard 1'");
+  // a named area on the same cells as a typed zone wins (free name beats the type)
+  const override = { ...PLAN, areas: [{ cells: range(1, 4, 10, 12), label: "Front Drive", semanticType: "driveway" }] };
+  assert.equal(api.rmDevCtx(cell(2, 11), { plan: override }, o).base, "Front Drive", "a named area beats the legacy zone type");
+});
+
 test("wall-mount tolerance: an anchor one cell outside a room still resolves to that room", () => {
   const r = api.rmDevCtx(cell(5, 2), f, o);   // col 5 is between Dining (≤4) and Kitchen (≥6); neighbour of both
   assert.equal(r.placementType, "inside");

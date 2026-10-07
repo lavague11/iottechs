@@ -1679,14 +1679,18 @@
     function rmDevCtx(d, f, o){ var vb=o&&o.vb, plan=f&&f.plan, res={placementType:"",roomIdx:-1,base:""};
       if(!vb||!(vb.vw>0)||!(vb.vh>0)||!plan||!sugOk(d.x)||!sugOk(d.y)) return res;
       var c=Math.floor((vb.x0+(+d.x)/100*vb.vw)/SUG_HALF), r=Math.floor((vb.y0+(+d.y)/100*vb.vh)/SUG_HALF), key=c+","+r;
-      var rooms=Array.isArray(plan.rooms)?plan.rooms:[];
+      var rooms=Array.isArray(plan.rooms)?plan.rooms:[], areas=Array.isArray(plan.areas)?plan.areas:[], N=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
       function roomAt(k){ for(var i=0;i<rooms.length;i++){ var rm=rooms[i]; if(rm&&Array.isArray(rm.cells)&&rm.cells.indexOf(k)>=0) return i; } return -1; }
+      function areaAt(k){ for(var i=0;i<areas.length;i++){ var ar=areas[i]; if(ar&&Array.isArray(ar.cells)&&(ar.label||"").trim()&&ar.cells.indexOf(k)>=0) return String(ar.label).trim(); } return ""; }
       var ri=roomAt(key);
-      if(ri<0){ var N=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]; for(var j=0;j<N.length&&ri<0;j++) ri=roomAt((c+N[j][0])+","+(r+N[j][1])); }   // wall-mount tolerance: the anchor may sit on a boundary cell
+      if(ri<0){ for(var j=0;j<N.length&&ri<0;j++) ri=roomAt((c+N[j][0])+","+(r+N[j][1])); }   // wall-mount tolerance: the anchor may sit on a boundary cell
       var inStruct = ri>=0 || (Array.isArray(plan.cells)&&plan.cells.indexOf(key)>=0);
-      var zt=null, zc=plan.zoneCells; if(zc){ for(var t in zc){ if(t==="site"||t==="interior"||t==="exterior"||!Array.isArray(zc[t])) continue; if(zc[t].indexOf(key)>=0){ zt=t; break; } } }
+      // OUTDOOR: a NAMED area wins (the free label — "Driveway"/"Backyard"); fall back to the legacy typed zone label.
+      var areaLbl=""; if(!inStruct){ areaLbl=areaAt(key); for(var ja=0;ja<N.length&&!areaLbl;ja++) areaLbl=areaAt((c+N[ja][0])+","+(r+N[ja][1])); }
+      var zt=null, zc=plan.zoneCells; if(!areaLbl && zc){ for(var t in zc){ if(t==="site"||t==="interior"||t==="exterior"||!Array.isArray(zc[t])) continue; if(zc[t].indexOf(key)>=0){ zt=t; break; } } }
       res.placementType = inStruct ? "inside" : "outside";
       if(ri>=0){ res.roomIdx=ri; res.base=(rooms[ri].label&&String(rooms[ri].label).trim())||""; }
+      else if(areaLbl){ res.base=areaLbl; }
       else if(zt){ res.base=zTypeLabel(zt); }
       return res; }
     function reconcileLocations(){ if(frozen()||!devices.length) return; var f=floors[curFloor]||{}, o=sugOpts(f), changed=false, max={};
