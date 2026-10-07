@@ -215,10 +215,8 @@
           <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> <span id="mCleanTxt">Enhance</span></button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           <button id="mImportZones" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 13v5m-2-3 2-2 2 2"/></svg> Import areas</button>
-          <button id="mRenameRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg> Rename</button>
+          <!-- Room-context actions (Rename / Merge / Remove wall) live in the Room Actions menu (double-click / second-tap a room), not here. -->
           <button id="mRotateStairs" style="display:none"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg> Rotate stairs</button>
-          <button id="mMergeRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
-          <button id="mRemoveWall" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 9h5M16 9h5M3 15h7M14 15h7"/><path d="M12 4v16"/></svg> <span id="mRemoveWallTxt">Remove wall</span></button>
           <button id="mRemoveAllWalls" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 9h18M3 15h18"/><path d="M8 4v16M16 4v16" stroke-dasharray="3 3"/></svg> <span id="mRemoveAllWallsTxt">Remove all</span></button>
           <button id="mDeleteRoom" class="danger" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteRoomTxt">Delete room</span></button>
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
@@ -748,24 +746,28 @@
     // reflect the active PRIMARY (Structure / Room / Area) in the compact selector — opening + remove-wall stay under Room
     var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : "room";
     [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.classList.toggle("on", b.getAttribute("data-m")===prim); });
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="removewall" ? "Remove wall" : "Room")));
+    // The PRIMARY selector always names the geometry type — Remove wall is a contextual Room action, never a top-level mode label.
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : "Room"));
     var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = edit ? "inline-flex" : "none";
     var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display="none";   // Areas are named like rooms now — no type picker
     cv.style.cursor = edit ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
-    $("hint").innerHTML = m==="opening" ? "Tap a wall for a door · tap the door to flip the swing."
-      : m==="removewall" ? "Tap a <b>wall</b> to open it — tap again to restore."
-      : m==="zone" ? "Draw an <b>area</b> outside and name it."
-      : m==="structure" ? (cells.size ? "Add or erase blocks — the outline updates itself." : "Drag to <b>block out the structure</b>.")
-      : "Draw the <b>rooms</b> inside and name each.";
-    $("hint").style.display = $("preview").classList.contains("show") ? "none" : "block"; updateTools(); redraw(); }
+    // No instructional hint copy — the controls speak for themselves (assume a competent user). The one
+    // exception is the very first empty canvas, where there is nothing on screen to act on yet.
+    var h=$("hint"); if(h){ var firstRun = m==="structure" && !cells.size;
+      h.innerHTML = firstRun ? "Drag to block out the structure" : "";
+      h.style.display = (firstRun && !$("preview").classList.contains("show")) ? "block" : "none"; }
+    updateTools(); redraw(); }
 
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="opening"){ return; }   // door placement / cycling happens on click/dblclick (so a double-click can open the door menu without cycling twice)
-    if(mode==="removewall"){ toggleOpenWallAt(pt.x,pt.y); return; }   // tap an interior wall → open / restore it (geometry never changes)
+    if(mode==="removewall"){   // Remove wall is an ACTION on the selected room, not a canvas lock — room selection always wins.
+      if(sel && nearestInteriorUnit(sel,pt.x,pt.y)){ toggleOpenWallAt(pt.x,pt.y); return; }   // tapped a wall of the selected room → open / restore it
+      var rhw=roomHit(pt.x,pt.y); if(rhw && rhw!==sel){ sel=rhw; redraw(); }                   // tapped another room → it becomes the Remove-wall target (Remove wall stays active)
+      return; }
     if(mode==="structure"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
     if(mode==="zone"){   // AREA: erase drags to remove cells; else tap a named area to SELECT (unnamed → name), empty drag draws a new one
       if(structOp==="erase"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
@@ -789,7 +791,7 @@
     var pt=rel(e), d=doorAt(pt.x,pt.y); if(d) scheduleDoorCycle(d); else { cancelDoorCycle(); placeDoor(pt.x,pt.y); } });
   // Desktop double-click: a room/area → Room Actions menu; a door → Door menu (Flip hinge / Opening only / Delete).
   cv.addEventListener("dblclick", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed) return;
-    var pt=rel(e); if(mode==="room"){ var h=roomHit(pt.x,pt.y); if(h) openRoomMenu(h,false); }
+    var pt=rel(e); if(mode==="room"||mode==="removewall"){ var h=roomHit(pt.x,pt.y); if(h) openRoomMenu(h,false); }   // Room Actions open even while Remove wall is active
     else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a) openRoomMenu(a,true); }
     else if(mode==="opening"){ var d=doorAt(pt.x,pt.y); if(d){ cancelDoorCycle(); openDoorMenu(d,pt.x,pt.y); } } });
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
@@ -1128,19 +1130,14 @@
   // (naming is for naming; deletion lives here per the redesign).
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu();
     var on=!$("moreMenu").classList.contains("on"); if(on){ var area=isAreaSel(), hasRoom=!!(sel && !area && Array.isArray(sel.cells)), sel2=hasRoom||area, hasInt=hasRoom && roomInteriorUnits(sel).length>0;
-      $("mRenameRoom").style.display=sel2?"":"none";   // Rename works for a room OR an area
       $("mRotateStairs").style.display=(hasRoom && isStairs(sel))?"":"none";   // only a Stairs room
-      $("mDeleteRoom").style.display=sel2?"":"none"; $("mDeleteRoomTxt").textContent=area?"Delete area":"Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none";
-      $("mRemoveWall").style.display=(hasRoom&&hasInt)?"":"none"; $("mRemoveWallTxt").textContent=(mode==="removewall"?"Done":"Remove wall");   // rooms only
+      $("mDeleteRoom").style.display=sel2?"":"none"; $("mDeleteRoomTxt").textContent=area?"Delete area":"Delete room";   // room/area actions otherwise live in the Room Actions menu
       var allOpen=hasInt && roomInteriorUnits(sel).every(function(u){ return openWalls.has(u.k); });
       $("mRemoveAllWalls").style.display=(mode==="removewall"&&hasInt)?"":"none"; $("mRemoveAllWallsTxt").textContent=allOpen?"Restore all":"Remove all";
       var mc=$("mCleanTxt"); if(mc) mc.textContent = !enhancedURL ? "Enhance" : (enhanceStale() ? "Update" : "View"); }   // the wand IS the stale indicator in draw mode: Enhance (none) / Update (stale) / View (fresh cache)
     $("moreMenu").classList.toggle("on"); });
-  $("mRenameRoom").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); openLabel(sel, isAreaSel()); });   // explicit rename (room or area)
   $("mRotateStairs").addEventListener("click", function(){ if(busy||!sel||!isStairs(sel)) return; closeMore(); sel.stairOrientation=(stairOrient(sel)+90)%360; pushHist(); redraw(); });   // rotate tread direction 90°
-  $("mRemoveWall").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); setMode(mode==="removewall" ? "room" : "removewall"); });
   $("mRemoveAllWalls").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); removeAllWalls(sel); });
-  $("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge(); });
   $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
     if(t.textContent.indexOf("Confirm")<0){ t.textContent="Confirm delete"; return; }
     if(isAreaSel()){ areas=areas.filter(function(x){return x!==sel;}); syncZoneCellsFromAreas(); } else { rooms=rooms.filter(function(x){return x!==sel;}); }
@@ -1179,8 +1176,9 @@
     if($("roomMenu").classList.contains("on") && Date.now()-rmOpenedAt>=350 && !$("roomMenu").contains(e.target)) closeRoomMenu();
     if($("doorMenu").classList.contains("on") && Date.now()-dmOpenedAt>=350 && !$("doorMenu").contains(e.target)) closeDoorMenu(); }, true);
   document.addEventListener("keydown", function(e){ if(e.key!=="Escape") return;
-    if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); }
-    if($("doorMenu").classList.contains("on")){ e.preventDefault(); closeDoorMenu(); } });
+    if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); return; }
+    if($("doorMenu").classList.contains("on")){ e.preventDefault(); closeDoorMenu(); return; }
+    if(mode==="removewall"){ e.preventDefault(); setMode("room"); } });   // easy exit from the Remove-wall action — no Done required
   document.addEventListener("click", function(e){ if(!$("moreMenu").contains(e.target) && e.target!==$("tMore") && !$("tMore").contains(e.target)) closeMore(); });
   // Floor selector — the HOST owns the floor list and sends it (iotFloors); a pick autosaves this plan (flushPlan) then asks the host to reopen the tool on that floor (iotDrawFloor).
   // Pure: sanitize the roster -> [{i,id,name,cur}]; cur = this frame's own floor (by id, else index). Names render via textContent only.

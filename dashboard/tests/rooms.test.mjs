@@ -124,24 +124,23 @@ test("roomLabelCell is used for the label anchor in redraw (drawRoom) + both SVG
   assert.ok(extractFn(src, "sketchPNG").includes("roomLabelCell(r.cells||[])"), "raster export uses the pole anchor");
 });
 
-test("Merge action lives in the More menu, one word, inline SVG, hidden by default", () => {
-  assert.ok(/<button id="mMergeRoom"[^>]*style="display:none"><svg /.test(src), "mMergeRoom is an SVG button, hidden until armed");
-  const bs = src.lastIndexOf("<button", src.indexOf('id="mMergeRoom"'));
+test("Merge action lives in the Room Actions menu, one word, inline SVG", () => {
+  assert.ok(/<button id="rmMerge"[^>]*><svg /.test(src), "rmMerge is an SVG button in the Room Actions menu");
+  const bs = src.lastIndexOf("<button", src.indexOf('id="rmMerge"'));
   const btn = src.slice(bs, src.indexOf("</button>", bs));
   assert.equal(btn.replace(/<[^>]*>/g, "").trim(), "Merge", "visible label is the single word Merge");
   assert.ok(!/[\u{1F000}-\u{1FAFF}☀-➿]/u.test(btn), "no emoji icon");
-  // the menu button order keeps Merge beside (just above) Delete room
-  assert.ok(src.indexOf('id="mMergeRoom"') < src.indexOf('id="mDeleteRoom"'), "Merge sits beside Delete room");
+  assert.ok(!src.includes('id="mMergeRoom"'), "Merge no longer lives in the generic ••• menu");
 });
 
 test("Merge is shown only when a room is selected (and a second room exists to merge into)", () => {
-  assert.ok(src.includes('$("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none"'),
-    "the More-menu open gates Merge on a selected room + >1 room");
+  assert.ok(src.includes('$("rmMerge").style.display=(room && rooms.length>1)?"":"none"'),
+    "the Room Actions menu gates Merge on a room + >1 room");
 });
 
 test("Merge click arms a one-shot pick (startMerge), guarded on busy/selection", () => {
-  assert.ok(src.includes('$("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge();'),
-    "the Merge button is guarded and calls startMerge");
+  assert.ok(src.includes('$("rmMerge").addEventListener("click", function(){ if(busy||!rmRoom) return; closeRoomMenu(); if(sel) startMerge();'),
+    "the Merge action is guarded and calls startMerge");
   const startMerge = extractFn(src, "startMerge");
   assert.ok(startMerge.includes("mergeArmed=sel"), "startMerge arms the selected room as the target A");
   assert.ok(startMerge.includes("busy") && startMerge.includes('planState!=="loaded"'), "guarded like the other room actions");

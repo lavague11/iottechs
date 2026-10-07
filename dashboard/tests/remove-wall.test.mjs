@@ -176,16 +176,32 @@ test("Merge / Remove wall actions route into the existing workflows", () => {
 test("Delete uses a destructive confirm; closing the menu is wired to outside-click and Escape", () => {
   assert.ok(src.includes('$("rmDelete").addEventListener("click"') && src.includes("askConfirm({ title:a?\"Delete area?\":\"Delete room?\", ok:\"Delete\", danger:true }"), "Delete runs the destructive confirm");
   assert.ok(src.includes('!$("roomMenu").contains(e.target)) closeRoomMenu();'), "an outside pointerdown closes the menu");
-  assert.ok(src.includes('if(e.key!=="Escape") return;') && src.includes('if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); }'), "Escape closes the menu");
+  assert.ok(src.includes('if(e.key!=="Escape") return;') && src.includes('if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); return; }'), "Escape closes the menu");
 });
 test("newly created rooms/areas still auto-open naming (first-creation naming is unchanged)", () => {
   const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 2000);
   assert.ok(pu.includes("openLabel(shape)") || pu.includes("openLabel(ash,true)"), "a freshly drawn room/area opens the naming UI on creation");
 });
-test("Remove Wall is a room mode: a menu action, its own hint, pointer cursor, tap toggles a wall", () => {
-  assert.ok(src.includes('$("mRemoveWall").addEventListener') && src.includes('setMode(mode==="removewall" ? "room" : "removewall")'), "••• Remove wall toggles the mode");
-  assert.ok(extractFn(src, "setMode").includes("Tap a <b>wall</b> to open it"), "remove-wall hint");
+
+// ---------- Remove wall is an ACTION on the selected room, never a canvas lock ----------
+test("Remove wall: room selection always wins — a click reselects another room; a wall tap toggles the selected room's wall", () => {
   const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("contextmenu"'));
-  assert.ok(pd.includes('if(mode==="removewall"){ toggleOpenWallAt(pt.x,pt.y); return; }'), "a tap in remove-wall mode toggles a wall");
-  assert.ok(src.includes('$("mRemoveAllWalls").addEventListener') && src.includes("removeAllWalls(sel)"), "Remove all / Restore all action");
+  assert.ok(pd.includes('if(sel && nearestInteriorUnit(sel,pt.x,pt.y)){ toggleOpenWallAt(pt.x,pt.y); return; }'), "a tap on the selected room's wall toggles it");
+  assert.ok(pd.includes('var rhw=roomHit(pt.x,pt.y); if(rhw && rhw!==sel){ sel=rhw; redraw(); }'), "a tap on another room reselects it (Remove wall then targets it)");
+  assert.ok(!pd.includes('if(mode==="removewall"){ toggleOpenWallAt(pt.x,pt.y); return; }'), "the old canvas-locking branch is gone");
+});
+test("Remove wall: double-click opens Room Actions even while active; Escape exits the action", () => {
+  const dc = src.slice(src.indexOf('cv.addEventListener("dblclick"'), src.indexOf('cv.addEventListener("pointermove"'));
+  assert.ok(dc.includes('mode==="room"||mode==="removewall"'), "double-click opens Room Actions in room OR remove-wall mode");
+  assert.ok(src.includes('if(mode==="removewall"){ e.preventDefault(); setMode("room"); }'), "Escape leaves Remove wall (no Done required)");
+});
+test("Remove wall is entered from the Room Actions menu, not the ••• menu; ••• keeps only Remove all / Rotate stairs / Delete room", () => {
+  assert.ok(src.includes('$("rmRemoveWall").addEventListener("click"'), "Remove wall is a Room Actions item");
+  assert.ok(!src.includes('id="mRemoveWall"') && !src.includes('id="mMergeRoom"') && !src.includes('id="mRenameRoom"'), "Rename / Merge / Remove wall are removed from the ••• menu");
+  assert.ok(src.includes('$("mRemoveAllWalls").addEventListener') && src.includes("removeAllWalls(sel)"), "Remove all / Restore all stays in ••• (a bulk sub-action)");
+});
+test("the PRIMARY selector always names the geometry type — Remove wall is never the dock label", () => {
+  const sm = extractFn(src, "setMode");
+  assert.ok(!sm.includes('"Remove wall"'), "the mode toggle never shows 'Remove wall'");
+  assert.ok(sm.includes('m==="zone" ? "Area" : "Room"'), "remove-wall falls back to the Room label");
 });

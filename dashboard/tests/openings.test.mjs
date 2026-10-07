@@ -246,7 +246,7 @@ test("Opening is a choice in the compact draw-mode selector — no separate Open
 });
 test("setMode supports 'opening': shows the door hint + pointer cursor; the selector reflects the mode", () => {
   const setMode = extractFn(src, "setMode");
-  assert.ok(setMode.includes("Tap a wall for a door") && setMode.includes("flip the swing"), "opening-mode hint explains place + cycle");
+  assert.ok(!setMode.includes("Draw the") && !setMode.includes("Tap a wall for a door"), "no instructional hint copy — controls speak for themselves");
   assert.ok(setMode.includes('m==="opening"||m==="removewall" ? "pointer"'), "pointer cursor in opening (and remove-wall) mode");
   assert.ok(setMode.includes('if(m!=="opening") hoverWall=null'), "leaving opening mode clears the hover highlight");
   assert.ok(setMode.includes('(m==="opening") ? "opening" : "room"'), "the selector check reflects opening mode");
