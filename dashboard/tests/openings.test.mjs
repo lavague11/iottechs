@@ -33,7 +33,7 @@ const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "c
   "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD", "svgPlanBody"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
-  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], _pushes=0;
+  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), _pushes=0;
   function pushHist(){ _pushes++; } function redraw(){}
   ${PURE}
   return { key:key, wallKey:wallKey, canonOpening:canonOpening, openKey:openKey, allWallUnits:allWallUnits,
@@ -186,7 +186,7 @@ test("setMode supports 'opening': toggles the button on, shows the door hint, po
   const setMode = extractFn(src, "setMode");
   assert.ok(setMode.includes('to.classList.toggle("on",m==="opening")'), "the Openings button reflects the mode");
   assert.ok(setMode.includes("Tap a wall to add a door."), "opening-mode hint");
-  assert.ok(setMode.includes('m==="opening" ? "pointer"'), "pointer cursor in opening mode");
+  assert.ok(setMode.includes('m==="opening"||m==="removewall" ? "pointer"'), "pointer cursor in opening (and remove-wall) mode");
   assert.ok(setMode.includes('if(m!=="opening") hoverWall=null'), "leaving opening mode clears the hover highlight");
   assert.ok(src.includes('setMode(mode==="opening" ? "structure" : "opening")'), "the button toggles the mode");
   assert.ok(src.includes('$("tOpening").addEventListener("click"') && src.includes("cells.size===0) return"), "guarded: no doors without walls");

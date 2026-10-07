@@ -30,14 +30,14 @@ const HALF = 13, FULL = 26;
 // Pure helpers (+ the Phase-10 additions) assembled into one live mini-module with mutable globals, exactly as the
 // widget sees them. pushHist/redraw/persist are stubbed counters; the enhance-state vars are plain locals.
 const NAMES = [
-  "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "segDistSq",
+  "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "sanitizeOpenWalls", "segDistSq",
   "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "svgPlanBody",
   "namedRooms", "planCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
   var HALF=${HALF}, FULL=${FULL};
-  var cells=new Set(), rooms=[], openings=[], metersPerPx=0, _seed=null, _planStamp=0;
+  var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), metersPerPx=0, _seed=null, _planStamp=0;
   var enhancedURL=null, enhancedRev=null, enhancedOnce=false, sel=null, _pushes=0;
   var zoneCells={};   // Phase 3: zone-classification cells — stubbed here (these tests cover the enhanced raster, not zones)
   function zcOut(){ return {}; } function zcIn(){ return {}; } function zcClone(){ return {}; } function zoneCellsSVG(){ return ""; }
