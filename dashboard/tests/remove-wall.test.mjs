@@ -25,19 +25,20 @@ function extractFn(s, name) {
 }
 
 const HALF = 13;
+const FULL = 26;
 const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "canonOpening", "openKey",
-  "segDistSq", "perimKeySet", "roomInteriorUnits", "nearestInteriorUnit", "removeAllWalls", "reconcileOpenWalls",
+  "segDistSq", "perimKeySet", "roomInteriorUnits", "interiorUnits", "nearestInteriorUnit", "toggleOpenWallAt", "removeAllWalls", "reconcileOpenWalls",
   "sanitizeOpenWalls", "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
-  var HALF=${HALF}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), sel=null, _pushes=0;
+  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), sel=null, _pushes=0, snap=0.5;
   function pushHist(){ _pushes++; } function redraw(){}
   ${PURE}
   return { key:key, wallKey:wallKey, perimKeySet:perimKeySet, roomInteriorUnits:roomInteriorUnits,
-    nearestInteriorUnit:nearestInteriorUnit, removeAllWalls:removeAllWalls, reconcileOpenWalls:reconcileOpenWalls,
-    sanitizeOpenWalls:sanitizeOpenWalls,
+    interiorUnits:interiorUnits, nearestInteriorUnit:nearestInteriorUnit, toggleOpenWallAt:toggleOpenWallAt,
+    removeAllWalls:removeAllWalls, reconcileOpenWalls:reconcileOpenWalls, sanitizeOpenWalls:sanitizeOpenWalls,
     wallPath:function(edgeSet){ return wallPathD(edgesOf(new Set(edgeSet)), [], []); },
-    setCells:function(a){ cells=new Set(a); }, setRooms:function(a){ rooms=a; }, setSel:function(r){ sel=r; },
+    setCells:function(a){ cells=new Set(a); }, setRooms:function(a){ rooms=a; }, setSel:function(r){ sel=r; }, setSnap:function(s){ snap=s; },
     openWallsArr:function(){ return Array.from(openWalls); }, addOpen:function(k){ openWalls.add(k); }, clearOpen:function(){ openWalls=new Set(); },
     pushes:function(){ return _pushes; } };
 `)();
@@ -77,6 +78,28 @@ test("opening a wall removes its stroke from the plan (and the room cells are un
   assert.ok(!open.includes("M26 0L26 13") && !open.includes("M26 13L26 26"), "an open wall is not stroked");
   // geometry is untouched — the room still owns the same cells
   assert.deepEqual(dining.cells, [key(0,0),key(1,0),key(0,1),key(1,1)], "room cells unchanged by Remove Wall");
+});
+
+// ---------- Snap setting: a wall opens one whole grid box at a time on full-grid snap ----------
+test("interiorUnits respects Snap: half snap = half units; full snap coalesces a box edge into ONE unit", () => {
+  setup();
+  api.setSnap(0.5);
+  const half = api.interiorUnits(dining);
+  assert.deepEqual(half.map((u) => u.id).sort(), ["26,0,26,13", "26,13,26,26"], "half snap keeps the two half-units");
+  api.setSnap(1);
+  const full = api.interiorUnits(dining);
+  assert.equal(full.length, 1, "full snap coalesces the shared edge into one whole-box unit");
+  assert.deepEqual(full[0].keys.sort(), ["26,0,26,13", "26,13,26,26"], "the one unit toggles BOTH half keys");
+  assert.deepEqual([full[0].a, full[0].b], [[26, 0], [26, 26]], "spanning the full grid box");
+  api.setSnap(0.5);
+});
+test("toggleOpenWallAt on full snap opens the WHOLE box in one tap (both halves), not half at a time", () => {
+  setup(); api.setSel(dining); api.setSnap(1);
+  api.toggleOpenWallAt(26, 13);   // tap the shared partition
+  assert.deepEqual(api.openWallsArr().sort(), ["26,0,26,13", "26,13,26,26"], "one tap opens both halves of the grid box");
+  api.toggleOpenWallAt(26, 13);
+  assert.deepEqual(api.openWallsArr(), [], "a second tap restores the whole box");
+  api.setSnap(0.5);
 });
 
 // ---------- Remove All / Restore All ----------

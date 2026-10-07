@@ -417,12 +417,14 @@
     for(k in u){ if(!u.hasOwnProperty(k)) continue; var a=k.split(",").map(Number); if(segDistSq(mx,my,a[0],a[1],a[2],a[3])<=2.25) return true; } return false; }
   function reconcileOpenings(){ openings=(openings||[]).filter(function(o){ return o && segMidOnWall(o); }); }
   function openSet(){ var s={}; (openings||[]).forEach(function(o){ s[openKey(o)]=1; }); return s; }
-  // Snap a tap to the nearest FULL-cell door slot; only when none is within reach fall back to a half unit
-  // (a half-cell wall jog that can't fit a full door still accepts one).
+  // Snap a tap to the nearest FULL-cell door slot (one grid box wide). On HALF-grid snap, if no full slot is
+  // within reach, fall back to a half unit (a half-cell wall jog that can't fit a full door still accepts one);
+  // on FULL-grid snap there is no half fallback — a door is always a whole grid box, matching the Snap setting.
   function nearestWallUnit(x,y){ var best=null, bd=1/0, tol=HALF*0.9, k, a, d;
     var full=allDoorUnits();
     for(k in full){ if(!full.hasOwnProperty(k)) continue; a=k.split(",").map(Number); d=segDistSq(x,y,a[0],a[1],a[2],a[3]); if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
     if(best && bd<=tol*tol) return best;
+    if(snap===1) return null;   // full-grid snap → doors are whole boxes only, never a half jog
     var u=allWallUnits(); best=null; bd=1/0;
     for(k in u){ if(!u.hasOwnProperty(k)) continue; a=k.split(",").map(Number); d=segDistSq(x,y,a[0],a[1],a[2],a[3]); if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
     return (best && bd<=(HALF*0.6)*(HALF*0.6)) ? best : null; }
@@ -439,10 +441,25 @@
     edgesOf(new Set(room.cells)).forEach(function(s){ var k=wallKey(s[0],s[1],s[2],s[3]); if(p[k]||seen[k]) return; seen[k]=1; out.push({a:[s[0],s[1]],b:[s[2],s[3]],k:k}); });   // the room boundary minus the building shell
 
     return out; }
-  function nearestInteriorUnit(room,x,y){ var units=roomInteriorUnits(room), best=null, bd=1/0, tol=HALF*0.9;   // tiny visible wall, generous tap target
+  // Snap-aware interior units for Remove Wall. On FULL-grid snap (snap===1) each pair of collinear half units
+  // sharing one FULL-grid cell edge coalesces into ONE tappable unit (both half keys toggled together) so a wall
+  // opens a whole grid box at a time; HALF snap keeps the half units. A leftover odd half (an L-jog) stays alone.
+  // Each unit carries .keys (the half wallKeys to toggle, stored) + .id (stable identity for hover match).
+  function interiorUnits(room){ var half=roomInteriorUnits(room);
+    if(snap!==1) return half.map(function(u){ return {a:u.a,b:u.b,keys:[u.k],id:u.k}; });
+    var byKey={}; half.forEach(function(u){ byKey[u.k]=u; }); var used={}, out=[];
+    half.forEach(function(u){ if(used[u.k]) return; var x1=u.a[0],y1=u.a[1],x2=u.b[0],y2=u.b[1];
+      if(y1===y2){ var fx=Math.floor(Math.min(x1,x2)/FULL)*FULL, k1=wallKey(fx,y1,fx+HALF,y1), k2=wallKey(fx+HALF,y1,fx+FULL,y1);
+        if(byKey[k1]&&byKey[k2]){ used[k1]=used[k2]=1; out.push({a:[fx,y1],b:[fx+FULL,y1],keys:[k1,k2],id:k1+"|"+k2}); return; } }
+      else if(x1===x2){ var fy=Math.floor(Math.min(y1,y2)/FULL)*FULL, j1=wallKey(x1,fy,x1,fy+HALF), j2=wallKey(x1,fy+HALF,x1,fy+FULL);
+        if(byKey[j1]&&byKey[j2]){ used[j1]=used[j2]=1; out.push({a:[x1,fy],b:[x1,fy+FULL],keys:[j1,j2],id:j1+"|"+j2}); return; } }
+      used[u.k]=1; out.push({a:u.a,b:u.b,keys:[u.k],id:u.k}); });
+    return out; }
+  function nearestInteriorUnit(room,x,y){ var units=interiorUnits(room), best=null, bd=1/0, tol=HALF*0.9;   // tiny visible wall, generous tap target
     units.forEach(function(u){ var d=segDistSq(x,y,u.a[0],u.a[1],u.b[0],u.b[1]); if(d<bd){ bd=d; best=u; } }); return (best&&bd<=tol*tol)?best:null; }
   function toggleOpenWallAt(x,y){ if(!sel) return; var wu=nearestInteriorUnit(sel,x,y); if(!wu) return;
-    if(openWalls.has(wu.k)) openWalls.delete(wu.k); else openWalls.add(wu.k); pushHist(); redraw(); }   // open ↔ restore (undoable, autosaved via pushHist)
+    var open=wu.keys.every(function(k){ return openWalls.has(k); });   // toggle the WHOLE unit together (both halves on full snap)
+    wu.keys.forEach(function(k){ if(open) openWalls.delete(k); else openWalls.add(k); }); pushHist(); redraw(); }   // open ↔ restore (undoable, autosaved via pushHist)
   function removeAllWalls(room){ var u=roomInteriorUnits(room); if(!u.length) return; var allOpen=u.every(function(x){return openWalls.has(x.k);});
     u.forEach(function(x){ if(allOpen) openWalls.delete(x.k); else openWalls.add(x.k); }); pushHist(); redraw(); }   // toggle: all-open → restore all, else remove all
   // Drop open-wall keys that are no longer an interior room wall (a structure/room/merge edit reconciles them away).
@@ -538,7 +555,7 @@
     }
     if(mode==="removewall" && sel){      // the selected interior walls: tappable; open ones dotted, hovered one highlighted
       ctx.save(); ctx.lineCap="round";
-      roomInteriorUnits(sel).forEach(function(u){ var open=openWalls.has(u.k), hov=owHover&&owHover.k===u.k;
+      interiorUnits(sel).forEach(function(u){ var open=u.keys.every(function(k){ return openWalls.has(k); }), hov=owHover&&owHover.id===u.id;
         ctx.beginPath(); ctx.moveTo(u.a[0],u.a[1]); ctx.lineTo(u.b[0],u.b[1]);
         if(hov){ ctx.setLineDash([]); ctx.strokeStyle="rgba(185,138,46,.95)"; ctx.lineWidth=4; }
         else if(open){ ctx.setLineDash([3,4]); ctx.strokeStyle="rgba(16,17,18,.3)"; ctx.lineWidth=1.5; }   // open → faint dotted guide

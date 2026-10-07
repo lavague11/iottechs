@@ -33,7 +33,7 @@ const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "c
   "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD", "svgPlanBody"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
-  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), _pushes=0;
+  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), _pushes=0, snap=0.5;
   function pushHist(){ _pushes++; } function redraw(){}
   ${PURE}
   return { key:key, wallKey:wallKey, canonOpening:canonOpening, openKey:openKey, allWallUnits:allWallUnits,
@@ -41,7 +41,7 @@ const api = new Function(`
     toggleOpeningAt:toggleOpeningAt,
     svgBody:function(){ var o=[]; svgPlanBody(o, 3.5, 2, 9); return o.join(""); },
     setCells:function(a){ cells=new Set(a); }, setRooms:function(a){ rooms=a; }, setOpenings:function(a){ openings=a; },
-    getOpenings:function(){ return openings; }, pushes:function(){ return _pushes; } };
+    setSnap:function(s){ snap=s; }, getOpenings:function(){ return openings; }, pushes:function(){ return _pushes; } };
 `)();
 const { key, wallKey, canonOpening, openKey, allWallUnits, nearestWallUnit, sanitizeOpenings, reconcileOpenings, toggleOpeningAt } = api;
 
@@ -152,9 +152,19 @@ test("toggleOpeningAt: a tap far from any wall is ignored (no door, no history)"
   assert.equal(api.pushes(), before, "no history step for a miss");
 });
 test("nearestWallUnit: snaps to the nearest FULL-cell door slot, null beyond reach", () => {
-  api.setCells(box2); api.setRooms([]);
+  api.setCells(box2); api.setRooms([]); api.setSnap(0.5);
   assert.equal(openKey(canonOpening(nearestWallUnit(6.5, 1).a, nearestWallUnit(6.5, 1).b)), "0,0,26,0", "a full-cell door slot");
   assert.equal(nearestWallUnit(500, 500), null, "a far tap snaps to nothing");
+});
+test("nearestWallUnit respects the Snap setting: full-grid snap places whole-box doors with no half fallback", () => {
+  // A lone half-cell has only HALF-length perimeter units (no FULL-cell door slot pairs).
+  api.setCells([key(0, 0)]); api.setRooms([]); api.setOpenings([]);
+  api.setSnap(0.5);
+  const half = nearestWallUnit(6.5, 1);   // half snap → falls back to the half unit
+  assert.ok(half && openKey(canonOpening(half.a, half.b)) === "0,0,13,0", "half snap accepts a half jog");
+  api.setSnap(1);
+  assert.equal(nearestWallUnit(6.5, 1), null, "full snap refuses the half jog — a door is a whole grid box only");
+  api.setSnap(0.5);
 });
 
 // ---------- functional SVG render: the opaque export actually draws the gap + swing arc ----------
