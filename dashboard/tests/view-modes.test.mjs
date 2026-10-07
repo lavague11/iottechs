@@ -57,11 +57,13 @@ test("4.2 survey: hybridCapable requires ctx.src AND planSvg AND bgCtx", () => {
     "hybridCapable gates on all three — a 4.1-only floor (no bgCtx) is NON-capable");
 });
 
-test("4.2 survey: renderView has the three view branches on the shared two-layer stack", () => {
+test("4.2 survey: renderView composes Full / Layered / Plan on the shared two-layer stack", () => {
   const fn = extractFn(survey, "renderView");
-  assert.ok(fn.includes('else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }'), "plan → opaque ctx-framed bg, aerial hidden");
-  assert.ok(fn.includes('else if(v==="satellite"){ aerial.style.display=""; layAerial(aerial, f.ctx); lay(img, null); }'), "satellite → windowed full aerial only, plan layer transparent");
-  assert.ok(fn.includes('layAerial(aerial, f.ctx); lay(img, f.planSvg); }'), "hybrid → windowed full aerial + transparent plan");
+  assert.ok(fn.includes('else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }'), "PLAN → opaque ctx-framed bg, aerial hidden");
+  assert.ok(fn.includes("layAerial(aerial, f.ctx); lay(img, f.planSvg)"), "Layered/Full → windowed full aerial + the transparent plan layer");
+  assert.ok(fn.includes('if(v==="full") img.style.mixBlendMode="multiply"'), "FULL multiplies the plan layer → white interior drops, only geometry stays over the full-colour aerial");
+  const nv = extractFn(survey, "normView");
+  assert.ok(nv.includes('if(x==="full"||x==="satellite") return "full"') && nv.includes('return "layered"'), "legacy satellite→full, hybrid/default→layered");
   assert.ok(fn.includes('c.full && r && r.w>0 && r.h>0'), "layAerial windows the full aerial to the viewport rect");
   assert.ok(fn.includes('backgroundSize="cover"'), "non-capable keeps today's cover bg");
 });
@@ -80,12 +82,11 @@ test("4.2 survey: bgCtx and view carry through restore, createFloor, and duplica
   assert.ok(survey.includes('floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true)'), "a draw result stores bgCtx only when flagged");
 });
 
-test("4.2 survey: the Aerial · Plan · Hybrid view pill is wired with the three data-v values", () => {
-  assert.ok(survey.includes('id="viewSeg"') && survey.includes('aria-label="View"'), "viewSeg group present with an aria-label");
-  assert.ok(survey.includes('class="vbtn" data-v="satellite">Aerial'), "Aerial = satellite");
-  assert.ok(survey.includes('class="vbtn" data-v="plan">Plan'), "Plan = plan");
-  assert.ok(survey.includes('class="vbtn" data-v="hybrid">Hybrid'), "Hybrid = hybrid");
-  assert.ok(survey.includes('f.view=b.getAttribute("data-v"); renderView(); queueSave();'), "clicking a segment sets the floor's view, re-renders and persists");
+test("4.2 survey: the Full / Layered / Plan view selector is a compact drop-up wired to renderView", () => {
+  assert.ok(survey.includes('id="viewSel"') && survey.includes('id="viewMenu"') && survey.includes('aria-label="View"'), "a compact view selector + drop-up menu");
+  assert.ok(survey.includes('data-v="full"') && survey.includes('data-v="layered"') && survey.includes('data-v="plan"'), "Full / Layered / Plan options");
+  assert.ok(survey.includes('f.view=b.getAttribute("data-v"); renderView(); queueSave();'), "picking a preset sets the floor's view, re-renders and persists");
+  assert.ok(!survey.includes('data-v="satellite"') && !survey.includes('>Hybrid<'), "the old Aerial/Hybrid 3-button segmented is gone");
 });
 
 test("a ctx-framed (bgCtx) draw result uses the context-crop feet as the floor scale, not planFeet", () => {

@@ -46,7 +46,7 @@ test("4.4 four .sidechip buttons with the four data-side values live in #working
 
 test("4.4 renderSides is called from renderView, gated on the resolved hybrid view", () => {
   const rv = extractFn(survey, "renderView");
-  assert.ok(rv.includes('renderSides(cap && v==="hybrid")'), "gate expression");
+  assert.ok(rv.includes('renderSides(cap && v!=="plan")'), "gate expression (side chips on the aerial views Layered/Full, not Plan)");
   assert.ok(extractFn(survey, "renderSides").includes('style.display="none"'), "hidden when not shown");
 });
 
