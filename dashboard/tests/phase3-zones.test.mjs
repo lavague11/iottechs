@@ -50,7 +50,7 @@ test("zcGet lazily creates a Set per type; zcClone deep-copies (no shared refs)"
 test("zClassLabel maps a type key to its display label", () => {
   const e = env();
   assert.equal(e.zClassLabel("driveway"), "Driveway");
-  assert.equal(e.zClassLabel("nope"), "Zone");
+  assert.equal(e.zClassLabel("nope"), "Area");
 });
 
 test("zone cells serialize + ride history", () => {
@@ -85,9 +85,11 @@ test("explicit Interior + Exterior classifications exist (after Site) and are ex
   assert.ok(survey.includes("if(ZC_NONAME[t]||!Array.isArray(zoneCells[t])) continue;"), "zcMapOf skips the structural categories");
 });
 
-test("Zones mode UI: segment button + type picker exist and are wired", () => {
-  assert.ok(draw.includes('id="tZones"'), "Zones segment button");
-  assert.ok(draw.includes('id="zoneTypeSel"'), "zone type picker");
-  assert.ok(draw.includes('setMode(mode==="zone" ? "structure" : "zone")'), "Zones button toggles the mode");
-  assert.ok(draw.includes('var edit = m==="structure"||m==="zone";'), "Add/Erase + snap apply in Zones mode too");
+test("Area mode UI: the compact selector offers Area + the type picker is wired", () => {
+  assert.ok(draw.includes('id="modeSel"') && draw.includes('<div class="moremenu" id="modeMenu"'), "compact drop-up mode selector");
+  assert.ok(/data-m="zone"[^>]*>\s*<svg class="mchk"[^>]*>.*?<\/svg>\s*Area/.test(draw), "the selector's Area option (maps to the zone mode internally)");
+  assert.ok(draw.includes('id="zoneTypeSel"') && draw.includes('aria-label="Area type"'), "Area type picker");
+  assert.ok(draw.includes('var edit = m==="structure"||m==="zone";'), "Add/Erase + snap apply in Area mode too");
+  // the old Structure|Room|Zones segmented control is gone
+  assert.ok(!draw.includes('id="tZones"') && !draw.includes('id="modeSeg"'), "the three-button segmented control is removed");
 });

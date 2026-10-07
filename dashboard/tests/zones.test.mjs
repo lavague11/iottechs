@@ -261,9 +261,9 @@ test("zones are carried through restore, create and duplicate (deep copies) — 
   assert.ok(!/survey2Meaning[\s\S]{0,1800}zones/.test(td), "zones are planning overlay, not part of the approved meaning");
 });
 
-test("zone chrome: sub-selector (Boundary | Zone) in Regions only, type picker lists the 9 types, icon-only bin has an aria-label", () => {
-  assert.ok(survey.includes('id="rgKind"') && survey.includes('data-k="boundary">Boundary<') && survey.includes('data-k="zone">Zone<'));
-  assert.ok(/id="zoneDel"[^>]*aria-label="Delete zone"/.test(survey));
+test("area chrome: sub-selector (Boundary | Area) in Regions only, type picker lists the 9 types, icon-only bin has an aria-label", () => {
+  assert.ok(survey.includes('id="rgKind"') && survey.includes('data-k="boundary">Boundary<') && survey.includes('data-k="zone">Area<'), "the exterior-region tab reads Area (zone stays internal)");
+  assert.ok(/id="zoneDel"[^>]*aria-label="Delete area"/.test(survey));
   assert.ok(/id="zonePop"[^>]*role="dialog"/.test(survey));
   assert.ok(extractFn(survey, "updateRegionUI").includes("regionMode&&!frozen()"), "rgBar shows only while editing");
   assert.ok(extractFn(survey, "setRegionMode").includes('rgTarget={kind:"boundary"}'), "leaving Regions returns to the boundary target");
