@@ -206,6 +206,7 @@
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           <button id="mImportZones" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 13v5m-2-3 2-2 2 2"/></svg> Import areas</button>
           <button id="mRenameRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg> Rename</button>
+          <button id="mRotateStairs" style="display:none"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg> Rotate stairs</button>
           <button id="mMergeRoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
           <button id="mRemoveWall" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 9h5M16 9h5M3 15h7M14 15h7"/><path d="M12 4v16"/></svg> <span id="mRemoveWallTxt">Remove wall</span></button>
           <button id="mRemoveAllWalls" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 9h18M3 15h18"/><path d="M8 4v16M16 4v16" stroke-dasharray="3 3"/></svg> <span id="mRemoveAllWallsTxt">Remove all</span></button>
@@ -479,9 +480,20 @@
     ctx.fillStyle="rgba(255,255,255,.80)";   // the floor plan reads WHITE over the full-colour aerial (a wash, not fully opaque)
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
     paintWalls(boundaryEdges(), "#111", 3.5); }
+  // A Stairs room (semanticType "stairs") renders repeated TREAD lines instead of a plain interior — still a normal
+  // Room (geometry/metrics/containment unchanged). Orientation: 0/180 → vertical travel (horizontal treads), 90/270 →
+  // horizontal travel (vertical treads). Default from the room's longest axis. The canonical grid still exists for snapping.
+  function isStairs(r){ return r && r.semanticType==="stairs"; }
+  function stairOrient(r){ var o=+(r&&r.stairOrientation); if(o===0||o===90||o===180||o===270) return o; var bb=cellsBBoxPx((r&&r.cells)||[]); return (bb.h>=bb.w)?0:90; }
+  function stairTreads(r){ var bb=cellsBBoxPx(r.cells||[]), horiz=(stairOrient(r)%180===0), span=horiz?bb.h:bb.w, n=Math.max(4,Math.min(16,Math.round(span/11))), step=span/n, out=[], i;
+    for(i=1;i<n;i++){ var t=(horiz?bb.y:bb.x)+i*step; out.push(horiz?[bb.x,t,bb.x+bb.w,t]:[t,bb.y,t,bb.y+bb.h]); } return out; }
+  function drawStairs(r,set){ ctx.save(); ctx.beginPath(); set.forEach(function(k){ var a=k.split(","); ctx.rect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); ctx.clip();   // clip the treads to the room polygon
+    ctx.strokeStyle="rgba(16,17,18,.55)"; ctx.lineWidth=1.2; ctx.beginPath();
+    stairTreads(r).forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke(); ctx.restore(); }
   function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;
     ctx.fillStyle= on ? "rgba(255,255,255,.94)" : "rgba(255,255,255,.88)";   // white interior; selection shows via the gold wall + contextual grid, not a dark tint
     set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
+    if(isStairs(r)) drawStairs(r,set);   // architectural stair treads (clipped), under the walls
     paintWalls(edgesOf(set), on ? "#b98a2e" : "#2b2f36", on ? 2.4 : 2);
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
     var lc=roomLabelCell(r.cells||[]), cx=lc[0], cy=lc[1], maxW=Math.max(20,bb.w-12);   // pole-of-inaccessibility anchor (stays inside concave rooms)
@@ -595,11 +607,11 @@
   // Enforce ROOM ⊆ STRUCTURE: keep only room cells the structure still occupies. Also migrates any legacy
   // normalized-rect rooms ({x,y,w,h}) into structure-clamped cells. Run on load and after every structure edit.
   function reconcileRooms(){ rooms=(rooms||[]).map(function(r){
-      var sem=(r&&r.semanticType)||"";
-      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"", semanticType:sem };
+      var sem=(r&&r.semanticType)||"", so=(r&&(r.stairOrientation===0||r.stairOrientation===90||r.stairOrientation===180||r.stairOrientation===270))?r.stairOrientation:undefined;   // preserve the stair orientation across reconcile
+      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"", semanticType:sem, stairOrientation:so };
       if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
-        return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem }; }
-      return { cells:[], label:(r&&r.label)||"", semanticType:sem };
+        return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem, stairOrientation:so }; }
+      return { cells:[], label:(r&&r.label)||"", semanticType:sem, stairOrientation:so };
     }).filter(function(r){ return r.cells.length>0; }); reconcileOpenings(); reconcileOpenWalls(); reconcileAreas(); }   // a door / open-wall whose wall no longer exists drops with it; an area cell now inside the building drops (Structure wins)
   // AREA ⊄ STRUCTURE: drop any area cell the building now occupies (so a device there stays INDOOR, never outdoor).
   function reconcileAreas(){ var ch=false; (areas||[]).forEach(function(a){ var n=(a.cells||[]).length; a.cells=(a.cells||[]).filter(function(k){ var p=k.split(","); return !has(+p[0],+p[1]); }); if(a.cells.length!==n) ch=true; });
@@ -918,10 +930,16 @@
       if(inD) return;
       d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; }); return d; }
   // Shared middle of both exports (room fills + walls, structure boundary, labels) — one copy so the sketch and the layer can't drift.
+  // Stair treads for the export — clipped to the room polygon (vector, crisp at any zoom). Unique clip id per use.
+  var _stClip=0;
+  function stairsSVG(r){ var set=new Set(r.cells||[]); if(!set.size) return ""; var d=""; stairTreads(r).forEach(function(s){ d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; }); if(!d) return "";
+    var cid="st"+(++_stClip), rects=""; set.forEach(function(k){ var a=k.split(","); rects+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
+    return '<clipPath id="'+cid+'">'+rects+'</clipPath><path d="'+d+'" fill="none" stroke="#2b2f36" stroke-opacity="0.6" stroke-width="1" vector-effect="non-scaling-stroke" clip-path="url(#'+cid+')"/>'; }
   function svgPlanBody(o, swS, swR, fs){ var segs=openings||[], hit=[];
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
       var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
       o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
+      if(isStairs(r)) o.push(stairsSVG(r));   // architectural treads instead of a blank rectangle
       var rp=wallPathD(edgesOf(set), segs, hit);
       if(rp) o.push('<path d="'+rp+'" fill="none" stroke="#111" stroke-width="'+swR+'" stroke-linecap="round" stroke-linejoin="round"/>'); });
     var sp=wallPathD(boundaryEdges(), segs, hit);
@@ -1040,6 +1058,7 @@
   $("tMore").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu();
     var on=!$("moreMenu").classList.contains("on"); if(on){ var area=isAreaSel(), hasRoom=!!(sel && !area && Array.isArray(sel.cells)), sel2=hasRoom||area, hasInt=hasRoom && roomInteriorUnits(sel).length>0;
       $("mRenameRoom").style.display=sel2?"":"none";   // Rename works for a room OR an area
+      $("mRotateStairs").style.display=(hasRoom && isStairs(sel))?"":"none";   // only a Stairs room
       $("mDeleteRoom").style.display=sel2?"":"none"; $("mDeleteRoomTxt").textContent=area?"Delete area":"Delete room"; $("mMergeRoom").style.display=(hasRoom&&rooms.length>1)?"":"none";
       $("mRemoveWall").style.display=(hasRoom&&hasInt)?"":"none"; $("mRemoveWallTxt").textContent=(mode==="removewall"?"Done":"Remove wall");   // rooms only
       var allOpen=hasInt && roomInteriorUnits(sel).every(function(u){ return openWalls.has(u.k); });
@@ -1047,6 +1066,7 @@
       var mc=$("mCleanTxt"); if(mc) mc.textContent = !enhancedURL ? "Enhance" : (enhanceStale() ? "Update" : "View"); }   // the wand IS the stale indicator in draw mode: Enhance (none) / Update (stale) / View (fresh cache)
     $("moreMenu").classList.toggle("on"); });
   $("mRenameRoom").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); openLabel(sel, isAreaSel()); });   // explicit rename (room or area)
+  $("mRotateStairs").addEventListener("click", function(){ if(busy||!sel||!isStairs(sel)) return; closeMore(); sel.stairOrientation=(stairOrient(sel)+90)%360; pushHist(); redraw(); });   // rotate tread direction 90°
   $("mRemoveWall").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); setMode(mode==="removewall" ? "room" : "removewall"); });
   $("mRemoveAllWalls").addEventListener("click", function(){ if(busy||!sel) return; closeMore(); removeAllWalls(sel); });
   $("mMergeRoom").addEventListener("click", function(){ if(busy||!sel) return; startMerge(); });
