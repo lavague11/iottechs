@@ -16,6 +16,11 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
     const floors = parseSurveyFloors(surveyData);
     if (!floors.length) return resolve([]);
     const all = surveyDevices(floors);
+    // Grid is a survey-wide display setting (0 off · 1 light · 2 full), the SAME one the planner's
+    // Show ▸ Grid toggle sets. Default OFF — a finished plan looks finished; the export only draws the
+    // grid (and its "1 box = N ft" scale chip) when the owner turned it on, mirroring the planner.
+    let gridMode = 0;
+    try { const d = typeof surveyData === "string" ? JSON.parse(surveyData) : surveyData; if (d && typeof d.gridMode === "number") gridMode = Math.max(0, Math.min(2, d.gridMode | 0)); } catch { /* default off */ }
 
     const loadImg = (src) => new Promise((res) => {
       const im = new Image();
@@ -36,10 +41,10 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       if (!ctx) return null;
       // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(im, 0, 0, W, H);
-      // Layer 1b — scaled grid: a ctx-framed plan SVG is drawn gridless (the planner overlays its grid), so the
-      // customer PDF would lose the "1 box = N ft" scale cue. Re-draw the SAME grid here. Skipped for a plain
-      // hand-drawn plan (it keeps its own baked grid — avoid doubling) and for raster/aerial backgrounds.
-      drawExportGrid(ctx, f.bg, (f.scale && f.scale.ftW > 0) ? f.scale.ftW : 0, W, H);
+      // Layer 1b — scaled grid: a ctx-framed plan SVG is drawn gridless (the planner overlays its grid). When
+      // the owner has Grid ON (gridMode > 0) re-draw the SAME grid + "1 box = N ft" scale chip here; default OFF
+      // draws nothing. Skipped for a plain hand-drawn plan (its own baked grid — avoid doubling) and raster bgs.
+      drawExportGrid(ctx, f.bg, (f.scale && f.scale.ftW > 0) ? f.scale.ftW : 0, W, H, gridMode);
       // Layer 1c — estimated site context: zones (translucent, labeled) + boundary (dashed). Same plate-% polygons the planner draws.
       drawExportRegions(ctx, f, W, H);
       // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
@@ -115,11 +120,13 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
   });
 }
 
-// The ctx-framed plan's grid, re-drawn on the export canvas so the customer PDF keeps the "1 box = N ft" scale cue.
-// Only for an inline SVG plan that has a viewBox + known scale AND no baked grid pattern (ctx plans are gridless;
-// hand-drawn plans bake their own grid — drawing here would double it). One grid box = FULL (26) plan-px.
-function drawExportGrid(ctx, bg, ftW, W, H) {
+// The ctx-framed plan's grid, re-drawn on the export canvas (and the "1 box = N ft" scale chip) — but ONLY when
+// the survey's Grid setting is on (gridMode: 1 light · 2 full; 0/absent = off, the default). Mirrors the planner's
+// Show ▸ Grid exactly. Only for an inline SVG plan that has a viewBox + known scale AND no baked grid pattern (ctx
+// plans are gridless; hand-drawn plans bake their own grid — drawing here would double it). One grid box = FULL (26) plan-px.
+function drawExportGrid(ctx, bg, ftW, W, H, gridMode = 0) {
   try {
+    if (!(gridMode > 0)) return;   // Grid OFF (default) → draw neither the lines nor the scale chip
     if (!(ftW > 0) || typeof bg !== "string" || bg.indexOf("data:image/svg") !== 0) return;
     const i = bg.indexOf(","); if (i < 0) return;
     const svg = /;base64/.test(bg.slice(0, i)) ? atob(bg.slice(i + 1)) : decodeURIComponent(bg.slice(i + 1));
@@ -132,7 +139,7 @@ function drawExportGrid(ctx, bg, ftW, W, H) {
     if (!(step >= 6)) return;   // too dense to read → skip
     const offx = (Math.ceil(x0 / FULL) * FULL - x0) * sx, offy = (Math.ceil(y0 / FULL) * FULL - y0) * sy;
     ctx.save();
-    ctx.strokeStyle = "rgba(16,20,24,.14)"; ctx.lineWidth = 1;
+    ctx.strokeStyle = gridMode === 1 ? "rgba(16,20,24,.07)" : "rgba(16,20,24,.14)"; ctx.lineWidth = 1;   // Light faint · Full base weight
     for (let x = offx; x <= W; x += step) { ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, 0); ctx.lineTo(Math.round(x) + 0.5, H); ctx.stroke(); }
     for (let y = offy; y <= H; y += FULL * sy) { ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(W, Math.round(y) + 0.5); ctx.stroke(); }
     // "1 box = N ft" chip, bottom-left
