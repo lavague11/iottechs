@@ -263,9 +263,11 @@
   #bgMore svg{width:18px;height:18px;fill:currentColor;stroke:none}
   #bgMenu{order:-1;min-width:210px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(16,17,18,.16);padding:5px;display:none;flex-direction:column}
   #planMore.menu #bgMenu{display:flex}
-  #bgMenu #buildPlanBtn{display:flex;align-items:center;gap:9px;width:100%;background:none;border:0;border-radius:7px;padding:9px 11px;color:var(--ink);cursor:pointer;font:700 13px var(--sans);text-align:left;white-space:nowrap}
-  #bgMenu #buildPlanBtn:hover{background:rgba(16,17,18,.06)}
-  #bgMenu #buildPlanBtn svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;color:var(--gold)}
+  #bgMenu button{display:flex;align-items:center;gap:9px;width:100%;background:none;border:0;border-radius:7px;padding:9px 11px;color:var(--ink);cursor:pointer;font:600 13px var(--sans);text-align:left;white-space:nowrap}
+  #bgMenu #buildPlanBtn{font-weight:700}
+  #bgMenu button:hover{background:rgba(16,17,18,.06)}
+  #bgMenu button svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  #bgMenu #buildPlanBtn svg{color:var(--gold)}
   /* ===== satellite overlay (the sub-tool, opened from the Satellite door) ===== */
   .satov{position:fixed;inset:0;background:#fff;z-index:50;display:none;flex-direction:column}
   .satov.show{display:flex}
@@ -609,7 +611,7 @@
           </div>
           <!-- bottom-right ••• overflow (drop-up): the rare build action — stacked just above the Show control -->
           <div id="planMore">
-            <div id="bgMenu" role="menu"><button id="buildPlanBtn" title="Outline the working area, set the grid, draw the structure"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button></div>
+            <div id="bgMenu" role="menu"><button id="buildPlanBtn" title="Outline the working area, set the grid, draw the structure"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button><button id="replaceBgBtn" title="Start over from a new background source (Satellite / Upload / Draw)"><svg viewBox="0 0 24 24"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button></div>
             <button id="bgMore" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
@@ -833,9 +835,13 @@
     function updateBgActions(){ var w=document.getElementById("bgActions");
       var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);
       if(w) w.style.display = show ? "flex" : "none";
-      var pm=document.getElementById("planMore"), canB=(show && canBuild(f)); if(pm){ pm.style.display = canB ? "flex" : "none"; if(!canB) closeBgMenu(); } }
+      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display = (show && canBuild(f)) ? "flex" : "none";   // Create Hybrid only on an aerial-not-yet-plan floor
+      var pm=document.getElementById("planMore"); if(pm){ pm.style.display = show ? "flex" : "none"; if(!show) closeBgMenu(); } }   // the ••• (Replace background, + Create Hybrid when available) shows over any real background
     document.getElementById("bgMore").addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return;
       var w=document.getElementById("planMore"), open=!w.classList.contains("menu"); w.classList.toggle("menu",open); this.setAttribute("aria-expanded",open?"true":"false"); });
+    // Replace background — the deliberate "start over from a new source" action (distinct from Edit background, which reopens the CURRENT tool/state). Opens the Satellite/Upload/Draw chooser.
+    document.getElementById("replaceBgBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
+      satFrame.style.display="none"; document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; });
     document.addEventListener("click", function(e){ var w=document.getElementById("planMore"); if(w && w.classList.contains("menu") && !w.contains(e.target)) closeBgMenu(); });   // tap-away closes the overflow
     // Build Floor Plan — outline the EXISTING aerial IN PLACE (no derived floor): reopen the satellite in a focused
     // OUTLINE-ONLY mode (distinct &buildplan=1 src → the shared frame reloads clean into/out of this mode) on THIS
