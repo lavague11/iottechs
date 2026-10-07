@@ -41,7 +41,8 @@ export function buildStops(floors, photos = []) {
       kc[kind]++;
       if (!isStopDevice(d, kind)) return;
       n++;
-      const label = (d.name && String(d.name).trim()) || `${kind === "spk" ? "Speaker" : "Camera"} ${kc[kind]}`;
+      // One canonical display name: WHERE it is (geometry-derived location "Dining 1") wins; the permanent identity is the fallback.
+      const label = (d.locName && String(d.locName).trim()) || (d.name && String(d.name).trim()) || `${kind === "spk" ? "Speaker" : "Camera"} ${kc[kind]}`;
       out.push({
         fi, di, kind, dev: d, floor: f, n, kn: kc[kind], name: label,
         key: d.cid || `${fi}:${kind}:${kc[kind]}`,

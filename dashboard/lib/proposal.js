@@ -810,7 +810,9 @@ function techWorkOrder(payload) {
 // staff-only, editable surfaces where a wrong guess is visible and correctable — never for customers.
 export function cameraNameOverrides(services, roster, { byPosition = false } = {}) {
   const list = Array.isArray(roster) ? roster : [];
-  const byCid = new Map(list.filter((c) => c && c.id).map((c) => [c.id, c.name]));
+  // Prefer the geometry-derived location name ("Dining 1"); fall back to the camera's identity name.
+  const dispName = (c) => (c && c.locName && String(c.locName).trim()) || (c && c.name) || "";
+  const byCid = new Map(list.filter((c) => c && c.id).map((c) => [c.id, dispName(c)]));
   const out = new Map();
   (services || []).forEach((s) => {
     if (s.key !== "camera") return;
@@ -818,7 +820,7 @@ export function cameraNameOverrides(services, roster, { byPosition = false } = {
     (s.items || []).forEach((it) => {
       if (!((it.sub || []).length > 0)) return;         // camera blocks carry the labor sub-items; NVR/drive don't
       const linked = it.camera_id && byCid.has(it.camera_id) ? byCid.get(it.camera_id) : null;
-      const byPos = byPosition && list[pos] ? list[pos].name : null;
+      const byPos = byPosition && list[pos] ? dispName(list[pos]) : null;
       const nm = (linked || byPos || "").trim();
       if (nm) out.set(it.id, nm);
       pos++;

@@ -59,7 +59,9 @@ export function surveyDevices(floors) {
     const code = String(d.tag || "").replace(/^I/, "") || `${g.letter}${perGroup[g.key]}`;
     out.push({
       id: d.id, floor: fi, floorName: f.name, k: d.k, kindName: it.name, group: g.key, color: d.color || g.color,
-      code, label: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
+      // label = WHERE it is (geometry-derived location "Dining 1"), falling back to identity; identity + placement ride alongside for detail/selection.
+      code, label: cap((d.locName && String(d.locName).trim()) || (d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
+      identity: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`), placementType: d.placementType || "",
       x: Math.max(0, Math.min(100, num(d.x))), y: Math.max(0, Math.min(100, num(d.y))),
       cone: !!(it.cone || d.cone), aimed: !!d.aimed || num(d.aim) !== 0, aim: num(d.aim), fov: num(d.fov, it.fov || 30),
       // Speakers cover a circle (a radius), not an aimed wedge — range is a percent of the floor's short side.

@@ -45,7 +45,7 @@ export default function SurveyCameras({ accessId, view, customerView }) {
   }, [accessId]);
   useEffect(() => { load(); }, [load]);
 
-  const label = (c, i) => (c.name && c.name.trim()) || c.tag || `Camera ${i + 1}`;
+  const label = (c, i) => (c.locName && c.locName.trim()) || (c.name && c.name.trim()) || c.tag || `Camera ${i + 1}`;   // location name ("Dining 1") first, identity as fallback
 
   // Upload the file to /api/media (HEIC-safe, returns a small URL), then patch the survey camera.
   async function attach(idx, file) {

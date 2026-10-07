@@ -6099,7 +6099,9 @@ export function getProjectCameras(accessId) {
         if (dev && dev.k === "cam") {
           out.push({
             id: dev.cid || null,            // stable camera id (stamped on proposal import) — the target of proposal_line_item.camera_id
-            name: dev.name || null,
+            name: dev.name || null,          // permanent identity (e.g. "Camera 5")
+            locName: dev.locName || null,    // geometry-derived location name (e.g. "Dining 1") — the preferred display label
+            placementType: dev.placementType || null,   // "inside" | "outside"
             tag: dev.tag || null,
             photo: dev.photo || null,       // /api/media/:id (or a legacy/fallback data-URL)
             photoName: dev.photoName || null,
