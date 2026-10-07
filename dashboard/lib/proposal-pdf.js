@@ -4,6 +4,7 @@ import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_
 import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
+import { PROPOSAL_TERMS } from "./proposal-terms.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -11,24 +12,10 @@ import { LAND, surveySheetBody } from "./pdf-chrome.js";
 // per-service proposal data model instead of the legacy flat LABOR/EQUIPMENT sections.
 const money = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Terms & Conditions — the standard contract language printed last in every proposal. Edit here to change
-// the wording (one source). Each clause = a short heading + body; rendered as numbered, paginated portrait
-// pages after the survey + mockup appendix. These are sensible industry defaults — have counsel review.
-export const PROPOSAL_TERMS = [
-  { h: "Acceptance & Scope", b: "This proposal defines the agreed scope of work, equipment, and pricing. Only the items listed are included; anything not expressly stated is excluded and requires a written change order. Signing the Acceptance, issuing a deposit, or authorizing work constitutes acceptance of these terms." },
-  { h: "Pricing & Validity", b: "Prices are valid for 30 days from the issue date and may be revised after that period or if quantities, materials, or site conditions change. Prices exclude applicable sales tax unless stated." },
-  { h: "Payment", b: "Payment is due per the Payment Terms schedule above. Past-due balances may accrue a service charge of 1.5% per month (or the maximum allowed by law), and work may be suspended until the account is current. Deposits are applied to the final balance." },
-  { h: "Change Orders", b: "Changes to the scope, materials, device locations, or conditions discovered during the work are billed as additions at then-current rates and may affect the schedule. No change is binding until documented." },
-  { h: "Site Access & Conditions", b: "The customer provides safe, timely access to all work areas, adequate 120V power, and a cleared work space. Delays, concealed conditions (e.g., inaccessible cable paths, hazardous materials, inadequate structure), or network/internet issues outside our control may incur additional charges." },
-  { h: "Permits, Codes & Approvals", b: "Installation is performed to applicable codes and manufacturer specifications. Permit fees, inspections, HOA or landlord approvals, and any required low-voltage licensing fees are the customer's responsibility unless expressly included." },
-  { h: "Equipment & Title", b: "Title to equipment passes to the customer upon receipt of full payment; risk of loss passes upon delivery or installation. We may substitute equipment of equal or greater capability when a specified item is unavailable." },
-  { h: "Warranty", b: "Workmanship is warranted for 12 months from completion (or as stated for the project). Manufacturer warranties pass through to the customer. Warranty excludes damage from misuse, power surges or outages, acts of nature, tampering, relocation, or changes made by others." },
-  { h: "Monitoring & Service", b: "Ongoing monitoring, maintenance, and service plans, where applicable, are governed by separate agreements and are not included in this proposal unless expressly stated." },
-  { h: "Data, Recording & Privacy", b: "The customer is solely responsible for lawful use of cameras, recordings, and audio, including any notices or consent required by law, and for safeguarding access credentials and recorded footage." },
-  { h: "Limitation of Liability", b: "Security and low-voltage systems reduce but do not eliminate risk, and IOT TECHS is not an insurer. To the maximum extent permitted by law, our total liability is limited to the amount paid for the work, and we are not liable for indirect, incidental, or consequential damages, including loss or theft of property." },
-  { h: "Cancellation", b: "Cancellation after acceptance may incur charges for work already performed, non-returnable or special-order items, restocking fees, and a reasonable cancellation fee. Refund of any remaining deposit is net of these amounts." },
-  { h: "Entire Agreement", b: "This proposal, together with the Payment Terms and Acceptance, is the entire agreement and supersedes prior discussions. It is governed by the laws of the state where the work is performed. If any provision is unenforceable, the remainder stays in effect." },
-];
+// Terms & Conditions — printed last in every proposal (portrait, numbered, paginated after the survey +
+// mockup appendix). The language lives in ONE place (lib/proposal-terms.js) shared with the on-screen
+// acceptance flow, so what the customer signs matches the document. Re-exported for back-compat.
+export { PROPOSAL_TERMS };
 
 // attachments (optional): { mockupPhotos: [dataURL...], surveyImages: [{name, img:dataURL}...] }.
 // Both are appended after the priced options — the mockup photos and the pinned site-survey floor

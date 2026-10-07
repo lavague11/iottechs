@@ -26,13 +26,14 @@ function typedToImg(name) {
 
 export default function ProposalSignModal({
   open, heading, subheading, reference, defaultName, showTitle = false,
-  agreeText = DEFAULT_AGREE, accent = "var(--gold)", busy, onConfirm, onCancel,
+  agreeText = DEFAULT_AGREE, terms = null, termsHeading = "Terms & Conditions", accent = "var(--gold)", busy, onConfirm, onCancel,
 }) {
   const [name, setName] = useState(defaultName || "");
   const [jobTitle, setJobTitle] = useState("");
   const [agree, setAgree] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
-  useEffect(() => { if (open) { setName((n) => n || defaultName || ""); setAgree(false); } }, [open, defaultName]);
+  useEffect(() => { if (open) { setName((n) => n || defaultName || ""); setAgree(false); setShowTerms(false); } }, [open, defaultName]);
 
   const clean = titleCase(name).trim();
   const canSign = clean.length >= 2 && agree && !busy;
@@ -73,6 +74,21 @@ export default function ProposalSignModal({
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
             <span>{agreeText}</span>
           </label>
+
+          {terms?.length ? (
+            <div className="psm-terms-wrap">
+              <button type="button" className="psm-termslink" aria-expanded={showTerms} onClick={() => setShowTerms((s) => !s)}>
+                {showTerms ? `Hide ${termsHeading}` : `Read the full ${termsHeading}`}
+              </button>
+              {showTerms && (
+                <div className="psm-terms" role="region" aria-label={termsHeading}>
+                  {terms.map((t, i) => (
+                    <p key={i}><b>{i + 1}. {t.h}.</b> {t.b}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
 
           <div className="psm-actions">
             <button type="button" className="psm-btn go" disabled={!canSign} onClick={confirm}>
@@ -115,6 +131,13 @@ const PSM_CSS = `
 .psm-preview .psm-ph{font-family:inherit;font-size:.82rem;color:var(--dv-faint,#A1A6AC);font-style:italic}
 .psm-agree{display:flex;align-items:flex-start;gap:9px;margin:16px 0 6px;font-size:.78rem;color:var(--dv-ink-soft,#3A4048);line-height:1.55;cursor:pointer}
 .psm-agree input{width:17px;height:17px;margin-top:1px;accent-color:var(--dv-ink,#101418);flex:0 0 auto}
+.psm-terms-wrap{margin:2px 0 2px 26px}
+.psm-termslink{background:none;border:none;padding:0;font-family:inherit;font-size:.76rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.psm-termslink:hover{color:var(--dv-ink,#101418)}
+.psm-terms{margin-top:8px;max-height:200px;overflow:auto;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-paper,#F4F4F2);padding:12px 14px}
+.psm-terms p{margin:0 0 9px;font-size:.72rem;line-height:1.55;color:var(--dv-ink-soft,#3A4048)}
+.psm-terms p:last-child{margin-bottom:0}
+.psm-terms b{color:var(--dv-ink,#101418);font-weight:600}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
 /* The signable action — DocuSign signing-field style: soft yellow fill, blue field border. */

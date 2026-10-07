@@ -39,6 +39,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
+import { PROPOSAL_TERMS } from "../../../lib/proposal-terms";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -913,7 +914,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         subheading={signFor ? `${optName(signFor)} · ${money(optionTotals(p.payload.options.find((o) => o.id === signFor), p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand)}` : ""}
         reference={propNum}
         defaultName={p.signed_name || customerName || ""}
-        agreeText="I have reviewed and agree to the scope, terms, and pricing of this proposal, and I authorize it to proceed."
+        agreeText="I have reviewed and agree to the scope and pricing of this proposal and to the Terms & Conditions, and I authorize it to proceed."
+        terms={PROPOSAL_TERMS}
         accent="var(--gold)"
         busy={busy}
         onConfirm={(sign) => doAccept(signFor, sign)}
