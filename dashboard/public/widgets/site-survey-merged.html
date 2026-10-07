@@ -902,7 +902,7 @@
       if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
-      fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; queueSave(); });   // a real Structure now lives on the floor → stop passing lidx
+      fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; if(fl===floors[curFloor]){ renderView(); reconcileLocations(); } queueSave(); });   // new Structure/rooms → refresh the room layer + re-resolve camera locations
     // Draw tool's floor selector: it already flushed its plan (iotPlanSave, ordered before this) -> save this floor, switch, and reopen the structure editor on the new one (new &floor/&fid = fresh iotPlanReady/Load).
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawFloor"||!ev.source||ev.source!==satFrame.contentWindow) return;
       var i=m.i; if(frozen()||bgToolOpen!=="draw"||typeof i!=="number"||i%1!==0||i<0||i>=floors.length||i===curFloor) return;
@@ -1498,7 +1498,7 @@
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
       var defRange = pxPerFt()>0 ? (REACH_FT[k] || (it.ring?18:40)) : RANGE;   // scaled floor → real-foot default reach; else legacy px
       var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
-      devices.push(d); mountDevice(d); renderPanel(); updateCount(); queueSave(); }
+      devices.push(d); mountDevice(d); renderPanel(); updateCount(); reconcileLocations(); queueSave(); }   // a new camera resolves its room/zone location name on placement
     // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
     function mountDevice(d){
@@ -1529,7 +1529,7 @@
       var dot=el.querySelector(".devDot"); if(dot) dot.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
-      lab.textContent=cap((d.name&&d.name.trim())||d.tag);   // label by NAME (matches the roster, mockup + walkthrough), title-cased; tag only if unnamed
+      lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag);   // the map emphasizes WHERE (location name "Dining 1"); falls back to the identity name/tag when no location is resolved
       lab.title=lab.textContent;
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
@@ -1661,9 +1661,37 @@
     // widget glue — memoised per panel render (O(n) coverage runs, not O(n²)); invalidated on renderPanel / any queueSave
     function sugOpts(f){ return { vb:(f&&hybridCapable(f))?planViewBox(f.planSvg):null, scale:curFloorScale||(f&&f.scale)||null, aspect:sceneAspect>0?sceneAspect:1, sceneW:scene?scene.clientWidth:0, cat:cat, zcMap:(f&&f.plan)?zcMapOf(f.plan.zoneCells):null }; }
     function sugFor(d){ if(!sugMap){ var f=floors[curFloor]||{}, nm=[]; try{ nm=suggestDeviceNames(devices,f,sugOpts(f)); }catch(e){} sugMap={}; devices.forEach(function(x,i){ sugMap[x.id]=nm[i]||""; }); } return sugMap[d.id]||""; }
-    function sugShown(d){ var s=sugFor(d); return (!frozen() && s && s.toLowerCase()!==String(d.name||"").trim().toLowerCase()) ? s : ""; }   // staff only, and only when it adds something
+    function sugShown(d){ if(d && d.k==="cam") return ""; var s=sugFor(d); return (!frozen() && s && s.toLowerCase()!==String(d.name||"").trim().toLowerCase()) ? s : ""; }   // cameras use the auto location name (d.locName); the suggestion row stays for speakers/other
     function paintSug(card,d){ var row=card.querySelector(".sug"), s; if(!row) return; s=sugShown(d); row.style.display=s?"flex":"none"; row.querySelector(".sv").textContent=s; }
     function refreshSugs(){ sugMap=null; try{ [].forEach.call(panelBody.querySelectorAll(".card"), function(c){ var d=byIdDev(+c.dataset.devId); if(d) paintSug(c,d); }); }catch(e){} }   // display only — never touches d.name
+    // ---- Device LOCATION model (deterministic, geometry-only). THREE separate concepts, never merged:
+    //   identity  = d.name ("Camera 5") + d.tag ("IC5") + d.cid  — permanent; NEVER auto-written.
+    //   location  = d.locName ("Dining 1") — <Room/Zone display name> + sequence WITHIN that location.
+    //   placement = d.placementType ("inside" | "outside") — from canonical Structure containment.
+    // The canvas shows the LOCATION; identity stays in the record. Per-location sequence is STABLE (stored
+    // d.locSeq/d.locKey): a new camera in a room takes the next number; deleting one does not reshuffle. ----
+    function rmDevCtx(d, f, o){ var vb=o&&o.vb, plan=f&&f.plan, res={placementType:"",roomIdx:-1,base:""};
+      if(!vb||!(vb.vw>0)||!(vb.vh>0)||!plan||!sugOk(d.x)||!sugOk(d.y)) return res;
+      var c=Math.floor((vb.x0+(+d.x)/100*vb.vw)/SUG_HALF), r=Math.floor((vb.y0+(+d.y)/100*vb.vh)/SUG_HALF), key=c+","+r;
+      var rooms=Array.isArray(plan.rooms)?plan.rooms:[];
+      function roomAt(k){ for(var i=0;i<rooms.length;i++){ var rm=rooms[i]; if(rm&&Array.isArray(rm.cells)&&rm.cells.indexOf(k)>=0) return i; } return -1; }
+      var ri=roomAt(key);
+      if(ri<0){ var N=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]; for(var j=0;j<N.length&&ri<0;j++) ri=roomAt((c+N[j][0])+","+(r+N[j][1])); }   // wall-mount tolerance: the anchor may sit on a boundary cell
+      var inStruct = ri>=0 || (Array.isArray(plan.cells)&&plan.cells.indexOf(key)>=0);
+      var zt=null, zc=plan.zoneCells; if(zc){ for(var t in zc){ if(t==="site"||t==="interior"||t==="exterior"||!Array.isArray(zc[t])) continue; if(zc[t].indexOf(key)>=0){ zt=t; break; } } }
+      res.placementType = inStruct ? "inside" : "outside";
+      if(ri>=0){ res.roomIdx=ri; res.base=(rooms[ri].label&&String(rooms[ri].label).trim())||""; }
+      else if(zt){ res.base=zTypeLabel(zt); }
+      return res; }
+    function reconcileLocations(){ if(frozen()||!devices.length) return; var f=floors[curFloor]||{}, o=sugOpts(f), changed=false, max={};
+      var ctxs=devices.map(function(d){ return d.k==="cam"?rmDevCtx(d,f,o):null; });
+      var keys=devices.map(function(d,i){ var ct=ctxs[i]; if(!ct||!ct.base) return ""; return ct.roomIdx>=0?("room:"+ct.roomIdx):("zone:"+ct.base); });
+      devices.forEach(function(d,i){ var k=keys[i]; if(k && d.locKey===k && +d.locSeq>0) max[k]=Math.max(max[k]||0,+d.locSeq); });   // keepers register their stored number first
+      devices.forEach(function(d,i){ if(d.k!=="cam") return; var ct=ctxs[i], k=keys[i], npt=ct.placementType||"", nSeq, nName;
+        if(!k){ nSeq=0; } else if(d.locKey===k && +d.locSeq>0){ nSeq=+d.locSeq; } else { nSeq=(max[k]||0)+1; max[k]=nSeq; }   // stable, else next number in this location
+        nName = k ? (ct.base+" "+nSeq) : "";
+        if(d.locName!==nName||d.locKey!==k||d.locSeq!==nSeq||d.placementType!==npt){ d.locName=nName; d.locKey=k; d.locSeq=nSeq; d.placementType=npt; changed=true; } });
+      if(changed){ sugMap=null; devices.forEach(renderDevice); renderPanel(); queueSave(); } }
     // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
     function makeCard(d){
       var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":""); card.dataset.devId=d.id;
@@ -1846,7 +1874,7 @@
     function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
     function ensureFloorIds(){ var seen={}; floors.forEach(function(f){ if(!f) return; if(!f.id || seen[f.id]){ f.id=null; f.id=newFloorId(); } seen[f.id]=1; }); }   // backfill + dedupe (a later floor sharing an id gets a fresh one)
     ensureFloorIds();
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); clearTimeout(sugT); sugT=setTimeout(refreshSugs,350); }   // refreshSugs repaints the suggestion rows only (a move/aim/zone edit can change them)
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -1865,7 +1893,7 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
       devices.push(d); mountDevice(d); }
     // Phase 4.2 view modes. A floor is hybrid-capable only when it has the ctx aerial crop, the transparent plan layer, AND a
     // ctx-framed opaque bg (bgCtx) — so one plate (the ctx extent) holds all three and device %-coords stay valid in every view.
@@ -2035,7 +2063,7 @@
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
-      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow();
+      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations();   // resolve/refresh location names for this floor's cameras against its plan
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
@@ -2183,7 +2211,7 @@
           d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d);
           showLoupe(ev.clientX, ev.clientY); }   // magnifier over the exact mount point (mouse + touch)
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); dot.removeEventListener("pointercancel",up); hideLoupe(); el.classList.remove("drag");
-          if(moved){ queueSave(); }
+          if(moved){ reconcileLocations(); queueSave(); }   // moved into another room/zone → location name + inside/outside follow (identity unchanged)
           else if(d.photo){ if(popId===d.id && popPinned) hideViewPop(); else showViewPop(d, el, true); }   // a clean tap on a photographed camera → toggle its full view
         }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); dot.addEventListener("pointercancel",up); }); }

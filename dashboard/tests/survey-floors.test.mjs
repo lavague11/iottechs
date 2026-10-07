@@ -57,7 +57,9 @@ test("iotPlanSave is stored on the floor matched by id and queued for save", () 
   assert.ok(handler.includes(".id==="), "handler must match the floor by .id===");
   assert.ok(handler.includes("queueSave()"), "handler must call queueSave()");
   assert.ok(handler.includes("fl.plan=m.plan"), "handler must store the plan on the matched floor");
-  assert.ok(!handler.includes("curFloor"), "handler must not use curFloor");
+  assert.ok(!handler.includes("floors[curFloor].plan"), "plan is stored on the id-matched floor, never floors[curFloor]");
+  // curFloor may appear ONLY in a display-refresh guard (if(fl===floors[curFloor]) → re-render) — never to choose the storage target
+  assert.ok(!/curFloor/.test(handler) || /fl===floors\[curFloor\]/.test(handler), "curFloor only gates the live refresh, not the store");
 });
 
 test("floor id rule: f_ + 8 base-36 chars, backfill only when missing, no collisions", () => {
