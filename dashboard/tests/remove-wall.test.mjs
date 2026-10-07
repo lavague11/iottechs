@@ -175,8 +175,8 @@ test("Merge / Remove wall actions route into the existing workflows", () => {
 });
 test("Delete uses a destructive confirm; closing the menu is wired to outside-click and Escape", () => {
   assert.ok(src.includes('$("rmDelete").addEventListener("click"') && src.includes("askConfirm({ title:a?\"Delete area?\":\"Delete room?\", ok:\"Delete\", danger:true }"), "Delete runs the destructive confirm");
-  assert.ok(src.includes('if(!$("roomMenu").contains(e.target)) closeRoomMenu();'), "an outside pointerdown closes the menu");
-  assert.ok(src.includes('if(e.key==="Escape" && $("roomMenu").classList.contains("on"))'), "Escape closes the menu");
+  assert.ok(src.includes('!$("roomMenu").contains(e.target)) closeRoomMenu();'), "an outside pointerdown closes the menu");
+  assert.ok(src.includes('if(e.key!=="Escape") return;') && src.includes('if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); }'), "Escape closes the menu");
 });
 test("newly created rooms/areas still auto-open naming (first-creation naming is unchanged)", () => {
   const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 2000);

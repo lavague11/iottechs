@@ -29,7 +29,8 @@ function extractFn(s, name) {
 const HALF = 13, FULL = 26;
 // Build a live mini-module: the real pure helpers + stubbed pushHist/redraw, with mutable cells/rooms/openings.
 const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "canonOpening", "openKey",
-  "segDistSq", "allWallUnits", "allDoorUnits", "nearestWallUnit", "sanitizeOpenings", "segMidOnWall", "reconcileOpenings", "openSet", "toggleOpeningAt",
+  "segDistSq", "allWallUnits", "allDoorUnits", "nearestWallUnit", "sanitizeOpenings", "segMidOnWall", "reconcileOpenings", "openSet",
+  "doorAt", "nearestHinge", "placeDoor", "cycleDoor", "flipHinge", "deleteDoor",
   "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD", "svgPlanBody"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
@@ -38,12 +39,12 @@ const api = new Function(`
   ${PURE}
   return { key:key, wallKey:wallKey, canonOpening:canonOpening, openKey:openKey, allWallUnits:allWallUnits,
     nearestWallUnit:nearestWallUnit, sanitizeOpenings:sanitizeOpenings, reconcileOpenings:reconcileOpenings,
-    toggleOpeningAt:toggleOpeningAt,
+    doorAt:doorAt, nearestHinge:nearestHinge, placeDoor:placeDoor, cycleDoor:cycleDoor, flipHinge:flipHinge, deleteDoor:deleteDoor,
     svgBody:function(){ var o=[]; svgPlanBody(o, 3.5, 2, 9); return o.join(""); },
     setCells:function(a){ cells=new Set(a); }, setRooms:function(a){ rooms=a; }, setOpenings:function(a){ openings=a; },
     setSnap:function(s){ snap=s; }, getOpenings:function(){ return openings; }, pushes:function(){ return _pushes; } };
 `)();
-const { key, wallKey, canonOpening, openKey, allWallUnits, nearestWallUnit, sanitizeOpenings, reconcileOpenings, toggleOpeningAt } = api;
+const { key, wallKey, canonOpening, openKey, allWallUnits, nearestWallUnit, sanitizeOpenings, reconcileOpenings, placeDoor, cycleDoor, flipHinge, deleteDoor, doorAt } = api;
 
 // A 2x2 half-cell box occupying cols 0..1, rows 0..1 → an 8-unit perimeter, no interior walls.
 const box2 = [key(0, 0), key(1, 0), key(0, 1), key(1, 1)];
@@ -111,7 +112,7 @@ test("sanitizeOpenings: drops non-finite and degenerate, re-canonicalises order"
     { a: [0, 0] },                        // missing b → dropped
   ]);
   assert.equal(out.length, 1);
-  assert.deepEqual(out[0], { a: [0, 0], b: [13, 0] }, "canonical-ordered");
+  assert.deepEqual(out[0], { a: [0, 0], b: [13, 0], hinge: "a", swing: 0 }, "canonical-ordered, with default door state");
 });
 test("sanitizeOpenings: dedupes identical units (incl. reversed)", () => {
   const out = sanitizeOpenings([{ a: [0, 0], b: [13, 0] }, { a: [13, 0], b: [0, 0] }]);
@@ -132,24 +133,64 @@ test("planOut/applyPlan round-trip openings, defaulting to [] when absent", () =
   assert.deepEqual(sanitizeOpenings(({}).openings), [], "a plan with no openings restores as []");
 });
 
-// ---------- the toggle ----------
-test("toggleOpeningAt: a tap near a wall snaps to a FULL-cell door, a second tap removes it, pushHist each time", () => {
+// ---------- place / cycle / flip / delete ----------
+test("placeDoor: a tap near a wall snaps to a FULL-cell door with a sensible hinge + swing side A", () => {
   api.setCells(box2); api.setRooms([]); api.setOpenings([]);
   const before = api.pushes();
-  toggleOpeningAt(6.5, 1);                             // over the top edge → the full-cell slot [0,0]-[26,0]
-  let o = api.getOpenings();
-  assert.equal(o.length, 1, "door added");
+  placeDoor(6.5, 1);                                   // over the top edge, nearer the a-end → the full-cell slot [0,0]-[26,0]
+  const o = api.getOpenings();
+  assert.equal(o.length, 1, "door placed");
   assert.equal(openKey(o[0]), "0,0,26,0", "a door spans a full cell (26px), not a half unit");
-  toggleOpeningAt(6.5, 1);
-  assert.equal(api.getOpenings().length, 0, "same tap toggles it back off");
-  assert.equal(api.pushes() - before, 2, "each toggle is a history step");
+  assert.equal(o[0].hinge, "a", "hinge defaults to the endpoint nearest the tap");
+  assert.equal(o[0].swing, 0, "a new door opens on side A");
+  assert.equal(api.pushes() - before, 1, "placement is one history step");
 });
-test("toggleOpeningAt: a tap far from any wall is ignored (no door, no history)", () => {
+test("placeDoor: a tap far from any wall is ignored (no door, no history)", () => {
   api.setCells(box2); api.setRooms([]); api.setOpenings([]);
   const before = api.pushes();
-  toggleOpeningAt(500, 500);
+  placeDoor(500, 500);
   assert.equal(api.getOpenings().length, 0, "nothing placed");
   assert.equal(api.pushes(), before, "no history step for a miss");
+});
+test("cycleDoor: swing A → B → opening-only → A, and it NEVER deletes the opening", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([]);
+  placeDoor(6.5, 1);
+  const o = api.getOpenings()[0];
+  assert.equal(o.swing, 0, "starts on side A");
+  cycleDoor(o); assert.equal(o.swing, 1, "→ side B");
+  cycleDoor(o); assert.equal(o.swing, null, "→ opening only");
+  cycleDoor(o); assert.equal(o.swing, 0, "→ back to side A");
+  assert.equal(api.getOpenings().length, 1, "the opening is preserved through the whole cycle (never removed)");
+});
+test("placeDoor on an existing door cycles it instead of duplicating or deleting", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([]);
+  placeDoor(6.5, 1); placeDoor(6.5, 1);
+  const o = api.getOpenings();
+  assert.equal(o.length, 1, "no duplicate opening");
+  assert.equal(o[0].swing, 1, "a repeat tap cycles the swing (A → B)");
+});
+test("flipHinge: the leaf pivots on the opposite endpoint; opening + swing side preserved", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([]);
+  placeDoor(6.5, 1);
+  const o = api.getOpenings()[0];
+  assert.equal(o.hinge, "a");
+  flipHinge(o);
+  assert.equal(o.hinge, "b", "hinge flips a → b");
+  assert.equal(o.swing, 0, "swing side is unchanged");
+  assert.equal(openKey(o), "0,0,26,0", "same opening on the same wall");
+});
+test("deleteDoor removes only on explicit delete", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([]);
+  placeDoor(6.5, 1);
+  const o = api.getOpenings()[0];
+  deleteDoor(o);
+  assert.equal(api.getOpenings().length, 0, "explicit delete removes the opening");
+});
+test("doorAt finds a placed door near the tap, null when far", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([]);
+  placeDoor(6.5, 1);
+  assert.ok(doorAt(6.5, 1), "a tap on the door finds it");
+  assert.equal(doorAt(500, 500), null, "a far tap finds nothing");
 });
 test("nearestWallUnit: snaps to the nearest FULL-cell door slot, null beyond reach", () => {
   api.setCells(box2); api.setRooms([]); api.setSnap(0.5);
@@ -175,10 +216,26 @@ test("svgPlanBody: no openings → the wall path has NO gap and NO door arc (byt
   assert.ok(!/A\d/.test(noDoor) && !noDoor.includes("stroke-opacity"), "no door arc, no light door layer");
 });
 test("svgPlanBody: a full-cell door leaves ONE continuous gap (no mid-wall stub) and emits a light swing arc", () => {
-  api.setCells(box2); api.setRooms([]); api.setOpenings([canonOpening([0, 0], [26, 0])]);
+  api.setCells(box2); api.setRooms([]); api.setOpenings([{ ...canonOpening([0, 0], [26, 0]), hinge: "a", swing: 0 }]);
   const withDoor = api.svgBody();
   assert.ok(!withDoor.includes("M0 0L13 0") && !withDoor.includes("M13 0L26 0"), "neither half of the top edge is stroked — the whole cell is open");
   assert.ok(/stroke-opacity="0\.5"/.test(withDoor) && /A26 26 /.test(withDoor), "a lighter door layer with a radius = full door width (26) swing arc is drawn");
+});
+test("svgPlanBody: OPENING ONLY (swing null) keeps the wall gap but draws NO leaf/arc", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([{ ...canonOpening([0, 0], [26, 0]), hinge: "a", swing: null }]);
+  const open = api.svgBody();
+  assert.ok(!open.includes("M0 0L13 0") && !open.includes("M13 0L26 0"), "the wall gap remains (opening preserved)");
+  assert.ok(!/A\d/.test(open) && !open.includes("stroke-opacity"), "no swing arc, no door leaf layer");
+});
+test("svgPlanBody: swing side B mirrors side A; flipping the hinge changes the arc geometry", () => {
+  const base = canonOpening([0, 0], [26, 0]);
+  api.setCells(box2); api.setRooms([]);
+  api.setOpenings([{ ...base, hinge: "a", swing: 0 }]); const a = api.svgBody();
+  api.setOpenings([{ ...base, hinge: "a", swing: 1 }]); const b = api.svgBody();
+  api.setOpenings([{ ...base, hinge: "b", swing: 0 }]); const hb = api.svgBody();
+  assert.ok(a !== b, "side A and side B render different door paths");
+  assert.ok(a !== hb, "flipping the hinge renders a different door path");
+  for (const s of [a, b, hb]) assert.ok(/A26 26 /.test(s), "every swinging state still draws the quarter arc");
 });
 
 // ---------- source-reads: wiring the pure logic into the live widget ----------
@@ -189,16 +246,27 @@ test("Opening is a choice in the compact draw-mode selector — no separate Open
 });
 test("setMode supports 'opening': shows the door hint + pointer cursor; the selector reflects the mode", () => {
   const setMode = extractFn(src, "setMode");
-  assert.ok(setMode.includes("Tap a wall to add a door."), "opening-mode hint");
+  assert.ok(setMode.includes("Tap a wall for a door") && setMode.includes("flip the swing"), "opening-mode hint explains place + cycle");
   assert.ok(setMode.includes('m==="opening"||m==="removewall" ? "pointer"'), "pointer cursor in opening (and remove-wall) mode");
   assert.ok(setMode.includes('if(m!=="opening") hoverWall=null'), "leaving opening mode clears the hover highlight");
   assert.ok(setMode.includes('(m==="opening") ? "opening" : "room"'), "the selector check reflects opening mode");
   assert.ok(setMode.includes('m==="opening" ? "Opening"'), "the selector label shows Opening");
 });
-test("pointerdown taps a wall (toggleOpeningAt) in opening mode; structure/room editing is suspended", () => {
-  const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("pointermove"'));
-  assert.ok(pd.includes('if(mode==="opening"){ toggleOpeningAt(pt.x,pt.y); return; }'), "opening tap intercepts before the structure/room branches");
+test("opening mode: pointerdown is consumed (no drag); a click places/cycles a door, a double-click opens the door menu", () => {
+  const pd = src.slice(src.indexOf('cv.addEventListener("pointerdown"'), src.indexOf('cv.addEventListener("click"'));
+  assert.ok(pd.includes('if(mode==="opening"){ return; }'), "opening-mode pointerdown is consumed before structure/room editing");
   assert.ok(pd.indexOf('mode==="opening"') < pd.indexOf('mode==="structure"'), "the opening branch is gated first");
+  const clk = src.slice(src.indexOf('cv.addEventListener("click"'), src.indexOf('cv.addEventListener("dblclick"'));
+  assert.ok(clk.includes('if(d) scheduleDoorCycle(d); else { cancelDoorCycle(); placeDoor(pt.x,pt.y); }'), "a click cycles the door under it, or places a new one");
+  const dc = src.slice(src.indexOf('cv.addEventListener("dblclick"'), src.indexOf('cv.addEventListener("pointermove"'));
+  assert.ok(dc.includes('mode==="opening"') && dc.includes("openDoorMenu(d"), "double-click a door opens the Door menu");
+});
+test("Door menu: Flip hinge · Opening only · Delete, wired to the door-state helpers", () => {
+  const menu = src.slice(src.indexOf('id="doorMenu"'), src.indexOf('id="doorMenu"') + 600);
+  for (const id of ["dmFlip", "dmOpenOnly", "rmsep", "dmDelete"]) assert.ok(menu.includes(id), "menu has " + id);
+  assert.ok(src.includes('$("dmFlip").addEventListener("click"') && src.includes("flipHinge(o)"), "Flip hinge → flipHinge");
+  assert.ok(src.includes('$("dmOpenOnly").addEventListener("click"') && src.includes("o.swing=null;"), "Opening only → swing null");
+  assert.ok(src.includes('$("dmDelete").addEventListener("click"') && src.includes("deleteDoor(o)"), "Delete → deleteDoor (explicit removal)");
 });
 test("pointermove highlights the hovered wall unit in opening mode", () => {
   assert.ok(src.includes('else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); }'), "hover tracks the nearest wall unit");
@@ -229,6 +297,16 @@ test("persistence: openings ride the plan record (planOut/applyPlan) and history
   assert.ok(extractFn(src, "snapshot").includes("openings:JSON.parse(JSON.stringify(openings))"), "undo snapshots openings");
   assert.ok(extractFn(src, "applySnap").includes("openings=sanitizeOpenings(s.openings||[])"), "undo restores openings");
 });
-test("toggleOpeningAt pushes history", () => {
-  assert.ok(extractFn(src, "toggleOpeningAt").includes("pushHist()"), "placing/removing a door is undoable");
+test("door-state changes push history (undoable)", () => {
+  assert.ok(extractFn(src, "placeDoor").includes("pushHist()"), "placing a door is undoable");
+  assert.ok(extractFn(src, "cycleDoor").includes("pushHist()"), "swing cycle is undoable");
+  assert.ok(extractFn(src, "flipHinge").includes("pushHist()"), "flip hinge is undoable");
+  assert.ok(extractFn(src, "deleteDoor").includes("pushHist()"), "delete is undoable");
+});
+test("sanitizeOpenings defaults + round-trips the door state (hinge/swing), opening-only preserved", () => {
+  const out = sanitizeOpenings([{ a: [0, 0], b: [26, 0] }]);                       // legacy door, no state
+  assert.equal(out[0].hinge, "a"); assert.equal(out[0].swing, 0, "legacy → hinge a, side A");
+  const rt = sanitizeOpenings([{ a: [0, 0], b: [26, 0], hinge: "b", swing: null }]);
+  assert.equal(rt[0].hinge, "b"); assert.equal(rt[0].swing, null, "opening-only + hinge b survive a write→read");
+  assert.equal(sanitizeOpenings([{ a: [0, 0], b: [26, 0], swing: 1 }])[0].swing, 1, "side B preserved");
 });
