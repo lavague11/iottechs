@@ -1384,7 +1384,7 @@
       renderZones();
       var zt=(rgTarget.kind==="zone"), f=floors[curFloor]||{}, bp=zt?((f.boundary&&f.boundary.pts)||[]):bdPts, bcl=zt?(bp.length>=3):bdClosed,   // editing a zone -> the stored boundary draws static; editing the boundary -> its working copy
           n=bp.length, has=n>=3, edit=regionMode && !frozen(), z=(typeof zScale==="number"&&zScale>0)?zScale:1, s="", i;
-      if(tag){ tag.textContent="Estimated boundary"; tag.style.display=has?"block":"none"; }
+      if(tag){ tag.style.display="none"; }   // "Estimated boundary" chip removed (decluttered) — the boundary still edits, just unlabeled
       var dash='stroke="rgba(185,138,46,'+(edit?0.9:0.5)+')" stroke-width="'+(edit?1.3:1.1)+'" vector-effect="non-scaling-stroke" stroke-dasharray="5 4" stroke-linejoin="round" stroke-linecap="round"';   // thin + restrained; a touch stronger while editing, subtle otherwise
       if(n){ var path=boundaryToPath(bp); s += (bcl&&has) ? '<polygon points="'+path+'" fill="rgba(185,138,46,.06)" '+dash+'/>' : '<polyline points="'+path+'" fill="none" '+dash+'/>'; }
       var zz=(zt&&rgTarget.id!=null)?rgZone(rgTarget.id):null, hc="#b98a2e";

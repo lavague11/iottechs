@@ -274,7 +274,7 @@ test("regionBtn/editor are hidden for frozen (customer/submitted) views but the 
   assert.ok(extractFn(survey, "updateRegionUI").includes("!frozen()"), "regionBtn hidden when frozen");
   assert.ok(extractFn(survey, "setRegionMode").includes("!frozen()"), "setRegionMode refuses when frozen");
   assert.ok(extractFn(survey, "renderBoundary").includes("regionMode && !frozen()"), "handles only in edit mode; the dashed polygon draws regardless");
-  assert.ok(extractFn(survey, "renderBoundary").includes("Estimated boundary"), "the Estimated boundary chip label");
+  assert.ok(!extractFn(survey, "renderBoundary").includes('tag.textContent="Estimated boundary"'), "the Estimated boundary chip label is removed (decluttered)");
 });
 
 test("empty-tap with a selected vertex only deselects — never drops a stray vertex (Phase 2.3 lesson)", () => {
