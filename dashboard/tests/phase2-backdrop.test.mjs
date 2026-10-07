@@ -30,8 +30,9 @@ test("backdrop draws BEHIND the cells (after clearRect, before drawStructure) vi
     "positioned through the same seed transform ctxVB uses (full aerial fraction -> canvas px)");
 });
 
-test("aerial toggle cycles Off -> Light -> Full with matching opacity", () => {
+test("aerial toggle cycles Off -> Light -> Full; Full is true full colour, default Full", () => {
   assert.ok(draw.includes("_bdMode=(_bdMode+1)%3"), "button cycles 0->1->2");
-  assert.ok(draw.includes("_bdMode===2?0.82:(_bdMode===1?0.45:0)"), "alpha: off 0, light .45, full .82");
+  assert.ok(draw.includes("_bdMode===2?1:(_bdMode===1?0.5:0)"), "alpha: off 0, light .5, full 1 (opaque = full colour)");
+  assert.ok(/var _bdImg=null, _bdMode=2;/.test(draw), "defaults to Full so the aerial reads in full colour while editing");
   assert.ok(draw.includes('id="tAerial"'), "the Aerial toolbar button exists");
 });

@@ -266,8 +266,8 @@
   // Phase 2 (grid-first): the enhanced aerial as a backdrop behind the grid + cells, so Building cells are
   // painted ON the roof. Positioned through the SAME seed transform ctxVB uses (full aerial fraction → canvas
   // px: fraction·aspect·sc+offx, fraction·sc+offy), so the building under the cells lines up 1:1. No new math.
-  var _bdImg=null, _bdMode=1;   // 0 off · 1 light · 2 full — default light so painted cells read over the photo
-  function bdAlpha(){ return _bdMode===2?0.82:(_bdMode===1?0.45:0); }
+  var _bdImg=null, _bdMode=2;   // 0 off · 1 light · 2 full — default FULL so the aerial reads in full colour while editing
+  function bdAlpha(){ return _bdMode===2?1:(_bdMode===1?0.5:0); }   // Full = true full colour (opaque); Light dims it so painted cells read
   function drawBackdrop(){ if(!_bdImg||!_bdMode||!_seed||!(+_seed.sc>0)) return; var a=+_seed.aspect||1, sc=+_seed.sc;
     ctx.save(); ctx.globalAlpha=bdAlpha(); try{ ctx.drawImage(_bdImg, +_seed.offx||0, +_seed.offy||0, a*sc, sc); }catch(e){} ctx.restore(); }
   function updateAerialBtn(){ var b=$("tAerial"); if(!b) return; var on=!!(_bdImg&&_seed&&+_seed.sc>0);
@@ -413,7 +413,7 @@
       ctx.moveTo(x1,y1); ctx.lineTo(x1+nx*dw,y1+ny*dw); ctx.stroke();                                                                       // door leaf
       ctx.beginPath(); ctx.arc(x1,y1,dw,Math.atan2(uy,ux),Math.atan2(ny,nx),false); ctx.stroke(); }); ctx.restore(); }
   function drawStructure(){ if(!cells.size) return;
-    ctx.fillStyle="rgba(185,138,46,.10)";
+    ctx.fillStyle="rgba(185,138,46,.18)";   // a touch stronger so painted Building cells still read over a full-colour aerial
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
     paintWalls(boundaryEdges(), "#111", 3.5); }
   function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;

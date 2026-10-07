@@ -254,7 +254,7 @@ test("the editor is routed by target, not duplicated: one pointer IIFE, one bdCo
 
 test("zones are carried through restore, create and duplicate (deep copies) — OFF snapFloor and OFF the approval fingerprint", () => {
   assert.ok(survey.includes("zones:zValidZones(f.zones)"), "restore validates + carries zones");
-  assert.ok(survey.includes("zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[]"), "createFloor deep-copies");
+  assert.ok(survey.includes("zones:(wp&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[]"), "createFloor deep-copies when carrying the plan");
   assert.ok(survey.includes("zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[]"), "duplicateFloor deep-copies");
   assert.ok(!extractFn(survey, "snapFloor").includes("zones"), "snapFloor must not touch zones (written by the zone helpers)");
   const td = readFileSync(new URL("../lib/tool-data.js", import.meta.url), "utf8");

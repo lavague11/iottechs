@@ -291,7 +291,7 @@ test("two-finger gestures fall through to pinch-zoom (never a vertex)", () => {
 
 test("boundary is carried through restore, create and duplicate — and kept OFF snapFloor", () => {
   assert.ok(survey.includes("boundary:bdValidBoundary(f.boundary)"), "restore validates + carries boundary");
-  assert.ok(survey.includes("boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null"), "createFloor deep-copies it");
+  assert.ok(survey.includes("boundary:(wp&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null"), "createFloor deep-copies it when carrying the plan");
   assert.ok(survey.includes("boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null"), "duplicateFloor deep-copies it");
   assert.ok(!extractFn(survey, "snapFloor").includes("boundary"), "snapFloor must NOT touch boundary (it's floor view-state, written by bdCommit)");
 });

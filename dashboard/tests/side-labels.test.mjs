@@ -51,7 +51,7 @@ test("4.4 renderSides is called from renderView, gated on the resolved hybrid vi
 });
 
 test("4.4 sides carried through restore / createFloor / duplicateFloor and kept OFF snapFloor", () => {
-  assert.ok(extractFn(survey, "createFloor").includes("sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null"), "createFloor deep-copies");
+  assert.ok(extractFn(survey, "createFloor").includes("sides:(wp&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null"), "createFloor deep-copies when carrying the plan");
   assert.ok(extractFn(survey, "duplicateFloor").includes("sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null"), "duplicateFloor deep-copies");
   assert.ok(/Object\.assign\(\{\}, f, \{[^\n]*sides:\(f\.sides&&typeof f\.sides==="object"\)\?f\.sides:null/.test(survey), "restore carries sides");
   assert.ok(!extractFn(survey, "snapFloor").includes("sides"), "snapFloor does not touch sides");

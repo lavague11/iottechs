@@ -82,6 +82,6 @@ test("renderGrid keeps the legacy plan-viewBox overlay for a hybrid floor with n
 
 test("grid rides through restore, createFloor and duplicateFloor (deep copies)", () => {
   assert.ok(survey.includes("grid:validGrid(f.grid)"), "restore validates + carries grid");
-  assert.ok(survey.includes("grid:(from&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null"), "createFloor deep-copies grid");
+  assert.ok(survey.includes("grid:(wp&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null"), "createFloor deep-copies grid when carrying the plan");
   assert.ok(survey.includes("grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null"), "duplicateFloor deep-copies grid");
 });

@@ -74,7 +74,7 @@ test("4.2 survey: #aerialImg is the first (behind) layer in #scene", () => {
 
 test("4.2 survey: bgCtx and view carry through restore, createFloor, and duplicateFloor; cleared background drops bgCtx", () => {
   assert.ok(survey.includes("bgCtx:f.bgCtx||false,view:(typeof f.view===\"string\")?f.view:null"), "restore carries bgCtx + view");
-  assert.ok(survey.includes("bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view===\"string\")?from.view:null"), "createFloor copies bgCtx + view");
+  assert.ok(survey.includes("bgCtx:!!(from&&from.bgCtx), view:(wp&&typeof from.view===\"string\")?from.view:null"), "createFloor copies bgCtx always; view rides with the plan");
   assert.ok(survey.includes("bgCtx:!!src.bgCtx, view:(typeof src.view===\"string\")?src.view:null"), "duplicateFloor copies bgCtx + view");
   assert.ok(survey.includes("fl.bgCtx=false; }"), "clearCtx drops bgCtx (non-capable)");
   assert.ok(survey.includes('floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true)'), "a draw result stores bgCtx only when flagged");

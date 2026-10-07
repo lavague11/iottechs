@@ -674,7 +674,8 @@
     <div class="cfMsg">Start the new floor from <b id="flPrev">the previous floor</b>?</div>
     <div class="cfCol">
       <button class="flOpt" id="flBoth"><b>Background + items</b><span>Copy the plan and all placed cameras/devices</span></button>
-      <button class="flOpt" id="flBg"><b>Background only</b><span>Copy just the plan image — place devices fresh</span></button>
+      <button class="flOpt" id="flBgPlan"><b>Background + floor plan</b><span>Copy the aerial and the drawn plan — place devices fresh</span></button>
+      <button class="flOpt" id="flBg"><b>Background only</b><span>Copy just the aerial — draw the plan fresh</span></button>
       <button class="flOpt" id="flBlank"><b>Blank floor</b><span>Start from the background chooser</span></button>
     </div>
     <button class="flCancel" id="flCancel">Cancel</button>
@@ -2084,14 +2085,19 @@
       if(out.length){ var used={}; floors.forEach(function(fl){ (fl.devices||[]).forEach(function(d){ if(d.cid) used[d.cid]=1; }); });   // cloned cameras get a fresh cid unique across ALL floors (proposal line items key on it)
         out.forEach(function(d){ if(!d.cid) return; var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(used[id]); used[id]=1; d.cid=id; }); }
       return out; }
-    function createFloor(from, withItems){
+    // Three levels of carry-over from the source floor:
+    //   withItems  → background + drawn plan + placed devices
+    //   withPlan   → background + drawn plan (structure/rooms/zones/boundary), devices fresh
+    //   neither    → JUST the aerial background (scale/capture), plan + devices drawn fresh
+    function createFloor(from, withPlan, withItems){
+      var wp=!!(from && (withPlan || withItems));   // carrying the drawn plan? (items imply the plan)
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
-        scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(from&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(from&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(from&&typeof from.view==="string")?from.view:null, sides:(from&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(from&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, zonesMigrated:!!(from&&from.zonesMigrated), boundary:(from&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(from&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // real-world scale + capture + structure + ctx-framed flag + view + boundary travel with the background (deep copies — never shared with the source)
+        scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(wp&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(wp&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(wp&&typeof from.view==="string")?from.view:null, sides:(wp&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(wp&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, zonesMigrated:!!(wp&&from.zonesMigrated), boundary:(wp&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(wp&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // background (scale/capture/ctx) always travels; the drawn plan (structure/view/sides/grid/boundary/zones) only when carrying the plan — deep copies, never shared with the source
         derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
-      goStep((f.started && withItems) ? 1 : 0);   // bg + items → Setup (devices carried); bg only / blank → Background tab (shows the carried plan / the chooser)
+      goStep((f.started && wp) ? 1 : 0);   // plan carried → Setup (place devices on it); background-only / blank → Background tab
       flushNow();   // discrete action → push to the server now, don't wait for the 5s poll
     }
     // Duplicate: a full copy (background, scale, capture, structure, devices) inserted right after the source, which stays untouched.
@@ -2105,8 +2111,8 @@
     // New floor: if the current floor has a background, offer to import it (with or without the placed
     // items) — buildings often reuse the same plan, but not always, so it's a choice, never automatic.
     function addFloor(){ snapFloor(); var prev=floors[curFloor];
-      if(prev && prev.bg){ askFloorImport(prev.name, function(mode){ createFloor(mode==="none"?null:prev, mode==="bgitems"); }); }
-      else createFloor(null, false); }
+      if(prev && prev.bg){ askFloorImport(prev.name, function(mode){ createFloor(mode==="none"?null:prev, mode==="bgplan"||mode==="bgitems", mode==="bgitems"); }); }
+      else createFloor(null, false, false); }
     // The selector shows the current location; the bottom sheet is the full picker (grouped + management).
     function renderFloorTabs(){
       var nm=document.getElementById("floorSelName");
@@ -2255,6 +2261,7 @@
     function closeFloorModal(){ document.getElementById("floorModal").classList.remove("on"); floorCb=null; }
     function pickFloor(mode){ var f=floorCb; closeFloorModal(); if(f) f(mode); }
     document.getElementById("flBoth").addEventListener("click", function(){ pickFloor("bgitems"); });
+    document.getElementById("flBgPlan").addEventListener("click", function(){ pickFloor("bgplan"); });
     document.getElementById("flBg").addEventListener("click", function(){ pickFloor("bg"); });
     document.getElementById("flBlank").addEventListener("click", function(){ pickFloor("none"); });
     document.getElementById("flCancel").addEventListener("click", closeFloorModal);

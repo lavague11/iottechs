@@ -28,15 +28,25 @@ test("createFloor and duplicateFloor share cloneDevices (fresh cids) and deep-co
   const dup = region("function duplicateFloor(", "function addFloor(");
   assert.ok(create.includes("cloneDevices("), "createFloor clones via cloneDevices");
   assert.ok(dup.includes("cloneDevices("), "duplicateFloor clones via cloneDevices");
-  for (const k of ["scale", "aerial", "plan"]) {
+  for (const k of ["scale", "aerial"]) {   // background metadata always travels with the aerial
     assert.ok(create.includes(`${k}:(from&&from.${k})?JSON.parse(JSON.stringify(`), `createFloor deep-copies ${k}`);
   }
-  assert.ok(html.includes("scale:(from&&from.scale)") && html.includes("aerial:(from&&from.aerial)") && html.includes("plan:(from&&from.plan)"));
+  assert.ok(create.includes("plan:(wp&&from.plan)?JSON.parse(JSON.stringify("), "the drawn plan deep-copies only when carrying the plan");
+  assert.ok(html.includes("scale:(from&&from.scale)") && html.includes("aerial:(from&&from.aerial)"));
 });
 
-// Guards: a background-only import skipping the Background tab, or +items not landing on Setup.
-test("Background-only lands on Background; +items lands on Setup", () => {
-  assert.ok(html.includes("goStep((f.started && withItems) ? 1 : 0)"), "landing rule changed");
+// Three carry levels: Background only (just the aerial), Background + floor plan, Background + items.
+test("start-from levels: only the plan-carrying levels keep the drawn plan; items land on Setup", () => {
+  assert.ok(html.includes("goStep((f.started && wp) ? 1 : 0)"), "plan carried → Setup; background-only / blank → Background tab");
+  const create = region("function createFloor(", "function duplicateFloor(");
+  assert.ok(create.includes("var wp=!!(from && (withPlan || withItems))"), "items imply the plan; background-only carries neither");
+  for (const k of ["plan", "boundary", "zones", "sides"]) {   // the drawn plan + its regions are gated on wp
+    assert.ok(create.includes(`${k}:(wp&&from.${k})`), `${k} is carried only when carrying the plan`);
+  }
+  assert.ok(create.includes("devices:(from&&withItems)?cloneDevices(from.devices):[]"), "devices only on +items");
+  // the sheet offers the middle option between +items and background-only
+  assert.ok(html.includes('id="flBgPlan"') && html.includes("Background + floor plan"), "a Background + floor plan option exists");
+  assert.ok(html.includes('pickFloor("bgplan")') && html.includes('createFloor(mode==="none"?null:prev, mode==="bgplan"||mode==="bgitems", mode==="bgitems")'), "bgplan carries the plan without devices");
 });
 
 // Guards: the capture transform being dropped anywhere between the satellite result and a reload.
