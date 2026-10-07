@@ -26,14 +26,14 @@ function extractFn(s, name) {
   throw new Error("unbalanced braces in " + name);
 }
 
-const HALF = 13;
+const HALF = 13, FULL = 26;
 // Build a live mini-module: the real pure helpers + stubbed pushHist/redraw, with mutable cells/rooms/openings.
 const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "canonOpening", "openKey",
-  "segDistSq", "allWallUnits", "nearestWallUnit", "sanitizeOpenings", "reconcileOpenings", "openSet", "toggleOpeningAt",
+  "segDistSq", "allWallUnits", "allDoorUnits", "nearestWallUnit", "sanitizeOpenings", "segMidOnWall", "reconcileOpenings", "openSet", "toggleOpeningAt",
   "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD", "svgPlanBody"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
-  var HALF=${HALF}; var cells=new Set(), rooms=[], openings=[], _pushes=0;
+  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], _pushes=0;
   function pushHist(){ _pushes++; } function redraw(){}
   ${PURE}
   return { key:key, wallKey:wallKey, canonOpening:canonOpening, openKey:openKey, allWallUnits:allWallUnits,
@@ -133,13 +133,13 @@ test("planOut/applyPlan round-trip openings, defaulting to [] when absent", () =
 });
 
 // ---------- the toggle ----------
-test("toggleOpeningAt: a tap near a wall unit adds a door, a second tap removes it, pushHist each time", () => {
+test("toggleOpeningAt: a tap near a wall snaps to a FULL-cell door, a second tap removes it, pushHist each time", () => {
   api.setCells(box2); api.setRooms([]); api.setOpenings([]);
   const before = api.pushes();
-  toggleOpeningAt(6.5, 1);                             // ~centre of the top-left unit [0,0]-[13,0]
+  toggleOpeningAt(6.5, 1);                             // over the top edge → the full-cell slot [0,0]-[26,0]
   let o = api.getOpenings();
   assert.equal(o.length, 1, "door added");
-  assert.equal(openKey(o[0]), "0,0,13,0", "snapped to the nearest wall unit");
+  assert.equal(openKey(o[0]), "0,0,26,0", "a door spans a full cell (26px), not a half unit");
   toggleOpeningAt(6.5, 1);
   assert.equal(api.getOpenings().length, 0, "same tap toggles it back off");
   assert.equal(api.pushes() - before, 2, "each toggle is a history step");
@@ -151,9 +151,9 @@ test("toggleOpeningAt: a tap far from any wall is ignored (no door, no history)"
   assert.equal(api.getOpenings().length, 0, "nothing placed");
   assert.equal(api.pushes(), before, "no history step for a miss");
 });
-test("nearestWallUnit: returns the closest unit within tolerance, null beyond it", () => {
+test("nearestWallUnit: snaps to the nearest FULL-cell door slot, null beyond reach", () => {
   api.setCells(box2); api.setRooms([]);
-  assert.equal(openKey(canonOpening(nearestWallUnit(6.5, 1).a, nearestWallUnit(6.5, 1).b)), "0,0,13,0");
+  assert.equal(openKey(canonOpening(nearestWallUnit(6.5, 1).a, nearestWallUnit(6.5, 1).b)), "0,0,26,0", "a full-cell door slot");
   assert.equal(nearestWallUnit(500, 500), null, "a far tap snaps to nothing");
 });
 
@@ -164,12 +164,11 @@ test("svgPlanBody: no openings → the wall path has NO gap and NO door arc (byt
   assert.ok(noDoor.includes("M0 0L13 0"), "the full top-left wall unit is stroked end to end");
   assert.ok(!/A\d/.test(noDoor) && !noDoor.includes("stroke-opacity"), "no door arc, no light door layer");
 });
-test("svgPlanBody: a door leaves a gap (0.2/0.8 split) and emits a light quarter-arc path", () => {
-  api.setCells(box2); api.setRooms([]); api.setOpenings([canonOpening([0, 0], [13, 0])]);
+test("svgPlanBody: a full-cell door leaves ONE continuous gap (no mid-wall stub) and emits a light swing arc", () => {
+  api.setCells(box2); api.setRooms([]); api.setOpenings([canonOpening([0, 0], [26, 0])]);
   const withDoor = api.svgBody();
-  assert.ok(!withDoor.includes("M0 0L13 0"), "the doored unit is no longer stroked as one solid segment");
-  assert.ok(withDoor.includes("M0 0L2.6 0") && withDoor.includes("M10.4 0L13 0"), "the two flanking stubs (0–20%, 80–100%) remain");
-  assert.ok(/stroke-opacity="0\.5"/.test(withDoor) && /A7\.8 7\.8 /.test(withDoor), "a lighter door layer with a radius 0.6·HALF quarter arc (swing) is drawn");
+  assert.ok(!withDoor.includes("M0 0L13 0") && !withDoor.includes("M13 0L26 0"), "neither half of the top edge is stroked — the whole cell is open");
+  assert.ok(/stroke-opacity="0\.5"/.test(withDoor) && /A26 26 /.test(withDoor), "a lighter door layer with a radius = full door width (26) swing arc is drawn");
 });
 
 // ---------- source-reads: wiring the pure logic into the live widget ----------
@@ -205,15 +204,15 @@ test("render: walls paint through the shared door-aware helpers (canvas + SVG)",
   assert.ok(extractFn(src, "drawStructure").includes("paintWalls(boundaryEdges()"), "structure shell strokes via paintWalls");
   assert.ok(extractFn(src, "drawRoom").includes("paintWalls(edgesOf(set)"), "room walls stroke via paintWalls");
   assert.ok(extractFn(src, "svgPlanBody").includes("wallPathD(edgesOf(set)") && extractFn(src, "svgPlanBody").includes("wallPathD(boundaryEdges()"), "SVG walls build via wallPathD");
-  assert.ok(extractFn(src, "svgPlanBody").includes("openSet()") && extractFn(src, "svgPlanBody").includes("doors.length"), "SVG collects + emits door arcs");
+  assert.ok(extractFn(src, "svgPlanBody").includes("hit.map(doorArcD)") && extractFn(src, "svgPlanBody").includes("hit.length"), "SVG collects + emits door arcs");
 });
-test("render guard: a wall with NO door is byte-identical to the old stroke/path", () => {
+test("render guard: an undoored wall is stroked solid; doors are a coverage-based gap + separate arc pass", () => {
   const wp = extractFn(src, "wallPathD");
-  assert.ok(wp.includes('else { d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; }'), "undoored SVG edge is the exact old 'M..L..' segment");
-  assert.ok(/\*0\.2/.test(wp) && /\*0\.8/.test(wp), "a doored edge leaves the middle gap");
+  assert.ok(wp.includes('d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3];'), "an uncovered SVG edge is the plain 'M..L..' segment");
+  assert.ok(wp.includes("segDistSq(mx,my") && wp.includes("if(inD) return;"), "a segment inside a door is skipped (one continuous gap)");
   const pw = extractFn(src, "paintWalls");
-  assert.ok(pw.includes('else { ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }'), "undoored canvas edge is the exact old moveTo/lineTo");
-  assert.ok(pw.includes("if(hasO) paintDoorArcs"), "door arcs are a separate pass, only when a door exists");
+  assert.ok(pw.includes("ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]);"), "an uncovered canvas edge is a plain moveTo/lineTo");
+  assert.ok(pw.includes("if(hit.length) paintDoorArcs"), "door arcs are a separate pass, only for covered openings");
 });
 test("reconcile hooks: reconcileRooms and doMerge both call reconcileOpenings", () => {
   assert.ok(extractFn(src, "reconcileRooms").includes("reconcileOpenings()"), "every structural reconcile drops stale doors");

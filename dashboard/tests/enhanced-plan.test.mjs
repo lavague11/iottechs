@@ -30,7 +30,7 @@ const HALF = 13, FULL = 26;
 // Pure helpers (+ the Phase-10 additions) assembled into one live mini-module with mutable globals, exactly as the
 // widget sees them. pushHist/redraw/persist are stubbed counters; the enhance-state vars are plain locals.
 const NAMES = [
-  "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings",
+  "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "segDistSq",
   "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "svgPlanBody",
   "namedRooms", "planCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];

@@ -37,6 +37,13 @@
   #labelPop.on{display:flex}
   #labelPop input{width:100%;box-sizing:border-box;border:0;border-radius:8px;padding:9px 10px;font:inherit;font-size:15px;font-weight:600;outline:none;color:var(--ink);background:var(--soft)}
   #labelPop input::placeholder{color:#9aa0a6;font-weight:500}
+  #labelPop .lprow{display:flex;align-items:center;gap:6px}
+  #labelPop .lprow input{flex:1 1 auto;width:auto}
+  #labelPop .lpact{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:0;border-radius:8px;background:var(--soft);color:var(--ink);cursor:pointer;padding:0}
+  #labelPop .lpact svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #labelPop .lpact:hover{background:#eceef0}
+  #labelPop #lpDel{color:#c4553d}
+  #labelPop #lpDel.arm{background:#c4553d;color:#fff}
   #labelPop .lplist{display:flex;flex-direction:column;margin-top:4px}
   #labelPop .lplist:empty{margin-top:0}
   #labelPop .lpopt{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -142,7 +149,11 @@
     <canvas id="cv"></canvas>
     <div id="hint"></div>
     <div id="labelPop">
-      <input id="lpInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Name room">
+      <div class="lprow">
+        <input id="lpInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Name room">
+        <button id="lpMerge" class="lpact" type="button" aria-label="Merge" title="Merge" style="display:none"><svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg></button>
+        <button id="lpDel" class="lpact" type="button" aria-label="Delete room" title="Delete" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+      </div>
       <div class="lplist" id="lpList"></div>
     </div>
 
@@ -344,20 +355,36 @@
       n=Math.max(1,Math.round((Math.abs(dx)+Math.abs(dy))/HALF)),ux=dx/n,uy=dy/n,i; for(i=0;i<n;i++){ var ax=x1+ux*i,ay=y1+uy*i; u[wallKey(ax,ay,ax+ux,ay+uy)]=1; } };
     (rooms||[]).forEach(function(r){ edgesOf(new Set(r.cells||[])).forEach(add); });
     boundaryEdges().forEach(add); return u; }
+  // A door spans a FULL cell (26px) — one visible square, never half (a half unit reads as too small for a door).
+  // Door slots = the full-cell-aligned pairs of adjacent half wall units that both exist (so a door only lands on real wall).
+  function allDoorUnits(){ var half=allWallUnits(), full={}, k;
+    for(k in half){ if(!half.hasOwnProperty(k)) continue; var a=k.split(",").map(Number), x1=a[0],y1=a[1],x2=a[2],y2=a[3];
+      if(y1===y2){ var fx=Math.floor(x1/FULL)*FULL;   // horizontal wall → pair the two half-units of this cell
+        if(half[wallKey(fx,y1,fx+HALF,y1)] && half[wallKey(fx+HALF,y1,fx+FULL,y1)]) full[wallKey(fx,y1,fx+FULL,y1)]=1; }
+      else if(x1===x2){ var fy=Math.floor(y1/FULL)*FULL; // vertical wall
+        if(half[wallKey(x1,fy,x1,fy+HALF)] && half[wallKey(x1,fy+HALF,x1,fy+FULL)]) full[wallKey(x1,fy,x1,fy+FULL)]=1; } }
+    return full; }
   // Validate a persisted list: two finite [x,y] pairs, non-degenerate, re-canonicalised, deduped, capped ~200.
   function sanitizeOpenings(list){ var out=[], seen={}, i; if(!Array.isArray(list)) return out;
     for(i=0;i<list.length && out.length<200;i++){ var o=list[i]; if(!o||!Array.isArray(o.a)||!Array.isArray(o.b)) continue;
       var ax=+o.a[0],ay=+o.a[1],bx=+o.b[0],by=+o.b[1]; if(!(isFinite(ax)&&isFinite(ay)&&isFinite(bx)&&isFinite(by))) continue;
       if(ax===bx&&ay===by) continue; var c=canonOpening([ax,ay],[bx,by]), k=openKey(c); if(seen[k]) continue; seen[k]=1; out.push(c); }
     return out; }
-  // Drop any opening whose wall unit no longer exists (e.g. a shared wall that merged away became interior).
-  function reconcileOpenings(){ var u=allWallUnits(); openings=(openings||[]).filter(function(o){ return o && u[openKey(o)]; }); }
+  // Keep a door while its wall still exists: its span must still lie ON a wall (length-agnostic, so legacy
+  // half-width doors survive too; a shared wall that merged away and became interior drops its door).
+  function segMidOnWall(o){ var u=allWallUnits(), mx=(o.a[0]+o.b[0])/2, my=(o.a[1]+o.b[1])/2, k;
+    for(k in u){ if(!u.hasOwnProperty(k)) continue; var a=k.split(",").map(Number); if(segDistSq(mx,my,a[0],a[1],a[2],a[3])<=2.25) return true; } return false; }
+  function reconcileOpenings(){ openings=(openings||[]).filter(function(o){ return o && segMidOnWall(o); }); }
   function openSet(){ var s={}; (openings||[]).forEach(function(o){ s[openKey(o)]=1; }); return s; }
-  // Snap a tap to the nearest wall UNIT within a small px tolerance (null if the tap isn't near any wall).
-  function nearestWallUnit(x,y){ var u=allWallUnits(), best=null, bd=1/0, tol=HALF*0.6, k;
-    for(k in u){ if(!u.hasOwnProperty(k)) continue; var a=k.split(",").map(Number), d=segDistSq(x,y,a[0],a[1],a[2],a[3]);
-      if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
-    return (best && bd<=tol*tol) ? best : null; }
+  // Snap a tap to the nearest FULL-cell door slot; only when none is within reach fall back to a half unit
+  // (a half-cell wall jog that can't fit a full door still accepts one).
+  function nearestWallUnit(x,y){ var best=null, bd=1/0, tol=HALF*0.9, k, a, d;
+    var full=allDoorUnits();
+    for(k in full){ if(!full.hasOwnProperty(k)) continue; a=k.split(",").map(Number); d=segDistSq(x,y,a[0],a[1],a[2],a[3]); if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
+    if(best && bd<=tol*tol) return best;
+    var u=allWallUnits(); best=null; bd=1/0;
+    for(k in u){ if(!u.hasOwnProperty(k)) continue; a=k.split(",").map(Number); d=segDistSq(x,y,a[0],a[1],a[2],a[3]); if(d<bd){ bd=d; best={a:[a[0],a[1]],b:[a[2],a[3]]}; } }
+    return (best && bd<=(HALF*0.6)*(HALF*0.6)) ? best : null; }
   // Tap a wall unit → toggle a door there (add if absent, remove if present); undoable + redraw.
   function toggleOpeningAt(x,y){ var wu=nearestWallUnit(x,y); if(!wu) return; var o=canonOpening(wu.a,wu.b), k=openKey(o), i;
     for(i=0;i<openings.length;i++){ if(openKey(openings[i])===k){ openings.splice(i,1); pushHist(); redraw(); return; } }
@@ -367,21 +394,24 @@
   // Stroke a set of wall edges; at each edge carrying a door, leave the middle ~60% as a gap and draw a light
   // door-swing arc + jamb ticks. Edges with NO door stroke byte-identically to the old single-path stroke (the
   // os lookup is the only branch — empty openings → every edge takes the plain moveTo/lineTo path).
-  function paintWalls(e, color, w){ var os=openSet(), hasO=false;
+  // A door leaves a clean GAP across its whole span (a full cell wide), then a swing arc + jamb ticks are drawn
+  // over it. Coverage-based: any wall segment whose midpoint sits inside an opening is skipped, so a door that
+  // spans two half-units reads as one continuous opening (no wall stub in the middle).
+  function paintWalls(e, color, w){ var segs=openings||[], hit=[];
     ctx.strokeStyle=color; ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath();
-    e.forEach(function(s){ if(os[wallKey(s[0],s[1],s[2],s[3])]){ hasO=true; var dx=s[2]-s[0],dy=s[3]-s[1];
-        ctx.moveTo(s[0],s[1]); ctx.lineTo(s[0]+dx*0.2,s[1]+dy*0.2); ctx.moveTo(s[0]+dx*0.8,s[1]+dy*0.8); ctx.lineTo(s[2],s[3]); }
-      else { ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); } });
+    e.forEach(function(s){ var mx=(s[0]+s[2])/2, my=(s[1]+s[3])/2, inD=false, i;
+      for(i=0;i<segs.length;i++){ var o=segs[i]; if(segDistSq(mx,my,o.a[0],o.a[1],o.b[0],o.b[1])<=2.25){ inD=true; if(hit.indexOf(o)<0) hit.push(o); break; } }
+      if(inD) return;                                          // inside a door → gap
+      ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); });
     ctx.stroke();
-    if(hasO) paintDoorArcs(e, os, color, w); }
-  function paintDoorArcs(e, os, color, w){ ctx.save(); ctx.strokeStyle=color; ctx.globalAlpha=0.5; ctx.lineWidth=Math.max(1,w*0.6); ctx.lineCap="round"; ctx.lineJoin="round";
-    e.forEach(function(s){ if(!os[wallKey(s[0],s[1],s[2],s[3])]) return;
-      var x1=s[0],y1=s[1],dx=s[2]-x1,dy=s[3]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
-      var jx=x1+dx*0.2,jy=y1+dy*0.2,jx2=x1+dx*0.8,jy2=y1+dy*0.8,dw=len*0.6,tk=Math.max(2,w*1.1);
-      ctx.beginPath(); ctx.moveTo(jx,jy); ctx.lineTo(jx+nx*tk,jy+ny*tk); ctx.moveTo(jx2,jy2); ctx.lineTo(jx2+nx*tk,jy2+ny*tk);
-      ctx.moveTo(jx,jy); ctx.lineTo(jx+nx*dw,jy+ny*dw); ctx.stroke();
-      ctx.beginPath(); ctx.arc(jx,jy,dw,Math.atan2(uy,ux),Math.atan2(ny,nx),false); ctx.stroke(); }); ctx.restore(); }
+    if(hit.length) paintDoorArcs(hit, color, w); }
+  function paintDoorArcs(list, color, w){ ctx.save(); ctx.strokeStyle=color; ctx.globalAlpha=0.5; ctx.lineWidth=Math.max(1,w*0.6); ctx.lineCap="round"; ctx.lineJoin="round";
+    list.forEach(function(o){ var x1=o.a[0],y1=o.a[1],dx=o.b[0]-x1,dy=o.b[1]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+      var dw=len, tk=Math.max(2,w*1.1);                        // swing radius = the full door width
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x1+nx*tk,y1+ny*tk); ctx.moveTo(o.b[0],o.b[1]); ctx.lineTo(o.b[0]+nx*tk,o.b[1]+ny*tk);   // jamb ticks at both ends
+      ctx.moveTo(x1,y1); ctx.lineTo(x1+nx*dw,y1+ny*dw); ctx.stroke();                                                                       // door leaf
+      ctx.beginPath(); ctx.arc(x1,y1,dw,Math.atan2(uy,ux),Math.atan2(ny,nx),false); ctx.stroke(); }); ctx.restore(); }
   function drawStructure(){ if(!cells.size) return;
     ctx.fillStyle="rgba(185,138,46,.10)";
     cells.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
@@ -558,6 +588,9 @@
     var h=roomHit(pt.x,pt.y);
     if(h){ sel=h; redraw(); openLabel(h); return; }                 // tap a room → name it
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
+  // Right-click a room → select it and open its pop (Merge / Delete right there). Room mode only; never while picking a merge target.
+  cv.addEventListener("contextmenu", function(e){ e.preventDefault(); if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mode!=="room"||mergeArmed) return;
+    var pt=rel(e), h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); openLabel(h); } });
   cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
     if(!dragging){ if(mode==="structure") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
@@ -631,6 +664,10 @@
   function openLabel(r){ lpRoom=r; lpOrig=r.label||""; lpActive=-1;
     var inp=$("lpInput"); inp.value=lpOrig;
     positionLabel(r);
+    // Merge / Delete live right here on an already-named room (a fresh unnamed draft is discarded by leaving it blank).
+    var existing=!!(lpOrig||"").trim();
+    $("lpDel").style.display=existing?"":"none"; lpDelDisarm();
+    $("lpMerge").style.display=(existing && rooms.length>1)?"":"none";
     inp.oninput=function(){ lpActive=-1; renderLabelOpts(); };
     inp.onkeydown=function(e){
       if(e.key==="Enter"){ e.preventDefault(); commitLabel(lpActive>=0?lpOpts[lpActive]:null); }
@@ -718,26 +755,26 @@
     svgPlanBody(o, swS, swR, fs);
     o.push("</svg>");
     return "data:image/svg+xml,"+encodeURIComponent(o.join("")); }
-  // A door's SVG geometry (jamb ticks + leaf + quarter swing arc) for the wall unit `s` — decorative, light ink.
-  function doorArcD(s){ var x1=s[0],y1=s[1],dx=s[2]-x1,dy=s[3]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
-    var jx=x1+dx*0.2,jy=y1+dy*0.2,jx2=x1+dx*0.8,jy2=y1+dy*0.8,dw=len*0.6,tk=Math.max(1.5,len*0.14);
-    var ex=jx+ux*dw,ey=jy+uy*dw,lx=jx+nx*dw,ly=jy+ny*dw;
-    return "M"+jx+" "+jy+"L"+(jx+nx*tk)+" "+(jy+ny*tk)+"M"+jx2+" "+jy2+"L"+(jx2+nx*tk)+" "+(jy2+ny*tk)+"M"+jx+" "+jy+"L"+lx+" "+ly+"M"+ex+" "+ey+"A"+dw+" "+dw+" 0 0 0 "+lx+" "+ly; }
-  // Build a wall path `d`: a doored edge leaves the middle ~60% as a gap (and queues a door arc); an undoored edge
-  // is "M x1 y1 L x2 y2" — byte-identical to the old builder, so a plan with no openings renders exactly as before.
-  function wallPathD(edges, os, doors){ var d=""; edges.forEach(function(s){ if(os[wallKey(s[0],s[1],s[2],s[3])]){ var dx=s[2]-s[0],dy=s[3]-s[1];
-        d+="M"+s[0]+" "+s[1]+"L"+(s[0]+dx*0.2)+" "+(s[1]+dy*0.2)+"M"+(s[0]+dx*0.8)+" "+(s[1]+dy*0.8)+"L"+s[2]+" "+s[3]; if(doors) doors.push(doorArcD(s)); }
-      else { d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; } }); return d; }
+  // A door's SVG geometry (jamb ticks + leaf + quarter swing arc) for the full opening `o` {a,b} — decorative, light ink.
+  function doorArcD(o){ var x1=o.a[0],y1=o.a[1],dx=o.b[0]-x1,dy=o.b[1]-y1,len=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+    var dw=len,tk=Math.max(1.5,len*0.14), bx=o.b[0],by=o.b[1], lx=x1+nx*dw,ly=y1+ny*dw, ex=x1+ux*dw,ey=y1+uy*dw;
+    return "M"+x1+" "+y1+"L"+(x1+nx*tk)+" "+(y1+ny*tk)+"M"+bx+" "+by+"L"+(bx+nx*tk)+" "+(by+ny*tk)+"M"+x1+" "+y1+"L"+lx+" "+ly+"M"+ex+" "+ey+"A"+dw+" "+dw+" 0 0 0 "+lx+" "+ly; }
+  // Build a wall path `d` (coverage-based, mirrors the canvas): a segment whose midpoint sits inside an opening is
+  // skipped (one continuous gap across the full door) and that opening is queued once in `hit`; others draw solid.
+  function wallPathD(edges, segs, hit){ var d=""; edges.forEach(function(s){ var mx=(s[0]+s[2])/2,my=(s[1]+s[3])/2, inD=false,i;
+      for(i=0;i<segs.length;i++){ var o=segs[i]; if(segDistSq(mx,my,o.a[0],o.a[1],o.b[0],o.b[1])<=2.25){ inD=true; if(hit.indexOf(o)<0) hit.push(o); break; } }
+      if(inD) return;
+      d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; }); return d; }
   // Shared middle of both exports (room fills + walls, structure boundary, labels) — one copy so the sketch and the layer can't drift.
-  function svgPlanBody(o, swS, swR, fs){ var os=openSet(), doors=[];
+  function svgPlanBody(o, swS, swR, fs){ var segs=openings||[], hit=[];
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
       var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
       o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
-      var rp=wallPathD(edgesOf(set), os, doors);
+      var rp=wallPathD(edgesOf(set), segs, hit);
       if(rp) o.push('<path d="'+rp+'" fill="none" stroke="#111" stroke-width="'+swR+'" stroke-linecap="round" stroke-linejoin="round"/>'); });
-    var sp=wallPathD(boundaryEdges(), os, doors);
+    var sp=wallPathD(boundaryEdges(), segs, hit);
     if(sp) o.push('<path d="'+sp+'" fill="none" stroke="#111" stroke-width="'+swS+'" stroke-linecap="round" stroke-linejoin="round"/>');
-    if(doors.length) o.push('<path d="'+doors.join("")+'" fill="none" stroke="#111" stroke-opacity="0.5" stroke-width="'+Math.max(1,swR*0.9)+'" stroke-linecap="round" stroke-linejoin="round"/>');
+    if(hit.length) o.push('<path d="'+hit.map(doorArcD).join("")+'" fill="none" stroke="#111" stroke-opacity="0.5" stroke-width="'+Math.max(1,swR*0.9)+'" stroke-linecap="round" stroke-linejoin="round"/>');
     rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var lc=roomLabelCell(r.cells||[]);
       o.push('<text x="'+lc[0]+'" y="'+lc[1]+'" font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
   /* Phase 4 plan LAYER: the same scene, TRANSPARENT (no paper, no grid; structure a light wash), framed on the floor's
@@ -852,6 +889,13 @@
   $("mDeleteRoom").addEventListener("click", function(){ if(busy||!sel) return; var t=$("mDeleteRoomTxt");
     if(t.textContent!=="Confirm delete"){ t.textContent="Confirm delete"; return; }
     rooms=rooms.filter(function(x){return x!==sel;}); sel=null; finishLabel(false); closeMore(); pushHist(); redraw(); });
+  // In-pop Merge / Delete (the easy way — right where you tap a room). pointerdown+preventDefault so the input never blur-commits mid-action.
+  var lpDelArmed=false;
+  function lpDelDisarm(){ lpDelArmed=false; var b=$("lpDel"); if(!b) return; b.classList.remove("arm"); b.title="Delete"; b.setAttribute("aria-label","Delete room"); }
+  $("lpMerge").addEventListener("pointerdown", function(e){ e.preventDefault(); if(busy||!lpRoom) return; finishLabel(true); if(sel) startMerge(); });   // keep the name, then arm "tap a room to merge"
+  $("lpDel").addEventListener("pointerdown", function(e){ e.preventDefault(); if(busy||!lpRoom) return;
+    if(!lpDelArmed){ lpDelArmed=true; var b=$("lpDel"); b.classList.add("arm"); b.title="Confirm delete"; b.setAttribute("aria-label","Confirm delete"); return; }   // two-tap confirm (undoable)
+    var r=lpRoom; rooms=rooms.filter(function(x){return x!==r;}); if(sel===r) sel=null; $("labelPop").classList.remove("on"); lpRoom=null; lpDelDisarm(); redraw(); persist(); pushHist(); });
   document.addEventListener("click", function(e){ if(!$("moreMenu").contains(e.target) && e.target!==$("tMore") && !$("tMore").contains(e.target)) closeMore(); });
   // Floor selector — the HOST owns the floor list and sends it (iotFloors); a pick autosaves this plan (flushPlan) then asks the host to reopen the tool on that floor (iotDrawFloor).
   // Pure: sanitize the roster -> [{i,id,name,cur}]; cur = this frame's own floor (by id, else index). Names render via textContent only.

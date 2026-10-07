@@ -71,19 +71,10 @@
       "Nurse Station","Doctor Office","Lab","Pharmacy","Supply Room","ADA Restroom"]
   };
 
-  // Curated defaults shown BEFORE the user types (approx five, contextually relevant).
-  var DEFAULTS_RES = ["Living Room","Kitchen","Bedroom","Bathroom","Hallway"];
-  var DEFAULTS_COM = ["Reception","Office","Conference Room","Hallway","Restroom"];
-  var VERT_DEFAULTS = {
-    automotive: ["Reception","Office","Mechanic Bay","Storage","Hallway"],
-    restaurant: ["Dining Room","Kitchen","Bar","Restroom","Storage"],
-    retail:     ["Sales Floor","Checkout","Office","Storage","Restroom"],
-    office:     ["Reception","Office","Conference Room","Break Room","Restroom"],
-    industrial: ["Warehouse","Receiving","Office","Storage","Restroom"],
-    hospitality:["Lobby","Reception","Guest Room","Office","Restroom"],
-    education:  ["Classroom","Office","Reception","Hallway","Restroom"],
-    medical:    ["Reception","Waiting Room","Exam Room","Office","Restroom"]
-  };
+  // The most-typed rooms across every property type — boosted so they surface first on an ambiguous
+  // prefix. The pool itself is UNIVERSAL (residential + commercial + every vertical), never split by type.
+  var COMMON = ["Bedroom","Bathroom","Kitchen","Living Room","Dining Room","Office","Hallway","Closet",
+    "Garage","Laundry Room","Reception","Lobby","Conference Room","Break Room","Restroom","Storage","Entry","Stairs"];
 
   // Short-prefix synonyms / aliases → boost the canonical label.
   var SYN = { recep:"Reception", rec:"Reception", mech:"Mechanic Bay", conf:"Conference Room",
@@ -122,14 +113,17 @@
     return "custom";
   }
 
+  // ONE universal pool — residential + commercial + every vertical, never split by property type.
+  // Tiers only rank the suggestions (detected vertical > common > universal > the rest); every label is typable.
   function poolFor(pt, vert) {
     var seen = {}, out = [];
-    function add(list, tier) { list.forEach(function (l) { var k = l.toLowerCase(); if (seen[k] != null) { if (tier > seen[k]) seen[k] = tier; return; } seen[k] = tier; out.push({ label: l, sem: slug(l), tier: tier }); }); }
-    if (vert && VERT[vert]) add(VERT[vert], 3);
-    add(pt === "residential" ? RESIDENTIAL : COMMERCIAL, 2);
-    add(UNIVERSAL, 1);
-    // tier may have been raised after push; reflect it
-    return out.map(function (e) { return { label: e.label, sem: e.sem, tier: seen[e.label.toLowerCase()] }; });
+    function add(list, tier) { list.forEach(function (l) { var k = l.toLowerCase(); if (seen[k] != null) { if (tier > seen[k]) seen[k] = tier; return; } seen[k] = tier; out.push(l); }); }
+    if (vert && VERT[vert]) add(VERT[vert], 4);
+    add(COMMON, 3);
+    add(UNIVERSAL, 2);
+    add(RESIDENTIAL, 1); add(COMMERCIAL, 1);
+    Object.keys(VERT).forEach(function (v) { add(VERT[v], 1); });   // every vertical's rooms stay searchable too
+    return out.map(function (l) { return { label: l, sem: slug(l), tier: seen[l.toLowerCase()] }; });
   }
 
   function suggest(opts) {
@@ -146,14 +140,8 @@
     var used = {}, results = [];
     function push(label, score, sem) { var k = label.toLowerCase(); if (used[k]) { if (score > used[k].s) used[k].s = score; return; } var o = { label: label, sem: sem || semanticFor(label), s: score }; used[k] = o; results.push(o); }
 
-    // ---- empty query → curated defaults (+ next-number for in-use bases) ----
-    if (!q) {
-      Object.keys(groups).forEach(function (kb) { var g = groups[kb]; if (g.max > 0) push(g.base + " " + (g.max + 1), 300 + g.max, "custom"); });
-      var defs = (vert && VERT_DEFAULTS[vert]) ? VERT_DEFAULTS[vert] : (pt === "residential" ? DEFAULTS_RES : DEFAULTS_COM);
-      defs.forEach(function (l, i) { push(l, 100 - i, semanticFor(l)); });
-      results.sort(function (a, b) { return b.s - a.s; });
-      return results.slice(0, limit).map(function (o) { return { label: o.label, semanticType: o.sem }; });
-    }
+    // ---- empty query → NOTHING. Suggestions only appear once the user starts typing. ----
+    if (!q) return [];
 
     // ---- typed query → rank library + recently-used + numbering ----
     poolFor(pt, vert).forEach(function (e) {
