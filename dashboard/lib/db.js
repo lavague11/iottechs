@@ -2789,7 +2789,7 @@ export function customerOwnsProjectAccount(accessId, opts) { return resolveCusto
 export function repairCustomerLink(accessId, { userId = null, email = null, name = null } = {}) {
   if (!userId) return { repaired: false, reason: "NO_USER" };
   const acctEmail = String(email || getUserById(userId)?.email || "").trim().toLowerCase();
-  if (!acctEmail) return { repaired: false, reason: "NO_EMAIL" };
+  if (!acctEmail || acctEmail === "null" || acctEmail === "undefined") return { repaired: false, reason: "NO_EMAIL" };   // phone-only account: never write a bogus roster email
   // Already linked by id on this project? nothing to do.
   const byId = db.prepare("SELECT id FROM project_assignments WHERE project_access_id=? COLLATE NOCASE AND user_id=?").get(String(accessId), Number(userId));
   if (byId) return { repaired: false, reason: "ALREADY_LINKED" };

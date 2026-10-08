@@ -1716,7 +1716,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   }, [project.access_id]);
 
   // ---- Customer inactivity auto-lock ----
-  // A customer's PIN grant already expires server-side 5 minutes after issuance (lib/auth.js
+  // A customer's PIN grant already expires server-side 30 minutes after its last use (sliding; lib/auth.js
   // ACCESS_TTL_MS) — that catches them on their next reload/request. This covers the gap where
   // they leave the tab open without reloading: 15 minutes with no mouse/keyboard/touch/scroll
   // activity drops the grant and reloads, which lands them back on the PIN gate. Staff previewing

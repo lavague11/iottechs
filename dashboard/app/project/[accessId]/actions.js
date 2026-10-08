@@ -51,7 +51,8 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
   const grantPin = async (role) => {
     const { makeAccessToken, accessTtlFor } = await import("../../../lib/auth");
     const jar = await cookies();
-    // Cookie maxAge mirrors the token's own role-based expiry (lib/auth.js ACCESS_TTL_MS) —
+    // Cookie maxAge mirrors the token's own role-based expiry (lib/auth.js ACCESS_TTL_MS; customer grants
+    // slide via refreshAccessToken in proposal-actions.js) —
     // no point letting the browser hold onto a cookie longer than the token inside it is valid.
     jar.set("iot_access", await makeAccessToken(p.access_id, role), { httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.ceil(accessTtlFor(role) / 1000) });
   };
@@ -116,7 +117,7 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       // A correct project PIN is proof the visitor is this project's customer. If that customer
       // has a real account, log them in fully (identity + dashboard access) — the PIN is a
       // shortcut for logging in, not a lesser guest pass. Leads with no account yet keep the
-      // project-scoped PIN grant (short-lived; see lib/auth ACCESS_TTL_MS).
+      // project-scoped PIN grant (30-min sliding window, 8h ceiling; see lib/auth ACCESS_TTL_MS).
       const owner = getCustomerUserForProject(p);
       // Surface the sign-in on the project's Job Log (the recordEvent above is the security
       // audit; this is the human-readable activity line).

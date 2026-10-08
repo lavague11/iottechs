@@ -32,7 +32,7 @@ async function hmac(payload) {
 }
 
 export async function makeToken(user) {
-  const payload = `${user.id}:${user.role}:${user.email}`;
+  const payload = `${user.id}:${user.role}:${user.email ?? ""}`;
   const sig = await hmac(payload);
   return btoa(`${payload}:${sig}`).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
 }
@@ -46,19 +46,24 @@ export async function parseToken(token) {
     const payload = `${id}:${role}:${email}`;
     const expected = await hmac(payload);
     if (sig !== expected) return null;
-    return { id: Number(id), role, email };
+    // Tokens minted before makeToken coalesced a missing email carry the literal "null"/"undefined"
+    // (phone-only accounts) — read those as no email so it can't leak into roster writes.
+    return { id: Number(id), role, email: email === "null" || email === "undefined" ? "" : email };
   } catch {
     return null;
   }
 }
 
 // PIN-scoped access token — a customer/tech who unlocks a project with its PIN gets no login
-// session, so this signed cookie (accessId:role:issuedAt) authorizes their writes on THAT
-// project only, for a limited window. Different roles get different leashes: a customer's
-// grant is short (they may be on a shared/borrowed device), staff get more room to work.
+// session, so this signed cookie authorizes their writes on THAT project only, for a limited
+// window. Payload: accessId:role:issuedAt:since — "since" is when the grant was first minted
+// (preserved across re-mints) so a sliding session still has an absolute ceiling. Tokens minted
+// before the sliding change have no "since" and are read as since = issuedAt.
+// Different roles get different leashes: a customer's window is short (shared/borrowed device) but
+// SLIDES while they use the portal (see refreshAccessToken); staff get more room to work.
 // ACCESS_TTL_MS is exported so callers can size the cookie's own maxAge to match.
 export const ACCESS_TTL_MS = {
-  customer: 5 * 60 * 1000,          // 5 min — re-checked on every request, so a refresh past this re-gates
+  customer: 30 * 60 * 1000,         // 30 min idle window — slides forward while the portal is in use
   tech:     4 * 60 * 60 * 1000,     // 4 hours — a technician is on-site working a job, not idly browsing
   admin:    60 * 60 * 1000,         // 1 hour
   manager:  60 * 60 * 1000,
@@ -67,23 +72,43 @@ export const ACCESS_TTL_MS = {
 const DEFAULT_ACCESS_TTL_MS = 15 * 60 * 1000;
 export function accessTtlFor(role) { return ACCESS_TTL_MS[role] || DEFAULT_ACCESS_TTL_MS; }
 
-export async function makeAccessToken(accessId, role) {
-  const payload = `${accessId}:${role}:${Date.now()}`;
+// Roles whose grant slides, and the absolute ceiling (from the first mint) past which it cannot.
+export const ACCESS_MAX_MS = { customer: 8 * 60 * 60 * 1000 };   // same as a full login session
+const SLIDE_MIN_AGE_MS = 60 * 1000;   // don't re-mint more often than once a minute
+
+export async function makeAccessToken(accessId, role, since = null, now = Date.now()) {
+  const payload = `${accessId}:${role}:${now}:${since == null ? now : since}`;
   const sig = await hmac(payload);
   return btoa(`${payload}:${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
-export async function parseAccessToken(token) {
+export async function parseAccessToken(token, now = Date.now()) {
   try {
     const raw = atob(token.replace(/-/g, "+").replace(/_/g, "/"));
     const parts = raw.split(":");
-    if (parts.length < 4) return null;
-    const [accessId, role, issuedAt, sig] = parts;
-    if ((await hmac(`${accessId}:${role}:${issuedAt}`)) !== sig) return null;
-    if (Date.now() - Number(issuedAt) > accessTtlFor(role)) return null;   // expired — re-gate
-    return { accessId, role };
+    let accessId, role, issuedAt, since, sig;
+    if (parts.length === 4) { [accessId, role, issuedAt, sig] = parts; since = issuedAt; }       // legacy
+    else if (parts.length === 5) { [accessId, role, issuedAt, since, sig] = parts; }
+    else return null;
+    const signed = parts.length === 4 ? `${accessId}:${role}:${issuedAt}` : `${accessId}:${role}:${issuedAt}:${since}`;
+    if ((await hmac(signed)) !== sig) return null;
+    if (!Number.isFinite(Number(issuedAt)) || !Number.isFinite(Number(since))) return null;
+    if (now - Number(issuedAt) > accessTtlFor(role)) return null;   // expired — re-gate
+    const cap = ACCESS_MAX_MS[role];
+    if (cap && now - Number(since) > cap) return null;              // absolute ceiling — re-gate
+    return { accessId, role, issuedAt: Number(issuedAt), since: Number(since) };
   } catch {
     return null;
   }
+}
+
+// Sliding re-mint: given a still-valid grant, return a fresh token for the SAME accessId and role
+// (never widened) with the idle window restarted and the original "since" preserved — or null when
+// it doesn't slide (non-sliding role, minted <1 min ago, expired/invalid, or past the ceiling).
+export async function refreshAccessToken(token, now = Date.now()) {
+  const g = await parseAccessToken(token, now);
+  if (!g || !ACCESS_MAX_MS[g.role]) return null;
+  if (now - g.issuedAt < SLIDE_MIN_AGE_MS) return null;
+  return makeAccessToken(g.accessId, g.role, g.since, now);
 }
 
 // Service-call access token — a customer who unlocks their service call with its PIN gets no login

@@ -1,6 +1,6 @@
 "use server";
 
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import {
   getJobByAccessId, getActiveProposal, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
@@ -369,6 +369,22 @@ export async function submitProposalFlagsAction(accessId, flags, note) {
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
+// Sliding PIN grant: a PIN-only customer's iot_access token is short-lived, so each authorized
+// poll re-mints it (same accessId + role, idle window restarted, original "since" ceiling kept —
+// lib/auth.js refreshAccessToken). Keeps an in-use portal alive without a long-lived token.
+// Only fires for a PIN grant on THIS project; the client's idle timer still drops an abandoned tab.
+async function slidePinGrant(tok, accessId) {
+  if (!tok?.viaPin || String(tok.accessId) !== String(accessId)) return;
+  try {
+    const jar = await cookies();
+    const raw = jar.get("iot_access")?.value;
+    if (!raw) return;
+    const { refreshAccessToken, accessTtlFor } = await import("../../../lib/auth");
+    const fresh = await refreshAccessToken(raw);
+    if (fresh) jar.set("iot_access", fresh, { httpOnly: true, sameSite: "lax", path: "/", maxAge: Math.ceil(accessTtlFor(tok.role) / 1000) });
+  } catch { /* best-effort — never fail a poll over cookie refresh */ }
+}
+
 // Lightweight polling endpoint — a compact, diffable snapshot of everything that can change
 // out from under whoever's looking at this page (staff moves the stage, or the other party
 // signs / pays / approves while it's open). The client polls this on an interval and diffs it
@@ -380,6 +396,7 @@ export async function getLiveSnapshotAction(accessId) {
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   const p = getJobByAccessId(accessId);
   if (!p) return { error: "Not found." };
+  await slidePinGrant(tok, accessId);
   const proposal = getActiveProposal(accessId);
   const payments = getProjectPayments(accessId);
   const acceptances = getStageAcceptances(accessId);
