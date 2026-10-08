@@ -57,8 +57,7 @@ test("audio: standard stays concise; detailed adds a system summary and expands 
   assert.deepEqual(det.warnings, []);
   assert.deepEqual(det.trace.filter((t) => t.y > PDF_PAGE.BOTTOM), [], "nothing under the footer");
   assert.equal(new Set([...pageOf(det.trace, "PAYMENT TERMS"), ...pageOf(det.trace, "Price subject to applicable sales tax")]).size, 1);
-  det.footers.forEach((f, i) => assert.ok(f === `Proposal | ${i + 1}` || f === `Terms | ${i + 1}`, `footer ${i}: ${f}`));
-  assert.ok(det.footers.at(-1).startsWith("Terms | "), "Terms & Conditions is appended last");
+  assert.deepEqual(det.footers, Array.from({ length: det.pages }, (_, i) => `Proposal | ${i + 1}`));
 });
 
 test("cctv: named locations, Included for $0 components, recorder + storage in the summary, no internal cost", () => {

@@ -10,7 +10,7 @@ import { northArrowAngle } from "./site-transform.js";
 // Returns [{ name, img, devices, counts }] — devices feed the legend / schedule in the PDF; counts
 // carry canonical vs rendered so the caller can refuse to ship a silently incomplete survey.
 // Always resolves — a bad/oversized floor is skipped, so the PDF download never fails because of it.
-export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
+export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   // higher res so the plan stays crisp on the PDF
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !surveyData) return resolve([]);
     const floors = parseSurveyFloors(surveyData);
@@ -49,7 +49,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 1600 } = {}) {
       drawExportRegions(ctx, f, W, H);
       // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
       const pxPerFt = (f.scale && f.scale.ftW > 0) ? W / f.scale.ftW : 0;
-      const scene = surveyScene(floors, fi, W, H, { pxPerFt });
+      const scene = surveyScene(floors, fi, W, H, { pxPerFt, dense: 7 });   // >7 devices → codes only on the plan (names in the legend) so a crowded plan doesn't overlap
       // Layer 2a — speaker coverage: a light-blue see-through radius circle (drawn under the markers).
       (scene.rings || []).forEach((g) => {
         ctx.beginPath(); ctx.arc(g.px, g.py, g.R, 0, Math.PI * 2);

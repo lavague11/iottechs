@@ -40,8 +40,8 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
 
   // Legend geometry (pinned to the bottom); the plan takes everything between the band and the legend.
   const devs = Array.isArray(f.devices) ? f.devices : [];
-  const cols = devs.length > 24 ? 5 : devs.length > 12 ? 4 : 3;
-  const lineH = 12, rows = devs.length ? Math.ceil(devs.length / cols) : 0;
+  const cols = devs.length > 24 ? 4 : devs.length > 12 ? 3 : 2;   // fewer columns = wider rows, so codes + full names read cleanly
+  const lineH = 13, rows = devs.length ? Math.ceil(devs.length / cols) : 0;
   const legendH = rows ? rows * lineH + 12 : 0, colW = (W - 2 * MARGIN) / cols;
   const legendTop = H - FOOTER_H - legendH;
 
@@ -56,11 +56,11 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
   if (rows) {
     const ly = legendTop + 12;
     doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.4); doc.line(MARGIN, legendTop + 3, W - MARGIN, legendTop + 3);
-    doc.setFontSize(7.5);
+    doc.setFontSize(8.5);
     devs.forEach((dv, i) => {
       const cx = MARGIN + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
       doc.setFont("helvetica", "bold"); doc.setTextColor(...INK); doc.text(String(dv.code || ""), cx, cy);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(String(dv.label || "").slice(0, 34), cx + 20, cy);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(String(dv.label || "").slice(0, 46), cx + 24, cy);
     });
   }
 }

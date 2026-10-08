@@ -82,7 +82,7 @@ export const SPK_COVERAGE = { fill: "rgba(96,165,250,0.28)", stroke: "rgba(96,16
 // Without it (unscaled / hand-drawn / uploaded floors) coverage falls back to a fixed fraction of the plan.
 export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = null, pxPerFt = 0 } = {}) {
   const all = surveyDevices(floors).filter((d) => d.floor === floorIndex);
-  const r = Math.max(9, Math.round(Math.min(W, H) * 0.018));
+  const r = Math.max(14, Math.round(Math.max(W, H) * 0.011));   // sized by the dominant dimension so markers stay readable on wide/short plans (not tiny)
   const minWH = Math.min(W, H);
   const scaled = pxPerFt > 0;
   const fallbackCone = coneLen || Math.round(minWH * 0.14);

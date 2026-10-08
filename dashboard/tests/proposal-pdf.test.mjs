@@ -46,11 +46,8 @@ for (const [label, n, opts] of [["short", 1, {}], ["medium", 10, {}], ["long", 3
     // 5. Column header follows the table onto every page that has rows (no orphaned rows).
     const rowPages = new Set(trace.filter((t) => /^Camera Location|^Exterior 4K/.test(t.text)).map((t) => t.page));
     for (const pg of rowPages) assert.ok(trace.some((t) => t.page === pg && t.text === "Description"), `page ${pg} has rows but no column header`);
-    // 6. Page numbers come from the real page count, in order; Terms & Conditions is appended last.
-    footers.forEach((f, i) => assert.ok(f === `Proposal | ${i + 1}` || f === `Terms | ${i + 1}`, `footer ${i}: ${f}`));
-    const firstTerms = footers.findIndex((f) => f.startsWith("Terms"));
-    assert.ok(firstTerms > 0, "a Terms & Conditions section is appended at the end");
-    for (let i = firstTerms; i < footers.length; i++) assert.ok(footers[i].startsWith("Terms"), "Terms pages are contiguous at the very end");
+    // 6. Page numbers come from the real page count, in order (no Terms page — terms live in the acceptance flow).
+    assert.deepEqual(footers, Array.from({ length: pages }, (_, i) => `Proposal | ${i + 1}`));
   });
 }
 
@@ -99,7 +96,7 @@ test("survey pages list every rendered device under the plan, flag a background-
   for (let i = 1; i <= 9; i++) { assert.ok(texts.includes(`S${i}`), `code S${i}`); assert.ok(texts.includes(`Speaker ${i}`), `label ${i}`); }
   assert.deepEqual(trace.filter((t) => t.y > PDF_PAGE.BOTTOM), [], "the device list stays above the footer");
   assert.ok(footers.some((f) => f.startsWith("Survey | ")), "survey pages numbered in the Survey section");
-  assert.ok(footers.at(-1).startsWith("Terms | "), "Terms & Conditions is the final section");
+  assert.ok(footers.at(-1).startsWith("Survey | "), "the survey is the final section (no Terms page)");
   assert.deepEqual(warnings, ["Scope mismatch — Planner speakers: 9 · proposal speakers: 10"]);
   // A floor whose export lost devices is surfaced, never silently shipped.
   const w2 = [];
@@ -107,7 +104,7 @@ test("survey pages list every rendered device under the plan, flag a background-
   assert.match(w2[0], /planner devices 9, rendered 0/);
 });
 
-test("document order: Proposal → Site Survey → System Mockup → Terms & Conditions (terms always present)", () => {
+test("document order: Proposal → Site Survey → System Mockup (no Terms page — terms are in the acceptance flow)", () => {
   const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
   const JPG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
   const surveyImages = [{ name: "Floor 1", img: PNG, devices: [{ code: "C1", label: "Driveway 1" }], counts: { canonical: 1, rendered: 1 } }];
@@ -116,8 +113,8 @@ test("document order: Proposal → Site Survey → System Mockup → Terms & Con
   assert.ok(firstOf("Proposal") === 0, "proposal pages come first");
   assert.ok(firstOf("Survey") > firstOf("Proposal"), "survey after the proposal");
   assert.ok(firstOf("Mockup") > firstOf("Survey"), "mockup after the survey");
-  assert.ok(firstOf("Terms") > firstOf("Mockup"), "terms after the mockup");
-  assert.ok(footers.at(-1).startsWith("Terms | "), "terms are the very last pages");
+  assert.ok(footers.at(-1).startsWith("Mockup | "), "mockup is the last section (no Terms page)");
+  assert.ok(!footers.some((f) => f.startsWith("Terms")), "no Terms page in the proposal PDF");
 });
 function render2(p, attachments) {
   const trace = [], footers = [];
