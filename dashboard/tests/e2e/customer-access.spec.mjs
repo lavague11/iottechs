@@ -75,6 +75,18 @@ test("refresh after auth keeps the customer in (no re-gate, no error)", async ({
   await NO_ERROR(page);
 });
 
+test("the internal staff directory is not shipped to the customer payload", async ({ page, request, context }) => {
+  const accessId = await makeProject(request, "noleak");
+  await context.clearCookies();
+  await page.goto(`/project/${accessId}`, { waitUntil: "domcontentloaded" });
+  await enterPin(page, PIN);
+  await expect(page.getByText("Customer view")).toBeVisible({ timeout: 30_000 });
+  // The RSC payload is serialized into <script> tags; staff ACCOUNT emails must never be in it.
+  const html = await page.content();
+  expect(html).not.toContain("manager@iot-techs.com");
+  expect(html).not.toContain("admin@iot-techs.com");
+});
+
 test("wrong PIN does not open the project (no data leak)", async ({ page, request, context }) => {
   const accessId = await makeProject(request, "wrongpin");
   await context.clearCookies();

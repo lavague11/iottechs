@@ -246,8 +246,8 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   if (initialView === "tech") {
     assignments = assignments.map(a => a.role === "customer" ? { ...a, user_email: null } : a);
   }
-  const staffUsers   = getStaffUsers().map(r=>({...r}));
-  const workOrders   = getWorkOrdersByProject(p.access_id).map(r=>({...r}));
+  let   staffUsers   = getStaffUsers().map(r=>({...r}));
+  let   workOrders   = getWorkOrdersByProject(p.access_id).map(r=>({...r}));
   let   expenses     = getProjectExpenses(p.access_id).map(r=>({...r}));
   let   requests     = getProjectRequests(p.access_id).map(r=>({...r}));
   // A tech has no management authority — they only see their OWN submissions, never their
@@ -256,6 +256,17 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     const meId = currentUser?.id ?? -1;
     expenses = expenses.filter((e) => Number(e.submitted_by_id) === Number(meId));
     requests = requests.filter((r) => Number(r.submitted_by_id) === Number(meId));
+  }
+  // Customer / unauthenticated (PIN-gate) viewers must NEVER receive the internal staff directory,
+  // financials or work orders — RSC ships these props to the browser, so hiding them in the UI isn't
+  // enough (they'd sit in DevTools / the payload). Send staff NAMES only (the Job Log and scheduling
+  // label events/appointments by name) and empty every internal list. Server-side strip, DoD rule #4.
+  if (initialView === "customer" || !initialView) {
+    staffUsers  = staffUsers.map((u) => ({ id: u.id, name: u.name, role: u.role }));
+    assignments = assignments.map((a) => (a.role === "customer" ? a : { ...a, user_email: null }));
+    expenses    = [];
+    requests    = [];
+    workOrders  = [];
   }
 
   // ---- Proposal view tracking: log a view when someone opens a project at the proposal stage ----
