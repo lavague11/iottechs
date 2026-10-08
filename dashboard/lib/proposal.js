@@ -362,14 +362,17 @@ export function blankPayloadForService(serviceKey) {
 // Deposit / payment schedules the office picks as presets. `terms` prints on the proposal.
 export const PAYMENT_PLANS = {
   "100":      { label: "100",          depositPct: 100, terms: "Paid in full before we begin." },
+  "100_end":  { label: "100 at end",   depositPct: 0,   terms: "Paid in full upon completion." },
   "50_50":    { label: "50 / 50",      depositPct: 50, terms: "50% due before we begin · 50% upon completion." },
   "50_30_20": { label: "50 / 30 / 20", depositPct: 50, terms: "50% to begin · 30% at project midpoint · 20% upon completion (or Net 30)." },
   "custom":   { label: "Custom",       depositPct: null, terms: "" },
 };
 
 // Milestone breakdown for the preset plans — [pct, when] pairs used to render a compact schedule.
+// A 100% plan is ONE milestone (not Deposit + 0% Final): "before we begin" (prepaid) or "upon completion" (postpaid).
 const PLAN_MILESTONES = {
   "100":      [[100, "before we begin"]],
+  "100_end":  [[100, "upon completion"]],
   "50_50":    [[50, "to begin"], [50, "upon completion"]],
   "50_30_20": [[50, "to begin"], [30, "at midpoint"], [20, "upon completion"]],
 };
@@ -930,6 +933,6 @@ export function validatePayload(payload) {
     const pv = (pc && typeof pc === "object") ? pc.value : pc;
     if (!(+pv >= 0 && +pv <= 1000000)) return "Bad PCP credit.";
   }
-  if (payload.payment_plan && !["50_50", "50_30_20", "custom"].includes(payload.payment_plan)) return "Bad payment plan.";
+  if (payload.payment_plan && !["100", "100_end", "50_50", "50_30_20", "custom"].includes(payload.payment_plan)) return "Bad payment plan.";
   return null;
 }
