@@ -294,7 +294,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     catch { window.prompt("Copy this link to share the proposal:", url); }
   }
 
-  if (!p || !p.payload) {
+  // A proposal row can exist with empty / missing options — cloned, imported or legacy rows that the
+  // write-time validatePayload never normalized. Treat that exactly like "not ready yet" (the Preparing
+  // state) so the customer view never dereferences a missing option and crashes the whole page
+  // ("This page couldn't load"). Guard here covers every p.payload.options / opt use below.
+  if (!p || !p.payload || !Array.isArray(p.payload.options) || !p.payload.options.length) {
     return (
       <div className="pcv-root">
         <style>{PCV_CSS}</style>
@@ -317,11 +321,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
   const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
-  const camSvc = opt.services.find((s) => s.key === "camera");
+  const camSvc = (opt.services || []).find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
   // one source of truth — instead of a generic "Full Camera Install".
-  const camNames = cameraNameOverrides(opt.services, camRoster);
+  const camNames = cameraNameOverrides(opt.services || [], camRoster);
   const payPlan = p.payload.payment_plan || "custom";
   const fullDate = p.payload.full_date || null;
   const payBase = p.signed_at || p.sent_at || p.created_at || null;
@@ -609,7 +613,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       <div className="pcv-sum">
         <div className="pcv-sum-hd">Your System{p.payload.options.length > 1 ? ` · Option ${opt.id}` : ""}{p.payload.options.length > 1 ? <span className="pcv-sum-hd-nm">{displayOptionName(opt.name)}</span> : null}</div>
         <div className="pcv-sum-cats">
-          {opt.services.filter((s) => s.items?.length).map((s, i) => {
+          {(opt.services || []).filter((s) => s.items?.length).map((s, i) => {
             const camCount = s.key === "camera" ? s.items.filter((it) => (it.sub || []).length > 0).length : 0;
             const count = camCount || s.items.reduce((a, it) => a + ((it.sub || []).length ? 1 : (+it.qty || 1)), 0);
             const noun = s.key === "camera" ? `camera${count !== 1 ? "s" : ""}` : `item${count !== 1 ? "s" : ""}`;
@@ -648,7 +652,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         <div className="pcv-table-head">
           <span>#</span><span>Description</span><span className="r">Qty</span><span className="r">Unit</span><span className="r">Total</span>
         </div>
-        {opt.services.map((s, i) => {
+        {(opt.services || []).map((s, i) => {
           if (!s.items?.length) return null;
           let blockN = 0;
           let secTotal = 0;

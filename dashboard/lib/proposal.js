@@ -842,7 +842,13 @@ export function cameraNameOverrides(services, roster, { byPosition = false } = {
 
 export function sanitizeProposal(row, role) {
   if (!row) return null;
-  const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+  // A corrupt / empty payload column must never throw here — this runs in the project page's server
+  // render, so a throw 500s the whole page ("This page couldn't load"). Parse safely and normalize to the
+  // shape every renderer already treats as "not ready yet": an object with an (array) options list.
+  let payload;
+  try { payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload; } catch { payload = null; }
+  if (!payload || typeof payload !== "object") payload = { options: [] };
+  else if (!Array.isArray(payload.options)) payload = { ...payload, options: [] };
   // Frozen snapshot of exactly what was signed (null until signed). Sanitized per role like `payload`,
   // and used by the PDF so a signed version downloads as the exact signed artifact, not a re-render.
   const signedPayloadRaw = row.signed_payload ? (() => { try { return typeof row.signed_payload === "string" ? JSON.parse(row.signed_payload) : row.signed_payload; } catch { return null; } })() : null;
