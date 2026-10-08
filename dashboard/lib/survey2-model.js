@@ -62,6 +62,9 @@ export function surveyDevices(floors) {
       // label = WHERE it is (geometry-derived location "Dining 1"), falling back to identity; identity + placement ride alongside for detail/selection.
       code, label: cap((d.locName && String(d.locName).trim()) || (d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
       identity: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`), placementType: d.placementType || "",
+      // loc = the geometry-derived room/area on its own ("Dining 1"), empty when the device sits off every
+      // room/area/zone. The legend/schedule show it as a separate column; "" renders as "Unassigned".
+      loc: cap((d.locName && String(d.locName).trim()) || ""),
       x: Math.max(0, Math.min(100, num(d.x))), y: Math.max(0, Math.min(100, num(d.y))),
       cone: !!(it.cone || d.cone), aimed: !!d.aimed || num(d.aim) !== 0, aim: num(d.aim), fov: num(d.fov, it.fov || 30),
       // Speakers cover a circle (a radius), not an aimed wedge — range is a percent of the floor's short side.

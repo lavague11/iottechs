@@ -44,6 +44,20 @@ test("audio survey: nine speakers + amp → nine S-coded markers, no cones, exac
   assert.deepEqual(surveyCounts(floors), { amp: 1, spk: 9 });
 });
 
+test("location split: a device carries loc (room) + identity separately; label prefers the room; no room → loc empty", () => {
+  const floors = parseSurveyFloors(JSON.stringify({ floors: [{ name: "Floor 1", bg: "x", devices: [
+    { id: 1, k: "cam", x: 30, y: 40, tag: "IC1", name: "Access Point 1", locName: "Dining 1" },
+    { id: 2, k: "cam", x: 70, y: 40, tag: "IC2", name: "Access Point 2" },   // off every room → no locName
+  ] }] }));
+  const [a, b] = surveyDevices(floors);
+  assert.equal(a.loc, "Dining 1", "room rides on its own field");
+  assert.equal(a.identity, "Access Point 1", "identity is the device's own name");
+  assert.equal(a.label, "Dining 1", "label prefers WHERE it is");
+  assert.equal(b.loc, "", "a device off every room has no room (renders as Unassigned downstream)");
+  assert.equal(b.identity, "Access Point 2");
+  assert.equal(b.label, "Access Point 2", "label falls back to identity when there's no room");
+});
+
 test("cameras: aimed cameras get a cone with the stored aim/fov; an unaimed one does not; mixed kinds keep their own symbols", () => {
   const floors = parseSurveyFloors(JSON.stringify({ floors: [{ name: "Exterior", bg: "x", devices: [cam(1, 30, 40, 90), cam(2, 60, 40, null), spk(1, 80, 80)] }] }));
   const scene = surveyScene(floors, 0, 1000, 1000);

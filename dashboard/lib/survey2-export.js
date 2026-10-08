@@ -107,7 +107,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       }
       let img;
       try { img = cv.toDataURL("image/png"); } catch { return null; }
-      const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, kind: d.kindName, group: d.group }));
+      const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, identity: d.identity, room: d.loc, kind: d.kindName, group: d.group }));
       return { name: f.name, img, devices, counts: { canonical: floors[fi].devices.length, rendered: scene.count } };
     })).then((out) => {
       const done = out.filter(Boolean);

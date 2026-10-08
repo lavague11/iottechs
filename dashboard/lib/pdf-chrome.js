@@ -40,7 +40,8 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
 
   // Legend geometry (pinned to the bottom); the plan takes everything between the band and the legend.
   const devs = Array.isArray(f.devices) ? f.devices : [];
-  const cols = devs.length > 24 ? 4 : devs.length > 12 ? 3 : 2;   // fewer columns = wider rows, so codes + full names read cleanly
+  // Each entry is "code  device · room", so keep columns wider than a plain code+name list.
+  const cols = devs.length > 24 ? 3 : devs.length > 10 ? 2 : 1;   // fewer, wider columns so "name · room" reads cleanly
   const lineH = 13, rows = devs.length ? Math.ceil(devs.length / cols) : 0;
   const legendH = rows ? rows * lineH + 12 : 0, colW = (W - 2 * MARGIN) / cols;
   const legendTop = H - FOOTER_H - legendH;
@@ -60,7 +61,12 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
     devs.forEach((dv, i) => {
       const cx = MARGIN + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
       doc.setFont("helvetica", "bold"); doc.setTextColor(...INK); doc.text(String(dv.code || ""), cx, cy);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(String(dv.label || "").slice(0, 46), cx + 24, cy);
+      // device identity, then its room in a muted tone ("· Dining 1"), "Unassigned" when off every room/area.
+      const name = String(dv.identity || dv.label || "").slice(0, 28);
+      const room = (String(dv.room || "").trim() || "Unassigned").slice(0, 22);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(name, cx + 24, cy);
+      const nameW = doc.getTextWidth(name);
+      doc.setTextColor(140, 142, 138); doc.text(" · " + room, cx + 24 + nameW, cy);
     });
   }
 }
