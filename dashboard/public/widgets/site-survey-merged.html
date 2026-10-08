@@ -1726,10 +1726,10 @@
       else if(zt){ res.base=zTypeLabel(zt); }
       return res; }
     function reconcileLocations(){ if(frozen()||!devices.length) return; var f=floors[curFloor]||{}, o=sugOpts(f), changed=false, max={};
-      var ctxs=devices.map(function(d){ return d.k==="cam"?rmDevCtx(d,f,o):null; });
+      var ctxs=devices.map(function(d){ return rmDevCtx(d,f,o); });   // EVERY placeholder (cam, toast, ADT, electrical, …) gets a room/area-based location
       var keys=devices.map(function(d,i){ var ct=ctxs[i]; if(!ct||!ct.base) return ""; return ct.roomIdx>=0?("room:"+ct.roomIdx):("zone:"+ct.base); });
       devices.forEach(function(d,i){ var k=keys[i]; if(k && d.locKey===k && +d.locSeq>0) max[k]=Math.max(max[k]||0,+d.locSeq); });   // keepers register their stored number first
-      devices.forEach(function(d,i){ if(d.k!=="cam") return; var ct=ctxs[i], k=keys[i], npt=ct.placementType||"", nSeq, nName;
+      devices.forEach(function(d,i){ var ct=ctxs[i], k=keys[i], npt=ct.placementType||"", nSeq, nName;
         if(!k){ nSeq=0; } else if(d.locKey===k && +d.locSeq>0){ nSeq=+d.locSeq; } else { nSeq=(max[k]||0)+1; max[k]=nSeq; }   // stable, else next number in this location
         nName = k ? (ct.base+" "+nSeq) : "";
         if(d.locName!==nName||d.locKey!==k||d.locSeq!==nSeq||d.placementType!==npt){ d.locName=nName; d.locKey=k; d.locSeq=nSeq; d.placementType=npt; changed=true; } });

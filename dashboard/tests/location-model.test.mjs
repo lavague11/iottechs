@@ -71,6 +71,9 @@ test("identity is never written; the reconciler writes only location fields with
   assert.ok(rc.includes("d.locName=nName") && rc.includes("d.placementType=npt") && rc.includes("d.locSeq=nSeq"), "writes the location fields");
   assert.ok(rc.includes("d.locKey===k && +d.locSeq>0){ nSeq=+d.locSeq;") && rc.includes("nSeq=(max[k]||0)+1"), "keeps its number in place, else takes the next one (no reshuffle)");
   assert.ok(survey.includes('ct.base+" "+nSeq') && !survey.includes('ct.base+" Camera "'), "location name is '<Room/Zone> <n>' (no 'Camera' word)");
+  // EVERY placeholder gets a room/area location — not cameras only.
+  assert.ok(rc.includes("devices.map(function(d){ return rmDevCtx(d,f,o); })"), "location context is computed for every device kind");
+  assert.ok(!rc.includes('if(d.k!=="cam") return;'), "the cameras-only gate on location naming is gone");
 });
 
 test("the map label prefers the location name; identity is the fallback", () => {
