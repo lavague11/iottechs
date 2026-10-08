@@ -39,7 +39,7 @@ export async function enterPin(page, pin = PIN) {
 // Customer opens the proposal and presses Approve & Sign → the PDF signer.
 export async function openSigner(page, context, accessId) {
   await context.clearCookies();
-  await page.goto(`/project/${accessId}?esign=1&stage=proposal&open=proposal`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/project/${accessId}?stage=proposal&open=proposal`, { waitUntil: "domcontentloaded" });
   await enterPin(page);
   await expect(page.getByText("Customer view")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: /Approve & Sign|Review & Sign/ }).first().click();

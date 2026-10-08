@@ -49,6 +49,7 @@ export function validateSession(token, accessId, caller, { now = Date.now() } = 
   // Ownership is re-checked on every step against the CURRENT cookies — a leaked token alone is useless.
   if (!maySignProposal(caller, s.project_access_id) || !sameSigner(s, caller)) return fail("DENIED", MSG.DENIED);
   if (s.state === "signed") return fail("USED", MSG.USED);
+  if (s.state === "completing") return fail("BUSY", "This document is being signed.");
   if (s.state === "void") return fail("VOID", MSG.VOID);
   if (s.state === "expired" || Number(s.expires_at) <= now) {
     if (s.state === "open") h().prepare("UPDATE sign_sessions SET state='expired' WHERE id=? AND state='open'").run(s.id);

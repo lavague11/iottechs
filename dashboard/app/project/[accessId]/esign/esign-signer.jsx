@@ -6,7 +6,7 @@ import CaptureSheet from "./capture-sheet";
 import ConsentSheet from "./consent-sheet";
 import { Icon } from "./icons";
 import { ESG_CSS } from "./esign-css";
-import { startSignAction, saveSignValuesAction } from "../esign-actions";
+import { startSignAction, saveSignValuesAction, completeSignAction } from "../esign-actions";
 
 // The signer: the ACTUAL generated proposal PDF, page by page, with the signature / name / date fields
 // laid over the acceptance block. Full-screen, mobile-first (sticky Next/Finish bar, large tap targets).
@@ -21,7 +21,7 @@ const store = {
   set: (k, v) => { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} },
 };
 
-export default function EsignSigner({ accessId, optKey, optLabel, reference, defaultName = "", onClose }) {
+export default function EsignSigner({ accessId, optKey, optLabel, reference, defaultName = "", onClose, onDone }) {
   const [sess, setSess] = useState(null);      // { token }
   const [doc, setDoc] = useState(null);
   const [values, setValues] = useState({ name: null, signature: null, acks: {}, missing: [] });
@@ -32,7 +32,6 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);        // sheet-level, recoverable
   const [fatal, setFatal] = useState(null);    // { error, code } — session can't continue
-  const [toast, setToast] = useState(null);
   const [epoch, setEpoch] = useState(0);       // bump to reopen with a fresh session
   const scrollRef = useRef(null);
 
@@ -72,7 +71,17 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   }
 
   const adopt = (name, signature) => save({ name, signature }, () => { setSheet(null); setActive(Math.max(0, fields.findIndex((f) => f.type === "signature"))); });
-  const saveAcks = (a) => save({ acks: a }, () => { setSheet(null); setToast("Saved"); setTimeout(() => setToast(null), 2200); });
+  // Sign: the server re-validates everything, flattens the signed PDF and runs accept + sign.
+  async function finish(a) {
+    if (!sess?.token) return;
+    setBusy(true); setErr(null);
+    const r = await completeSignAction(accessId, sess.token, a).catch(() => ({ error: "Couldn't finish signing. Try again." }));
+    setBusy(false);
+    if (!handle(r)) return;
+    store.set(tokenKey(accessId, optKey), null);
+    setSheet(null);
+    onDone?.(r);
+  }
 
   function scrollTo(i) { scrollRef.current?.querySelector(`[data-field="${fields[i]?.key}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }
   function next() {
@@ -129,12 +138,11 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       </div>
       <div className="esg-bar">
         <span className="esg-count">{fields.length ? `${filled} / ${fields.length}` : ""}</span>
-        {toast && <span className="esg-count" role="status" data-testid="esign-toast" style={{ color: "var(--esg-ok)", textAlign: "right" }}>{toast}</span>}
         <button type="button" className="esg-go" data-testid="esign-next" disabled={!fields.length || !!fatal} onClick={next}>Next</button>
         <button type="button" className="esg-go" data-testid="esign-finish" disabled={!signed || !!fatal} onClick={() => { setErr(null); setSheet("consent"); }}>Finish</button>
       </div>
       {sheet === "capture" && <CaptureSheet defaultName={values.name || defaultName} busy={busy} error={err} onAdopt={adopt} onCancel={() => { setSheet(null); setErr(null); }} />}
-      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Sign" onConfirm={saveAcks} onCancel={() => { setSheet(null); setErr(null); }} />}
+      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Sign" onConfirm={finish} onCancel={() => { setSheet(null); setErr(null); }} />}
     </div>,
     document.body
   );

@@ -79,7 +79,7 @@ async function adoptTyped(page, name = "Jordan Rivera") {
 }
 
 for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone", { width: 390, height: 844 }]]) {
-  test(`P2 ${label}: adopt (typed) fills name, signature and date; survives a reload; consent is saved`, async ({ page, request, context }) => {
+  test(`P2 ${label}: adopt (typed) fills name, signature and date; survives a reload; consent is gated`, async ({ page, request, context }) => {
     await page.setViewportSize(size);
     const accessId = await makeProject(request, `p2-typed-${label}`);
     seedSentProposal(accessId);
@@ -113,10 +113,10 @@ for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone"
     await expect(page.getByTestId("esign-confirm")).toBeDisabled();
     await page.getByTestId("esign-ack-payment").check();
     await expect(page.getByTestId("esign-confirm")).toBeEnabled();
-    await page.getByTestId("esign-confirm").click();
-    await expect(page.getByTestId("esign-toast")).toHaveText("Saved");
-    const saved = JSON.parse(sessionRow(accessId).values_json);
-    expect(saved.acks.terms && saved.acks.payment).toBe(true);
+    // Acks are saved with the session as they're checked at Sign time; closing keeps the signature adopted.
+    await page.getByLabel("Close").last().click();
+    await expect(page.getByTestId("esign-consent")).toHaveCount(0);
+    await expect(page.locator('[data-type="signature"] img')).toBeVisible();
   });
 }
 
@@ -163,3 +163,54 @@ test("P2: a proposal edited under an open session is refused (Reopen → review 
   await expect(page.getByTestId("esign-field")).toHaveCount(3, { timeout: 30_000 });
   await expect(page.getByTestId("esign-fatal")).toHaveCount(0);
 });
+
+// ---- P3: sign → flatten → persist → lifecycle → certificate -------------------------------------------
+for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone", { width: 390, height: 844 }]]) {
+  test(`P3 ${label}: Sign completes — signed PDF + certificate stored, proposal accepted and locked`, async ({ page, request, context }) => {
+    await page.setViewportSize(size);
+    const accessId = await makeProject(request, `p3-${label}`);
+    seedSentProposal(accessId);
+    await openSigner(page, context, accessId);
+    await expect(page.getByTestId("esign-field")).toHaveCount(3, { timeout: 30_000 });
+    await adoptTyped(page, "Jordan Rivera");
+    await page.getByTestId("esign-finish").click();
+    await expect(page.getByTestId("esign-confirm")).toBeDisabled();
+    await page.getByTestId("esign-ack-terms").check();
+    await page.getByTestId("esign-ack-payment").check();
+    await page.getByTestId("esign-confirm").click();
+
+    // The signer closes and the customer view shows the locked, signed state with the stored PDFs.
+    await expect(page.getByTestId("esign")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByText(/Signed by Jordan Rivera/)).toBeVisible({ timeout: 30_000 });
+    const link = page.getByTestId("signed-pdf-link");
+    await expect(link).toBeVisible();
+
+    const db = openDb();
+    const p = db.prepare("SELECT * FROM proposals WHERE project_access_id=? ORDER BY id DESC LIMIT 1").get(accessId);
+    const docs = db.prepare("SELECT kind, voided, length(bytes) n FROM sign_documents WHERE proposal_id=? ORDER BY created_at").all(p.id);
+    db.close();
+    expect(p.status).toBe("accepted");
+    expect(p.signed_name).toBe("Jordan Rivera");
+    expect(p.sign_status).toBe("signed");
+    expect(p.signed_fingerprint).toBeTruthy();
+    expect(p.signed_doc_id).toBeTruthy();
+    expect(docs.map((d) => d.kind).sort()).toEqual(["certificate", "signed", "unsigned"]);
+    expect(docs.every((d) => !d.voided && d.n > 1000)).toBeTruthy();
+
+    // Both stored PDFs are real PDFs behind the read gate; an anonymous client gets nothing.
+    const href = await link.getAttribute("href");
+    const signed = await page.request.get(href);
+    expect(signed.status()).toBe(200);
+    expect((await signed.body()).subarray(0, 5).toString()).toBe("%PDF-");
+    const cert = await page.request.get(`${href}?cert=1`);
+    expect(cert.status()).toBe(200);
+    expect((await cert.body()).subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await request.get(href, { headers: { cookie: "" } })).status()).toBe(404);
+
+    // Reload: still signed and locked (no re-sign button), links still there.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByText(/Signed by Jordan Rivera/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("button", { name: /Approve & Sign|Review & Sign/ })).toHaveCount(0);
+    await expect(page.getByTestId("cert-link")).toBeVisible();
+  });
+}

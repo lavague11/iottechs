@@ -2,7 +2,10 @@
 // before it is stored, and again when the PDF is flattened.
 import { PROPOSAL_ACKS } from "../proposal-terms.js";
 
-export const MAX_SIG_BYTES = 200 * 1024;          // decoded PNG
+// The data URL (what proposals.signature_data stores, sliced to 200000 chars by signProposal) must fit in 200KB —
+// a longer one would be truncated into a corrupt image, so it is refused up front.
+export const MAX_SIG_DATAURL = 200000;
+export const MAX_SIG_BYTES = 150 * 1024;          // decoded PNG (≈ 200KB as base64)
 export const MAX_SIG_PIXELS = { w: 2000, h: 1000 };
 export const SIG_METHODS = ["draw", "type", "upload"];
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -12,6 +15,7 @@ const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 export function parsePngDataUrl(s) {
   const m = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(s || ""));
   if (!m) return { ok: false, error: "Signature must be a PNG image." };
+  if (String(s).length > MAX_SIG_DATAURL) return { ok: false, error: "Signature image is too large." };
   if (m[1].length > Math.ceil(MAX_SIG_BYTES * 4 / 3) + 8) return { ok: false, error: "Signature image is too large." };
   const bytes = Buffer.from(m[1], "base64");
   if (bytes.length > MAX_SIG_BYTES) return { ok: false, error: "Signature image is too large." };

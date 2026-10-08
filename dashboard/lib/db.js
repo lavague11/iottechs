@@ -5976,6 +5976,9 @@ export function voidProposalSignature(accessId) {
   const cur = getActiveProposal(accessId);
   if (!cur) return null;
   db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, signed_fingerprint=NULL, signed_payload=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  // E-sign: the stored signed PDF + certificate stay in history (voided, never erased) and the proposal stops pointing at them.
+  db.prepare("UPDATE sign_documents SET voided=1 WHERE proposal_id=? AND kind IN ('signed','certificate')").run(cur.id);
+  db.prepare("UPDATE proposals SET signed_doc_id=NULL, sign_status=NULL WHERE id=?").run(cur.id);
   return getActiveProposal(accessId);
 }
 // Admin/manager correction: void the technician's work-order signature (which is also their

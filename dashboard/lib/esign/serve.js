@@ -8,14 +8,22 @@
 import { getDocument } from "./store.js";
 import { callerFromCookies, mayReadSignDoc } from "./access.js";
 
-export async function serveSignDocument(id, cookieHeader) {
+// `certificate: true` on a signed document's id serves ITS certificate of completion instead (one gate, no extra
+// column): /api/proposal-doc/<signedId>?cert=1.
+export async function serveSignDocument(id, cookieHeader, { certificate = false } = {}) {
   const miss = { status: 404, body: "Not found", headers: { "Cache-Control": "no-store" } };
   const docId = String(id || "");
   if (!/^[0-9a-f]{32}$/.test(docId)) return miss;
-  const doc = getDocument(docId);
+  let doc = getDocument(docId);
   if (!doc) return miss;
   const tok = await callerFromCookies(cookieHeader);
   if (!mayReadSignDoc(tok, doc.project_access_id)) return miss;
+  if (certificate) {
+    const cid = doc.kind === "signed" ? doc.meta?.certificateDocId : null;
+    const cert = cid ? getDocument(cid) : null;
+    if (!cert || cert.project_access_id !== doc.project_access_id) return miss;
+    doc = cert;
+  }
   // A voided document stays in the audit trail but is only served to the office.
   if (doc.voided && !["admin", "manager"].includes(tok.role)) return miss;
   const name = String(doc.meta?.fileName || `proposal-${doc.kind}.pdf`).replace(/[^\w.\- ]+/g, "_");

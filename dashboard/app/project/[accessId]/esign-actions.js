@@ -7,6 +7,8 @@ import { headers } from "next/headers";
 import { callerFromCookies } from "../../../lib/esign/access";
 import { startSession, saveValues, publicSession } from "../../../lib/esign/session";
 import { requiredAcks, missingRequired } from "../../../lib/esign/capture";
+import { completeSession } from "../../../lib/esign/complete";
+import { sanitizeProposal } from "../../../lib/proposal";
 
 async function ctx() {
   const h = await headers();
@@ -41,4 +43,17 @@ export async function saveSignValuesAction(accessId, token, patch) {
   const r = saveValues({ token, accessId, caller, patch: patch || {}, ip, ua });
   if (!r.ok) return err(r);
   return { ok: true, values: valuesView(r.values, r.row), expiresAt: r.expiresAt };
+}
+
+// Finish: flatten the signed PDF, run the existing accept + sign lifecycle, write the certificate.
+// `acks` (optional) is merged first so the consent sheet can confirm and sign in one round trip.
+export async function completeSignAction(accessId, token, acks = null) {
+  const { caller, ip, ua } = await ctx();
+  if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
+  if (acks) { const r = saveValues({ token, accessId, caller, patch: { acks }, ip, ua }); if (!r.ok) return err(r); }
+  const r = await completeSession({ token, accessId, caller, ip, ua });
+  if (!r.ok) return err(r);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, stage: r.stage, proposal: sanitizeProposal(r.row, caller.role), signedDocId: r.signedDocId };
 }
