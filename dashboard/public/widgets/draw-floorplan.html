@@ -81,6 +81,10 @@
   #revBox.on{display:flex}
   #revBox input{border:0;outline:none;font:inherit;font-size:13px;color:var(--ink);width:min(52vw,320px)}
   #revBox button{border:0;background:var(--gold);color:#fff;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer}
+  #revBox .revmic{background:#eef0f2;color:#2b2f36;padding:0;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px}
+  #revBox .revmic svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #revBox .revmic.live{background:#c4553d;color:#fff;animation:revpulse 1s ease-in-out infinite}
+  @keyframes revpulse{0%,100%{opacity:1}50%{opacity:.6}}
   /* In-product confirm (replaces window.confirm): compact centered card over a light dim; Cancel quiet, one primary. */
   #confirmCard{position:absolute;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(16,17,18,.28);padding:16px}
   #confirmCard.on{display:flex}
@@ -178,7 +182,7 @@
       <div id="scan"><div class="grid"></div><div class="beam"></div><div class="cap">Drawing your floor plan…</div></div>
     </div>
     <div id="msg"></div>
-    <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. add a hallway between the rooms"><button id="revGo">Revise</button></div>
+    <div id="revBox"><input id="revIn" type="text" maxlength="200" placeholder="What should change? e.g. add a hallway between the rooms"><button id="revMic" class="revmic" type="button" title="Dictate" aria-label="Dictate"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4M8 22h8"/></svg></button><button id="revGo">Revise</button></div>
     <div id="confirmCard"><div class="cc" role="alertdialog" aria-modal="true" aria-labelledby="ccT" aria-describedby="ccB"><div class="cct" id="ccT"></div><div class="ccb" id="ccB"></div><div class="cca"><button id="ccNo">Cancel</button><button id="ccOk">OK</button></div></div></div>
 
     <!-- Bottom-left contextual history — outside the toolbar; Undo appears after the first edit, Redo only when a redo exists. -->
@@ -1196,6 +1200,18 @@
   function runRev(){ var v=$("revIn").value.trim(); closeRev(); enhance(v); }
   $("revGo").addEventListener("click", runRev);
   $("revIn").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runRev(); } else if(e.key==="Escape") closeRev(); });
+  // Dictation: a mic on the Revise box fills the prompt by voice (Web Speech API). Appends to what's typed;
+  // tap again to stop. Hidden where the browser has no speech recognition.
+  (function(){ var SR=window.SpeechRecognition||window.webkitSpeechRecognition, mic=$("revMic"), inp=$("revIn"); if(!mic||!inp) return;
+    if(!SR){ mic.style.display="none"; return; }
+    var rec=null, on=false;
+    function stop(){ if(rec){ try{ rec.stop(); }catch(e){} } rec=null; on=false; mic.classList.remove("live"); }
+    mic.addEventListener("click", function(){ if(on){ stop(); return; }
+      rec=new SR(); rec.lang="en-US"; rec.interimResults=true; rec.continuous=false;
+      var base=inp.value?inp.value.replace(/\s+$/,"")+" ":"";
+      rec.onresult=function(e){ var t=""; for(var i=e.resultIndex;i<e.results.length;i++) t+=e.results[i][0].transcript; inp.value=(base+t).slice(0,200); };
+      rec.onerror=function(){ stop(); }; rec.onend=function(){ stop(); inp.focus(); };
+      try{ rec.start(); on=true; mic.classList.add("live"); }catch(e){ stop(); } }); })();
 
   // ---- toolbar ----
   // Dismiss the preview back to the drawing — but KEEP enhancedURL/enhancedRev as the cache (reused on an unchanged plan, marked stale once edited). Only Delete clears the raster.
