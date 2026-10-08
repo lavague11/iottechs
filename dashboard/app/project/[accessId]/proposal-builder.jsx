@@ -469,8 +469,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     }
   }, [plan, payload.custom_plan]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  function setPlan(key) {
+  function setPlan(key, fullDate) {
     const patch = { ...payload, payment_plan: key };
+    // full_date only applies to the pay-in-full plans (100 / 100_end): a chosen date renders as
+    // "by <date>" instead of before/upon. Clear it for every other plan so it never lingers.
+    patch.full_date = (key === "100" || key === "100_end") ? (fullDate || null) : null;
     if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "monthly");
     patchPayload(patch);
     if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
@@ -761,11 +764,23 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             );
             return <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>;
           })() : (
-            <div className="prop-plan-opts">
-              <button type="button" className={`prop-plan-btn${plan === "100" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
-              <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
-              <button type="button" className={`prop-plan-btn${plan === "50_30_20" ? " on" : ""}`} onClick={() => setPlan("50_30_20")}>50 / 30 / 20</button>
-              <button type="button" className={`prop-plan-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
+            <div className="prop-plan-edit">
+              <div className="prop-plan-opts">
+                <button type="button" className={`prop-plan-btn${plan === "100" || plan === "100_end" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
+                <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
+                <button type="button" className={`prop-plan-btn${plan === "50_30_20" ? " on" : ""}`} onClick={() => setPlan("50_30_20")}>50 / 30 / 20</button>
+                <button type="button" className={`prop-plan-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
+              </div>
+              {(plan === "100" || plan === "100_end") && (
+                <div className="prop-plan-timing">
+                  <button type="button" className={`prop-time-btn${plan === "100" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100")}>Before we begin</button>
+                  <button type="button" className={`prop-time-btn${plan === "100_end" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100_end")}>Upon completion</button>
+                  <label className={`prop-time-date${payload.full_date ? " on" : ""}`} onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
+                    <span>{payload.full_date ? fmtShortDate(payload.full_date) : "By a date"}</span>
+                    <input type="date" value={payload.full_date || ""} onChange={(e) => setPlan("100", e.target.value || undefined)} />
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -805,8 +820,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
           </div>
         )}
-        {plan !== "custom" && PAYMENT_PLANS[plan]?.terms && <div className="prop-plan-terms">{PAYMENT_PLANS[plan].terms}</div>}
-        <div className="prop-trow"><span>{plan === "100" ? "Due before we begin" : "Deposit due"}</span><b>{money(totals.deposit)}</b></div>
+        {(() => {
+          const payFull = plan === "100" || plan === "100_end";
+          const whenLabel = payload.full_date ? `by ${fmtShortDate(payload.full_date)}` : plan === "100_end" ? "upon completion" : "before we begin";
+          const termsText = payFull ? `Paid in full ${whenLabel}.` : (plan !== "custom" ? PAYMENT_PLANS[plan]?.terms : null);
+          return (
+            <>
+              {termsText && <div className="prop-plan-terms">{termsText}</div>}
+              <div className="prop-trow"><span>{payFull ? `Due ${whenLabel}` : "Deposit due"}</span><b>{money(payFull ? totals.grand : totals.deposit)}</b></div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save */}

@@ -300,6 +300,14 @@ const PROP_CSS = `
 .pvx .prop-sched-when{flex:1 1 auto;text-align:right;color:var(--dv-meta,#787D84);font-size:.76rem;text-transform:capitalize}
 .pvx .prop-plan-opts{display:flex;gap:6px;width:100%}
 .pvx .prop-plan-opts .prop-plan-btn{flex:1 1 0;min-width:0;padding:0 6px}
+.pvx .prop-plan-edit{display:flex;flex-direction:column;gap:6px;width:100%}
+/* Pay-in-full timing: before we begin / upon completion / a chosen date */
+.pvx .prop-plan-timing{display:flex;gap:6px;width:100%}
+.pvx .prop-time-btn,.pvx .prop-time-date{flex:1 1 0;min-width:0;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;padding:0 6px}
+.pvx .prop-time-btn:hover,.pvx .prop-time-date:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-time-btn.on,.pvx .prop-time-date.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
+.pvx .prop-time-date{position:relative}
+.pvx .prop-time-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
 /* Custom schedule: # payments stepper + one compact row per payment */
 .pvx .prop-cplan{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 12px;margin:2px 0;display:flex;flex-direction:column;gap:8px}
 .pvx .prop-cplan-head{display:flex;align-items:center;gap:10px;font-size:.78rem;color:var(--dv-meta,#787D84);font-weight:600}

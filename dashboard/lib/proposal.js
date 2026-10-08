@@ -412,14 +412,22 @@ export function customPlanTerms(rows, currentTotal = 0) {
 // Unified compact schedule for ANY plan → [{ pctLabel, amount, when }]. Preset plans use their
 // milestone labels ("to begin"), custom uses formatted due dates. Amounts derive from the CURRENT
 // contract total so an approved addendum is reflected. Zero installments never appear.
-export function planScheduleRows(plan, custRows, currentTotal = 0) {
+// Short date for the pay-in-full "by <date>" option. Accepts "YYYY-MM-DD" (or any Date-parseable string).
+export function fmtPlanDate(d) {
+  if (!d) return "";
+  const dt = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? String(d) + "T00:00" : String(d));
+  return isNaN(dt) ? "" : dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+export function planScheduleRows(plan, custRows, currentTotal = 0, fullDate = null) {
   if (plan === "custom") {
     return customPlanRows(custRows, currentTotal).map((r) => ({ pctLabel: r.pctLabel, amount: r.amount, when: r.dueLabel }));
   }
   const ms = PLAN_MILESTONES[plan];
   if (!ms) return [];
   const g = Math.max(0, +currentTotal || 0);
-  return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when }));
+  // A pay-in-full plan (100 / 100_end) with a chosen date shows "by <date>" instead of before/upon.
+  const byDate = (plan === "100" || plan === "100_end") && fullDate ? ("by " + fmtPlanDate(fullDate)) : null;
+  return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when: byDate || when }));
 }
 // Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.
 function amountOf(v, base) {

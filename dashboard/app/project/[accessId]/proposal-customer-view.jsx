@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
@@ -322,21 +322,36 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
   // one source of truth — instead of a generic "Full Camera Install".
   const camNames = cameraNameOverrides(opt.services, camRoster);
-  const depositPct = +p.deposit_pct || 50;
-  const finalPct = 100 - depositPct;
   const payPlan = p.payload.payment_plan || "custom";
-  // [phase, trigger, %, days-after-base] — due dates are scheduled off the signed date (once signed)
-  // or the proposal's issue date, using standard offsets: deposit on signing, progress ~2 weeks,
-  // final Net-30. Concrete dates so the customer knows exactly what's owed and by when.
-  const payPhases = payPlan === "50_30_20"
-    ? [["Deposit", "To begin", 50, 0], ["Progress", "At project midpoint", 30, 14], ["Final", "Upon completion (or Net 30)", 20, 30]]
-    : payPlan === "50_50"
-    ? [["Deposit", "Before we begin", 50, 0], ["Final", "Upon completion", 50, 30]]
-    : [["Deposit", "Before project start", depositPct, 0], ["Final", "Upon completion", finalPct, 30]];
+  const fullDate = p.payload.full_date || null;
   const payBase = p.signed_at || p.sent_at || p.created_at || null;
   const payBaseDate = payBase ? new Date(String(payBase).replace(" ", "T")) : new Date();
   const dueOn = (days) => { const d = new Date(payBaseDate); d.setDate(d.getDate() + (+days || 0)); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
-  const payTerms = PAYMENT_PLANS[payPlan]?.terms || "";
+  // ONE schedule source (shared with the PDF + builder): milestones → rows. A pay-in-full plan is
+  // ONE row (before we begin / upon completion / by a chosen date), never a Deposit+Final split.
+  const payWhen = (when) => {
+    const w = (when || "").toLowerCase();
+    if (w.includes("before")) return "Before we begin";     // pay-in-full prepaid → words, not a date
+    if (w.startsWith("by ")) return when.slice(3);           // chosen date
+    if (w.includes("midpoint")) return dueOn(14);
+    if (w.includes("completion")) return "Upon completion";
+    if (w.includes("begin")) return dueOn(0);                // "to begin" (50/50 deposit) → the date
+    return when || dueOn(0);
+  };
+  const payPhase = (when, i, n) => {
+    if (n === 1) return "Payment";
+    const w = (when || "").toLowerCase();
+    if (w.includes("midpoint")) return "Progress";
+    if (w.includes("completion") || i === n - 1) return "Final";
+    if (i === 0) return "Deposit";
+    return "Progress";
+  };
+  const paySched = planScheduleRows(payPlan, p.payload.custom_plan?.rows, t.grand, fullDate);
+  // [phase, trigger, pctLabel, amount] — ready-to-render strings.
+  const payPhases = paySched.map((r, i) => [payPhase(r.when, i, paySched.length), payWhen(r.when), r.pctLabel, r.amount || 0]);
+  const payTerms = (fullDate && (payPlan === "100" || payPlan === "100_end") && paySched[0])
+    ? "Paid in full " + paySched[0].when + "."
+    : (PAYMENT_PLANS[payPlan]?.terms || "");
   // PCP (Performance Credit Program) — a pending, discretionary labor-subtotal credit.
   const pcpRaw = p.payload.pcp_credit;
   const pcpPct = (pcpRaw && typeof pcpRaw === "object" && pcpRaw.type === "pct") ? +pcpRaw.value || 0 : 0;
@@ -745,12 +760,12 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       <div className="pcv-section-hd">Payment Terms</div>
       <div className="pcv-pay-table">
         <div className="pcv-pay-head"><span>Phase</span><span>Due date</span><span className="r">%</span><span className="r">Amount</span></div>
-        {payPhases.map(([ph, trig, pct, days], i) => (
-          <div key={ph} className={"pcv-pay-row" + (i === 0 ? " first" : "")}>
-            <span className="pcv-pay-phase">{ph}<em>{trig}</em></span>
-            <span className="pcv-pay-due">{dueOn(days)}</span>
-            <span className="r">{pct}%</span>
-            <span className="r b">{money(t.grand * pct / 100)}</span>
+        {payPhases.map(([ph, trig, pct, amt], i) => (
+          <div key={i} className={"pcv-pay-row" + (i === 0 ? " first" : "")}>
+            <span className="pcv-pay-phase">{ph}</span>
+            <span className="pcv-pay-due">{trig}</span>
+            <span className="r">{pct}</span>
+            <span className="r b">{money(amt)}</span>
           </div>
         ))}
       </div>

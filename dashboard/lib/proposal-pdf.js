@@ -1,6 +1,6 @@
 "use client";
 import { jsPDF, AcroFormTextField } from "jspdf";
-import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, displayOptionName } from "./proposal.js";
+import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName } from "./proposal.js";
 import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
@@ -622,25 +622,33 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
     // Payment terms — ONE block (heading, schedule, methods, plan terms, tax note). Its full height is
     // measured first; if it would run into the footer the whole block moves to the next page.
-    const depositPct = +p.deposit_pct || 50;
-    const finalPct = 100 - depositPct;
     const payPlan = p.payload.payment_plan || "custom";
-    const payments = payPlan === "50_30_20"
-      ? [
-          ["Deposit", dueOn(0), "50%", "$" + money(t.grand * 0.5)],
-          ["Progress", dueOn(14), "30%", "$" + money(t.grand * 0.3)],
-          ["Final", dueOn(30), "20%", "$" + money(t.grand * 0.2)],
-        ]
-      : payPlan === "50_50"
-      ? [
-          ["Deposit", dueOn(0), "50%", "$" + money(t.grand * 0.5)],
-          ["Final", dueOn(30), "50%", "$" + money(t.grand * 0.5)],
-        ]
-      : [
-          ["Deposit", dueOn(0), depositPct + "%", "$" + money(t.grand * depositPct / 100)],
-          ["Final", dueOn(30), finalPct + "%", "$" + money(t.grand * finalPct / 100)],
-        ];
-    const planTerms = PAYMENT_PLANS[payPlan]?.terms;
+    const fullDate = p.payload.full_date || null;
+    // One schedule source for the PDF, the builder and the customer view: milestones → rows. A
+    // pay-in-full plan is ONE row (before we begin / upon completion / by a chosen date), never a
+    // "Deposit 100% + Final 0%" split.
+    const sched = planScheduleRows(payPlan, p.payload.custom_plan?.rows, t.grand, fullDate);
+    const dueFor = (when) => {
+      const w = (when || "").toLowerCase();
+      if (w.includes("before")) return "Before we begin";    // pay-in-full prepaid → words, not a date
+      if (w.startsWith("by ")) return when.slice(3);         // "by Oct 15, 2026" → the date
+      if (w.includes("midpoint")) return dueOn(14);
+      if (w.includes("completion")) return "Upon completion";
+      if (w.includes("begin")) return dueOn(0);              // "to begin" (50/50 deposit) → the date
+      return when || dueOn(0);                                // custom due labels pass through
+    };
+    const phaseFor = (when, i, n) => {
+      if (n === 1) return "Payment";
+      const w = (when || "").toLowerCase();
+      if (w.includes("midpoint")) return "Progress";
+      if (w.includes("completion") || i === n - 1) return "Final";
+      if (i === 0) return "Deposit";
+      return "Progress";
+    };
+    const payments = sched.map((r, i) => [phaseFor(r.when, i, sched.length), dueFor(r.when), r.pctLabel, "$" + money(r.amount || 0)]);
+    const planTerms = fullDate && (payPlan === "100" || payPlan === "100_end") && sched[0]
+      ? "Paid in full " + sched[0].when + "."       // "Paid in full by Oct 15, 2026."
+      : PAYMENT_PLANS[payPlan]?.terms;
     doc.setFontSize(8); doc.setFont("helvetica", "bold");
     const termLines = planTerms ? doc.splitTextToSize(planTerms, rw) : [];
     const termsH = termLines.length ? termLines.length * LINE_H + 2 : 0;
