@@ -39,6 +39,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
+import EsignSigner from "./esign/esign-signer";
 import { PROPOSAL_TERMS, PROPOSAL_ACKS, PROPOSAL_TERMS_TITLE, PROPOSAL_TERMS_INTRO, PROPOSAL_TERMS_VERSION } from "../../../lib/proposal-terms";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -170,9 +171,13 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2600);
   };
+  useEffect(() => { esignOn(); }, []);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [signFor, setSignFor] = useState(null);   // option id awaiting signature (accept flow)
+  // Rollout switch (removed in P3): ?esign=1 sticks for the tab, since the app rewrites the URL after load.
+  const esignOn = () => { try { if (/[?&]esign=1/.test(window.location.search)) sessionStorage.setItem("esign", "1"); return sessionStorage.getItem("esign") === "1"; } catch { return false; } };
+  const [esignFor, setEsignFor] = useState(null);  // option id open in the PDF signer (?esign=1 while the PDF-first signer is rolled out)
   // Once accepted+signed, the full proposal document collapses to a summary so "Make Your Deposit"
   // is the focus. null = follow the lock state (auto-collapse on sign); true/false = user override.
   const [docOverride, setDocOverride] = useState(null);
@@ -326,6 +331,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
   // one source of truth — instead of a generic "Full Camera Install".
   const camNames = cameraNameOverrides(opt.services || [], camRoster);
+  const depositPct = +p.deposit_pct || 50;   // was dropped by 1f451c0 while the summary card (pcv-sum-dep) still reads it → every real proposal crashed the customer view
   const payPlan = p.payload.payment_plan || "custom";
   const fullDate = p.payload.full_date || null;
   const payBase = p.signed_at || p.sent_at || p.created_at || null;
@@ -390,7 +396,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   function choose(optId) {
     if (busy) return;
     if (acceptedSet.has(optId)) { doAccept(optId, null); }
-    else { if (preview) return; setSignFor(optId); }
+    else { if (preview) return; if (esignOn()) setEsignFor(optId); else setSignFor(optId); }
   }
   async function doAccept(optId, sign) {
     setBusy(true); setErr(null);
@@ -944,6 +950,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         onConfirm={(sign) => doAccept(signFor, sign)}
         onCancel={() => setSignFor(null)}
       />
+
+      {esignFor && (
+        <EsignSigner accessId={accessId} optKey={esignFor} optLabel={optName(esignFor)} reference={propNum}
+          onClose={() => setEsignFor(null)} />
+      )}
 
       {toast && (
         <div className="pcv-toast">
