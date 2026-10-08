@@ -12,6 +12,7 @@ import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentCon
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
+import { ensureEsignSchema } from "./esign/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -1158,6 +1159,7 @@ function init() {
   if (!propCols.includes("pcp_agreement_no")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreement_no TEXT");
   if (!propCols.includes("pcp_grant_source")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_grant_source TEXT");  // performance | donor | community | company
   if (!propCols.includes("pcp_approved_at"))  db.exec("ALTER TABLE proposals ADD COLUMN pcp_approved_at TEXT");   // admin finalized
+  ensureEsignSchema(db);   // PDF e-sign: sign_documents / sign_sessions / sign_events + proposals.unsigned_doc_id/signed_doc_id/sign_status (lib/esign/)
 
   // ---- Payments / deposits recorded against a project (approval & deposit stage) ----
   db.exec(`
@@ -2266,7 +2268,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v37";
+const DB_VER = "v38";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -2292,6 +2294,9 @@ const db = new Proxy({}, {
     return typeof v === "function" ? v.bind(real) : v;
   },
 });
+
+// Raw handle for self-contained modules (lib/esign/) that own their own tables — same lazy connection.
+export const sqliteHandle = () => db;
 
 // Flush the WAL into the main .db file so a file-level copy (backup / migration) is complete.
 export function checkpointDb() {
