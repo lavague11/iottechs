@@ -952,7 +952,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       />
 
       {esignFor && (
-        <EsignSigner accessId={accessId} optKey={esignFor} optLabel={optName(esignFor)} reference={propNum}
+        <EsignSigner accessId={accessId} optKey={esignFor} optLabel={optName(esignFor)} reference={propNum} defaultName={customerName || ""}
           onClose={() => setEsignFor(null)} />
       )}
 

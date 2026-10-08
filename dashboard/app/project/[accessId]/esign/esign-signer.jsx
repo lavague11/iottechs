@@ -1,60 +1,110 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PdfPages from "./pdf-pages";
+import CaptureSheet from "./capture-sheet";
+import ConsentSheet from "./consent-sheet";
+import { Icon } from "./icons";
 import { ESG_CSS } from "./esign-css";
-import { prepareSignDocAction } from "../esign-actions";
+import { startSignAction, saveSignValuesAction } from "../esign-actions";
 
 // The signer: the ACTUAL generated proposal PDF, page by page, with the signature / name / date fields
 // laid over the acceptance block. Full-screen, mobile-first (sticky Next/Finish bar, large tap targets).
+// Flow: tap a field (or Next) → adopt name + signature → Finish → agree to the terms → sign.
 
-const I = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
-export const Icon = {
-  close: <svg {...I}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>,
-  plus: <svg {...I}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
-  minus: <svg {...I}><line x1="5" y1="12" x2="19" y2="12" /></svg>,
-  pen: <svg {...I} width="14" height="14"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>,
-  user: <svg {...I} width="14" height="14"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>,
-  cal: <svg {...I} width="14" height="14"><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="16" y1="3" x2="16" y2="7" /></svg>,
-  check: <svg {...I} width="16" height="16"><polyline points="20 6 9 17 4 12" /></svg>,
-};
 const TAG = { signature: ["Sign", Icon.pen], name: ["Name", Icon.user], date: ["Date", Icon.cal] };
+const RESTART = new Set(["EXPIRED", "VOID", "CHANGED", "TAMPERED", "NO_SESSION"]);
+const todayLabel = () => new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+const tokenKey = (a, o) => `esign:${a}:${o}`;
+const store = {
+  get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} },
+};
 
-export default function EsignSigner({ accessId, optKey, optLabel, reference, onClose }) {
+export default function EsignSigner({ accessId, optKey, optLabel, reference, defaultName = "", onClose }) {
+  const [sess, setSess] = useState(null);      // { token }
   const [doc, setDoc] = useState(null);
-  const [err, setErr] = useState(null);
+  const [values, setValues] = useState({ name: null, signature: null, acks: {}, missing: [] });
+  const [acks, setAcks] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [active, setActive] = useState(0);
+  const [sheet, setSheet] = useState(null);    // null | "capture" | "consent"
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);        // sheet-level, recoverable
+  const [fatal, setFatal] = useState(null);    // { error, code } — session can't continue
+  const [toast, setToast] = useState(null);
+  const [epoch, setEpoch] = useState(0);       // bump to reopen with a fresh session
   const scrollRef = useRef(null);
 
+  // Open (or resume) the session.
   useEffect(() => {
     let live = true;
-    prepareSignDocAction(accessId, optKey).then((r) => { if (!live) return; if (r?.error) setErr(r.error); else setDoc(r.doc); }).catch(() => live && setErr("Couldn't open the document."));
+    setDoc(null); setFatal(null);
+    startSignAction(accessId, optKey, store.get(tokenKey(accessId, optKey))).then((r) => {
+      if (!live) return;
+      if (r?.error) { setFatal({ error: r.error, code: r.code }); return; }
+      store.set(tokenKey(accessId, optKey), r.token);
+      setSess({ token: r.token }); setDoc(r.doc); setValues(r.values); setAcks(r.acks);
+    }).catch(() => live && setFatal({ error: "Couldn't open the document.", code: "ERROR" }));
     return () => { live = false; };
-  }, [accessId, optKey]);
+  }, [accessId, optKey, epoch]);
 
   const fields = doc?.fields || [];
   const byPage = useMemo(() => fields.reduce((m, f, i) => { (m[f.page] ||= []).push({ ...f, i }); return m; }, {}), [fields]);
+  const signed = !!(values.name && values.signature);
 
-  function goTo(i) {
-    setActive(i);
-    const el = scrollRef.current?.querySelector(`[data-field="${fields[i]?.key}"]`);
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  const handle = useCallback((r) => {
+    if (r?.error) {
+      if (RESTART.has(r.code) || r.code === "DENIED" || r.code === "USED") { store.set(tokenKey(accessId, optKey), null); setFatal({ error: r.error, code: r.code }); setSheet(null); }
+      else setErr(r.error);
+      return false;
+    }
+    return true;
+  }, [accessId, optKey]);
+
+  async function save(patch, after) {
+    if (!sess?.token) return;
+    setBusy(true); setErr(null);
+    const r = await saveSignValuesAction(accessId, sess.token, patch).catch(() => ({ error: "Couldn't save. Try again." }));
+    setBusy(false);
+    if (!handle(r)) return;
+    setValues(r.values); after?.(r.values);
   }
+
+  const adopt = (name, signature) => save({ name, signature }, () => { setSheet(null); setActive(Math.max(0, fields.findIndex((f) => f.type === "signature"))); });
+  const saveAcks = (a) => save({ acks: a }, () => { setSheet(null); setToast("Saved"); setTimeout(() => setToast(null), 2200); });
+
+  function scrollTo(i) { scrollRef.current?.querySelector(`[data-field="${fields[i]?.key}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  function next() {
+    if (!signed) { const i = fields.findIndex((f) => f.type !== "date"); setActive(Math.max(0, i)); scrollTo(Math.max(0, i)); setSheet("capture"); return; }
+    const i = (active + 1) % Math.max(1, fields.length); setActive(i); scrollTo(i);
+  }
+  function tap(f) {
+    setActive(f.i);
+    if (f.type === "date" && signed) return;
+    setSheet("capture");
+  }
+
   const overlay = (page) => (byPage[page] || []).map((f) => {
     const [label, icon] = TAG[f.type] || [f.type, null];
+    const done = f.type === "name" ? !!values.name : f.type === "signature" ? !!values.signature : signed;
     return (
-      <button key={f.key} type="button" data-field={f.key} data-type={f.type} data-ro="1" data-testid="esign-field"
-        className={`esg-f${f.i === active ? " on" : ""}`} aria-label={label}
+      <button key={f.key} type="button" data-field={f.key} data-type={f.type} data-done={done ? "1" : "0"} data-testid="esign-field"
+        className={`esg-f${f.i === active ? " on" : ""}${done ? " done" : ""}`} aria-label={label}
         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.w * 100}%`, height: `${f.h * 100}%` }}
-        onClick={() => setActive(f.i)}>
-        {icon}{label}
+        onClick={() => tap(f)}>
+        {!done && <>{icon}{label}</>}
+        {done && f.type === "name" && <span className="v">{values.name}</span>}
+        {done && f.type === "date" && <span className="v">{todayLabel()}</span>}
+        {done && f.type === "signature" && <img alt="Your signature" src={values.signature.data} />}
       </button>
     );
   });
 
-  // Portaled to <body>: the deck wraps tools in transformed containers, which would otherwise capture `position: fixed`.
+  const filled = fields.filter((f) => (f.type === "name" ? values.name : f.type === "signature" ? values.signature : signed)).length;
+
   return createPortal(
+    // Portaled to <body>: the deck wraps tools in transformed containers, which would otherwise capture `position: fixed`.
     <div className="esg" role="dialog" aria-modal="true" aria-label="Sign proposal" data-testid="esign">
       <style>{ESG_CSS}</style>
       <div className="esg-top">
@@ -64,15 +114,27 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, onC
         <button type="button" className="esg-ico" aria-label="Zoom in" title="Zoom in" disabled={zoom >= 2.5} onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}>{Icon.plus}</button>
       </div>
       <div className="esg-scroll" ref={scrollRef}>
-        {err && <div className="esg-note err" role="alert">{err}</div>}
-        {!err && !doc && <div className="esg-note">Preparing…</div>}
-        {doc && <PdfPages url={`/api/proposal-doc/${doc.id}`} expectedSha={doc.sha256} zoom={zoom} renderOverlay={overlay} onError={setErr} />}
+        {fatal && (
+          <div className="esg-note err" role="alert" data-testid="esign-fatal">
+            {fatal.error}
+            <div style={{ marginTop: 14 }}>
+              {fatal.code === "USED" || fatal.code === "DENIED"
+                ? <button type="button" className="esg-ghost" onClick={onClose}>Close</button>
+                : <button type="button" className="esg-go" style={{ display: "inline-flex" }} data-testid="esign-reopen" onClick={() => { store.set(tokenKey(accessId, optKey), null); setSess(null); setValues({ name: null, signature: null, acks: {}, missing: [] }); setEpoch((e) => e + 1); }}>Reopen</button>}
+            </div>
+          </div>
+        )}
+        {!fatal && !doc && <div className="esg-note">Preparing…</div>}
+        {!fatal && doc && <PdfPages url={`/api/proposal-doc/${doc.id}`} expectedSha={doc.sha256} zoom={zoom} renderOverlay={overlay} onError={(m) => setFatal({ error: m, code: "ERROR" })} />}
       </div>
       <div className="esg-bar">
-        <span className="esg-count">{fields.length ? `${active + 1} / ${fields.length}` : ""}</span>
-        <button type="button" className="esg-go" data-testid="esign-next" disabled={!fields.length} onClick={() => goTo((active + 1) % fields.length)}>Next</button>
-        <button type="button" className="esg-go" data-testid="esign-finish" disabled>Finish</button>
+        <span className="esg-count">{fields.length ? `${filled} / ${fields.length}` : ""}</span>
+        {toast && <span className="esg-count" role="status" data-testid="esign-toast" style={{ color: "var(--esg-ok)", textAlign: "right" }}>{toast}</span>}
+        <button type="button" className="esg-go" data-testid="esign-next" disabled={!fields.length || !!fatal} onClick={next}>Next</button>
+        <button type="button" className="esg-go" data-testid="esign-finish" disabled={!signed || !!fatal} onClick={() => { setErr(null); setSheet("consent"); }}>Finish</button>
       </div>
+      {sheet === "capture" && <CaptureSheet defaultName={values.name || defaultName} busy={busy} error={err} onAdopt={adopt} onCancel={() => { setSheet(null); setErr(null); }} />}
+      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Sign" onConfirm={saveAcks} onCancel={() => { setSheet(null); setErr(null); }} />}
     </div>,
     document.body
   );
