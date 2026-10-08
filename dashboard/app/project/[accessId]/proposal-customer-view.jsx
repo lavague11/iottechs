@@ -39,7 +39,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
 import ProposalSignModal from "./proposal-sign-modal";
-import { PROPOSAL_TERMS } from "../../../lib/proposal-terms";
+import { PROPOSAL_TERMS, PROPOSAL_ACKS, PROPOSAL_TERMS_TITLE, PROPOSAL_TERMS_INTRO, PROPOSAL_TERMS_VERSION } from "../../../lib/proposal-terms";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -916,6 +916,10 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         defaultName={p.signed_name || customerName || ""}
         agreeText="I have reviewed and agree to the scope and pricing of this proposal and to the Terms & Conditions, and I authorize it to proceed."
         terms={PROPOSAL_TERMS}
+        acks={PROPOSAL_ACKS.filter((a) => !a.pcpOnly || +(p.payload?.pcp_credit || 0) > 0)}
+        termsTitle={PROPOSAL_TERMS_TITLE}
+        termsIntro={PROPOSAL_TERMS_INTRO}
+        termsVersion={PROPOSAL_TERMS_VERSION}
         accent="var(--gold)"
         busy={busy}
         onConfirm={(sign) => doAccept(signFor, sign)}

@@ -26,22 +26,28 @@ function typedToImg(name) {
 
 export default function ProposalSignModal({
   open, heading, subheading, reference, defaultName, showTitle = false,
-  agreeText = DEFAULT_AGREE, terms = null, termsHeading = "Terms & Conditions", accent = "var(--gold)", busy, onConfirm, onCancel,
+  agreeText = DEFAULT_AGREE, terms = null, acks = null, termsHeading = "Terms & Conditions",
+  termsTitle = null, termsIntro = null, termsVersion = null,
+  accent = "var(--gold)", busy, onConfirm, onCancel,
 }) {
   const [name, setName] = useState(defaultName || "");
   const [jobTitle, setJobTitle] = useState("");
   const [agree, setAgree] = useState(false);
+  const [checks, setChecks] = useState({});
   const [showTerms, setShowTerms] = useState(false);
 
-  useEffect(() => { if (open) { setName((n) => n || defaultName || ""); setAgree(false); setShowTerms(false); } }, [open, defaultName]);
+  useEffect(() => { if (open) { setName((n) => n || defaultName || ""); setAgree(false); setChecks({}); setShowTerms(false); } }, [open, defaultName]);
 
   const clean = titleCase(name).trim();
-  const canSign = clean.length >= 2 && agree && !busy;
+  const useAcks = Array.isArray(acks) && acks.length > 0;
+  const allRequired = useAcks ? acks.every((a) => !a.required || checks[a.key]) : agree;   // every required initial checked
+  const canSign = clean.length >= 2 && allRequired && !busy;
   const previewFont = useMemo(() => `'Brush Script MT','Snell Roundhand','Segoe Script','Lucida Handwriting',cursive`, []);
 
   function confirm() {
     if (!canSign) return;
-    onConfirm?.({ name: clean, title: titleCase(jobTitle).trim(), data: typedToImg(clean) });
+    const agreedAcks = useAcks ? acks.reduce((o, a) => { o[a.key] = !!checks[a.key]; return o; }, {}) : undefined;
+    onConfirm?.({ name: clean, title: titleCase(jobTitle).trim(), data: typedToImg(clean), acks: agreedAcks });
   }
 
   if (!open) return null;
@@ -70,20 +76,33 @@ export default function ProposalSignModal({
             {clean ? <span style={{ fontFamily: previewFont }}>{clean}</span> : <span className="psm-ph">Your typed signature appears here</span>}
           </div>
 
-          <label className="psm-agree">
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span>{agreeText}</span>
-          </label>
+          {useAcks ? (
+            <div className="psm-acks">
+              {acks.map((a) => (
+                <label key={a.key} className="psm-agree">
+                  <input type="checkbox" checked={!!checks[a.key]} onChange={(e) => setChecks((c) => ({ ...c, [a.key]: e.target.checked }))} />
+                  <span>{a.label}{a.required ? <i className="psm-req"> *</i> : null}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <label className="psm-agree">
+              <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+              <span>{agreeText}</span>
+            </label>
+          )}
 
           {terms?.length ? (
             <div className="psm-terms-wrap">
               <button type="button" className="psm-termslink" aria-expanded={showTerms} onClick={() => setShowTerms((s) => !s)}>
-                {showTerms ? `Hide ${termsHeading}` : `Read the full ${termsHeading}`}
+                {showTerms ? `Hide the full ${termsHeading}` : `Read the full ${termsHeading}`}
               </button>
               {showTerms && (
                 <div className="psm-terms" role="region" aria-label={termsHeading}>
-                  {terms.map((t, i) => (
-                    <p key={i}><b>{i + 1}. {t.h}.</b> {t.b}</p>
+                  {termsTitle && <p className="psm-terms-title"><b>{termsTitle}{termsVersion ? ` — ${termsVersion}` : ""}</b></p>}
+                  {termsIntro && <p className="psm-terms-intro">{termsIntro}</p>}
+                  {terms.map((t) => (
+                    <p key={t.n ?? t.h}><b>{t.n != null ? `${t.n}. ` : ""}{t.h}.</b> {t.b}</p>
                   ))}
                 </div>
               )}
@@ -134,10 +153,15 @@ const PSM_CSS = `
 .psm-terms-wrap{margin:2px 0 2px 26px}
 .psm-termslink{background:none;border:none;padding:0;font-family:inherit;font-size:.76rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .psm-termslink:hover{color:var(--dv-ink,#101418)}
-.psm-terms{margin-top:8px;max-height:200px;overflow:auto;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-paper,#F4F4F2);padding:12px 14px}
-.psm-terms p{margin:0 0 9px;font-size:.72rem;line-height:1.55;color:var(--dv-ink-soft,#3A4048)}
+.psm-terms{margin-top:8px;max-height:240px;overflow:auto;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-paper,#F4F4F2);padding:12px 14px}
+.psm-terms p{margin:0 0 10px;font-size:.72rem;line-height:1.55;color:var(--dv-ink-soft,#3A4048);white-space:pre-wrap}
 .psm-terms p:last-child{margin-bottom:0}
 .psm-terms b{color:var(--dv-ink,#101418);font-weight:600}
+.psm-terms-title{font-size:.8rem !important;margin-bottom:4px !important}
+.psm-terms-intro{color:var(--dv-meta,#787D84) !important}
+.psm-acks{display:flex;flex-direction:column;gap:2px}
+.psm-acks .psm-agree{margin:6px 0 0}
+.psm-req{color:#c4553d;font-style:normal;font-weight:700}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
 /* The signable action — DocuSign signing-field style: soft yellow fill, blue field border. */

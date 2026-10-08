@@ -4,7 +4,7 @@ import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_
 import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
-import { PROPOSAL_TERMS } from "./proposal-terms.js";
+import { PROPOSAL_TERMS, PROPOSAL_ACKS, PROPOSAL_TERMS_TITLE, PROPOSAL_TERMS_VERSION } from "./proposal-terms.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -835,26 +835,30 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     });
   }
 
-  // Terms & Conditions — the standard contract language, LAST in the document (portrait). Numbered clauses,
-  // each a short bold heading kept with its first lines, then the body; paginated like the rest.
+  // Terms & Conditions — LAST in the document (portrait). The full 83-section Master Terms are not reprinted
+  // in every proposal; instead this references the governing Master Terms (title + version) and captures the
+  // acknowledgments the customer initials at signing (Section 83). The PCP acknowledgment prints only when the
+  // proposal actually carries a PCP credit.
   {
     currentSection = "Terms";
+    const hasPcp = +((p.payload && p.payload.pcp_credit) || 0) > 0;
+    const acks = PROPOSAL_ACKS.filter((a) => !a.pcpOnly || hasPcp);
     let y = newPage(); y = sectionHeader("TERMS & CONDITIONS", y) + 12;
     doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(110, 114, 120);
-    doc.splitTextToSize("The following terms govern the work described in this proposal and, upon acceptance, form part of the agreement between the customer and IOT TECHS.", rw)
-      .forEach((ln) => { y = ensureRoom(y, LINE_H); doc.text(ln, lm, y + 7.5); y += LINE_H; });
-    y += 8;
-    PROPOSAL_TERMS.forEach((t, i) => {
-      const heading = `${i + 1}.  ${t.h}`;
-      doc.setFontSize(8.5); doc.setFont("helvetica", "bold");
-      const bodyLines = (doc.setFont("helvetica", "normal"), doc.setFontSize(8), doc.splitTextToSize(t.b, rw - 4));
-      // keep the heading with at least its first two body lines (no orphaned heading at a page foot)
-      y = ensureRoom(y, LINE_H + Math.min(2, bodyLines.length) * LINE_H + 6);
-      doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-      doc.text(heading, lm, y + 8); y += LINE_H + 2;
-      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55);
-      bodyLines.forEach((ln) => { y = ensureRoom(y, LINE_H); doc.text(ln, lm + 14, y + 7.5); y += LINE_H; });
-      y += 8;
+    const ref = `This proposal is governed by the ${PROPOSAL_TERMS_TITLE} (version ${PROPOSAL_TERMS_VERSION}), which the customer reviews in full and accepts as part of this Agreement. By signing, the customer initials and agrees to the acknowledgments below.`;
+    doc.splitTextToSize(ref, rw).forEach((ln) => { y = ensureRoom(y, LINE_H); doc.text(ln, lm, y + 7.5); y += LINE_H; });
+    y += 12;
+    acks.forEach((a) => {
+      doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      const lines = doc.splitTextToSize(a.label, rw - 30);
+      const blockH = Math.max(24, lines.length * LINE_H + 8);
+      y = ensureRoom(y, blockH);
+      doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.6); doc.rect(lm, y, 18, 18, "S");   // initial box
+      doc.setFontSize(5.5); doc.setFont("helvetica", "bold"); doc.setTextColor(170, 170, 170);
+      doc.text(a.required ? "INITIAL" : "OPTIONAL", lm + 9, y + 25, { align: "center" });
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(44, 46, 48);
+      lines.forEach((ln, i) => doc.text(ln, lm + 30, y + 8 + i * LINE_H));
+      y += blockH + 6;
     });
   }
 
