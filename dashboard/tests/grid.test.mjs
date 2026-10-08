@@ -31,9 +31,10 @@ test("4.3 draw: the baked grid is emitted only when no vb is given; paper rect +
   assert.equal((fn.match(/pattern id="pg"/g) || []).length, 1);
 });
 
-test("4.3 survey: #gridLayer sits after .dimOverlay inside #scene; #gridScale is outside #scene", () => {
-  // Phase 5.1 adds #regionLayer; clickable-rooms adds #roomLayer — both inside #scene after #gridLayer; #gridScale closes out #scene; #roomTag follows.
-  assert.match(survey, /<div class="dimOverlay"><\/div><div id="gridLayer"><\/div><svg id="zoneLayer"[^>]*><\/svg><div id="zoneTags"><\/div><svg id="regionLayer"[^>]*><\/svg><svg id="roomLayer"[^>]*><\/svg><\/div><div id="gridScale"><\/div>/);
+test("4.3 survey: the plan layers live inside #planWorld (one alignment transform); #alignDrag closes #scene; #gridScale is outside", () => {
+  // The plan/grid/zones/rooms + devices ride ONE manual-alignment transform → wrapped in #planWorld over the fixed #aerialImg.
+  // #alignDrag (the Align drag surface) is a direct child of #scene after #planWorld; #gridScale sits outside #scene.
+  assert.match(survey, /<div id="planWorld"><div class="stage-img" id="stageImg"><\/div><div class="dimOverlay"><\/div><div id="gridLayer"><\/div><svg id="zoneLayer"[^>]*><\/svg><div id="zoneTags"><\/div><svg id="regionLayer"[^>]*><\/svg><svg id="roomLayer"[^>]*><\/svg><\/div><div id="alignDrag"><\/div><\/div><div id="gridScale"><\/div>/);
   assert.match(survey, /#gridLayer\{[^}]*pointer-events:none[^}]*z-index:2|#gridLayer\{[^}]*z-index:2[^}]*pointer-events:none/);
   assert.match(survey, /\.devNode\{[^}]*z-index:5/, "device markers sit above the grid (z2), zone (z3) and boundary (z4) layers");
 });

@@ -267,7 +267,7 @@ test("device placement + aim + drag are gated on !regionMode", () => {
   assert.ok(extractFn(survey, "placeAt").includes("regionMode"), "placeAt early-returns in Regions mode");
   assert.ok(survey.includes("inChrome(e)||regionMode"), "the scene pointerdown placement handler is gated");
   assert.ok(survey.includes("selId==null || regionMode"), "the angle-aim handler is gated");
-  assert.ok(survey.includes('dot.addEventListener("pointerdown", function(e){ if(regionMode) return;'), "device drag is suspended");
+  assert.ok(survey.includes('dot.addEventListener("pointerdown", function(e){ if(regionMode||aligning) return;'), "device drag is suspended in Regions / Align mode");
 });
 
 test("regionBtn/editor are hidden for frozen (customer/submitted) views but the boundary still renders", () => {

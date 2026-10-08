@@ -61,6 +61,7 @@
 
   /* device + FOV (used when a background is set) */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
+  #planWorld{position:absolute;inset:0;transform-origin:50% 50%}   /* the plan + its grid/zones/rooms/devices ride ONE manual alignment transform (floor.planXf) over the fixed aerial; identity on plain/Plan-view floors */
   #gridLayer{position:absolute;inset:0;z-index:2;pointer-events:none;display:none;background-image:linear-gradient(to right,rgba(16,20,24,.14) 1px,transparent 1px),linear-gradient(to bottom,rgba(16,20,24,.14) 1px,transparent 1px)}   /* Phase 4.3: ONE scaled grid on the plate (scene-local px → rides the zoom); under devices (z3), over the plan */
   #gridScale{position:absolute;left:14px;bottom:56px;z-index:6;pointer-events:none;display:none;padding:3px 8px;border-radius:6px;background:rgba(16,20,24,.72);color:#fff;font-size:11px;font-weight:600;letter-spacing:.2px}
   /* Phase 5.1: ONE editable property-boundary polygon per floor, in #scene so it rides zoom/pan. viewBox 0 0 100 100 → user units are plate-%. pointer-events only while editing. */
@@ -123,6 +124,17 @@
 
   .ctxbar{position:absolute;left:14px;top:14px;z-index:4;display:flex;gap:8px}
   .ctxbtn{background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(16,17,18,.12)}
+  /* Manual alignment: a transparent drag surface over the plate + a bottom control bar; both live only while aligning. */
+  #alignDrag{position:absolute;inset:0;z-index:7;display:none;cursor:move;touch-action:none}
+  body.aligning #alignDrag{display:block}
+  body.aligning .ctxbar,body.aligning .plandim,body.aligning #showCtl,body.aligning #planMore,body.aligning .utils{display:none!important}
+  #alignBar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:9;display:none;gap:6px;align-items:center;background:rgba(16,20,24,.92);border-radius:12px;padding:7px 9px;box-shadow:0 6px 24px rgba(16,17,18,.28)}
+  body.aligning #alignBar{display:flex}
+  #alignBar .alignHint{color:rgba(255,255,255,.7);font-size:12px;font-weight:600;padding:0 8px 0 4px;white-space:nowrap}
+  .abtn{height:34px;min-width:34px;display:inline-flex;align-items:center;justify-content:center;padding:0 9px;border:0;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .abtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .abtn:hover{background:rgba(255,255,255,.2)} .abtn.atxt{letter-spacing:.2px} .abtn.prim{background:#fff;color:#101418}
+  .abtn.prim:hover{background:#eee}
   .ctxbtn svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .ctxnote{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font-size:12px;color:var(--muted);box-shadow:0 2px 10px rgba(16,17,18,.08)}
   .utils{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;z-index:4}
@@ -588,12 +600,22 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
           <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Area</button></div><button class="vbtn" id="zoneName" aria-label="Edit area" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete area" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="bdDel" title="Clear boundary" aria-label="Clear boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
           <div id="zonePop" role="dialog" aria-label="Area"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Area name"></div>
+          <!-- Align tool: drag the plan over the aerial; rotate / scale / reset / done. Shown only while aligning. -->
+          <div id="alignBar">
+            <span class="alignHint">Drag to move</span>
+            <button class="abtn" data-a="rotL" title="Rotate left" aria-label="Rotate left"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+            <button class="abtn" data-a="rotR" title="Rotate right" aria-label="Rotate right"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></button>
+            <button class="abtn" data-a="sclD" title="Smaller" aria-label="Scale down"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+            <button class="abtn" data-a="sclU" title="Larger" aria-label="Scale up"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button class="abtn atxt" data-a="reset" title="Reset alignment">Reset</button>
+            <button class="abtn atxt prim" data-a="done" title="Done">Done</button>
+          </div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
@@ -605,6 +627,7 @@
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
             <div id="viewWrap"><button id="viewSel" aria-haspopup="true" aria-expanded="false" title="View" aria-label="View"><span id="viewSelName">Layered</span><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
               <div id="viewMenu" role="menu"><button data-v="full" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Full</button><button data-v="layered" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Layered</button><button data-v="plan" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Plan</button></div></div>
+            <button class="ubtn" id="alignBtn" title="Align plan to aerial" aria-label="Align plan to aerial" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></button>
             <button class="ubtn" id="regionBtn" title="Regions" aria-label="Regions" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
             <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
             <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
@@ -1176,8 +1199,8 @@
     work.addEventListener("pointerup", ptrGone, true);
     work.addEventListener("pointercancel", ptrGone, true);
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
-    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode) return; var r=document.getElementById("scene").getBoundingClientRect();
-      addDevice(armedK,(cx-r.left)/r.width*100,(cy-r.top)/r.height*100); devMenu.classList.remove("show"); }
+    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode||aligning) return; var p=planPctFromClient(cx,cy);   // client → plan-% (through the active alignment)
+      addDevice(armedK,p.x,p.y); devMenu.classList.remove("show"); }
     // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
     var loupeEl=null;
     function ensureLoupe(){ if(loupeEl) return loupeEl; loupeEl=document.createElement("div"); loupeEl.id="loupe"; loupeEl.innerHTML='<div class="lxh"></div>'; document.body.appendChild(loupeEl); return loupeEl; }
@@ -1491,7 +1514,7 @@
     (function(){ var wrap=document.getElementById("viewWrap"), sel=document.getElementById("viewSel"), menu=document.getElementById("viewMenu"); if(!wrap||!sel||!menu) return;
       function closeViewMenu(){ wrap.classList.remove("open"); sel.setAttribute("aria-expanded","false"); }
       sel.addEventListener("click", function(e){ e.stopPropagation(); var open=!wrap.classList.contains("open"); wrap.classList.toggle("open",open); sel.setAttribute("aria-expanded",open?"true":"false"); });
-      [].forEach.call(menu.querySelectorAll("button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); closeViewMenu(); var f=floors[curFloor]; if(!hybridCapable(f)) return; f.view=b.getAttribute("data-v"); renderView(); queueSave(); }); });
+      [].forEach.call(menu.querySelectorAll("button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); closeViewMenu(); var f=floors[curFloor]; if(!hybridCapable(f)) return; if(aligning) exitAlign(true); f.view=b.getAttribute("data-v"); renderView(); queueSave(); }); });
       document.addEventListener("click", function(e){ if(!wrap.contains(e.target)) closeViewMenu(); });
     })();
 
@@ -1546,7 +1569,7 @@
         (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
         '<div class="viewBadge" title="View photo"></div>';
-      document.getElementById("scene").appendChild(el);
+      (document.getElementById("planWorld")||document.getElementById("scene")).appendChild(el);   // devices ride the plan-world transform, aligned to the aerial
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d); ringDrag(el.querySelector(".ringGrip"),d);
       // Read-only (customer): tapping a camera marker opens its VIEW first (the enlarged photo popup,
       // which carries a "Leave a comment" button) so they see the camera before commenting. A marker
@@ -1945,6 +1968,51 @@
     // sceneAspect (from floor.bg); for a capable floor floor.bg is ctx-framed so its aspect == the ctx/planSvg aspect → all layers line up 1:1.
     // View presets (presentation only, one canonical geometry): Full / Layered / Plan. Legacy satellite→full, hybrid→layered; default Layered.
     function normView(x){ if(x==="plan") return "plan"; if(x==="full"||x==="satellite") return "full"; return "layered"; }
+    // ---- Manual plan→aerial alignment (floor.planXf). The aerial is the fixed real world; the plan + its
+    // devices/rooms/zones/grid ride together as ONE transformed unit over it. xf = { tx,ty (plate-% translate),
+    // s (uniform scale), rot (deg) } about the plate centre (50,50). Pure + unit-tested; the CSS string drives
+    // #planWorld and xfInv maps a pointer (scene-%) back to plan-% so editing still lands correctly when aligned.
+    function validXf(x){ if(!x||typeof x!=="object") return {tx:0,ty:0,s:1,rot:0};
+      var tx=isFinite(+x.tx)?+x.tx:0, ty=isFinite(+x.ty)?+x.ty:0, s=isFinite(+x.s)?+x.s:1, rot=isFinite(+x.rot)?+x.rot:0;
+      s=Math.max(0.2,Math.min(5,s)); tx=Math.max(-100,Math.min(100,tx)); ty=Math.max(-100,Math.min(100,ty));
+      while(rot<=-180)rot+=360; while(rot>180)rot-=360;
+      return { tx:Math.round(tx*100)/100, ty:Math.round(ty*100)/100, s:Math.round(s*1e4)/1e4, rot:Math.round(rot*100)/100 }; }
+    function xfIsId(x){ var v=validXf(x); return v.tx===0 && v.ty===0 && v.s===1 && v.rot===0; }
+    function xfCss(x){ var v=validXf(x); return "translate("+v.tx+"%,"+v.ty+"%) rotate("+v.rot+"deg) scale("+v.s+")"; }
+    // plan-% → screen-% (what xfCss does visually): v=(p-c); rotate+scale; +t; c=centre(50,50).
+    function xfFwd(x,px,py){ var v=validXf(x), vx=px-50, vy=py-50, rad=v.rot*Math.PI/180, c=Math.cos(rad), sn=Math.sin(rad);
+      return { x:50 + (vx*c - vy*sn)*v.s + v.tx, y:50 + (vx*sn + vy*c)*v.s + v.ty }; }
+    // screen-% → plan-% (inverse): subtract t; un-rotate; un-scale about the centre.
+    function xfInv(x,px,py){ var v=validXf(x), vx=px-v.tx-50, vy=py-v.ty-50, rad=-v.rot*Math.PI/180, c=Math.cos(rad), sn=Math.sin(rad), s=v.s||1;
+      return { x:50 + (vx*c - vy*sn)/s, y:50 + (vx*sn + vy*c)/s }; }
+    var aligning=false;   // true while the Align tool is open (device/region editing suspended; the plan world follows a live drag/rotate/scale)
+    // The transform CURRENTLY painted on the plan world: identity unless the floor is hybrid-capable AND an
+    // aerial view (Layered/Full) is showing — Plan view and plain floors always edit at identity.
+    function activeXf(){ var f=floors[curFloor]||{}; return (hybridCapable(f) && normView(f.view)!=="plan") ? validXf(f.planXf) : {tx:0,ty:0,s:1,rot:0}; }
+    // Map a client point (clientX,clientY) to plan-% through the scene rect + the active alignment inverse.
+    function planPctFromClient(cx,cy){ var r=document.getElementById("scene").getBoundingClientRect(); if(!r.width||!r.height) return {x:0,y:0};
+      return xfInv(activeXf(), (cx-r.left)/r.width*100, (cy-r.top)/r.height*100); }
+    // ---- Align tool: drag / rotate / scale the whole plan world over the fixed aerial, then persist floor.planXf.
+    function applyAlignXf(){ var pw=document.getElementById("planWorld"), f=floors[curFloor]; if(pw&&f) pw.style.transform=xfCss(f.planXf); }
+    function nudgeAlign(d){ var f=floors[curFloor]; if(!f) return; var x=validXf(f.planXf);
+      if(d.rot) x.rot+=d.rot; if(d.s) x.s*=d.s; if(d.tx) x.tx+=d.tx; if(d.ty) x.ty+=d.ty; f.planXf=validXf(x); applyAlignXf(); }
+    function enterAlign(){ var f=floors[curFloor]; if(frozen()||!hybridCapable(f)||normView(f.view)==="plan") return;
+      if(!f.planXf) f.planXf={tx:0,ty:0,s:1,rot:0}; aligning=true; document.body.classList.add("aligning");
+      var ab=document.getElementById("alignBtn"); if(ab) ab.classList.add("on"); applyAlignXf(); }
+    function exitAlign(save){ if(!aligning) return; aligning=false; document.body.classList.remove("aligning");
+      var ab=document.getElementById("alignBtn"); if(ab) ab.classList.remove("on"); var f=floors[curFloor]; if(f) f.planXf=validXf(f.planXf);
+      renderView(); if(save!==false) queueSave(); }
+    function resetAlign(){ var f=floors[curFloor]; if(f){ f.planXf={tx:0,ty:0,s:1,rot:0}; applyAlignXf(); } }
+    (function(){ var ad=document.getElementById("alignDrag"), bar=document.getElementById("alignBar"), btn=document.getElementById("alignBtn");
+      if(btn) btn.addEventListener("click", function(e){ e.stopPropagation(); if(aligning) exitAlign(true); else enterAlign(); });
+      if(bar) bar.addEventListener("click", function(e){ var b=e.target.closest(".abtn"); if(!b) return; e.stopPropagation(); var a=b.getAttribute("data-a");
+        if(a==="rotL") nudgeAlign({rot:-2}); else if(a==="rotR") nudgeAlign({rot:2}); else if(a==="sclD") nudgeAlign({s:1/1.03});
+        else if(a==="sclU") nudgeAlign({s:1.03}); else if(a==="reset") resetAlign(); else if(a==="done") exitAlign(true); });
+      if(ad){ var last=null;
+        ad.addEventListener("pointerdown", function(e){ if(!aligning) return; e.preventDefault(); e.stopPropagation(); try{ ad.setPointerCapture(e.pointerId); }catch(_){} last={x:e.clientX,y:e.clientY}; });
+        ad.addEventListener("pointermove", function(e){ if(!aligning||!last) return; var sc=document.getElementById("scene").getBoundingClientRect(); if(!sc.width||!sc.height) return;
+          nudgeAlign({ tx:(e.clientX-last.x)/sc.width*100, ty:(e.clientY-last.y)/sc.height*100 }); last={x:e.clientX,y:e.clientY}; });
+        ad.addEventListener("pointerup", function(){ last=null; }); ad.addEventListener("pointercancel", function(){ last=null; }); } })();
     function renderView(){
       var aerial=document.getElementById("aerialImg"), img=document.getElementById("stageImg"); if(!aerial||!img) return;
       var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?normView(f.view):null;   // Full | Layered | Plan (default Layered); legacy satellite→full, hybrid→layered
@@ -1962,8 +2030,12 @@
       else if(v==="plan"){ aerial.style.display="none"; lay(img, bgData); }                      // PLAN: aerial hidden, the ctx-framed OPAQUE plan
       else { aerial.style.display=""; layAerial(aerial, f.ctx); lay(img, f.planSvg);             // LAYERED (default) / FULL: windowed aerial + the transparent plan layer
         if(v==="full") img.style.mixBlendMode="multiply"; }                                     // FULL: multiply drops the white structure interior → full-colour aerial everywhere, only the drawn geometry (dark walls/labels/area tints) remains
+      // Manual alignment: the plan world rides floor.planXf over the fixed aerial in Layered/Full; identity in Plan / on plain floors.
+      var pw=document.getElementById("planWorld");
+      if(pw && !aligning){ var ax=(cap && v!=="plan") ? validXf(f.planXf) : null; pw.style.transform = (ax && !xfIsId(ax)) ? xfCss(ax) : ""; }
       syncViewSeg(cap, v);
       var rb=document.getElementById("rotateBtn"); if(rb) rb.style.display=cap?"none":"";   // rotating only bgData would misalign the ctx aerial/planSvg layers (and a ctx plan is already leveled)
+      var ab=document.getElementById("alignBtn"); if(ab){ ab.style.display=(cap && v!=="plan" && !frozen())?"":"none"; ab.classList.toggle("on",aligning); }   // Align plan→aerial: only on a hybrid floor in an aerial view, staff only
       renderGrid();
       renderSides(cap && v!=="plan");   // side chips on the aerial views (Layered / Full), not in Plan
       renderBoundary(); updateRegionUI(); siRender();   // the boundary rides the same plate → redrawn in every view (+ the Phase 7 draft preview, if any)
@@ -2105,7 +2177,7 @@
       if(!coverageRevealed && bgHasImage && typeof devices!=="undefined" && devices.length){ coverageRevealed=true; revealCoverage(); }
     }
     window.addEventListener("resize", fitScene);
-    function loadFloor(i){ curFloor=i; var f=floors[i]||{};
+    function loadFloor(i){ if(aligning) exitAlign(true); curFloor=i; var f=floors[i]||{};
       if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
@@ -2129,7 +2201,7 @@
       var wp=!!(from && (withPlan || withItems));   // carrying the drawn plan? (items imply the plan)
       var f={ id:newFloorId(), name:"Floor "+(floors.length+1), bg:(from?from.bg:null), bgSource:(from?from.bgSource:null),
         scale:(from&&from.scale)?JSON.parse(JSON.stringify(from.scale)):null, aerial:(from&&from.aerial)?JSON.parse(JSON.stringify(from.aerial)):null, plan:(wp&&from.plan)?JSON.parse(JSON.stringify(from.plan)):null, outlineDraft:null,
-        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(wp&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(wp&&typeof from.view==="string")?from.view:null, sides:(wp&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(wp&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, zonesMigrated:!!(wp&&from.zonesMigrated), boundary:(wp&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(wp&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // background (scale/capture/ctx) always travels; the drawn plan (structure/view/sides/grid/boundary/zones) only when carrying the plan — deep copies, never shared with the source
+        ctx:(from&&from.ctx)?JSON.parse(JSON.stringify(from.ctx)):null, planSvg:(wp&&typeof from.planSvg==="string")?from.planSvg:null, bgCtx:!!(from&&from.bgCtx), view:(wp&&typeof from.view==="string")?from.view:null, sides:(wp&&from.sides)?JSON.parse(JSON.stringify(from.sides)):null, grid:(wp&&from.grid)?JSON.parse(JSON.stringify(from.grid)):null, planXf:(wp&&from.planXf)?JSON.parse(JSON.stringify(from.planXf)):null, zonesMigrated:!!(wp&&from.zonesMigrated), boundary:(wp&&from.boundary)?JSON.parse(JSON.stringify(from.boundary)):null, zones:(wp&&from.zones)?JSON.parse(JSON.stringify(from.zones)):[],   // background (scale/capture/ctx) always travels; the drawn plan (structure/view/sides/grid/planXf/boundary/zones) only when carrying the plan — deep copies, never shared with the source
         derivedFromFloorId:(from&&from.id)?from.id:null,   // lineage only — editing this floor never mutates the source (every field above is a deep copy / fresh id)
         devices:(from&&withItems)?cloneDevices(from.devices):[], started:!!(from&&from.bg) };
       floors.push(f); loadFloor(floors.length-1); renderFloorTabs();
@@ -2140,7 +2212,7 @@
     function duplicateFloor(i){ if(frozen()) return; snapFloor(); var src=floors[i]; if(!src) return;
       var f={ id:newFloorId(), name:"Copy of "+src.name, bg:src.bg, bgSource:src.bgSource?JSON.parse(JSON.stringify(src.bgSource)):null, started:!!src.started,
         scale:src.scale?JSON.parse(JSON.stringify(src.scale)):null, aerial:src.aerial?JSON.parse(JSON.stringify(src.aerial)):null, plan:src.plan?JSON.parse(JSON.stringify(src.plan)):null, outlineDraft:null,
-        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null, zonesMigrated:!!src.zonesMigrated, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
+        ctx:src.ctx?JSON.parse(JSON.stringify(src.ctx)):null, planSvg:(typeof src.planSvg==="string")?src.planSvg:null, bgCtx:!!src.bgCtx, view:(typeof src.view==="string")?src.view:null, sides:src.sides?JSON.parse(JSON.stringify(src.sides)):null, grid:src.grid?JSON.parse(JSON.stringify(src.grid)):null, planXf:src.planXf?JSON.parse(JSON.stringify(src.planXf)):null, zonesMigrated:!!src.zonesMigrated, boundary:src.boundary?JSON.parse(JSON.stringify(src.boundary)):null, zones:src.zones?JSON.parse(JSON.stringify(src.zones)):[],
         derivedFromFloorId:src.id||null,   // lineage only — the copy is fully independent (deep copies + fresh ids)
         devices:cloneDevices(src.devices) };
       floors.splice(i+1,0,f); loadFloor(i+1); renderFloorTabs(); goStep(f.started?1:0); flushNow(); }   // discrete action → immediate server flush
@@ -2252,7 +2324,7 @@
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
-      dot.addEventListener("pointerdown", function(e){ if(regionMode) return;                                            // Regions mode suspends device drag/select
+      dot.addEventListener("pointerdown", function(e){ if(regionMode||aligning) return;                                            // Regions / Align mode suspends device drag/select
         if(frozen()){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only / submitted: tap a photographed camera to view it (no drag)
         if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
@@ -2261,7 +2333,7 @@
         var moved=false, sx=e.clientX, sy=e.clientY;
         function mv(ev){ if(!moved && Math.hypot(ev.clientX-sx,ev.clientY-sy)<=6) return;   // ignore tiny jitter so a tap doesn't nudge the camera
           if(!moved){ moved=true; el.classList.add("drag"); hideViewPop(); }   // entering a real drag → strip FOV/ring/label + the photo card so the mount point is visible
-          d.x=Math.max(2,Math.min(98,(ev.clientX-r.left)/r.width*100)); d.y=Math.max(2,Math.min(98,(ev.clientY-r.top)/r.height*100)); renderDevice(d);
+          var pp=planPctFromClient(ev.clientX,ev.clientY); d.x=Math.max(2,Math.min(98,pp.x)); d.y=Math.max(2,Math.min(98,pp.y)); renderDevice(d);   // client → plan-% through the active alignment, so a dragged device lands under the cursor when aligned
           showLoupe(ev.clientX, ev.clientY); }   // magnifier over the exact mount point (mouse + touch)
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); dot.removeEventListener("pointercancel",up); hideLoupe(); el.classList.remove("drag");
           if(moved){ reconcileLocations(); queueSave(); }   // moved into another room/zone → location name + inside/outside follow (identity unchanged)
@@ -2271,7 +2343,7 @@
     // aim (Angles step): drag the IC label around the camera axis; the cone follows
     function aimDrag(lab,d){ lab.addEventListener("pointerdown", function(e){ if(frozen()||!angleMode||!d.cone) return; e.preventDefault(); e.stopPropagation(); select(d.id); lab.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
-        function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI); d.aimed=true; renderDevice(d); }
+        function mv(ev){ d.aim=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI - activeXf().rot); d.aimed=true; renderDevice(d); }   // store the aim in plan-space; the plan-world rotation is added back on render
         function up(){ lab.removeEventListener("pointermove",mv); lab.removeEventListener("pointerup",up); queueSave(); }
         lab.addEventListener("pointermove",mv); lab.addEventListener("pointerup",up); }); }
 
@@ -2279,7 +2351,7 @@
     // (like a cone's reach), so it's divided by the current zoom to track the pointer 1:1.
     function ringDrag(grip,d){ if(!grip) return; grip.addEventListener("pointerdown", function(e){ if(frozen()) return; e.preventDefault(); e.stopPropagation(); select(d.id); grip.setPointerCapture(e.pointerId);
         var node=document.getElementById("dev-"+d.id), c=node.getBoundingClientRect(), cx=c.left+c.width/2, cy=c.top+c.height/2;
-        function mv(ev){ var dist=Math.hypot(ev.clientX-cx,ev.clientY-cy)/(zScale||1); d.range=reachFromPx(dist, ISZ); renderDevice(d); }   // feet when scaled, else px
+        function mv(ev){ var dist=Math.hypot(ev.clientX-cx,ev.clientY-cy)/((zScale||1)*(activeXf().s||1)); d.range=reachFromPx(dist, ISZ); renderDevice(d); }   // feet when scaled, else px; divide out the plan-world scale too
         function up(){ grip.removeEventListener("pointermove",mv); grip.removeEventListener("pointerup",up); queueSave(); }
         grip.addEventListener("pointermove",mv); grip.addEventListener("pointerup",up); }); }
 
