@@ -614,21 +614,15 @@
     var bb=cellsBBoxPx(r.cells||[]), name=(r.label||"").trim();
     var lc=roomLabelCell(r.cells||[]), cx=lc[0], cy=lc[1];   // pole-of-inaccessibility anchor (stays inside concave rooms)
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    var sqft = name ? cellsSqFt((r.cells||[]).length) : 0;   // real sq ft only when the floor is scaled
-    // A narrow, taller-than-wide room rotates its label 90° so a long name fits along the long (vertical) axis
-    // instead of being squished into the width.
+    // Just the room name (no sq ft). A narrow, taller-than-wide room rotates its label 90° so a long name fits
+    // along the long (vertical) axis instead of being squished into the width.
     ctx.font="600 14px "+fontFam();
     var vertical = !!name && ctx.measureText(name).width > (bb.w-12) && bb.h > bb.w+4;
     var along = Math.max(20, (vertical ? bb.h : bb.w) - 12);   // the label clamps to the room's long axis
     ctx.save();
     if(vertical){ ctx.translate(cx,cy); ctx.rotate(-Math.PI/2); cx=0; cy=0; }
-    if(sqft>0){
-      ctx.fillStyle="#2b2f36"; ctx.font="600 14px "+fontFam(); ctx.fillText(name, cx, cy-8, along);
-      ctx.fillStyle="#9aa0a6"; ctx.font="600 11px "+fontFam(); ctx.fillText(Math.round(sqft)+" sq ft", cx, cy+9, along);
-    } else {
-      ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
-      ctx.fillText(name||"Tap to name", cx, cy, along);
-    }
+    ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
+    ctx.fillText(name||"Tap to name", cx, cy, along);
     ctx.restore(); }
   // Room drag → the cells inside the drag rect that ALSO belong to the structure (the clamp that keeps rooms inside).
   function roomDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return has(cr[0],cr[1]); }); }
