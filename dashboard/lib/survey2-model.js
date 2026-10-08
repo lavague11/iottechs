@@ -7,6 +7,7 @@
 //   Device: { id, k, x, y, aim, aimed, cone, fov, range, tag, name, color, cid, photo }
 //   x / y are PERCENT of the floor's background image (rotation is baked into the image; zoom and
 //   pan are view-only), so any renderer projects them as x/100 × imageWidth, y/100 × imageHeight.
+import { validXf, xfIsId, xfApplyPx } from "./plan-xf.js";
 
 // `range` on a coverage kind is its DEFAULT reach in FEET (cone throw, or speaker radius) — real-world
 // scale when the floor is scaled from a trace, else a sensible px fraction fallback (see surveyScene).
@@ -43,9 +44,28 @@ export function parseSurveyFloors(raw) {
         // Site boundary + zones (plate-% polygons) so the customer layout / PDF can render the same estimated site context the planner shows.
         boundary: (f.boundary && Array.isArray(f.boundary.pts) && f.boundary.pts.length >= 3) ? { pts: f.boundary.pts } : null,
         zones: Array.isArray(f.zones) ? f.zones.filter((z) => z && Array.isArray(z.pts) && z.pts.length >= 3).map((z) => ({ label: z.label || "", type: z.type || "custom", pts: z.pts })) : [],
+        // Hybrid composite inputs (the leveled aerial under the plan + the manual plan→aerial alignment the
+        // planner saved). Carried so the exporter / customer layout can composite the SAME aligned hybrid;
+        // absent/legacy floors keep these null/false and render plan-only, exactly as before.
+        ctx: (f.ctx && typeof f.ctx.src === "string" && f.ctx.src) ? {
+          src: f.ctx.src,
+          rect: (f.ctx.rect && Number.isFinite(+f.ctx.rect.w) && Number.isFinite(+f.ctx.rect.h)) ? { x: +f.ctx.rect.x || 0, y: +f.ctx.rect.y || 0, w: +f.ctx.rect.w, h: +f.ctx.rect.h } : null,
+          full: !!f.ctx.full, ftW: +f.ctx.ftW || 0, ftH: +f.ctx.ftH || 0 } : null,
+        planSvg: (typeof f.planSvg === "string" && f.planSvg) ? f.planSvg : null,
+        bgCtx: !!f.bgCtx,
+        planXf: f.planXf ? validXf(f.planXf) : null,
+        view: typeof f.view === "string" ? f.view : null,
         devices: Array.isArray(f.devices) ? f.devices.filter((x) => x && x.k) : [] }));
   } catch { return []; }
 }
+
+// A floor can composite the aligned hybrid (aerial under the plan) only when it carries the leveled
+// aerial (ctx.src), the transparent plan layer (planSvg) and the ctx flag — mirrors the widget's
+// hybridCapable(). Without all three the floor renders plan-only everywhere, exactly as before.
+export function hybridCapable(f) { return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }
+// Should a renderer composite the aligned hybrid for this floor? Only when it is hybrid-capable AND the
+// staff set a non-identity alignment; an identity (or missing) planXf keeps today's plan-only render.
+export function compositeHybrid(f) { return hybridCapable(f) && !xfIsId(f.planXf); }
 
 // One record per device, in planner order, with a short code (group letter + running number across
 // floors — the widget's own "I<letter><n>" tag when present) and the display label (name, else tag).
@@ -83,20 +103,28 @@ export const SPK_COVERAGE = { fill: "rgba(96,165,250,0.28)", stroke: "rgba(96,16
 // `pxPerFt` (> 0) scales coverage to real feet: a device's reach (d.range, in feet) renders as
 // range × pxPerFt. Callers derive it from the floor's real width: pxPerFt = renderWidthPx ÷ floorFeetW.
 // Without it (unscaled / hand-drawn / uploaded floors) coverage falls back to a fixed fraction of the plan.
-export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = null, pxPerFt = 0 } = {}) {
+// `planXf` (optional) bakes the manual plan→aerial alignment into the returned pixel coordinates: marker
+// centres are projected onto the plate through the SAME transform the widget paints (lib/plan-xf.js), the
+// marker radius + coverage reach scale by the alignment scale, and aimed cones rotate by the alignment
+// rotation — so a renderer that draws devices in plain plate space (an HTML overlay, or a canvas without a
+// group transform) lands them on the aerial exactly as the planner shows. Identity / absent = unchanged.
+export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = null, pxPerFt = 0, planXf = null } = {}) {
   const all = surveyDevices(floors).filter((d) => d.floor === floorIndex);
-  const r = Math.max(14, Math.round(Math.max(W, H) * 0.011));   // sized by the dominant dimension so markers stay readable on wide/short plans (not tiny)
+  const xf = planXf && !xfIsId(planXf) ? validXf(planXf) : null;
+  const rBase = Math.max(14, Math.round(Math.max(W, H) * 0.011));   // sized by the dominant dimension so markers stay readable on wide/short plans (not tiny)
+  const r = xf ? Math.max(1, Math.round(rBase * xf.s)) : rBase;     // markers ride the alignment scale, like the widget's #planWorld
   const minWH = Math.min(W, H);
   const scaled = pxPerFt > 0;
   const fallbackCone = coneLen || Math.round(minWH * 0.14);
   const fallbackRing = Math.round(minWH * 0.12);
-  const reachPx = (d, fb) => scaled ? Math.max(8, Math.round((+d.range || 0) * pxPerFt)) : fb;
+  const reach = (d, fb) => { const px = scaled ? Math.max(8, Math.round((+d.range || 0) * pxPerFt)) : fb; return xf ? Math.max(1, Math.round(px * xf.s)) : px; };
+  const proj = (px, py) => xf ? xfApplyPx(xf, px, py, W, H) : { x: px, y: py };   // plan-pixel → plate-pixel through the alignment
   const showNames = all.length <= dense;    // past `dense` markers the labels would collide: codes on the plan, names in the list
-  const markers = all.map((d) => ({ ...d, px: d.x / 100 * W, py: d.y / 100 * H, r }));
-  const cones = markers.filter((d) => d.cone && d.aimed).map((d) => ({ px: d.px, py: d.py, aim: d.aim, fov: Math.min(360, Math.max(5, d.fov)), R: reachPx(d, fallbackCone), color: d.color }));
+  const markers = all.map((d) => { const p = proj(d.x / 100 * W, d.y / 100 * H); return { ...d, px: p.x, py: p.y, r }; });
+  const cones = markers.filter((d) => d.cone && d.aimed).map((d) => ({ px: d.px, py: d.py, aim: d.aim + (xf ? xf.rot : 0), fov: Math.min(360, Math.max(5, d.fov)), R: reach(d, fallbackCone), color: d.color }));
   // Speaker coverage: a light-blue radius circle (see-through) drawn under the marker, like a cone but round.
-  const rings = markers.filter((d) => d.ring).map((d) => ({ px: d.px, py: d.py, R: reachPx(d, fallbackRing), fill: SPK_COVERAGE.fill, stroke: SPK_COVERAGE.stroke }));
-  return { W, H, r, markers, cones, rings, showNames, count: all.length, scaled };
+  const rings = markers.filter((d) => d.ring).map((d) => ({ px: d.px, py: d.py, R: reach(d, fallbackRing), fill: SPK_COVERAGE.fill, stroke: SPK_COVERAGE.stroke }));
+  return { W, H, r, markers, cones, rings, showNames, count: all.length, scaled, hybrid: !!xf };
 }
 
 // Counts by kind for validation (canonical vs rendered) and the device schedule.

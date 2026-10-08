@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { SURVEY_GROUPS, kindOf, parseSurveyFloors, surveyDevices, surveyScene, surveyCounts, scopeMismatches } from "../lib/survey2-model.js";
+import { SURVEY_GROUPS, kindOf, parseSurveyFloors, surveyDevices, surveyScene, surveyCounts, scopeMismatches, hybridCapable, compositeHybrid } from "../lib/survey2-model.js";
 import { PDF_PAGE } from "../lib/proposal-pdf.js";
 
 const spk = (i, x, y) => ({ id: i, k: "spk", x, y, aim: 0, aimed: false, cone: false, fov: 30, tag: `IS${i}`, name: `Speaker ${i}`, color: "#B084E0" });
@@ -127,4 +127,66 @@ test("parseSurveyFloors carries site boundary + zones (for the customer/PDF site
   const f2 = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "data:image/svg+xml,x", boundary: { pts: [[0,0]] } }] }))[0];
   assert.equal(f2.boundary, null);
   assert.deepEqual(f2.zones, []);
+});
+
+// ---- Aligned hybrid: the aerial-under-plan composite the PDF / customer layout now render, matching the planner.
+const hybridFloor = (planXf, extra = {}) => ({ name: "F1", bg: "data:image/svg+xml,plan", bgCtx: true,
+  ctx: { src: "data:image/png;base64,AERIAL", rect: { x: 0.1, y: 0.2, w: 0.5, h: 0.5 }, full: true, ftW: 40, ftH: 30 },
+  planSvg: "data:image/svg+xml,planlayer", planXf,
+  devices: [{ id: 1, k: "cam", x: 60, y: 50, aim: 0, aimed: true, tag: "IC1", name: "Front" }], ...extra });
+
+test("parseSurveyFloors carries the hybrid composite inputs (ctx / planSvg / bgCtx / planXf / view)", () => {
+  const f = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 10, ty: -6, s: 2, rot: 90 }, { view: "layered" })] }))[0];
+  assert.ok(f.ctx && f.ctx.src === "data:image/png;base64,AERIAL", "aerial src carried");
+  assert.deepEqual(f.ctx.rect, { x: 0.1, y: 0.2, w: 0.5, h: 0.5 }, "window rect carried");
+  assert.equal(f.ctx.full, true);
+  assert.equal(f.planSvg, "data:image/svg+xml,planlayer");
+  assert.equal(f.bgCtx, true);
+  assert.deepEqual(f.planXf, { tx: 10, ty: -6, s: 2, rot: 90 }, "planXf carried + validated");
+  assert.equal(f.view, "layered");
+  // A plain floor carries none of it → plan-only everywhere, exactly as before.
+  const plain = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "x", devices: [] }] }))[0];
+  assert.equal(plain.ctx, null); assert.equal(plain.planSvg, null); assert.equal(plain.bgCtx, false); assert.equal(plain.planXf, null);
+});
+
+test("hybridCapable / compositeHybrid gate the composite: all three inputs AND a non-identity alignment", () => {
+  const cap = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 10, ty: -6, s: 2, rot: 90 })] }))[0];
+  assert.equal(hybridCapable(cap), true);
+  assert.equal(compositeHybrid(cap), true, "capable + non-identity → composite");
+  // Identity alignment → capable, but renders plan-only (nothing to composite).
+  const id = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 0, ty: 0, s: 1, rot: 0 })] }))[0];
+  assert.equal(hybridCapable(id), true);
+  assert.equal(compositeHybrid(id), false, "identity alignment stays plan-only");
+  // No planXf at all → plan-only.
+  const noxf = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor(undefined)] }))[0];
+  assert.equal(compositeHybrid(noxf), false);
+  // Missing the aerial (ctx) → not capable, even with an alignment set.
+  const noctx = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "x", bgCtx: true, planSvg: "p", planXf: { tx: 10 }, devices: [] }] }))[0];
+  assert.equal(hybridCapable(noctx), false);
+  assert.equal(compositeHybrid(noctx), false);
+});
+
+test("surveyScene(planXf): a known alignment projects a device to the expected plate pixel; identity falls back to plan-only", () => {
+  const floors = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 10, ty: -6, s: 2, rot: 90 })] }));
+  const planXf = floors[0].planXf;
+  // Plan-only (no planXf): device at 60%,50% of a 1000×1000 plate → (600,500), markers un-scaled.
+  const plain = surveyScene(floors, 0, 1000, 1000);
+  assert.equal(plain.hybrid, false);
+  assert.equal(plain.markers[0].px, 600); assert.equal(plain.markers[0].py, 500);
+  const rBase = plain.r;
+  // Aligned hybrid: tx+10%,ty-6%,×2,rot90 about the centre → the SAME point the widget paints.
+  const near = (a, b, m = "") => assert.ok(Math.abs(a - b) < 1e-6, `${a} ≈ ${b} ${m}`);
+  const hy = surveyScene(floors, 0, 1000, 1000, { planXf });
+  assert.equal(hy.hybrid, true);
+  near(hy.markers[0].px, 600); near(hy.markers[0].py, 640, "projected onto the aerial");
+  assert.equal(hy.r, Math.round(rBase * 2), "marker radius rides the alignment scale");
+  // The camera's cone rides the alignment too: aim rotates by rot, reach scales by s.
+  assert.equal(hy.cones.length, 1);
+  assert.equal(hy.cones[0].aim, 0 + 90, "cone aim rotated by the alignment");
+  assert.equal(hy.cones[0].R, Math.round(Math.round(1000 * 0.14) * 2), "cone reach scaled by the alignment");
+  near(hy.cones[0].px, 600); near(hy.cones[0].py, 640);
+  // An identity planXf is treated as plan-only (no projection, no drift for existing floors).
+  const idScene = surveyScene(floors, 0, 1000, 1000, { planXf: { tx: 0, ty: 0, s: 1, rot: 0 } });
+  assert.equal(idScene.hybrid, false);
+  assert.equal(idScene.markers[0].px, 600); assert.equal(idScene.markers[0].py, 500);
 });

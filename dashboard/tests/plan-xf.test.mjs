@@ -5,6 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as lib from "../lib/plan-xf.js";
 
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 function extractFn(name) {
@@ -61,4 +62,40 @@ test("xfFwd: the plate centre is the fixed point of rotation+scale; translate sh
   c = xf.xfFwd({ tx: 10, ty: -6 }, 50, 50); close(c.x, 60); close(c.y, 44);
   // 90° rotation: a point 10 right of centre goes to 10 below centre (screen y down)
   const p = xf.xfFwd({ rot: 90 }, 60, 50); close(p.x, 50); close(p.y, 60);
+});
+
+// ---- The shared lib (lib/plan-xf.js) must not drift from the widget's inline copy. The widget is static
+// HTML (no bundler) so it inlines the helpers; assert the lib and the extracted inline functions agree on a
+// sweep of inputs — the exporter composites hybrids from the lib, so a divergence would mis-place the plan.
+test("lib/plan-xf.js matches the widget's inline validXf/xfIsId/xfCss/xfFwd/xfInv (no drift)", () => {
+  const xfs = [null, {}, { tx: 5, ty: -3, s: 1.25, rot: 12 }, { tx: 200, ty: -999, s: 99, rot: 270 },
+    { tx: -40, ty: 18, s: 0.05, rot: -360 }, { s: 3, rot: 45 }, { rot: 90 }, { tx: 10, ty: -6 }, { s: 1.5, rot: 37, tx: 7, ty: -2 }];
+  for (const t of xfs) {
+    assert.deepEqual(lib.validXf(t), xf.validXf(t), "validXf " + JSON.stringify(t));
+    assert.equal(lib.xfIsId(t), xf.xfIsId(t), "xfIsId " + JSON.stringify(t));
+    assert.equal(lib.xfCss(t), xf.xfCss(t), "xfCss " + JSON.stringify(t));
+    for (const [px, py] of [[50, 50], [20, 80], [0, 0], [100, 100], [63.2, 41.7]]) {
+      const a = lib.xfFwd(t, px, py), b = xf.xfFwd(t, px, py); close(a.x, b.x); close(a.y, b.y);
+      const u = lib.xfInv(t, px, py), v = xf.xfInv(t, px, py); close(u.x, v.x); close(u.y, v.y);
+    }
+  }
+});
+
+test("xfMatrix/xfApplyPx: identity is identity; a square plate matches xfFwd; rotation is true pixel-space", () => {
+  // Identity → the canvas affine is the identity matrix (±0 are equal here).
+  const I = lib.xfMatrix(null, 800, 600);
+  close(I.a, 1); close(I.b, 0); close(I.c, 0); close(I.d, 1); close(I.e, 0); close(I.f, 0);
+  // Known value: xf={tx:10,ty:-6,s:2,rot:90}, W=H=1000, device pixel (600,500) → (600,640).
+  const p = lib.xfApplyPx({ tx: 10, ty: -6, s: 2, rot: 90 }, 600, 500, 1000, 1000);
+  close(p.x, 600); close(p.y, 640);
+  // On a SQUARE plate, pixel-space projection equals xfFwd projected to pixels (no shear).
+  for (const t of [{ tx: 7, ty: -2, s: 1.5, rot: 37 }, { rot: 90 }, { s: 2 }, { tx: 12 }]) {
+    for (const [dx, dy] of [[60, 50], [10, 90], [0, 0], [100, 100]]) {
+      const px = lib.xfApplyPx(t, dx / 100 * 1000, dy / 100 * 1000, 1000, 1000);
+      const pc = lib.xfFwd(t, dx, dy);
+      close(px.x, pc.x / 100 * 1000); close(px.y, pc.y / 100 * 1000);
+    }
+  }
+  // The plate centre is the fixed point of rotate+scale (translate aside), at any aspect.
+  const cc = lib.xfApplyPx({ s: 3, rot: 45 }, 400, 200, 800, 400); close(cc.x, 400); close(cc.y, 200);
 });

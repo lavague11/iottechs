@@ -1,6 +1,7 @@
 "use client";
-import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts } from "./survey2-model.js";
+import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable } from "./survey2-model.js";
 import { northArrowAngle } from "./site-transform.js";
+import { validXf, xfIsId, xfMatrix } from "./plan-xf.js";
 
 // Rasterize the Site Survey (the "survey2" planner) into one PNG per floor for the proposal PDF —
 // the SAME floors, backgrounds and devices the planner shows, projected through the same geometry
@@ -39,8 +40,26 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       if (!ctx) return null;
-      // Layer 1 — background (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
-      ctx.drawImage(im, 0, 0, W, H);
+      // Aligned hybrid? When the floor carries the leveled aerial + the transparent plan layer AND staff set a
+      // non-identity alignment, composite the aerial UNDER the plan (windowed by ctx.rect, same math as the
+      // widget's layAerial) and ride the plan + its grid/zones/devices on ONE transform over it — so the
+      // customer / PDF see exactly what staff aligned. Any missing piece falls back to today's plan-only render.
+      const xf = validXf(f.planXf);
+      let planIm = im, hybrid = false;
+      if (hybridCapable(f) && !xfIsId(xf)) {
+        const [aerialIm, planLayer] = await Promise.all([loadImg(f.ctx.src), loadImg(f.planSvg)]);
+        if (aerialIm && aerialIm.naturalWidth && planLayer && planLayer.naturalWidth) {
+          drawAerialWindow(ctx, aerialIm, f.ctx, W, H);   // Layer 0 — the fixed real world under the plan
+          planIm = planLayer; hybrid = true;              // the TRANSPARENT plan layer, so the aerial shows through
+        }
+      }
+      // Everything that rides the plan (plan bitmap, grid, site context, coverage, markers, labels) is drawn
+      // inside this group so the one alignment transform moves it all together, exactly like the widget's
+      // #planWorld. In plan-only mode the transform is identity, so nothing changes for existing floors.
+      ctx.save();
+      if (hybrid) { const m = xfMatrix(xf, W, H); ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f); }
+      // Layer 1 — plan (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
+      ctx.drawImage(planIm, 0, 0, W, H);
       // Layer 1b — scaled grid: a ctx-framed plan SVG is drawn gridless (the planner overlays its grid). When
       // the owner has Grid ON (gridMode > 0) re-draw the SAME grid + "1 box = N ft" scale chip here; default OFF
       // draws nothing. Skipped for a plain hand-drawn plan (its own baked grid — avoid doubling) and raster bgs.
@@ -86,6 +105,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
           ctx.textAlign = "center";
         }
       });
+      ctx.restore();   // end the plan-world group — the north indicator below is screen-fixed, not part of the plan
       // Layer 5 — north indicator (top-right), only when the floor's capture transform knows north.
       if (f.aerial && Number.isFinite(f.aerial.northDeg)) {
         const nr = Math.max(14, Math.round(Math.min(W, H) * 0.028));
@@ -118,6 +138,22 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       resolve(done);
     });
   });
+}
+
+// The leveled aerial drawn as the bottom layer of an aligned hybrid — windowed to the viewport rect
+// (ctx.rect, fractions 0..1 of the FULL aerial) so the building sits framed with real surroundings and the
+// plate matches the plan, the SAME windowing the widget's layAerial does. Legacy ctx without `full` held a
+// pre-cropped strip → contain-fit it. Cosmetic: a bad aerial is skipped, never breaks the export.
+function drawAerialWindow(ctx, im, c, W, H) {
+  try {
+    const AW = im.naturalWidth, AH = im.naturalHeight, r = c && c.rect;
+    if (c && c.full && r && r.w > 0 && r.h > 0) {
+      ctx.drawImage(im, r.x * AW, r.y * AH, r.w * AW, r.h * AH, 0, 0, W, H);   // window [r.x..r.x+r.w]×[r.y..r.y+r.h] → the whole plate
+    } else {
+      const a = AW / AH; let w, h; if (W / H > a) { h = H; w = H * a; } else { w = W; h = W / a; }   // contain-fit, centred
+      ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+    }
+  } catch (e) { /* aerial is cosmetic — never break the PDF over it */ }
 }
 
 // The ctx-framed plan's grid, re-drawn on the export canvas (and the "1 box = N ft" scale chip) — but ONLY when
