@@ -191,7 +191,7 @@ export async function selectOptionAction(accessId, optKey, sign) {
   // If this was an ACCEPT (option now in the set) and a signature was supplied, record it.
   const nowAccepted = (() => { try { return JSON.parse(row.accepted_options || "[]").includes(optKey); } catch { return false; } })();
   if (nowAccepted && sign && sign.name) {
-    const signed = signProposal(accessId, sign.name, sign.data || null);
+    const signed = signProposal(accessId, sign.name, sign.data || null, sign.acks || null);
     if (signed) row = signed;
   }
   const stage = maybeAutoAdvance(accessId);

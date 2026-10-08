@@ -1145,6 +1145,7 @@ function init() {
   // matches the live payload; a signed version's PDF renders from signed_payload (the exact artifact).
   if (!propCols.includes("signed_fingerprint"))  db.exec("ALTER TABLE proposals ADD COLUMN signed_fingerprint TEXT");
   if (!propCols.includes("signed_payload"))      db.exec("ALTER TABLE proposals ADD COLUMN signed_payload TEXT");
+  if (!propCols.includes("signed_acks"))         db.exec("ALTER TABLE proposals ADD COLUMN signed_acks TEXT");   // { ackKey: bool } — the Section 83 initials the customer checked at signing
   // Work order: the office finalizes the auto-created work order (payout reviewed) before a tech
   // can accept it. Null until finalized; stamped with the finalizer's name + timestamp.
   if (!propCols.includes("wo_finalized_at"))     db.exec("ALTER TABLE proposals ADD COLUMN wo_finalized_at TEXT");
@@ -5906,14 +5907,20 @@ export function setProposalCustomerFlags(accessId, flags, note) {
 
 // ---- Signature + payments + stage acceptances (Approval & Deposit stage) ----
 // Customer signs the accepted proposal (typed name, optional drawn signature data URL).
-export function signProposal(accessId, name, signatureData) {
+export function signProposal(accessId, name, signatureData, acks) {
   const cur = getActiveProposal(accessId);
   if (!cur || cur.status !== "accepted") return null;
   // Bind the signature to EXACTLY what was signed: capture the content fingerprint + freeze a snapshot
   // of the payload. Any later drift of the signed row voids the gate; the PDF renders from the snapshot.
   const fp = proposalFingerprint(cur.payload, cur.tax_rate, cur.deposit_pct);
-  db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, updated_at=datetime('now','localtime') WHERE id=?")
-    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, cur.id);
+  // The Section 83 acknowledgments the customer initialed: a small {ackKey: bool} map, stored as JSON.
+  let acksJson = null;
+  if (acks && typeof acks === "object") {
+    const clean = {}; for (const k of Object.keys(acks)) clean[String(k).slice(0, 40)] = !!acks[k];
+    acksJson = JSON.stringify(clean).slice(0, 2000);
+  }
+  db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, signed_acks=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, acksJson, cur.id);
   return getActiveProposal(accessId);
 }
 // Technician accepts the (customer-accepted) work order: records the tech's signature on the
