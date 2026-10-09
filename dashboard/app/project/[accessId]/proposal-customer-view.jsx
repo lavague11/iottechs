@@ -326,7 +326,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
   // one source of truth — instead of a generic "Full Camera Install".
   const camNames = cameraNameOverrides(opt.services || [], camRoster);
-  const depositPct = +p.deposit_pct || 50;   // was dropped by 1f451c0 while the summary card (pcv-sum-dep) still reads it → every real proposal crashed the customer view
   const payPlan = p.payload.payment_plan || "custom";
   const fullDate = p.payload.full_date || null;
   const payBase = p.signed_at || p.sent_at || p.created_at || null;
