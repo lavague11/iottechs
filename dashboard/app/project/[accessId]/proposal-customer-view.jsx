@@ -85,7 +85,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // Summary-first: the customer reads a calm system summary + the one number up top; the full
   // itemized cost table lives behind "View detailed breakdown" (collapsed by default). Staff looking
   // through the preview toggle, or the full-screen deck overlay, get the detail open so nothing hides.
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(true);   // the line-item breakdown is core proposal info — visible by default; "Hide details" is the only control
 
   // ---- Revise mode: per-line change/remove requests (flags), not real edits ----
   const [reviseMode, setReviseMode] = useState(false);
@@ -640,7 +640,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             {optAccepted ? `Remove Option ${opt.id}` : (
               <>
                 <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                Approve &amp; Sign
+                {diffInfo ? "Review & Sign" : "Approve & Sign"}
               </>
             )}
           </button>
@@ -825,7 +825,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
       {diffInfo && !locked && <ProposalDiff diff={diffInfo.diff} fromVersion={diffInfo.fromVersion} toVersion={diffInfo.toVersion} signedAt={diffInfo.signedAt} />}
-      <div className="pcv-section-hd">{locked ? "Accepted" : "Accept, Request Change, or Decline"}</div>
+      <div className="pcv-section-hd">{locked ? "Accepted" : "Request a Change or Decline"}</div>
       <div className="pcv-accept-box">
         {reviseMode ? (
           <div className="pcv-send-bar">
@@ -864,16 +864,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             )}
             {canAct && (
               <>
-                <p>Accept, request a change, or decline.</p>
-                <div className="pcv-accept-actions">
-                  <button className={`pcv-select${optAccepted ? " outline" : ""}`} disabled={busy} onClick={() => choose(opt.id)}>
-                    {optAccepted ? `Remove Option ${opt.id}` : (
-                      <>
-                        <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                        {diffInfo ? "Review & Sign" : "Approve & Sign"}
-                      </>
-                    )}
-                  </button>
+                <p>{diffInfo ? "Review the changes and use Review & Sign above — or request a change / decline." : "Use Approve & Sign above to accept. You can also request a change or decline here."}</p>
+                <div className="pcv-accept-actions secondary">
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>
                     <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     Request Change
@@ -981,10 +973,11 @@ const PCV_CSS = `
 .pcv-diff-total{display:flex;justify-content:space-between;font-size:.95rem;font-weight:700;padding:8px 10px 2px}
 .pcv-diff-total s{color:var(--dv-meta,#787D84);font-weight:500;margin-right:6px}
 .pcv-diff-note{font-size:.76rem;color:var(--dv-meta,#787D84);padding:6px 22px 0}
-.pcv-root{background:var(--dv-paper,#F4F4F2);border-radius:14px;border:1px solid var(--dv-line,#E4E4DF);overflow:hidden;
-  box-shadow:0 1px 2px rgba(16,20,24,.04);
+/* One continuous document rail — no giant outer card. Sections flow through it, sharing the same 22px
+   gutters and separated by thin hairlines, so the proposal reads as one page, not a stack of cards. */
+.pcv-root{background:transparent;border:0;border-radius:0;overflow:visible;max-width:1500px;margin:0 auto;
   font-family:var(--font-sans,inherit)}
-.pcv-header{background:var(--dv-raise,#FBFBFA);padding:14px 22px;display:flex;justify-content:space-between;
+.pcv-header{background:transparent;padding:4px 22px 16px;display:flex;justify-content:space-between;
   align-items:flex-start;flex-wrap:wrap;gap:14px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
 .pcv-hd-left{display:flex;flex-direction:column;gap:3px}
 .pcv-brand{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
@@ -1002,9 +995,9 @@ const PCV_CSS = `
 .pcv-hd-meta{font-size:.7rem;color:var(--dv-faint,#A1A6AC)}
 .pcv-empty{color:var(--dv-meta,#787D84);font-size:.86rem;padding:30px 22px;text-align:center}
 
-.pcv-info-box{margin:20px 22px;border:1px solid var(--dv-line,#E4E4DF);border-radius:2px;background:var(--dv-raise,#FBFBFA)}
-.pcv-info-row{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:10px 14px}
-.pcv-info-row+.pcv-info-row{border-top:1px solid var(--dv-line-soft,#EDEDE9)}
+.pcv-info-box{margin:18px 22px 4px;border:0;border-radius:0;background:transparent;border-bottom:1px solid var(--dv-line-soft,#EDEDE9);padding-bottom:16px}
+.pcv-info-row{display:grid;grid-template-columns:1fr 1fr;gap:12px 32px;padding:8px 0}
+.pcv-info-row+.pcv-info-row{border-top:0}
 .pcv-info-row div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .pcv-info-row b{font-size:.82rem;color:var(--dv-ink,#101418);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcv-info-lbl{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
@@ -1059,14 +1052,12 @@ const PCV_CSS = `
 
 /* Summary-first card — scope (what you're getting) + the one number + the primary action, up top.
    The itemized table (the math) is a click away behind "View detailed breakdown". */
-.pcv-sum{margin:16px 22px 4px;border:1px solid var(--dv-line,#E4E4DF);border-top:3px solid var(--dv-gold,#C9A96E);
-  border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;display:flex;flex-direction:column;gap:12px;
-  box-shadow:0 1px 2px rgba(16,20,24,.04),0 20px 44px -34px rgba(16,20,24,.4)}
+.pcv-sum{margin:24px 22px 4px;border:0;border-radius:0;background:transparent;padding:0;display:flex;flex-direction:column;gap:14px}
 .pcv-sum-hd{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .pcv-sum-hd-nm{font-size:.9rem;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--dv-ink,#101418)}
-.pcv-sum-cats{display:flex;flex-direction:column;gap:1px;border:1px solid var(--dv-line-soft,#EDEDE9);border-radius:10px;overflow:hidden}
-.pcv-sum-cat{display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--dv-paper,#F4F4F2)}
-.pcv-sum-cat:nth-child(odd){background:var(--dv-raise,#FBFBFA)}
+.pcv-sum-cats{display:flex;flex-direction:column;gap:0;border:0;border-radius:0}
+.pcv-sum-cat{display:flex;align-items:center;gap:10px;padding:9px 0;background:transparent;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
+.pcv-sum-cat:first-child{border-top:0}
 .pcv-sum-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
 .pcv-sum-cat-nm{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);text-transform:capitalize}
 .pcv-sum-cat-ct{margin-left:auto;font-size:.78rem;font-weight:600;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
@@ -1082,8 +1073,8 @@ const PCV_CSS = `
 .pcv-sum-more{align-self:center;background:none;border:none;color:var(--dv-blue,#3E6C9E);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 6px}
 .pcv-sum-more:hover{text-decoration:underline}
 
-.pcv-section-hd{margin:18px 22px 0;background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;
-  letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-left:3px solid var(--dv-gold,#C9A96E);border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
+.pcv-section-hd{margin:30px 22px 8px;background:transparent;color:var(--dv-ink,#101418);font-size:.72rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;padding:0 0 7px;border-left:0;border-bottom:1px solid var(--dv-line,#E4E4DF)}
 /* Fold header — collapses the whole proposal; matches the page's FlowStep tool-cards (raised row,
    1px border with a status-colored left rule, soft-tint icon, status chip, chevron). Gold while in
    progress, green once accepted+signed — same "complete = green" convention as the other cards. */
@@ -1110,6 +1101,12 @@ const PCV_CSS = `
   .pcv-hd-lbl{display:none}
   .pcv-hd-ic{padding:0 8px;gap:0}
   .pcv-fold-hd{padding:11px 12px;gap:8px}
+  /* 16px mobile gutter across the one rail; metadata stacks; the total shrinks so nothing overflows the page. */
+  .pcv-header,.pcv-info-box,.pcv-sum,.pcv-section-hd,.pcv-table,.pcv-pay-table,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
+  .pcv-info-row{grid-template-columns:1fr;gap:12px}
+  .pcv-sum-total{flex-wrap:wrap;gap:2px 12px}
+  .pcv-sum-total-amt{font-size:1.45rem}
+  .pcv-info-link,.pcv-contact{word-break:break-word;overflow-wrap:anywhere}
 }
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:var(--dv-paper,#F4F4F2);
@@ -1174,8 +1171,8 @@ const PCV_CSS = `
 .pcv-void-no{height:24px;padding:0 10px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:500;cursor:pointer;font-family:inherit}
 .pcv-fineprint{margin:6px 22px 0;font-size:.7rem;color:var(--dv-faint,#A1A6AC);font-style:italic}
 
-.pcv-accept-box{margin:0 22px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);
-  padding:14px;display:flex;flex-direction:column;gap:10px}
+.pcv-accept-box{margin:0 22px;background:transparent;border:0;
+  padding:12px 0 0;display:flex;flex-direction:column;gap:10px}
 .pcv-accept-box p{margin:0;font-size:.8rem;color:var(--dv-meta,#787D84)}
 .pcv-accept-selected{font-size:.86rem;font-weight:600;color:var(--dv-green,#2E7D5B)}
 .pcv-select{height:44px;border:none;border-radius:9px;background:var(--dv-ink,#101418);
