@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials } from "../../../lib/proposal";
+import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials, planDepositPct } from "../../../lib/proposal";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
@@ -280,7 +280,7 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
     return { sub: acc.sub + tt.sub, grand: acc.grand + tt.grand };
   }, { sub: 0, grand: 0 });
   const optLabel = shown.map((o) => `Option ${o.id} (${o.name})`).join(" + ");
-  const depositPct = +p.deposit_pct || 50;
+  const depositPct = planDepositPct(p.payload, p.deposit_pct);   // deposit due is driven by the payment PLAN, not the legacy deposit_pct (which can drift from it)
   const payments = data.payments || [];
   // Only CONFIRMED money counts — a customer submission sits pending until staff confirm receipt.
   const confirmed = payments.filter((x) => x.status !== "pending");

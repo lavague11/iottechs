@@ -429,6 +429,20 @@ export function planScheduleRows(plan, custRows, currentTotal = 0, fullDate = nu
   const byDate = (plan === "100" || plan === "100_end") && fullDate ? ("by " + fmtPlanDate(fullDate)) : null;
   return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when: byDate || when }));
 }
+// THE canonical "deposit due up front" percentage — the single source of truth every stage must use for
+// "deposit due" (Record-a-Payment, Approval, the customer summary, gates), so the app can never show two
+// different deposits for one proposal. It is derived from the PAYMENT PLAN, never the legacy deposit_pct
+// field (which can drift from the plan — e.g. a proposal switched to 100%-on-completion but still carrying
+// deposit_pct:50). Up-front = milestones due "before we begin" / "to begin"; a pay-on-completion plan is 0;
+// prepaid is 100; custom = its first installment %. Only with NO recognizable plan does it fall back to the
+// stored deposit_pct, so legacy proposals without a plan are unchanged.
+export function planDepositPct(payload, fallbackPct = 50) {
+  const plan = payload && payload.payment_plan;
+  const ms = plan && PLAN_MILESTONES[plan];
+  if (ms) return r2(ms.filter(([, when]) => /begin/i.test(when)).reduce((s, [p]) => s + (+p || 0), 0));
+  if (plan === "custom") { const rows = customPlanRows(payload.custom_plan && payload.custom_plan.rows, 100); return rows.length ? r2(+rows[0].pct || 0) : 0; }
+  return r2(+fallbackPct || 0);
+}
 // Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.
 function amountOf(v, base) {
   if (v && typeof v === "object") return v.type === "pct" ? base * (+v.value || 0) / 100 : Math.max(0, +v.value || 0);
