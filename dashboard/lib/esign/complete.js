@@ -30,13 +30,23 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
   if (claim.changes !== 1) return fail("USED", "This document was already signed.");
   const release = () => h().prepare("UPDATE sign_sessions SET state='open' WHERE id=? AND state='completing'").run(s.id);
 
-  let weAccepted = false, signedRow = null;
+  let weAccepted = false, signedRow = null, aborted = false;
   const created = [];
   try {
     const unsigned = getDocument(doc.id);
     const fields = (doc.meta?.fields || []).filter((f) => f.opt === s.option_key);
     // Dry run: prove the signature embeds and every field is on a real page BEFORE touching the record.
     await flattenSigned({ unsignedBytes: unsigned.bytes, fields, values, signedAt: new Date().toISOString().replace("T", " ").slice(0, 19) });
+
+    // The dry-run flatten yielded the event loop: a revision may have minted v+1 meanwhile. v+1 clones the payload,
+    // so its fingerprint is IDENTICAL and the fingerprint guard below can't see it. Re-assert, with no await between
+    // here and signProposal, that the active proposal is still the exact one this session was opened on.
+    const live = getActiveProposal(accessId);
+    if (!live || live.id !== s.proposal_id || live.version !== s.version || live.signed_name) {
+      h().prepare("UPDATE sign_sessions SET state='void', void_reason='revised' WHERE id=?").run(s.id);
+      aborted = true;
+      throw new Error("The proposal changed while signing. Reopen it to review the update.");
+    }
 
     // The existing lifecycle — acceptance + signature binding to the content fingerprint.
     const accepted = (() => { try { return JSON.parse(row.accepted_options || "[]").includes(s.option_key); } catch { return false; } })();
@@ -87,6 +97,7 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
       for (const id of created) h().prepare("UPDATE sign_documents SET voided=1 WHERE id=?").run(id);
       setProposalSignPointers(row.id, { signedDocId: null, signStatus: "signing" });
     } catch { /* best effort */ }
+    if (aborted) return fail("VOID", e.message);   // session already voided — the signer must reopen, not retry
     release();
     return fail("ERROR", e?.message?.startsWith("The proposal") ? e.message : "Couldn't finish signing. Please try again.");
   }

@@ -255,3 +255,20 @@ test("multi-option proposal: signing B signs ONLY B (document narrowed to the op
   assert.match(txt, /Doorbell Camera/);
   assert.doesNotMatch(txt, /Camera Location|\bCamera\b.*\$150/, "option A's lines are not in the document the customer signed");
 });
+
+test("mid-completion version bump aborts instead of signing the wrong version (identical-fingerprint v+1)", async () => {
+  const x = await ready("Done Race Rev", "5552220016");
+  const v1 = db.getActiveProposal(x.a);
+  const p = K.completeSession({ token: x.token, accessId: x.a, caller: pin(x.a) });   // runs sync up to the first await (the dry-run flatten)
+  db.reviseProposal(x.a, "Office");                                                   // …and v+1 (same payload → same fingerprint) lands in that gap
+  const out = await p;
+  assert.equal(out.ok, false);
+  assert.equal(out.code, "VOID");
+  const v2 = db.getActiveProposal(x.a);
+  assert.equal(v2.version, 2);
+  assert.equal(v2.signed_name, null, "the new version was NOT signed");
+  assert.equal(db.sqliteHandle().prepare("SELECT signed_name FROM proposals WHERE id=?").get(v1.id).signed_name, null, "nor the old one");
+  assert.equal(db.sqliteHandle().prepare("SELECT COUNT(*) c FROM sign_documents WHERE proposal_id IN (?,?) AND kind IN ('signed','certificate')").get(v1.id, v2.id).c, 0);
+  assert.equal(db.sqliteHandle().prepare("SELECT state FROM sign_sessions WHERE doc_id=?").get(x.unsignedId).state, "void");
+  assert.equal((await done(x)).code, "VOID", "the token can't be retried");
+});
