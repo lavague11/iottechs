@@ -1,7 +1,7 @@
 "use client";
 import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable } from "./survey2-model.js";
 import { northArrowAngle } from "./site-transform.js";
-import { validXf, xfIsId, xfMatrix } from "./plan-xf.js";
+import { validXf, xfMatrix } from "./plan-xf.js";
 
 // Rasterize the Site Survey (the "survey2" planner) into one PNG per floor for the proposal PDF —
 // the SAME floors, backgrounds and devices the planner shows, projected through the same geometry
@@ -40,13 +40,13 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       if (!ctx) return null;
-      // Aligned hybrid? When the floor carries the leveled aerial + the transparent plan layer AND staff set a
-      // non-identity alignment, composite the aerial UNDER the plan (windowed by ctx.rect, same math as the
-      // widget's layAerial) and ride the plan + its grid/zones/devices on ONE transform over it — so the
-      // customer / PDF see exactly what staff aligned. Any missing piece falls back to today's plan-only render.
+      // Hybrid? When the floor carries the leveled aerial + the transparent plan layer, composite the aerial
+      // UNDER the plan (windowed by ctx.rect, same math as the widget's layAerial) and ride the plan + its
+      // grid/zones/devices on ONE planXf transform over it — so the customer / PDF see the SAME Layered view
+      // the app shows (identity alignment = the plan's default position; a plain floor still renders plan-only).
       const xf = validXf(f.planXf);
       let planIm = im, hybrid = false;
-      if (hybridCapable(f) && !xfIsId(xf)) {
+      if (hybridCapable(f)) {
         const [aerialIm, planLayer] = await Promise.all([loadImg(f.ctx.src), loadImg(f.planSvg)]);
         if (aerialIm && aerialIm.naturalWidth && planLayer && planLayer.naturalWidth) {
           drawAerialWindow(ctx, aerialIm, f.ctx, W, H);   // Layer 0 — the fixed real world under the plan

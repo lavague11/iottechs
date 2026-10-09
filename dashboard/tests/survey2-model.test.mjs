@@ -149,17 +149,18 @@ test("parseSurveyFloors carries the hybrid composite inputs (ctx / planSvg / bgC
   assert.equal(plain.ctx, null); assert.equal(plain.planSvg, null); assert.equal(plain.bgCtx, false); assert.equal(plain.planXf, null);
 });
 
-test("hybridCapable / compositeHybrid gate the composite: all three inputs AND a non-identity alignment", () => {
+test("hybridCapable / compositeHybrid: composite whenever the floor carries the aerial + plan (identity alignment included)", () => {
   const cap = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 10, ty: -6, s: 2, rot: 90 })] }))[0];
   assert.equal(hybridCapable(cap), true);
   assert.equal(compositeHybrid(cap), true, "capable + non-identity → composite");
-  // Identity alignment → capable, but renders plan-only (nothing to composite).
+  // Identity alignment → still composites (the plan at its DEFAULT position over the aerial), matching the
+  // in-app Layered view — the PDF/customer must not fall back to plan-only just because staff never nudged it.
   const id = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor({ tx: 0, ty: 0, s: 1, rot: 0 })] }))[0];
   assert.equal(hybridCapable(id), true);
-  assert.equal(compositeHybrid(id), false, "identity alignment stays plan-only");
-  // No planXf at all → plan-only.
+  assert.equal(compositeHybrid(id), true, "identity alignment still composites (default position)");
+  // No planXf at all → still composites at identity (a hybrid-capable floor always shows the aerial).
   const noxf = parseSurveyFloors(JSON.stringify({ floors: [hybridFloor(undefined)] }))[0];
-  assert.equal(compositeHybrid(noxf), false);
+  assert.equal(compositeHybrid(noxf), true);
   // Missing the aerial (ctx) → not capable, even with an alignment set.
   const noctx = parseSurveyFloors(JSON.stringify({ floors: [{ name: "F", bg: "x", bgCtx: true, planSvg: "p", planXf: { tx: 10 }, devices: [] }] }))[0];
   assert.equal(hybridCapable(noctx), false);

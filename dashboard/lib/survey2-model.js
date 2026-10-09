@@ -65,7 +65,7 @@ export function parseSurveyFloors(raw) {
 export function hybridCapable(f) { return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }
 // Should a renderer composite the aligned hybrid for this floor? Only when it is hybrid-capable AND the
 // staff set a non-identity alignment; an identity (or missing) planXf keeps today's plan-only render.
-export function compositeHybrid(f) { return hybridCapable(f) && !xfIsId(f.planXf); }
+export function compositeHybrid(f) { return hybridCapable(f); }
 
 // One record per device, in planner order, with a short code (group letter + running number across
 // floors — the widget's own "I<letter><n>" tag when present) and the display label (name, else tag).
