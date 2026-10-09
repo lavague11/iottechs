@@ -137,7 +137,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       }
       let img;
       try { img = cv.toDataURL("image/png"); } catch { return null; }
-      const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, identity: d.identity, room: d.loc, kind: d.kindName, group: d.group }));
+      const devices = all.filter((d) => d.floor === fi && !d.annotation).map((d) => ({ code: d.code, label: d.label, identity: d.identity, room: d.loc, kind: d.kindName, group: d.group, icon: glyphPng(d.k, d.color) }));
       return { name: f.name, img, devices, counts: { canonical: floors[fi].devices.length, rendered: scene.count } };
     })).then((out) => {
       const done = out.filter(Boolean);
@@ -225,6 +225,23 @@ function drawExportRegions(ctx, f, W, H) {
       ctx.restore();
     }
   } catch (e) { /* site context is cosmetic — never break the PDF over it */ }
+}
+
+// A small transparent PNG of a device's glyph in its group colour, for the PDF legend's Icon column
+// (jsPDF can't stroke SVG paths, so the glyph is rasterized here). Cached by kind+colour — one bitmap
+// per device type, not per device. Returns "" if it can't render (the legend then shows no icon cell).
+const _glyphPng = {};
+function glyphPng(k, color, px = 56) {
+  const key = k + "|" + color;
+  if (key in _glyphPng) return _glyphPng[key];
+  let url = "";
+  try {
+    const cv = document.createElement("canvas"); cv.width = px; cv.height = px;
+    const g = cv.getContext("2d");
+    if (g && drawGlyph(g, deviceIcon(k), px / 2, px / 2, px * 0.82, color)) url = cv.toDataURL("image/png");
+  } catch { url = ""; }
+  _glyphPng[key] = url;
+  return url;
 }
 
 // Draw a canonical device glyph (a 24×24 line icon from lib/survey2-model's SURVEY_ICONS) centred at

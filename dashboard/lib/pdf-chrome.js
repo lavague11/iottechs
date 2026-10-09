@@ -58,15 +58,19 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
     const ly = legendTop + 12;
     doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.4); doc.line(MARGIN, legendTop + 3, W - MARGIN, legendTop + 3);
     doc.setFontSize(8.5);
+    // Aligned cells per entry: ID (code) · Icon (the device's real glyph) · Device (name) · Room (muted).
+    const idW = 20, icoS = 10, nameX0 = idW + icoS + 8;
+    const nameMax = cols > 2 ? 22 : cols > 1 ? 30 : 48, roomMax = cols > 2 ? 16 : 22;
     devs.forEach((dv, i) => {
       const cx = MARGIN + (i % cols) * colW, cy = ly + Math.floor(i / cols) * lineH;
       doc.setFont("helvetica", "bold"); doc.setTextColor(...INK); doc.text(String(dv.code || ""), cx, cy);
+      if (dv.icon) { try { doc.addImage(dv.icon, "PNG", cx + idW, cy - icoS + 2, icoS, icoS); } catch { /* bad glyph — skip the cell */ } }
       // device identity, then its room in a muted tone ("· Dining 1"), "Unassigned" when off every room/area.
-      const name = String(dv.identity || dv.label || "").slice(0, 28);
-      const room = (String(dv.room || "").trim() || "Unassigned").slice(0, 22);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(name, cx + 24, cy);
+      const name = String(dv.identity || dv.label || "").slice(0, nameMax);
+      const room = (String(dv.room || "").trim() || "Unassigned").slice(0, roomMax);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55); doc.text(name, cx + nameX0, cy);
       const nameW = doc.getTextWidth(name);
-      doc.setTextColor(140, 142, 138); doc.text(" · " + room, cx + 24 + nameW, cy);
+      doc.setTextColor(140, 142, 138); doc.text(" · " + room, cx + nameX0 + nameW, cy);
     });
   }
 }
