@@ -13,19 +13,40 @@ import { validXf, xfIsId, xfApplyPx } from "./plan-xf.js";
 // scale when the floor is scaled from a trace, else a sensible px fraction fallback (see surveyScene).
 export const SURVEY_GROUPS = [
   { key: "cctv",  name: "Cameras",   letter: "C", color: "#b98a2e", items: [
-    { k: "cam", name: "Camera", cone: true, fov: 30, range: 40 }, { k: "nvr", name: "NVR" }, { k: "isp", name: "ISP" }, { k: "poe", name: "PoE Switch" }, { k: "disp", name: "Display" }] },
+    { k: "cam", name: "Camera", ic: "cam", cone: true, fov: 30, range: 40 }, { k: "nvr", name: "NVR", ic: "nvr" }, { k: "isp", name: "ISP", ic: "net" }, { k: "poe", name: "PoE Switch", ic: "net" }, { k: "disp", name: "Display", ic: "disp" }] },
   { key: "sound", name: "Sound",     letter: "S", color: "#B084E0", items: [
-    { k: "amp", name: "Amp" }, { k: "spk", name: "Speaker", ring: true, range: 18 }, { k: "aux", name: "Audio Input" }] },
+    { k: "amp", name: "Amp", ic: "disp" }, { k: "spk", name: "Speaker", ic: "spk", ring: true, range: 18 }, { k: "aux", name: "Audio Input", ic: "net" }] },
   { key: "toast", name: "Toast POS", letter: "T", color: "#E8743B", items: [
-    { k: "pronto", name: "Pronto / Meraki" }, { k: "tap", name: "Access Point" }, { k: "pos", name: "POS Terminal" }, { k: "kprint", name: "Kitchen Printer" }, { k: "kds", name: "Kitchen Display" }, { k: "ssk", name: "Self-Service Kiosk" }, { k: "tpoe", name: "24-Port Switch" }, { k: "tisp", name: "ISP Router" }] },
+    { k: "pronto", name: "Pronto / Meraki", ic: "net" }, { k: "tap", name: "Access Point", ic: "net" }, { k: "pos", name: "POS Terminal", ic: "pos" }, { k: "kprint", name: "Kitchen Printer", ic: "print" }, { k: "kds", name: "Kitchen Display", ic: "disp" }, { k: "ssk", name: "Self-Service Kiosk", ic: "disp" }, { k: "tpoe", name: "24-Port Switch", ic: "net" }, { k: "tisp", name: "ISP Router", ic: "net" }] },
   { key: "alarm", name: "Alarms",    letter: "A", color: "#5FB8DB", items: [
-    { k: "door", name: "Door / Window" }, { k: "motion", name: "Motion", cone: true, fov: 110, range: 30 }, { k: "glass", name: "Glassbreak", cone: true, fov: 360, range: 20 }, { k: "keypad", name: "Keypad" }, { k: "fire", name: "Fire / CO" }, { k: "aisp", name: "ISP" }] },
+    { k: "door", name: "Door / Window", ic: "door" }, { k: "motion", name: "Motion", ic: "motion", cone: true, fov: 110, range: 30 }, { k: "glass", name: "Glassbreak", ic: "dot", cone: true, fov: 360, range: 20 }, { k: "keypad", name: "Keypad", ic: "pos" }, { k: "fire", name: "Fire / CO", ic: "alarm" }, { k: "aisp", name: "ISP", ic: "net" }] },
   { key: "misc",  name: "Misc",      letter: "M", color: "#E8C547", items: [
-    { k: "important", name: "Important" }, { k: "outlet", name: "Outlet" }, { k: "hazard", name: "Hazard" }] },
+    { k: "important", name: "Important", ic: "dot" }, { k: "outlet", name: "Outlet", ic: "dot" }, { k: "hazard", name: "Hazard", ic: "dot" }] },
 ];
 const FLAT = {};
 SURVEY_GROUPS.forEach((g) => g.items.forEach((it) => { FLAT[it.k] = { ...it, group: g }; }));
-export const kindOf = (k) => FLAT[k] || { k, name: String(k || "Device"), group: SURVEY_GROUPS[4] };
+export const kindOf = (k) => FLAT[k] || { k, name: String(k || "Device"), group: SURVEY_GROUPS[4], ic: "dot" };
+
+// Canonical device glyphs — the SAME line-icon set the planner widget draws on each marker
+// (public/widgets/site-survey-merged.html `ICONS`), so the customer layout and the PDF survey page
+// render real device icons instead of code bubbles. A drift test asserts the two copies never diverge.
+// Each value is a 24×24 SVG fragment (fill:none, stroked); a canvas renderer parses the primitives.
+export const SURVEY_ICONS = {
+  cam: '<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  nvr: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>',
+  net: '<svg viewBox="0 0 24 24"><path d="M5 12a10 10 0 0114 0"/><path d="M8.5 15.5a5 5 0 017 0"/><circle cx="12" cy="19" r="1"/></svg>',
+  disp: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  spk: '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>',
+  pos: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  print: '<svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M7 15h10v6H7z"/></svg>',
+  door: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1"/><circle cx="15" cy="12" r="1"/></svg>',
+  motion: '<svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2"/><path d="M12 8v6M8 22l4-8 4 8M6 12l6-2 6 2"/></svg>',
+  alarm: '<svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  dot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg>',
+};
+// The glyph fragment for a device kind (falls back to the neutral dot). `iconKeyOf` gives the raw key.
+export const iconKeyOf = (k) => kindOf(k).ic || "dot";
+export const deviceIcon = (k) => SURVEY_ICONS[iconKeyOf(k)] || SURVEY_ICONS.dot;
 // Annotation kinds are notes on the plan, not equipment — they get a marker but no schedule row.
 export const ANNOTATION_KINDS = new Set(["important", "outlet", "hazard"]);
 
@@ -63,8 +84,9 @@ export function parseSurveyFloors(raw) {
 // aerial (ctx.src), the transparent plan layer (planSvg) and the ctx flag — mirrors the widget's
 // hybridCapable(). Without all three the floor renders plan-only everywhere, exactly as before.
 export function hybridCapable(f) { return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }
-// Should a renderer composite the aligned hybrid for this floor? Only when it is hybrid-capable AND the
-// staff set a non-identity alignment; an identity (or missing) planXf keeps today's plan-only render.
+// Should a renderer composite the aligned hybrid for this floor? Whenever it is hybrid-capable — the
+// customer layout / PDF show the SAME Layered view the app does, with the plan at its default position
+// when staff never nudged the alignment (identity planXf). A plain floor (no aerial/plan) stays plan-only.
 export function compositeHybrid(f) { return hybridCapable(f); }
 
 // One record per device, in planner order, with a short code (group letter + running number across
@@ -78,7 +100,7 @@ export function surveyDevices(floors) {
     perGroup[g.key] = (perGroup[g.key] || 0) + 1;
     const code = String(d.tag || "").replace(/^I/, "") || `${g.letter}${perGroup[g.key]}`;
     out.push({
-      id: d.id, floor: fi, floorName: f.name, k: d.k, kindName: it.name, group: g.key, color: d.color || g.color,
+      id: d.id, floor: fi, floorName: f.name, k: d.k, kindName: it.name, ic: it.ic || "dot", group: g.key, color: d.color || g.color,
       // label = WHERE it is (geometry-derived location "Dining 1"), falling back to identity; identity + placement ride alongside for detail/selection.
       code, label: cap((d.locName && String(d.locName).trim()) || (d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
       identity: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`), placementType: d.placementType || "",

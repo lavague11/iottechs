@@ -1,5 +1,5 @@
 "use client";
-import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable } from "./survey2-model.js";
+import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable, deviceIcon } from "./survey2-model.js";
 import { northArrowAngle } from "./site-transform.js";
 import { validXf, xfMatrix } from "./plan-xf.js";
 
@@ -84,16 +84,26 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
         ctx.fillStyle = hexA(c.color, 0.22); ctx.fill();
         ctx.lineWidth = 1; ctx.strokeStyle = hexA(c.color, 0.6); ctx.stroke();
       });
-      // Layer 3 — markers with their code; Layer 4 — name tags while the plan is readable.
+      // Layer 3 — markers: a white disc with the REAL device glyph (same icons the planner draws), group-
+      // coloured so cameras / speakers / alarms read apart at a glance; Layer 4 — name tags while readable.
       const r = scene.r;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       scene.markers.forEach((d) => {
+        // White disc + soft shadow + thin ring — mirrors the widget's .devDot so the marker pops on the aerial.
+        ctx.save();
+        ctx.shadowColor = "rgba(16,17,18,.22)"; ctx.shadowBlur = r * 0.55; ctx.shadowOffsetY = r * 0.14;
+        ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+        ctx.restore();
         ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2);
-        ctx.fillStyle = d.color; ctx.fill();
-        ctx.lineWidth = Math.max(1.5, r * 0.14); ctx.strokeStyle = "#fff"; ctx.stroke();
-        ctx.fillStyle = "#fff";
-        ctx.font = `800 ${Math.round(r * (d.code.length > 2 ? 0.72 : 0.9))}px system-ui, "Segoe UI", sans-serif`;
-        ctx.fillText(d.code, d.px, d.py + 0.5);
+        ctx.lineWidth = Math.max(1, r * 0.08); ctx.strokeStyle = "rgba(16,20,24,.22)"; ctx.stroke();
+        // Real device icon in the group colour; if a glyph can't render, fall back to the old code bubble.
+        if (!drawGlyph(ctx, deviceIcon(d.k), d.px, d.py, r * 1.12, d.color)) {
+          ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.fill();
+          ctx.lineWidth = Math.max(1.5, r * 0.14); ctx.strokeStyle = "#fff"; ctx.stroke();
+          ctx.fillStyle = "#fff";
+          ctx.font = `800 ${Math.round(r * (d.code.length > 2 ? 0.72 : 0.9))}px system-ui, "Segoe UI", sans-serif`;
+          ctx.fillText(d.code, d.px, d.py + 0.5);
+        }
         if (scene.showNames && d.label) {
           ctx.font = `700 ${Math.round(r * 0.85)}px system-ui, "Segoe UI", sans-serif`;
           const tw = ctx.measureText(d.label).width, ph = Math.round(r * 1.1), pw = tw + r * 0.9;
@@ -215,6 +225,30 @@ function drawExportRegions(ctx, f, W, H) {
       ctx.restore();
     }
   } catch (e) { /* site context is cosmetic — never break the PDF over it */ }
+}
+
+// Draw a canonical device glyph (a 24×24 line icon from lib/survey2-model's SURVEY_ICONS) centred at
+// (cx,cy), fit to a `size`-px box and stroked in `color` — the SAME icon the planner shows on each marker,
+// so the PDF/customer plan carries real device icons instead of code bubbles. Parses the three primitives
+// the icon set uses (path / circle / rect). Returns false if nothing could be drawn (caller falls back).
+function drawGlyph(ctx, svg, cx, cy, size, color) {
+  if (!svg || typeof svg !== "string") return false;
+  try {
+    let drew = false;
+    ctx.save();
+    ctx.translate(cx - size / 2, cy - size / 2);
+    const k = size / 24; ctx.scale(k, k);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    let m;
+    const paths = /<path[^>]*\sd="([^"]+)"/g;
+    while ((m = paths.exec(svg))) { if (typeof Path2D === "function") { ctx.stroke(new Path2D(m[1])); drew = true; } }
+    const circles = /<circle[^>]*\scx="([-\d.]+)"[^>]*\scy="([-\d.]+)"[^>]*\sr="([-\d.]+)"/g;
+    while ((m = circles.exec(svg))) { ctx.beginPath(); ctx.arc(+m[1], +m[2], +m[3], 0, Math.PI * 2); ctx.stroke(); drew = true; }
+    const rects = /<rect[^>]*\sx="([-\d.]+)"[^>]*\sy="([-\d.]+)"[^>]*\swidth="([-\d.]+)"[^>]*\sheight="([-\d.]+)"(?:[^>]*\srx="([-\d.]+)")?/g;
+    while ((m = rects.exec(svg))) { roundRect(ctx, +m[1], +m[2], +m[3], +m[4], +m[5] || 0); ctx.stroke(); drew = true; }
+    ctx.restore();
+    return drew;
+  } catch { try { ctx.restore(); } catch { /* noop */ } return false; }
 }
 
 function hexA(hex, a) {

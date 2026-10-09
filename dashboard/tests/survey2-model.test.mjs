@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { SURVEY_GROUPS, kindOf, parseSurveyFloors, surveyDevices, surveyScene, surveyCounts, scopeMismatches, hybridCapable, compositeHybrid } from "../lib/survey2-model.js";
+import { SURVEY_GROUPS, SURVEY_ICONS, kindOf, iconKeyOf, deviceIcon, parseSurveyFloors, surveyDevices, surveyScene, surveyCounts, scopeMismatches, hybridCapable, compositeHybrid } from "../lib/survey2-model.js";
 import { PDF_PAGE } from "../lib/proposal-pdf.js";
 
 const spk = (i, x, y) => ({ id: i, k: "spk", x, y, aim: 0, aimed: false, cone: false, fov: 30, tag: `IS${i}`, name: `Speaker ${i}`, color: "#B084E0" });
@@ -21,6 +21,22 @@ test("model covers every kind the planner widget registers (no drift)", () => {
   for (const [k, cone] of [["cam", true], ["motion", true], ["glass", true], ["spk", false]]) assert.equal(!!kindOf(k).cone, cone, k);
   assert.equal(kindOf("spk").group.color, "#B084E0");
   assert.equal(kindOf("cam").group.color, "#b98a2e");
+});
+
+test("device glyphs: the model's icon set + kind→icon mapping never drift from the planner widget", () => {
+  const html = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
+  // 1) The canonical glyph fragments (SURVEY_ICONS) must match the widget's ICONS map verbatim.
+  const block = /var ICONS=\{([\s\S]*?)\};/.exec(html);
+  assert.ok(block, "found the widget ICONS block");
+  const widgetIcons = {};
+  for (const m of block[1].matchAll(/(\w+):'(<svg[\s\S]*?<\/svg>)'/g)) widgetIcons[m[1]] = m[2];
+  assert.ok(widgetIcons.cam && widgetIcons.spk, "parsed the widget glyphs");
+  for (const [key, svg] of Object.entries(widgetIcons)) assert.equal(SURVEY_ICONS[key], svg, `glyph "${key}" drifted from the widget`);
+  // 2) Every kind the widget maps to an icon must resolve to the SAME icon key in the model.
+  for (const m of html.matchAll(/\{k:"([a-z]+)",name:"[^"]+",ic:"([a-z]+)"/g)) assert.equal(iconKeyOf(m[1]), m[2], `kind "${m[1]}" icon drifted`);
+  // 3) deviceIcon resolves to a real fragment; an unknown kind falls back to the neutral dot.
+  assert.equal(deviceIcon("cam"), SURVEY_ICONS.cam);
+  assert.equal(deviceIcon("nope"), SURVEY_ICONS.dot);
 });
 
 test("audio survey: nine speakers + amp → nine S-coded markers, no cones, exact percent projection", () => {
