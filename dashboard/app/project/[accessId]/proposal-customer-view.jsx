@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, planDepositPct, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { downloadProposalPdf } from "../../../lib/proposal-pdf";
+import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
@@ -286,7 +286,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     } catch { /* fetch failed — download the numbers-only proposal */ }
     try {
       if (mode === "survey") downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
-      else downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
+      else await saveFillableProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
     } finally {
       setDlBusy(false);
     }

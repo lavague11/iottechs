@@ -10,7 +10,7 @@ import {
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
-import { downloadProposalPdf } from "../../../lib/proposal-pdf";
+import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
 import { can } from "../../../lib/roles";
@@ -378,7 +378,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         // Site Survey on its own: the planner's floors with every device, named "… - Site Survey.pdf".
         const out = downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
         if (!out) setDlError("No site survey on this project yet.");
-      } else downloadProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors });
+      } else await saveFillableProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors });
     }
     finally { setDlBusy(false); }
   }

@@ -785,7 +785,20 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         const page = doc.getCurrentPageInfo().pageNumber;
         const frac = (key, type, [bx, by, bw, bh]) => ({ key: `${key}_${opt.id}`, type, opt: opt.id, page, x: bx / W, y: by / H, w: bw / W, h: bh / H, required: true });
         if (Array.isArray(meta.__fields)) meta.__fields.push(frac("name", "name", nameBox), frac("date", "date", dateBox), frac("signature", "signature", signBox));
+      } else if (Array.isArray(meta.__acroFields)) {
+        // Preferred path: record the field rects (PDF points, top-left origin) so the download wrapper
+        // (lib/proposal-acroform.js) can lay REAL AcroForm fields with pdf-lib — complete /DA + /DR +
+        // appearance streams so they fill and print in Acrobat / Preview / iOS, not just Chrome. The
+        // field sits exactly on the visible box above. Names are unique per option when there's a choice.
+        const page = doc.getCurrentPageInfo().pageNumber;
+        const sfx = renderOptions.length > 1 ? "_" + opt.id : "";
+        const push = (kind, name, [bx, byTop, bw, bh], required) => meta.__acroFields.push({ page, kind, name: name + sfx, x: bx, yTop: byTop, w: bw, h: bh, required });
+        push("name", "proposal_client_name", nameBox, true);
+        push("date", "proposal_signature_date", dateBox, true);
+        push("sign", "proposal_authorized_signature", signBox, false);
       } else {
+        // Legacy fallback (direct sync save without the pdf-lib wrapper): jsPDF's own AcroForm. Usable in
+        // lenient viewers but lacks /DA+/DR for strict ones — the wrapper path above is preferred.
         addField("proposal_" + propNum + "_name_" + opt.id, sc[0], y + 16, (sc[1] - sc[0]) - 14, 13, 10);
         addField("proposal_" + propNum + "_date_" + opt.id, sc[1], y + 16, (sc[2] - sc[1]) - 14, 13, 10);
         addField("proposal_" + propNum + "_sign_" + opt.id, sc[0], y + 52, rw * 0.5 - 6, 14, 14);
