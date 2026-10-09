@@ -24,9 +24,12 @@
     "html2canvas-pro": "^2.5.1",
     "jspdf": "^4.2.1",
     "next": "^16.2.9",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "signature_pad": "^4.2.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

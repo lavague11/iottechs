@@ -38,8 +38,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
   );
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
-import ProposalSignModal from "./proposal-sign-modal";
-import { PROPOSAL_TERMS, PROPOSAL_ACKS, PROPOSAL_TERMS_TITLE, PROPOSAL_TERMS_INTRO, PROPOSAL_TERMS_VERSION } from "../../../lib/proposal-terms";
+import EsignSigner from "./esign/esign-signer";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -172,7 +171,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   };
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
-  const [signFor, setSignFor] = useState(null);   // option id awaiting signature (accept flow)
+  const [esignFor, setEsignFor] = useState(null);   // option id open in the PDF signer (lib/esign): Approve & Sign → the actual proposal PDF
   // Once accepted+signed, the full proposal document collapses to a summary so "Make Your Deposit"
   // is the focus. null = follow the lock state (auto-collapse on sign); true/false = user override.
   const [docOverride, setDocOverride] = useState(null);
@@ -391,7 +390,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   function choose(optId) {
     if (busy) return;
     if (acceptedSet.has(optId)) { doAccept(optId, null); }
-    else { if (preview) return; setSignFor(optId); }
+    else { if (preview) return; setEsignFor(optId); }
   }
   async function doAccept(optId, sign) {
     setBusy(true); setErr(null);
@@ -399,7 +398,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);
-    setSignFor(null); setConfirmApprove(false);
+    setConfirmApprove(false);
     showToast(sign ? "Signed & accepted" : "Option removed");
     // After signing, stay on this page and pop the deposit panel open (it lives right below in the
     // same phase) — don't jump anywhere. The stage advances to approval_deposit, but that's the same
@@ -843,6 +842,18 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                 {locked && (
                   <div className="pcv-locked-row">
                     <span className="pcv-locked-note">Signed by {p.signed_name} — this agreement is locked.</span>
+                    {p.signed_doc_id && (
+                      <span className="pcv-doclinks">
+                        <a className="pcv-btn" href={`/api/proposal-doc/${p.signed_doc_id}`} target="_blank" rel="noreferrer" aria-label="Signed PDF" title="Signed PDF" data-testid="signed-pdf-link">
+                          <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /></svg>
+                          Signed
+                        </a>
+                        <a className="pcv-btn" href={`/api/proposal-doc/${p.signed_doc_id}?cert=1`} target="_blank" rel="noreferrer" aria-label="Certificate" title="Certificate" data-testid="cert-link">
+                          <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6" /><path d="M8.5 14 7 22l5-3 5 3-1.5-8" /></svg>
+                          Certificate
+                        </a>
+                      </span>
+                    )}
                     <button type="button" className={`pcv-btn revise${reviseMode ? " on" : ""}`}
                             onClick={() => { setReviseMode((m) => !m); setMenuFor(null); setDeclineOpen(false); }}>
                       ✎ Request Modification
@@ -932,23 +943,16 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       </div>
       )}
 
-      <ProposalSignModal
-        open={!!signFor}
-        heading={signFor ? `Approve & Sign — Option ${signFor}` : "Approve & Sign"}
-        subheading={signFor ? `${optName(signFor)} · ${money(optionTotals(p.payload.options.find((o) => o.id === signFor), p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand)}` : ""}
-        reference={propNum}
-        defaultName={p.signed_name || customerName || ""}
-        agreeText="I have reviewed and agree to the scope and pricing of this proposal and to the Terms & Conditions, and I authorize it to proceed."
-        terms={PROPOSAL_TERMS}
-        acks={PROPOSAL_ACKS.filter((a) => !a.pcpOnly || +(p.payload?.pcp_credit || 0) > 0)}
-        termsTitle={PROPOSAL_TERMS_TITLE}
-        termsIntro={PROPOSAL_TERMS_INTRO}
-        termsVersion={PROPOSAL_TERMS_VERSION}
-        accent="var(--gold)"
-        busy={busy}
-        onConfirm={(sign) => doAccept(signFor, sign)}
-        onCancel={() => setSignFor(null)}
-      />
+      {esignFor && (
+        <EsignSigner accessId={accessId} optKey={esignFor} optLabel={optName(esignFor)} reference={propNum} defaultName={customerName || ""}
+          onClose={() => setEsignFor(null)}
+          onDone={(r) => {
+            setEsignFor(null); setP(r.proposal); setConfirmApprove(false);
+            showToast("Signed & accepted");
+            accCtx?.open?.("deposit");   // stay on the page and pop the deposit panel open, as the old flow did
+            if (r.stage && r.stage !== "proposal") onStageSync?.(r.stage);
+          }} />
+      )}
 
       {toast && (
         <div className="pcv-toast">
@@ -962,6 +966,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
 
 const PCV_CSS = `
 /* Diff before re-sign */
+.pcv-doclinks{display:inline-flex;gap:8px;flex-wrap:wrap}
+.pcv-doclinks a{text-decoration:none}
 .pcv-diff{margin:0 0 4px}
 .pcv-diff-v{font-weight:500;color:var(--dv-meta,#787D84);margin-left:6px}
 .pcv-diff-opt{padding:8px 22px 0}

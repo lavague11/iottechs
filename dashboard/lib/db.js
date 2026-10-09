@@ -12,6 +12,7 @@ import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentCon
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
+import { ensureEsignSchema } from "./esign/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -1158,6 +1159,7 @@ function init() {
   if (!propCols.includes("pcp_agreement_no")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreement_no TEXT");
   if (!propCols.includes("pcp_grant_source")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_grant_source TEXT");  // performance | donor | community | company
   if (!propCols.includes("pcp_approved_at"))  db.exec("ALTER TABLE proposals ADD COLUMN pcp_approved_at TEXT");   // admin finalized
+  ensureEsignSchema(db);   // PDF e-sign: sign_documents / sign_sessions / sign_events + proposals.unsigned_doc_id/signed_doc_id/sign_status (lib/esign/)
 
   // ---- Payments / deposits recorded against a project (approval & deposit stage) ----
   db.exec(`
@@ -2266,7 +2268,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v37";
+const DB_VER = "v38";
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -2292,6 +2294,9 @@ const db = new Proxy({}, {
     return typeof v === "function" ? v.bind(real) : v;
   },
 });
+
+// Raw handle for self-contained modules (lib/esign/) that own their own tables — same lazy connection.
+export const sqliteHandle = () => db;
 
 // Flush the WAL into the main .db file so a file-level copy (backup / migration) is complete.
 export function checkpointDb() {
@@ -5820,6 +5825,8 @@ export function reviseProposal(accessId, byName, opts = {}) {
   db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name, change_note, customer_flags) VALUES (?,?,?,?,?,?,?,?)")
     .run(String(accessId), cur.version + 1, cur.payload, cur.tax_rate, cur.deposit_pct, byName || null, note, flags);
   db.prepare("UPDATE proposals SET status='superseded', updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  // Any in-flight PDF signing session was bound to THIS version's content — void it so the signer is sent back to review v+1 (lib/esign/session.js).
+  db.prepare("UPDATE sign_sessions SET state='void', void_reason='revised' WHERE proposal_id=? AND state='open'").run(cur.id);
   return { proposal: getActiveProposal(accessId), fromVersion: cur.version, wasSigned: !!cur.signed_name };
 }
 // Accepting and declining are tracked as two INDEPENDENT per-option sets so a customer can
@@ -5969,6 +5976,9 @@ export function voidProposalSignature(accessId) {
   const cur = getActiveProposal(accessId);
   if (!cur) return null;
   db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, signed_fingerprint=NULL, signed_payload=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  // E-sign: the stored signed PDF + certificate stay in history (voided, never erased) and the proposal stops pointing at them.
+  db.prepare("UPDATE sign_documents SET voided=1 WHERE proposal_id=? AND kind IN ('signed','certificate')").run(cur.id);
+  db.prepare("UPDATE proposals SET signed_doc_id=NULL, sign_status=NULL WHERE id=?").run(cur.id);
   return getActiveProposal(accessId);
 }
 // Admin/manager correction: void the technician's work-order signature (which is also their

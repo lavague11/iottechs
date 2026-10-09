@@ -1,4 +1,5 @@
-"use client";
+// Pure jsPDF renderer — no "use client" directive on purpose: lib/esign/ calls it from server code
+// (route handlers / server actions), where a client-boundary module would be an uncallable reference.
 import { jsPDF, AcroFormTextField } from "jspdf";
 import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName } from "./proposal.js";
 import { scopeMismatches } from "./survey2-model.js";
@@ -769,12 +770,26 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.text("DECLINED", sc[0], y + 64);
     } else {
       // Name + Date fields (row 1, under their labels) and the Signature field (row 2).
-      fillableBox(sc[0] - 3, y + 15, (sc[1] - sc[0]) - 12, 15);
-      fillableBox(sc[1] - 3, y + 15, (sc[2] - sc[1]) - 12, 15);
-      fillableBox(sc[0] - 3, y + 51, rw * 0.5, 16);
-      addField("proposal_" + propNum + "_name_" + opt.id, sc[0], y + 16, (sc[1] - sc[0]) - 14, 13, 10);
-      addField("proposal_" + propNum + "_date_" + opt.id, sc[1], y + 16, (sc[2] - sc[1]) - 14, 13, 10);
-      addField("proposal_" + propNum + "_sign_" + opt.id, sc[0], y + 52, rw * 0.5 - 6, 14, 14);
+      // E-sign mode (meta.__signing): the same boxes, but NO AcroForm widgets — the signing viewer lays
+      // its own fields over the page from meta.__fields (normalized page fractions, top-left origin),
+      // and the server flattens the captured values into the PDF. The signature box is a touch taller
+      // so a drawn signature has room.
+      const signing = !!meta.__signing;
+      const nameBox = [sc[0] - 3, y + 15, (sc[1] - sc[0]) - 12, 15];
+      const dateBox = [sc[1] - 3, y + 15, (sc[2] - sc[1]) - 12, 15];
+      const signBox = [sc[0] - 3, signing ? y + 50 : y + 51, rw * 0.5, signing ? 21 : 16];
+      fillableBox(...nameBox);
+      fillableBox(...dateBox);
+      fillableBox(...signBox);
+      if (signing) {
+        const page = doc.getCurrentPageInfo().pageNumber;
+        const frac = (key, type, [bx, by, bw, bh]) => ({ key: `${key}_${opt.id}`, type, opt: opt.id, page, x: bx / W, y: by / H, w: bw / W, h: bh / H, required: true });
+        if (Array.isArray(meta.__fields)) meta.__fields.push(frac("name", "name", nameBox), frac("date", "date", dateBox), frac("signature", "signature", signBox));
+      } else {
+        addField("proposal_" + propNum + "_name_" + opt.id, sc[0], y + 16, (sc[1] - sc[0]) - 14, 13, 10);
+        addField("proposal_" + propNum + "_date_" + opt.id, sc[1], y + 16, (sc[2] - sc[1]) - 14, 13, 10);
+        addField("proposal_" + propNum + "_sign_" + opt.id, sc[0], y + 52, rw * 0.5 - 6, 14, 14);
+      }
     }
 
     if (p.created_by_name) {

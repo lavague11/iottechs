@@ -883,6 +883,7 @@ export function sanitizeProposal(row, role) {
     declined_options: (() => { try { return JSON.parse(row.declined_options || "{}"); } catch { return {}; } })(),
     declined_reason: row.declined_reason,
     signed_fingerprint: row.signed_fingerprint || null,
+    signed_doc_id: row.signed_doc_id || null, sign_status: row.sign_status || null,   // e-sign: the stored signed PDF (served by /api/proposal-doc/<id>, read-gated)
   };
   if (COST_ROLES.has(role)) return { ...base, payload, signedPayload: signedPayloadRaw };
   // Technician: the work order builds out as soon as the office SENDS the proposal to the customer
