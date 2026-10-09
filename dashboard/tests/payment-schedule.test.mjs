@@ -3,8 +3,32 @@
 // "Deposit 100% + Final 0%" split. Multi-phase plans keep their milestones; amounts track the total.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planScheduleRows, fmtPlanDate } from "../lib/proposal.js";
+import { planScheduleRows, fmtPlanDate, planDepositPct, projectFinancials } from "../lib/proposal.js";
 import { downloadProposalPdf } from "../lib/proposal-pdf.js";
+
+// The ONE canonical "deposit due up front" %, derived from the payment PLAN — every stage (customer
+// summary, Record-a-Payment, completion) must agree. It must NOT follow the legacy deposit_pct when a
+// plan is present (that field can drift: a proposal switched to 100%-on-completion but still deposit_pct:50).
+test("planDepositPct: up-front % comes from the plan, never a drifted deposit_pct", () => {
+  assert.equal(planDepositPct({ payment_plan: "100_end" }, 50), 0, "pay on completion → nothing up front, even if deposit_pct says 50");
+  assert.equal(planDepositPct({ payment_plan: "100" }, 50), 100, "prepaid → full up front");
+  assert.equal(planDepositPct({ payment_plan: "50_50" }, 99), 50);
+  assert.equal(planDepositPct({ payment_plan: "50_30_20" }, 10), 50);
+  assert.equal(planDepositPct({ payment_plan: "custom", custom_plan: { rows: [{ pct: 30 }, { pct: 70 }] } }, 50), 30, "custom → first installment %");
+  assert.equal(planDepositPct({}, 50), 50, "no plan → fall back to deposit_pct");
+  assert.equal(planDepositPct(null, 25), 25);
+});
+
+test("projectFinancials + planDepositPct: a 100%-on-completion plan owes $0 deposit (not 50% of the total)", () => {
+  // ASC0050's shape: plan 100_end but a stale deposit_pct of 50 on the row.
+  const payload = { payment_plan: "100_end" }, grand = 1087.58;
+  const fin = projectFinancials(grand, 0, 0, planDepositPct(payload, 50));
+  assert.equal(fin.depositTarget, 0, "no deposit due up front");
+  assert.equal(fin.depositDue, 0);
+  assert.equal(fin.balance, 1087.58, "the full amount is the balance");
+  // Contrast: feeding the stale deposit_pct directly reproduces the reported $543.79 bug.
+  assert.equal(projectFinancials(grand, 0, 0, 50).depositDue, 543.79);
+});
 
 test("pay-in-full is a single row — prepaid, postpaid, or by a chosen date", () => {
   const pre = planScheduleRows("100", null, 1000);

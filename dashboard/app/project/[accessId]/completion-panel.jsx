@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { completeProjectAction, setCommissionAction, setPayoutAction, setWarrantyAction } from "./actions";
 import { getApprovalDataAction } from "./proposal-actions";
-import { optionTotals, projectFinancials } from "../../../lib/proposal";
+import { optionTotals, projectFinancials, planDepositPct } from "../../../lib/proposal";
 import { downloadCompletionPdf } from "../../../lib/completion-pdf";
 import SystemQrModal from "./system-qr-modal";
 import { TaglinePill, Wordmark } from "../../components/brand";
@@ -58,7 +58,7 @@ export default function CompletionPanel({ project, proposal, role, readOnly, onS
     : 0;
   const paidTotal = (payData?.payments || []).filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
   // Canonical contract math — same selector every stage uses (base proposal + approved add-ons).
-  const fin = projectFinancials(grand, payData?.addons?.total, paidTotal, proposal?.deposit_pct);
+  const fin = projectFinancials(grand, payData?.addons?.total, paidTotal, planDepositPct(proposal?.payload, proposal?.deposit_pct));
   const addonsTotal = fin.addons;
   const owed = fin.current;
   const balance = fin.balance;

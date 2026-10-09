@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, planDepositPct, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { downloadProposalPdf } from "../../../lib/proposal-pdf";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
@@ -320,6 +320,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
   const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
+  const depositPct = planDepositPct(p.payload, p.deposit_pct);   // the up-front % from the PAYMENT PLAN (not the legacy deposit_pct) — keeps this summary consistent with the Payment Terms table below
   const camSvc = (opt.services || []).find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the
@@ -630,7 +631,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           <span className="pcv-sum-total-lbl">Total Investment</span>
           <span className="pcv-sum-total-amt">{money(t.grand)}</span>
         </div>
-        <div className="pcv-sum-dep">{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</div>
+        <div className="pcv-sum-dep">{
+          depositPct <= 0 ? <>Paid in full upon completion · <b>{money(t.grand)}</b></>
+          : depositPct >= 100 ? <>Paid in full before we begin · <b>{money(t.grand)}</b></>
+          : <>{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</>
+        }</div>
         {canAct && (
           <button className="pcv-sum-cta" disabled={busy} onClick={() => choose(opt.id)}>
             {optAccepted ? `Remove Option ${opt.id}` : (
