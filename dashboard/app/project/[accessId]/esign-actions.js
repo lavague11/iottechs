@@ -8,12 +8,13 @@ import { callerFromCookies } from "../../../lib/esign/access";
 import { startSession, saveValues, publicSession } from "../../../lib/esign/session";
 import { requiredAcks, missingRequired } from "../../../lib/esign/capture";
 import { completeSession } from "../../../lib/esign/complete";
+import { trustedClientIp } from "../../../lib/esign/client-ip";
 import { sanitizeProposal } from "../../../lib/proposal";
 
 async function ctx() {
   const h = await headers();
-  const fwd = (h.get("x-forwarded-for") || "").split(",")[0].trim();
-  return { caller: await callerFromCookies(h.get("cookie")), ip: fwd || h.get("x-real-ip") || null, ua: h.get("user-agent") || null };
+  // The signing IP goes on the legal certificate: trusted-proxy hop only, never the client-supplied leftmost XFF entry.
+  return { caller: await callerFromCookies(h.get("cookie")), ip: trustedClientIp((n) => h.get(n)), ua: h.get("user-agent") || null };
 }
 
 // Public view of a stored document — never the bytes (those come through the gated /api/proposal-doc/[id]).
