@@ -43,6 +43,13 @@ import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// A customer write is a server action (POST to /project/<id>). The call can fail to DISPATCH — a
+// network blip, or a stale page after a redeploy whose action id now 404s — which REJECTS the promise
+// instead of returning {error}. Without this, the awaiting handler never clears `busy` and the customer
+// is stuck on a dead "Signing…/Sending…" button with no feedback. Fold a throw into the normal {error}
+// path so the control resets and a retry message shows. Mirrors the esign signer's own .catch pattern.
+const CONN_ERR = "Couldn't reach the server. Check your connection and try again — if it keeps happening, refresh the page.";
+const callAction = (promise) => promise.catch(() => ({ error: CONN_ERR }));
 // Per-option accent so the customer can tell A / B / C apart at a glance.
 const OPTION_TABCOLORS = { A: "var(--gold)", B: "#4b6a9b", C: "var(--green)" };
 
@@ -210,7 +217,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     setFlags(next); setMenuFor(null); setMenuNote("");   // optimistic mark
     if (preview) { showToast("Preview mode — requests disabled"); return; }
     setBusy(true); setErr(null);
-    const r = await submitProposalFlagsAction(accessId, next);
+    const r = await callAction(submitProposalFlagsAction(accessId, next));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);
@@ -233,7 +240,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     if (busy) return;
     if (preview) { showToast("Preview mode — approval disabled"); return; }
     setBusy(true); setErr(null);
-    const r = await approvePcpAction(accessId, customerName);
+    const r = await callAction(approvePcpAction(accessId, customerName));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     if (r.proposal) setP(r.proposal);
@@ -242,7 +249,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // Admin/manager correction: void the customer's PCP agreement signature so it can be re-approved.
   async function voidPcp() {
     setBusy(true); setErr(null);
-    const r = await voidPcpAgreementAction(accessId);
+    const r = await callAction(voidPcpAgreementAction(accessId));
     setBusy(false); setVoidPcpOpen(false);
     if (r?.error) { setErr(r.error); return; }
     if (r.proposal) setP(r.proposal);
@@ -394,7 +401,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   }
   async function doAccept(optId, sign) {
     setBusy(true); setErr(null);
-    const r = await selectOptionAction(accessId, optId, sign);
+    const r = await callAction(selectOptionAction(accessId, optId, sign));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);
@@ -410,7 +417,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   async function decline(reason) {
     if (busy) return;
     setBusy(true); setErr(null);
-    const r = await declineOptionAction(accessId, opt.id, reason);
+    const r = await callAction(declineOptionAction(accessId, opt.id, reason));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);
@@ -430,7 +437,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   async function submitRequest() {
     if (preview || busy || !note.trim()) return;
     setBusy(true); setErr(null);
-    const r = await requestChangesAction(accessId, note.trim());
+    const r = await callAction(requestChangesAction(accessId, note.trim()));
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setP(r.proposal);

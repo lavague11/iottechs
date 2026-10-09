@@ -105,9 +105,14 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const unvoidAddendum = (id) => persist(addendums.map((a) => (a.id === id ? { ...a, status: a.signedName ? "approved" : "pending", voidedAt: undefined } : a)));
 
   // ---- Approval (customer) — a server action: binds the signature to the add-on's fingerprint. ----
+  // A server-action POST can fail to DISPATCH (a network blip, or a stale page after a redeploy →
+  // the action id 404s). That rejects the promise, so without this guard setBusy never clears and the
+  // customer is stuck on a dead "Signing…" button with no feedback. Catch it, reset, offer a retry.
   async function approve(sign) {
-    setBusy(true);
-    const r = await signAddendumAction(accessId, signId, sign);
+    setBusy(true); setSignErr(null);
+    let r;
+    try { r = await signAddendumAction(accessId, signId, sign); }
+    catch { setBusy(false); setSignErr("Couldn't reach the server. Check your connection and try again — if it keeps happening, refresh the page."); return; }
     setBusy(false);
     if (r?.error) { setSignErr(r.error); return; }
     setAddendums(r.addendums || addendums);
@@ -178,7 +183,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
               )}
               {a.status === "pending" && isCustomer && !a.needsPricing && (
                 <button type="button" className="adn-approve" disabled={readOnly} title={readOnly ? "The customer signs here" : undefined}
-                        onClick={() => !readOnly && setSignId(a.id)}>
+                        onClick={() => { if (!readOnly) { setSignErr(null); setSignId(a.id); } }}>
                   {readOnly ? "Customer signs here" : a.resignRequired ? "Review & Sign" : "Approve & Sign"}
                 </button>
               )}
@@ -289,8 +294,10 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         defaultName={customerName || ""}
         agreeText="I approve this job-site add-on and authorize the additional work and charges shown above."
         accent="var(--green)"
+        busy={busy}
+        error={signErr}
         onConfirm={approve}
-        onCancel={() => setSignId(null)}
+        onCancel={() => { setSignId(null); setSignErr(null); }}
       />
     </div>
   );

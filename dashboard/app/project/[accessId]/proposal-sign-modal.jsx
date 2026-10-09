@@ -28,7 +28,7 @@ export default function ProposalSignModal({
   open, heading, subheading, reference, defaultName, showTitle = false,
   agreeText = DEFAULT_AGREE, terms = null, acks = null, termsHeading = "Terms & Conditions",
   termsTitle = null, termsIntro = null, termsVersion = null,
-  accent = "var(--gold)", busy, onConfirm, onCancel,
+  accent = "var(--gold)", busy, error = null, onConfirm, onCancel,
 }) {
   const [name, setName] = useState(defaultName || "");
   const [jobTitle, setJobTitle] = useState("");
@@ -109,6 +109,8 @@ export default function ProposalSignModal({
             </div>
           ) : null}
 
+          {error && <div className="psm-err" role="alert">{error}</div>}
+
           <div className="psm-actions">
             <button type="button" className="psm-btn go" disabled={!canSign} onClick={confirm}>
               {busy ? "Signing…" : (
@@ -162,6 +164,7 @@ const PSM_CSS = `
 .psm-acks{display:flex;flex-direction:column;gap:2px}
 .psm-acks .psm-agree{margin:6px 0 0}
 .psm-req{color:#c4553d;font-style:normal;font-weight:700}
+.psm-err{margin-top:14px;font-size:.76rem;line-height:1.5;color:var(--dv-red,#C4553D);background:#fbe9e6;border:1px solid #f0cfc8;border-radius:8px;padding:9px 11px}
 .psm-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
 .psm-btn{border:none;border-radius:9px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;padding:13px 22px;transition:transform .12s}
 /* The signable action — DocuSign signing-field style: soft yellow fill, blue field border. */
