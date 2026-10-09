@@ -321,6 +321,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
   const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
+  const depositPct = +p.deposit_pct || 50;   // the "X% deposit to begin" summary line (payment-terms refactor dropped this decl; a real proposal still reads it)
   const camSvc = (opt.services || []).find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
   // Camera line items show the survey's location name (Side Yard, Front Driveway…) — synced from the

@@ -63,6 +63,26 @@ test("regression: a SENT proposal with empty options renders 'Preparing', not a 
   await NO_ERROR(page);
 });
 
+test("regression: a real (populated) proposal renders the full customer view, not a crash", async ({ page, request, context }) => {
+  const accessId = await makeProject(request, "real-prop");
+  // A sent proposal WITH options/services exercises the full proposal render (past the empty-options
+  // short-circuit) — the path that referenced the dropped `depositPct` and crashed every real customer.
+  const db = new DatabaseSync("./data/dashboard.db");
+  db.exec("PRAGMA busy_timeout=5000");
+  const payload = JSON.stringify({ options: [{ id: "A", name: "Premium", services: [{ key: "camera", label: "Security Cameras", items: [{ id: "nvr", name: "NVR", qty: 1, price: 150 }] }] }], payment_plan: "50_50", discount: { type: "flat", value: 0 } });
+  db.prepare("INSERT INTO proposals (project_access_id,version,status,payload,tax_rate,deposit_pct,sent_at,created_by_name) VALUES (?,?,?,?,?,?,datetime('now','localtime'),?)")
+    .run(accessId, 1, "sent", payload, 0, 50, "E2E");
+  db.prepare("UPDATE projects SET stage='proposal' WHERE access_id=?").run(accessId);
+  db.close();
+
+  await context.clearCookies();
+  await page.goto(`/project/${accessId}`, { waitUntil: "domcontentloaded" });
+  await enterPin(page, PIN);
+  await expect(page.getByText("Customer view")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Total Investment/i)).toBeVisible();   // the full proposal summary rendered (no depositPct ReferenceError)
+  await NO_ERROR(page);
+});
+
 test("refresh after auth keeps the customer in (no re-gate, no error)", async ({ page, request, context }) => {
   const accessId = await makeProject(request, "refresh");
   await context.clearCookies();
