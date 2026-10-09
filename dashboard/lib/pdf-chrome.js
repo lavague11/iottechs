@@ -46,11 +46,13 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
   const legendH = rows ? rows * lineH + 12 : 0, colW = (W - 2 * MARGIN) / cols;
   const legendTop = H - FOOTER_H - legendH;
 
-  const top = BAND_H + 14, pad = 6, availW = W - 2 * MARGIN, availH = (legendTop - 8) - top;
+  // The plan is the hero, so give it a tighter inset than the brand text / legend (MARGIN) and thin gaps —
+  // it fills nearly the whole sheet between the band and the legend. Aspect preserved (never stretched).
+  const planM = 20, top = BAND_H + 9, pad = 4, availW = W - 2 * planM, availH = (legendTop - 5) - top;
   let d = null;
   try { const pr = doc.getImageProperties(f.img); let w = availW - 2 * pad, h = (w * pr.height) / pr.width; if (h > availH - 2 * pad) { h = availH - 2 * pad; w = (h * pr.width) / pr.height; } d = { w, h }; } catch { d = null; }
   if (d) {
-    const imgX = MARGIN + (availW - d.w) / 2, imgY = top + (availH - d.h) / 2;
+    const imgX = planM + (availW - d.w) / 2, imgY = top + (availH - d.h) / 2;
     doc.setDrawColor(...GOLD_D); doc.setLineWidth(1); doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
     try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image — skip, keep the page */ }
   }

@@ -86,32 +86,44 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       });
       // Layer 3 — markers: a white disc with the REAL device glyph (same icons the planner draws), group-
       // coloured so cameras / speakers / alarms read apart at a glance; Layer 4 — name tags while readable.
+      // Overlapping devices are spread to tidy DISPLAY spots (place[i]); the true point stays put, with a
+      // leader line connecting the two so a relocated marker is never mistaken for a different position.
       const r = scene.r;
+      const place = declutterPlaces(scene.markers, r, W, H);
+      // Leader lines first, UNDER the discs: only for a marker that actually moved.
+      scene.markers.forEach((d, i) => {
+        const q = place[i];
+        if (Math.hypot(q.x - d.px, q.y - d.py) < r * 0.5) return;
+        ctx.beginPath(); ctx.moveTo(d.px, d.py); ctx.lineTo(q.x, q.y);
+        ctx.lineWidth = Math.max(1, r * 0.07); ctx.strokeStyle = "rgba(16,20,24,.5)"; ctx.setLineDash([]); ctx.stroke();
+        ctx.beginPath(); ctx.arc(d.px, d.py, Math.max(1.5, r * 0.14), 0, Math.PI * 2); ctx.fillStyle = "rgba(16,20,24,.7)"; ctx.fill();   // tick at the true point
+      });
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      scene.markers.forEach((d) => {
+      scene.markers.forEach((d, i) => {
+        const cx = place[i].x, cy = place[i].y;
         // White disc + soft shadow + thin ring — mirrors the widget's .devDot so the marker pops on the aerial.
         ctx.save();
         ctx.shadowColor = "rgba(16,17,18,.22)"; ctx.shadowBlur = r * 0.55; ctx.shadowOffsetY = r * 0.14;
-        ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
         ctx.restore();
-        ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.lineWidth = Math.max(1, r * 0.08); ctx.strokeStyle = "rgba(16,20,24,.22)"; ctx.stroke();
         // Real device icon in the group colour; if a glyph can't render, fall back to the old code bubble.
-        if (!drawGlyph(ctx, deviceIcon(d.k), d.px, d.py, r * 1.12, d.color)) {
-          ctx.beginPath(); ctx.arc(d.px, d.py, r, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.fill();
+        if (!drawGlyph(ctx, deviceIcon(d.k), cx, cy, r * 1.12, d.color)) {
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.fill();
           ctx.lineWidth = Math.max(1.5, r * 0.14); ctx.strokeStyle = "#fff"; ctx.stroke();
           ctx.fillStyle = "#fff";
           ctx.font = `800 ${Math.round(r * (d.code.length > 2 ? 0.72 : 0.9))}px system-ui, "Segoe UI", sans-serif`;
-          ctx.fillText(d.code, d.px, d.py + 0.5);
+          ctx.fillText(d.code, cx, cy + 0.5);
         }
         if (scene.showNames && d.label) {
           ctx.font = `700 ${Math.round(r * 0.85)}px system-ui, "Segoe UI", sans-serif`;
           const tw = ctx.measureText(d.label).width, ph = Math.round(r * 1.1), pw = tw + r * 0.9;
-          const tx = Math.min(W - pw - 2, d.px + r + 4), ty = d.py - ph / 2;
+          const tx = Math.min(W - pw - 2, cx + r + 4), ty = cy - ph / 2;
           ctx.fillStyle = "rgba(16,20,24,.86)";
           roundRect(ctx, tx, ty, pw, ph, 4); ctx.fill();
           ctx.fillStyle = "#fff"; ctx.textAlign = "left";
-          ctx.fillText(d.label, tx + r * 0.45, d.py + 0.5);
+          ctx.fillText(d.label, tx + r * 0.45, cy + 0.5);
           ctx.textAlign = "center";
         }
       });
@@ -242,6 +254,34 @@ function glyphPng(k, color, px = 56) {
   } catch { url = ""; }
   _glyphPng[key] = url;
   return url;
+}
+
+// Declutter overlapping markers: spread the DISPLAY disc positions so two devices placed on top of each
+// other don't draw as one blob, while the CANONICAL point (marker.px/py — where coverage cones/rings and
+// the leader line anchor) never moves. A short force-relaxation pushes any pair closer than ~2 radii apart,
+// clamped to the plate. Returns display {x,y} per marker, index-aligned to the input. Nothing moves when
+// nothing overlaps, so existing well-spaced plans render byte-identical.
+function declutterPlaces(markers, r, W, H) {
+  const minDist = r * 2.2;                 // two discs (radius r) + a hair of gap
+  const p = markers.map((d) => ({ x: d.px, y: d.py }));
+  for (let iter = 0; iter < 80; iter++) {
+    let moved = false;
+    for (let i = 0; i < p.length; i++) {
+      for (let j = i + 1; j < p.length; j++) {
+        let dx = p[j].x - p[i].x, dy = p[j].y - p[i].y;
+        let dist = Math.hypot(dx, dy);
+        if (dist >= minDist) continue;
+        if (dist < 0.01) { dx = (i % 2 ? 1 : -1); dy = (j % 2 ? 1 : -1); dist = Math.hypot(dx, dy); }   // exact overlap → deterministic nudge
+        const push = (minDist - dist) / 2, ux = dx / dist, uy = dy / dist;
+        p[i].x -= ux * push; p[i].y -= uy * push;
+        p[j].x += ux * push; p[j].y += uy * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  for (const q of p) { q.x = Math.max(r, Math.min(W - r, q.x)); q.y = Math.max(r, Math.min(H - r, q.y)); }
+  return p;
 }
 
 // Draw a canonical device glyph (a 24×24 line icon from lib/survey2-model's SURVEY_ICONS) centred at
