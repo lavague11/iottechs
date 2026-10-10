@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction, updatePageAction } from "./actions";
+import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction, updatePageAction, upsertCaseStudyAction } from "./actions";
 
 const STATUSES = ["opportunity", "researching", "brief", "writing", "fact_check", "seo_qa", "needs_review", "approved", "published", "monitoring", "refresh", "blocked"];
 const TIER_C = { P0: "#ff7a7a", P1: "#f2c14e", P2: "#4ea3ff", P3: "#8795b4" };
@@ -9,6 +9,7 @@ export default function SeoClient({ data, caps }) {
   const [tab, setTab] = useState("overview");
   const [pages, setPages] = useState(data.pages);
   const [facts, setFacts] = useState(data.facts);
+  const [cases, setCases] = useState(data.cases);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(null), 4000); };
@@ -77,6 +78,12 @@ export default function SeoClient({ data, caps }) {
     return r.page;
   }
   function genFromPrompt() { const t = prompt.trim(); if (!t) return; setPrompt(""); generate({ topic: t, page_type: promptType }, "new"); }
+  async function linkCase(id, accessId) {
+    const r = await upsertCaseStudyAction({ id, project_access_id: accessId.trim() }).catch(() => ({ error: "failed" }));
+    if (r?.error) return flash("⚠ " + r.error);
+    setCases((cs) => cs.map((c) => (c.id === id ? r.caseStudy : c)));
+    flash(`Linked ${r.caseStudy.project_access_id} — you can draft this study now.`);
+  }
 
   async function savePage(id, patch) {
     const r = await updatePageAction(id, patch).catch(() => ({ error: "failed" }));
@@ -225,16 +232,21 @@ export default function SeoClient({ data, caps }) {
 
       {tab === "cases" && (
         <section>
+          <p className="muted">A case study drafts from a <b>real, linked project</b> — no project, no story. Link a project id (e.g. ASC0042) to enable drafting.</p>
           <div className="tblw"><table className="tbl">
-            <thead><tr><th>Client</th><th>Industry</th><th>City/State</th><th>Project</th><th>Status</th><th>Name OK</th><th></th></tr></thead>
+            <thead><tr><th>Client</th><th>Industry</th><th>City/State</th><th>Project</th><th>Status</th><th>Name OK</th><th>Action</th></tr></thead>
             <tbody>
-              {data.cases.map((c) => (
+              {cases.map((c) => (
                 <tr key={c.id}><td><b>{c.client}</b></td><td className="muted">{c.industry}</td>
                   <td className="muted">{[c.city, c.state].filter(Boolean).join(", ") || "—"}</td>
-                  <td className="mono">{c.project_access_id || "—"}</td>
+                  <td className="mono">{c.project_access_id || <span className="faint">—</span>}</td>
                   <td><span className={"chip " + (c.status === "verified" ? "ok" : "")}>{c.status}</span></td>
                   <td>{c.permission_to_name_client ? "✓" : "—"}</td>
-                  <td className="acts">{caps.edit && <button className="btn sm" disabled={gen === "cs" + c.id} onClick={() => generate({ caseStudyId: c.id }, "cs" + c.id)}>{gen === "cs" + c.id ? "writing…" : "draft study"}</button>}</td></tr>
+                  <td className="acts">
+                    {caps.edit && (c.project_access_id
+                      ? <button className="btn sm" disabled={gen === "cs" + c.id} onClick={() => generate({ caseStudyId: c.id }, "cs" + c.id)}>{gen === "cs" + c.id ? "writing…" : "draft study"}</button>
+                      : <LinkCell onLink={(acc) => linkCase(c.id, acc)} />)}
+                  </td></tr>
               ))}
             </tbody>
           </table></div>
@@ -332,6 +344,16 @@ function PreviewBlock({ b }) {
   }
 }
 
+function LinkCell({ onLink }) {
+  const [v, setV] = useState("");
+  return (
+    <span className="linkcell">
+      <input className="inp xs" placeholder="ASC0042" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && v.trim() && onLink(v)} />
+      <button className="btn sm" disabled={!v.trim()} onClick={() => onLink(v)}>Link</button>
+    </span>
+  );
+}
+
 function FactRow({ f, canEdit, onSave }) {
   const [value, setValue] = useState(f.value || "");
   const dirty = value !== (f.value || "");
@@ -383,6 +405,8 @@ section{margin-top:18px}
 .btn.sm{padding:5px 10px;font-size:12px;margin-left:5px}
 .btn.pri{background:var(--accent);color:#06101f;border-color:var(--accent);font-weight:600}
 .btn:disabled{opacity:.5;cursor:default}
+.linkcell{display:inline-flex;gap:6px;align-items:center}
+.inp.xs{width:88px;max-width:88px;padding:4px 7px;font-size:12px;text-transform:uppercase}
 .linkbtn{background:none;border:none;color:#cfe0ff;font:inherit;font-weight:600;cursor:pointer;padding:0;text-align:left}
 .linkbtn:hover{color:#fff;text-decoration:underline}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ad08a;margin-left:7px;vertical-align:middle}

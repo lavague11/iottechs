@@ -57,6 +57,7 @@ export async function POST(req) {
     if (body.caseStudyId) {
       const cs = getCaseStudy(body.caseStudyId);
       if (!cs) return Response.json({ ok: false, error: "case study not found" }, { status: 404 });
+      if (!cs.project_access_id) return Response.json({ ok: false, error: "Link a real project to this case study first — a study needs verified project facts, not an invented story." }, { status: 400 });
       const slug = normalizeSlug(cs.slug || `case-studies/${slugify(cs.client || "project-" + cs.id)}`);
       let page = getPageBySlug(slug) || createPage({ slug, page_type: "case-study", title: cs.client ? `${cs.client} — Case Study` : "Case Study", status: "writing" }, by);
       const pf = projectFacts(cs.project_access_id, !!cs.permission_to_name_client);

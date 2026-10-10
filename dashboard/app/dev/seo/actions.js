@@ -7,7 +7,7 @@ import { getSessionUser } from "../../../lib/session";
 import { can } from "../../../lib/roles";
 import {
   seedSeoPlan, createPage, updatePage, setStatus, publishPage, unpublishPage,
-  upsertFact, addBacklink, upsertCaseStudy,
+  upsertFact, addBacklink, upsertCaseStudy, projectExists,
 } from "../../../lib/seo";
 
 async function who(cap) {
@@ -60,5 +60,13 @@ export async function addBacklinkAction(data) {
 
 export async function upsertCaseStudyAction(data) {
   const g = await who("seo.edit"); if (g.err) return g.err;
-  try { return { ok: true, caseStudy: upsertCaseStudy(data || {}) }; } catch (e) { return { error: String(e?.message || e) }; }
+  try {
+    // Linking a project: it must be a real project id. A linked study is marked "verified" (it's now
+    // backed by a real record), which is what unlocks "draft study".
+    if (data?.project_access_id) {
+      if (!projectExists(data.project_access_id)) return { error: `No project found with id “${data.project_access_id}”.` };
+      data = { ...data, project_access_id: String(data.project_access_id).toUpperCase(), status: data.status || "verified" };
+    }
+    return { ok: true, caseStudy: upsertCaseStudy(data || {}) };
+  } catch (e) { return { error: String(e?.message || e) }; }
 }

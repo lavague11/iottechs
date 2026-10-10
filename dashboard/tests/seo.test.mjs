@@ -138,3 +138,12 @@ test("normalizeFactCheck: clean only with zero flags; otherwise review", () => {
   assert.equal(r.flags.length, 1);
   assert.throws(() => normalizeFactCheck(null), /no JSON/);
 });
+
+// --- case study requires a real linked project ---
+import { projectExists } from "../lib/seo.js";
+test("projectExists gates case-study drafting to real projects", () => {
+  assert.equal(projectExists("ASC0042"), true, "a seeded project exists");
+  assert.equal(projectExists("ZZ-not-a-project"), false);
+  assert.equal(projectExists(""), false);
+  assert.equal(projectExists(null), false);
+});

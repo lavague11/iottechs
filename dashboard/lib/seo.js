@@ -225,6 +225,11 @@ export function applyDraft(pageId, draft, by = "ai", engine = "") {
   }, by, "AI draft generated");
 }
 export function getCaseStudy(id) { return one(db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(Number(id))); }
+// Does a real project exist for this access id? A case study must be backed by one before it's drafted.
+export function projectExists(accessId) {
+  if (!accessId) return false;
+  try { return !!db.prepare("SELECT 1 FROM projects WHERE UPPER(access_id)=UPPER(?)").get(String(accessId)); } catch { return false; }
+}
 
 // Record an AI grounding-audit result. Clean → fact_check passed (that gate clears); flagged → failed
 // (publish stays blocked) with the unsupported claims written into agent_notes for the human to fix.
