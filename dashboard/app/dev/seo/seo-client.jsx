@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction } from "./actions";
+import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction, updatePageAction } from "./actions";
 
 const STATUSES = ["opportunity", "researching", "brief", "writing", "fact_check", "seo_qa", "needs_review", "approved", "published", "monitoring", "refresh", "blocked"];
 const TIER_C = { P0: "#ff7a7a", P1: "#f2c14e", P2: "#4ea3ff", P3: "#8795b4" };
@@ -60,17 +60,42 @@ export default function SeoClient({ data, caps }) {
   const [gen, setGen] = useState(null);
   const [prompt, setPrompt] = useState("");
   const [promptType, setPromptType] = useState("resource");
-  async function generate(payload, spinnerId) {
+  const [sel, setSel] = useState(null);       // page id open in the detail/preview panel
+  const [batch, setBatch] = useState(null);   // { done, total, current } while batch-generating
+  const selPage = pages.find((p) => p.id === sel) || null;
+
+  async function generate(payload, spinnerId, openDetail = true) {
     setGen(spinnerId); setMsg("Writing draft with AI… this can take up to a minute.");
     const r = await fetch("/api/seo-generate", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setGen(null);
-    if (!r?.ok) return flash("⚠ " + (r?.error || "generation failed"));
+    if (!r?.ok) { flash("⚠ " + (r?.error || "generation failed")); return null; }
     setPages((ps) => { const i = ps.findIndex((p) => p.id === r.page.id); return i >= 0 ? ps.map((p) => (p.id === r.page.id ? r.page : p)) : [r.page, ...ps]; });
     const flags = (r.flags || []).length ? ` · ⚠ ${r.flags.length} fact(s) to verify` : "";
-    flash(`Draft ready: “${r.page.title}” via ${r.engine}${flags}. Review → set fact-check → publish.`);
+    flash(`Draft ready: “${r.page.title}” via ${r.engine}${flags}. Review it, verify facts, then publish.`);
+    if (openDetail) { setTab("content"); setSel(r.page.id); }   // show what was written, not just a tab switch
+    return r.page;
   }
   function genFromPrompt() { const t = prompt.trim(); if (!t) return; setPrompt(""); generate({ topic: t, page_type: promptType }, "new"); }
+
+  async function savePage(id, patch) {
+    const r = await updatePageAction(id, patch).catch(() => ({ error: "failed" }));
+    if (r?.error) return flash("⚠ " + r.error);
+    setPages((ps) => ps.map((p) => (p.id === id ? r.page : p)));
+  }
+  // Batch: write drafts for every un-written opportunity page, one at a time (keeps each independent and
+  // shows progress). Each is a real OpenAI call, so confirm first.
+  async function batchGenerate() {
+    const targets = pages.filter((p) => p.status === "opportunity" && p.page_type !== "hub" && !p.body);
+    if (!targets.length) return flash("No un-written opportunity pages to generate.");
+    if (!window.confirm(`Generate AI drafts for ${targets.length} pages? Each is a separate OpenAI call (cost on your key) and this can take several minutes. Drafts land at “needs review” — nothing publishes automatically.`)) return;
+    for (let i = 0; i < targets.length; i++) {
+      setBatch({ done: i, total: targets.length, current: targets[i].title });
+      // eslint-disable-next-line no-await-in-loop
+      await generate({ pageId: targets[i].id }, "batch", false);
+    }
+    setBatch(null); flash(`Batch complete — ${targets.length} drafts written. Review each and verify facts before publishing.`);
+  }
 
   return (
     <div className="seoa">
@@ -84,6 +109,16 @@ export default function SeoClient({ data, caps }) {
         </div>
       </header>
       {msg && <div className="seoa-msg">{msg}</div>}
+
+      {selPage && (
+        <DetailPanel page={selPage} caps={caps} busy={busy} working={gen === selPage.id}
+          onClose={() => setSel(null)}
+          onSave={(patch) => savePage(selPage.id, patch)}
+          onStatus={(s) => advance(selPage.id, s)}
+          onGenerate={() => generate({ pageId: selPage.id }, selPage.id)}
+          onPublish={async () => { await publish(selPage.id); }}
+          onUnpublish={() => unpublish(selPage.id)} />
+      )}
 
       {tab === "overview" && (
         <section>
@@ -123,15 +158,19 @@ export default function SeoClient({ data, caps }) {
             </div>
           )}
           <div className="seoa-bar">
-            <span className="muted">{pages.length} pages · drafts land at “needs review”; the publish gate still applies</span>
-            {caps.edit && <button className="btn" onClick={newPage}>+ Blank page</button>}
+            <span className="muted">{pages.length} pages · click a title to read/review · drafts land at “needs review”</span>
+            <span style={{ display: "flex", gap: 8 }}>
+              {caps.edit && <button className="btn" disabled={!!batch} onClick={batchGenerate}>{batch ? `Writing ${batch.done + 1}/${batch.total}…` : "⚡ Generate all opportunities"}</button>}
+              {caps.edit && <button className="btn" onClick={newPage}>+ Blank page</button>}
+            </span>
           </div>
+          {batch && <div className="seoa-msg">Batch writing {batch.done + 1} of {batch.total}: “{batch.current}” — each page is saved as it finishes; you can keep this tab open.</div>}
           <div className="tblw"><table className="tbl">
             <thead><tr><th>Title</th><th>Slug</th><th>Type</th><th>Pri</th><th>Status</th><th>Checks</th><th>Actions</th></tr></thead>
             <tbody>
               {pages.map((p) => (
                 <tr key={p.id}>
-                  <td><b>{p.title || <span className="muted">untitled</span>}</b></td>
+                  <td><button className="linkbtn" onClick={() => setSel(p.id)}>{p.title || <span className="muted">untitled</span>}</button>{p.body ? <span className="dot" title="has a draft" /> : null}</td>
                   <td className="mono">/{p.slug}</td>
                   <td className="muted">{p.page_type}</td>
                   <td><span className="tier" style={{ color: TIER_C[p.priority_tier] || "#8795b4" }}>{p.priority_tier || "—"}</span></td>
@@ -182,7 +221,7 @@ export default function SeoClient({ data, caps }) {
                   <td className="mono">{c.project_access_id || "—"}</td>
                   <td><span className={"chip " + (c.status === "verified" ? "ok" : "")}>{c.status}</span></td>
                   <td>{c.permission_to_name_client ? "✓" : "—"}</td>
-                  <td className="acts">{caps.edit && <button className="btn sm" disabled={gen === "cs" + c.id} onClick={() => { setTab("content"); generate({ caseStudyId: c.id }, "cs" + c.id); }}>{gen === "cs" + c.id ? "writing…" : "draft study"}</button>}</td></tr>
+                  <td className="acts">{caps.edit && <button className="btn sm" disabled={gen === "cs" + c.id} onClick={() => generate({ caseStudyId: c.id }, "cs" + c.id)}>{gen === "cs" + c.id ? "writing…" : "draft study"}</button>}</td></tr>
               ))}
             </tbody>
           </table></div>
@@ -205,6 +244,76 @@ export default function SeoClient({ data, caps }) {
       )}
     </div>
   );
+}
+
+// Read + review one page: its draft, meta, tags, flags, and the actions to verify facts and publish.
+function DetailPanel({ page, caps, busy, working, onClose, onSave, onStatus, onGenerate, onPublish, onUnpublish }) {
+  const [title, setTitle] = useState(page.title || "");
+  const [mt, setMt] = useState(page.meta_title || "");
+  const [md, setMd] = useState(page.meta_description || "");
+  const [tags, setTags] = useState((page.secondary_topics || []).join(", "));
+  const dirty = title !== (page.title || "") || mt !== (page.meta_title || "") || md !== (page.meta_description || "") || tags !== (page.secondary_topics || []).join(", ");
+  const blocks = Array.isArray(page.body) ? page.body : [];
+  const factPassed = page.fact_check_status === "passed";
+
+  return (
+    <div className="dp-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="dp">
+        <div className="dp-head">
+          <div><span className="mono muted">/{page.slug}</span><div className="dp-meta2">{page.page_type} · <span className="tier" style={{ color: TIER_C[page.priority_tier] }}>{page.priority_tier || "—"}</span> · <span className={"chip " + (page.status === "published" ? "ok" : "")}>{page.status}</span> · q{page.quality_score || 0}</div></div>
+          <button className="dp-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="dp-body">
+          {page.agent_notes && <div className={"dp-notes" + (/VERIFY/.test(page.agent_notes) ? " warn" : "")}>{page.agent_notes}</div>}
+
+          {caps.edit && (
+            <div className="dp-edit">
+              <label>Title<input className="inp" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
+              <label>Meta title <span className="muted">({mt.length}/60)</span><input className="inp" value={mt} onChange={(e) => setMt(e.target.value)} /></label>
+              <label>Meta description <span className="muted">({md.length}/155)</span><textarea className="inp" rows={2} value={md} onChange={(e) => setMd(e.target.value)} /></label>
+              <label>Tags (comma-separated)<input className="inp" value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+              {dirty && <button className="btn sm pri" onClick={() => onSave({ title, meta_title: mt, meta_description: md, secondary_topics: tags.split(",").map((t) => t.trim()).filter(Boolean) })}>Save edits</button>}
+            </div>
+          )}
+
+          <div className="dp-preview">
+            <div className="dp-prev-h1">{title || page.title}</div>
+            {blocks.length ? blocks.map((b, i) => <PreviewBlock key={i} b={b} />) : <p className="muted">No draft yet — generate one.</p>}
+          </div>
+        </div>
+
+        <div className="dp-foot">
+          {caps.edit && <button className="btn" disabled={working} onClick={onGenerate}>{working ? "writing…" : (blocks.length ? "Rewrite with AI" : "Generate with AI")}</button>}
+          {caps.edit && (
+            <button className={"btn" + (factPassed ? " pri" : "")} onClick={() => onSave({ fact_check_status: factPassed ? "pending" : "passed" })}>
+              {factPassed ? "✓ Fact-check passed" : "Mark fact-check passed"}
+            </button>
+          )}
+          <span className="dp-spacer" />
+          {page.status === "published" && <a className="btn" href={"/" + page.slug} target="_blank" rel="noreferrer">Open live ↗</a>}
+          {caps.publish && page.status !== "published" && <button className="btn pri" disabled={busy} onClick={onPublish}>Publish</button>}
+          {caps.publish && page.status === "published" && <button className="btn" onClick={onUnpublish}>Unpublish</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewBlock({ b }) {
+  if (!b) return null;
+  if (typeof b === "string") return <p>{b}</p>;
+  switch (b.type) {
+    case "h2": return <h2>{b.value}</h2>;
+    case "h3": return <h3>{b.value}</h3>;
+    case "p": return <p>{b.value}</p>;
+    case "callout": return <div className="dp-callout">{b.value}</div>;
+    case "ul": return <ul>{(b.items || []).map((t, i) => <li key={i}>{t}</li>)}</ul>;
+    case "ol": return <ol>{(b.items || []).map((t, i) => <li key={i}>{t}</li>)}</ol>;
+    case "faq": return <div className="dp-faq">{(b.items || []).map((x, i) => <div key={i}><b>{x.q}</b><div className="muted">{x.a}</div></div>)}</div>;
+    case "cta": return <p><span className="dp-cta">{b.label || "Request a Quote"}</span></p>;
+    default: return b.value ? <p>{b.value}</p> : null;
+  }
 }
 
 function FactRow({ f, canEdit, onSave }) {
@@ -258,5 +367,29 @@ section{margin-top:18px}
 .btn.sm{padding:5px 10px;font-size:12px;margin-left:5px}
 .btn.pri{background:var(--accent);color:#06101f;border-color:var(--accent);font-weight:600}
 .btn:disabled{opacity:.5;cursor:default}
+.linkbtn{background:none;border:none;color:#cfe0ff;font:inherit;font-weight:600;cursor:pointer;padding:0;text-align:left}
+.linkbtn:hover{color:#fff;text-decoration:underline}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ad08a;margin-left:7px;vertical-align:middle}
+/* detail panel */
+.dp-overlay{position:fixed;inset:0;z-index:9000;background:rgba(5,9,18,.6);backdrop-filter:blur(3px);display:flex;justify-content:center;align-items:flex-start;padding:28px 16px;overflow:auto}
+.dp{width:min(820px,100%);background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.5);overflow:hidden;margin:auto}
+.dp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.dp-meta2{font-size:12.5px;color:var(--muted);margin-top:5px}
+.dp-x{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;width:30px;height:30px;cursor:pointer;flex:none}
+.dp-body{padding:18px;max-height:62vh;overflow:auto}
+.dp-notes{background:#13233c;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:12.5px;color:#bcd0ef;white-space:pre-wrap;margin-bottom:16px}
+.dp-notes.warn{border-left:3px solid #f2c14e;background:rgba(242,193,78,.08)}
+.dp-edit{display:grid;gap:10px;margin-bottom:18px}
+.dp-edit label{display:grid;gap:4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.dp-edit .inp{max-width:none;width:100%;font-size:13.5px}
+.dp-preview{border-top:1px solid var(--line);padding-top:16px;color:#dfe8f6;font-size:14.5px;line-height:1.6}
+.dp-prev-h1{font-size:24px;font-weight:700;letter-spacing:-.01em;margin-bottom:12px;color:#fff}
+.dp-preview h2{font-size:18px;margin:20px 0 8px;color:#fff}.dp-preview h3{font-size:15px;margin:16px 0 6px;color:#eaf1fb}
+.dp-preview p{margin:0 0 12px}.dp-preview ul,.dp-preview ol{padding-left:20px;margin:0 0 12px}.dp-preview li{margin:5px 0}
+.dp-callout{background:var(--panel);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin:0 0 12px}
+.dp-faq>div{border-top:1px solid var(--line);padding:10px 0}.dp-faq b{color:#fff}
+.dp-cta{display:inline-block;background:var(--accent);color:#06101f;font-weight:600;border-radius:8px;padding:8px 16px}
+.dp-foot{display:flex;gap:8px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.dp-spacer{flex:1}
 @media(max-width:720px){.seoa-kpis{grid-template-columns:1fr 1fr}}
 `;
