@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { titleCase } from "../../../lib/proposal";
-import { getToolDataAction, saveToolDataAction, signAddendumAction } from "./proposal-actions";
+import { saveToolDataAction } from "./proposal-actions";
 import { logAddendumAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { can } from "../../../lib/roles";
@@ -39,12 +39,15 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const [confirm, setConfirm] = useState(null); // { id, action: 'delete'|'void' }
   const first = useRef(true);
 
+  // Read the add-on list from the stable API route (not a server action) — on the deploy host the
+  // server-action read intermittently 404'd, so the panel rendered nothing and the customer couldn't
+  // see the request to approve it (BUG #50).
   useEffect(() => {
     let live = true;
-    getToolDataAction(accessId, "addendum").then((r) => {
-      if (!live || !r?.ok || !r.saved?.data) return;
-      try { setAddendums(JSON.parse(r.saved.data).addendums || []); } catch { /* bad blob */ }
-    }).catch(() => {});
+    fetch(`/api/addendum?project=${encodeURIComponent(accessId)}`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && j?.ok && Array.isArray(j.addendums)) setAddendums(j.addendums); })
+      .catch(() => {});
     return () => { live = false; };
   }, [accessId]);
 
@@ -104,18 +107,24 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   // Un-void: a voided addendum returns to pending (if never signed) or approved (if it had been signed).
   const unvoidAddendum = (id) => persist(addendums.map((a) => (a.id === id ? { ...a, status: a.signedName ? "approved" : "pending", voidedAt: undefined } : a)));
 
-  // ---- Approval (customer) — a server action: binds the signature to the add-on's fingerprint. ----
-  // A server-action POST can fail to DISPATCH (a network blip, or a stale page after a redeploy →
-  // the action id 404s). That rejects the promise, so without this guard setBusy never clears and the
-  // customer is stuck on a dead "Signing…" button with no feedback. Catch it, reset, offer a retry.
+  // ---- Approval (customer) — POSTs to the stable /api/addendum route (binds the signature to the
+  // add-on's content fingerprint, server-side). Uses an API route, not a server action, so a redeploy
+  // can't 404 the approval; a network failure resets the button and shows a retry instead of hanging.
   async function approve(sign) {
     setBusy(true); setSignErr(null);
-    let r;
-    try { r = await signAddendumAction(accessId, signId, sign); }
-    catch { setBusy(false); setSignErr("Couldn't reach the server. Check your connection and try again — if it keeps happening, refresh the page."); return; }
+    let j;
+    try {
+      const res = await fetch("/api/addendum", {
+        method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: accessId, addendumId: signId, sign }),
+      });
+      j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) { setBusy(false); const m = String(j?.error || ""); setSignErr(m ? m.charAt(0).toUpperCase() + m.slice(1) : "Couldn't reach the server. Check your connection and try again — if it keeps happening, refresh the page."); return; }
+    } catch {
+      setBusy(false); setSignErr("Couldn't reach the server. Check your connection and try again — if it keeps happening, refresh the page."); return;
+    }
     setBusy(false);
-    if (r?.error) { setSignErr(r.error); return; }
-    setAddendums(r.addendums || addendums);
+    if (Array.isArray(j.addendums)) setAddendums(j.addendums);
     setSignId(null);
   }
   const [signErr, setSignErr] = useState(null);
