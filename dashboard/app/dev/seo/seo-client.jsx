@@ -83,6 +83,18 @@ export default function SeoClient({ data, caps }) {
     if (r?.error) return flash("⚠ " + r.error);
     setPages((ps) => ps.map((p) => (p.id === id ? r.page : p)));
   }
+  // AI fact-check (grounding audit). Clean → fact-check passes; flagged → stays failed with the claims noted.
+  async function factCheck(id) {
+    setGen("fc" + id); setMsg("AI fact-check running — auditing the draft against the verified facts…");
+    const r = await fetch("/api/seo-generate", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ factCheck: true, pageId: id }) })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setGen(null);
+    if (!r?.ok) return flash("⚠ " + (r?.error || "fact-check failed"));
+    setPages((ps) => ps.map((p) => (p.id === r.page.id ? r.page : p)));
+    flash(r.report.verdict === "clean"
+      ? `✓ Fact-check clean via ${r.engine} — fact-check passed. (Publish still your call.)`
+      : `⚠ Fact-check flagged ${r.report.flags.length} claim(s) — see the notes, then rewrite, soften, or verify.`);
+  }
   // Batch: write drafts for every un-written opportunity page, one at a time (keeps each independent and
   // shows progress). Each is a real OpenAI call, so confirm first.
   async function batchGenerate() {
@@ -116,6 +128,7 @@ export default function SeoClient({ data, caps }) {
           onSave={(patch) => savePage(selPage.id, patch)}
           onStatus={(s) => advance(selPage.id, s)}
           onGenerate={() => generate({ pageId: selPage.id }, selPage.id)}
+          onFactCheck={() => factCheck(selPage.id)} checking={gen === "fc" + selPage.id}
           onPublish={async () => { await publish(selPage.id); }}
           onUnpublish={() => unpublish(selPage.id)} />
       )}
@@ -247,7 +260,7 @@ export default function SeoClient({ data, caps }) {
 }
 
 // Read + review one page: its draft, meta, tags, flags, and the actions to verify facts and publish.
-function DetailPanel({ page, caps, busy, working, onClose, onSave, onStatus, onGenerate, onPublish, onUnpublish }) {
+function DetailPanel({ page, caps, busy, working, checking, onClose, onSave, onStatus, onGenerate, onFactCheck, onPublish, onUnpublish }) {
   const [title, setTitle] = useState(page.title || "");
   const [mt, setMt] = useState(page.meta_title || "");
   const [md, setMd] = useState(page.meta_description || "");
@@ -285,9 +298,12 @@ function DetailPanel({ page, caps, busy, working, onClose, onSave, onStatus, onG
 
         <div className="dp-foot">
           {caps.edit && <button className="btn" disabled={working} onClick={onGenerate}>{working ? "writing…" : (blocks.length ? "Rewrite with AI" : "Generate with AI")}</button>}
+          {caps.edit && blocks.length > 0 && (
+            <button className="btn" disabled={checking} onClick={onFactCheck}>{checking ? "checking…" : "AI fact-check"}</button>
+          )}
           {caps.edit && (
-            <button className={"btn" + (factPassed ? " pri" : "")} onClick={() => onSave({ fact_check_status: factPassed ? "pending" : "passed" })}>
-              {factPassed ? "✓ Fact-check passed" : "Mark fact-check passed"}
+            <button className={"btn" + (factPassed ? " pri" : "")} title="Manual override" onClick={() => onSave({ fact_check_status: factPassed ? "pending" : "passed" })}>
+              {factPassed ? "✓ Fact-check passed" : (page.fact_check_status === "failed" ? "Override: pass" : "Mark passed")}
             </button>
           )}
           <span className="dp-spacer" />

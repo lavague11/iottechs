@@ -181,3 +181,60 @@ export async function runGeneration(prompt, engine = seoEngine()) {
   const raw = engine.name === "openai" ? await callOpenAI(prompt, engine.key, engine.model) : await callClaude(prompt, engine.key, engine.model);
   return { draft: normalizeDraft(raw), engine: engine.name, model: engine.model };
 }
+
+// ---- AI fact-check: a GROUNDING AUDIT, not a truth oracle ----
+// A model can't confirm real-world facts, but it can catch the real risk in AI copy: a claim the draft
+// asserts that ISN'T backed by a verified fact. This audits the draft against the fact store and lists
+// every unsupported company/client/number/pricing/cert/partnership/service-area claim. General industry
+// guidance (how LPR lighting works, where to place lot cameras) is fine and not flagged.
+const FACTCHECK_SYSTEM = `You are a meticulous fact-checker auditing marketing copy for a commercial security integrator before it is published. You do NOT judge whether real-world events are true — you check GROUNDING: does the draft state any specific, checkable claim that is not supported by the VERIFIED FACTS provided?
+
+FLAG a sentence when it asserts, as fact, any of these WITHOUT support in VERIFIED FACTS:
+- a number/statistic/percentage/outcome ("reduced theft 40%", "1500+ locations", "24/7 monitored")
+- a named client, project, or result
+- pricing, a guarantee, a warranty length
+- a certification, license, award, or official partnership/designation
+- a service area beyond the verified one
+- any company-specific capability stated as established fact
+
+Do NOT flag: general industry knowledge and professional guidance (camera placement, how LPR capture depends on lighting/angle/speed, what an NVR is, retention trade-offs), or clearly hypothetical/illustrative language.
+
+Return STRICT JSON:
+{"verdict":"clean" | "review",
+ "flags":[{"claim":"the exact sentence/phrase","category":"number|client|pricing|certification|partnership|service-area|capability","severity":"high|med","why":"why it isn't supported","fix":"how to fix (soften, remove, or verify)"}],
+ "summary":"one line"}
+"clean" ONLY when there are zero unsupported factual claims.`;
+
+export function buildFactCheckPrompt({ page, facts = {} }) {
+  const blocks = Array.isArray(page.body) ? page.body : [];
+  const text = blocks.map((b) => (b.type === "faq" ? (b.items || []).map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n") : (b.items ? b.items.map((i) => `• ${i}`).join("\n") : b.value || ""))).join("\n\n");
+  const factLines = Object.entries(facts).map(([k, v]) => `- ${k}: ${v}`).join("\n") || "- (only the company name/phone/email/service-area are cleared)";
+  const user = `Audit this draft for unsupported factual claims.
+
+VERIFIED FACTS (the only company-specific facts that are allowed to appear as fact):
+${factLines}
+
+PAGE: ${page.title} (/${page.slug})
+META TITLE: ${page.meta_title || ""}
+META DESCRIPTION: ${page.meta_description || ""}
+
+DRAFT BODY:
+${text || "(empty)"}
+
+Return the JSON verdict.`;
+  return { system: FACTCHECK_SYSTEM, user };
+}
+
+export function normalizeFactCheck(raw) {
+  if (!raw || typeof raw !== "object") throw new Error("no JSON returned");
+  const flags = Array.isArray(raw.flags) ? raw.flags.filter((f) => f && f.claim).slice(0, 40) : [];
+  const verdict = raw.verdict === "clean" && flags.length === 0 ? "clean" : "review";
+  return { verdict, flags, summary: raw.summary ? String(raw.summary) : (verdict === "clean" ? "No unsupported claims found." : `${flags.length} claim(s) need verification.`) };
+}
+
+export async function runFactCheck(page, facts, engine = seoEngine()) {
+  if (!engine) throw new Error("No AI key configured. Add OPENAI_API_KEY in Development ▸ API Keys.");
+  const prompt = buildFactCheckPrompt({ page, facts });
+  const raw = engine.name === "openai" ? await callOpenAI(prompt, engine.key, engine.model) : await callClaude(prompt, engine.key, engine.model);
+  return { report: normalizeFactCheck(raw), engine: engine.name, model: engine.model };
+}

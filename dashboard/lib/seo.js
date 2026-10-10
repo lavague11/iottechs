@@ -226,6 +226,19 @@ export function applyDraft(pageId, draft, by = "ai", engine = "") {
 }
 export function getCaseStudy(id) { return one(db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(Number(id))); }
 
+// Record an AI grounding-audit result. Clean → fact_check passed (that gate clears); flagged → failed
+// (publish stays blocked) with the unsupported claims written into agent_notes for the human to fix.
+// A human can still override via "Mark fact-check passed". Never auto-publishes.
+export function applyFactCheck(pageId, report, by = "ai") {
+  const page = getPage(pageId);
+  if (!page) throw new Error("page not found");
+  const clean = report.verdict === "clean";
+  const noteLines = ["AI fact-check (" + (by || "ai") + "): " + report.summary];
+  for (const f of report.flags || []) noteLines.push(`⚠ [${f.severity || "med"}·${f.category || "claim"}] “${String(f.claim).slice(0, 160)}” — ${f.why || ""}${f.fix ? ` → ${f.fix}` : ""}`);
+  const prior = page.agent_notes && !/^AI fact-check/.test(page.agent_notes) ? page.agent_notes + "\n\n" : "";
+  return updatePage(pageId, { fact_check_status: clean ? "passed" : "failed", agent_notes: prior + noteLines.join("\n") }, by, `AI fact-check: ${report.verdict}`);
+}
+
 // ---- Internal-link graph --------------------------------------------------
 export function setPageLinks(fromSlug, links = []) {
   const from = normalizeSlug(fromSlug);

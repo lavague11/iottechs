@@ -115,3 +115,26 @@ test("provisionalQuality rewards a real draft and tanks placeholder text", () =>
   const bad = { meta_title: "t", body: [{ type: "p", value: "TODO write this. lorem ipsum ".repeat(30) }], needs_verification: ["x"] };
   assert.ok(provisionalQuality(bad) < 40, "placeholder text is penalized hard");
 });
+
+// --- AI fact-check: grounding-audit prompt + verdict normalization ---
+import { buildFactCheckPrompt, normalizeFactCheck } from "../lib/seo/generate.js";
+
+test("fact-check prompt audits grounding: flags unsupported claims, allows general guidance", () => {
+  const { system, user } = buildFactCheckPrompt({
+    page: { slug: "s", title: "T", meta_title: "m", meta_description: "d", body: [{ type: "p", value: "We serve 1500+ locations and reduced theft 40%." }] },
+    facts: { "company.brand": "IOT TECHS", "service_area.primary": "New Jersey; New York City" },
+  });
+  assert.match(system, /GROUNDING/i, "frames it as grounding, not truth");
+  assert.match(system, /number\/statistic|percentage|outcome/i, "targets numbers/outcomes");
+  assert.match(system, /Do NOT flag: general industry knowledge/i, "leaves general guidance alone");
+  assert.match(user, /1500\+ locations/, "includes the draft text to audit");
+  assert.match(user, /company\.brand: IOT TECHS/, "includes the verified facts");
+});
+
+test("normalizeFactCheck: clean only with zero flags; otherwise review", () => {
+  assert.equal(normalizeFactCheck({ verdict: "clean", flags: [] }).verdict, "clean");
+  const r = normalizeFactCheck({ verdict: "clean", flags: [{ claim: "1500+ locations", category: "number", severity: "high", why: "not in facts" }] });
+  assert.equal(r.verdict, "review", "a model saying clean but listing a flag is forced to review");
+  assert.equal(r.flags.length, 1);
+  assert.throws(() => normalizeFactCheck(null), /no JSON/);
+});

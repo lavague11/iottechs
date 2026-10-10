@@ -2,9 +2,9 @@ import { getSessionUser } from "../../../lib/session";
 import { can } from "../../../lib/roles";
 import { sqliteHandle } from "../../../lib/db";
 import {
-  getPage, getPageBySlug, createPage, publicFacts, applyDraft, normalizeSlug, getCaseStudy,
+  getPage, getPageBySlug, createPage, publicFacts, applyDraft, applyFactCheck, normalizeSlug, getCaseStudy,
 } from "../../../lib/seo";
-import { buildPagePrompt, buildCaseStudyPrompt, runGeneration, seoEngine } from "../../../lib/seo/generate";
+import { buildPagePrompt, buildCaseStudyPrompt, runGeneration, runFactCheck, seoEngine } from "../../../lib/seo/generate";
 
 // One-call AI drafting for the SEO engine. Writes a complete DRAFT (meta, tags, body, FAQ) onto a page
 // record and returns it for review — it lands at needs_review / fact_check pending and the publish gate
@@ -43,6 +43,16 @@ export async function POST(req) {
   const facts = publicFacts();
 
   try {
+    // 0) AI fact-check (grounding audit) of an existing page's draft.
+    if (body.factCheck && body.pageId) {
+      const page = getPage(body.pageId);
+      if (!page) return Response.json({ ok: false, error: "page not found" }, { status: 404 });
+      if (!(Array.isArray(page.body) && page.body.length)) return Response.json({ ok: false, error: "no draft to check" }, { status: 400 });
+      const { report, engine } = await runFactCheck(page, facts);
+      const updated = applyFactCheck(page.id, report, by);
+      return Response.json({ ok: true, page: updated, report, engine });
+    }
+
     // 1) Case study → its own case-study page.
     if (body.caseStudyId) {
       const cs = getCaseStudy(body.caseStudyId);
