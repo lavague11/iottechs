@@ -42,6 +42,12 @@ const CAPS = {
   "customer.edit":       ["admin", "manager"],                              // "Update client record" from the form
   "customer.duplicate.override": ["admin", "manager"],                      // "Create new anyway" past a duplicate warning
   "cost.view":           ["admin", "manager"],
+  // SEO engine (lib/seo.js, /dev/seo). Internal marketing tooling — staff only; customers never touch it.
+  "seo.view":            ["admin", "manager"],
+  "seo.edit":            ["admin", "manager"],                              // create/edit records, facts, briefs, drafts
+  "seo.approve":         ["admin", "manager"],                              // move a page to "approved"
+  "seo.publish":         ["admin"],                                          // flip a page live (passes the publish gate)
+  "seo.admin":           ["admin"],                                          // fact verification, settings
 };
 export const ROLE_KEYS = ["admin", "manager", "sales", "tech", "customer", "vendor", "readonly"];
 export function can(role, cap) {

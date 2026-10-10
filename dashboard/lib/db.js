@@ -13,6 +13,7 @@ import { installProgress, qcProgress, qcItemStates } from "./install-checklist-m
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
+import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
@@ -1160,6 +1161,7 @@ function init() {
   if (!propCols.includes("pcp_grant_source")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_grant_source TEXT");  // performance | donor | community | company
   if (!propCols.includes("pcp_approved_at"))  db.exec("ALTER TABLE proposals ADD COLUMN pcp_approved_at TEXT");   // admin finalized
   ensureEsignSchema(db);   // PDF e-sign: sign_documents / sign_sessions / sign_events + proposals.unsigned_doc_id/signed_doc_id/sign_status (lib/esign/)
+  ensureSeoSchema(db);     // SEO engine: seo_pages / seo_facts / seo_case_studies / seo_links / seo_revisions / seo_backlinks (lib/seo/)
 
   // ---- Payments / deposits recorded against a project (approval & deposit stage) ----
   db.exec(`
@@ -2268,7 +2270,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v38";
+const DB_VER = "v39";   // v39: SEO engine tables (lib/seo/schema.js)
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
