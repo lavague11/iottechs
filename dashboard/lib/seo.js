@@ -230,6 +230,18 @@ export function projectExists(accessId) {
   if (!accessId) return false;
   try { return !!db.prepare("SELECT 1 FROM projects WHERE UPPER(access_id)=UPPER(?)").get(String(accessId)); } catch { return false; }
 }
+// Search projects by name / company / access id — so a case study can be linked without knowing the raw id.
+export function searchProjects(query, limit = 8) {
+  const q = String(query || "").trim();
+  if (q.length < 2) return [];
+  const like = `%${q}%`;
+  try {
+    const rows = db.prepare(`SELECT access_id, company_name, contact_name, address FROM projects
+      WHERE company_name LIKE ? OR contact_name LIKE ? OR access_id LIKE ?
+      ORDER BY (UPPER(access_id)=UPPER(?)) DESC, rowid DESC LIMIT ?`).all(like, like, like, q, Number(limit) || 8);
+    return rows.map((r) => ({ access_id: r.access_id, name: (r.company_name || r.contact_name || "").trim(), address: r.address || "" }));
+  } catch { return []; }
+}
 
 // Record an AI grounding-audit result. Clean → fact_check passed (that gate clears); flagged → failed
 // (publish stays blocked) with the unsupported claims written into agent_notes for the human to fix.

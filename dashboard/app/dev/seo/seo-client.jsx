@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction, updatePageAction, upsertCaseStudyAction } from "./actions";
+import { seedPlanAction, createPageAction, setStatusAction, publishPageAction, unpublishPageAction, upsertFactAction, updatePageAction, upsertCaseStudyAction, searchProjectsAction } from "./actions";
 
 const STATUSES = ["opportunity", "researching", "brief", "writing", "fact_check", "seo_qa", "needs_review", "approved", "published", "monitoring", "refresh", "blocked"];
 const TIER_C = { P0: "#ff7a7a", P1: "#f2c14e", P2: "#4ea3ff", P3: "#8795b4" };
@@ -344,12 +344,33 @@ function PreviewBlock({ b }) {
   }
 }
 
+// Link a case study to a real project by searching name / company / id — no need to know the raw ASC id.
 function LinkCell({ onLink }) {
-  const [v, setV] = useState("");
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [open, setOpen] = useState(false);
+  async function search(v) {
+    setQ(v);
+    if (v.trim().length < 2) { setRes([]); setOpen(false); return; }
+    const r = await searchProjectsAction(v).catch(() => ({ results: [] }));
+    setRes(r?.results || []); setOpen(true);
+  }
   return (
-    <span className="linkcell">
-      <input className="inp xs" placeholder="ASC0042" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && v.trim() && onLink(v)} />
-      <button className="btn sm" disabled={!v.trim()} onClick={() => onLink(v)}>Link</button>
+    <span className="lc-wrap">
+      <input className="inp xs2" placeholder="Search project…" value={q}
+        onChange={(e) => search(e.target.value)} onFocus={() => res.length && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) { setOpen(false); onLink(q); } }} />
+      {open && (
+        <div className="lc-menu">
+          {res.length ? res.map((p) => (
+            <button key={p.access_id} className="lc-opt" onMouseDown={() => { setOpen(false); onLink(p.access_id); }}>
+              <b className="mono">{p.access_id}</b> {p.name || <span className="faint">(no name)</span>}
+              {p.address && <span className="faint"> · {p.address.slice(0, 34)}</span>}
+            </button>
+          )) : <div className="lc-empty">No match. Press Enter to link “{q}” directly.</div>}
+        </div>
+      )}
     </span>
   );
 }
@@ -405,8 +426,13 @@ section{margin-top:18px}
 .btn.sm{padding:5px 10px;font-size:12px;margin-left:5px}
 .btn.pri{background:var(--accent);color:#06101f;border-color:var(--accent);font-weight:600}
 .btn:disabled{opacity:.5;cursor:default}
-.linkcell{display:inline-flex;gap:6px;align-items:center}
-.inp.xs{width:88px;max-width:88px;padding:4px 7px;font-size:12px;text-transform:uppercase}
+.lc-wrap{position:relative;display:inline-block}
+.inp.xs2{width:150px;max-width:150px;padding:5px 8px;font-size:12px}
+.lc-menu{position:absolute;z-index:50;top:calc(100% + 4px);left:0;min-width:300px;max-width:420px;max-height:240px;overflow:auto;background:#0e1a2e;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.5);padding:4px}
+.lc-opt{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font:inherit;font-size:12.5px;padding:7px 9px;border-radius:7px;cursor:pointer}
+.lc-opt:hover{background:#17263f}
+.lc-opt b{margin-right:6px;color:#9fd0ff}
+.lc-empty{padding:9px;font-size:12px;color:var(--muted)}
 .linkbtn{background:none;border:none;color:#cfe0ff;font:inherit;font-weight:600;cursor:pointer;padding:0;text-align:left}
 .linkbtn:hover{color:#fff;text-decoration:underline}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ad08a;margin-left:7px;vertical-align:middle}

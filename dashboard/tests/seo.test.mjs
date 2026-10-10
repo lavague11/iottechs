@@ -147,3 +147,13 @@ test("projectExists gates case-study drafting to real projects", () => {
   assert.equal(projectExists(""), false);
   assert.equal(projectExists(null), false);
 });
+
+import { searchProjects } from "../lib/seo.js";
+test("searchProjects finds a project by name or id, needs ≥2 chars", () => {
+  assert.equal(searchProjects("a").length, 0, "too short");
+  const byName = searchProjects("crazy");
+  assert.ok(byName.some((p) => p.access_id === "ASC0042"), "finds Crazy Cars by name");
+  const byId = searchProjects("ASC0042");
+  assert.equal(byId[0].access_id, "ASC0042", "exact id ranks first");
+  assert.ok(typeof byName[0].name === "string" && "address" in byName[0], "returns name + address");
+});

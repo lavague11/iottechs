@@ -7,7 +7,7 @@ import { getSessionUser } from "../../../lib/session";
 import { can } from "../../../lib/roles";
 import {
   seedSeoPlan, createPage, updatePage, setStatus, publishPage, unpublishPage,
-  upsertFact, addBacklink, upsertCaseStudy, projectExists,
+  upsertFact, addBacklink, upsertCaseStudy, projectExists, searchProjects,
 } from "../../../lib/seo";
 
 async function who(cap) {
@@ -56,6 +56,11 @@ export async function upsertFactAction(data) {
 export async function addBacklinkAction(data) {
   const g = await who("seo.edit"); if (g.err) return g.err;
   try { return { ok: true, backlink: addBacklink(data || {}) }; } catch (e) { return { error: String(e?.message || e) }; }
+}
+
+export async function searchProjectsAction(query) {
+  const g = await who("seo.edit"); if (g.err) return g.err;
+  try { return { ok: true, results: searchProjects(query) }; } catch (e) { return { error: String(e?.message || e) }; }
 }
 
 export async function upsertCaseStudyAction(data) {
