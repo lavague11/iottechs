@@ -56,6 +56,22 @@ export default function SeoClient({ data, caps }) {
     flash("Saved " + key);
   }
 
+  // AI drafting (OpenAI). Writes a full draft onto a page and returns it at needs_review — never live.
+  const [gen, setGen] = useState(null);
+  const [prompt, setPrompt] = useState("");
+  const [promptType, setPromptType] = useState("resource");
+  async function generate(payload, spinnerId) {
+    setGen(spinnerId); setMsg("Writing draft with AI… this can take up to a minute.");
+    const r = await fetch("/api/seo-generate", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setGen(null);
+    if (!r?.ok) return flash("⚠ " + (r?.error || "generation failed"));
+    setPages((ps) => { const i = ps.findIndex((p) => p.id === r.page.id); return i >= 0 ? ps.map((p) => (p.id === r.page.id ? r.page : p)) : [r.page, ...ps]; });
+    const flags = (r.flags || []).length ? ` · ⚠ ${r.flags.length} fact(s) to verify` : "";
+    flash(`Draft ready: “${r.page.title}” via ${r.engine}${flags}. Review → set fact-check → publish.`);
+  }
+  function genFromPrompt() { const t = prompt.trim(); if (!t) return; setPrompt(""); generate({ topic: t, page_type: promptType }, "new"); }
+
   return (
     <div className="seoa">
       <style>{CSS}</style>
@@ -96,9 +112,19 @@ export default function SeoClient({ data, caps }) {
 
       {tab === "content" && (
         <section>
+          {caps.edit && (
+            <div className="seoa-gen">
+              <input className="inp grow" placeholder="Write a page from a prompt — e.g. “License plate reader cameras for car dealership lots in NJ”"
+                     value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && genFromPrompt()} />
+              <select className="sel" value={promptType} onChange={(e) => setPromptType(e.target.value)}>
+                {["service", "industry", "location", "resource", "blog"].map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <button className="btn pri" disabled={gen === "new" || !prompt.trim()} onClick={genFromPrompt}>{gen === "new" ? "Writing…" : "Generate"}</button>
+            </div>
+          )}
           <div className="seoa-bar">
-            <span className="muted">{pages.length} pages</span>
-            {caps.edit && <button className="btn" onClick={newPage}>+ New page</button>}
+            <span className="muted">{pages.length} pages · drafts land at “needs review”; the publish gate still applies</span>
+            {caps.edit && <button className="btn" onClick={newPage}>+ Blank page</button>}
           </div>
           <div className="tblw"><table className="tbl">
             <thead><tr><th>Title</th><th>Slug</th><th>Type</th><th>Pri</th><th>Status</th><th>Checks</th><th>Actions</th></tr></thead>
@@ -121,6 +147,7 @@ export default function SeoClient({ data, caps }) {
                     <span className={"chip " + ((+p.quality_score || 0) >= 70 ? "ok" : "")}>q{p.quality_score || 0}</span>
                   </td>
                   <td className="acts">
+                    {caps.edit && p.page_type !== "hub" && <button className="btn sm" disabled={gen === p.id} onClick={() => generate({ pageId: p.id }, p.id)}>{gen === p.id ? "writing…" : (p.body ? "rewrite" : "generate")}</button>}
                     {p.status === "published" && <a className="btn sm" href={"/" + p.slug} target="_blank" rel="noreferrer">open</a>}
                     {caps.publish && p.status !== "published" && <button className="btn sm pri" disabled={busy} onClick={() => publish(p.id)}>publish</button>}
                     {caps.publish && p.status === "published" && <button className="btn sm" onClick={() => unpublish(p.id)}>unpublish</button>}
@@ -147,14 +174,15 @@ export default function SeoClient({ data, caps }) {
       {tab === "cases" && (
         <section>
           <div className="tblw"><table className="tbl">
-            <thead><tr><th>Client</th><th>Industry</th><th>City/State</th><th>Project</th><th>Status</th><th>Name OK</th></tr></thead>
+            <thead><tr><th>Client</th><th>Industry</th><th>City/State</th><th>Project</th><th>Status</th><th>Name OK</th><th></th></tr></thead>
             <tbody>
               {data.cases.map((c) => (
                 <tr key={c.id}><td><b>{c.client}</b></td><td className="muted">{c.industry}</td>
                   <td className="muted">{[c.city, c.state].filter(Boolean).join(", ") || "—"}</td>
                   <td className="mono">{c.project_access_id || "—"}</td>
                   <td><span className={"chip " + (c.status === "verified" ? "ok" : "")}>{c.status}</span></td>
-                  <td>{c.permission_to_name_client ? "✓" : "—"}</td></tr>
+                  <td>{c.permission_to_name_client ? "✓" : "—"}</td>
+                  <td className="acts">{caps.edit && <button className="btn sm" disabled={gen === "cs" + c.id} onClick={() => { setTab("content"); generate({ caseStudyId: c.id }, "cs" + c.id); }}>{gen === "cs" + c.id ? "writing…" : "draft study"}</button>}</td></tr>
               ))}
             </tbody>
           </table></div>
@@ -212,7 +240,9 @@ section{margin-top:18px}
 .seoa-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:14px}
 .seoa-card h3{margin:0 0 6px;font-size:15px}
 .muted{color:var(--muted)} .mono{font-family:var(--font-mono),monospace;font-size:12.5px}
-.seoa-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.seoa-gen{display:flex;gap:8px;align-items:center;margin:4px 0 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px}
+.inp.grow{flex:1;max-width:none}
+.seoa-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap}
 .tblw{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th{text-align:left;background:#0e1829;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--line)}

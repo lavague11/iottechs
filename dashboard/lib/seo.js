@@ -182,6 +182,50 @@ export function unpublishPage(id, by = "editor", reason = "unpublished") {
 }
 export function pageRevisions(pageId) { return plain(db.prepare("SELECT id, version, agent, reason, at FROM seo_revisions WHERE page_id=? ORDER BY version DESC").all(Number(pageId))); }
 
+// ---- AI drafts ------------------------------------------------------------
+// Provisional quality from the draft's shape (meta present, real length, headings, FAQ, tags, no open
+// flags). It can reach the publish threshold, but publishing ALSO needs fact_check_status=passed — which
+// only a human sets — so an AI draft can never go live without a person verifying its facts.
+export function provisionalQuality(draft) {
+  const blocks = draft.body || [];
+  const text = blocks.map((b) => (b.type === "faq" ? (b.items || []).map((x) => `${x.q} ${x.a}`).join(" ") : (b.items ? b.items.join(" ") : b.value || ""))).join(" ");
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  let s = 38;
+  if (draft.meta_title) s += 8;
+  if (draft.meta_description) s += 8;
+  if (words >= 350) s += 12;
+  if (words >= 600) s += 6;
+  if (blocks.some((b) => b.type === "h2")) s += 6;
+  if (blocks.some((b) => b.type === "faq")) s += 6;
+  if ((draft.secondary_topics || []).length >= 3) s += 4;
+  s += (draft.needs_verification || []).length === 0 ? 6 : -4;
+  if (PLACEHOLDER_RE.test(text)) s -= 30;
+  return Math.max(0, Math.min(94, s));
+}
+function draftNotes(draft, engine) {
+  const parts = [`AI draft via ${engine || "model"}.`];
+  if (draft.notes) parts.push(draft.notes);
+  if ((draft.needs_verification || []).length) parts.push("⚠ VERIFY before publish: " + draft.needs_verification.join(" · "));
+  if ((draft.internal_link_suggestions || []).length) parts.push("Link ideas: " + draft.internal_link_suggestions.map((l) => `${l.anchor}→${l.to_topic}`).join(", "));
+  return parts.join("\n");
+}
+// Write a generated draft onto a page. ALWAYS lands at needs_review with fact_check pending — never live.
+export function applyDraft(pageId, draft, by = "ai", engine = "") {
+  const page = getPage(pageId);
+  if (!page) throw new Error("page not found");
+  return updatePage(pageId, {
+    title: draft.title || page.title,
+    meta_title: draft.meta_title, meta_description: draft.meta_description,
+    primary_keyword: draft.primary_keyword || page.primary_keyword,
+    secondary_topics: draft.secondary_topics, search_intent: draft.search_intent || page.search_intent,
+    body: draft.body,
+    status: "needs_review", fact_check_status: "pending",
+    quality_score: provisionalQuality(draft),
+    agent_notes: draftNotes(draft, engine),
+  }, by, "AI draft generated");
+}
+export function getCaseStudy(id) { return one(db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(Number(id))); }
+
 // ---- Internal-link graph --------------------------------------------------
 export function setPageLinks(fromSlug, links = []) {
   const from = normalizeSlug(fromSlug);

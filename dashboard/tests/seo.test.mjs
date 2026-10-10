@@ -73,3 +73,45 @@ test("helpers: priority tiers + slug normalization", () => {
   assert.equal(normalizeSlug("/New-Jersey/Union-County/"), "new-jersey/union-county");
   assert.equal(normalizeSlug("Commercial-Security-Camera-Installation"), "commercial-security-camera-installation");
 });
+
+// --- AI drafting: prompt contract + output normalization (no API calls) ---
+import { buildPagePrompt, normalizeDraft } from "../lib/seo/generate.js";
+import { provisionalQuality } from "../lib/seo.js";
+
+test("generation prompt encodes fact-safety, the banned phrases, and the JSON contract", () => {
+  const { system, user } = buildPagePrompt({
+    page: { slug: "license-plate-reader-cameras", page_type: "service", title: "License Plate Reader Cameras", primary_keyword: "lpr camera installation nj" },
+    facts: { "company.phone": "(646) 396-0775", "service_area.primary": "New Jersey; New York City" },
+    instruction: "emphasize dealership lots",
+  });
+  assert.match(system, /ONLY state facts/i, "forbids inventing facts");
+  assert.match(system, /peace of mind/i, "lists banned phrases");
+  assert.match(system, /distance, speed, angle, lighting, lens/i, "LPR responsibility rule present");
+  assert.match(user, /lpr camera installation nj/, "passes the target keyword");
+  assert.match(user, /company\.phone: \(646\) 396-0775/, "passes verified facts");
+  assert.match(user, /"needs_verification"/, "requires the needs_verification output field");
+  assert.match(user, /emphasize dealership lots/, "includes the owner instruction");
+});
+
+test("normalizeDraft parses a model response and guards bad output", () => {
+  assert.throws(() => normalizeDraft(null), /no JSON/);
+  assert.throws(() => normalizeDraft({ h1: "x", body: [] }), /no body blocks/);
+  const d = normalizeDraft({
+    h1: "Commercial Security Cameras", meta_title: "x".repeat(90), meta_description: "y".repeat(200),
+    primary_keyword: "commercial security cameras nj", secondary_topics: ["cctv", "nvr", "retention"],
+    search_intent: "transactional", body: [{ type: "p", value: "Lead paragraph." }, { type: "bogus" }, { type: "h2", value: "Design" }],
+    internal_link_suggestions: [{ anchor: "access control", to_topic: "commercial-access-control" }], needs_verification: ["1500+ locations"], notes: "ok",
+  });
+  assert.ok(d.meta_title.length <= 70 && d.meta_description.length <= 170, "meta clamped");
+  assert.equal(d.body.filter((b) => b.type === "bogus").length, 1, "keeps unknown-typed blocks for the editor (renderer guards)");
+  assert.deepEqual(d.needs_verification, ["1500+ locations"]);
+  assert.equal(d.search_intent, "transactional");
+});
+
+test("provisionalQuality rewards a real draft and tanks placeholder text", () => {
+  const good = { meta_title: "t", meta_description: "d", secondary_topics: ["a", "b", "c"],
+    body: [{ type: "p", value: "A specific, useful paragraph about camera placement at dealership lots. ".repeat(12) }, { type: "h2", value: "Design" }, { type: "faq", items: [{ q: "q", a: "a" }] }], needs_verification: [] };
+  assert.ok(provisionalQuality(good) >= 70, "a complete draft can reach the threshold");
+  const bad = { meta_title: "t", body: [{ type: "p", value: "TODO write this. lorem ipsum ".repeat(30) }], needs_verification: ["x"] };
+  assert.ok(provisionalQuality(bad) < 40, "placeholder text is penalized hard");
+});
