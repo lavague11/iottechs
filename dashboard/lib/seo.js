@@ -12,6 +12,10 @@ import { sqliteHandle } from "./db.js";
 import { SEO_STATUSES } from "./seo/schema.js";
 
 const db = sqliteHandle();
+// node:sqlite returns rows as NULL-prototype objects; Next refuses to pass those to a Client Component,
+// so every row that may cross that boundary is spread into a plain object first.
+const plain = (rows) => (Array.isArray(rows) ? rows.map((r) => (r ? { ...r } : r)) : rows);
+const one = (r) => (r ? { ...r } : r);
 const J = (v, d) => { try { return v == null ? d : JSON.parse(v); } catch { return d; } };
 const S = (v) => (v == null ? null : JSON.stringify(v));
 const now = () => new Date().toISOString();
@@ -29,8 +33,8 @@ export function normalizeSlug(slug) {
 }
 
 // ---- Facts ----------------------------------------------------------------
-export function allFacts() { return db.prepare("SELECT * FROM seo_facts ORDER BY category, key").all(); }
-export function getFact(key) { return db.prepare("SELECT * FROM seo_facts WHERE key=?").get(key); }
+export function allFacts() { return plain(db.prepare("SELECT * FROM seo_facts ORDER BY category, key").all()); }
+export function getFact(key) { return one(db.prepare("SELECT * FROM seo_facts WHERE key=?").get(key)); }
 // The ONLY facts a page/schema may cite: verified AND cleared for public use. Returns { key: value }.
 export function publicFacts() {
   const rows = db.prepare("SELECT key, value FROM seo_facts WHERE verified=1 AND public_use_allowed=1").all();
@@ -176,7 +180,7 @@ export function unpublishPage(id, by = "editor", reason = "unpublished") {
   db.prepare("UPDATE seo_pages SET status='needs_review', updated_at=? WHERE id=?").run(now(), page.id);
   return { ok: true };
 }
-export function pageRevisions(pageId) { return db.prepare("SELECT id, version, agent, reason, at FROM seo_revisions WHERE page_id=? ORDER BY version DESC").all(Number(pageId)); }
+export function pageRevisions(pageId) { return plain(db.prepare("SELECT id, version, agent, reason, at FROM seo_revisions WHERE page_id=? ORDER BY version DESC").all(Number(pageId))); }
 
 // ---- Internal-link graph --------------------------------------------------
 export function setPageLinks(fromSlug, links = []) {
@@ -192,23 +196,85 @@ export function orphanPublishedPages() {
 }
 
 // ---- Case studies ---------------------------------------------------------
-export function listCaseStudies() { return db.prepare("SELECT * FROM seo_case_studies ORDER BY updated_at DESC").all(); }
+export function listCaseStudies() { return plain(db.prepare("SELECT * FROM seo_case_studies ORDER BY updated_at DESC").all()); }
 export function upsertCaseStudy(data = {}) {
   if (data.id) {
     db.prepare(`UPDATE seo_case_studies SET client=?, project_access_id=?, industry=?, city=?, state=?, status=?, permission_to_name_client=?, updated_at=? WHERE id=?`)
       .run(data.client || null, data.project_access_id || null, data.industry || null, data.city || null, data.state || null,
            data.status || "opportunity", data.permission_to_name_client ? 1 : 0, now(), Number(data.id));
-    return db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(Number(data.id));
+    return one(db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(Number(data.id)));
   }
   const r = db.prepare(`INSERT INTO seo_case_studies (client, project_access_id, industry, city, state, status, permission_to_name_client) VALUES (?,?,?,?,?,?,?)`)
     .run(data.client || null, data.project_access_id || null, data.industry || null, data.city || null, data.state || null, data.status || "opportunity", data.permission_to_name_client ? 1 : 0);
-  return db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(r.lastInsertRowid);
+  return one(db.prepare("SELECT * FROM seo_case_studies WHERE id=?").get(r.lastInsertRowid));
+}
+
+// ---- Seed the opportunity queue from the approved master plan ----
+// Idempotent: a page is created only if its slug is absent; a case study only if its client is absent;
+// backlinks only when the queue is empty. Everything lands as an OPPORTUNITY — nothing publishes. This
+// operationalizes the approved plan so /dev/seo opens on a real backlog instead of a blank screen.
+const PLAN_PAGES = [
+  // hubs
+  ["services", "Services", "hub", "", 60], ["industries", "Industries", "hub", "", 60],
+  ["locations", "Locations", "hub", "", 60], ["case-studies", "Case Studies", "hub", "", 60], ["resources", "Resources", "hub", "", 60],
+  // money pages (service)
+  ["commercial-security-camera-installation", "Commercial Security Camera Installation", "service", "transactional", 95],
+  ["license-plate-reader-cameras", "License Plate Reader Cameras", "service", "transactional", 92],
+  ["restaurant-technology-installation", "Restaurant Technology & Toast Installation", "service", "transactional", 90],
+  ["commercial-access-control", "Commercial Access Control", "service", "transactional", 84],
+  ["commercial-alarm-systems", "Commercial Alarm Systems", "service", "transactional", 80],
+  ["panic-duress-emergency-buttons", "Panic / Duress / Emergency Buttons", "service", "transactional", 78],
+  ["structured-cabling", "Structured Cabling", "service", "transactional", 76],
+  ["commercial-networking-wifi", "Commercial Networking & Wi-Fi", "service", "transactional", 74],
+  ["24-7-alarm-monitoring", "24/7 Alarm Monitoring", "service", "transactional", 72],
+  ["commercial-sound-systems", "Commercial Sound Systems", "service", "transactional", 66],
+  // industries
+  ["security-systems-car-dealerships", "Security Systems for Car Dealerships", "industry", "commercial", 93],
+  ["restaurant-security-systems", "Restaurant Security Systems", "industry", "commercial", 90],
+  ["jewelry-store-security-systems", "Jewelry Store Security Systems", "industry", "commercial", 88],
+  ["security-cameras-collision-centers", "Security Cameras for Collision Centers", "industry", "commercial", 84],
+  ["diamond-district-security-systems", "Diamond District Security Systems", "industry", "commercial", 82],
+  ["multi-location-security-systems", "Multi-Location Security Systems", "industry", "commercial", 78],
+  ["security-systems-auto-repair-shops", "Security Systems for Auto Repair Shops", "industry", "commercial", 74],
+  ["retail-security-systems", "Retail Security Systems", "industry", "commercial", 70],
+  ["warehouse-security-systems", "Warehouse Security Systems", "industry", "commercial", 68],
+  ["security-systems-sports-facilities", "Security Systems for Sports Facilities", "industry", "commercial", 66],
+  ["luxury-home-security-systems", "Luxury Home & Estate Security Systems", "industry", "commercial", 64],
+];
+const PLAN_CASES = [
+  { client: "Crazy Cars", project_access_id: "ASC0042", industry: "Car Dealership", city: "Hillside", state: "NJ", status: "verified" },
+  { client: "Milan Motors", industry: "Car Dealership", state: "NJ" }, { client: "Rev Motors", industry: "Car Dealership", state: "NJ" },
+  { client: "The Car Guys", industry: "Car Dealership", state: "NJ" }, { client: "Easy Drive", industry: "Car Dealership", state: "NJ" },
+  { client: "Onyx Autobody", industry: "Collision Center", state: "NJ" }, { client: "Huntington Collision Center", industry: "Collision Center", state: "NY" },
+  { client: "PaneBianco", industry: "Restaurant" }, { client: "Nature's Grill", industry: "Restaurant" }, { client: "YoYo Chicken", industry: "Restaurant" },
+  { client: "Lodi Pizza", industry: "Restaurant", city: "Lodi", state: "NJ" }, { client: "SHIRO", industry: "Restaurant" }, { client: "Buck n Up", industry: "Retail" }, { client: "Vino Fine Wine", industry: "Retail" },
+  { client: "Velto", industry: "Sports / Pickleball", city: "Brooklyn", state: "NY" },
+];
+const PLAN_BACKLINKS = [
+  { domain: "", reason: "Toast / restaurant-technology partner directory", relationship: "ecosystem", authority: "high" },
+  { domain: "", reason: "Manufacturer integrator/dealer directories (camera/access/alarm brands installed)", relationship: "vendor", authority: "high" },
+  { domain: "", reason: "Union / Essex / Hudson chambers of commerce", relationship: "local", authority: "medium" },
+  { domain: "", reason: "Client case-study collaboration / co-marketing (where name-use permitted)", relationship: "client", authority: "medium" },
+  { domain: "", reason: "Commercial real estate & property-management partners", relationship: "partner", authority: "medium" },
+  { domain: "", reason: "Local press / security-technology publication project feature", relationship: "press", authority: "high" },
+];
+export function seedSeoPlan(by = "plan") {
+  let pages = 0, cases = 0, links = 0;
+  for (const [slug, title, type, intent, pri] of PLAN_PAGES) {
+    if (getPageBySlug(slug)) continue;
+    createPage({ slug, title, page_type: type, primary_topic: title, search_intent: intent || null, priority: pri, status: "opportunity" }, by);
+    pages++;
+  }
+  const haveClient = (c) => db.prepare("SELECT 1 FROM seo_case_studies WHERE client=?").get(c);
+  for (const c of PLAN_CASES) { if (haveClient(c.client)) continue; upsertCaseStudy(c); cases++; }
+  if (db.prepare("SELECT COUNT(*) c FROM seo_backlinks").get().c === 0) { for (const b of PLAN_BACKLINKS) { addBacklink(b); links++; } }
+  return { pages, cases, links };
 }
 
 // ---- Backlinks ------------------------------------------------------------
-export function listBacklinks() { return db.prepare("SELECT * FROM seo_backlinks ORDER BY updated_at DESC").all(); }
+export function listBacklinks() { return plain(db.prepare("SELECT * FROM seo_backlinks ORDER BY updated_at DESC").all()); }
 export function addBacklink(data = {}) {
   const r = db.prepare(`INSERT INTO seo_backlinks (domain, contact, reason, target_slug, relationship, authority, outreach_concept, status) VALUES (?,?,?,?,?,?,?,?)`)
     .run(data.domain || null, data.contact || null, data.reason || null, data.target_slug || null, data.relationship || null, data.authority || null, data.outreach_concept || null, data.status || "opportunity");
-  return db.prepare("SELECT * FROM seo_backlinks WHERE id=?").get(r.lastInsertRowid);
+  return one(db.prepare("SELECT * FROM seo_backlinks WHERE id=?").get(r.lastInsertRowid));
 }
