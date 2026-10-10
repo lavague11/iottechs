@@ -141,7 +141,9 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
       if (!status || status === "draft") return { sub: "Proposal not ready yet.", showBtn: false };
       if (status === "changes_requested") return { sub: "Revising your proposal.", showBtn: false };
       if (status === "declined") return { sub: "Declined — contact us to revisit.", showBtn: false };
-      return { sub: "Accept an option to continue.", showBtn: true };   // "sent"
+      // "sent": the proposal (with its ONE Approve & Sign) sits directly above in the same view, so this
+      // locked gate just points there — no second sign/approve button (it read as a duplicate CTA).
+      return { sub: "Approve & Sign the proposal above to continue.", showBtn: false };
     })();
     const gatePayments = data.payments || [];
     // Billing figures even before acceptance: total owed, deposit target/due, and remaining
