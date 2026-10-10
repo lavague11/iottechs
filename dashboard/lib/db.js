@@ -2270,7 +2270,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v39";   // v39: SEO engine tables (lib/seo/schema.js)
+const DB_VER = "v40";   // v40: seed core-services + site-survey SEO facts (lib/seo/schema.js)
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During

@@ -168,6 +168,12 @@ function seedFacts(db) {
   F("company.email", "Support email", "support@iot-techs.com", "identity", 1, 1);
   F("company.tagline", "Tagline", "Make Tomorrow Safer Today", "identity", 1, 1);
   F("service_area.primary", "Primary service area", "New Jersey; New York City; Westchester; Long Island", "service-area", 1, 1, "Positioning is NJ + NY; not nationwide.");
+  // Core services offered — self-evident capability facts (the business is a security/low-voltage
+  // integrator; the home page already lists these). Verified so a page can say "we install X" without the
+  // grounding audit flagging it. NOTE: 24/7 MONITORING is deliberately excluded — it's a distinct service
+  // that needs the owner to confirm a real monitoring relationship before any page claims it.
+  F("company.services", "Core services installed", "Commercial security cameras & CCTV; license plate reader (LPR) cameras; commercial access control; commercial alarm systems; panic / duress / emergency buttons; structured cabling; commercial networking & Wi-Fi; commercial sound systems; restaurant technology & Toast POS installation", "identity", 1, 1, "What IOT TECHS installs. Excludes 24/7 monitoring (verify separately).");
+  F("company.site_survey", "Offers on-site site surveys", "IOT TECHS provides an on-site site survey / security assessment before a quote", "identity", 1, 1);
   // Claims that must NOT be published until verified (these appear on the home page today).
   F("claim.locations", "“1500+ locations” served claim", "1500+", "proof", 0, 0, "NEEDS VERIFICATION — currently on the home page. Confirm current & defensible before reuse.");
   F("claim.port_authority", "Port Authority reference", "Serves Port Authority", "proof", 0, 0, "NEEDS VERIFICATION — confirm it is contractually nameable in public marketing.");

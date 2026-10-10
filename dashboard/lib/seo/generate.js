@@ -100,21 +100,42 @@ Return STRICT JSON (no prose, no markdown) with exactly these keys:
   return { system: HOUSE, user };
 }
 
-// Case-study prompt — editorial, built ONLY from the verified project facts passed in.
-export function buildCaseStudyPrompt({ caseStudy, projectFacts = {}, facts = {}, instruction = "" }) {
+// Case-study prompt — editorial, built ONLY from the verified project facts passed in. We hand the model
+// a CLEAN set of fields (no internal flags/ids) and tell it how to handle naming, so it never writes
+// about internal settings like "permission_to_name_client is set to 0".
+export function buildCaseStudyPrompt({ caseStudy = {}, projectFacts = {}, facts = {}, instruction = "" }) {
+  const nameAllowed = !!caseStudy.permission_to_name_client && (projectFacts.client || caseStudy.client);
+  const clientName = nameAllowed ? (projectFacts.client || caseStudy.client) : null;
+  // Only the fields the writer may use — no ids, no permission flags, no status.
+  const safe = {
+    client: clientName,                                   // null = DO NOT name the client
+    industry: caseStudy.industry || null,
+    city: projectFacts.city || caseStudy.city || null,
+    state: projectFacts.state || caseStudy.state || null,
+    services_installed: caseStudy.services || null,       // only if present/verified
+    verified_outcome: caseStudy.verified_outcome || null,
+  };
+  const anonLabel = `a ${safe.industry || "commercial"} business${safe.city ? ` in ${safe.city}${safe.state ? ", " + safe.state : ""}` : (safe.state ? ` in ${safe.state}` : "")}`;
   const user = `Write a project case study for IOT TECHS in the voice of a trade publication (never "another happy customer!").
 
-VERIFIED CASE FACTS (the only specifics you may use — do not invent beyond these):
-${JSON.stringify({ ...caseStudy, project: projectFacts }, null, 2)}
+VERIFIED CASE FACTS (the ONLY specifics you may use — do not invent beyond these):
+${JSON.stringify(safe, null, 2)}
+
+NAMING: ${nameAllowed
+  ? `You MAY name the client ("${clientName}").`
+  : `You may NOT name the client. Refer to them as "${anonLabel}". Never mention permissions, settings, record status, or that a name was withheld — just write naturally about the project.`}
 
 COMPANY FACTS:
 ${Object.entries(facts).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
-Structure: Client/Project → The Problem (only if verified) → The System (what was installed/designed) → Why it was designed that way (useful technical context) → The Result (ONLY verified outcomes; if none are verified, omit the section and flag it) → Related.
+Rules:
+- If a detail (problem, equipment counts, outcomes, quotes) is not in VERIFIED CASE FACTS, DO NOT write it as fact — put it in needs_verification and write around it.
+- Never reference internal field names, database settings, or the words "verified/unverified record".
+- Structure: Project overview → The System (what was installed, only if given) → Why it was designed that way (useful general technical context is fine) → The Result (ONLY verified outcomes; omit the section if none) → Related services.
 ${instruction ? `Owner instruction: ${instruction}` : ""}
 ${BLOCKS_SPEC}
 
-Return STRICT JSON with the same keys as a page (h1, meta_title, meta_description, primary_keyword, secondary_topics, search_intent, body, internal_link_suggestions, needs_verification, notes). Put any missing-but-wanted specifics (outcomes, counts, quotes) into needs_verification — never fabricate them.`;
+Return STRICT JSON: h1, meta_title, meta_description, primary_keyword, secondary_topics, search_intent, body, internal_link_suggestions, needs_verification, notes.`;
   return { system: HOUSE, user };
 }
 
@@ -197,7 +218,7 @@ FLAG a sentence when it asserts, as fact, any of these WITHOUT support in VERIFI
 - a service area beyond the verified one
 - any company-specific capability stated as established fact
 
-Do NOT flag: general industry knowledge and professional guidance (camera placement, how LPR capture depends on lighting/angle/speed, what an NVR is, retention trade-offs), or clearly hypothetical/illustrative language.
+Do NOT flag: general industry knowledge and professional guidance (camera placement, how LPR capture depends on lighting/angle/speed, what an NVR is, retention trade-offs), or clearly hypothetical/illustrative language. Also do NOT flag a statement that IOT TECHS provides/designs/installs a service that is listed in company.services, offers an on-site site survey when company.site_survey confirms it, or serves the verified service area — those ARE supported. Flag a service claim only when the service is NOT in company.services (e.g. 24/7 monitoring if it isn't listed).
 
 Return STRICT JSON:
 {"verdict":"clean" | "review",
