@@ -387,6 +387,23 @@
       if(Number.isFinite(+a.zoom)) map.setZoom(+a.zoom);
     }
     invalidateCapture();
+    restoreCropFrame(a);   // put the crop frame back EXACTLY where it was → "Edit background" resumes right where you left off
+  }
+  // Non-destructive crop: the floor background is the FRAMED export, but the capture transform (center/
+  // zoom/level + the crop rect) is kept on the floor, so reopening lands you on the live map with your
+  // frame restored — ready to nudge it, drag it out to zoom out, re-level or re-enhance, then re-lock.
+  // The rect was drawn on the stage recorded in `stage`; rescale it to the current stage so it lands
+  // in the same place on any viewport, and clamp so a smaller screen never strands it off-canvas.
+  function restoreCropFrame(a){
+    try{
+      var r=a&&a.rect, sg=a&&a.stage; if(!r||!(+r.w>0&&+r.h>0)) return;
+      var st=document.querySelector(".stage"); if(!st) return;
+      var cw=st.clientWidth, ch=st.clientHeight; if(!(cw>0&&ch>0)) return;
+      var sx=(sg&&+sg.w>0)?cw/+sg.w:1, sy=(sg&&+sg.h>0)?ch/+sg.h:1;
+      var w=Math.min(+r.w*sx,cw), h=Math.min(+r.h*sy,ch);
+      rect={ x:Math.max(0,Math.min(+r.x*sx,cw-w)), y:Math.max(0,Math.min(+r.y*sy,ch-h)), w:w, h:h };
+      cropMode=true; $("draw").classList.add("on"); $("tCrop").classList.add("on"); closePops(); paint();   // show the restored frame, editable
+    }catch(e){}
   }
   window.addEventListener("message", function(e){
     var d=e&&e.data; if(!d||d.type!=="iotAerialRestore") return;
