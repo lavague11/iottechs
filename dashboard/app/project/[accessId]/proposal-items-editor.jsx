@@ -91,7 +91,7 @@ const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 // NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
 const AMP_ADDON = "Rack & Mount";
 
-export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename }) {
+export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag }) {
   const flags = customerFlags || {};
   // Recomputed whenever the price book changes (priceBookVersion bumps after Save) — includes
   // renamed/priced defaults, minus hidden ones, plus any custom items added for this service.
@@ -449,8 +449,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   };
 
   return (
-    <div className="prop-svc">
+    <div className={`prop-svc${svcDrag?.over ? " svc-over" : ""}`}
+         onDragOver={svcDrag?.dragging ? (e) => { e.preventDefault(); svcDrag.onDragOver(); } : undefined}
+         onDrop={svcDrag?.dragging ? (e) => { e.preventDefault(); svcDrag.onDrop(); } : undefined}>
       <div className="prop-svc-head">
+        {svcDrag && (
+          <span className="prop-svc-drag" draggable title="Drag to reorder"
+                onDragStart={(e) => { svcDrag.onHandleDragStart(); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", "svc"); } catch {} }}
+                onDragEnd={() => svcDrag.onHandleDragEnd()}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+          </span>
+        )}
         <span className="prop-svc-name">
           {svc.label}
           {svc.key === "camera" && camCount > 0 && <span className="prop-svc-count"> · {camCount} camera{camCount !== 1 ? "s" : ""}</span>}

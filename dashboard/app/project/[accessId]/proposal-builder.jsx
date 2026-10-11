@@ -80,6 +80,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [dragSvc, setDragSvc] = useState(null);   // index of the service section being dragged
+  const [overSvc, setOverSvc] = useState(null);   // index currently hovered as the drop target
   const [confirmSend, setConfirmSend] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [toast, setToast] = useState(null);
@@ -213,12 +215,20 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (activeOpt === id) setActiveOpt(next[0].id);
   }
   function addService(key) {
-    if (!key || opt.services.some((s) => s.key === key && key !== "custom")) return;
+    if (!key) return;   // a service type can appear more than once (e.g. two separate camera systems)
     // Toast POS always brings ISP / Pronto-Meraki / Network Switch along, even added
     // manually with no survey markers — same baseline surveyToImport seeds on import.
     const items = key === "toast" ? toastBaselineItems(loadPriceBook())
       : key === "camera" ? cameraBaselineItems(loadPriceBook()) : [];
     patchOption({ services: [...opt.services, { key, label: serviceLabel(key), items, note: "" }] });
+  }
+  // Drag-to-reorder whole service sections within the active option.
+  function moveService(from, to) {
+    if (from == null || to == null || from === to) return;
+    const next = opt.services.slice();
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    patchOption({ services: next });
   }
 
   // ---- Import from the site survey (per-camera blocks w/ labor sub-items + locations) ----
@@ -654,6 +664,14 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           priceBookVersion={priceBookVersion}
           cameraNames={camNames}
           onCameraRename={writeCameraName}
+          svcDrag={readOnly ? undefined : {
+            dragging: dragSvc != null,
+            over: overSvc === i && dragSvc !== i,
+            onHandleDragStart: () => setDragSvc(i),
+            onHandleDragEnd: () => { setDragSvc(null); setOverSvc(null); },
+            onDragOver: () => { if (dragSvc != null && dragSvc !== i) setOverSvc(i); },
+            onDrop: () => { moveService(dragSvc, i); setDragSvc(null); setOverSvc(null); },
+          }}
         />
       ))}
       {opt.services.length === 0 && <div className="prop-empty">No services yet — import the survey or add one below.</div>}
@@ -663,10 +681,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <select defaultValue="" onChange={(e) => { addService(e.target.value); e.target.value = ""; }}
                   style={{ height: 38, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-soft)", fontSize: ".76rem", fontWeight: 700, fontFamily: "inherit", padding: "0 8px", outline: "none" }}>
             <option value="" disabled>+ Service…</option>
-            {/* Only offer what can actually be added: a predefined service already in this option is hidden
-                (re-adding it is a silent no-op — the "stuck at two" trap). Custom stays, it's repeatable. */}
-            {PROPOSAL_SERVICES.filter((s) => s.key === "custom" || !opt.services.some((x) => x.key === s.key))
-              .map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {/* Every type stays addable — a proposal can carry two camera systems, two custom blocks, etc. */}
+            {PROPOSAL_SERVICES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </div>
       )}

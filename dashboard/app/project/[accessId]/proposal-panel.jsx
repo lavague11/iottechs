@@ -97,7 +97,11 @@ const PROP_CSS = `
 .pvx .prop-tab-x{opacity:.7;cursor:pointer;font-size:.72rem;margin-left:1px}
 .pvx .prop-tab-x:hover{opacity:1}
 .pvx .prop-svc{border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;overflow:hidden}
+.pvx .prop-svc.svc-over{box-shadow:0 0 0 2px var(--dv-gold,#B98A2E)}
 .pvx .prop-svc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-svc-drag{flex:none;display:flex;align-items:center;color:var(--dv-meta,#787D84);opacity:.4;cursor:grab}
+.pvx .prop-svc-drag:active{cursor:grabbing}
+.pvx .prop-svc-head:hover .prop-svc-drag{opacity:.75}
 .pvx .prop-svc-name{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
