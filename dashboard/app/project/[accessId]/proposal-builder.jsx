@@ -663,7 +663,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <select defaultValue="" onChange={(e) => { addService(e.target.value); e.target.value = ""; }}
                   style={{ height: 38, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-soft)", fontSize: ".76rem", fontWeight: 700, fontFamily: "inherit", padding: "0 8px", outline: "none" }}>
             <option value="" disabled>+ Service…</option>
-            {PROPOSAL_SERVICES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {/* Only offer what can actually be added: a predefined service already in this option is hidden
+                (re-adding it is a silent no-op — the "stuck at two" trap). Custom stays, it's repeatable. */}
+            {PROPOSAL_SERVICES.filter((s) => s.key === "custom" || !opt.services.some((x) => x.key === s.key))
+              .map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </div>
       )}
