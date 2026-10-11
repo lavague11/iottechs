@@ -145,6 +145,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       }
       return;
     }
+    // Don't page on a horizontal swipe while editing a field (renaming a line item, etc.).
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || ""))) return;
     e.preventDefault();
     if (wheelLock.current || Math.abs(e.deltaX) < 18) return;
     wheelLock.current = true; go(idx + (e.deltaX > 0 ? 1 : -1));
