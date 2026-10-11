@@ -1763,10 +1763,17 @@
       var keys=devices.map(function(d,i){ var ct=ctxs[i]; if(!ct||!ct.base) return ""; return ct.roomIdx>=0?("room:"+ct.roomIdx):("zone:"+ct.base); });
       devices.forEach(function(d,i){ var k=keys[i]; if(k && d.locKey===k && +d.locSeq>0) max[k]=Math.max(max[k]||0,+d.locSeq); });   // keepers register their stored number first
       devices.forEach(function(d,i){ var ct=ctxs[i], k=keys[i], npt=ct.placementType||"", nSeq, nName;
+        if(d.locManual){ if(d.placementType!==npt){ d.placementType=npt; changed=true; } return; }   // a hand-typed name wins — only the inside/outside placement stays auto-derived
         if(!k){ nSeq=0; } else if(d.locKey===k && +d.locSeq>0){ nSeq=+d.locSeq; } else { nSeq=(max[k]||0)+1; max[k]=nSeq; }   // stable, else next number in this location
         nName = k ? (ct.base+" "+nSeq) : "";
         if(d.locName!==nName||d.locKey!==k||d.locSeq!==nSeq||d.placementType!==npt){ d.locName=nName; d.locKey=k; d.locSeq=nSeq; d.placementType=npt; changed=true; } });
       if(changed){ sugMap=null; devices.forEach(renderDevice); renderPanel(); queueSave(); } }
+    // A hand-typed name becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
+    // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An
+    // empty name clears the flag → the auto geometry location takes over again on the next reconcile.
+    function applyManualName(d, raw){ if(!d) return; var nm=cap(String(raw||"").trim());
+      if(nm){ d.name=nm; d.locName=nm; d.locManual=true; }
+      else { d.locManual=false; d.name=cap((cat(d.k)||{}).name||"Device"); } }
     // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
     function makeCard(d){
       var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":""); card.dataset.devId=d.id;
@@ -1930,10 +1937,10 @@
       // Rename by STABLE cid — the host relays a rename made in the mockup so the survey stays in sync
       // (the name lives once; a rename anywhere shows everywhere). Current floor only; other floors were
       // already updated server-side and re-hydrate on reload.
-      if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ rd.name=cap(String(m.name||"").trim())||cap(cat(rd.k).name); renderDevice(rd); renderPanel(); queueSave(); } return; }
+      if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ applyManualName(rd, m.name); renderDevice(rd); renderPanel(); reconcileLocations(); queueSave(); } return; }
       if(!d) return;
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
-      if(m.cmd==="rename"){ d.name=cap(String(m.name||"").trim())||cap(cat(d.k).name); renderDevice(d); renderPanel(); queueSave(); }
+      if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); }
       else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="delete"){ removeDevice(d.id); }
       else if(m.cmd==="photo"){ d.photo=m.photo||null; d.photoName=m.photo?(m.photoName||d.name||null):null; renderDevice(d); renderPanel(); queueSave(); }

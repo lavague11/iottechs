@@ -30,7 +30,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
     const hasLoc = !!(d.locName && d.locName.trim());
     const place = d.placementType === "inside" ? "Inside" : d.placementType === "outside" ? "Outside" : "";
     const kind = d.k === "cam" ? "Camera" : (d.kind || "Device");
-    const ident = (hasLoc && d.name && d.name.trim()) ? d.name.trim() : (d.tag || "");   // show the identity here only when the location is the headline
+    // Show the identity on the sub-line only when it adds info — not when it just repeats the headline (a hand-typed name sets both).
+    const ident = !hasLoc ? (d.tag || "") : (d.name && d.name.trim() && d.name.trim() !== d.locName.trim() ? d.name.trim() : "");
     const parts = [];
     if (place) parts.push(`${place} ${kind}`); else if (hasLoc) parts.push(kind);
     if (ident) parts.push(ident);
@@ -196,9 +197,9 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                           </div>
                           <div className="sd-foot">
                             {editing && !locked ? (
-                              <input className="sd-nm-in" autoFocus defaultValue={d.name} spellCheck={false}
-                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = d.name || ""; e.currentTarget.blur(); } }}
-                                onBlur={(e) => { const v = e.target.value.trim(); if (v !== d.name) cmd({ cmd: "rename", id: d.id, name: v }); setEditingId(null); }} />
+                              <input className="sd-nm-in" autoFocus defaultValue={nm} spellCheck={false}
+                                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = nm; e.currentTarget.blur(); } }}
+                                onBlur={(e) => { const v = e.target.value.trim(); if (v !== nm) cmd({ cmd: "rename", id: d.id, name: v }); setEditingId(null); }} />
                             ) : (
                               <span className="sd-nm-wrap">
                                 <span className="sd-nm-txt" title={nm} onClick={() => { if (!locked) setEditingId(d.id); }}>{nm}</span>
