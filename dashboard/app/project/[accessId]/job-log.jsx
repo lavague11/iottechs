@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { getNotesAction, addNoteAction, setNoteVisibilityAction, resolveNotePublicAction, getEventsAction, getPaymentsForLogAction } from "./proposal-actions";
+import MicButton from "../../components/mic-button";
 
 // The Job Log — a per-project record with two halves:
 //   • Activity: a timestamped trail — the inquiry, the milestones that carry a signature/approval
@@ -235,6 +236,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
             <div className="jl-ta-wrap">
               <textarea ref={taRef} className="jl-input" rows={2} value={draft} placeholder="Add a note…  @ to mention"
                 onChange={onDraft} onBlur={() => setTimeout(() => setMq(null), 120)} />
+              <span className="jl-mic"><MicButton value={draft} onChange={(v) => { setDraft(v); setMq(null); }} title="Dictate note" size={16} /></span>
               {mentionMatches.length > 0 && (
                 <div className="jl-mdd">
                   {mentionMatches.map((u) => (
@@ -313,7 +315,8 @@ const CSS = `
 /* compose */
 .jl-compose{margin-bottom:18px}
 .jl-ta-wrap{position:relative}
-.jl-input{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:11px 13px;font-size:13.5px;font-family:inherit;outline:none;resize:vertical}
+.jl-input{width:100%;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);padding:11px 38px 11px 13px;font-size:13.5px;font-family:inherit;outline:none;resize:vertical}
+.jl-mic{position:absolute;top:8px;right:9px;z-index:3}
 .jl-input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .jl-mdd{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 30px rgba(16,20,24,.12);padding:4px;max-height:210px;overflow-y:auto}
 .jl-mopt{width:100%;display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:7px;text-align:left;cursor:pointer}
