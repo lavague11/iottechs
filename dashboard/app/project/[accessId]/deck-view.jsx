@@ -153,8 +153,12 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   // ── keys ──
   useEffect(() => {
     function onKey(e) {
-      if (e.key === "ArrowRight") { go(idx + 1); }
-      if (e.key === "ArrowLeft") { go(idx - 1); }
+      // Don't hijack arrows while editing a field (renaming a line item, etc.) — let them move the caret.
+      const t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""));
+      if (!typing) {
+        if (e.key === "ArrowRight") { go(idx + 1); }
+        if (e.key === "ArrowLeft") { go(idx - 1); }
+      }
       if (e.key === "Escape") { setMenuOpen(false); setCustOpen(false); setOverlay(null); }
     }
     const el = deckRef.current; el?.addEventListener("keydown", onKey);
