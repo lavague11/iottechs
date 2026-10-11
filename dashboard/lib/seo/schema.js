@@ -174,6 +174,8 @@ function seedFacts(db) {
   // that needs the owner to confirm a real monitoring relationship before any page claims it.
   F("company.services", "Core services installed", "Commercial security cameras & CCTV; license plate reader (LPR) cameras; commercial access control; commercial alarm systems; panic / duress / emergency buttons; structured cabling; commercial networking & Wi-Fi; commercial sound systems; restaurant technology & Toast POS installation", "identity", 1, 1, "What IOT TECHS installs. Excludes 24/7 monitoring (verify separately).");
   F("company.site_survey", "Offers on-site site surveys", "IOT TECHS provides an on-site site survey / security assessment before a quote", "identity", 1, 1);
+  // Monitoring model — stated precisely so no page claims a central-station service IOT TECHS doesn't run.
+  F("company.monitoring", "Monitoring model (self-monitored)", "IOT TECHS installs systems with 24/7 continuous recording and remote self-monitoring via a phone app — the owner views live footage and receives motion/alarm alerts on their phone. IOT TECHS does NOT operate a central or professional monitoring station; monitoring is customer-managed through the app.", "identity", 1, 1, "We install; the customer self-monitors via the app. Not a monitored-service claim.");
   // Claims that must NOT be published until verified (these appear on the home page today).
   F("claim.locations", "“1500+ locations” served claim", "1500+", "proof", 0, 0, "NEEDS VERIFICATION — currently on the home page. Confirm current & defensible before reuse.");
   F("claim.port_authority", "Port Authority reference", "Serves Port Authority", "proof", 0, 0, "NEEDS VERIFICATION — confirm it is contractually nameable in public marketing.");
