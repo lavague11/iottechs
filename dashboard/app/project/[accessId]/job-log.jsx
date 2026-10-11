@@ -351,8 +351,8 @@ const CSS = `
 .jl-badge.tog{cursor:pointer}
 .jl-note-anchor{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--dv-gold-text,#8A6A1F);background:#F7EFDD;border-radius:100px;padding:2px 9px;margin-bottom:6px}
 .jl-note-anchor svg{flex:0 0 auto}
-.jl-note-body{font-size:14px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-.jl-note-body.open{white-space:pre-wrap;overflow:visible}
+.jl-note-body{font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;cursor:pointer}
+.jl-note-body.open{-webkit-line-clamp:unset;overflow:visible}
 .jl-tools{display:inline-flex;align-items:center;gap:8px}
 .jl-icbtn{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dv-line,#E4E4DF);border-radius:99px;color:var(--dv-meta,#787D84);background:var(--dv-raise,#FBFBFA)}
 .jl-icbtn:hover,.jl-icbtn.on{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
