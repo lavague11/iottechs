@@ -313,6 +313,11 @@
   /* View photo — a real shot of what the camera sees, attached per device */
   .devNode .viewBadge{position:absolute;right:-5px;top:-5px;width:17px;height:17px;border-radius:50%;border:2px solid #fff;background:#0c0f14 center/cover no-repeat;box-shadow:0 1px 5px rgba(16,17,18,.42);display:none;cursor:pointer;z-index:6}
   /* When a camera has a view photo, the icon itself BECOMES the photo (tap it to see the full view). */
+  .devNode .devRm{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px) + 3px);transform:translate(-50%,0);width:17px;height:17px;border-radius:50%;border:2px solid #fff;background:#e0574a;padding:0;line-height:0;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:7;box-shadow:0 1px 5px rgba(16,17,18,.42)}
+  .devNode .devRm svg{width:9px;height:9px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round}
+  .devNode.sel .devRm,.devNode:hover .devRm{display:flex}
+  .devNode.drag .devRm{display:none!important}
+  body.ro .devNode .devRm,body.regions .devNode .devRm{display:none!important}
   .devNode.has-photo .devDot{background-size:cover;background-position:center;background-repeat:no-repeat;color:transparent}
   .devNode.has-photo .devDot svg{display:none}
   .devNode.has-photo .viewBadge{display:none}
@@ -1568,7 +1573,8 @@
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
-        '<div class="viewBadge" title="View photo"></div>';
+        '<div class="viewBadge" title="View photo"></div>'+
+        '<button class="devRm" title="Remove" aria-label="Remove"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
       (document.getElementById("planWorld")||document.getElementById("scene")).appendChild(el);   // devices ride the plan-world transform, aligned to the aerial
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d); ringDrag(el.querySelector(".ringGrip"),d);
       // Read-only (customer): tapping a camera marker opens its VIEW first (the enlarged photo popup,
@@ -1582,6 +1588,10 @@
       vb.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
       vb.addEventListener("click", function(e){ e.stopPropagation(); if(!d.photo) return;
         if(popId===d.id && popPinned){ hideViewPop(); } else { showViewPop(d, el, true); } });
+      // Inline remove on the marker — deletes this device straight from the plan (undoable via ↺, same as the side-panel ×). Staff only; locked on a submitted/approved survey.
+      var rm=el.querySelector(".devRm");
+      if(rm){ rm.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+        rm.addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return; hideViewPop(); removeDevice(d.id); }); }
       renderDevice(d);
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
