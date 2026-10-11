@@ -82,6 +82,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [err, setErr] = useState(null);
   const [dragSvc, setDragSvc] = useState(null);   // index of the service section being dragged
   const [overSvc, setOverSvc] = useState(null);   // index currently hovered as the drop target
+  const [dragItem, setDragItem] = useState(null); // cross-section line-item drag: { svcIdx, id }
   const [confirmSend, setConfirmSend] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [toast, setToast] = useState(null);
@@ -229,6 +230,23 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     const [m] = next.splice(from, 1);
     next.splice(to, 0, m);
     patchOption({ services: next });
+  }
+  // Move a top-level line item from the service it's being dragged from into another service
+  // (before `toId`, or appended when toId is null). Same-section drops are handled inside the editor.
+  function moveLineItem(toSvcIdx, toId) {
+    const src = dragItem;
+    if (!src || src.svcIdx === toSvcIdx) { setDragItem(null); return; }
+    const services = opt.services.map((s) => ({ ...s, items: (s.items || []).slice() }));
+    const fromItems = services[src.svcIdx]?.items; const toItems = services[toSvcIdx]?.items;
+    if (!fromItems || !toItems) { setDragItem(null); return; }
+    const fi = fromItems.findIndex((x) => x.id === src.id);
+    if (fi < 0) { setDragItem(null); return; }
+    const [moved] = fromItems.splice(fi, 1);
+    let at = toId ? toItems.findIndex((x) => x.id === toId) : toItems.length;
+    if (at < 0) at = toItems.length;
+    toItems.splice(at, 0, moved);
+    patchOption({ services });
+    setDragItem(null);
   }
 
   // ---- Import from the site survey (per-camera blocks w/ labor sub-items + locations) ----
@@ -671,6 +689,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             onHandleDragEnd: () => { setDragSvc(null); setOverSvc(null); },
             onDragOver: () => { if (dragSvc != null && dragSvc !== i) setOverSvc(i); },
             onDrop: () => { moveService(dragSvc, i); setDragSvc(null); setOverSvc(null); },
+          }}
+          itemDrag={readOnly ? undefined : {
+            active: dragItem,
+            svcIdx: i,
+            onStart: (id) => setDragItem({ svcIdx: i, id }),
+            onEnd: () => setDragItem(null),
+            onDrop: (toId) => moveLineItem(i, toId),
           }}
         />
       ))}

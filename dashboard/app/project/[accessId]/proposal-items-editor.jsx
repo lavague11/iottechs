@@ -91,7 +91,7 @@ const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 // NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
 const AMP_ADDON = "Rack & Mount";
 
-export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag }) {
+export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag, itemDrag }) {
   const flags = customerFlags || {};
   // Recomputed whenever the price book changes (priceBookVersion bumps after Save) — includes
   // renamed/priced defaults, minus hidden ones, plus any custom items added for this service.
@@ -114,8 +114,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [presetOpen, setPresetOpen] = useState(false); // preset-bundle manager modal
   const [presetVer, setPresetVer] = useState(0);       // bumps after a preset save to refresh chips
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
-  const [dragId, setDragId] = useState(null);   // line item being dragged
+  const [dragId, setDragId] = useState(null);   // line item being dragged (within THIS section)
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
+  // An item dragged from ANOTHER section is hovering here → this section is a cross-section drop target.
+  const crossItem = !!(itemDrag?.active && itemDrag.active.svcIdx !== itemDrag.svcIdx);
   // Camera recording system: NVR (+drives) and Displays each collapse to a compact, expandable
   // summary line via a "Done" button. Start collapsed when already configured (cleaner reopen).
   const [nvrDone, setNvrDone] = useState(() => (svc.items || []).some((it) => !it.sub && /^NVR/.test(it.name || "")));
@@ -449,9 +451,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   };
 
   return (
-    <div className={`prop-svc${svcDrag?.over ? " svc-over" : ""}`}
-         onDragOver={svcDrag?.dragging ? (e) => { e.preventDefault(); svcDrag.onDragOver(); } : undefined}
-         onDrop={svcDrag?.dragging ? (e) => { e.preventDefault(); svcDrag.onDrop(); } : undefined}>
+    <div className={`prop-svc${svcDrag?.over ? " svc-over" : ""}${crossItem ? " svc-item-target" : ""}`}
+         onDragOver={(svcDrag?.dragging || crossItem) ? (e) => { e.preventDefault(); if (svcDrag?.dragging) svcDrag.onDragOver(); } : undefined}
+         onDrop={(svcDrag?.dragging || crossItem) ? (e) => { e.preventDefault(); if (crossItem) itemDrag.onDrop(null); else svcDrag.onDrop(); } : undefined}>
       <div className="prop-svc-head">
         {svcDrag && (
           <span className="prop-svc-drag" draggable title="Drag to reorder"
@@ -672,14 +674,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {visibleItems.map((it, idx) => (
         <div key={it.id}
-             className={`prop-block${!readOnly ? " has-drag" : ""}${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}${dragId === it.id ? " prop-dragging" : ""}${overId === it.id && dragId && dragId !== it.id ? " prop-dragover" : ""}`}
+             className={`prop-block${!readOnly ? " has-drag" : ""}${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}${dragId === it.id ? " prop-dragging" : ""}${overId === it.id && (dragId || crossItem) && dragId !== it.id ? " prop-dragover" : ""}`}
              style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}
-             onDragOver={!readOnly && dragId ? (e) => { e.preventDefault(); if (overId !== it.id) setOverId(it.id); } : undefined}
-             onDrop={!readOnly && dragId ? (e) => { e.preventDefault(); moveItem(dragId, it.id); setDragId(null); setOverId(null); } : undefined}>
+             onDragOver={!readOnly && (dragId || crossItem) ? (e) => { e.preventDefault(); if (overId !== it.id) setOverId(it.id); } : undefined}
+             onDrop={!readOnly && (dragId || crossItem) ? (e) => { e.preventDefault(); e.stopPropagation(); if (crossItem) itemDrag.onDrop(it.id); else moveItem(dragId, it.id); setDragId(null); setOverId(null); } : undefined}>
           {!readOnly && (
             <span className="prop-drag-handle" draggable title="Drag to reorder"
-                  onDragStart={(e) => { setDragId(it.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", it.id); } catch {} }}
-                  onDragEnd={() => { setDragId(null); setOverId(null); }}>
+                  onDragStart={(e) => { setDragId(it.id); itemDrag?.onStart(it.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", it.id); } catch {} }}
+                  onDragEnd={() => { setDragId(null); setOverId(null); itemDrag?.onEnd(); }}>
               <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
             </span>
           )}
