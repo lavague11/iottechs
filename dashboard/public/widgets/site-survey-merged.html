@@ -375,13 +375,13 @@
     box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(6px);
     font-size:0;line-height:0;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .ctxbtn svg,#changeBgBtn svg,.ubtn svg,.showBtn svg,.plandim svg,#viewSel svg{
-    width:21px;height:21px;opacity:1;stroke-width:1.8}
+    width:21px;height:21px;opacity:1;stroke-width:1.8;stroke:currentColor;fill:none}
   #bgMore svg{width:21px;height:21px}
   .ctxbtn:hover,#changeBgBtn:hover,.ubtn:hover,.showBtn:hover,.plandim:hover,#bgMore:hover,#viewSel:hover{border-color:var(--ink)}
   .ubtn.on,.showBtn.on,.plandim.on,#viewSel.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  /* the ONE primary — Add (dark); angles + everything else stay quiet/neutral */
-  #addDeviceBtn{background:var(--ink);border-color:var(--ink);color:#fff}
-  #addDeviceBtn svg{stroke:#fff}
+  /* +Add is the ONE accented primary — gold icon on the same frosted square (reads over any aerial,
+     never a heavy black block); angles + Fit + everything else stay quiet ink. */
+  #addDeviceBtn svg{stroke:var(--gold);stroke-width:2}
   .ctxbar{gap:10px}
   .utils{gap:10px}
   /* bottom-right cluster sits in a row (Show · Fit · Focus), compact */
@@ -437,10 +437,8 @@
   .devNode.drag{z-index:9}
   .devNode.drag .fovWrap,.devNode.drag .coneSvg,.devNode.drag .ringWrap,.devNode.drag .icLabel{display:none!important}
   .devNode.drag .devDot{cursor:grabbing;box-shadow:0 0 0 3px rgba(185,138,46,.55),0 3px 12px rgba(16,17,18,.3)}
-  /* Add device: frosted + gold so it reads clearly over any aerial (not a heavy black block) */
-  #addDeviceBtn,#angleModeBtn{padding:0;width:40px;height:40px;justify-content:center;background:rgba(255,255,255,.92);border:1px solid rgba(16,17,18,.14);color:var(--gold);box-shadow:0 3px 14px rgba(16,17,18,.18);backdrop-filter:blur(6px)}
-  #addDeviceBtn:hover,#angleModeBtn:hover{background:#fff}
-  #addDeviceBtn svg,#angleModeBtn svg{stroke:var(--gold);stroke-width:2.2}
+  /* Sizing/colour for +Add and angles come from the unified canvas-control block above (frosted square,
+     +Add is the gold-accent primary, angles is quiet ink). Keep only the angle-mode ACTIVE state here. */
   #angleModeBtn.on{background:var(--ink);border-color:var(--ink)}
   #angleModeBtn.on svg{stroke:#fff}
   .devmenu{position:absolute;left:14px;top:56px;z-index:7;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 44px rgba(16,17,18,.18);padding:6px;min-width:212px;max-height:min(64vh,440px);overflow:auto;display:none}
@@ -569,8 +567,7 @@
        everything stays put. */
     #scene{--isz:20px}
     .devNode .icLabel{font-size:8px;padding:2px 5px}
-    .moon,.plandim,.ubtn{width:30px;height:30px}
-    .ctxbtn{padding:8px 11px;font-size:12px}
+    .moon{width:30px;height:30px}   /* canvas controls (.plandim/.ubtn/.ctxbtn) stay the unified 42px square — see the compact-control block */
     .door svg{width:24px;height:24px;margin-bottom:8px}
     .door{padding:16px 12px}
   }
@@ -672,8 +669,9 @@
             <button class="abtn atxt prim" data-a="done" title="Done">Done</button>
           </div>
           <div class="ctxbar">
-            <button class="ctxbtn" id="addDeviceBtn" title="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-            <button class="ctxbtn" id="angleModeBtn" title="Set camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
+            <button class="ctxbtn" id="addDeviceBtn" title="Add device" aria-label="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button class="ctxbtn" id="focusBtn" title="Fit" aria-label="Fit plan to view"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span id="focusBtnTxt" hidden>Focus</span></button>
+            <button class="ctxbtn" id="angleModeBtn" title="Camera angles" aria-label="Camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
           </div>
           <div class="devmenu" id="devMenu"></div>
           <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
@@ -700,7 +698,6 @@
               <div class="showRow"><label>Grid</label><div class="viewseg" id="gridSeg" role="group" aria-label="Grid"><button class="vbtn" type="button" data-g="0">Off</button><button class="vbtn" type="button" data-g="1">Light</button><button class="vbtn" type="button" data-g="2">Full</button></div></div>
             </div>
             <div style="display:flex;gap:8px">
-              <button class="showBtn" id="focusBtn" title="Fit" aria-label="Fit plan to view"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span id="focusBtnTxt" hidden>Focus</span></button>
               <button class="showBtn" id="showBtn" title="Show" aria-label="Show angles and coverage"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
               <!-- Focus = enter app-level fullscreen (handled by the React host). Hidden once already in focus (the header × exits). -->
               <button class="showBtn" id="fullBtn" title="Focus" aria-label="Enter focus mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
@@ -2577,8 +2574,14 @@
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
       if(idx!==1){ arm(null); devMenu.classList.remove("show"); }
-      // The Setup toolbar ("+" place · "↗" angles) shows only on the Setup step (1), not Submit (2).
-      document.querySelector(".ctxbar").style.display = (idx===1) ? "" : "none";
+      // Top-left control group: Fit lives here over ANY working canvas (both steps); + / angles are
+      // Setup-only. Setting display="" (not "flex") clears the inline value so the RO/frozen CSS that
+      // hides + / angles still applies for read-only viewers.
+      var ctxWorking=(idx===1)||(idx===0 && bgHasImage);
+      document.querySelector(".ctxbar").style.display = ctxWorking ? "flex" : "none";
+      var _adb=document.getElementById("addDeviceBtn"), _amb=document.getElementById("angleModeBtn");
+      if(_adb) _adb.style.display=(idx===1)?"":"none";
+      if(_amb) _amb.style.display=(idx===1)?"":"none";
       var sc=document.getElementById("showCtl"); if(sc) sc.style.display = (!chooser && !RO) ? "flex" : "none";
       backBtn.style.display = idx>0 ? "" : "none";   // Back stays beside the submit control
       unsubConfirm=false; clearTimeout(unsubTimer);  // changing steps drops any pending unsubmit confirm

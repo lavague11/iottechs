@@ -119,11 +119,8 @@ export default function SystemPlanner({
           <button role="tab" aria-selected={mode === "views"} className={`syp-tab${mode === "views" ? " on" : ""}`} onClick={() => setMode("views")}>Views</button>
         </div>
         <div className="syp-head-actions">
-          {/* Fullscreen lives on this line now; it focuses the plan (switches to Plans first). */}
-          <button className="syp-ico" title="Fullscreen" aria-label="Fullscreen plan"
-            onClick={() => { setMode("plan"); setTimeout(() => { try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch {} }, 0); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
-          </button>
+          {/* Focus (fullscreen) now lives ON the plan canvas itself (the ⤢ button), so it's no longer
+              duplicated on this line — the Plans/Views row stays just the mode switch + walkthrough. */}
           {/* Walkthrough is just a play button now (icon only) — Consulting stage. */}
           {canWalk && (
             <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
