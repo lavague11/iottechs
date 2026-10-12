@@ -249,8 +249,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     chrome = false;
   }
 
-  function newPage() {
-    doc.addPage();
+  function newPage(orient) {
+    // Force an orientation when it matters (the mockup appendix must stay PORTRAIT even though the
+    // Site Survey sheets right before it are landscape — addPage() with no args inherits the last
+    // page's orientation, which was landing the phone mockups on wide landscape pages).
+    if (orient) doc.addPage("letter", orient); else doc.addPage();
     drawHeader();
     drawFooter();
     return TOP;
@@ -862,7 +865,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     mockupImages.forEach((src, i) => {
       const d = fit(src, availW - 2 * pad, 250);   // cap height so two stack on one page
       if (!d) return;
-      if (i % 2 === 0) { y = newPage(); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
+      if (i % 2 === 0) { y = newPage("portrait"); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
       const imgX = margin + (availW - d.w) / 2;
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
       doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");

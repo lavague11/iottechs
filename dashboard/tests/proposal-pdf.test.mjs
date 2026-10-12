@@ -108,13 +108,20 @@ test("document order: Proposal → Site Survey → System Mockup (no Terms page 
   const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
   const JPG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
   const surveyImages = [{ name: "Floor 1", img: PNG, devices: [{ code: "C1", label: "Driveway 1" }], counts: { canonical: 1, rendered: 1 } }];
-  const { footers } = render2(proposal(3), { surveyImages, mockupImages: [JPG] });
+  const { footers, doc } = render2(proposal(3), { surveyImages, mockupImages: [JPG] });
   const firstOf = (p) => footers.findIndex((f) => f.startsWith(p));
   assert.ok(firstOf("Proposal") === 0, "proposal pages come first");
   assert.ok(firstOf("Survey") > firstOf("Proposal"), "survey after the proposal");
   assert.ok(firstOf("Mockup") > firstOf("Survey"), "mockup after the survey");
   assert.ok(footers.at(-1).startsWith("Mockup | "), "mockup is the last section (no Terms page)");
   assert.ok(!footers.some((f) => f.startsWith("Terms")), "no Terms page in the proposal PDF");
+  // Orientation: survey sheets are landscape, but the mockup appendix must stay PORTRAIT even though it
+  // follows them (addPage inherits the previous page's orientation — the phone mockups were landing on
+  // wide landscape pages and not fitting).
+  const dims = (pg) => { doc.setPage(pg); return { w: doc.internal.pageSize.getWidth(), h: doc.internal.pageSize.getHeight() }; };
+  const sd = dims(firstOf("Survey") + 1), md = dims(firstOf("Mockup") + 1);
+  assert.ok(sd.w > sd.h, "site-survey sheet is landscape");
+  assert.ok(md.w < md.h, "system-mockup page is portrait");
 });
 function render2(p, attachments) {
   const trace = [], footers = [];
