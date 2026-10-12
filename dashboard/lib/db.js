@@ -1226,6 +1226,18 @@ function init() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_events_project ON project_events(project_access_id)`);
 
+  // Per-user "recently opened" projects — powers the dashboard launchpad. One row per (user, project),
+  // bumped on every open, so the six most-recent DISTINCT projects a user touched are a cheap query.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_views (
+      user_id           INTEGER NOT NULL,
+      project_access_id TEXT NOT NULL,
+      last_viewed_at    TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (user_id, project_access_id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pviews_user ON project_views(user_id, last_viewed_at)`);
+
   // ---- Server copy of the browser tools' working data (survey / mockup / schedule) ----
   // These tools draft in localStorage for speed; this table is the authoritative backup so a
   // cleared cache or a different device never loses a site survey. One row per project+tool.
@@ -2270,7 +2282,7 @@ export function openPinConflictTicketIfAny(pin, label, { skipUserId = null, skip
   return { ticketId, conflicts };
 }
 
-const DB_VER = "v41";   // v41: seed accurate self-monitoring SEO fact (lib/seo/schema.js)
+const DB_VER = "v42";   // v42: project_views table (per-user recently-opened projects for the dashboard launchpad)
 const g = globalThis;
 
 // Open (and migrate/seed) the database on first real use — NOT at import time. During
@@ -6315,6 +6327,31 @@ export function requestNotePublic(accessId, id) {
 // Job Log events — append-only activity (calls, etc.), newest first.
 export function getProjectEvents(accessId) {
   return db.prepare("SELECT * FROM project_events WHERE project_access_id=? ORDER BY id DESC LIMIT 200").all(String(accessId)).map((r) => ({ ...r }));
+}
+// Dashboard launchpad: per-user recently-opened projects + the cross-project business feed.
+export function recordProjectView(userId, accessId) {
+  if (!userId || !accessId) return;
+  try {
+    db.prepare(`INSERT INTO project_views (user_id, project_access_id, last_viewed_at)
+                VALUES (?, ?, datetime('now','localtime'))
+                ON CONFLICT(user_id, project_access_id) DO UPDATE SET last_viewed_at = datetime('now','localtime')`)
+      .run(Number(userId), String(accessId));
+  } catch { /* view tracking is best-effort — never block the project page */ }
+}
+export function getRecentProjectIdsForUser(userId, limit = 6) {
+  if (!userId) return [];
+  try {
+    return db.prepare("SELECT project_access_id FROM project_views WHERE user_id=? ORDER BY last_viewed_at DESC LIMIT ?")
+      .all(Number(userId), Number(limit)).map((r) => r.project_access_id);
+  } catch { return []; }
+}
+// Recent BUSINESS events (the Job Log), cross-project — never the login/PIN audit noise (that's login_logs).
+export function getRecentBusinessEvents(limit = 6) {
+  return db.prepare(`
+    SELECT e.id, e.kind, e.label, e.actor, e.created_at, e.project_access_id, p.customer AS project_customer
+    FROM project_events e LEFT JOIN projects p ON p.access_id = e.project_access_id
+    ORDER BY e.id DESC LIMIT ?
+  `).all(Number(limit)).map((r) => ({ ...r }));
 }
 export function logProjectEvent(accessId, { kind, label, actor }) {
   db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor) VALUES (?,?,?,?)")

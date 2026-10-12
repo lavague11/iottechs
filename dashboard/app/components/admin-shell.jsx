@@ -835,6 +835,7 @@ const CSS = `
 
 .apx .kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:22px 0}
 .apx .kpi-row.k4{grid-template-columns:repeat(4,1fr)}
+.apx .kpi-row.k3{grid-template-columns:repeat(3,1fr)}
 .apx .kpi-row.k5{grid-template-columns:repeat(5,1fr)}
 .apx .kpi{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 14px}
 .apx .kpi-link{display:block;transition:transform .15s,box-shadow .18s,border-color .18s}
@@ -937,7 +938,27 @@ const CSS = `
 .apx .today-time{font-size:.78rem;font-weight:700;color:var(--gold-deep);white-space:nowrap;flex:none;width:72px;font-variant-numeric:tabular-nums}
 .apx .today-title{font-weight:600;font-size:.86rem}
 .apx .today-cust{font-size:.75rem;color:var(--muted);margin-top:1px}
-@media(max-width:720px){.apx .pipe-strip{grid-template-columns:repeat(3,1fr)}}
+.apx .today-at{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+/* Recent Projects — compact launchpad cards (3×2) */
+.apx .rp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 22px}
+.apx .rp-card{display:block;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 15px;transition:transform .15s,box-shadow .18s,border-color .18s;color:inherit}
+.apx .rp-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px -16px rgba(14,19,32,.35);border-color:rgba(201,169,110,.5)}
+.apx .rp-name{font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .rp-id{font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .rp-svc{color:var(--muted)}
+.apx .rp-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px}
+.apx .rp-next{font-size:.76rem;font-weight:600;color:var(--gold-deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .na-count{font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:100px;background:var(--red-soft,rgba(231,76,60,.1));color:var(--red,#c0392b);vertical-align:middle;margin-left:4px}
+/* Collapsed empty-schedule row (no giant blank panel) */
+.apx .sched-empty{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:18px;color:inherit}
+.apx .sched-empty:hover{border-color:rgba(201,169,110,.5)}
+.apx .se-lbl{font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.apx .se-msg{color:var(--muted);font-size:.86rem}
+.apx .se-more{margin-left:auto;font-size:.8rem;font-weight:600;color:var(--gold-deep)}
+.apx .act-click{color:inherit;transition:.12s}
+.apx .act-click:hover{background:var(--bg-soft)}
+@media(max-width:1100px){.apx .rp-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.apx .pipe-strip{grid-template-columns:repeat(3,1fr)}.apx .rp-grid{grid-template-columns:1fr}.apx .kpi-row.k3{grid-template-columns:1fr}}
 
 .apx .ticket{display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:.12s}
 .apx .ticket:last-child{border-bottom:none}

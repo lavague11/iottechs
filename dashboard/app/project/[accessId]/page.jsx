@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -124,6 +124,16 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   };
 
   const initialView  = await resolveSessionView(p, previewRole, previewToken);
+
+  // Track per-user "recently opened" for the dashboard launchpad (staff only, deduped upsert, best-effort).
+  if (!previewRole) {
+    try {
+      const jar = await cookies();
+      const tok = jar.get("iot_session")?.value;
+      const su  = tok ? await parseToken(tok) : null;
+      if (su?.id && ["admin", "manager", "sales", "tech"].includes(su.role)) recordProjectView(su.id, p.access_id);
+    } catch { /* never block the project page on view tracking */ }
+  }
 
   // A logged-in user with NO access to THIS specific project shouldn't be dumped on the PIN gate —
   // that's a confusing loop (e.g. after a Google sign-in on a project they don't own). Send them to
