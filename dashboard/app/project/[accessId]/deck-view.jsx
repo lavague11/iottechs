@@ -45,31 +45,22 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [statusOpen, setStatusOpen] = useState(false);   // smart status pill popover
   const [moved, setMoved] = useState(false);
   const [compact, setCompact] = useState(false);         // scrolled into content → condense the header (reclaim vertical space)
-  // Auto-hiding project header (MOBILE only) — like mobile browser chrome: scroll down → the project
-  // context slides away; a small reverse scroll brings it back; it quietly re-hides after a few idle
-  // seconds. Direction-based with a ~24px threshold so bounce/tiny moves don't toggle it.
-  const [headHidden, setHeadHidden] = useState(false);
+  // Auto-hiding project header (mobile + desktop) — like browser chrome: scroll down → the project
+  // context slides away and only the logo + project name stay by the top. The FULL header returns only
+  // when you scroll all the way back to the top; a caret by the name opens it on demand while collapsed.
+  const [headHidden, setHeadHidden] = useState(false);   // collapsed by scrolling down
+  const [manualOpen, setManualOpen] = useState(false);   // user tapped the caret to use the header while collapsed
   const scrollRef = useRef({ y: 0, acc: 0 });
-  const revealT = useRef(null);
-  const revealHandleY = useRef(null);   // touch-start Y for the bottom reveal pull
   const headerBusy = menuOpen || statusOpen;             // a header dropdown is open → keep the header visible
-  const headerBusyRef = useRef(false); headerBusyRef.current = headerBusy;
-  const headerHidden = headHidden && !headerBusy;
-  useEffect(() => () => clearTimeout(revealT.current), []);
-  function scheduleReHide() { clearTimeout(revealT.current); revealT.current = setTimeout(() => { if (!headerBusyRef.current && scrollRef.current.y > 40) setHeadHidden(true); }, 2800); }
-  function revealHeaderTemporarily() { scrollRef.current.acc = 0; setHeadHidden(false); scheduleReHide(); }
-  // Threshold + hysteresis so the header doesn't flicker between expanded/compact around one scroll line.
+  const headerHidden = headHidden && !manualOpen && !headerBusy;
+  // Collapse on a downward scroll past a ~24px threshold; the full header comes back only at the very top.
   function onDeckScroll(e) {
     const y = e.currentTarget.scrollTop || 0;
     setCompact((c) => (c ? y > 36 : y > 76));
-    const mobile = typeof window !== "undefined" && window.matchMedia("(max-width:768px)").matches;
-    if (!mobile) { if (headHidden) setHeadHidden(false); return; }   // desktop never auto-hides
     const st = scrollRef.current, dy = y - st.y; st.y = y;
-    if (y < 40) { st.acc = 0; clearTimeout(revealT.current); if (headHidden) setHeadHidden(false); return; }   // near top → always visible
-    if (st.acc !== 0 && Math.sign(dy) !== Math.sign(st.acc)) st.acc = 0;                                        // direction reversed → reset accumulation (no show/hide thrash)
-    st.acc += dy;
-    if (st.acc > 24) { st.acc = 0; clearTimeout(revealT.current); if (!headerBusy) setHeadHidden(true); }       // scrolled DOWN past threshold → hide
-    else if (st.acc < -24) { st.acc = 0; setHeadHidden(false); scheduleReHide(); }                              // scrolled UP past threshold → reveal, re-hide after idle
+    if (y < 40) { st.acc = 0; if (headHidden) setHeadHidden(false); if (manualOpen) setManualOpen(false); return; }  // back at top → full header
+    if (dy > 0) { st.acc += dy; if (st.acc > 24) { st.acc = 0; if (!headHidden) setHeadHidden(true); if (manualOpen) setManualOpen(false); } }  // scrolled DOWN → collapse (and close a manual peek)
+    else if (dy < 0) { st.acc = 0; }                                                                               // scrolling up does NOT reveal — only reaching the top does
   }
   // "Complete but unread" markers blink green until the viewer has actually looked at the finished
   // stage; once seen they go solid green. Seen-state is per viewer (this browser), remembered across
@@ -275,6 +266,13 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       {/* top bar */}
       <header className="dv-top">
         <a className="dv-logo" href="/go" title="IOT TECHS" aria-label="IOT TECHS home"><Wordmark height={16} /></a>
+        {/* When the project header collapses on scroll, the name rides next to the logo as a persistent
+            indicator, with a caret to open the full header on demand without scrolling to the top. */}
+        <button className="dv-mini-name" data-stop title={customer?.name}
+          aria-label="Show project header" onClick={() => setManualOpen((o) => !o)}>
+          <span className="dv-mini-txt">{customer?.name}</span>
+          <svg className="dv-mini-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>
@@ -558,17 +556,6 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         ))}
       </main>
 
-      {/* Bottom reveal handle (mobile) — a subtle grab bar to peek the project header back without
-          scrolling to the top. Tap or short upward pull; it auto-hides again after a few idle seconds. */}
-      {headerHidden && (
-        <button className="dv-head-reveal" aria-label="Show project header"
-          onClick={revealHeaderTemporarily}
-          onTouchStart={(e) => { revealT.current && clearTimeout(revealT.current); revealHandleY.current = e.touches[0]?.clientY ?? null; }}
-          onTouchMove={(e) => { const y0 = revealHandleY.current; const y1 = e.touches[0]?.clientY; if (y0 != null && y1 != null && y0 - y1 > 30) { revealHandleY.current = null; revealHeaderTemporarily(); } }}>
-          <span className="dv-head-grab" />
-        </button>
-      )}
-
       {/* full-screen tool overlay — heavy tools (Site Survey, Proposal…) get the whole screen */}
       {overlay && (
         <div className="dv-overlay">
@@ -706,20 +693,23 @@ const CSS = `
 .dv-top{transition:height .2s var(--dv-e),opacity .15s}
 .dv-jobbar{transition:padding .2s var(--dv-e)}
 .dv-title{transition:font-size .2s var(--dv-e)}
-.dv-compact .dv-top{height:0;opacity:0;pointer-events:none;overflow:hidden;padding-top:0;padding-bottom:0}
 .dv-compact .dv-jobbar{padding-top:8px}
 .dv-compact .dv-title{font-size:18px}
 .dv-compact .dv-code{display:none}
-/* Auto-hiding project header (mobile): collapse the whole project context out of the way, smoothly. */
-@media(max-width:768px){
-  .dv-head-hidden .dv-top,.dv-head-hidden .dv-jobbar,.dv-head-hidden .dv-gate,.dv-head-hidden .dv-rail{height:0!important;min-height:0!important;padding-top:0!important;padding-bottom:0!important;margin:0!important;opacity:0;overflow:hidden;pointer-events:none;transform:translateY(-8px)}
-  .dv-top,.dv-jobbar,.dv-gate,.dv-rail{transition:height .22s var(--dv-e),opacity .18s var(--dv-e),padding .22s var(--dv-e),margin .22s var(--dv-e),transform .22s var(--dv-e)}
-}
-.dv-head-reveal{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 7px);z-index:150;width:84px;height:28px;display:none;align-items:center;justify-content:center;border:0;background:transparent;cursor:pointer;opacity:.45;transition:opacity .15s;-webkit-tap-highlight-color:transparent}
-.dv-head-reveal:active{opacity:.85}
-.dv-head-grab{width:40px;height:4px;border-radius:999px;background:var(--dv-ink,#101418);opacity:.6}
-@media(max-width:768px){.dv-head-reveal{display:flex}}
-@media(prefers-reduced-motion:reduce){.dv-top,.dv-jobbar{transition:opacity .18s}}
+/* Auto-hiding project header (mobile AND desktop) — like browser chrome: scroll down collapses the
+   project context (status · workflow · progress), scroll up brings it back. The logo ROW stays put so a
+   compact project name can ride next to the logo as a persistent indicator. */
+.dv-head-hidden .dv-jobbar,.dv-head-hidden .dv-gate,.dv-head-hidden .dv-rail{height:0!important;min-height:0!important;padding-top:0!important;padding-bottom:0!important;margin:0!important;opacity:0;overflow:hidden;pointer-events:none;transform:translateY(-8px)}
+.dv-jobbar,.dv-gate,.dv-rail{transition:height .22s var(--dv-e),opacity .18s var(--dv-e),padding .22s var(--dv-e),margin .22s var(--dv-e),transform .22s var(--dv-e)}
+/* Collapsed-state project name + caret by the logo. A flex button; min-width:0 lets max-width:0 actually
+   collapse it (flex items default to min-width:auto, which otherwise pins it open). Clicking opens the
+   full header on demand (manualOpen) — which removes .dv-head-hidden and tucks this back away. */
+.dv-mini-name{display:flex;align-items:center;gap:3px;min-width:0;max-width:0;opacity:0;overflow:hidden;border:0;background:transparent;padding:0;margin:0;cursor:pointer;color:var(--dv-ink);font-size:14px;font-weight:600;line-height:1;-webkit-tap-highlight-color:transparent;transition:max-width .26s var(--dv-e),opacity .2s var(--dv-e),margin .26s var(--dv-e)}
+.dv-mini-txt{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dv-mini-caret{flex:none;opacity:.55}
+.dv-mini-name:active{opacity:.7}
+.dv-head-hidden .dv-mini-name{max-width:56vw;opacity:1;margin-left:2px}
+@media(prefers-reduced-motion:reduce){.dv-top,.dv-jobbar,.dv-mini-name{transition:opacity .18s}}
 /* Property field inside the info card — the toggle reads as neutral metadata (icon + word + chevron),
    matching the other values; not a bordered/coloured pill. */
 .dv-field-prop dd{display:flex}

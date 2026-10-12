@@ -157,6 +157,14 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     return () => { oc?.removeEventListener?.("change", sync); omq.removeEventListener?.("change", sync); window.removeEventListener("orientationchange", sync); };
   }, []);
 
+  // External focus trigger — the System Planner's fullscreen control lives on its header line (not in
+  // the survey's own bar), so it asks the survey to enter focus mode via this event.
+  useEffect(() => {
+    function onFocus(e) { if (!e.detail || e.detail.project === accessId) setFs(true); }
+    window.addEventListener("iotSurveyFocus", onFocus);
+    return () => window.removeEventListener("iotSurveyFocus", onFocus);
+  }, [accessId]);
+
   // Full-screen overlay: lock page scroll + Esc to exit.
   useEffect(() => {
     if (!fs) return;

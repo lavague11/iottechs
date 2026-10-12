@@ -118,12 +118,19 @@ export default function SystemPlanner({
           <button role="tab" aria-selected={mode === "plan"} className={`syp-tab${mode === "plan" ? " on" : ""}`} onClick={() => setMode("plan")}>Plans</button>
           <button role="tab" aria-selected={mode === "views"} className={`syp-tab${mode === "views" ? " on" : ""}`} onClick={() => setMode("views")}>Views</button>
         </div>
-        {canWalk && (
-          <button className="syp-walk" onClick={() => setWalkOpen(true)}>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-            Walkthrough
+        <div className="syp-head-actions">
+          {/* Fullscreen lives on this line now; it focuses the plan (switches to Plans first). */}
+          <button className="syp-ico" title="Fullscreen" aria-label="Fullscreen plan"
+            onClick={() => { setMode("plan"); setTimeout(() => { try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch {} }, 0); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
           </button>
-        )}
+          {/* Walkthrough is just a play button now (icon only) — Consulting stage. */}
+          {canWalk && (
+            <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
@@ -162,10 +169,14 @@ const CSS = `
   color:var(--dv-meta,#787D84);padding:7px 16px;border-radius:100px;transition:background .18s,color .18s}
 .syp-tab:hover{color:var(--dv-ink,#101418)}
 .syp-tab.on{background:var(--dv-ink,#101418);color:#fff}
-.syp-walk{appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;display:inline-flex;align-items:center;gap:7px;
-  padding:8px 16px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);transition:background .18s,border-color .18s}
-.syp-walk:hover{background:#fff;border-color:var(--dv-ink,#101418)}
-.syp-walk svg{margin-left:-1px}
+.syp-head-actions{display:inline-flex;align-items:center;gap:8px}
+.syp-ico,.syp-play{appearance:none;cursor:pointer;width:38px;height:38px;border-radius:100px;display:inline-flex;align-items:center;justify-content:center;transition:background .18s,border-color .18s}
+.syp-ico{border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418)}
+.syp-ico:hover{background:#fff;border-color:var(--dv-ink,#101418)}
+.syp-ico svg{width:16px;height:16px}
+.syp-play{border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff}
+.syp-play:hover{background:#000}
+.syp-play svg{margin-left:1px}
 .syp-pane[hidden]{display:none!important}
 /* PLAN pane flows like a document — bound only the MAP, never the whole survey (which would clip the
    camera roster below it). The survey node itself stays auto-height so the roster + comments flow. */
@@ -179,7 +190,8 @@ const CSS = `
    widget's redundant descriptive tag ("Live survey editor · N floors" / the empty mockup tag) and keep
    only the functional controls (fullscreen, etc.) pinned to the right of a slim bar. */
 .syp .ss-embed-tag{display:none}
-.syp .ss-embed-bar{justify-content:flex-end;padding-bottom:8px}
+/* The fullscreen control now lives on the Plans/Views line (syp-head), so the survey's own slim bar is hidden here. */
+.syp .ss-embed-bar{display:none}
 .syp-empty{text-align:center;padding:40px 16px;color:var(--dv-meta,#787D84);font-size:.86rem;border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px}
 /* One submit surface — both tools' Submit/Approve controls, always visible under either mode. */
 .syp-submit{margin-top:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:6px 16px;display:flex;flex-direction:column}
