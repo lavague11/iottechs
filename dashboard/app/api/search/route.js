@@ -1,5 +1,5 @@
 import { getSessionUser } from "../../../lib/session";
-import { getVisibleJobs, getTickets, listServiceCalls, getStaffUsers, getRecentProjectIdsForUser, getAllJobs } from "../../../lib/db";
+import { getVisibleJobs, getTickets, listServiceCalls, getStaffUsers, getRecentProjectIdsForUser, listProposalsForSearch } from "../../../lib/db";
 import { searchEntities } from "../../../lib/search";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +34,14 @@ export async function GET(req) {
   if (!isMgr) tickets = tickets.filter((t) => (t.audienceList || []).includes(role) || t.assignee_id === user.id || t.opened_by_id === user.id);
   const serviceCalls = (isMgr || role === "tech") ? listServiceCalls() : [];
   const technicians = isMgr ? getStaffUsers().filter((u) => u.role === "tech").map((u) => ({ id: u.id, name: u.name, phone: u.phone, email: u.email })) : [];
+  // Proposals: admin/manager/sales only, scoped to projects this user can see.
+  let proposals = [];
+  if (isMgr || role === "sales") {
+    const visible = new Set(projects.map((p) => p.access_id));
+    proposals = listProposalsForSearch().filter((pr) => visible.has(pr.project_access_id));
+  }
 
-  const data = searchEntities({ q, projects, tickets, serviceCalls, technicians });
+  const data = searchEntities({ q, projects, proposals, tickets, serviceCalls, technicians });
   // Sales/tech don't get a Customers directory group (they reach customers through their projects).
   const groups = (role === "sales" || isMgr) ? data.groups : data.groups.filter((g) => g.type !== "customer");
   return Response.json({ groups, total: groups.reduce((s, g) => s + g.items.length, 0) });

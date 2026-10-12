@@ -5617,6 +5617,16 @@ export function getActiveProposal(accessId) {
   ).get(String(accessId));
   return r ? { ...r, created_by_name: resolvePreparerName(r.created_by_name) } : null;
 }
+// The current (non-superseded) proposal per project, with its project — for the global search Proposals group.
+export function listProposalsForSearch() {
+  return db.prepare(`
+    SELECT pr.id, pr.project_access_id, pr.status, pr.version, pr.signed_name, p.customer, p.address
+    FROM proposals pr JOIN projects p ON p.access_id = pr.project_access_id
+    WHERE pr.id = (SELECT x.id FROM proposals x WHERE x.project_access_id = pr.project_access_id
+                    AND x.status != 'superseded' ORDER BY x.version DESC, x.id DESC LIMIT 1)
+    ORDER BY pr.id DESC
+  `).all().map((r) => ({ ...r }));
+}
 // The most recent version the customer actually SIGNED (frozen snapshot) — what a re-sign is
 // compared against. Null when nothing was ever signed.
 export function getLatestSignedVersion(accessId) {

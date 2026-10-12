@@ -763,6 +763,7 @@ const CSS = `
 .apx .gs-ic{flex:none;width:28px;height:28px;border-radius:7px;display:grid;place-items:center;background:var(--bg-soft);color:var(--muted)}
 .apx .gs-ic svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .apx .gs-ic-project{background:#faf4e8;color:var(--gold-deep)}
+.apx .gs-ic-proposal{background:var(--accent-soft);color:var(--accent)}
 .apx .gs-ic-customer{background:var(--accent-soft);color:var(--accent)}
 .apx .gs-ic-ticket{background:var(--red-soft);color:var(--red)}
 .apx .gs-ic-service{background:var(--purple-soft);color:var(--purple)}

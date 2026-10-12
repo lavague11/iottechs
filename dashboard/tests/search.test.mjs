@@ -7,6 +7,7 @@ const projects = [
   { access_id: "ASC0042", customer: "Crazy Cars", address: "658 US-22", contact_phone: "(646) 555-0000", service: "Sound System", stageLabel: "Survey" },
   { access_id: "ASC0046", customer: "Zain Farooq", address: "12 Main St", contact_phone: "(201) 555-9999", service: "Security Cameras", stageLabel: "Proposal" },
 ];
+const proposals = [{ id: 9, project_access_id: "ASC0050", status: "sent", version: 2, customer: "Nobo Restaurant", address: "1400 Palisade Ave" }];
 const tickets = [{ id: 7, subject: "Camera offline", project_customer: "Nobo Restaurant", status: "open", priority: "urgent" }];
 const serviceCalls = [{ id: 3, customer: "Crazy Cars", address: "658 US-22", stage: "scheduled" }];
 const technicians = [{ id: 11, name: "Mike Tech", phone: "(201) 555-7777" }];
@@ -58,6 +59,17 @@ test("direct entity hit outranks a weak address hit", () => {
   const { groups } = searchEntities({ q: "crazy cars", projects });
   const items = groups.find((g) => g.type === "project").items;
   assert.equal(items[0].id, "ASC0042");   // name match, not some address partial
+});
+
+test("proposals are a distinct group linking to the proposal section", () => {
+  const { groups } = searchEntities({ q: "nobo", projects, proposals });
+  const g = groups.find((x) => x.type === "proposal");
+  assert.ok(g, "proposal group present");
+  assert.equal(g.items[0].href, "/project/ASC0050?open=proposal");
+  assert.match(g.items[0].subtitle, /Sent/);
+  // ordered right after projects
+  const types = groups.map((x) => x.type);
+  assert.ok(types.indexOf("proposal") === types.indexOf("project") + 1);
 });
 
 test("empty query returns nothing", () => {

@@ -34,11 +34,12 @@ function scoreFields(ql, qd, { id, name, phone, email, address, text }) {
   return best;
 }
 
-const TYPE_ORDER = ["project", "customer", "ticket", "service", "technician"];
-const TYPE_LABEL = { project: "Projects", customer: "Customers", ticket: "Tickets", service: "Service Calls", technician: "Technicians" };
+const TYPE_ORDER = ["project", "proposal", "customer", "ticket", "service", "technician"];
+const TYPE_LABEL = { project: "Projects", proposal: "Proposals", customer: "Customers", ticket: "Tickets", service: "Service Calls", technician: "Technicians" };
+const PROP_STATUS = { draft: "Draft", sent: "Sent", changes_requested: "Changes requested", accepted: "Accepted", declined: "Declined", signed: "Signed" };
 
-// input: { q, projects?, tickets?, serviceCalls?, technicians?, perGroup? }
-export function searchEntities({ q, projects = [], tickets = [], serviceCalls = [], technicians = [], perGroup = 5 } = {}) {
+// input: { q, projects?, proposals?, tickets?, serviceCalls?, technicians?, perGroup? }
+export function searchEntities({ q, projects = [], proposals = [], tickets = [], serviceCalls = [], technicians = [], perGroup = 5 } = {}) {
   const ql = lc(q), qd = digits(q);
   if (!ql) return { groups: [], total: 0 };
   const out = [];
@@ -63,6 +64,14 @@ export function searchEntities({ q, projects = [], tickets = [], serviceCalls = 
     if (s > 0) out.push({ type: "customer", score: s - 1, id: c.name, title: c.name,
       subtitle: [c.phone, c.email].filter(Boolean).join(" · ") || `${c.count} project${c.count === 1 ? "" : "s"}`,
       href: `/customers/${encodeURIComponent(c.name)}` });
+  }
+
+  for (const pr of proposals) {
+    const status = PROP_STATUS[pr.status] || pr.status || "";
+    const s = scoreFields(ql, qd, { id: pr.project_access_id, name: pr.customer, address: pr.address, text: `proposal ${status} ${pr.signed_name || ""}` });
+    if (s > 0) out.push({ type: "proposal", score: s - 1, id: pr.project_access_id, title: pr.customer || pr.project_access_id,
+      subtitle: [pr.project_access_id, status, pr.version ? `v${pr.version}` : null].filter(Boolean).join(" · "),
+      href: `/project/${pr.project_access_id}?open=proposal` });
   }
 
   for (const t of tickets) {
