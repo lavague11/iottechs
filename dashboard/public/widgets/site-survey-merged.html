@@ -223,6 +223,20 @@
   .fsMore svg{width:18px;height:18px;fill:currentColor}
   .fsAdd{margin-top:8px;border:1px dashed var(--line);background:var(--soft);color:var(--ink);border-radius:12px;padding:13px;font:700 13.5px var(--sans);cursor:pointer}
   .fsAdd:hover{border-color:var(--gold)}
+  /* ••• More sheet — compact sections (Mode / Step / Floor / Background) */
+  .moreBody{overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:2px 2px 4px}
+  .moreSec{display:flex;flex-direction:column;gap:8px}
+  .moreLbl{font:800 11px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .moreSeg{width:100%}
+  .moreSeg .vbtn,.moreSeg button{flex:1;height:44px;font:700 13.5px var(--sans);background:#fff;border:0;border-left:1px solid var(--line);color:var(--ink);cursor:pointer}
+  .moreSeg button:first-child{border-left:0}
+  .moreSeg button.on{background:var(--ink);color:#fff}
+  .moreRow{display:flex;align-items:center;gap:11px;width:100%;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:600 14.5px var(--sans);cursor:pointer;text-align:left}
+  .moreRow:hover{border-color:var(--ink)}
+  .moreRow svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .moreRow>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #moreFloorBtn svg{opacity:.5;margin-left:auto}
+  #moreBgSec{gap:8px}
   .fsActions{display:flex;gap:8px;padding:2px 12px 8px}
   .fsActions button{flex:1;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px;font:600 13px var(--sans);cursor:pointer;color:var(--ink)}
   .fsActions button:hover{border-color:var(--ink)}
@@ -374,6 +388,10 @@
   .showCtl>div{gap:10px!important}
   /* Already fullscreen → the canvas Focus button is redundant (the host header × exits). */
   body.focusmode #fullBtn{display:none}
+  /* Focus mode = plan first. The bottom survey bar (Background/Setup · Floor · Back) and the dim control
+     move into the ••• sheet, so the canvas fills ~the whole screen. Only + Fit Undo Show ••• remain. */
+  body.focusmode #surveyWiz{display:none}
+  body.focusmode .plandim{display:none}
   .showPop{display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
   .showPop.open{display:flex}
   .showRow{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:6px 8px;min-width:150px}
@@ -736,6 +754,35 @@
     </div>
   </div>
 
+  <!-- ••• More — one compact bottom sheet for the secondary controls (never pinned to the canvas).
+       In focus mode it's the home for Mode / Floor / Background·Setup; edit/replace background always here. -->
+  <div class="floorSheet" id="moreSheet" aria-hidden="true">
+    <div class="fsScrim" id="moreScrim"></div>
+    <div class="fsPanel" role="dialog" aria-label="Plan options">
+      <div class="fsGrab"></div>
+      <div class="moreBody">
+        <div class="moreSec" id="moreModeSec">
+          <div class="moreLbl">Mode</div>
+          <div class="viewseg moreSeg" id="moreMode" role="group" aria-label="Mode"><button type="button" data-v="layered">Layered</button><button type="button" data-v="plan">Plan</button><button type="button" data-v="full">Satellite</button></div>
+        </div>
+        <div class="moreSec" id="moreStepSec">
+          <div class="moreLbl">Step</div>
+          <div class="viewseg moreSeg" id="moreStep" role="group" aria-label="Step"><button type="button" data-s="0">Background</button><button type="button" data-s="1">Setup</button></div>
+        </div>
+        <div class="moreSec" id="moreFloorSec">
+          <div class="moreLbl">Floor</div>
+          <button class="moreRow" id="moreFloorBtn" type="button"><span id="moreFloorName">Floor 1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+        <div class="moreSec" id="moreBgSec">
+          <div class="moreLbl">Background</div>
+          <button class="moreRow" id="moreEditBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span>Edit background</span></button>
+          <button class="moreRow" id="moreBuildPlan" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create floor plan</span></button>
+          <button class="moreRow" id="moreReplaceBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- background-build mode: the satellite tool's OWN bar takes over this slot;
        a slim strip on top keeps the breadcrumb so Back is obvious -->
   <div class="wiz" id="bgWiz" style="display:none">
@@ -907,12 +954,13 @@
     // Top-left Edit background shows over a real floor on the Background tab (not the chooser, not inside a
     // tool). The bottom-right ••• (Create Hybrid Floor Plan) shows only on an aerial-not-yet-plan floor.
     function updateBgActions(){ var w=document.getElementById("bgActions");
-      var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);
-      if(w) w.style.display = show ? "flex" : "none";
-      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display = (show && canBuild(f)) ? "flex" : "none";   // Create Hybrid only on an aerial-not-yet-plan floor
-      var pm=document.getElementById("planMore"); if(pm){ pm.style.display = show ? "flex" : "none"; if(!show) closeBgMenu(); } }   // the ••• (Replace background, + Create Hybrid when available) shows over any real background
-    document.getElementById("bgMore").addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return;
-      var w=document.getElementById("planMore"), open=!w.classList.contains("menu"); w.classList.toggle("menu",open); this.setAttribute("aria-expanded",open?"true":"false"); });
+      if(w) w.style.display="none";   // the TL "Edit background" button is retired — Edit/Replace/Create live in the ••• sheet now
+      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display = canBuild(floors[curFloor]) ? "flex" : "none";
+      // ••• More is available on EVERY step whenever a real background exists (not just Background) — it's the
+      // secondary-control home in both normal and focus mode (never pinned to the canvas beyond this one dot).
+      var pmShow=(bgHasImage && !frozen() && !bgToolOpen);
+      var pm=document.getElementById("planMore"); if(pm){ pm.style.display = pmShow ? "flex" : "none"; if(!pmShow) closeMoreSheet(); } }
+    document.getElementById("bgMore").addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return; openMoreSheet(); });
     // Replace background — the deliberate "start over from a new source" action (distinct from Edit background, which reopens the CURRENT tool/state). Opens the Satellite/Upload/Draw chooser.
     document.getElementById("replaceBgBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
       satFrame.style.display="none"; document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; });
@@ -2358,6 +2406,24 @@
     }
     function openFloorSheet(){ if(RO) return; buildFloorSheet(); document.getElementById("floorSheet").classList.add("on"); }
     function closeFloorSheet(){ var s=document.getElementById("floorSheet"); if(s){ s.classList.remove("on"); clearRowActions(); } }
+    // ••• More sheet — the single home for the secondary controls. Sections appear only when they apply
+    // (Mode on hybrid floors, Step/Background once a background exists, Create floor plan when buildable).
+    function buildMoreSheet(){ var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?normView(f.view):"layered", hasBg=bgHasImage && !bgToolOpen;
+      var ms=document.getElementById("moreModeSec"); if(ms) ms.style.display=cap?"":"none";
+      [].forEach.call(document.querySelectorAll("#moreMode button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); });
+      var ss=document.getElementById("moreStepSec"); if(ss) ss.style.display=hasBg?"":"none";
+      [].forEach.call(document.querySelectorAll("#moreStep button"), function(b){ b.classList.toggle("on", +b.getAttribute("data-s")===curStep); });
+      var fn=document.getElementById("moreFloorName"); if(fn) fn.textContent=(f.name||("Floor "+(curFloor+1)));
+      var bgSec=document.getElementById("moreBgSec"); if(bgSec) bgSec.style.display=hasBg?"":"none";
+      var bp=document.getElementById("moreBuildPlan"); if(bp) bp.style.display=canBuild(f)?"":"none"; }
+    function openMoreSheet(){ if(frozen()) return; buildMoreSheet(); document.getElementById("moreSheet").classList.add("on"); }
+    function closeMoreSheet(){ var s=document.getElementById("moreSheet"); if(s) s.classList.remove("on"); }
+    (function(){ var scrim=document.getElementById("moreScrim"); if(scrim) scrim.addEventListener("click", closeMoreSheet);
+      [].forEach.call(document.querySelectorAll("#moreMode button"), function(b){ b.addEventListener("click", function(){ var f=floors[curFloor]; if(!f||!hybridCapable(f)) return; if(typeof aligning!=="undefined"&&aligning) exitAlign(true); f.view=b.getAttribute("data-v"); renderView(); queueSave(); buildMoreSheet(); }); });
+      [].forEach.call(document.querySelectorAll("#moreStep button"), function(b){ b.addEventListener("click", function(){ goStep(+b.getAttribute("data-s")); buildMoreSheet(); }); });
+      var ff=document.getElementById("moreFloorBtn"); if(ff) ff.addEventListener("click", function(){ closeMoreSheet(); openFloorSheet(); });
+      function relay(id,tgt){ var b=document.getElementById(id); if(b) b.addEventListener("click", function(){ closeMoreSheet(); var t=document.getElementById(tgt); if(t) t.click(); }); }
+      relay("moreEditBg","changeBgBtn"); relay("moreBuildPlan","buildPlanBtn"); relay("moreReplaceBg","replaceBgBtn"); })();
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
       if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
       var wasCur=(curFloor===i);

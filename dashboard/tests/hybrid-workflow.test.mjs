@@ -47,11 +47,12 @@ test("top-left = Edit background (direct); Create Hybrid lives in a bottom-right
 test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, and not frozen", () => {
   has('function floorHasAerial(f){ return !!(f && (f.bgSource==="satellite" || f.aerial || (f.ctx && f.ctx.src)));', "floorHasAerial reads the floor record");
   has("function canBuild(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }", "canBuild composes floorHasAerial AND !hybridCapable AND !frozen");
-  // updateBgActions drives visibility: cluster on the Background step over a real floor; the ••• shows over any
-  // background (Replace lives there); the Create Hybrid ITEM gates on canBuild.
-  has('var f=floors[curFloor], show=(curStep===0 && bgHasImage && !frozen() && !bgToolOpen);', "cluster shows on the Background tab over a real floor, outside any tool");
-  has('bp.style.display = (show && canBuild(f)) ? "flex" : "none"', "Create Hybrid shows only when canBuild");
-  has('pm.style.display = show ? "flex" : "none"', "the ••• (Replace + Create Hybrid) shows over any real background");
+  // updateBgActions drives visibility: the ••• More sheet is the home for Edit/Replace/Create (+ Mode/
+  // Floor/Step), so it shows over ANY real background on every step; the Create-floor-plan ITEM gates on
+  // canBuild. The old top-left "Edit background" button is retired (its action moved into the sheet).
+  has('var pmShow=(bgHasImage && !frozen() && !bgToolOpen);', "the ••• shows over any real background, outside any tool, on every step");
+  has('bp.style.display = canBuild(floors[curFloor]) ? "flex" : "none"', "Create floor plan shows only when canBuild");
+  has('pm.style.display = pmShow ? "flex" : "none"', "the ••• (More sheet trigger) shows over any real background");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
   has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
   const setStatus = survey.slice(survey.indexOf("function setStatus("), survey.indexOf("function setStatus(") + 1100);
