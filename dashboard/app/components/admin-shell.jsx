@@ -477,6 +477,39 @@ export const USER_ROLE_COLOR = {
 };
 const ROLE_LABEL = { admin: "Admin", manager: "Manager", sales: "Sales", tech: "Tech", customer: "Customer" };
 
+// Global "+ New" — one create entry point. Project / Lead / Customer open the New Project intake
+// (the canonical new-client + lead workflow); the rest jump to where that record is created. No new
+// forms are introduced — this only routes to existing flows.
+function NewMenu({ onProject }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    function onDoc(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, []);
+  const modalItem = (label) => <button key={label} className="newm-item" onClick={() => { setOpen(false); onProject(); }}>{label}</button>;
+  const linkItem  = (label, href) => <Link key={label} href={href} className="newm-item" onClick={() => setOpen(false)}>{label}</Link>;
+  return (
+    <div className="newm-wrap np-desktop" ref={ref}>
+      <button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }} aria-haspopup="menu" aria-expanded={open}>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> New
+      </button>
+      {open && (
+        <div className="newm-menu" role="menu">
+          {modalItem("Project")}
+          {modalItem("Lead")}
+          {modalItem("Customer")}
+          <div className="newm-div" />
+          {linkItem("Service Call", "/service-calls")}
+          {linkItem("Ticket", "/tickets")}
+          {linkItem("Proposal", "/projects")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminShell({ user, alerts, active, children }) {
   const [npOpen, setNpOpen] = useState(false);
   const router = useRef(null);
@@ -542,9 +575,7 @@ export default function AdminShell({ user, alerts, active, children }) {
             <NotifBell alerts={alerts} />
             <UserMenu user={user} />
             {!["tech","sales"].includes(user?.role) && (
-              <button className="btn btn-primary np-desktop" onClick={() => setNpOpen(true)}>
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg> New Project
-              </button>
+              <NewMenu onProject={() => setNpOpen(true)} />
             )}
             <button className="apx-burger" aria-label="Menu" onClick={() => setMobOpen(true)}>
               <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
@@ -713,6 +744,11 @@ const CSS = `
 .apx .tab-menu-head{padding:8px 12px 4px;font-size:.64rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);opacity:.7}
 .apx .tab-menu-head:first-child{padding-top:4px}
 .apx-mobsubhead{padding:9px 12px 3px 22px;font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);opacity:.7}
+.apx .newm-wrap{position:relative}
+.apx .newm-menu{position:absolute;top:calc(100% + 6px);right:0;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 12px 32px rgba(14,19,32,.14);padding:6px;min-width:168px;z-index:90;animation:tabMenuIn .14s ease}
+.apx .newm-item{display:block;width:100%;text-align:left;padding:9px 12px;border:0;background:none;font-family:inherit;font-size:.85rem;font-weight:600;color:var(--ink);border-radius:8px;cursor:pointer;transition:.12s}
+.apx .newm-item:hover{background:var(--bg-soft)}
+.apx .newm-div{height:1px;background:var(--line);margin:5px 4px}
 
 .apx .nav-search{display:flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;padding:8px 14px;width:380px;max-width:38vw}
 .apx .nav-search svg{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;flex-shrink:0}

@@ -24,11 +24,12 @@ function ProjectCard({ job }) {
   );
 }
 
-export default function PortalClient({ user, alerts, jobs, customers, initialQ = "" }) {
+export default function PortalClient({ user, alerts, jobs, customers, tickets = [], serviceCalls = [], initialQ = "" }) {
   const [mode, setMode]         = useState(initialQ ? "projects" : "customer");
   const [query, setQuery]       = useState(initialQ);
   const [customer, setCustomer] = useState(null);
   const q = query.trim().toLowerCase();
+  const digits = q.replace(/\D/g, "");
 
   const custResults = q ? customers.filter((c) => c.toLowerCase().includes(q)) : customers;
   const mine = customer ? jobs.filter((j) => j.customer === customer) : [];
@@ -38,8 +39,13 @@ export default function PortalClient({ user, alerts, jobs, customers, initialQ =
         j.customer.toLowerCase().includes(q) ||
         j.access_id.toLowerCase().includes(q) ||
         j.address?.toLowerCase().includes(q) ||
-        j.issue?.toLowerCase().includes(q))
+        j.issue?.toLowerCase().includes(q) ||
+        (j.contact_email || "").toLowerCase().includes(q) ||
+        (digits.length >= 3 && (j.contact_phone || "").replace(/\D/g, "").includes(digits)))
     : jobs;
+  // Cross-entity matches (shown in the All Projects / search view when a query is active).
+  const ticketResults = q ? tickets.filter((t) => (t.subject || "").toLowerCase().includes(q) || (t.customer || "").toLowerCase().includes(q)) : [];
+  const svcResults = q ? serviceCalls.filter((c) => (c.customer || "").toLowerCase().includes(q) || (c.address || "").toLowerCase().includes(q) || (digits.length >= 3 && (c.phone || "").replace(/\D/g, "").includes(digits))) : [];
 
   return (
     <AdminShell user={user} alerts={alerts} active="portal">
@@ -94,6 +100,7 @@ export default function PortalClient({ user, alerts, jobs, customers, initialQ =
         )}
 
         {mode === "projects" && (
+          <>
           <div className="panel mb">
             <div className="panel-head"><h3>{projectResults.length} Project{projectResults.length === 1 ? "" : "s"}</h3></div>
             {projectResults.length === 0 ? (
@@ -116,6 +123,41 @@ export default function PortalClient({ user, alerts, jobs, customers, initialQ =
               </table>
             )}
           </div>
+
+          {/* Cross-entity results (only while searching) — grouped by type */}
+          {q && ticketResults.length > 0 && (
+            <div className="panel mb">
+              <div className="panel-head"><h3>{ticketResults.length} Ticket{ticketResults.length === 1 ? "" : "s"}</h3><Link className="more" href="/tickets">All →</Link></div>
+              {ticketResults.slice(0, 12).map((t) => (
+                <Link key={t.id} href={`/tickets/${t.id}`} className="pt-row pt-click" style={{ gridTemplateColumns: "1fr auto" }}>
+                  <div style={{ minWidth: 0 }}><div className="r-name">{t.subject}</div><div className="r-loc">{t.customer}</div></div>
+                  <span className="chip">{t.priority}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {q && svcResults.length > 0 && (
+            <div className="panel mb">
+              <div className="panel-head"><h3>{svcResults.length} Service Call{svcResults.length === 1 ? "" : "s"}</h3><Link className="more" href="/service-calls">All →</Link></div>
+              {svcResults.slice(0, 12).map((c) => (
+                <Link key={c.id} href={`/service-calls/${c.id}`} className="pt-row pt-click" style={{ gridTemplateColumns: "1fr auto" }}>
+                  <div style={{ minWidth: 0 }}><div className="r-name">{c.customer}</div><div className="r-loc">{c.address || "—"}</div></div>
+                  <span className="chip">{c.status}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {q && custResults.length > 0 && (
+            <div className="panel mb">
+              <div className="panel-head"><h3>{custResults.length} Customer{custResults.length === 1 ? "" : "s"}</h3><Link className="more" href="/customers">All →</Link></div>
+              {custResults.slice(0, 12).map((c) => (
+                <Link key={c} href={`/customers/${encodeURIComponent(c)}`} className="pt-row pt-click" style={{ gridTemplateColumns: "1fr" }}>
+                  <div className="r-name">{c}</div>
+                </Link>
+              ))}
+            </div>
+          )}
+          </>
         )}
       </div>
     </AdminShell>
