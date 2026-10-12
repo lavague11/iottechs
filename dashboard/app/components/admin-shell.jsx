@@ -90,13 +90,22 @@ const NAV_GROUPS = [
 ];
 
 const isNavLink = (it) => it && !it.heading && it.href;
-// Filter the grouped nav per role (manager: no Dashboard / Dev — admin-only). A heading is dropped
-// when the section it introduces has no surviving links, so no orphan labels remain.
+// Role-aware nav. Each role sees ONLY links to pages its own server-side guard allows, so a nav item
+// never leads to a redirect — the page guards remain the real enforcement, the nav just mirrors them.
+//   admin   — everything.
+//   manager — everything except the admin-only dev tools (Dev Roadmap, Archives).
+//   sales   — their pages only: Pipeline, Projects, Customers, Tickets, Support Library.
+// (tech keeps its own tight flat nav below — grouping would bury its /tech home.)
+const NAV_DENY  = { manager: new Set(["dev", "archives"]) };
+const NAV_ALLOW = { sales: new Set(["sales", "projects", "customers", "tickets", "support"]) };
+function navItemVisible(role, key) {
+  if (role === "admin") return true;
+  if (NAV_ALLOW[role]) return NAV_ALLOW[role].has(key);
+  const deny = NAV_DENY[role];
+  return deny ? !deny.has(key) : true;
+}
 function groupedNavFor(role) {
-  let groups = NAV_GROUPS.map((g) => ({ ...g, items: [...g.items] }));
-  if (role === "manager") {
-    groups = groups.map((g) => ({ ...g, items: g.items.filter((it) => it.heading || !["dashboard", "dev"].includes(it.key)) }));
-  }
+  let groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => it.heading || navItemVisible(role, it.key)) }));
   // Prune headings whose section ends up empty (nothing clickable before the next heading).
   groups = groups.map((g) => {
     const items = g.items.filter((it, i) => {
@@ -491,7 +500,7 @@ export default function AdminShell({ user, alerts, active, children }) {
 
   const roleColor = ROLE_COLOR[active] || ROLE_COLOR.dashboard;
 
-  const isGrouped = ["admin", "manager"].includes(user?.role);
+  const isGrouped = ["admin", "manager", "sales"].includes(user?.role);
   const navModel  = isGrouped ? groupedNavFor(user.role) : null;
   const [openMenu, setOpenMenu] = useState(null);
   const [mobOpen, setMobOpen] = useState(false);   // mobile nav drawer
