@@ -351,6 +351,29 @@
   .showBtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border:1px solid rgba(16,17,18,.10);border-radius:99px;background:rgba(255,255,255,.86);color:var(--ink);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 1px 4px rgba(16,17,18,.10);backdrop-filter:blur(4px)}
   .showBtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7}
   .showBtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  /* ===== Mobile Plan editor redesign — one compact SVG-first canvas-control language =====
+     Every floating control is a 42px rounded-square icon button (44px touch target with the
+     canvas gutter), 21px icon, translucent white + hairline border; the single primary is +Add. */
+  .ctxbtn,#changeBgBtn,.ubtn,.showBtn,.plandim,#bgMore,#viewSel{
+    width:42px;height:42px;min-width:42px;padding:0;gap:0;border-radius:12px;
+    display:inline-flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.92);border:1px solid var(--line);color:var(--ink);
+    box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(6px);
+    font-size:0;line-height:0;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .ctxbtn svg,#changeBgBtn svg,.ubtn svg,.showBtn svg,.plandim svg,#viewSel svg{
+    width:21px;height:21px;opacity:1;stroke-width:1.8}
+  #bgMore svg{width:21px;height:21px}
+  .ctxbtn:hover,#changeBgBtn:hover,.ubtn:hover,.showBtn:hover,.plandim:hover,#bgMore:hover,#viewSel:hover{border-color:var(--ink)}
+  .ubtn.on,.showBtn.on,.plandim.on,#viewSel.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  /* the ONE primary — Add (dark); angles + everything else stay quiet/neutral */
+  #addDeviceBtn{background:var(--ink);border-color:var(--ink);color:#fff}
+  #addDeviceBtn svg{stroke:#fff}
+  .ctxbar{gap:10px}
+  .utils{gap:10px}
+  /* bottom-right cluster sits in a row (Show · Fit · Focus), compact */
+  .showCtl>div{gap:10px!important}
+  /* Already fullscreen → the canvas Focus button is redundant (the host header × exits). */
+  body.focusmode #fullBtn{display:none}
   .showPop{display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(16,17,18,.2);padding:8px}
   .showPop.open{display:flex}
   .showRow{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:6px 8px;min-width:150px}
@@ -661,6 +684,8 @@
             <div style="display:flex;gap:8px">
               <button class="showBtn" id="focusBtn" title="Fit" aria-label="Fit plan to view"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span id="focusBtnTxt" hidden>Focus</span></button>
               <button class="showBtn" id="showBtn" title="Show" aria-label="Show angles and coverage"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              <!-- Focus = enter app-level fullscreen (handled by the React host). Hidden once already in focus (the header × exits). -->
+              <button class="showBtn" id="fullBtn" title="Focus" aria-label="Enter focus mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
             </div>
           </div>
         </div>
@@ -1300,6 +1325,12 @@
       if(focusMode){ var cx=(scene.offsetLeft||0)+scene.clientWidth/2, cy=(scene.offsetTop||0)+scene.clientHeight/2; zoomAt(cx,cy,1.6); }   // zoom toward the plate centre (the structure)
       updateFocusBtn(); }
     (function(){ var fb=document.getElementById("focusBtn"); if(fb) fb.addEventListener("click", function(e){ e.stopPropagation(); focusView(!focusMode); }); })();
+    // Focus = app-level fullscreen, owned by the React host (it escapes the deck transform via a body
+    // portal). The canvas button just asks; the host answers with iotSurveyFocusState so this iframe can
+    // adapt its controls (body.focusmode) — the floating header × there is what exits.
+    (function(){ var fuB=document.getElementById("fullBtn"); if(fuB) fuB.addEventListener("click", function(e){ e.stopPropagation(); try{ parent.postMessage({type:"iotSurveyReqFocus", project:PID}, "*"); }catch(err){} }); })();
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotSurveyFocusState"||(PID&&m.project!==PID)) return;
+      document.body.classList.toggle("focusmode", !!m.on); });
     // A camera's reach (cone length) is capped to ~half the plan's longer side — enough for a realistic
     // cone, but it can never shoot across the whole aerial (and off into the panel) from a far/stray tap.
     function maxReach(){ var m=Math.max(scene.clientWidth||0, scene.clientHeight||0); return m ? Math.round(m*0.35) : 420; }

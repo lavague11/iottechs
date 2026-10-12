@@ -11,7 +11,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261012-2";
+const WIDGET_VERSION = "20261012-3";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
@@ -165,6 +165,22 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     return () => window.removeEventListener("iotSurveyFocus", onFocus);
   }, [accessId]);
 
+  // The canvas's own Focus (⤢) button lives INSIDE the iframe; it asks the host to go fullscreen.
+  useEffect(() => {
+    function onMsg(e) { if (e.data?.type === "iotSurveyReqFocus" && e.data.project === accessId) setFs(true); }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [accessId]);
+
+  // Tell the iframe whether it's in focus mode so it can adapt its own controls (body.focusmode):
+  // move Floor / Background / Setup into the ••• sheet, drop the redundant canvas Focus button, etc.
+  // Entering/leaving focus reparents the iframe (body portal) which RELOADS it, so this is also sent
+  // from onLoad below — that's the reliable delivery; this covers any same-document fs change.
+  const pushFocusState = useCallback(() => {
+    try { frameRef.current?.contentWindow?.postMessage({ type: "iotSurveyFocusState", project: accessId, on: fs }, "*"); } catch { /* frame gone */ }
+  }, [fs, accessId]);
+  useEffect(() => { pushFocusState(); }, [pushFocusState, synced]);
+
   // Full-screen overlay: lock page scroll + Esc to exit.
   useEffect(() => {
     if (!fs) return;
@@ -187,8 +203,8 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const editor = (
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
       {fs ? (
-        <div className="ss-fs-bar">{/* Focus mode — tiny floating bar (floor · exit); the rest is plan */}
-          <span className="ss-fs-title">{floorName}</span>
+        <div className="ss-fs-bar">{/* Focus mode — one tiny bar (customer · floor · exit); the rest is plan */}
+          <span className="ss-fs-title">{customerName ? `${customerName} · ${floorName}` : floorName}</span>
           <button className="ss-fs-x" title="Exit focus" aria-label="Exit focus mode" onClick={() => setFs(false)}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
@@ -221,7 +237,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
           src={src}
           title="Site Survey"
           allow="geolocation"
-          onLoad={() => { pushSubmitState(); pushContext(); }}
+          onLoad={() => { pushSubmitState(); pushContext(); pushFocusState(); }}
         />
       ) : (
         <BuildGate onBuild={() => setBuilt(true)}
