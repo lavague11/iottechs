@@ -27,7 +27,7 @@ export default function MockupLibraryClient({ user, alerts, rows = [] }) {
   const withData = rows.filter((r) => r.has).length;
 
   return (
-    <AdminShell user={user} alerts={alerts} active="support">
+    <AdminShell user={user} alerts={alerts} active="mockups">
       <div className="apx-wrap">
         <div className="page-head mkl-head">
           <div>

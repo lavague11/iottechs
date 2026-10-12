@@ -27,7 +27,7 @@ export default function SurveyLibraryClient({ user, alerts, rows = [] }) {
   const withData = rows.filter((r) => r.has).length;
 
   return (
-    <AdminShell user={user} alerts={alerts} active="support">
+    <AdminShell user={user} alerts={alerts} active="surveys">
       <div className="apx-wrap">
         <div className="page-head svl-head">
           <div>

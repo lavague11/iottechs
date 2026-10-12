@@ -77,7 +77,7 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
   const counts = Object.fromEntries(TABS.map(([k]) => [k, projects.filter((p) => matches(p, k)).length]));
 
   return (
-    <AdminShell user={user} alerts={alerts} active="dashboard">
+    <AdminShell user={user} alerts={alerts} active="projects">
       <div className="apx-wrap">
         <div className="page-head"><h1>Projects</h1><div className="ph-sub">{projects.length} projects · most recent first</div></div>
 

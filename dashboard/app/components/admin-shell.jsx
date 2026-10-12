@@ -30,68 +30,83 @@ const TABS = [
   { key: "bugs",      label: "Bugs",      href: "/bugs" },
 ];
 
-// Grouped nav for admin/manager — collapses the long flat bar into dropdowns,
-// ordered by chain of command: Management → Customers → Technicians → Sales.
-// (Tech & Sales roles keep their short flat navs — no dropdowns for 3 links.)
+// Grouped nav for admin/manager — ONE operating-system structure for the business, organized by
+// how the company actually works: Dashboard · Sales · Projects · Customers · Operations · Finance ·
+// Tools · Admin. Every top-level item answers "what am I working on?" or "what function am I entering?".
+// Business objects (projects, customers, proposals) are kept separate from Tools (things staff USE).
+// Items with `heading` are non-clickable section labels inside a dropdown (keeps it to two levels).
+// NOTE: pointer-only — every href is an existing route; nothing is renamed or moved on disk.
 const NAV_GROUPS = [
   { key: "dash-grp", label: "Dashboard", items: [
     { key: "dashboard", label: "Dashboard", href: "/dashboard" },
   ]},
-  { key: "admin-grp", label: "Admin", items: [
-    { key: "users",      label: "Users",   href: "/users" },
-    { key: "onboarding", label: "Hiring",  href: "/hiring" },
-    { key: "activity", label: "Activity Log", href: "/activity" },
-    { key: "dev",      label: "Dev Roadmap",  href: "/dev" },
-    { key: "bugs",     label: "Bug Portal",   href: "/bugs" },
+  { key: "sales-grp", label: "Sales", items: [
+    { key: "sales",     label: "Pipeline",  href: "/sales" },
+    { key: "proposals", label: "Proposals", href: "/support/proposals" },
+  ]},
+  { key: "projects-grp", label: "Projects", items: [
+    { key: "projects", label: "All Projects", href: "/projects" },
+    { key: "surveys",  label: "Site Surveys", href: "/support/surveys" },
+    { key: "mockups",  label: "Mockups",      href: "/support/mockups" },
     { key: "archives", label: "Archives",     href: "/archives" },
   ]},
-  { key: "bio-grp", label: "Biometrics", items: [
+  { key: "cust-grp", label: "Customers", items: [
+    { key: "customers",     label: "Customers",     href: "/customers" },
+    { key: "tickets",       label: "Tickets",       href: "/tickets" },
+    { key: "service-calls", label: "Service Calls", href: "/service-calls" },
+    { key: "adt",           label: "Monitoring",    href: "/adt-applications" },
+  ]},
+  { key: "ops-grp", label: "Operations", items: [
+    { key: "operations",   label: "Action Center", href: "/operations" },
+    { key: "tech",         label: "Technicians",   href: "/tech" },
+    { key: "inventory",    label: "Inventory",     href: "/inventory" },
+    { key: "tech-support", label: "Tech Support",  href: "/tech-support" },
+  ]},
+  { key: "finance-grp", label: "Finance", items: [
+    { key: "finances",    label: "Overview",    href: "/finances" },
+    { key: "receivables", label: "Receivables", href: "/receivables" },
+    { key: "expenses",    label: "Expenses",    href: "/expenses" },
+    { key: "pcp",         label: "PCP Ledger",  href: "/pcp" },
+  ]},
+  { key: "tools-grp", label: "Tools", items: [
+    { heading: "Biometrics" },
     { key: "identity",    label: "Identity Library", href: "/identity" },
     { key: "enroll",      label: "Face Enroll",      href: "/enroll" },
     { key: "face-verify", label: "Face Verify",      href: "/face-verify" },
     { key: "id-scan",     label: "ID Scanner",       href: "/id-scan" },
     { key: "tools",       label: "Document Tools",   href: "/tools" },
     { key: "liveness",    label: "Liveness Test",    href: "/liveness" },
+    { heading: "Utilities" },
+    { key: "qr",      label: "QR Codes",        href: "/support/qr" },
+    { key: "support", label: "Support Library", href: "/support" },
   ]},
-  { key: "mgmt-grp", label: "Management", items: [
-    { key: "finances",  label: "Finances",  href: "/finances" },
-    { key: "expenses",  label: "Expenses",  href: "/expenses" },
-    { key: "pcp",       label: "PCP Ledger", href: "/pcp" },
-  ]},
-  { key: "cust-grp", label: "Customers", items: [
-    { key: "customers", label: "Customers", href: "/customers" },
-    { key: "tickets",   label: "Tickets",   href: "/tickets" },
-  ]},
-  { key: "tech-grp", label: "Technicians", items: [
-    { key: "tech",         label: "Tech Dashboard", href: "/tech" },
-    { key: "inventory",    label: "Inventory",      href: "/inventory" },
-    { key: "tech-support", label: "Tech Support",   href: "/tech-support" },
-  ]},
-  { key: "sales-grp", label: "Sales", items: [
-    { key: "sales",     label: "Sales Pipeline", href: "/sales" },
-  ]},
-  { key: "ops-grp", label: "Operations", items: [
-    { key: "operations",    label: "Action Center", href: "/operations" },
-    { key: "service-calls", label: "Service Calls", href: "/service-calls" },
-    { key: "adt",           label: "ADT Monitoring", href: "/adt-applications" },
-    { key: "receivables",   label: "Receivables",   href: "/receivables" },
-  ]},
-  { key: "support-grp", label: "Support", items: [
-    { key: "support",   label: "Support Library", href: "/support" },
-    { key: "proposals", label: "Proposals",       href: "/support/proposals" },
-    { key: "qr",        label: "QR Codes",        href: "/support/qr" },
-    { key: "surveys",   label: "Site Surveys",    href: "/support/surveys" },
-    { key: "mockups",   label: "Mockups",         href: "/support/mockups" },
+  { key: "admin-grp", label: "Admin", items: [
+    { key: "users",      label: "Users",        href: "/users" },
+    { key: "onboarding", label: "Hiring",       href: "/hiring" },
+    { key: "activity",   label: "Activity Log", href: "/activity" },
+    { key: "bugs",       label: "Bug Portal",   href: "/bugs" },
+    { key: "dev",        label: "Dev Roadmap",  href: "/dev" },
   ]},
 ];
 
-// Filter the grouped nav per role (manager: no Dashboard / Dev / Archives — admin-only).
+const isNavLink = (it) => it && !it.heading && it.href;
+// Filter the grouped nav per role (manager: no Dashboard / Dev — admin-only). A heading is dropped
+// when the section it introduces has no surviving links, so no orphan labels remain.
 function groupedNavFor(role) {
   let groups = NAV_GROUPS.map((g) => ({ ...g, items: [...g.items] }));
   if (role === "manager") {
-    groups = groups.map((g) => ({ ...g, items: g.items.filter((it) => !["dashboard", "dev", "archives"].includes(it.key)) }));
+    groups = groups.map((g) => ({ ...g, items: g.items.filter((it) => it.heading || !["dashboard", "dev"].includes(it.key)) }));
   }
-  return groups.filter((g) => g.items.length);
+  // Prune headings whose section ends up empty (nothing clickable before the next heading).
+  groups = groups.map((g) => {
+    const items = g.items.filter((it, i) => {
+      if (!it.heading) return true;
+      for (let j = i + 1; j < g.items.length; j++) { if (g.items[j].heading) break; if (isNavLink(g.items[j])) return true; }
+      return false;
+    });
+    return { ...g, items };
+  });
+  return groups.filter((g) => g.items.some(isNavLink));
 }
 
 function relTime(ts) {
@@ -531,12 +546,13 @@ export default function AdminShell({ user, alerts, active, children }) {
         <div className="apx-wrap tabbar-wrap">
           <nav className={`tabbar${isGrouped ? " tabbar-grouped" : ""}`} ref={navRef}>
             {isGrouped
-              ? navModel.map((g) =>
-                  g.items.length === 1 ? (
+              ? navModel.map((g) => {
+                  const links = g.items.filter(isNavLink);
+                  return links.length === 1 ? (
                     <Link
                       key={g.key}
-                      href={g.items[0].href}
-                      className={`tab${active === g.items[0].key ? " on" : ""}`}
+                      href={links[0].href}
+                      className={`tab${active === links[0].key ? " on" : ""}`}
                       onClick={() => setOpenMenu(null)}
                     >
                       {g.label}
@@ -544,7 +560,7 @@ export default function AdminShell({ user, alerts, active, children }) {
                   ) : (
                     <div key={g.key} className="tab-group">
                       <button
-                        className={`tab tab-trigger${g.items.some((it) => it.key === active) ? " on" : ""}${openMenu === g.key ? " open" : ""}`}
+                        className={`tab tab-trigger${links.some((it) => it.key === active) ? " on" : ""}${openMenu === g.key ? " open" : ""}`}
                         onClick={() => setOpenMenu((m) => (m === g.key ? null : g.key))}
                       >
                         {g.label}
@@ -552,21 +568,23 @@ export default function AdminShell({ user, alerts, active, children }) {
                       </button>
                       {openMenu === g.key && (
                         <div className="tab-menu">
-                          {g.items.map((it) => (
-                            <Link
-                              key={it.key}
-                              href={it.href}
-                              className={`tab-menu-item${active === it.key ? " on" : ""}`}
-                              onClick={() => setOpenMenu(null)}
-                            >
-                              {it.label}
-                            </Link>
+                          {g.items.map((it, i) => (
+                            it.heading
+                              ? <div key={`h${i}`} className="tab-menu-head">{it.heading}</div>
+                              : <Link
+                                  key={it.key}
+                                  href={it.href}
+                                  className={`tab-menu-item${active === it.key ? " on" : ""}`}
+                                  onClick={() => setOpenMenu(null)}
+                                >
+                                  {it.label}
+                                </Link>
                           ))}
                         </div>
                       )}
                     </div>
-                  )
-                )
+                  );
+                })
               : allowed.map((t) => (
                   <Link key={t.key} href={t.href} className={`tab${active === t.key ? " on" : ""}`}>{t.label}</Link>
                 ))}
@@ -583,26 +601,29 @@ export default function AdminShell({ user, alerts, active, children }) {
             </div>
             <nav className="apx-moblinks">
               {isGrouped
-                ? navModel.map((g) => (
-                    g.items.length === 1 ? (
-                      <Link key={g.key} href={g.items[0].href} className={`apx-moblink${active === g.items[0].key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{g.label}</Link>
+                ? navModel.map((g) => {
+                    const links = g.items.filter(isNavLink);
+                    return links.length === 1 ? (
+                      <Link key={g.key} href={links[0].href} className={`apx-moblink${active === links[0].key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{g.label}</Link>
                     ) : (
                       <div className="apx-mobgroup" key={g.key}>
-                        <button type="button" className={`apx-mobhead${openGroups.has(g.key) ? " open" : ""}${g.items.some((it) => it.key === active) ? " active" : ""}`}
+                        <button type="button" className={`apx-mobhead${openGroups.has(g.key) ? " open" : ""}${links.some((it) => it.key === active) ? " active" : ""}`}
                           aria-expanded={openGroups.has(g.key)} onClick={() => toggleGroup(g.key)}>
                           <span>{g.label}</span>
                           <svg className="apx-mobchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
                         </button>
                         {openGroups.has(g.key) && (
                           <div className="apx-mobitems">
-                            {g.items.map((it) => (
-                              <Link key={it.key} href={it.href} className={`apx-moblink sub${active === it.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{it.label}</Link>
+                            {g.items.map((it, i) => (
+                              it.heading
+                                ? <div key={`h${i}`} className="apx-mobsubhead">{it.heading}</div>
+                                : <Link key={it.key} href={it.href} className={`apx-moblink sub${active === it.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{it.label}</Link>
                             ))}
                           </div>
                         )}
                       </div>
-                    )
-                  ))
+                    );
+                  })
                 : allowed.map((t) => (
                     <Link key={t.key} href={t.href} className={`apx-moblink${active === t.key ? " on" : ""}`} onClick={() => setMobOpen(false)}>{t.label}</Link>
                   ))}
@@ -680,6 +701,9 @@ const CSS = `
 .apx .tab-menu-item{display:block;padding:9px 12px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--muted);white-space:nowrap;transition:.12s}
 .apx .tab-menu-item:hover{background:var(--bg-soft);color:var(--ink)}
 .apx .tab-menu-item.on{color:var(--ink);background:var(--accent-primary-soft,#f0e8d8)}
+.apx .tab-menu-head{padding:8px 12px 4px;font-size:.64rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);opacity:.7}
+.apx .tab-menu-head:first-child{padding-top:4px}
+.apx-mobsubhead{padding:9px 12px 3px 22px;font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);opacity:.7}
 
 .apx .nav-search{display:flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;padding:8px 14px;width:380px;max-width:38vw}
 .apx .nav-search svg{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;flex-shrink:0}
