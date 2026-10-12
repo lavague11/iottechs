@@ -113,8 +113,10 @@ test("derived floors record lineage (derivedFromFloorId) and discrete actions fl
   // Lineage: both createFloor(from) and duplicateFloor set derivedFromFloorId to the source id (bookkeeping — carried by the restore spread, off the fingerprint).
   assert.ok(survey.includes("derivedFromFloorId:(from&&from.id)?from.id:null"), "createFloor records lineage");
   assert.ok(survey.includes("derivedFromFloorId:src.id||null"), "duplicateFloor records lineage");
-  // Immediate server flush for discrete actions (not just the 5s poll).
-  assert.ok(/function flushNow\(\)\{ save\(\);/.test(survey), "flushNow exists and saves first");
-  assert.ok(survey.includes('tool:"survey2",data:localStorage.getItem(PKEY)'), "flushNow posts the survey2 blob");
+  // Immediate server flush for discrete actions (not just the 5s poll). flushNow now pushes the FRESH
+  // in-memory serialization (never a re-read of localStorage, which could be stale after a quota failure).
+  assert.ok(/function flushNow\(\)\{ var json;/.test(survey), "flushNow serializes the fresh survey");
+  assert.ok(survey.includes("pushServer(json);"), "flushNow pushes the fresh blob to the server");
+  assert.ok(survey.includes('tool:"survey2",data:json'), "the server push carries the survey2 blob");
   assert.ok(survey.includes("snapFloor(); flushNow(); renderFloorTabs();"), "Done/background set flushes now");
 });

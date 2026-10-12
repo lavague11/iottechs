@@ -1768,12 +1768,6 @@
         nName = k ? (ct.base+" "+nSeq) : "";
         if(d.locName!==nName||d.locKey!==k||d.locSeq!==nSeq||d.placementType!==npt){ d.locName=nName; d.locKey=k; d.locSeq=nSeq; d.placementType=npt; changed=true; } });
       if(changed){ sugMap=null; devices.forEach(renderDevice); renderPanel(); queueSave(); } }
-    // A hand-typed name becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
-    // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An
-    // empty name clears the flag → the auto geometry location takes over again on the next reconcile.
-    function applyManualName(d, raw){ if(!d) return; var nm=cap(String(raw||"").trim());
-      if(nm){ d.name=nm; d.locName=nm; d.locManual=true; }
-      else { d.locManual=false; d.name=cap((cat(d.k)||{}).name||"Device"); } }
     // A device on the CURRENT floor — full interactive card (rename, FOV, hover-preview, delete).
     function makeCard(d){
       var card=document.createElement("div"); card.className="card"+(d.id===selId?" sel":""); card.dataset.devId=d.id;
@@ -1948,6 +1942,13 @@
     });
     function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
       devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); queueSave(); }
+    // A hand-typed rename becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
+    // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An empty
+    // name clears the flag → the auto geometry location takes over again on the next reconcile. (This is an
+    // explicit rename action — NOT the suggestion engine, which still never auto-assigns a name.)
+    function applyManualName(d, raw){ if(!d) return; var nm=cap(String(raw||"").trim());
+      if(nm){ d.name=nm; d.locName=nm; d.locManual=true; }
+      else { d.locManual=false; d.name=cap((cat(d.k)||{}).name||"Device"); } }
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
 
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----

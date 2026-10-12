@@ -44,7 +44,7 @@ test("3d survey: Grid is a 3-level Off/Light/Full control, default OFF, applySet
   assert.match(survey, /gridMode=0/);                                   // default OFF — a finished plan looks finished; Show ▸ Grid turns it on
   assert.ok(extractFn(survey, "applySettings").includes('getElementById("gridSeg")') && extractFn(survey, "applySettings").includes("renderGrid()"));
   assert.match(survey, /gridMode=Math\.max\(0,Math\.min\(2,\+b\.getAttribute\("data-g"\)\|\|0\)\)/);   // segment sets the mode
-  assert.ok(extractFn(survey, "save").includes("gridMode:gridMode"));
+  assert.ok(extractFn(survey, "serialize").includes("gridMode:gridMode"));   // payload now built in serialize(), persisted by save()/flushNow()
   assert.ok(extractFn(survey, "restore").includes('(typeof st.gridMode==="number")') && extractFn(survey, "restore").includes("st.showGrid===true?2:0"), "persists gridMode; migrates legacy on→Full, else Off (new default OFF)");
   const rg = extractFn(survey, "renderGrid");
   assert.ok(rg.includes("if(!gridMode||!hasGrid") && rg.includes('gridMode===1 ? "0.5" : "1"'), "Off hides; Light faint; Full base weight");
