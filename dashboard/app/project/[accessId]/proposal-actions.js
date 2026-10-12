@@ -18,7 +18,7 @@ import {
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
-import { survey2CameraCount } from "../../../lib/tool-data";
+import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady } from "../../../lib/email";
 
@@ -702,9 +702,9 @@ export async function proposalLayoutMetaAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !(await canReadProject(accessId))) return { ok: false };
   const sv = getToolData(accessId, "survey2"), mk = getToolData(accessId, "mockup");
-  return { ok: true,
-    hasSurvey: !!(sv?.data && sv.data.includes("data:image")),
-    hasMockup: !!(mk?.data && mk.data.includes("data:image")) };
+  // Canonical content checks (parse the blob), not a "data:image" substring scan — photos/backgrounds are
+  // normally /api/media URLs now, so the old scan both missed built layouts AND could show empty ones.
+  return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
 export async function saveToolDataAction(accessId, tool, data) {
   const tok = await getSessionRole();

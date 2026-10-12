@@ -16,6 +16,7 @@ import { applyPrices } from "../../../lib/proposal-reuse";
 import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
+import { survey2HasData } from "../../../lib/tool-data";
 import { parseSurveyFloors } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 
@@ -398,7 +399,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       // A placed photo is either an inline data: URL or (normal path) a small /api/media URL — count both.
       try { const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null; hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.length > 0); } catch { /* bad blob */ }
       if (hasMockupPhoto && mk?.saved?.data) jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
-      if (sv?.saved?.data) { plannerFloors = parseSurveyFloors(sv.saved.data); jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {})); }
+      // Only include the Site Survey when it's actually built (real content), not an empty default survey.
+      if (sv?.saved?.data && survey2HasData(sv.saved.data)) { plannerFloors = parseSurveyFloors(sv.saved.data); jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {})); }
       await Promise.all(jobs);
     } catch { /* download numbers-only on any fetch failure */ }
     try {

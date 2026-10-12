@@ -7,6 +7,7 @@ import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
+import { survey2HasData } from "../../../lib/tool-data";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction } from "./proposal-actions";
 
 // What changed since the customer last signed (ledger P4) — structured, never raw JSON. Rendered
@@ -269,16 +270,20 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         getToolDataAction(accessId, "survey2").catch(() => null),
       ]);
       const jobs = [];
-      // Only render the mockup when it actually has at least one photo.
+      // Only render the mockup when it was actually built — i.e. it has at least one placed photo. A
+      // photo is an inline data: URL OR (the normal path) a small /api/media URL, so count any non-empty
+      // string — not just data: (checking only data: wrongly skipped mockups whose photos are URLs).
       let hasMockupPhoto = false;
       try {
         const md = mk?.saved?.data ? JSON.parse(mk.saved.data) : null;
-        hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.startsWith("data:image"));
+        hasMockupPhoto = Array.isArray(md?.photos) && md.photos.some((x) => typeof x === "string" && x.length > 0);
       } catch { /* bad mockup blob */ }
       if (hasMockupPhoto && mk?.saved?.data) {
         jobs.push(exportMockupImages(accessId, mk.saved.data).then((r) => { mockupImages = r; }).catch(() => {}));
       }
-      if (sv?.saved?.data) {
+      // Only render the Site Survey ("views") when it has real content — a built floor plan, not an empty
+      // default survey. Otherwise the customer's proposal is padded with blank survey pages.
+      if (sv?.saved?.data && survey2HasData(sv.saved.data)) {
         surveyFloors = parseSurveyFloors(sv.saved.data);
         jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       }
