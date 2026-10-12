@@ -1,7 +1,8 @@
 import { svcIsOpen } from "../../lib/svc-status";
 import { redirect } from "next/navigation";
-import { getAllJobs, getActivityLog, getAllUsers, getTickets, listServiceCalls, listAdtApplications, getReceivables, allScheduleBlobs } from "../../lib/db";
+import { getAllJobs, getActivityLog, getTickets, listServiceCalls, listAdtApplications, getReceivables, allScheduleBlobs, getPendingWorkOrders, getPendingExpenses, getPendingRequests } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
+import { buildActionItems } from "../../lib/action-center";
 import AdminClient from "./admin-client";
 
 // The dashboard answers ONE question: what needs my attention right now? It is the admin/manager
@@ -92,22 +93,15 @@ export default async function DashboardPage() {
   todayAppts.sort((a, b) => a.time.localeCompare(b.time));
   const installsToday = todayAppts.filter((a) => /install/i.test(a.title)).length;
 
-  // ---- Needs Attention — one cross-module queue of things blocking progress ----
-  const na = [];
-  const ageDays = (ts) => { if (!ts) return null; const t = new Date((ts.includes("T") ? ts : ts.replace(" ", "T") + "Z")).getTime(); return Number.isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : null; };
-  const push = (sev, reason, label, href, age) => na.push({ sev, reason, label, href, age });
-  for (const r of overdueRecv) push(3, `Payment overdue · $${Math.round(r.balance).toLocaleString()}`, r.customer || r.contact_name || "Project", `/project/${r.access_id}`, r.daysOut);
-  for (const t of urgentTickets) push(3, "Urgent ticket", t.subject || t.project_customer || "Ticket", `/tickets/${t.id}`, ageDays(t.created_at));
-  for (const c of urgentSvc) push(3, "Service call", c.customer || c.business_name || "Service call", `/service-calls/${c.id}`, ageDays(c.created_at));
-  for (const j of awaitingSignature) push(2, "Awaiting signature", j.customer, `/project/${j.access_id}`, ageDays(j.created_at));
-  for (const j of jobs.filter((x) => ["schedule", "install"].includes(x.stage) && (!x.tech || !x.tech.trim()))) push(2, "Needs technician", j.customer, `/project/${j.access_id}`, ageDays(j.created_at));
-  for (const j of jobs.filter((x) => x.stage === "site_survey")) push(1, "Survey incomplete", j.customer, `/project/${j.access_id}`, ageDays(j.created_at));
-  for (const j of jobs.filter((x) => x.stage === "qc")) push(1, "QC review", j.customer, `/project/${j.access_id}`, ageDays(j.created_at));
-  na.sort((a, b) => b.sev - a.sev || (b.age || 0) - (a.age || 0));
-  const needsAttention = na.slice(0, 8);
+  // ---- Action Center (the ONE canonical queue) → the dashboard shows its top slice as Needs Attention ----
+  const ac = buildActionItems({
+    jobs, receivables: recv, tickets: openTickets, serviceCalls: openSvc,
+    pendingWorkOrders: getPendingWorkOrders(), pendingExpenses: getPendingExpenses(), pendingRequests: getPendingRequests(),
+  });
+  const needsAttention = ac.items.slice(0, 8);
 
   const kpis = {
-    needsAttention: na.length,
+    needsAttention: ac.count,
     awaitingSignature: awaitingSignature.length,
     pipelineCount: pipelineOpportunities.length,
     pipelineValue,

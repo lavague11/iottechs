@@ -20,7 +20,7 @@ function Section({ title, count, accent, href, viewLabel, empty, children }) {
 
 const ageClass = (d) => d == null ? "op-age-grey" : d >= 7 ? "op-age-red" : d >= 3 ? "op-age-amber" : "op-age-grey";
 
-export default function OperationsClient({ user, alerts, expenses, requests, workOrders, tickets, stalled = [] }) {
+export default function OperationsClient({ user, alerts, expenses, requests, workOrders, tickets, stalled = [], actionQueue = [], actionCount = 0 }) {
   const urgentTickets = tickets.filter(t => t.priority === "urgent");
   const totalActions = expenses.length + requests.length + workOrders.length + tickets.length;
 
@@ -61,6 +61,30 @@ export default function OperationsClient({ user, alerts, expenses, requests, wor
             </div>
           ))}
         </div>
+
+        {/* The canonical action queue — one classified list across every module. The dashboard's
+            Needs Attention shows the top slice of this exact set, so there's no competing task system. */}
+        {actionQueue.length > 0 && (
+          <div className="panel mb">
+            <div className="panel-head"><h3>Action Queue {actionCount > 0 && <span className="op-badge op-red">{actionCount}</span>}</h3></div>
+            {actionQueue.map((cat) => (
+              <div key={cat.key} className="op-cat">
+                <div className="op-cat-head"><span className={`op-sev op-sev-${cat.sev}`} />{cat.label}<span className="op-cat-n">{cat.items.length}</span></div>
+                {cat.items.slice(0, 6).map((it, i) => (
+                  <Link href={it.href} className="op-row" key={i}>
+                    <div className="op-row-main">
+                      <div className="op-row-name">{it.label}</div>
+                      <div className="op-row-sub">{it.reason}</div>
+                    </div>
+                    {it.age != null && <span className="op-age-lbl">{it.age === 0 ? "today" : `${it.age}d`}</span>}
+                    <span className="op-open">Open →</span>
+                  </Link>
+                ))}
+                {cat.items.length > 6 && <div className="op-more">+{cat.items.length - 6} more</div>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Stalled jobs — the throughput view: every active job's blocker, whose court, how long */}
         <div className="panel mb">
@@ -187,4 +211,13 @@ const OP_CSS = `
 .apx .op-who-cust{background:rgba(75,106,155,.12);color:#3a5480}
 .apx .op-who-us{background:rgba(201,169,110,.16);color:#7a5f1f}
 .apx .op-more{padding:11px 18px;font-size:.8rem;color:var(--muted)}
+.apx .op-cat{border-bottom:1px solid var(--line)}
+.apx .op-cat:last-child{border-bottom:none}
+.apx .op-cat-head{display:flex;align-items:center;gap:8px;padding:9px 18px 7px;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--bg-soft)}
+.apx .op-cat-n{margin-left:auto;font-weight:700}
+.apx .op-sev{width:9px;height:9px;border-radius:50%;flex:none}
+.apx .op-sev-3{background:var(--red,#c0392b)}
+.apx .op-sev-2{background:var(--amber,#e09a3a)}
+.apx .op-sev-1{background:var(--muted,#787d84)}
+.apx .op-age-lbl{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
 `;
