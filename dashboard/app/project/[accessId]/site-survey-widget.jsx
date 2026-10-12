@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import SignaturePanel from "./signature-panel";
 import SurveyDevices from "./survey-devices";
 import BuildGate from "./build-gate";
@@ -11,6 +12,20 @@ import { survey2HasData } from "../../../lib/tool-data";
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
 const WIDGET_VERSION = "20260921-5";
+
+// Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
+// the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
+const SS_FS_CSS = `
+.ss-embed-fs{position:fixed;inset:0;z-index:10000;width:100vw;height:100vh;height:100dvh;background:#f1eee7;display:flex;flex-direction:column;box-sizing:border-box;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);animation:ssFsIn .18s ease-out}
+@keyframes ssFsIn{from{opacity:.4}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.ss-embed-fs{animation:none}}
+.ss-embed-fs .ss-fs-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;height:46px;padding:0 6px 0 16px}
+.ss-embed-fs .ss-fs-title{font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#101418;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ss-embed-fs .ss-fs-x{flex:none;width:44px;height:44px;display:grid;place-items:center;border:0;background:none;color:#101418;cursor:pointer;border-radius:11px;-webkit-tap-highlight-color:transparent}
+.ss-embed-fs .ss-fs-x:active{background:rgba(16,17,18,.07)}
+.ss-embed-fs .ss-embed-frame{flex:1 1 0;min-height:0;width:auto;height:auto;border:0;border-radius:12px;overflow:hidden;background:#fff;margin:0 8px 8px;display:block}
+.ss-embed-fs .ss-zoom{z-index:10001}
+`;
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
 // All editing — device placement, FOV cones, drawing tools, shapes, satellite imagery,
@@ -159,27 +174,31 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomImg]);
 
-  return (
-    <>
+  const floorName = (roster[curFloorState] && roster[curFloorState].name) || (floorCount ? `Floor ${curFloorState + 1}` : "Floor");
+
+  const editor = (
     <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
-      <div className="ss-embed-bar">
-        <span className="ss-embed-tag">
-          {readOnly ? "Customer view" : "Live survey editor"}
-          {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
-        </span>
-        {/* The visible Residential/Commercial control lives once, in the project info card. The survey
-            still RECEIVES propertyType (for room-name suggestions) via props/postMessage — no toggle here,
-            so the page shows one property indicator, not two. */}
-        {showEditor && (fs ? (
-          <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      {fs ? (
+        <div className="ss-fs-bar">{/* Focus mode — tiny floating bar (floor · exit); the rest is plan */}
+          <span className="ss-fs-title">{floorName}</span>
+          <button className="ss-fs-x" title="Exit focus" aria-label="Exit focus mode" onClick={() => setFs(false)}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
-        ) : (
-          <button className="mk-btn mk-ico" title="Fullscreen" aria-label="Fullscreen" onClick={() => setFs(true)}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
-          </button>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="ss-embed-bar">
+          <span className="ss-embed-tag">
+            {readOnly ? "Customer view" : "Live survey editor"}
+            {floorCount != null && <> · {floorCount} floor{floorCount !== 1 ? "s" : ""}</>}
+          </span>
+          {/* The visible Residential/Commercial control lives once, in the project info card. */}
+          {showEditor && (
+            <button className="mk-btn mk-ico" title="Focus mode" aria-label="Enter focus mode" onClick={() => setFs(true)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+            </button>
+          )}
+        </div>
+      )}
       {!synced ? (
         /* Until the draft is seeded we don't yet know if this project has a survey — show Loading, never
            the Build gate, so a previously-built survey doesn't flash "Build" on reload. */
@@ -216,9 +235,8 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         </div>
       )}
 
-      {/* Legacy per-item approval — superseded by the server-backed ToolApproveBar in the
-          gateway (noApproval). Kept for any caller that still wants it. */}
-      {!noApproval && (
+      {/* Legacy per-item approval — superseded by the server-backed ToolApproveBar. Hidden in focus mode. */}
+      {!noApproval && !fs && (
         <SignaturePanel
           accessId={accessId}
           tool="survey"
@@ -230,13 +248,18 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         />
       )}
     </div>
-    {/* The device roster lives OUTSIDE the tool now — below the map, never overlapping it. Hidden while
-        the tool is full-screen (the overlay covers the page). */}
-    {/* The devices roster is lifted into the System Planner shell (shown on BOTH tabs), so the survey
-        widget doesn't render its own copy when embedded there (noRoster). */}
-    {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
-    {/* Customer tap-to-comment: read-only, tag a comment to the camera they tapped; staff see the thread. */}
-    <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
+  );
+
+  return (
+    <>
+      {/* Focus mode escapes the deck's transformed slides via a body portal → a true, viewport-filling
+          fullscreen (a position:fixed element inside a translateX'd slide is otherwise trapped). */}
+      {fs && typeof document !== "undefined" ? createPortal(editor, document.body) : editor}
+      {/* The device roster lives OUTSIDE the tool — hidden in focus mode (the overlay owns the screen),
+          and lifted into the System Planner shell when embedded there (noRoster). */}
+      {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
+      <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
+      <style>{SS_FS_CSS}</style>
     </>
   );
 }
