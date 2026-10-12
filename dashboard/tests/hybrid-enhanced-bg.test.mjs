@@ -14,7 +14,7 @@ const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
 test("there is no standalone Enhance button — enhancing happens inside the Edit-background flow", () => {
   assert.ok(!survey.includes('id="enhBtn"'), "the Enhance button is removed from the plan");
-  has('<span>Edit background</span>', "Edit background (the entry point that reopens the satellite to re-enhance) remains");
+  has('id="changeBgBtn" title="Edit background" aria-label="Edit background"', "Edit background (the entry point that reopens the satellite to re-enhance) remains — icon-only");
   has("body.ro #bgActions, body.frozen #bgActions{display:none!important}", "read-only / submitted hide the floor actions");
 });
 

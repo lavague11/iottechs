@@ -29,7 +29,7 @@ test("Create Hybrid Floor Plan is the item in the bottom-right ••• drop-up
 test("top-left = Edit background (direct); Create Hybrid lives in a bottom-right ••• drop-up", () => {
   // top-left: one direct button, no ••• here, no standalone Enhance (it lives in the Edit-background flow)
   has('<button id="changeBgBtn"', "Edit background is a direct button");
-  has("<span>Edit background</span>", "Edit background label");
+  has('aria-label="Edit background"', "Edit background is labelled (icon-only button, accessible name)");
   assert.ok(!survey.includes('id="enhBtn"'), "no standalone Enhance button");
   // bottom-right ••• drop-up
   has('<div id="planMore">', "bottom-right overflow container");
