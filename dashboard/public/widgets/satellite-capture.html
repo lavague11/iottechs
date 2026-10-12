@@ -373,6 +373,7 @@
     if(pendingCapture){ var pc=pendingCapture; pendingCapture=null; loadCapture(pc); }   // a parent-supplied capture wins — never run the default geocode over it (the race that let the live map show through)
     else if(pendingAerial){ var pa=pendingAerial; pendingAerial=null; applyAerial(pa); if(!aerialApplied) search(($("q").value||DEMO).trim(), true); }   // a restored transform must not be overridden by the default geocode (a center-less one falls back to it)
     else search(($("q").value||DEMO).trim(), true);
+    if(window.parent!==window){ try{ parent.postMessage({type:"iotBgReady", project:PID}, "*"); }catch(e){} }   // map is interactive → the parent drops its loading veil
   };
 
   /* ---------- restore a saved aerial transform (rotation + center + zoom) ---------- */

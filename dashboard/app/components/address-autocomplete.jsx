@@ -20,6 +20,7 @@ export default function AddressAutocomplete({
   types = ["address"],
   className,
   placeholder,
+  onKeyDown,
   ...rest
 }) {
   const ref = useRef(null);
@@ -48,6 +49,12 @@ export default function AddressAutocomplete({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChangeRef.current?.(e.target.value)}
+      onKeyDown={(e) => {
+        // Enter picks the highlighted Places suggestion (Places' own listener handles that);
+        // it must never submit the surrounding form, so the field never creates anything on Enter.
+        if (e.key === "Enter") e.preventDefault();
+        onKeyDown?.(e);
+      }}
       {...rest}
     />
   );

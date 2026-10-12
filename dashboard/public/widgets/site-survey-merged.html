@@ -358,6 +358,12 @@
   .devNode .fovGrow{position:absolute;left:0;top:0;transform-origin:0 0}   /* wrapper the expand animation scales — origin 0,0 = the camera apex, so the cone fans out FROM the camera */
   .devNode .fovGrow.grow{animation:coneGrow .6s cubic-bezier(.2,.85,.25,1)}
   @keyframes coneGrow{from{transform:scale(.08);opacity:.2}60%{opacity:1}to{transform:scale(1);opacity:1}}
+  /* Background-tool loading veil — only while the map/structure iframe is actually (re)loading. */
+  #bgLoad{display:none;position:absolute;inset:0;z-index:7;align-items:center;justify-content:center;gap:10px;flex-direction:column;background:var(--soft,#f4f5f7);color:var(--muted,#8b93a1);font-size:13px;font-weight:500}
+  #bgLoad.on{display:flex}
+  .bgload-spin{width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(130,140,155,.25);border-top-color:var(--muted,#8b93a1);animation:bgspin .7s linear infinite}
+  @keyframes bgspin{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){.bgload-spin{animation-duration:1.4s}}
   .devNode .coneSvg{position:absolute;overflow:visible;pointer-events:none}
   body.no-fov .devNode .coneSvg{display:none}   /* Show FOV off → hide the shaded cone, keep the aim line + arrow */
   /* Speaker coverage ring — a light-blue see-through radius circle, sits under the marker */
@@ -571,6 +577,9 @@
         <iframe id="satFrame" title="Satellite Capture"
           style="display:none;position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--soft);z-index:6"
           allow="geolocation"></iframe>
+        <!-- Shown the instant the background tool is (re)opened while its iframe loads, so the click
+             registers immediately instead of a blank/frozen canvas; cleared when the tool signals ready. -->
+        <div id="bgLoad" aria-live="polite"><span class="bgload-spin"></span><span class="bgload-t">Loading</span></div>
         <!-- Top-left: Edit background (direct). Enhance lives inside the Edit-background / satellite flow; "Create plan" lives with the view switcher below. -->
         <div id="bgActions">
           <button id="changeBgBtn" title="Edit this floor's background"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span>Edit background</span></button>
@@ -760,7 +769,14 @@
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
     var bgToolSrc=null;   // which tool the shared bg iframe is currently showing (satellite vs draw)
     var bgToolOpen=null;  // 'draw'|'satellite' while a build tool is actively open → persisted so a refresh reopens it
-    function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; } }
+    function ensureBgToolSrc(src){ if(bgToolSrc!==src){ satFrame.src=src; bgToolSrc=src; return true; } return false; }   // returns true when the iframe actually (re)loaded
+    // Loading veil over the background tool — shown only while its iframe is genuinely (re)loading
+    // (first open, or a switch between the map and the structure editor), cleared the moment the tool
+    // signals ready. A reused warm iframe never shows it, and a safety timeout prevents a stuck veil.
+    var bgLoadT=null;
+    function showBgLoading(){ var el=document.getElementById("bgLoad"); if(!el) return; el.classList.add("on");
+      clearTimeout(bgLoadT); bgLoadT=setTimeout(hideBgLoading, 25000); }   // never strand the veil if a ready signal is missed
+    function hideBgLoading(){ clearTimeout(bgLoadT); var el=document.getElementById("bgLoad"); if(el) el.classList.remove("on"); }
     var surveyWiz=document.getElementById("surveyWiz");
     var bgWiz=document.getElementById("bgWiz");
     var bgHasImage=false;   // once a background exists, Back can return to editing it
@@ -776,7 +792,8 @@
     // Seamless: a background tool (satellite OR draw-floorplan) fills the canvas while the universal
     // Background · Setup · Submit bar stays put. Both post `satellite-capture-result` back → applyBackground.
     function openBgTool(src, source){
-      pendingBgSource=source; ensureBgToolSrc(src);
+      pendingBgSource=source; var reloaded=ensureBgToolSrc(src);
+      if(reloaded) showBgLoading(); else hideBgLoading();   // a fresh (re)load → veil until the tool is ready; a warm iframe is instant
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
@@ -810,6 +827,7 @@
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       if(!committed) pendingCtxSwap=false;   // Phase H2: backed out of the satellite without "Use" (satBack / refresh-exit) → cancel any pending enhanced-background swap so a later capture never swaps ctx.src
+      hideBgLoading();
       satFrame.style.display="none";
       bgWiz.style.display="none";   // drop the tool's Back strip
       surveyWiz.style.display="";   // restore the survey bar when leaving the build tool
@@ -891,6 +909,8 @@
     // standalone Enhance button on the plan. (pendingCtxSwap for a hybrid floor is still set from that flow.)
     // Cancel from the satellite's focused outline-only mode → close the tool back to this floor (unchanged).
     window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotCaptureCancel" || !ev.source || ev.source!==satFrame.contentWindow) return; exitBg(false); });
+    // The satellite tool signals its map is interactive → drop the loading veil (the draw tool uses iotPlanReady).
+    window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotBgReady" || !ev.source || ev.source!==satFrame.contentWindow) return; hideBgLoading(); });
     // Back on the strip leaves the tool: to the three-source chooser (nothing yet) or the saved plan (bg exists).
     // Geometry autosaves (Phase 1), so backing out of the draw tool never loses the Structure. exitBg(false)
     // owns the display swap + clears bgToolOpen so a refresh doesn't reopen the tool.
@@ -936,7 +956,7 @@
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||(m.type!=="iotPlanReady"&&m.type!=="iotPlanSave")||(PID&&m.project!==PID)) return;
       if(!ev.source || ev.source!==satFrame.contentWindow) return;   // only the embedded build tool speaks this protocol (null source = reject)
       var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
-      if(m.type==="iotPlanReady"){ try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster();
+      if(m.type==="iotPlanReady"){ hideBgLoading(); try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster();   // structure editor up → drop the loading veil, then load the plan + roster
         // Phase 2 (grid-first): hand the draw tool this floor's enhanced/leveled aerial so Building cells are painted ON the roof — the tool positions it through its own seed transform (ctxVB), behind the grid + cells.
         try{ satFrame.contentWindow.postMessage({type:"iotDrawBackdrop", fid:fid, src:(fl&&fl.ctx&&fl.ctx.src)||null}, "*"); }catch(e){}
         // Phase 3c: hand over the legacy polygon boundary + zones (plate-%) so the tool can migrate them to cells.
