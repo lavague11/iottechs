@@ -13,6 +13,7 @@ import { ReusePicker } from "../project/[accessId]/proposal-start";
 import { searchCustomersAction, customerSummaryAction, updateCustomerAction } from "./crm-actions";
 import { can } from "../../lib/roles";
 import { formatPhone, customerMeta } from "../../lib/crm";
+import GlobalSearch from "./global-search";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
@@ -514,10 +515,6 @@ export default function AdminShell({ user, alerts, active, children }) {
   const [npOpen, setNpOpen] = useState(false);
   const router = useRef(null);
   const r = useRouter();
-  const [q, setQ] = useState("");
-  function onSearchKey(e) {
-    if (e.key === "Enter" && q.trim()) r.push(`/portal?q=${encodeURIComponent(q.trim())}`);
-  }
   const SALES_TABS = ["sales", "customers", "tickets"];
   const tabsByKey  = Object.fromEntries(TABS.map(t => [t.key, t]));
   // Techs don't approve expenses (that page is admin/manager only). Their "Expenses" tab points
@@ -566,10 +563,7 @@ export default function AdminShell({ user, alerts, active, children }) {
             <span className="admin-badge" style={{ background: USER_ROLE_COLOR[user?.role] || "#C9A96E" }}>{ROLE_LABEL[user?.role] || "Staff"}</span>
           </Link>
 
-          <div className="nav-search">
-            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input type="text" placeholder="Search projects, customers…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onSearchKey} />
-          </div>
+          <GlobalSearch />
 
           <div className="nav-right">
             <NotifBell alerts={alerts} />
@@ -754,6 +748,32 @@ const CSS = `
 .apx .nav-search svg{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;flex-shrink:0}
 .apx .nav-search input{background:transparent;border:none;outline:none;font-family:inherit;font-size:.88rem;color:var(--ink);width:100%}
 .apx .nav-search input::placeholder{color:var(--muted)}
+/* Global search dropdown */
+.apx .gs-wrap{position:relative;width:380px;max-width:38vw}
+.apx .gs-field{width:100%;max-width:none}
+.apx .gs-menu{position:absolute;top:calc(100% + 7px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 44px -14px rgba(14,19,32,.32);padding:6px;z-index:95;max-height:min(70vh,560px);overflow:auto;animation:tabMenuIn .13s ease}
+.apx .gs-state,.apx .gs-nores{padding:14px 13px;font-size:.84rem;color:var(--muted)}
+.apx .gs-group{padding:2px 0}
+.apx .gs-group+.gs-group{border-top:1px solid var(--line-soft,#EDEDE9);margin-top:2px;padding-top:4px}
+.apx .gs-glabel{display:flex;align-items:center;justify-content:space-between;padding:7px 11px 4px;font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.apx .gs-clear{border:0;background:none;font:inherit;font-size:.62rem;font-weight:700;letter-spacing:.04em;color:var(--muted);cursor:pointer;text-transform:none}
+.apx .gs-clear:hover{color:var(--ink)}
+.apx .gs-row{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:0;background:none;font-family:inherit;padding:8px 11px;border-radius:8px;cursor:pointer;color:var(--ink)}
+.apx .gs-row.on{background:var(--bg-soft)}
+.apx .gs-ic{flex:none;width:28px;height:28px;border-radius:7px;display:grid;place-items:center;background:var(--bg-soft);color:var(--muted)}
+.apx .gs-ic svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.apx .gs-ic-project{background:#faf4e8;color:var(--gold-deep)}
+.apx .gs-ic-customer{background:var(--accent-soft);color:var(--accent)}
+.apx .gs-ic-ticket{background:var(--red-soft);color:var(--red)}
+.apx .gs-ic-service{background:var(--purple-soft);color:var(--purple)}
+.apx .gs-ic-technician{background:var(--green-soft);color:var(--green)}
+.apx .gs-body{min-width:0;display:flex;flex-direction:column}
+.apx .gs-title{font-size:.86rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .gs-sub{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apx .gs-all{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--gold-deep);padding:9px 11px;border-radius:8px;cursor:pointer;margin-top:2px;border-top:1px solid var(--line-soft,#EDEDE9)}
+.apx .gs-all.on{background:var(--bg-soft)}
+.apx .gs-empty{padding:4px}
+@media(max-width:720px){.apx .gs-wrap{display:none}}
 
 .apx .nav-right{display:flex;align-items:center;gap:10px}
 /* mobile hamburger + slide-in nav drawer (revealed at <=820px; hidden on desktop) */
