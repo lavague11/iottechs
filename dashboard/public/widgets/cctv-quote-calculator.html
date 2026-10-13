@@ -1133,6 +1133,27 @@ const R = {
   }
 };
 
+/* ---------- autosave (resume an interrupted session) ----------
+   A per-device draft so a reload or accidental navigation never loses progress. The large floor-plan
+   image is excluded (quota) and the draft is cleared on submit. localStorage is wrapped in try/catch and
+   the app works if it's blocked. */
+const DRAFT_KEY = 'iot-cctv-draft';
+let draftT = null;
+function saveDraft(){ clearTimeout(draftT); draftT = setTimeout(function(){ try{
+  if(submitted){ localStorage.removeItem(DRAFT_KEY); return; }
+  const s = JSON.parse(JSON.stringify(state)); if(s.contact) delete s.contact.floorPlanImg;
+  localStorage.setItem(DRAFT_KEY, JSON.stringify({ v:1, cur, openAcc, at:Date.now(), state:s }));
+}catch(_){} }, 500); }
+function loadDraft(){ try{
+  const raw = localStorage.getItem(DRAFT_KEY); if(!raw) return false;
+  const d = JSON.parse(raw); if(!d || d.v!==1 || !d.state) return false;
+  if(d.at && Date.now()-d.at > 1000*60*60*24*14){ localStorage.removeItem(DRAFT_KEY); return false; }   // expire after 2 weeks
+  Object.assign(state, d.state); if(state.contact) state.contact.floorPlanImg = null;
+  if(typeof d.cur==='number') cur = Math.max(0, Math.min(STEPS.length-1, d.cur));
+  if(d.openAcc) openAcc = d.openAcc;
+  return true;
+}catch(_){ return false; } }
+
 /* ---------- render ---------- */
 function render(){
   const q = Engine.compute(state);
@@ -1145,6 +1166,7 @@ function render(){
   document.querySelectorAll('.slide').forEach((el,i)=>{ if(keep[i]) el.scrollTop = keep[i]; });
   chrome(q);
   attachAddr();   // (re)bind Google Places to the rebuilt address field
+  saveDraft();    // persist progress
 }
 function chrome(q){
   q = q || Engine.compute(state);
@@ -1393,7 +1415,7 @@ document.addEventListener('click', e=>{
     case 'edit': submitted = null; render(); go(STEPS.length-1); return;
     case 'editcfg': { if(a.dataset.acc) openAcc=a.dataset.acc; go(a.dataset.step!=null?+a.dataset.step:1); return; }   // Review → jump back to edit a section
     case 'replock': rep = false; render(); renderDrawer(); return;
-    case 'reset': Object.assign(state, CONFIG.defaults, { contact:{name:'',phone:'',email:'',address:'',when:'',notes:''} }); submitted=null; done.clear(); closeDrawer(); render(); go(0); return;
+    case 'reset': Object.assign(state, CONFIG.defaults, { contact:{firstName:'',lastName:'',name:'',phone:'',phoneE164:'',email:'',company:'',address:'',unit:'',placeId:'',lat:null,lng:null,companyPlaceId:'',when:'',notes:''} }); submitted=null; done.clear(); openAcc='property'; try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} closeDrawer(); render(); go(0); return;
     default: return;
   }
   render();
@@ -1585,6 +1607,7 @@ function bindPhoton(el){
   el.addEventListener('blur', function(){ setTimeout(close, 150); });
 }
 
+loadDraft();   // resume an interrupted session (per-device draft), then paint
 render();
 </script>
 
