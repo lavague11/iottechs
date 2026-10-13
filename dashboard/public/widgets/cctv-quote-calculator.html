@@ -213,6 +213,10 @@ details.why p{margin:6px 0 0;max-width:60ch}
 
 .sub-q{display:grid;gap:8px;padding:0 12px 12px}
 .sub-q .row{justify-content:space-between}
+.cflags{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:7px 14px;min-height:36px;font:600 13px var(--f-body);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.chip.on{background:var(--slate);color:#FAF8F4;border-color:var(--slate)}
+@media (prefers-reduced-motion:reduce){.chip{transition:none}}
 
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
@@ -1132,15 +1136,18 @@ const R = {
               <div class="seg">${[['yes','Working'],['no','Not working'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingWorking===v?'on':''}" data-act="exwork" data-v="${v}">${l}</button>`).join('')}</div></div>
           </div>`:''}
         </div>
-        <div class="opt ${c.construction?'sel':''}">
-          <button type="button" class="pick opt-head" data-act="constr"><span class="check"></span>
-            <div><div class="opt-title">This is a construction project</div><div class="opt-sub">Property is under construction or being built out</div></div></button>
-        </div>
         <div class="opt ${c.hasDeadline?'sel':''}">
           <button type="button" class="pick opt-head" data-act="deadline"><span class="check"></span>
             <div><div class="opt-title">I have a deadline</div><div class="opt-sub">A date the system needs to be installed by</div></div></button>
           ${c.hasDeadline?`<div class="sub-q"><div class="field"><label for="c_deadline">Install by</label>
             <input id="c_deadline" type="date" value="${esc(c.deadline||'')}" data-contact="deadline" min="${new Date().toISOString().slice(0,10)}"></div></div>`:''}
+        </div>
+        <div class="opt ${c.construction?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="constr"><span class="check"></span>
+            <div><div class="opt-title">This is a construction project</div><div class="opt-sub">Property is under construction or being built out</div></div></button>
+          ${c.construction?`<div class="sub-q"><div class="cflags">
+            ${[['noSheetrock','No sheetrock'],['dropCeiling','Drop ceiling'],['needPermits','Need permits']].map(([k,l])=>`<button type="button" class="chip ${c[k]?'on':''}" data-act="cflag" data-v="${k}">${l}</button>`).join('')}
+          </div></div>`:''}
         </div>
         <div class="opt ${c.floorPlans?'sel':''}">
           <button type="button" class="pick opt-head" data-act="plans"><span class="check"></span>
@@ -1332,7 +1339,9 @@ function finalizeQuote(){
   const fp = c.floorPlanImg;
   const snapshot = { id, createdAt:d.toISOString(), catalogVersion:CONFIG.version, calcVersion:q.ss.calcVersion, level:q.level.id,
     inputs:{...state, contact:{...c}},
-    site:{ existingSystem:c.existingSystem, existingType:c.existingType, existingWorking:c.existingWorking, construction:c.construction,
+    site:{ existingSystem:c.existingSystem, existingType:c.existingType, existingWorking:c.existingWorking,
+      construction:c.construction,
+      constructionDetails: c.construction ? { noSheetrock:!!c.noSheetrock, dropCeiling:!!c.dropCeiling, needPermits:!!c.needPermits } : null,
       hasDeadline:c.hasDeadline, deadline:c.deadline,
       floorPlans:c.floorPlans, floorPlanFile: fp ? { name:fp.name, type:fp.type, size:fp.size } : null },
     storage:{ desiredRetentionDays:q.ss.days, recommendedStorageTB:q.ss.recommendedTB, selectedStorageTB:q.ss.storageTB,
@@ -1414,7 +1423,8 @@ document.addEventListener('click', e=>{
     case 'existing': state.contact.existingSystem = !state.contact.existingSystem; if(!state.contact.existingSystem){ state.contact.existingType = null; state.contact.existingWorking = null; } break;
     case 'extype': state.contact.existingType = v; break;
     case 'exwork': state.contact.existingWorking = v; break;
-    case 'constr': state.contact.construction = !state.contact.construction; break;
+    case 'constr': state.contact.construction = !state.contact.construction; if(!state.contact.construction){ state.contact.noSheetrock = state.contact.dropCeiling = state.contact.needPermits = false; } break;
+    case 'cflag': state.contact[v] = !state.contact[v]; break;
     case 'deadline': state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; break;
     case 'plans': state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; break;
     case 'planclear': state.contact.floorPlanImg = null; break;
