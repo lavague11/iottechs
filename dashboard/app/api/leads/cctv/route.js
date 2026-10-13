@@ -14,8 +14,14 @@ export const runtime = "nodejs";
 const MAX_FILE = 20 * 1024 * 1024;   // 20 MB (the calculator caps the upload at 15 MB)
 const OK_MIME = /^(image\/(png|jpe?g|gif|webp|heic|heif)|application\/pdf)$/i;
 
+// Title-case all-lower/all-upper words but preserve a name the client already mixed-cased (McDonald,
+// O'Neill, DeMarco) — the public calculator smart-caps names before sending, so don't flatten them.
 function cap(s) {
-  return String(s || "").trim().split(/\s+/).map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+  return String(s || "").trim().replace(/\s+/g, " ").split(" ").map((w) => {
+    if (!w) return w;
+    if (/[a-z]/.test(w) && /[A-Z]/.test(w.slice(1))) return w;
+    return w.toLowerCase().replace(/(^|[-'’])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
+  }).join(" ");
 }
 const dollars = (cents) => "$" + Math.round((Number(cents) || 0) / 100).toLocaleString("en-US");
 

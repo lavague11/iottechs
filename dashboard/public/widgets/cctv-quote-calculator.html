@@ -240,6 +240,11 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .addr-opt b{font-weight:600;font-size:14px}
 .addr-opt span{font-size:12px;color:var(--muted)}
 .pac-container{z-index:5000}
+/* email "did you mean" suggestion + address/unit row */
+.email-sug{align-self:flex-start;margin-top:2px;background:var(--warn-bg);color:var(--warn);border:1px solid transparent;border-radius:7px;padding:6px 10px;font:600 12.5px var(--f-body);cursor:pointer}
+.email-sug:hover{border-color:var(--warn)}
+.grid-addr{display:grid;grid-template-columns:1fr 130px;gap:12px}
+@media (max-width:520px){.grid-addr{grid-template-columns:1fr}}
 .field .err{font-size:12px;color:var(--red)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .btn{border:none;border-radius:8px;padding:12px 18px;font-weight:700;background:var(--gold);color:#0B0F1A}
@@ -662,7 +667,39 @@ const money0 = c => '$'+Math.round(c/100).toLocaleString('en-US');
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const estDaysUI = (tb, daily) => daily>0 ? Math.floor(tb/daily) : 0;
 
-const state = Object.assign({}, CONFIG.defaults, { contact:{name:'',phone:'',email:'',company:'',address:'',when:'',notes:'',existingSystem:false,existingType:null,existingWorking:null,construction:false,hasDeadline:false,deadline:'',floorPlans:false,floorPlanImg:null} });
+/* ---------- intelligent Step-1 field helpers ---------- */
+// Name: title-case all-lower/all-upper words but PRESERVE already-mixed-case input (McDonald, DeMarco,
+// O'Neill), honouring hyphens/apostrophes and the Mc- prefix. Applied on blur, never mid-typing.
+function titleWord(w){
+  if(!w) return w;
+  if(/[a-zà-öø-ÿ]/.test(w) && /[A-ZÀ-ÖØ-Þ]/.test(w.slice(1))) return w;   // user already mixed-cased it → keep
+  let out = w.toLowerCase().replace(/(^|[-'’ ])([a-zà-öø-ÿ])/g, (m,sep,ch)=>sep+ch.toUpperCase());
+  out = out.replace(/\bMc([a-zà-öø-ÿ])/g, (m,ch)=>'Mc'+ch.toUpperCase());   // McDonald
+  return out;
+}
+function smartName(v){ return String(v||'').replace(/\s+/g,' ').trim().split(' ').map(titleWord).join(' '); }
+// Phone: US NANP. Strip a leading 1/+1, keep 10 digits, format (xxx) xxx-xxxx; E.164 when complete.
+function phoneDigits(v){ let d=String(v||'').replace(/\D/g,''); if(d.length===11 && d[0]==='1') d=d.slice(1); return d.slice(0,10); }
+function fmtPhone(v){ const d=phoneDigits(v); if(!d) return ''; if(d.length<4) return '('+d; if(d.length<7) return '('+d.slice(0,3)+') '+d.slice(3); return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6,10); }
+function phoneE164(v){ const d=phoneDigits(v); return d.length===10 ? '+1'+d : ''; }
+// Email: suggest a correction for an obvious domain/TLD typo (never auto-applied).
+const EMAIL_DOMAINS = ['gmail.com','googlemail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','me.com','comcast.net','verizon.net','att.net','sbcglobal.net','protonmail.com'];
+function levenshtein(a,b){ const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]); for(let j=0;j<=n;j++)d[0][j]=j; for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
+function emailSuggest(email){
+  const m=/^([^@]+)@([^@]+)$/.exec(String(email||'').trim()); if(!m) return '';
+  let dom=m[2].toLowerCase().replace(/\.con$|\.cpm$|\.cmo$|\.vom$/,'.com').replace(/\.comm$/,'.com').replace(/\.co$/,'.com');
+  if(EMAIL_DOMAINS.indexOf(dom)>=0) return (dom===m[2].toLowerCase())?'':m[1]+'@'+dom;
+  let best=null,bd=99; EMAIL_DOMAINS.forEach(d=>{ const x=levenshtein(dom,d); if(x<bd){bd=x;best=d;} });
+  if(best && bd>0 && bd<=2) dom=best;
+  return (dom!==m[2].toLowerCase()) ? m[1]+'@'+dom : '';
+}
+function composeName(){ const c=state.contact; c.name=[c.firstName,c.lastName].filter(Boolean).join(' ').trim(); }
+
+const state = Object.assign({}, CONFIG.defaults, { contact:{
+  firstName:'', lastName:'', name:'', phone:'', phoneE164:'', email:'', company:'',
+  address:'', unit:'', placeId:'', lat:null, lng:null, companyPlaceId:'',
+  when:'', notes:'', existingSystem:false, existingType:null, existingWorking:null,
+  construction:false, hasDeadline:false, deadline:'', floorPlans:false, floorPlanImg:null } });
 let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
 // 3-step model (the 14 topic renderers below are regrouped into these; engine/state/actions unchanged).
 let openAcc = 'property';   // Step 2: one accordion open at a time
@@ -998,14 +1035,27 @@ const R = {
       <p class="fine">Estimate based on standard conditions. Final price is confirmed at a free site survey. Quote ref ${CONFIG.version}.</p>`;
   },
   contact(s, q, i){
-    const f = (id,label,type,ph,req) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label><input id="c_${id}" type="${type}" value="${esc(state.contact[id])}" data-contact="${id}" placeholder="${ph}" autocomplete="${{name:'name',phone:'tel',email:'email',company:'organization',address:'street-address'}[id]||'off'}"><span class="err" id="e_${id}"></span></div>`;
-    return `${head(s,i,'Tell us where to send your quote.', false)}
+    const c = state.contact;
+    const fld = (id,label,type,ph,req,ac,im) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label>`
+      + `<input id="c_${id}" type="${type}" value="${esc(c[id]||'')}" data-contact="${id}" placeholder="${ph}" autocomplete="${ac||'off'}"${im?` inputmode="${im}"`:''} spellcheck="false">`
+      + `<span class="err" id="e_${id}"></span></div>`;
+    return `${head(s,i,'Tell us who you are and where the cameras go — your estimate is sent here.', false)}
       <form class="form" id="cform" novalidate>
-        <div class="grid2">${f('name','Name','text','Jane Smith',true)}${f('phone','Number','tel','(201) 555-0142',true)}</div>
-        ${f('email','Email','email','jane@example.com',true)}
-        ${f('company','Company name','text','Business name (optional)')}
-        ${f('address','Address','text','Street, city, ZIP',true)}
-        <button class="btn start" type="submit">Next →</button>
+        <div class="grid2">
+          ${fld('firstName','First name','text','Jane',true,'given-name')}
+          ${fld('lastName','Last name','text','Smith',true,'family-name')}
+        </div>
+        ${fld('phone','Phone','tel','(201) 555-0142',true,'tel','tel')}
+        <div class="field"><label for="c_email">Email *</label>
+          <input id="c_email" type="email" value="${esc(c.email||'')}" data-contact="email" placeholder="jane@example.com" autocomplete="email" inputmode="email" spellcheck="false">
+          ${c.emailSuggest?`<button type="button" class="email-sug" data-act="emailfix">Did you mean <b>${esc(c.emailSuggest)}</b>?</button>`:''}
+          <span class="err" id="e_email"></span></div>
+        ${fld('company','Company','text','Business name (optional)',false,'organization')}
+        <div class="grid-addr">
+          ${fld('address','Property address','text','Start typing your address…',true,'street-address')}
+          ${fld('unit','Apt / Suite','text','Unit (optional)',false,'address-line2')}
+        </div>
+        <p class="fine">Used only to prepare and send your estimate. No spam, and a valid format isn’t a verified number — we may confirm by text or call.</p>
       </form>`;
   },
   site(s, q, i){
@@ -1178,12 +1228,15 @@ function quoteText(q, id){
   return L.join('\n');
 }
 function validateContact(showErr){
-  const c = state.contact; let ok = true;
-  const setErr = (k,m)=>{ const el=$('#e_'+k); if(el && showErr) el.textContent=m; if(m) ok=false; };
-  setErr('name', c.name.trim()?'':'Enter your name.');
-  setErr('phone', c.phone.replace(/\D/g,'').length>=10?'':'Enter a 10-digit phone number.');
-  setErr('email', /^\S+@\S+\.\S+$/.test(c.email)?'':'Enter a valid email.');
-  setErr('address', c.address.trim()?'':'Enter the install address.');
+  const c = state.contact; let ok = true, firstBad = null;
+  const setErr = (k,m)=>{ const el=$('#e_'+k); if(el && showErr) el.textContent=m; if(m){ ok=false; if(!firstBad) firstBad=k; } };
+  composeName();
+  setErr('firstName', c.firstName.trim()?'':'Enter your first name.');
+  setErr('lastName',  c.lastName.trim()?'':'Enter your last name.');
+  setErr('phone', phoneDigits(c.phone).length===10?'':'Enter a 10-digit U.S. phone number.');
+  setErr('email', /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((c.email||'').trim())?'':'Enter a valid email.');
+  setErr('address', c.address.trim()?'':'Enter the property address.');
+  if(!ok && showErr && firstBad){ const el=$('#c_'+firstBad); if(el){ try{ el.focus(); }catch(_){} } }
   return ok;
 }
 function finalizeQuote(){
@@ -1301,8 +1354,9 @@ document.addEventListener('click', e=>{
     // PUBLIC BUILD — capture the code into the lead; no client-side code list or discount (rep/backend applies it).
     case 'promo': { const code = ($('#promoInput').value||'').trim().toUpperCase(); state.promoCode = code || null; promoMsg=''; render(); return; }
     case 'promoclear': state.promoCode=null; promoMsg=''; render(); return;
-    case 'submit': if(validateContact(true)) finalizeQuote(); else { render(); go(CONFIG.slides.findIndex(x=>x.id==='contact')); } return;
-    case 'edit': submitted = null; render(); go(CONFIG.slides.findIndex(x=>x.id==='review')); return;
+    case 'emailfix': { state.contact.email=state.contact.emailSuggest||state.contact.email; state.contact.emailSuggest=''; const el=$('#c_email'); if(el) el.value=state.contact.email; updateEmailSug(); return; }
+    case 'submit': if(validateContact(true)) finalizeQuote(); else { go(0); } return;   // invalid → back to Step 1
+    case 'edit': submitted = null; render(); go(STEPS.length-1); return;
     case 'replock': rep = false; render(); renderDrawer(); return;
     case 'reset': Object.assign(state, CONFIG.defaults, { contact:{name:'',phone:'',email:'',address:'',when:'',notes:''} }); submitted=null; done.clear(); closeDrawer(); render(); go(0); return;
     default: return;
@@ -1331,9 +1385,32 @@ function liveCams(n){
 }
 document.addEventListener('input', e=>{
   const t = e.target;
-  if(t.dataset.contact){ state.contact[t.dataset.contact] = t.value; const er=$('#e_'+t.dataset.contact); if(er) er.textContent=''; }
+  if(t.dataset.contact){
+    const k = t.dataset.contact;
+    if(k==='phone'){ t.value = fmtPhone(t.value); const p=t.value.length; try{ t.setSelectionRange(p,p); }catch(_){} state.contact.phone=t.value; state.contact.phoneE164=phoneE164(t.value); }
+    else state.contact[k] = t.value;
+    if(k==='firstName'||k==='lastName') composeName();
+    if(k==='email' && state.contact.emailSuggest){ state.contact.emailSuggest=''; const b=$('.email-sug'); if(b) b.remove(); }
+    const er=$('#e_'+k); if(er) er.textContent='';
+  }
   if(t.dataset.num==='camsrange' || t.dataset.num==='camsnum'){ liveCams(+t.value); }
 });
+// Final formatting on blur (never mid-typing): name casing + email typo suggestion.
+document.addEventListener('focusout', e=>{
+  const t = e.target; if(!t.dataset || !t.dataset.contact) return;
+  const k = t.dataset.contact;
+  if(k==='firstName'||k==='lastName'){ const v=smartName(t.value); if(v!==t.value){ t.value=v; } state.contact[k]=v; composeName(); }
+  else if(k==='email'){ state.contact.emailSuggest = emailSuggest(t.value); updateEmailSug(); }
+});
+// Inject/remove the "did you mean…" hint in place, so an email blur never re-renders (no focus steal).
+function updateEmailSug(){
+  const field = $('#c_email'); if(!field) return;
+  let b = $('.email-sug');
+  if(state.contact.emailSuggest){
+    if(!b){ b=document.createElement('button'); b.type='button'; b.className='email-sug'; b.dataset.act='emailfix'; field.insertAdjacentElement('afterend', b); }
+    b.innerHTML = 'Did you mean <b>'+esc(state.contact.emailSuggest)+'</b>?';
+  } else if(b){ b.remove(); }
+}
 document.addEventListener('change', e=>{
   const t = e.target;
   if(t.dataset.file==='floorPlan'){ const f = t.files && t.files[0]; if(!f) return;
@@ -1394,16 +1471,47 @@ function attachAddr(){
   var el = document.getElementById('c_address'); if(!el) return;
   if(gmapsState==='idle' && STEPS[cur] && STEPS[cur].id==='details') loadMaps();   // reached the Your Details step → load now
   if(gmapsState==='ready' && window.google && google.maps && google.maps.places){
-    if(el._acBound) return; el._acBound = true;
-    document.querySelectorAll('.pac-container').forEach(function(n){ n.remove(); });   // drop stale dropdowns from a previous bind
-    try{
-      var bounds = new google.maps.LatLngBounds({lat:39.8,lng:-75.6},{lat:41.5,lng:-73.0});   // NY/NJ metro bias
-      var ac = new google.maps.places.Autocomplete(el, { types:['address'], componentRestrictions:{country:'us'}, bounds, fields:['formatted_address'] });
-      ac.addListener('place_changed', function(){ var p=ac.getPlace(); if(p && p.formatted_address) setAddress(p.formatted_address); });
-    }catch(e){ el._acBound=false; }
+    bindGoogleAddr(el);
+    bindGoogleCompany(document.getElementById('c_company'));
     return;
   }
   if(gmapsState==='none' || gmapsState==='loading'){ bindPhoton(el); }   // fallback / while Maps loads
+}
+function gBounds(){ return new google.maps.LatLngBounds({lat:39.8,lng:-75.6},{lat:41.5,lng:-73.0}); }   // NY/NJ metro bias
+function parseAddr(comps){ var o={}; (comps||[]).forEach(function(c){ var t=c.types||[];
+  if(t.indexOf('street_number')>=0) o.num=c.long_name;
+  else if(t.indexOf('route')>=0) o.street=c.long_name;
+  else if(t.indexOf('locality')>=0) o.city=c.long_name;
+  else if(t.indexOf('sublocality')>=0 && !o.city) o.city=c.long_name;
+  else if(t.indexOf('administrative_area_level_1')>=0) o.state=c.short_name;
+  else if(t.indexOf('postal_code')>=0) o.zip=c.long_name;
+  else if(t.indexOf('country')>=0) o.country=c.short_name;
+  else if(t.indexOf('subpremise')>=0) o.unit=c.long_name;
+}); return o; }
+function bindGoogleAddr(el){
+  if(el._acBound) return; el._acBound=true;
+  document.querySelectorAll('.pac-container').forEach(function(n){ n.remove(); });
+  try{
+    var ac=new google.maps.places.Autocomplete(el,{ types:['address'], componentRestrictions:{country:'us'}, bounds:gBounds(), fields:['formatted_address','address_components','geometry','place_id'] });
+    ac.addListener('place_changed', function(){ var p=ac.getPlace(); if(!p) return; var c=state.contact, a=parseAddr(p.address_components);
+      if(p.formatted_address){ c.address=p.formatted_address; el.value=p.formatted_address; }
+      c.placeId=p.place_id||''; c.addr=a;
+      if(a.unit && !c.unit){ c.unit=a.unit; var u=$('#c_unit'); if(u) u.value=a.unit; }
+      if(p.geometry && p.geometry.location){ try{ c.lat=p.geometry.location.lat(); c.lng=p.geometry.location.lng(); }catch(_){} }
+      var er=$('#e_address'); if(er) er.textContent='';
+    });
+  }catch(e){ el._acBound=false; }
+}
+function bindGoogleCompany(el){
+  if(!el || el._acBound) return; el._acBound=true;
+  try{
+    var ac=new google.maps.places.Autocomplete(el,{ types:['establishment'], componentRestrictions:{country:'us'}, bounds:gBounds(), fields:['name','formatted_address','place_id'] });
+    ac.addListener('place_changed', function(){ var p=ac.getPlace(); if(!p) return; var c=state.contact;
+      if(p.name){ c.company=p.name; el.value=p.name; }
+      c.companyPlaceId=p.place_id||'';
+      if(p.formatted_address && !c.address.trim()){ c.address=p.formatted_address; var ae=$('#c_address'); if(ae) ae.value=p.formatted_address; var er=$('#e_address'); if(er) er.textContent=''; }   // offer the business address when the install address is still blank
+    });
+  }catch(e){ el._acBound=false; }
 }
 function bindPhoton(el){
   if(el._phBound) return; el._phBound = true;
