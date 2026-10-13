@@ -274,6 +274,8 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .total{font-size:12px;color:var(--bar-muted);white-space:nowrap}
 .total b{color:var(--bar-fg);font-size:16px;font-variant-numeric:tabular-nums;margin-left:4px}
 .total i{font-style:normal;color:var(--gold)}
+.total .prelim{font-style:normal;color:var(--warn);font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.rev-edit{background:none;border:none;color:var(--gold);font:700 12px var(--f-body);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
 
 /* ===== 3-step layout: step header + Step-2 accordions ===== */
 .step-h{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
@@ -786,7 +788,7 @@ const R = {
         <div class="opt-sub">${lv.blurb}</div>
         <ul class="feat">${lv.features.map(f=>`<li>${tick}${f}</li>`).join('')}</ul>
       </button></div>`;
-    return `${head(s,i,'What are you looking for? Swipe to compare — you can change this any time.')}
+    return `${head(s,i,'Pick how smart you want the system — you can change this anytime.')}
       <div class="level-carousel">${CONFIG.catalog.levels.map(card).join('')}</div>`;
   },
   size(s, q, i){
@@ -1015,12 +1017,20 @@ const R = {
     const line = l => `<div class="q-line"><span>${esc(l.label)}<br><small class="num">${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</small></span><span class="amt">${money(l.amt)}</span></div>`;
     const discPct = Math.round((state.discount||0)*100);
     const sys = q.ss, sysLabel = sys.groups.map(g=>`${g.count} × ${g.res}`).join(' + ')||`${q.n} cameras`;
-    return `${head(s,i,'Every line is itemized. Tap any step in the grid to change it.', false)}
-      <div class="panel rec-hero"><div class="panel-h"><span>Your system</span><span class="num">≈ ${sys.estimatedDays} days</span></div>
+    const c = state.contact;
+    return `${head(s,i,'Here’s your estimate. Edit any section, then submit for a reviewed final quote.', false)}
+      <div class="panel"><div class="panel-h"><span>Your details</span><button type="button" class="rev-edit" data-act="editcfg" data-step="0">Edit</button></div>
+        <div class="panel-b" style="gap:3px">
+          <div style="font-weight:700">${esc(c.name||'')}${c.company?' · '+esc(c.company):''}</div>
+          <div class="opt-sub">${esc(c.phone||'')}${c.email?' · '+esc(c.email):''}</div>
+          <div class="opt-sub">${esc(c.address||'')}${c.unit?' · '+esc(c.unit):''}</div>
+        </div></div>
+      <div class="panel rec-hero"><div class="panel-h"><span>Your system</span><button type="button" class="rev-edit" data-act="editcfg" data-acc="cameras">Edit</button></div>
         <div class="panel-b" style="gap:4px">
           <div style="font-weight:700">${sysLabel} cameras · ${q.level.name}</div>
-          <div class="opt-sub">${sys.activeNvr.name} · ${sys.storageTB}TB storage · ${CONFIG.catalog.retention.recordingLabel}</div>
+          <div class="opt-sub">${sys.activeNvr.name} · ${state.extStorage?'60+ days storage (custom quote)':sys.storageTB+'TB storage'} · ${CONFIG.catalog.retention.recordingLabel}</div>
           <div class="opt-sub">${q.level.features.join(' · ')}</div>
+          ${state.extStorage?`<div class="note" style="margin-top:6px">Extended retention (60+ days) is sized and priced at the free site survey — the total below is preliminary.</div>`:''}
         </div></div>
       <div class="quote">
         ${groups.map(g=>`<div class="q-group"><h3>${g}</h3>${q.lines.filter(l=>l.g===g).map(line).join('')}</div>`).join('')}
@@ -1143,7 +1153,8 @@ function chrome(q){
   $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
   // three-segment progress bar (Your Details → Build System → Review Quote); segments jump when reachable
   $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span>${st.label}</span></button>`).join('');
-  $('#total').innerHTML = cur===0 ? '' : `Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
+  const prelim = state.extStorage || q.ss.noStandardFit;   // extended/custom storage → the total isn't final
+  $('#total').innerHTML = cur===0 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
   $('#prev').disabled = cur===0;
   const nx=$('#next'), lbl=nx.querySelector('.lbl');
   lbl.textContent = cur===0 ? 'Continue' : cur===1 ? 'Review quote' : 'Submit';
@@ -1258,6 +1269,8 @@ function validateContact(showErr){
   return ok;
 }
 function finalizeQuote(){
+  if(submitted || window.__cctvSubmitting) return;   // prevent double-tap / double-submit
+  window.__cctvSubmitting = true;
   const q = Engine.compute(state);
   const c = state.contact;   // (bugfix) finalizeQuote referenced an undefined `c`
   const d = new Date(), id = 'Q-'+String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
@@ -1280,6 +1293,7 @@ function finalizeQuote(){
     const lite = JSON.parse(JSON.stringify(snapshot)); if(lite.inputs && lite.inputs.contact) delete lite.inputs.contact.floorPlanImg;
     arr.unshift(lite); localStorage.setItem(k, JSON.stringify(arr.slice(0,25))); }catch(_){}
   submitLead(snapshot, fp);
+  window.__cctvSubmitting = false;   // 'submitted' now guards re-entry; allow a later Edit → re-submit
   done.add(cur); render();
 }
 
@@ -1377,6 +1391,7 @@ document.addEventListener('click', e=>{
     case 'emailfix': { state.contact.email=state.contact.emailSuggest||state.contact.email; state.contact.emailSuggest=''; const el=$('#c_email'); if(el) el.value=state.contact.email; updateEmailSug(); return; }
     case 'submit': if(validateContact(true)) finalizeQuote(); else { go(0); } return;   // invalid → back to Step 1
     case 'edit': submitted = null; render(); go(STEPS.length-1); return;
+    case 'editcfg': { if(a.dataset.acc) openAcc=a.dataset.acc; go(a.dataset.step!=null?+a.dataset.step:1); return; }   // Review → jump back to edit a section
     case 'replock': rep = false; render(); renderDrawer(); return;
     case 'reset': Object.assign(state, CONFIG.defaults, { contact:{name:'',phone:'',email:'',address:'',when:'',notes:''} }); submitted=null; done.clear(); closeDrawer(); render(); go(0); return;
     default: return;
