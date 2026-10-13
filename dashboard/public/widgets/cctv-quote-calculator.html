@@ -232,6 +232,39 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .lvl-price{margin-left:auto;font-weight:700;font-size:16px}
 @media (prefers-reduced-motion:reduce){.feat-row,.feat-box{transition:none}}
 
+/* polished quote document (Step 5) */
+.quote-doc{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.10)}
+.qd-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px;background:var(--bar);color:var(--bar-fg);border-bottom:3px solid var(--gold)}
+.qd-brand b{display:block;font-size:17px;letter-spacing:.04em;font-weight:800}
+.qd-brand span{font-size:10.5px;color:var(--bar-muted);letter-spacing:.09em;text-transform:uppercase}
+.qd-meta{text-align:right;flex:none}
+.qd-doc-t{font-size:15px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.qd-date{font-size:12px;color:var(--bar-muted);margin-top:1px}
+.qd-flag{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#0B0F1A;background:var(--warn);border-radius:4px;padding:2px 7px}
+.qd-parties{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line)}
+@media (max-width:480px){.qd-parties{grid-template-columns:1fr;gap:12px}}
+.qd-k{font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.qd-name{font-weight:700;font-size:14.5px;line-height:1.3}
+.qd-co{font-weight:400;color:var(--muted)}
+.qd-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.qd-badge{display:inline-block;background:var(--gold);color:#0B0F1A;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;border-radius:4px;padding:2px 7px;margin-right:6px;vertical-align:1px}
+.qd-body{padding:4px 18px}
+.qd-group{padding:11px 0;border-bottom:1px solid var(--line)}
+.qd-group:last-child{border-bottom:none}
+.qd-gh{font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--gold-ink);margin-bottom:7px}
+.qd-line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:4px 0;font-size:13.5px}
+.qd-desc{display:flex;flex-direction:column;min-width:0}
+.qd-desc em{font-style:normal;font-size:11.5px;color:var(--muted);margin-top:1px}
+.qd-amt{font-weight:600;white-space:nowrap}
+.qd-totals{padding:13px 18px 16px;background:rgba(0,0,0,.025)}
+:root[data-theme="dark"] .qd-totals,:root:not([data-theme="light"]) .qd-totals{background:rgba(255,255,255,.03)}
+.qd-trow{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0;color:var(--muted)}
+.qd-trow.disc{color:var(--good)}
+.qd-trow.mo{margin-top:5px;color:var(--fg)}
+.qd-grand{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px;padding-top:11px;border-top:2px solid var(--line)}
+.qd-grand span{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.qd-grand b{font-size:25px;line-height:1;color:var(--gold-ink)}
+
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
 .promo-row{display:flex;gap:8px}
@@ -287,6 +320,7 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .dots{display:flex;gap:6px;width:100%;max-width:420px}
 .seg{flex:1;min-width:0;border:none;background:#2a3245;color:var(--bar-muted);height:26px;border-radius:7px;padding:0 6px;font:700 10px/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .18s,color .18s}
 .seg>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg-n{display:none}
 .seg.done{background:#5a4e35;color:#e7d9bd}
 .seg.on{background:var(--gold);color:#0B0F1A}
 .total{font-size:12px;color:var(--bar-muted);white-space:nowrap}
@@ -346,6 +380,11 @@ details.why p{margin:6px 0 0;max-width:60ch}
   .nav{padding:0 12px}
   .nav .lbl{display:none}
   .count-val b{font-size:40px}
+  /* 5 steps don't fit as words on a phone — show numbered pips (the header carries the step name) */
+  .dots{gap:7px;justify-content:center}
+  .seg{flex:0 0 auto;width:26px;padding:0;font-size:12px}
+  .seg-l{display:none}
+  .seg-n{display:inline}
 }
 @media (prefers-reduced-motion:reduce){.track{transition:none}}
 </style>
@@ -407,7 +446,7 @@ const CONFIG = {
       { id:'colornight',   label:'Full-Color Night Vision',       level:1 },
       { id:'hd4k',         label:'4K HD Video',                   level:1 },
       { id:'mobile',       label:'Mobile App Access',             level:1 },
-      { id:'audio',        label:'Audio Recording',               level:2, caveat:'Audio depends on the camera model — confirmed at the survey.' },
+      { id:'audio',        label:'Audio Recording',               level:1, allPackages:true, caveat:'Audio depends on the camera model — confirmed at the survey.' },
       { id:'aidetect',     label:'AI Human & Vehicle Detection',  level:2 },
       { id:'motionnotify', label:'Phone Motion Notifications',    level:2 },
       { id:'facial',       label:'Facial Recognition',            level:3, specialized:true },
@@ -778,9 +817,11 @@ const ICON = {
 /* ---------- 3-step shell: regroup the topic renderers into Your Details / Build System / Review ---------- */
 const STEP_ICON = { property: ICON.house, cameras: ICON.cam, storage: ICON.nvr, install: ICON.cable };
 const STEPS = [
-  { id:'details', label:'Intake',  title:'Your information',   single:['contact'] },
-  { id:'project', label:'Project', title:'About your project', single:['features','site'] },
-  { id:'system',  label:'System',  title:'Your system',        single:['system'] },
+  { id:'details',  label:'Intake',   title:'Your information',    single:['contact'] },
+  { id:'features', label:'Features',  title:'Security features',   single:['features'] },
+  { id:'project',  label:'Project',   title:'About your project',  single:['site'] },
+  { id:'system',   label:'System',    title:'Your system',         single:['system'] },
+  { id:'quote',    label:'Quote',     title:'Your quote',          single:['quote'] },
 ];
 function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
 function renderStep(st, q, i){
@@ -857,32 +898,57 @@ function optionsStrip(q){
       ${planRow}
     </div>`;
 }
-function quoteItemized(q){
-  const groups = ['Equipment','Installation','Cable'];
-  const line = l => `<div class="q-line"><span>${esc(l.label)}<br><small class="num">${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</small></span><span class="amt">${money(l.amt)}</span></div>`;
+// A polished, document-style quote (branded header, prepared-for + system, grouped line items, totals).
+function quoteDoc(q){
+  const c = state.contact;
   const discPct = Math.round((state.discount||0)*100);
   const rec = recommendLevel(state.features);
+  const sys = q.ss, sysLabel = sys.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || `${q.n} camera${q.n>1?'s':''}`;
+  const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const prelim = state.extStorage || sys.noStandardFit || rec.specialized.length>0;
+
+  const line = l => `<div class="qd-line"><span class="qd-desc">${esc(l.label)}<em>${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</em></span><span class="qd-amt num">${money(l.amt)}</span></div>`;
+  const group = (title, rows) => rows ? `<div class="qd-group"><div class="qd-gh">${title}</div>${rows}</div>` : '';
+  const grp = g => { const ls=q.lines.filter(l=>l.g===g); return ls.length ? ls.map(line).join('') : ''; };
+  const planRow = q.plan.kind!=='none' ? `<div class="qd-line"><span class="qd-desc">${q.plan.kind==='warranty'?'Extended warranty':'Full protection'} · ${state.term} yr<em>${q.plan.upfront?`paid in full (list ${money(q.plan.termTotal)})`:`${money(q.plan.monthly)}/mo × ${q.plan.months}`}</em></span><span class="qd-amt num">${q.plan.upfront?money(q.plan.upfront):'monthly'}</span></div>` : '';
+
   const secNotes = [
-    rec.wantsMonitoring ? '24/7 live monitoring requested — quoted separately as a monitoring service.' : '',
-    rec.specialized.length ? 'Facial / license-plate recognition needs specialized equipment — specced and priced at your free survey. Total below is preliminary.' : '',
+    rec.wantsMonitoring ? '24/7 live monitoring is quoted separately as a monitoring service.' : '',
+    rec.specialized.length ? 'Facial / license-plate recognition needs specialized equipment — specced and priced at your free survey, so this total is preliminary.' : '',
   ].filter(Boolean);
+
   return `<div class="eyebrow">Your quote</div>
-    <div class="quote">
-      ${groups.map(g=>{const ls=q.lines.filter(l=>l.g===g); return ls.length?`<div class="q-group"><h3>${g}</h3>${ls.map(line).join('')}</div>`:'';}).join('')}
-      <div class="q-group"><h3>System package</h3>
-        <div class="q-line"><span>Package subtotal</span><span class="amt">${money(q.base)}</span></div>
-        ${q.discount?`<div class="q-line disc"><span>Package discount (${discPct}%)</span><span class="amt">−${money(q.discount)}</span></div>`:''}
-        ${q.promoDiscount?`<div class="q-line disc"><span>Promo ${esc(q.promo.code)}<br><small>${esc(q.promo.label||'')}</small></span><span class="amt">−${money(q.promoDiscount)}</span></div>`:''}
+    <div class="quote-doc">
+      <div class="qd-head">
+        <div class="qd-brand"><b>IOT TECHS</b><span>Security camera systems</span></div>
+        <div class="qd-meta"><div class="qd-doc-t">Estimate</div><div class="qd-date">${today}</div>${prelim?`<div class="qd-flag">Preliminary</div>`:''}</div>
       </div>
-      ${q.addons.length?`<div class="q-group"><h3>Add-ons</h3>${q.addons.map(line).join('')}</div>`:''}
-      ${q.plan.kind!=='none'?`<div class="q-group"><h3>Protection plan</h3>
-        <div class="q-line"><span>${q.plan.kind==='warranty'?'Extended warranty':'Full protection'} · ${state.term} yr<br><small class="num">${q.plan.upfront?`Paid in full (list ${money(q.plan.termTotal)})`:`${money(q.plan.monthly)}/mo × ${q.plan.months}, billed monthly`}</small></span><span class="amt">${q.plan.upfront?money(q.plan.upfront):'monthly'}</span></div></div>`:''}
-      ${q.adjust?`<div class="q-group"><h3>Site adjustment</h3><div class="q-line"><span>${esc(state.adjustReason||'Site survey adjustment')}</span><span class="amt">${money(q.adjust)}</span></div></div>`:''}
-      <div class="q-tot">
-        <div class="kv"><span>Before tax</span><span class="num">${money(q.beforeTax)}</span></div>
-        <div class="kv"><span>Sales tax${state.taxRate?` (${(state.taxRate*100).toFixed(3).replace(/\.?0+$/,'')}%)`:''}</span><span class="num">${state.taxRate?money(q.tax):'Not included'}</span></div>
-        <div class="kv grand"><span>Total due at install</span><b>${money(q.total)}</b></div>
-        ${q.plan.monthlyDue?`<div class="kv"><span>Then monthly</span><span class="num">${money(q.plan.monthlyDue)}/mo for ${q.plan.months} months</span></div>`:''}
+      <div class="qd-parties">
+        <div class="qd-party"><div class="qd-k">Prepared for</div>
+          <div class="qd-name">${esc(c.name||'—')}${c.company?` <span class="qd-co">· ${esc(c.company)}</span>`:''}</div>
+          ${(c.phone||c.email)?`<div class="qd-sub">${esc(c.phone||'')}${c.email?(c.phone?' · ':'')+esc(c.email):''}</div>`:''}
+          ${c.address?`<div class="qd-sub">${esc(c.address)}${c.unit?' · '+esc(c.unit):''}</div>`:''}
+        </div>
+        <div class="qd-party"><div class="qd-k">System</div>
+          <div class="qd-name"><span class="qd-badge">${q.level.name}</span>${sysLabel}</div>
+          <div class="qd-sub">${sys.activeNvr.name} · ${state.extStorage?'60+ days (custom)':sys.storageTB+'TB · ≈ '+sys.estimatedDays+' days'}</div>
+        </div>
+      </div>
+      <div class="qd-body">
+        ${group('Equipment', grp('Equipment'))}
+        ${group('Installation', grp('Installation'))}
+        ${group('Cable', grp('Cable'))}
+        ${q.addons.length?group('Add-ons', q.addons.map(line).join('')):''}
+        ${planRow?group('Protection plan', planRow):''}
+        ${q.adjust?group('Site adjustment', `<div class="qd-line"><span class="qd-desc">${esc(state.adjustReason||'Site survey adjustment')}</span><span class="qd-amt num">${money(q.adjust)}</span></div>`):''}
+      </div>
+      <div class="qd-totals">
+        <div class="qd-trow"><span>Subtotal</span><span class="num">${money(q.base)}</span></div>
+        ${q.discount?`<div class="qd-trow disc"><span>Package discount (${discPct}%)</span><span class="num">−${money(q.discount)}</span></div>`:''}
+        ${q.promoDiscount?`<div class="qd-trow disc"><span>Promo ${esc(q.promo.code)}</span><span class="num">−${money(q.promoDiscount)}</span></div>`:''}
+        <div class="qd-trow"><span>Sales tax${state.taxRate?` (${(state.taxRate*100).toFixed(3).replace(/\.?0+$/,'')}%)`:''}</span><span class="num">${state.taxRate?money(q.tax):'Not included'}</span></div>
+        <div class="qd-grand"><span>Total due at install</span><b class="num">${money(q.total)}${prelim?'+':''}</b></div>
+        ${q.plan.monthlyDue?`<div class="qd-trow mo"><span>Then monthly</span><span class="num">${money(q.plan.monthlyDue)}/mo × ${q.plan.months}</span></div>`:''}
       </div>
     </div>
     ${q.warnings.map(w=>`<div class="note">${esc(w)}</div>`).join('')}
@@ -1160,7 +1226,18 @@ const R = {
   },
   // STEP 3 — the whole system on one flat page: how many cameras + quality, what recorder + how long,
   // then the auto-defaulted options and the itemized quote. No accordions.
+  // STEP 4 — configure the system: cameras + resolution, recorder + retention, options. No package, no quote.
   system(s, q, i){
+    const div = '<hr class="sys-div">';
+    return head(s,i,'How many cameras, what recorder, and how long to keep footage. Pick your package and see the quote next.', false)
+      + `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}${R.resolution(slideOf('resolution'),q,i)}</div>`
+      + div
+      + `<div class="sys-block"><div class="eyebrow">Recorder &amp; recording history</div>${R.recorder(slideOf('recorder'),q,i)}</div>`
+      + div
+      + `<div class="sys-block">${optionsStrip(q)}</div>`;
+  },
+  // STEP 5 — choose the package, then the polished quote document + submit.
+  quote(s, q, i){
     if(submitted){
       return `<div class="eyebrow">Quote ready</div><h1>Thanks, ${esc((state.contact.name||'').split(' ')[0]||'')}. Your quote is saved.</h1>
         <div class="done-card"><div class="kv"><span>Quote number</span><b class="num">${submitted.id}</b></div>
@@ -1169,17 +1246,10 @@ const R = {
           <div class="row"><button class="btn" data-act="copy">Copy quote</button><button class="btn ghost" data-act="edit">Make changes</button></div>
           <p class="fine" id="copyMsg" aria-live="polite">Your IOT TECHS rep will reach out to book a free site survey.</p></div>`;
     }
-    const div = '<hr class="sys-div">';
-    return head(s,i,'How many cameras, what recorder, and how long to keep footage — we size it all and total it below.', false)
-      + `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}</div>`
-      + div
-      + `<div class="sys-block"><div class="eyebrow">Camera quality</div>${R.level(slideOf('level'),q,i)}${R.resolution(slideOf('resolution'),q,i)}</div>`
-      + div
-      + `<div class="sys-block"><div class="eyebrow">Recorder &amp; recording history</div>${R.recorder(slideOf('recorder'),q,i)}</div>`
-      + div
-      + `<div class="sys-block">${optionsStrip(q)}</div>`
-      + div
-      + quoteItemized(q);
+    return head(s,i,'Choose your package, then review your quote.', false)
+      + `<div class="sys-block"><div class="eyebrow">Choose your package</div>${R.level(slideOf('level'),q,i)}</div>`
+      + `<hr class="sys-div">`
+      + quoteDoc(q);
   },
   contact(s, q, i){
     const c = state.contact;
@@ -1215,9 +1285,7 @@ const R = {
     if(rec.wantsMonitoring) bits.push('24/7 live monitoring');
     if(rec.specialized.length) bits.push('specialized equipment (reviewed at survey)');
     const recNote = bits.length ? `<div class="feat-rec"><span class="feat-rec-k">Recommended</span> ${bits.join(' · ')}</div>` : '';
-    return `<div class="eyebrow">Security features</div>
-      <h2 class="feat-h">What security features are you interested in?</h2>
-      <p class="lede">Select all that apply — we'll help you find the right system.</p>
+    return `${head(s,i,"Select all that apply — we'll match you to the right system.", false)}
       <div class="feat-list">${CONFIG.catalog.securityFeatures.map(row).join('')}</div>
       ${recNote}`;
   },
@@ -1312,10 +1380,10 @@ function chrome(q){
   document.querySelectorAll('.slide').forEach((el,i)=>{ el.setAttribute('aria-hidden', i!==cur); el.inert = i!==cur; });
   $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
   // three-segment progress bar (Intake → Your Project → System); segments jump when reachable
-  $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span>${st.label}</span></button>`).join('');
+  $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span class="seg-n">${i+1}</span><span class="seg-l">${st.label}</span></button>`).join('');
   const prelim = state.extStorage || q.ss.noStandardFit || recommendLevel(state.features).specialized.length>0;   // extended storage or specialized facial/LPR → total not final
-  // Running total only on the System step — the earlier steps have no cost inputs yet.
-  $('#total').innerHTML = cur < STEPS.length-1 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
+  // Running total on the System + Quote steps — the earlier steps have no cost inputs yet.
+  $('#total').innerHTML = cur < STEPS.length-2 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
   $('#prev').disabled = cur===0;
   const nx=$('#next'), lbl=nx.querySelector('.lbl');
   lbl.textContent = cur < STEPS.length-1 ? 'Continue' : 'Submit';
