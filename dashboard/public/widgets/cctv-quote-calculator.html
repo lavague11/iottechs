@@ -1144,19 +1144,29 @@ function dataUrlToFile(dataUrl, name, type){
 }
 function submitLead(snapshot, fp){
   const file = (fp && fp.dataUrl && !fp.tooBig && !fp.error) ? dataUrlToFile(fp.dataUrl, fp.name, fp.type) : null;
-  try{ console.log('[CCTV] submitLead', snapshot.id, { snapshot, file }); }catch(_){}
-  // Hand the lead to the host page (it owns the real POST to the FSM backend).
+  // The floor plan rides as a multipart FILE; strip its (possibly multi-MB) data URL from the JSON snapshot.
+  var lean = snapshot; try{ lean = JSON.parse(JSON.stringify(snapshot)); if(lean.inputs && lean.inputs.contact) delete lean.inputs.contact.floorPlanImg; }catch(_){ }
+  try{ console.log('[CCTV] submitLead', snapshot.id, { total:snapshot.total, hasFile:!!file }); }catch(_){}
+  // Create the real lead: POST { snapshot JSON, quote text, floor-plan file } to the CRM intake route.
+  try{
+    var fd = new FormData();
+    fd.append('snapshot', JSON.stringify(lean));
+    fd.append('text', (submitted && submitted.text) || '');
+    if(file) fd.append('floorplan', file, file.name || 'floorplan');
+    fetch('/api/leads/cctv', { method:'POST', body:fd, credentials:'same-origin' })
+      .then(function(r){ return r.json().catch(function(){ return null; }); })
+      .then(function(j){ try{ console.log('[CCTV] lead saved', j); }catch(_){ } })
+      .catch(function(err){ try{ console.warn('[CCTV] lead POST failed', err); }catch(_){ } });
+  }catch(_){ }
+  // Notify the host page (homepage overlay) — analytics / UX only; it does NOT re-POST the lead.
   try{ if(window.parent && window.parent!==window)
-        window.parent.postMessage({ type:'iotcctv:lead', id:snapshot.id, total:snapshot.total, snapshot, hasFile:!!file }, '*'); }catch(_){}
-  // Light analytics — only if the host already provides one.
+        window.parent.postMessage({ type:'iotcctv:lead', id:snapshot.id, total:snapshot.total, hasFile:!!file }, '*'); }catch(_){}
+  // Light analytics — only if a provider is already present.
   try{ const p = { cameras:snapshot.inputs.cams, security_level:snapshot.level, total:snapshot.total/100,
         has_deadline:!!snapshot.site.hasDeadline, has_floorplan:!!snapshot.site.floorPlanFile };
     if(window.gtag) window.gtag('event','quote_submitted', p);
     else if(window.dataLayer && window.dataLayer.push) window.dataLayer.push({ event:'quote_submitted', ...p });
   }catch(_){}
-  // TODO(backend): replace the postMessage above (or add here) with the real FSM lead POST:
-  // const fd = new FormData(); fd.append('snapshot', JSON.stringify(snapshot)); if(file) fd.append('floorplan', file, file.name);
-  // fetch('/api/leads/cctv', { method:'POST', body: fd }).catch(()=>{});
 }
 function copy(text){
   const msg = $('#copyMsg');

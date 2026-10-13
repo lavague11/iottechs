@@ -1280,6 +1280,23 @@ function init() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_media_project ON media(project_access_id)`);
 
+  // ---- Public CCTV quote-builder leads: the full quote snapshot (JSON) + plain-text quote that the
+  // public /build calculator produced, linked to the lead project it created. The snapshot carries the
+  // internal flags / sizing math (never shown to the customer) so the office can act on the lead. ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cctv_quote_leads (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      quote_id           TEXT,
+      access_id          TEXT,
+      total              INTEGER,
+      snapshot           TEXT,
+      quote_text         TEXT,
+      floorplan_media_id TEXT,
+      created_at         TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cctv_quote_leads_access ON cctv_quote_leads(access_id)`);
+
   // ---- Per-stage customer acceptances (site survey / mockup gating) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS stage_acceptances (
@@ -3123,6 +3140,24 @@ export function createLeadProject(name, email, phone, address, service, company,
   );
 
   return { userId: user.id, accessId, customerPin: pin };
+}
+
+// Store the public CCTV quote-builder's snapshot + plain-text quote against the lead project it created.
+// Also drops a short human summary onto the project's contact_message so the office sees it at a glance.
+export function saveCctvQuoteLead({ quoteId, accessId, total, snapshot, text, floorplanMediaId, summary }) {
+  db.prepare(
+    `INSERT INTO cctv_quote_leads (quote_id, access_id, total, snapshot, quote_text, floorplan_media_id)
+     VALUES (?,?,?,?,?,?)`
+  ).run(quoteId || null, accessId || null, Number.isFinite(+total) ? Math.round(+total) : null,
+        snapshot ? (typeof snapshot === "string" ? snapshot : JSON.stringify(snapshot)) : null,
+        text || null, floorplanMediaId || null);
+  if (accessId && summary) {
+    try { db.prepare("UPDATE projects SET contact_message=? WHERE access_id=?").run(String(summary).slice(0, 2000), accessId); } catch { /* column optional */ }
+  }
+  return { ok: true };
+}
+export function getCctvQuoteLeadByAccess(accessId) {
+  return db.prepare("SELECT * FROM cctv_quote_leads WHERE access_id=? ORDER BY id DESC LIMIT 1").get(String(accessId || ""));
 }
 
 // ---- CRM: customer identity ---------------------------------------------------------------------

@@ -1587,16 +1587,13 @@
   window.addEventListener('message', function(e){
     var d = e.data; if(!d) return;
     if(d.type === 'iotcctv:close'){ if(ov && ov.classList.contains('on')) requestClose(); return; }
-    if(d.type === 'iotcctv:lead' && d.snapshot){ submitLead(d.snapshot); return; }
+    if(d.type === 'iotcctv:lead'){
+      // The calculator POSTs the lead to /api/leads/cctv itself (it has the floor-plan file + is same-origin).
+      // Here the homepage just records the event for analytics — it never re-POSTs (no duplicate lead).
+      try{ console.log('[home] CCTV quote submitted', d.id, d.total); }catch(_){ }
+      try{ if(window.gtag) gtag('event','quote_submitted',{ value:(d.total||0)/100 }); else if(window.dataLayer) dataLayer.push({ event:'quote_submitted', value:(d.total||0)/100 }); }catch(_){ }
+    }
   });
-  function submitLead(snapshot){
-    try{ console.log('[home] CCTV quote lead', snapshot.id, snapshot); }catch(_){ }
-    try{ if(window.gtag) gtag('event','quote_submitted',{ value: (snapshot.total||0)/100 }); }catch(_){ }
-    // TODO(backend): POST the lead to the FSM platform. The floor-plan data URL (when present) lives at
-    // snapshot.inputs.contact.floorPlanImg.dataUrl — convert to a File and send multipart alongside the JSON.
-    // var fd = new FormData(); fd.append('snapshot', JSON.stringify(snapshot)); /* + floorplan file */
-    // fetch('/api/leads/cctv', { method:'POST', body: fd }).catch(function(){});
-  }
 })();
 </script>
 </body>
