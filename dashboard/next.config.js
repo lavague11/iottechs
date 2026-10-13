@@ -19,6 +19,9 @@ const nextConfig = {
   async rewrites() {
     return [
       { source: "/", destination: "/home.html" },
+      // Shareable / textable public CCTV quote builder (also opened as an overlay from the homepage).
+      { source: "/build", destination: "/widgets/cctv-quote-calculator.html" },
+      { source: "/quote", destination: "/widgets/cctv-quote-calculator.html" },
     ];
   },
   // Tell browsers to forget any advertised HTTP/3 (QUIC) endpoint. LiteSpeed advertises

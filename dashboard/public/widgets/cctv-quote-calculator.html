@@ -1,0 +1,1283 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Build Your CCTV System</title>
+<style>
+/* Layout: one-screen app — ink top bar, horizontal slide track, ink bottom bar with live total. VAULT DARK palette. */
+:root{
+  --bg:#FAF8F4; --surface:#FFFFFF; --surface-2:#F0EDE8; --fg:#0B0F1A; --muted:#5B6070;
+  --slate:#2C3347; --gold:#C9A96E; --gold-ink:#7E6030; --line:#E2DCD0;
+  --bar:#0B0F1A; --bar-fg:#FAF8F4; --bar-muted:#9298A8;
+  --good:#2F6B4A; --good-bg:#E5F0E9; --warn:#8F5410; --warn-bg:#FBEEDB; --red:#A33A2B;
+  --sel:#FBF5EA;
+  --f-body:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  --f-num:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B0F1A; --surface:#131A2A; --surface-2:#1A2236; --fg:#EDE9E1; --muted:#9BA1B0;
+  --slate:#2C3347; --gold:#C9A96E; --gold-ink:#D9BC88; --line:#283048;
+  --bar:#05070D; --bar-fg:#EDE9E1; --bar-muted:#8A90A0;
+  --good:#7CC39A; --good-bg:#14281E; --warn:#E8B06A; --warn-bg:#2B2012; --red:#E8806F;
+  --sel:#1F2639; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B0F1A; --surface:#131A2A; --surface-2:#1A2236; --fg:#EDE9E1; --muted:#9BA1B0;
+  --slate:#2C3347; --gold:#C9A96E; --gold-ink:#D9BC88; --line:#283048;
+  --bar:#05070D; --bar-fg:#EDE9E1; --bar-muted:#8A90A0;
+  --good:#7CC39A; --good-bg:#14281E; --warn:#E8B06A; --warn-bg:#2B2012; --red:#E8806F;
+  --sel:#1F2639; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;overflow:hidden}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+.app{height:100%;display:grid;grid-template-rows:auto 1fr auto}
+
+/* top bar */
+.top{background:var(--bar);color:var(--bar-fg);border-bottom:2px solid var(--gold);padding:10px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.brand b{font-size:13px;letter-spacing:.14em}
+.brand span{font-size:11px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase}
+.step{margin-left:auto;font-size:12px;color:var(--bar-muted);text-align:right;white-space:nowrap}
+.step strong{color:var(--bar-fg);font-weight:600}
+.rep-badge{font-size:10px;letter-spacing:.12em;background:var(--gold);color:#0B0F1A;padding:2px 7px;border-radius:3px;font-weight:700}
+.icon-btn{background:transparent;border:1px solid #3a4258;border-radius:6px;width:38px;height:38px;display:grid;place-items:center;color:var(--bar-fg);flex:none}
+.icon-btn:hover{border-color:var(--gold)}
+
+/* slides */
+.viewport{overflow:hidden;position:relative;touch-action:pan-y}
+.track{display:flex;height:100%;transition:transform .45s cubic-bezier(.2,.75,.2,1)}
+.slide{flex:0 0 100%;height:100%;overflow-y:auto;overscroll-behavior:contain}
+.wrap{max-width:700px;margin:0 auto;padding:24px 16px 40px;display:flex;flex-direction:column;gap:18px}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-ink);font-weight:700;display:flex;align-items:center;gap:10px}
+.eyebrow::after{content:"";height:1px;background:var(--gold);flex:1;opacity:.6}
+h1{font-size:clamp(24px,5vw,32px);line-height:1.15;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:17px;margin:0}
+.lede{color:var(--muted);margin:0;max-width:60ch}
+.skip{align-self:flex-start;background:none;border:none;padding:0;color:var(--muted);font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.skip:hover{color:var(--fg)}
+
+/* option cards */
+.opts{display:grid;gap:10px}
+.opts.two{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.opt{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:8px;text-align:left;position:relative}
+.opt.sel{border-color:var(--gold);background:var(--sel);box-shadow:inset 3px 0 0 var(--gold)}
+.opt-head{display:flex;align-items:center;gap:12px}
+.opt-head svg{flex:none;color:var(--gold-ink)}
+.opt-title{font-weight:700}
+.opt-sub{font-size:13px;color:var(--muted)}
+.opt-price{margin-left:auto;font-weight:700;white-space:nowrap}
+.pick{background:none;border:none;padding:0;text-align:left;width:100%}
+.radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center}
+.sel .radio{border-color:var(--gold)}
+.sel .radio::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--gold)}
+.check{width:18px;height:18px;border-radius:4px;border:2px solid var(--line);flex:none;display:grid;place-items:center}
+.sel .check{border-color:var(--gold);background:var(--gold)}
+.sel .check::after{content:"";width:5px;height:9px;border:solid #0B0F1A;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.tag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--gold-ink);border:1px solid var(--gold);border-radius:3px;padding:1px 6px;white-space:nowrap}
+
+details.why{font-size:13.5px;color:var(--muted)}
+details.why summary{cursor:pointer;color:var(--gold-ink);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:6px}
+details.why summary::-webkit-details-marker{display:none}
+details.why summary::before{content:"+";font-weight:700;width:14px}
+details.why[open] summary::before{content:"–"}
+details.why p{margin:6px 0 0;max-width:60ch}
+.specs{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:8px 0 0;font-size:13px}
+.specs dt{color:var(--muted)} .specs dd{margin:0;color:var(--fg)}
+
+/* stepper + presets */
+.counter{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;align-items:center;justify-content:center;gap:18px}
+.counter button{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);font-size:24px;line-height:1}
+.counter button:hover{border-color:var(--gold)}
+.counter button:disabled{opacity:.35;cursor:default}
+.count-val{text-align:center;min-width:110px}
+.count-val b{display:block;font-size:48px;line-height:1;font-variant-numeric:tabular-nums}
+.count-val span{font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.presets.tiered{grid-template-columns:repeat(auto-fit,minmax(88px,1fr))}
+.presets.tiered .preset{padding:22px 10px}
+.presets.tiered .preset b{font-size:26px}
+.custom-count{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:14px;margin-top:4px}
+.cc-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink);font-weight:700}
+.cc-val{font-size:15px;color:var(--muted);text-align:center}
+.cc-val input{font:inherit;font-size:30px;font-weight:700;width:3.2em;text-align:center;border:none;border-bottom:2px solid var(--gold);background:transparent;color:var(--fg);padding:0 4px}
+.cc-slider{width:100%;accent-color:var(--gold);height:28px}
+.cc-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:-8px;font-variant-numeric:tabular-nums}
+.cc-row{display:flex;align-items:center;gap:14px}
+.mini-round{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);font-size:22px;line-height:1}
+.mini-round:disabled{opacity:.35}
+.cc-now{font-size:22px;font-weight:700;min-width:44px;text-align:center}
+.quick-label{font-size:12px;color:var(--muted);text-align:center;margin-top:2px}
+#sl-count .wrap{min-height:100%;justify-content:center}
+.intro-hero{min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:16px}
+.intro-hero .start{margin-top:8px}
+.preset{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 8px;text-align:center}
+.preset b{display:block;font-size:18px}
+.preset span{font-size:11.5px;color:var(--muted)}
+.preset.sel{border-color:var(--gold);background:var(--sel)}
+.mini-step{display:inline-flex;align-items:center;gap:8px}
+.mini-step button{width:32px;height:32px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);font-size:17px}
+.mini-step b{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* info panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.panel-h{background:var(--slate);color:#FAF8F4;padding:9px 14px;font-weight:700;font-size:13px;letter-spacing:.04em;border-left:3px solid var(--gold);display:flex;justify-content:space-between;gap:10px}
+.panel-b{padding:12px 14px;display:grid;gap:10px}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.kv span:first-child{color:var(--muted)}
+.svc{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.svc:first-child{border-top:none;padding-top:0}
+.svc b{font-size:14px}
+.svc small{grid-column:1/-1;color:var(--muted);font-size:13px}
+.svc.off b{opacity:.5;text-decoration:line-through}
+.svc.off .num{opacity:.5}
+.x{width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;line-height:1;display:grid;place-items:center;flex:none}
+.x:hover{border-color:var(--gold)}
+.svc .tag{font-weight:600;margin-left:6px;vertical-align:middle}
+.note{font-size:13px;padding:10px 12px;border-radius:6px;background:var(--warn-bg);color:var(--warn)}
+.note.good{background:var(--good-bg);color:var(--good)}
+.fine{font-size:12px;color:var(--muted);margin:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:none;background:none;padding:8px 14px;font-size:14px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--slate);color:#FAF8F4}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.row label{font-size:13px;color:var(--muted)}
+
+/* review */
+.quote{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.q-group{padding:6px 14px 10px}
+.q-group h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink);margin:10px 0 4px}
+.q-line{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:5px 0;font-size:14px;border-bottom:1px dashed var(--line)}
+.q-line:last-child{border-bottom:none}
+.q-line small{color:var(--muted);font-size:12px}
+.q-line .amt{font-variant-numeric:tabular-nums;text-align:right}
+.q-line.disc .amt,.q-line.disc span{color:var(--red)}
+.q-tot{background:var(--bar);color:var(--bar-fg);border-top:2px solid var(--gold);padding:14px;display:grid;gap:4px}
+.q-tot .kv span:first-child{color:var(--bar-muted)}
+.q-tot .grand{font-size:15px}
+.q-tot .grand b{color:var(--gold);font-size:24px;font-variant-numeric:tabular-nums}
+
+/* security level cards — side-by-side carousel */
+.level-carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.opt.level{padding:0;flex:1 1 0;min-width:200px;scroll-snap-align:start;display:flex;flex-direction:column;overflow:hidden}
+.opt.level.is-rec{border-color:var(--good)}
+.opt.level .pick{padding:15px 16px;display:grid;gap:9px;align-content:start;width:100%;flex:1}
+.rec-banner{background:var(--good);color:#fff;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:6px 10px;white-space:nowrap}
+:root[data-theme="dark"] .rec-banner,:root:not([data-theme="light"]) .rec-banner{color:#06130C}
+.lvl-head{display:flex;align-items:center;gap:10px}
+.lvl-name{font-weight:700;font-size:19px;line-height:1.1}
+.lvl-line{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-ink);margin-top:-4px}
+.lvl-tag{margin-left:auto;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 7px}
+.feat{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:7px}
+.feat li{display:flex;align-items:flex-start;gap:9px;font-size:14px;line-height:1.35;color:var(--fg)}
+.feat li svg{color:var(--good);flex:none;margin-top:3px}
+
+/* recorder / retention step */
+.daychips{display:flex;flex-wrap:wrap;gap:8px}
+.daychip{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font-size:14px;font-weight:600}
+.daychip.on{background:var(--slate);color:#FAF8F4;border-color:var(--slate)}
+.counter.compact{padding:12px}
+.counter.compact button{width:44px;height:44px;font-size:20px}
+.counter.compact .count-val b{font-size:34px}
+.sys-line{font-size:13px;color:var(--muted);letter-spacing:.02em}
+.rec-hero .panel-h{background:var(--slate)}
+.panel-h.good{background:var(--good);color:#fff;border-left-color:#06130C}
+:root[data-theme="dark"] .panel-h.good,:root:not([data-theme="light"]) .panel-h.good{color:#06130C}
+.opt.stor.is-rec{border-color:var(--good);overflow:hidden}
+.opt.stor.is-rec .pick{padding-top:10px}
+.rec-days{font-size:28px;font-weight:700;line-height:1.1;display:flex;flex-direction:column;gap:2px}
+.rec-days span{font-size:13px;font-weight:400;color:var(--muted);letter-spacing:.02em}
+.panel.upgrade .panel-h{background:var(--gold);color:#0B0F1A;border-left-color:#0B0F1A}
+.upgrade-opts{display:grid;gap:8px;margin-top:4px}
+.upgrade-opts .opt{display:block;width:100%;text-align:left;background:var(--surface-2)}
+.upgrade-opts .opt.sel{border-color:var(--gold);background:var(--sel);box-shadow:inset 3px 0 0 var(--gold)}
+.stor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+.opt.stor{padding:0}
+.opt.stor .pick{padding:12px 14px;display:grid;gap:4px}
+.stor-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.stor-top b{font-size:20px}
+.stor-days{font-size:14px;color:var(--gold-ink);font-weight:600}
+.opt.stor.is-rec{border-color:var(--gold)}
+
+/* floor-plan upload */
+.plan-drop{display:flex;flex-direction:column;align-items:center;gap:3px;padding:18px;border:1.5px dashed var(--gold);border-radius:10px;background:var(--sel);text-align:center;cursor:pointer}
+.plan-drop:hover{border-color:var(--gold-ink)}
+.plan-cta{font-weight:700;color:var(--gold-ink)}
+.plan-prev{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.plan-prev img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none}
+.plan-file{width:64px;height:64px;border-radius:8px;background:var(--slate);color:var(--gold);display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.plan-meta{display:flex;flex-direction:column;min-width:0;flex:1}
+.plan-meta b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-meta span{font-size:12px;color:var(--muted)}
+
+.sub-q{display:grid;gap:8px;padding:0 12px 12px}
+.sub-q .row{justify-content:space-between}
+
+.promo-box{display:grid;gap:6px}
+.promo-box>label{font-size:13px;font-weight:600}
+.promo-row{display:flex;gap:8px}
+.promo-row input{flex:1;min-width:0;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);text-transform:uppercase;letter-spacing:.04em}
+.promo-row .btn{flex:none}
+
+/* rep box */
+.rep{border:1px dashed var(--gold);border-radius:8px;padding:12px 14px;display:grid;gap:10px;background:var(--surface-2)}
+.rep-h{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--gold-ink)}
+.rep input,.rep select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);max-width:100%}
+.flags{margin:0;padding-left:18px;font-size:12.5px;color:var(--warn)}
+
+/* form */
+.form{display:grid;gap:12px}
+.field{display:grid;gap:4px}
+.field label{font-size:13px;font-weight:600}
+.field input,.field textarea,.field select{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);width:100%}
+.field .err{font-size:12px;color:var(--red)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.btn{border:none;border-radius:8px;padding:12px 18px;font-weight:700;background:var(--gold);color:#0B0F1A}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+.done-card{background:var(--surface);border:1px solid var(--gold);border-radius:8px;padding:16px;display:grid;gap:10px}
+.done-card pre{white-space:pre-wrap;font-size:12.5px;background:var(--surface-2);padding:12px;border-radius:6px;margin:0;max-height:260px;overflow:auto;font-family:ui-monospace,Menlo,monospace}
+
+/* intro */
+.hero-steps{display:grid;gap:8px;counter-reset:s}
+.hero-steps li{list-style:none;display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.hero-steps li::before{counter-increment:s;content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;background:var(--slate);color:var(--gold);font-weight:700;font-size:12px;display:grid;place-items:center}
+.hero-steps{padding:0;margin:0}
+.start{align-self:flex-start;font-size:16px;padding:14px 24px}
+
+/* bottom bar */
+.bottom{background:var(--bar);color:var(--bar-fg);border-top:2px solid var(--gold);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+.nav{height:44px;padding:0 16px;border-radius:8px;border:1px solid #3a4258;background:transparent;color:var(--bar-fg);font-weight:600}
+.nav.next{background:var(--gold);border-color:var(--gold);color:#0B0F1A}
+.nav:disabled{opacity:.3;cursor:default}
+.mid{display:grid;justify-items:center;gap:6px;min-width:0}
+.dots{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.dot{width:8px;height:8px;border-radius:50%;background:#3a4258;border:none;padding:0}
+.dot.done{background:#7d6a49}
+.dot.on{background:var(--gold);width:20px;border-radius:4px}
+.total{font-size:12px;color:var(--bar-muted);white-space:nowrap}
+.total b{color:var(--bar-fg);font-size:16px;font-variant-numeric:tabular-nums;margin-left:4px}
+.total i{font-style:normal;color:var(--gold)}
+
+/* index drawer */
+.scrim{position:fixed;inset:0;background:rgba(5,7,13,.55);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:2px solid var(--gold);padding-top:env(safe-area-inset-top,0px)}
+.drawer-h{background:var(--bar);color:var(--bar-fg);padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.drawer-b{overflow-y:auto;padding:12px 16px 24px;display:grid;gap:6px;align-content:start}
+.ix{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-align:left}
+.ix.on{border-color:var(--gold);background:var(--sel)}
+.ix .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--surface-2);color:var(--muted)}
+.ix.done .n{background:var(--gold);color:#0B0F1A}
+.ix small{display:block;color:var(--muted);font-size:12px}
+.pin{display:flex;gap:8px;margin-top:10px}
+.pin input{flex:1;min-width:0;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+
+@media (max-width:520px){
+  .bottom{grid-template-columns:auto 1fr auto;gap:8px;padding-inline:12px}
+  .nav{padding:0 12px}
+  .nav .lbl{display:none}
+  .count-val b{font-size:40px}
+}
+@media (prefers-reduced-motion:reduce){.track{transition:none}}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><b>IOT TECHS</b><span>Build your camera system</span></div>
+    <span class="rep-badge" id="repBadge" hidden>REP</span>
+    <div class="step" id="stepLbl"></div>
+    <button class="icon-btn" id="openIndex" aria-label="Open slide index">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5" rx="1"/><rect x="10.5" y="2" width="5.5" height="5.5" rx="1"/><rect x="2" y="10.5" width="5.5" height="5.5" rx="1"/><rect x="10.5" y="10.5" width="5.5" height="5.5" rx="1"/></svg>
+    </button>
+  </header>
+  <main class="viewport" id="viewport"><div class="track" id="track"></div></main>
+  <footer class="bottom">
+    <button class="nav" id="prev" aria-label="Back"><span aria-hidden="true">←</span> <span class="lbl">Back</span></button>
+    <div class="mid">
+      <div class="dots" id="dots"></div>
+      <div class="total" id="total"></div>
+    </div>
+    <button class="nav next" id="next" aria-label="Next"><span class="lbl">Next</span> <span aria-hidden="true">→</span></button>
+  </footer>
+</div>
+<div id="drawerRoot"></div>
+
+<script>
+/* =====================================================================
+   CONFIG — everything product-specific lives here. Swap this object to
+   make a calculator for another product line. Money is integer cents.
+   ===================================================================== */
+const CONFIG = {
+  id: 'cctv', version: 'CCTV spec v1.0 · Oct 2026',
+  // PUBLIC BUILD — rep mode / PIN and the promo code list are intentionally stripped from this file.
+  // Cost, margin and discount tooling never ship in the public calculator; they live in the internal
+  // staff copy served behind the authed dashboard. Do not re-add a client-side PIN or promo list here.
+  catalog: {
+    cam: { 8: { code:'CAM-8',  name:'8MP camera',  price:6500, watts:6.5 },
+           12:{ code:'CAM-12', name:'12MP camera', price:7500, watts:null } },
+    // Security level / feature tier — framed at the start. Price adders default to $0 (set per camera or flat in rep settings).
+    levels: [
+      { id:'essential', name:'Essential', tag:'Simple', line:'Record and watch',
+        blurb:'Around-the-clock recording you can check any time from your phone.',
+        features:['24/7 continuous recording','Live & recorded phone viewing','Clear day and night video'],
+        addPerCamera:0, addFlat:0 },
+      { id:'smart', name:'Smart', tag:'Most popular', line:'AI alerts',
+        blurb:'Everything in Essential, plus AI that tells people and vehicles apart and alerts you to what matters.',
+        features:['AI human & vehicle detection','Smart alerts to your phone','Far fewer false alarms'],
+        addPerCamera:0, addFlat:0, recommended:true },
+      { id:'pro', name:'Pro', tag:'Advanced', line:'AI search & plates',
+        blurb:'Everything in Smart, plus facial recognition, AI search through footage and license-plate capture.',
+        features:['Facial recognition','AI smart search (person, vehicle, color)','License plate recognition','Best with 12MP cameras'],
+        addPerCamera:0, addFlat:0, suggest12MP:true }
+    ],
+    // 8MP body styles — same price, same sensor. Internal SKU kept private (rep view only).
+    styles: {
+      turret:{ name:'Turret', sku:'I91DF', rating:'IP67 + IK08 impact rated', size:'4.8" round', info:'Ball-in-socket design aims anywhere and has no glass dome over the lens, so night vision never reflects. Our default for eaves, entrances and storefronts.' },
+      bullet:{ name:'Bullet', sku:'I91DL', rating:'IP67', size:'6.7" long', info:'Long, visible body that points down a fixed line. Good for driveways, side yards and fence lines, and its look alone deters people.' },
+      dome:  { name:'Dome',   sku:'I91DM', rating:'IP67', size:'4.3" round', info:'Low-profile and discreet, hard to tell which way it faces. Best for ceilings, hallways, registers and interiors.' }
+    },
+    services: [
+      { code:'DROP',  name:'Cable pull & routing',   price:15000, info:'A dedicated cable is run from the recorder to each camera. Charged per cable (one per camera).' },
+      { code:'TERM',  name:'Cable termination',      price:2500,  info:'Both ends get a connector, then each run is tested and labeled so it can be traced later.' },
+      { code:'MOUNT', name:'Camera mounting',        price:2500,  info:'Each camera is positioned, fastened and aimed at the area you want covered.' },
+      { code:'PROG',  name:'Camera programming',     price:2500,  info:'Network addressing, recording schedule and setup of the viewing app on your phone.' },
+      { code:'HW',    name:'Mounting hardware',      price:1000,  info:'Anchors, fasteners and weather sealing used at each camera.' },
+      { code:'CMGT',  name:'Cable management',       price:2500,  info:'Clips, ties and labeling so every run is tidy and serviceable.' }
+    ],
+    cable: { outdoor:{ code:'CB-OUT', name:'Outdoor-rated Cat6', price:15000 },
+             indoor: { code:'CB-IN',  name:'Indoor Cat6',        price:10000 },
+             feetPerBox:1000, feetPerCam:100 },
+    nvr: {
+      8:  { code:'NVR-8',  name:'8-channel recorder',  price:18999, ch:8,  bays:1, maxTB:10, poe:null, verified:false },
+      16: { code:'NVR-16', name:'16-channel recorder', price:36999, ch:16, bays:2, maxTB:10, poe:null, verified:false },
+      32: { code:'NVR-32', name:'32-channel recorder', price:45000, ch:32, bays:4, maxTB:10, poe:16,   verified:true }
+    },
+    // purchasable surveillance drives, 2TB increments (cents). Any 2TB capacity target is realized from these.
+    drives: { 2:17449, 4:19499, 6:32290, 8:42500, 10:52900 },
+    poe: { standard:{ code:'SW16', price:9900 }, bundle:{ code:'SW16-BUNDLE', price:4999 } },
+    addons: {
+      monitor:{ code:'MON',         name:'Monitor',                 price:9900,  info:'A screen at the recorder so you can watch live and recorded video without a phone.' },
+      mount:  { code:'MON-INSTALL', name:'Monitor mount & install', price:9900,  info:'We wall-mount the monitor and run the video connection to the recorder.' },
+      ups:    { code:'UPS',         name:'Battery backup (UPS)',    price:19900, info:'Keeps the recorder and cameras running through short power outages and protects them from surges.' }
+    },
+    plans: { warranty:700, protection:1500 },   // per month, per 8-camera tier
+    discounts: [0],   // PUBLIC BUILD — rep discount tiers stripped (margin data never ships publicly)
+    // ONE SOURCE OF TRUTH for storage/retention assumptions. Admin-editable; never shown to customers.
+    retention: {
+      defaultDays: 30, incrementTB: 2, minTB: 2, maxPerBayTB: 10,
+      dayRange: [7, 180], dayPresets: [15, 30, 45, 60, 90],
+      recordingLabel: '24/7 continuous recording',
+      // storage rate per camera per day, by resolution. Add 4/5/6MP here later with no code change.
+      profiles: {
+        '8MP':  { mp:8,  multiplier:1.0, tbPerDay:0.04 },
+        '12MP': { mp:12, multiplier:1.5, tbPerDay:0.06 }
+      }
+    },
+    calcVersion: 'retention-v1 · 8MP 0.04TB/day · 12MP 0.06TB/day · 2TB steps',
+    // PUBLIC BUILD — the promo / voucher code list is intentionally NOT shipped in the public page
+    // (it would be discoverable in source). Promo validation belongs server-side; until then there are
+    // no client-side codes. A code a customer types is captured into the lead snapshot for the rep to honor.
+    promos: {}
+  },
+  defaults: { level:'smart', sizeTier:8, cams:4, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
+              desiredDays:30, daysMode:'preset', selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
+              skipProg:false, monitorMode:'buy', monitor:true, mount:true, ups:false, plan:'none', term:1, billing:'monthly',
+              discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
+  sizeTiers: [
+    { ch:8,  label:'Up to 8 cameras',  sub:'Best for smaller systems',   presets:[4,6,8] },
+    { ch:16, label:'Up to 16 cameras', sub:'Best for medium systems',    presets:[8,10,12,16] },
+    { ch:32, label:'Up to 32 cameras', sub:'Best for larger properties', presets:[16,24,32] }
+  ],
+  camRange: [1,32],
+  slides: [
+    { id:'intro',   title:'Start',              type:'intro' },
+    { id:'contact', title:'Your details',       type:'contact' },
+    { id:'site',    title:'About the property',  type:'site' },
+    { id:'level',   title:'Security level',      type:'level',     fields:['level'] },
+    { id:'size',    title:'System size',         type:'size',      fields:['sizeTier'] },
+    { id:'count',   title:'How many cameras',   type:'count',     fields:['cams','customOpen'] },
+    { id:'res',     title:'Camera detail',      type:'resolution',fields:['n12'] },
+    { id:'cable',   title:'Cable',              type:'cable',     fields:['env','footage','extraBoxes'] },
+    { id:'rec',     title:'Recorder & storage', type:'recorder',  fields:['desiredDays','daysMode','selectedStorageTB','nvrUpgrade','poe'] },
+    { id:'install', title:'Installation',       type:'install',   fields:['skipProg'] },
+    { id:'monitor', title:'Monitor',            type:'monitor',   fields:['monitorMode','monitor','mount'] },
+    { id:'addons',  title:'Add-ons',            type:'addons',    fields:['ups'] },
+    { id:'plan',    title:'Protection plan',    type:'plan',      fields:['plan','term','billing'] },
+    { id:'review',  title:'Your quote',         type:'review' }
+  ]
+};
+
+/* =====================================================================
+   PRICING ENGINE — pure functions, no DOM.
+   ===================================================================== */
+const Engine = (() => {
+  const C = CONFIG.catalog;
+  const R = C.retention;
+  const nvrTiers = Object.keys(C.nvr).map(Number).sort((a,b)=>a-b); // [8,16,32]
+  const driveSizes = Object.keys(C.drives).map(Number).sort((a,b)=>a-b);
+
+  function nvrTier(n){ return n<=8 ? 8 : n<=16 ? 16 : 32; }
+  function boxesFor(n){ return n<=4 ? 0.5 : Math.ceil(n/8); }
+  function planTier(n){ return Math.ceil(n/8); }
+  function planMonthly(kind, n){ return kind==='none' ? 0 : C.plans[kind]*planTier(n); }
+  function maxStorageOf(nvr){ return nvr.bays * nvr.maxTB; }
+
+  // ---- canonical storage-sizing engine -----------------------------------
+  function profile(res){ return R.profiles[res] || R.profiles['8MP']; }
+  // camera groups → [{count,res,tbPerDay}]; mixed resolution handled natively
+  function cameraGroups(s){
+    const n = s.cams, n12 = Math.min(s.n12||0, n), n8 = n - n12, g = [];
+    if(n8)  g.push({ count:n8,  res:'8MP',  tbPerDay:profile('8MP').tbPerDay });
+    if(n12) g.push({ count:n12, res:'12MP', tbPerDay:profile('12MP').tbPerDay });
+    return g;
+  }
+  function dailyTB(groups){ return groups.reduce((a,g)=>a + g.count*g.tbPerDay, 0); }
+  function roundUpTB(tb){ const inc=R.incrementTB; return Math.max(R.minTB, Math.ceil((tb - 1e-9)/inc)*inc); }
+  function clampDays(d){ const [lo,hi]=R.dayRange; d=Math.round(+d||R.defaultDays); return Math.min(hi, Math.max(lo, d)); }
+  function retentionDays(storageTB, daily){ return daily>0 ? storageTB/daily : 0; }       // precise
+  function estDays(storageTB, daily){ return Math.floor(retentionDays(storageTB, daily)); } // conservative (floor)
+
+  // cheapest set of real drives (≤bays, each ≤maxPerBay) summing to exactly targetTB
+  function realizeDrives(targetTB, nvr){
+    const bays = nvr.bays, cap = Math.min(nvr.maxTB, R.maxPerBayTB);
+    const usable = driveSizes.filter(d=>d<=cap);
+    const memo = new Map();
+    function best(rem, baysLeft){
+      if(rem===0) return { price:0, drives:[] };
+      if(baysLeft===0) return null;
+      const key = rem+'/'+baysLeft; if(memo.has(key)) return memo.get(key);
+      let win = null;
+      for(const d of usable){ if(d>rem) break;
+        const sub = best(rem-d, baysLeft-1);
+        if(sub){ const cand = { price:sub.price+C.drives[d], drives:[d,...sub.drives] };
+          if(!win || cand.price<win.price) win = cand; }
+      }
+      memo.set(key, win); return win;
+    }
+    const r = best(targetTB, bays);
+    return r ? { price:r.price, drives:r.drives.sort((a,b)=>b-a) } : null;
+  }
+  // smallest NVR tier satisfying BOTH channel count and storage target
+  function smallestNvr(cams, targetTB){
+    for(const t of nvrTiers){ const nv=C.nvr[t]; if(nv.ch>=cams && maxStorageOf(nv)>=targetTB) return nv; }
+    return null;
+  }
+
+  // THE one function every surface derives from
+  function sizeStorage(s){
+    const groups = cameraGroups(s);
+    const daily = dailyTB(groups);                         // TB/day for the whole system
+    const days = clampDays(s.desiredDays);
+    const rawTB = daily * days;                            // raw requirement
+    const recommendedTB = daily>0 ? roundUpTB(rawTB) : R.minTB;
+
+    const channelTier = nvrTier(s.cams);                   // recorder the camera COUNT needs
+    const currentNvr = C.nvr[channelTier];
+    const currentMax = maxStorageOf(currentNvr);
+
+    const recNvr = smallestNvr(s.cams, recommendedTB);     // satisfies channels AND storage
+    const noStandardFit = !recNvr;                         // beyond entire catalog → custom quote
+    const requiresUpgrade = !noStandardFit && recNvr.ch > currentNvr.ch
+                            || (!noStandardFit && recNvr.code !== currentNvr.code && recommendedTB > currentMax);
+
+    // which recorder is actually active, honoring the customer's upgrade choice
+    let activeNvr;
+    if(noStandardFit) activeNvr = C.nvr[nvrTiers[nvrTiers.length-1]];
+    else if(requiresUpgrade && s.nvrUpgrade==='keep') activeNvr = currentNvr;
+    else activeNvr = recNvr;
+    // channel count alone may still force a bigger recorder than "keep" implies
+    if(activeNvr.ch < s.cams) activeNvr = smallestNvr(s.cams, 0) || activeNvr;
+    const activeMax = maxStorageOf(activeNvr);
+
+    // storage target: manual pick if any, else recommended, clamped to what the active recorder holds
+    const base = (s.selectedStorageTB!=null) ? roundUpTB(s.selectedStorageTB) : recommendedTB;
+    const storageTB = Math.min(activeMax, Math.max(R.minTB, base));
+    const realized = realizeDrives(storageTB, activeNvr) || realizeDrives(activeMax, activeNvr);
+
+    const estimatedDays = estDays(storageTB, daily);
+    const maxDaysCurrentNvr = estDays(currentMax, daily);
+    const meetsTarget = estimatedDays >= days;
+
+    // capacity options to show: 2TB steps around the recommendation, within the active recorder
+    const opts = [];
+    for(let tb=R.minTB; tb<=activeMax; tb+=R.incrementTB){
+      const d = realizeDrives(tb, activeNvr); if(!d) continue;
+      opts.push({ tb, price:d.price, drives:d.drives, days:estDays(tb, daily),
+                  recommended: tb===recommendedTB && !noStandardFit && tb<=activeMax });
+    }
+    // trim to a tidy window around the recommended / selected capacity (keep ≤6 for mobile)
+    const focus = Math.max(storageTB, recommendedTB);
+    let view = opts;
+    if(opts.length>6){
+      const idx = opts.findIndex(o=>o.tb>=focus);
+      const start = Math.max(0, Math.min(idx-1, opts.length-6));
+      view = opts.slice(start, start+6);
+      if(!view.some(o=>o.recommended)){ const rc=opts.find(o=>o.recommended); if(rc) view=[rc,...view].slice(0,6).sort((a,b)=>a.tb-b.tb); }
+    }
+
+    return {
+      groups, daily, days, rawTB, recommendedTB,
+      currentNvr, currentMax, recNvr, activeNvr, activeMax,
+      storageTB, drives:realized ? realized.drives : [], drivePrice:realized ? realized.price : 0,
+      estimatedDays, maxDaysCurrentNvr, meetsTarget,
+      requiresUpgrade, noStandardFit, options:opts, viewOptions:view,
+      manual: s.selectedStorageTB!=null, calcVersion:C.calcVersion
+    };
+  }
+
+  function compute(s){
+    const n = s.cams, n12 = Math.min(s.n12, n), n8 = n - n12;
+    const flags = [], warnings = [];
+
+    // canonical storage sizing drives the recorder, the drives and the retention
+    const ss = sizeStorage(s);
+    const nvr = ss.activeNvr, tier = nvr.ch, autoTier = ss.currentNvr.ch;
+    if(!nvr.verified) flags.push(`${nvr.code}: bays (${nvr.bays}), PoE ports and 12MP support are assumptions — confirm the stocked SKU.`);
+    if(n12) flags.push('12MP camera SKU + datasheet not verified (spec BLOCKER).');
+    if(ss.noStandardFit) warnings.push(`${ss.recommendedTB}TB for ${ss.days} days exceeds every standard recorder. IOT TECHS will size a custom storage system.`);
+    if(ss.requiresUpgrade && s.nvrUpgrade==='keep') warnings.push(`Current ${ss.currentNvr.name} holds up to ${ss.currentMax}TB — about ${ss.maxDaysCurrentNvr} days with this setup, below your ${ss.days}-day target.`);
+
+    const level = C.levels.find(l=>l.id===s.level) || C.levels[0];
+    if(level.suggest12MP && n12<n) flags.push('Pro tier: license plate recognition works best on 12MP cameras.');
+
+    // cameras
+    const lines = [];
+    if(n8)  lines.push({ g:'Equipment', code:'CAM-8',  label:'8MP camera',  qty:n8,  unit:C.cam[8].price,  amt:n8*C.cam[8].price });
+    if(n12) lines.push({ g:'Equipment', code:'CAM-12', label:'12MP camera', qty:n12, unit:C.cam[12].price, amt:n12*C.cam[12].price });
+    const watts = n8*C.cam[8].watts;
+    if(n8) flags.push(`PoE load ≈ ${watts.toFixed(1)} W for ${n8} × 8MP at 6.5 W max (802.3af)${n12?' + 12MP draw unknown':''}. Check recorder/switch PoE budget.`);
+    lines.push({ g:'Equipment', code:nvr.code, label:nvr.name, qty:1, unit:nvr.price, amt:nvr.price });
+
+    // storage drives (realized from the 2TB capacity target)
+    const counts = {}; ss.drives.forEach(d=>counts[d]=(counts[d]||0)+1);
+    Object.keys(counts).map(Number).sort((a,b)=>b-a).forEach(tb=>{
+      lines.push({ g:'Equipment', code:`HDD-${tb}`, label:`${tb}TB surveillance drive`, qty:counts[tb], unit:C.drives[tb], amt:counts[tb]*C.drives[tb] });
+    });
+
+    // PoE switch
+    let poeKind = null;
+    if(s.poe==='auto'){ if(n>=17) poeKind = 'bundle'; }
+    else if(s.poe!=='none') poeKind = s.poe;
+    if(n>=17 && s.poe==='none') warnings.push('17+ cameras need more PoE ports than the recorder provides.');
+    if(n>=17 && !(nvr.poe>=16)) flags.push('Auto switch price assumes 16 built-in PoE ports on the 32CH recorder.');
+    if(poeKind){
+      const p = C.poe[poeKind];
+      lines.push({ g:'Equipment', code:p.code, label:'16-port PoE switch'+(poeKind==='bundle'?' (bundle price)':''), qty:1, unit:p.price, amt:p.price });
+      flags.push('Check PoE switch wattage against total camera draw.');
+    }
+
+    // security-level AI package (price adders configurable; $0 by default)
+    const levelAmt = Math.round((level.addFlat||0) + (level.addPerCamera||0)*n);
+    if(levelAmt>0) lines.push({ g:'Equipment', code:'AI-'+level.id.toUpperCase(), label:`${level.name} AI package`, qty:1, unit:levelAmt, amt:levelAmt });
+
+    // installation services (camera programming is optional)
+    C.services.forEach(sv=>{
+      if(sv.code==='PROG' && s.skipProg) return;
+      lines.push({ g:'Installation', code:sv.code, label:sv.name, qty:n, unit:sv.price, amt:n*sv.price });
+    });
+
+    // cable
+    const baseBoxes = boxesFor(n), boxes = baseBoxes + (s.extraBoxes||0);
+    const cab = C.cable[s.env];
+    const footage = s.footage ?? n*C.cable.feetPerCam;
+    const allocated = boxes*C.cable.feetPerBox;
+    if(footage > allocated) warnings.push(`Estimated ${footage.toLocaleString()} ft exceeds the ${allocated.toLocaleString()} ft allocated. Add a cable box.`);
+    lines.push({ g:'Cable', code:cab.code, label:`${cab.name} · ${boxes===0.5?'half box':boxes+(boxes===1?' box':' boxes')} (1,000 ft each)`, qty:boxes, unit:cab.price, amt:Math.round(boxes*cab.price) });
+
+    const base = lines.reduce((a,l)=>a+l.amt,0);
+    const discount = Math.round(base*(s.discount||0));
+    const discountedBase = base - discount;
+
+    // customer promo / voucher — discounts the package only, capped so it can't exceed it
+    let promo = null, promoDiscount = 0;
+    if(s.promoCode){
+      const p = C.promos[s.promoCode];
+      if(p){ promo = { code:s.promoCode, ...p };
+        promoDiscount = p.type==='percent' ? Math.round(discountedBase*p.value) : Math.min(p.value, discountedBase);
+      }
+    }
+    const netBase = discountedBase - promoDiscount;
+
+    // add-ons (never discounted)
+    const addons = [];
+    ['monitor','mount','ups'].forEach(k=>{ if(s[k]){ const a=C.addons[k]; addons.push({ g:'Add-ons', code:a.code, label:a.name, qty:1, unit:a.price, amt:a.price }); }});
+    const addonTotal = addons.reduce((a,l)=>a+l.amt,0);
+
+    // service plan
+    const monthly = planMonthly(s.plan, n);
+    const months = s.term*12;
+    const termTotal = monthly*months;
+    const prepaid = Math.round(termTotal*5/6/100)*100;
+    const planUpfront = s.plan!=='none' && s.billing==='prepaid' ? prepaid : 0;
+    const planMonthlyDue = s.plan!=='none' && s.billing==='monthly' ? monthly : 0;
+
+    const adjust = Math.round(s.adjust||0);
+    const beforeTax = netBase + addonTotal + planUpfront + adjust;
+    const tax = Math.round(beforeTax*(s.taxRate||0));
+    const total = beforeTax + tax;
+
+    return { n, n8, n12, level, nvr, tier, autoTier, ss, boxes, baseBoxes, footage, allocated,
+             lines, base, discount, discountedBase, promo, promoDiscount, netBase, addons, addonTotal,
+             plan:{ kind:s.plan, monthly, months, termTotal, prepaid, upfront:planUpfront, monthlyDue:planMonthlyDue, tier:planTier(n) },
+             adjust, beforeTax, tax, total, warnings, flags };
+  }
+  return { compute, sizeStorage, nvrTier, boxesFor, planMonthly };
+})();
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const money = c => (c<0?'−':'')+'$'+(Math.abs(c)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0 = c => '$'+Math.round(c/100).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const estDaysUI = (tb, daily) => daily>0 ? Math.floor(tb/daily) : 0;
+
+const state = Object.assign({}, CONFIG.defaults, { contact:{name:'',phone:'',email:'',company:'',address:'',when:'',notes:'',existingSystem:false,existingType:null,existingWorking:null,construction:false,hasDeadline:false,deadline:'',floorPlans:false,floorPlanImg:null} });
+let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
+
+const ICON = {
+  cam:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 10h18l6 4v6l-6 4H5z"/><circle cx="15" cy="17" r="4"/><path d="M9 24v5h8"/></svg>',
+  nvr:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="11" width="26" height="12" rx="2"/><path d="M9 17h8"/><circle cx="24" cy="17" r="1.6"/><path d="M8 26h18"/></svg>',
+  drive:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="8" y="5" width="18" height="24" rx="2"/><circle cx="17" cy="15" r="5"/><circle cx="17" cy="15" r="1"/><path d="M12 25h4"/></svg>',
+  cable:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="17" cy="17" r="11"/><circle cx="17" cy="17" r="4"/><path d="M28 17h4"/></svg>',
+  house:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 16L17 5l13 11"/><path d="M8 13v15h18V13"/></svg>',
+  inside:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="6" width="24" height="22" rx="1"/><path d="M5 22h24M14 28v-6"/></svg>',
+  mon:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="26" height="16" rx="1.5"/><path d="M13 28h8M17 23v5"/></svg>',
+  mount:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 5v24"/><path d="M5 17h7"/><rect x="12" y="9" width="17" height="16" rx="1.5"/></svg>',
+  ups:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="8" y="5" width="18" height="25" rx="2"/><path d="M18 11l-4 7h6l-4 7"/></svg>',
+  shield:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 4l11 4v8c0 7-5 12-11 14C11 28 6 23 6 16V8z"/><path d="M12 17l4 4 7-8"/></svg>',
+  none:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="17" cy="17" r="11"/><path d="M10 24L24 10"/></svg>'
+};
+
+/* ---------- slide renderers (keyed by slide.type) ---------- */
+function head(slide, i, lede, skippable=true){
+  return `<div class="eyebrow">Step ${i} of ${CONFIG.slides.length-1}</div>
+    <h1>${slide.h || slide.title}</h1>${lede?`<p class="lede">${lede}</p>`:''}
+    ${skippable && slide.fields ? `<button class="skip" data-act="skip">Skip, keep the recommended setup</button>`:''}`;
+}
+function why(text){ return `<details class="why"><summary>Why this?</summary><p>${text}</p></details>`; }
+function repBox(inner){ return ''; }   // PUBLIC BUILD — rep controls never render in the public calculator
+
+const R = {
+  intro(s, q){
+    return `<div class="intro-hero">
+      <div class="eyebrow">IOT TECHS · Security cameras</div>
+      <h1>Build your camera system</h1>
+      <p class="lede">A few quick taps and you'll have a full quote — cameras, recorder, storage, cable and installation.</p>
+      <button class="btn start" data-act="next">Build →</button>
+    </div>`;
+  },
+  level(s, q, i){
+    const tick = `<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 6-7"/></svg>`;
+    const card = lv => `<div class="opt level ${state.level===lv.id?'sel':''} ${lv.recommended?'is-rec':''}">
+      ${lv.recommended?`<div class="rec-banner">${lv.tag}</div>`:''}
+      <button class="pick" data-act="level" data-v="${lv.id}">
+        <div class="lvl-head">
+          <span class="radio"></span>
+          <div class="lvl-name">${lv.name}</div>
+          ${!lv.recommended?`<span class="lvl-tag">${lv.tag}</span>`:''}
+        </div>
+        <div class="lvl-line">${lv.line}</div>
+        <div class="opt-sub">${lv.blurb}</div>
+        <ul class="feat">${lv.features.map(f=>`<li>${tick}${f}</li>`).join('')}</ul>
+      </button></div>`;
+    return `${head(s,i,'What are you looking for? Swipe to compare — you can change this any time.')}
+      <div class="level-carousel">${CONFIG.catalog.levels.map(card).join('')}</div>`;
+  },
+  size(s, q, i){
+    const card = t => `<div class="opt level ${state.sizeTier===t.ch?'sel':''}">
+      <button class="pick" data-act="size" data-v="${t.ch}">
+        <div class="lvl-name">${t.label}</div>
+        <div class="lvl-line">${t.ch}-channel recorder</div>
+        <div class="opt-sub">${t.sub}</div></button></div>`;
+    return `${head(s,i,'How large is your camera system? We’ll size the recorder for you — you can fine-tune the exact count next.', false)}
+      <div class="level-carousel">${CONFIG.sizeTiers.map(card).join('')}</div>`;
+  },
+  count(s, q, i){
+    const tierDef = CONFIG.sizeTiers.find(t=>t.ch===state.sizeTier) || CONFIG.sizeTiers[0];
+    const presets = tierDef.presets.slice();
+    const [lo] = CONFIG.camRange, hiAbs = CONFIG.camRange[1], hi = state.sizeTier;
+
+    const numCard = n => `<button class="preset ${state.cams===n?'sel':''}" data-act="setcams" data-v="${n}"><b>${n}</b></button>`;
+    const cards = presets.map(numCard).join('');
+
+    // slider is shown by default — presets are quick picks above it
+    const custom = `<div class="custom-count">
+        <div class="cc-val"><input type="number" min="${lo}" max="${hiAbs}" value="${state.cams}" data-num="camsnum" aria-label="Camera count" class="num"> cameras</div>
+        <input type="range" min="${lo}" max="${hi}" value="${Math.min(state.cams,hi)}" data-num="camsrange" aria-label="Camera count slider" class="cc-slider">
+        <div class="cc-scale"><span>${lo}</span><span>${hi}</span></div>
+        <div class="cc-row">
+          <button class="mini-round" data-act="camadj" data-v="-1" aria-label="One fewer" ${state.cams<=lo?'disabled':''}>−</button>
+          <span class="num cc-now">${state.cams}</span>
+          <button class="mini-round" data-act="camadj" data-v="1" aria-label="One more" ${state.cams>=hiAbs?'disabled':''}>+</button>
+        </div>
+      </div>`;
+
+    const room = q.nvr.ch - q.n;
+    const note = bumpMsg
+      ? `<div class="note">${esc(bumpMsg)}</div>`
+      : `<div class="note good">${q.n} camera${q.n>1?'s':''} · ${q.nvr.name}${room>0?` · room for ${room} more`:' · at full capacity'} · storage sized automatically</div>`;
+    return `${head(s,i,'One camera for each area you want to see.', false)}
+      <div class="sys-line">${tierDef.label} selected</div>
+      ${custom}
+      <div class="quick-label">Or tap a common size</div>
+      <div class="presets tiered">${cards}</div>
+      ${note}`;
+  },
+  resolution(s, q, i){
+    const n = state.cams;
+    return `${head(s,i,'Standard is 8MP (4K). Upgrade any camera to 12MP for extra zoom detail on wide areas.')}
+      <div class="opts two">
+        <div class="opt ${q.n12===0?'sel':''}">
+          <button class="pick opt-head" data-act="n12" data-v="0">${ICON.cam}<div><div class="opt-title">8MP · 4K</div><div class="opt-sub">Standard</div></div><span class="opt-price num">${money(CONFIG.catalog.cam[8].price)}</span></button>
+        </div>
+        <div class="opt ${q.n12>0?'sel':''}">
+          <div class="opt-head">${ICON.cam}<div><div class="opt-title">12MP upgrade</div><div class="opt-sub">+${money(CONFIG.catalog.cam[12].price-CONFIG.catalog.cam[8].price)} each</div></div><span class="opt-price num">${money(CONFIG.catalog.cam[12].price)}</span></div>
+          <div class="row"><label for="n12">How many of your ${n}?</label>
+            <div class="mini-step"><button data-act="n12d" data-v="-1" aria-label="Fewer 12MP" ${q.n12<=0?'disabled':''}>−</button><b id="n12">${q.n12}</b><button data-act="n12d" data-v="1" aria-label="More 12MP" ${q.n12>=n?'disabled':''}>+</button></div></div>
+        </div>
+      </div>
+      ${q.level.suggest12MP?`<div class="note good">${q.level.name} tier: 12MP is recommended on driveways and entrances for clear license plates.</div>`:''}`;
+  },
+  cable(s, q, i){
+    const C = CONFIG.catalog.cable;
+    const card = (k, icon, title, sub) => `<div class="opt ${state.env===k?'sel':''}">
+      <button class="pick opt-head" data-act="env" data-v="${k}"><span class="radio"></span>${icon}<div><div class="opt-title">${title}</div><div class="opt-sub">${sub}</div></div><span class="opt-price num">${money(Math.round(q.boxes*C[k].price))}</span></button></div>`;
+    return `${head(s,i,'Where will most of the cable run?')}
+      <div class="opts">
+        ${card('outdoor', ICON.house, 'Outdoor', 'Any exterior run')}
+        ${card('indoor', ICON.inside, 'Indoor only', 'All inside the building')}
+      </div>
+      ${q.footage>q.allocated?`<div class="note">${esc(q.warnings.find(w=>w.includes('ft'))||'')}</div>`:''}`;
+  },
+  recorder(s, q, i){
+    const ss = q.ss, R = CONFIG.catalog.retention;
+    const sysLabel = ss.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || '0 cameras';
+
+    // RECORDING HISTORY — day chips + custom stepper
+    const chips = R.dayPresets.map(d=>`<button class="daychip ${state.daysMode==='preset'&&state.desiredDays===d?'on':''}" data-act="days" data-v="${d}">${d} days</button>`).join('')
+      + `<button class="daychip ${state.daysMode==='custom'?'on':''}" data-act="daysmode" data-v="custom">Custom</button>`;
+    const custom = state.daysMode==='custom' ? `<div class="counter compact">
+        <button data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=R.dayRange[0]?'disabled':''}>−</button>
+        <div class="count-val"><b>${ss.days}</b><span>days</span></div>
+        <button data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=R.dayRange[1]?'disabled':''}>+</button>
+      </div>` : '';
+
+    // RECOMMENDED / upgrade / custom-config
+    let headline;
+    if(ss.noStandardFit){
+      headline = `<div class="panel"><div class="panel-h" style="background:var(--warn-bg);color:var(--warn);border-color:var(--warn)"><span>Custom storage configuration</span></div>
+        <div class="panel-b"><p style="margin:0">Keeping <b>${ss.days} days</b> of ${sysLabel} needs about <b>${ss.recommendedTB}TB</b> — more than any standard recorder. IOT TECHS will size the recorder and storage for you at the site survey. You can keep going and we'll finish this part together.</p></div></div>`;
+    } else if(ss.requiresUpgrade){
+      const upNvr = ss.recNvr;
+      headline = `<div class="panel upgrade"><div class="panel-h"><span>Keep your ${ss.days}-day target</span></div>
+        <div class="panel-b">
+          <p style="margin:0">To record <b>${sysLabel}</b> for about <b>${ss.days} days</b> you need <b>${ss.recommendedTB}TB</b>. Your ${ss.currentNvr.name} holds up to ${ss.currentMax}TB (≈ ${ss.maxDaysCurrentNvr} days).</p>
+          <div class="upgrade-opts">
+            <button class="opt ${s.nvrUpgrade==='auto'?'sel':''}" data-act="nvrup" data-v="auto">
+              <div class="opt-title">Upgrade recorder</div>
+              <div class="opt-sub">${upNvr.name} · up to ${ss.activeMax}TB · ≈ ${estDaysUI(ss.recommendedTB,ss.daily)} days</div></button>
+            <button class="opt ${s.nvrUpgrade==='keep'?'sel':''}" data-act="nvrup" data-v="keep">
+              <div class="opt-title">Keep current recorder</div>
+              <div class="opt-sub">${ss.currentNvr.name} · ≈ ${ss.maxDaysCurrentNvr} days max</div></button>
+          </div>
+        </div></div>`;
+    } else {
+      headline = `<div class="panel rec-hero is-rec"><div class="panel-h good"><span>Recommended</span><span class="num">${ss.storageTB}TB</span></div>
+        <div class="panel-b">
+          <div class="rec-days">≈ ${ss.estimatedDays} days<span>of ${R.recordingLabel}</span></div>
+          <div class="opt-sub">Included with the ${ss.activeNvr.name}. Watch live or recorded video from your phone.</div>
+        </div></div>`;
+    }
+
+    // OTHER OPTIONS — capacity cards, retention first
+    const cards = ss.viewOptions.map(o=>{
+      const sel = o.tb===ss.storageTB;
+      return `<div class="opt stor ${sel?'sel':''} ${o.recommended?'is-rec':''}">
+        ${o.recommended?`<div class="rec-banner">Recommended</div>`:''}
+        <button class="pick" data-act="stor" data-v="${o.tb}">
+          <div class="stor-top"><b class="num">${o.tb}TB</b></div>
+          <div class="stor-days num">≈ ${o.days} days</div>
+        </button></div>`;
+    }).join('');
+
+    const belowTarget = !ss.meetsTarget && !ss.noStandardFit;
+    return `${head(s,i,'How long would you like to keep footage? We size the storage and recorder for you.', false)}
+      <div class="eyebrow">Recording history</div>
+      <div class="daychips">${chips}</div>
+      ${custom}
+      <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
+      ${headline}
+      ${belowTarget && !ss.requiresUpgrade ? `<div class="note">${ss.estimatedDays} days — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>`:''}
+      <details class="why"><summary>Other storage options</summary>
+        <div class="stor-grid">${cards}</div>
+        ${ss.manual?`<button class="skip" data-act="storauto" style="margin-top:8px">↺ Back to recommended (${ss.recommendedTB}TB)</button>`:''}
+      </details>
+      <p class="fine">Estimated for ${R.recordingLabel}. Actual retention varies with frame rate, compression, scene activity and recording settings.</p>`;
+  },
+  install(s, q, i){
+    const C = CONFIG.catalog;
+    const row = sv => {
+      const opt = sv.code==='PROG';
+      const off = opt && state.skipProg;
+      return `<div class="svc ${off?'off':''}"><b>${sv.name}${opt?' <span class="tag">optional</span>':''}</b>
+        <span style="display:flex;align-items:center;gap:10px"><span class="num">${off?'—':money(sv.price)+' <span style="color:var(--muted);font-weight:400">/ camera</span>'}</span>
+        ${opt?`<button class="x" data-act="prog" aria-label="${off?'Add':'Remove'} camera programming">${off?'+':'✕'}</button>`:''}</span></div>`;
+    };
+    const active = C.services.filter(sv=>!(sv.code==='PROG'&&state.skipProg));
+    const per = active.reduce((a,x)=>a+x.price,0);
+    return `${head(s,i,'Installation included with every camera.', false)}
+      <div class="panel"><div class="panel-h"><span>Per camera</span><span class="num">${money(per)}</span></div>
+        <div class="panel-b">${C.services.map(row).join('')}</div></div>
+      <div class="kv" style="font-size:16px"><span>${q.n} camera${q.n>1?'s':''} × ${money(per)}</span><b class="num">${money(per*q.n)}</b></div>
+      ${state.skipProg?`<p class="fine">Camera programming removed. We'll hand off network and app setup to you.</p>`:''}`;
+  },
+  monitor(s, q, i){
+    const price = CONFIG.catalog.addons.monitor.price + CONFIG.catalog.addons.mount.price;
+    const opt = (mode,icon,title,sub,amt) => `<div class="opt ${state.monitorMode===mode?'sel':''}">
+      <button class="pick opt-head" data-act="mon" data-v="${mode}"><span class="radio"></span>${icon}
+        <div><div class="opt-title">${title}</div><div class="opt-sub">${sub}</div></div>
+        ${amt!=null?`<span class="opt-price num">${money(amt)}</span>`:''}</button></div>`;
+    return `${head(s,i,'A monitor at the recorder lets you watch and manage the system without a phone.', false)}
+      <div class="opts">
+        ${opt('buy', ICON.mon, 'I need a monitor', 'Recommended · screen + wall mount & install', price)}
+        ${opt('own', ICON.mon, 'I have my own monitor', 'Already have one, or getting your own — we connect it', null)}
+        ${opt('none', ICON.none, 'No monitor', 'Manage everything from the phone app', null)}
+      </div>`;
+  },
+  addons(s, q, i){
+    const C = CONFIG.catalog.addons;
+    return `${head(s,i,'One more option. Skip if you don\'t need it.')}
+      <div class="opts">
+        <div class="opt ${state.ups?'sel':''}">
+          <button class="pick opt-head" data-act="toggle" data-v="ups"><span class="check"></span>${ICON.ups}
+            <div><div class="opt-title">${C.ups.name}</div><div class="opt-sub">Keeps the system running through short power outages</div></div>
+            <span class="opt-price num">${money(C.ups.price)}</span></button></div>
+      </div>`;
+  },
+  plan(s, q, i){
+    const n = q.n, tier = Math.ceil(n/8), C = CONFIG.catalog.plans;
+    const yrs = state.term, months = yrs*12;
+    const priceFor = k => { const m = Engine.planMonthly(k,n); const t=m*months; return { m, t, pre:Math.round(t*5/6/100)*100 }; };
+    const w = priceFor('warranty'), p = priceFor('protection');
+    const today = new Date(); const yr = today.getFullYear();
+    const card = (k, icon, title, sub, body, pr) => `<div class="opt ${state.plan===k?'sel':''}">
+      <button class="pick opt-head" data-act="plan" data-v="${k}"><span class="radio"></span>${icon}<div><div class="opt-title">${title}</div><div class="opt-sub">${sub}</div></div>
+      <span class="opt-price num">${pr?money(pr.m)+'/mo':'$0'}</span></button>${body}</div>`;
+    return `${head(s,i,`Every installation includes a 1-year equipment warranty. Plans are optional and priced by system size (${n} camera${n>1?'s':''}).`)}
+      <div class="row"><span style="font-size:13px;color:var(--muted)">Plan length</span>
+        <div class="seg">${[1,2,3].map(y=>`<button class="${state.term===y?'on':''}" data-act="term" data-v="${y}">${y} yr</button>`).join('')}</div>
+        <div class="seg">${['monthly','prepaid'].map(b=>`<button class="${state.billing===b?'on':''}" data-act="billing" data-v="${b}">${b==='monthly'?'Pay monthly':'Pay in full'}</button>`).join('')}</div></div>
+      <div class="opts">
+        ${card('none', ICON.none, 'No plan', 'Included 1-year warranty only', '', null)}
+        ${card('warranty', ICON.shield, 'Extended warranty', `Equipment failures after year 1 · ${money(C.warranty)}/mo per 8 cameras`,
+          `<p class="fine">Covers years 2 to ${yrs+1} (about ${yr+1}–${yr+yrs+1}), for ${yrs+1} years of total warranty. ${state.billing==='prepaid'?`Pay in full: <b class="num">${money(w.pre)}</b> instead of ${money(w.t)}.`:`${months} payments, ${money(w.t)} over the term.`}</p>
+          ${why('If a camera, recorder or drive fails from a defect after the included first year, we replace it. It does not cover damage, theft or misuse.')}`, w)}
+        ${card('protection', ICON.shield, 'Full protection', `Starts at installation · ${money(C.protection)}/mo per 8 cameras`,
+          `<p class="fine">${yrs} year${yrs>1?'s':''} of coverage from install day. ${state.billing==='prepaid'?`Pay in full: <b class="num">${money(p.pre)}</b> instead of ${money(p.t)}.`:`${months} payments, ${money(p.t)} over the term.`}</p>
+          ${why('Troubleshooting, covered replacements, site visits, cable issues, system adjustments and routine support. Coverage limits, visit counts and exclusions are set out in the written plan terms you receive with your quote.')}`, p)}
+      </div>
+      <p class="fine">Paying in full saves about 16.7% (two months free per year).</p>`;
+  },
+  review(s, q, i){
+    if(submitted){
+      return `<div class="eyebrow">Quote ready</div><h1>Thanks, ${esc((state.contact.name||'').split(' ')[0]||'')}. Your quote is saved.</h1>
+        <div class="done-card"><div class="kv"><span>Quote number</span><b class="num">${submitted.id}</b></div>
+          <div class="kv"><span>Total due at install</span><b class="num">${money(submitted.q.total)}</b></div>
+          <pre id="qtext">${esc(submitted.text)}</pre>
+          <div class="row"><button class="btn" data-act="copy">Copy quote</button><button class="btn ghost" data-act="edit">Make changes</button></div>
+          <p class="fine" id="copyMsg" aria-live="polite">Your IOT TECHS rep will reach out to book a free site survey.</p></div>`;
+    }
+    const groups = ['Equipment','Installation','Cable'];
+    const line = l => `<div class="q-line"><span>${esc(l.label)}<br><small class="num">${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</small></span><span class="amt">${money(l.amt)}</span></div>`;
+    const discPct = Math.round((state.discount||0)*100);
+    const sys = q.ss, sysLabel = sys.groups.map(g=>`${g.count} × ${g.res}`).join(' + ')||`${q.n} cameras`;
+    return `${head(s,i,'Every line is itemized. Tap any step in the grid to change it.', false)}
+      <div class="panel rec-hero"><div class="panel-h"><span>Your system</span><span class="num">≈ ${sys.estimatedDays} days</span></div>
+        <div class="panel-b" style="gap:4px">
+          <div style="font-weight:700">${sysLabel} cameras · ${q.level.name}</div>
+          <div class="opt-sub">${sys.activeNvr.name} · ${sys.storageTB}TB storage · ${CONFIG.catalog.retention.recordingLabel}</div>
+          <div class="opt-sub">${q.level.features.join(' · ')}</div>
+        </div></div>
+      <div class="quote">
+        ${groups.map(g=>`<div class="q-group"><h3>${g}</h3>${q.lines.filter(l=>l.g===g).map(line).join('')}</div>`).join('')}
+        <div class="q-group"><h3>System package</h3>
+          <div class="q-line"><span>Package subtotal</span><span class="amt">${money(q.base)}</span></div>
+          ${q.discount?`<div class="q-line disc"><span>Package discount (${discPct}%)</span><span class="amt">−${money(q.discount)}</span></div>`:''}
+          ${q.promoDiscount?`<div class="q-line disc"><span>Promo ${esc(q.promo.code)}<br><small>${esc(q.promo.label||'')}</small></span><span class="amt">−${money(q.promoDiscount)}</span></div>`:''}
+        </div>
+        ${q.addons.length?`<div class="q-group"><h3>Add-ons</h3>${q.addons.map(line).join('')}</div>`:''}
+        ${q.plan.kind!=='none'?`<div class="q-group"><h3>Protection plan</h3>
+          <div class="q-line"><span>${q.plan.kind==='warranty'?'Extended warranty':'Full protection'} · ${state.term} yr<br><small class="num">${q.plan.upfront?`Paid in full (list ${money(q.plan.termTotal)})`:`${money(q.plan.monthly)}/mo × ${q.plan.months}, billed monthly`}</small></span><span class="amt">${q.plan.upfront?money(q.plan.upfront):'monthly'}</span></div></div>`:''}
+        ${q.adjust?`<div class="q-group"><h3>Site adjustment</h3><div class="q-line"><span>${esc(state.adjustReason||'Site survey adjustment')}</span><span class="amt">${money(q.adjust)}</span></div></div>`:''}
+        <div class="q-tot">
+          <div class="kv"><span>Before tax</span><span class="num">${money(q.beforeTax)}</span></div>
+          <div class="kv"><span>Sales tax${state.taxRate?` (${(state.taxRate*100).toFixed(3).replace(/\.?0+$/,'')}%)`:''}</span><span class="num">${state.taxRate?money(q.tax):'Not included'}</span></div>
+          <div class="kv grand"><span>Total due at install</span><b>${money(q.total)}</b></div>
+          ${q.plan.monthlyDue?`<div class="kv"><span>Then monthly</span><span class="num">${money(q.plan.monthlyDue)}/mo for ${q.plan.months} months</span></div>`:''}
+        </div>
+      </div>
+      ${q.warnings.map(w=>`<div class="note">${esc(w)}</div>`).join('')}
+      <div class="promo-box">
+        <label for="promoInput">Promo or voucher code</label>
+        <div class="promo-row">
+          <input id="promoInput" type="text" value="${esc(state.promoCode||'')}" placeholder="Enter code" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          ${state.promoCode?`<button class="btn ghost" data-act="promoclear">Remove</button>`:`<button class="btn ghost" data-act="promo">Add</button>`}
+        </div>
+        ${state.promoCode?`<p class="fine" style="color:var(--good)">✓ Code ${esc(state.promoCode)} saved — your rep will apply it to this quote.</p>`:''}
+      </div>
+      <button class="btn start" data-act="submit">Prepare my quote</button>
+      <p class="fine">Estimate based on standard conditions. Final price is confirmed at a free site survey. Quote ref ${CONFIG.version}.</p>`;
+  },
+  contact(s, q, i){
+    const f = (id,label,type,ph,req) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label><input id="c_${id}" type="${type}" value="${esc(state.contact[id])}" data-contact="${id}" placeholder="${ph}" autocomplete="${{name:'name',phone:'tel',email:'email',company:'organization',address:'street-address'}[id]||'off'}"><span class="err" id="e_${id}"></span></div>`;
+    return `${head(s,i,'Tell us where to send your quote.', false)}
+      <form class="form" id="cform" novalidate>
+        <div class="grid2">${f('name','Name','text','Jane Smith',true)}${f('phone','Number','tel','(201) 555-0142',true)}</div>
+        ${f('email','Email','email','jane@example.com',true)}
+        ${f('company','Company name','text','Business name (optional)')}
+        ${f('address','Address','text','Street, city, ZIP',true)}
+        <button class="btn start" type="submit">Next →</button>
+      </form>`;
+  },
+  site(s, q, i){
+    const c = state.contact;
+    return `${head(s,i,'A few quick things that help us quote accurately. All optional.', false)}
+      <div class="opts">
+        <div class="opt ${c.existingSystem?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="existing"><span class="check"></span>
+            <div><div class="opt-title">I have an existing system</div><div class="opt-sub">Cameras or wiring already in place we may be able to reuse</div></div></button>
+          ${c.existingSystem?`<div class="sub-q">
+            <div class="row"><label style="font-size:13px">What type?</label>
+              <div class="seg">${[['ip','IP / digital'],['analog','Analog / coax'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingType===v?'on':''}" data-act="extype" data-v="${v}">${l}</button>`).join('')}</div></div>
+            <div class="row"><label style="font-size:13px">Is it working?</label>
+              <div class="seg">${[['yes','Working'],['no','Not working'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingWorking===v?'on':''}" data-act="exwork" data-v="${v}">${l}</button>`).join('')}</div></div>
+          </div>`:''}
+        </div>
+        <div class="opt ${c.construction?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="constr"><span class="check"></span>
+            <div><div class="opt-title">This is a construction project</div><div class="opt-sub">Property is under construction or being built out</div></div></button>
+        </div>
+        <div class="opt ${c.hasDeadline?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="deadline"><span class="check"></span>
+            <div><div class="opt-title">I have a deadline</div><div class="opt-sub">A date the system needs to be installed by</div></div></button>
+          ${c.hasDeadline?`<div class="sub-q"><div class="field"><label for="c_deadline">Install by</label>
+            <input id="c_deadline" type="date" value="${esc(c.deadline||'')}" data-contact="deadline" min="${new Date().toISOString().slice(0,10)}"></div></div>`:''}
+        </div>
+        <div class="opt ${c.floorPlans?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="plans"><span class="check"></span>
+            <div><div class="opt-title">I have floor plans</div><div class="opt-sub">Helps us place cameras and quote cable accurately</div></div></button>
+          ${c.floorPlans ? (c.floorPlanImg ? `
+          <div class="plan-prev" style="margin:0 12px 12px">
+            ${c.floorPlanImg.tooBig || c.floorPlanImg.error
+              ? `<div class="plan-file" style="background:var(--warn-bg);color:var(--warn)">!</div>`
+              : c.floorPlanImg.type.startsWith('image/')
+                ? `<img src="${c.floorPlanImg.dataUrl}" alt="Floor plan preview">`
+                : `<div class="plan-file">PDF</div>`}
+            <div class="plan-meta"><b>${esc(c.floorPlanImg.name)}</b><span class="num">${c.floorPlanImg.tooBig?'Too large — max 15 MB':c.floorPlanImg.error?'Couldn’t read file':(c.floorPlanImg.size/1048576).toFixed(1)+' MB'}</span></div>
+            <button type="button" class="x" data-act="planclear" aria-label="Remove floor plan">✕</button>
+          </div>` : `
+          <label class="plan-drop" style="margin:0 12px 12px">
+            <input type="file" accept="image/*,application/pdf" data-file="floorPlan" hidden>
+            <span class="plan-cta">Upload a photo or screenshot</span>
+            <span class="opt-sub">PNG, JPG or PDF — or skip for now</span>
+          </label>`) : ''}
+        </div>
+      </div>`;
+  }
+};
+
+/* ---------- render ---------- */
+function render(){
+  const q = Engine.compute(state);
+  const keepScroll = [...document.querySelectorAll('.slide')].map(el=>el.scrollTop);
+  $('#track').innerHTML = CONFIG.slides.map((s,i)=>`<section class="slide" id="sl-${s.id}" aria-hidden="${i!==cur}" ${i!==cur?'inert':''}><div class="wrap">${R[s.type](s,q,i)}</div></section>`).join('');
+  document.querySelectorAll('.slide').forEach((el,i)=>{ if(keepScroll[i]) el.scrollTop = keepScroll[i]; });
+  chrome(q);
+}
+function chrome(q){
+  q = q || Engine.compute(state);
+  $('#track').style.transform = `translateX(${-cur*100}%)`;
+  document.querySelectorAll('.slide').forEach((el,i)=>{ el.setAttribute('aria-hidden', i!==cur); el.inert = i!==cur; });
+  const s = CONFIG.slides[cur];
+  $('#stepLbl').innerHTML = cur===0 ? 'Start' : `<strong>${cur}</strong> / ${CONFIG.slides.length-1} · ${s.title}`;
+  $('#dots').innerHTML = CONFIG.slides.map((x,i)=>`<button class="dot ${i===cur?'on':''} ${done.has(i)?'done':''}" data-go="${i}" aria-label="Go to ${x.title}"></button>`).join('');
+  $('#total').innerHTML = `Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
+  $('#prev').disabled = cur===0;
+  const last = cur===CONFIG.slides.length-1;
+  $('#next').disabled = last;
+  $('#next').querySelector('.lbl').textContent = cur===CONFIG.slides.length-2 ? 'Finish' : 'Next';
+  $('#repBadge').hidden = !rep;
+  if(drawer) renderDrawer(q);
+}
+function go(i){
+  i = Math.max(0, Math.min(CONFIG.slides.length-1, i));
+  if(i>cur) for(let k=cur;k<i;k++) done.add(k);
+  cur = i; chrome();
+  const sl = document.querySelectorAll('.slide')[cur]; if(sl) sl.scrollTop = 0;
+}
+
+/* ---------- index drawer ---------- */
+function summaryFor(id, q){
+  const c = state.contact;
+  const siteBits = [c.existingSystem?'existing':null, c.construction?'construction':null, c.hasDeadline?'deadline':null, c.floorPlans?'floor plans':null].filter(Boolean);
+  return ({ contact: c.name||'Not filled in', site: siteBits.length?siteBits.join(', '):'nothing noted',
+    level:q.level.name, size:(CONFIG.sizeTiers.find(t=>t.ch===state.sizeTier)||{}).label||'', count:`${q.n} camera${q.n>1?'s':''}`, res: q.n12?`${q.n8} × 8MP, ${q.n12} × 12MP`:'All 8MP',
+    cable: state.env==='outdoor'?'Outdoor':'Indoor', rec:`${q.tier}CH · ${q.ss.storageTB}TB · ≈${q.ss.estimatedDays}d`,
+    install: money(q.lines.filter(l=>l.g==='Installation').reduce((a,l)=>a+l.amt,0))+(state.skipProg?' · no prog':''),
+    monitor: ({buy:'Yes',own:'Own',none:'No'})[state.monitorMode]||'No',
+    addons: state.ups?'Battery backup':'None',
+    plan: state.plan==='none'?'None':(state.plan==='warranty'?'Warranty':'Protection')+` · ${state.term}yr`,
+    review: money(q.total) })[id] || '';
+}
+function renderDrawer(q){
+  q = q || Engine.compute(state);
+  $('#drawerRoot').innerHTML = `<div class="scrim" data-act="close"></div>
+    <aside class="drawer" role="dialog" aria-label="All steps">
+      <div class="drawer-h"><b>All steps</b><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <div class="drawer-b">
+        ${CONFIG.slides.map((s,i)=>`<button class="ix ${i===cur?'on':''} ${done.has(i)?'done':''}" data-go="${i}">
+          <span class="n">${done.has(i)?'✓':i}</span><span><b>${s.title}</b><small>${esc(summaryFor(s.id,q))}</small></span><span aria-hidden="true">›</span></button>`).join('')}
+        <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+          <!-- PUBLIC BUILD — no rep PIN / unlock here. -->
+          <button class="btn ghost" data-act="reset" style="padding:8px 12px;width:100%">Start over</button>
+        </div>
+      </div></aside>`;
+}
+function openDrawer(){ drawer = true; renderDrawer(); const b=document.querySelector('.drawer [data-go].on'); b&&b.focus(); }
+function closeDrawer(){ drawer = false; $('#drawerRoot').innerHTML=''; $('#openIndex').focus(); }
+
+/* ---------- actions ---------- */
+// camera/resolution/day changes invalidate any manual storage pick or kept-recorder choice
+function resetStorage(){ state.selectedStorageTB = null; state.nvrUpgrade = 'auto'; }
+// count is the source of truth; set it, auto-raise the recorder tier if it was exceeded, keep a friendly note
+function setCams(n){
+  const [lo,hi] = CONFIG.camRange;
+  n = Math.min(hi, Math.max(lo, Math.round(n||lo)));
+  state.cams = n; state.n12 = Math.min(state.n12, n);
+  const t = Engine.nvrTier(n);
+  if(t > state.sizeTier){ const room = t - n;
+    bumpMsg = `Recorder updated to ${t}-channel — supports your ${n}-camera system${room>0?`, with room for ${room} more`:''}.`;
+    state.sizeTier = t;
+  } else bumpMsg = '';
+  resetStorage();
+}
+function skipSlide(){
+  const s = CONFIG.slides[cur];
+  (s.fields||[]).forEach(f=>state[f] = CONFIG.defaults[f]);
+  render(); go(cur+1);
+}
+function quoteText(q, id){
+  const L = [];
+  L.push(`IOT TECHS · Camera system quote ${id}`, new Date().toLocaleString('en-US'), '');
+  L.push(`${state.contact.name} · ${state.contact.phone}${state.contact.email?' · '+state.contact.email:''}`);
+  if(state.contact.company) L.push(`Company: ${state.contact.company}`);
+  if(state.contact.address) L.push(state.contact.address);
+  if(state.contact.existingSystem) L.push(`Existing system: Yes (${({ip:'IP / digital',analog:'Analog / coax',unknown:'type not sure'})[state.contact.existingType]||'type not specified'}; ${({yes:'working',no:'not working',unknown:'working status unknown'})[state.contact.existingWorking]||'working status not specified'})`);
+  if(state.contact.construction) L.push('*** CONSTRUCTION PROJECT — property under construction ***');
+  if(state.contact.hasDeadline) L.push(`Deadline: install by ${state.contact.deadline||'(date not set)'}`);
+  L.push(`Floor plans: ${state.contact.floorPlans?(state.contact.floorPlanImg?'Yes — '+state.contact.floorPlanImg.name:'Yes (not uploaded)'):'No'}`);
+  L.push('');
+  L.push(`Security level: ${q.level.name} — ${q.level.features.join(', ')}`);
+  L.push(`System: ${q.ss.groups.map(g=>g.count+' × '+g.res).join(' + ')||q.n+' cameras'} · ${q.ss.activeNvr.name}`);
+  L.push(`Storage: ${q.ss.storageTB}TB ≈ ${q.ss.estimatedDays} days of 24/7 recording (target ${q.ss.days} days)`);
+  L.push('');
+  q.lines.forEach(l=>L.push(`${l.label}  ${l.qty===0.5?'½':l.qty} × ${money(l.unit)} = ${money(l.amt)}`));
+  L.push(`Package subtotal: ${money(q.base)}`);
+  if(q.discount) L.push(`Package discount (${Math.round(state.discount*100)}%): −${money(q.discount)}`);
+  if(q.promoDiscount) L.push(`Promo ${q.promo.code}: −${money(q.promoDiscount)}`);
+  q.addons.forEach(l=>L.push(`${l.label}: ${money(l.amt)}`));
+  if(q.plan.kind!=='none') L.push(`${q.plan.kind==='warranty'?'Extended warranty':'Full protection'} ${state.term} yr: ${q.plan.upfront?money(q.plan.upfront)+' paid in full':money(q.plan.monthly)+'/mo × '+q.plan.months}`);
+  if(q.adjust) L.push(`Adjustment (${state.adjustReason||'site survey'}): ${money(q.adjust)}`);
+  if(q.tax) L.push(`Sales tax: ${money(q.tax)}`);
+  L.push(`TOTAL DUE AT INSTALL: ${money(q.total)}`);
+  if(q.plan.monthlyDue) L.push(`Then ${money(q.plan.monthlyDue)}/mo for ${q.plan.months} months`);
+  if(state.contact.when) L.push('', `Site survey: ${state.contact.when}`);
+  if(state.contact.notes) L.push(`Notes: ${state.contact.notes}`);
+  L.push('', 'Estimate. Final price confirmed at site survey.');
+  return L.join('\n');
+}
+function validateContact(showErr){
+  const c = state.contact; let ok = true;
+  const setErr = (k,m)=>{ const el=$('#e_'+k); if(el && showErr) el.textContent=m; if(m) ok=false; };
+  setErr('name', c.name.trim()?'':'Enter your name.');
+  setErr('phone', c.phone.replace(/\D/g,'').length>=10?'':'Enter a 10-digit phone number.');
+  setErr('email', /^\S+@\S+\.\S+$/.test(c.email)?'':'Enter a valid email.');
+  setErr('address', c.address.trim()?'':'Enter the install address.');
+  return ok;
+}
+function finalizeQuote(){
+  const q = Engine.compute(state);
+  const c = state.contact;   // (bugfix) finalizeQuote referenced an undefined `c`
+  const d = new Date(), id = 'Q-'+String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+  const fp = c.floorPlanImg;
+  const snapshot = { id, createdAt:d.toISOString(), catalogVersion:CONFIG.version, calcVersion:q.ss.calcVersion, level:q.level.id,
+    inputs:{...state, contact:{...c}},
+    site:{ existingSystem:c.existingSystem, existingType:c.existingType, existingWorking:c.existingWorking, construction:c.construction,
+      hasDeadline:c.hasDeadline, deadline:c.deadline,
+      floorPlans:c.floorPlans, floorPlanFile: fp ? { name:fp.name, type:fp.type, size:fp.size } : null },
+    storage:{ desiredRetentionDays:q.ss.days, recommendedStorageTB:q.ss.recommendedTB, selectedStorageTB:q.ss.storageTB,
+      estimatedRetentionDays:q.ss.estimatedDays, dailySystemTB:+q.ss.daily.toFixed(4), rawRequiredTB:+q.ss.rawTB.toFixed(3),
+      drives:q.ss.drives, selectedNvr:q.ss.activeNvr.code, nvrUpgrade:state.nvrUpgrade, requiredUpgrade:q.ss.requiresUpgrade, customSizing:q.ss.noStandardFit },
+    lines:q.lines, addons:q.addons, plan:q.plan, base:q.base, discount:q.discount, discountPct:state.discount,
+    promo:q.promo, promoDiscount:q.promoDiscount,
+    adjust:q.adjust, adjustReason:state.adjustReason, tax:q.tax, total:q.total, overrides:{ poe:state.poe, extraBoxes:state.extraBoxes, footage:state.footage }, flags:q.flags };
+  submitted = { id, q, text:quoteText(q,id), snapshot };
+  // persist a copy WITHOUT the (possibly multi-MB) floor-plan data URL, so localStorage quota holds
+  try{ const k='iot-cctv-quotes'; const arr=JSON.parse(localStorage.getItem(k)||'[]');
+    const lite = JSON.parse(JSON.stringify(snapshot)); if(lite.inputs && lite.inputs.contact) delete lite.inputs.contact.floorPlanImg;
+    arr.unshift(lite); localStorage.setItem(k, JSON.stringify(arr.slice(0,25))); }catch(_){}
+  submitLead(snapshot, fp);
+  done.add(cur); render();
+}
+
+/* ---------- lead delivery ----------
+   ONE hook for handing a finished quote to the pipeline. Stubbed: logs + notifies the host page
+   (homepage overlay / analytics) + is ready to POST the snapshot and the floor-plan file (multipart)
+   to the FSM backend. Public page never shows cost/margin; this payload is for the backend/rep only. */
+function dataUrlToFile(dataUrl, name, type){
+  try{ const b = atob(String(dataUrl).split(',')[1]||''); const u = new Uint8Array(b.length);
+    for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i);
+    return new File([u], name||'floorplan', { type:type||'application/octet-stream' });
+  }catch(_){ return null; }
+}
+function submitLead(snapshot, fp){
+  const file = (fp && fp.dataUrl && !fp.tooBig && !fp.error) ? dataUrlToFile(fp.dataUrl, fp.name, fp.type) : null;
+  try{ console.log('[CCTV] submitLead', snapshot.id, { snapshot, file }); }catch(_){}
+  // Hand the lead to the host page (it owns the real POST to the FSM backend).
+  try{ if(window.parent && window.parent!==window)
+        window.parent.postMessage({ type:'iotcctv:lead', id:snapshot.id, total:snapshot.total, snapshot, hasFile:!!file }, '*'); }catch(_){}
+  // Light analytics — only if the host already provides one.
+  try{ const p = { cameras:snapshot.inputs.cams, security_level:snapshot.level, total:snapshot.total/100,
+        has_deadline:!!snapshot.site.hasDeadline, has_floorplan:!!snapshot.site.floorPlanFile };
+    if(window.gtag) window.gtag('event','quote_submitted', p);
+    else if(window.dataLayer && window.dataLayer.push) window.dataLayer.push({ event:'quote_submitted', ...p });
+  }catch(_){}
+  // TODO(backend): replace the postMessage above (or add here) with the real FSM lead POST:
+  // const fd = new FormData(); fd.append('snapshot', JSON.stringify(snapshot)); if(file) fd.append('floorplan', file, file.name);
+  // fetch('/api/leads/cctv', { method:'POST', body: fd }).catch(()=>{});
+}
+function copy(text){
+  const msg = $('#copyMsg');
+  const fallback = ()=>{ const pre=$('#qtext'); if(pre){ const r=document.createRange(); r.selectNodeContents(pre); const s=getSelection(); s.removeAllRanges(); s.addRange(r);} if(msg) msg.textContent='Selected. Press copy on your device.'; };
+  try{ navigator.clipboard.writeText(text).then(()=>{ if(msg) msg.textContent='Copied. Paste it into a text or email to your IOT TECHS rep.'; }, fallback); }catch(_){ fallback(); }
+}
+
+document.addEventListener('click', e=>{
+  const g = e.target.closest('[data-go]');
+  if(g){ go(+g.dataset.go); if(drawer) closeDrawer(); return; }
+  const a = e.target.closest('[data-act]'); if(!a) return;
+  const v = a.dataset.v, act = a.dataset.act;
+  switch(act){
+    case 'next': go(cur+1); return;
+    case 'skip': skipSlide(); return;
+    case 'close': closeDrawer(); return;
+    case 'size': { const p=CONFIG.sizeTiers.find(t=>t.ch===+v); state.sizeTier=+v; state.customOpen=false; bumpMsg='';
+        state.cams = Math.min(+v, p?p.presets[0]:state.cams); state.n12 = Math.min(state.n12, state.cams); resetStorage(); } break;
+    case 'setcams': state.customOpen = false; setCams(+v); break;
+    case 'customopen': state.customOpen = true; bumpMsg=''; break;
+    case 'customdone': state.customOpen = false; bumpMsg=''; break;
+    case 'camadj': setCams(state.cams + +v); break;
+    case 'existing': state.contact.existingSystem = !state.contact.existingSystem; if(!state.contact.existingSystem){ state.contact.existingType = null; state.contact.existingWorking = null; } break;
+    case 'extype': state.contact.existingType = v; break;
+    case 'exwork': state.contact.existingWorking = v; break;
+    case 'constr': state.contact.construction = !state.contact.construction; break;
+    case 'deadline': state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; break;
+    case 'plans': state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; break;
+    case 'planclear': state.contact.floorPlanImg = null; break;
+    case 'level': state.level = v; break;
+    case 'prog': state.skipProg = !state.skipProg; break;
+    case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; break;
+    case 'days': state.desiredDays = +v; state.daysMode = 'preset'; resetStorage(); break;
+    case 'daysmode': state.daysMode = 'custom'; resetStorage(); break;
+    case 'dayadj': { const [lo,hi]=CONFIG.catalog.retention.dayRange; state.desiredDays = Math.min(hi, Math.max(lo, state.desiredDays + +v)); resetStorage(); break; }
+    case 'stor': state.selectedStorageTB = +v; break;
+    case 'storauto': state.selectedStorageTB = null; break;
+    case 'nvrup': state.nvrUpgrade = v; state.selectedStorageTB = null; break;
+    case 'n12': state.n12 = +v; resetStorage(); break;
+    case 'n12d': state.n12 = Math.max(0, Math.min(state.cams, state.n12 + +v)); resetStorage(); break;
+    case 'env': state.env = v; break;
+    case 'storage': state.storage = v; break;
+    case 'toggle': state[v] = !state[v]; if(v==='mount' && state.mount) state.monitor = true; if(v==='monitor' && !state.monitor) state.mount = false; break;
+    case 'plan': state.plan = v; break;
+    case 'term': state.term = +v; break;
+    case 'billing': state.billing = v; break;
+    case 'disc': state.discount = +v; break;
+    case 'footreset': state.footage = null; state.extraBoxes = 0; break;
+    case 'copy': copy(submitted.text); return;
+    case 'copyjson': copy(JSON.stringify(submitted.snapshot, null, 2)); return;
+    // PUBLIC BUILD — capture the code into the lead; no client-side code list or discount (rep/backend applies it).
+    case 'promo': { const code = ($('#promoInput').value||'').trim().toUpperCase(); state.promoCode = code || null; promoMsg=''; render(); return; }
+    case 'promoclear': state.promoCode=null; promoMsg=''; render(); return;
+    case 'submit': if(validateContact(true)) finalizeQuote(); else { render(); go(CONFIG.slides.findIndex(x=>x.id==='contact')); } return;
+    case 'edit': submitted = null; render(); go(CONFIG.slides.findIndex(x=>x.id==='review')); return;
+    case 'replock': rep = false; render(); renderDrawer(); return;
+    case 'reset': Object.assign(state, CONFIG.defaults, { contact:{name:'',phone:'',email:'',address:'',when:'',notes:''} }); submitted=null; done.clear(); closeDrawer(); render(); go(0); return;
+    default: return;
+  }
+  render();
+});
+document.addEventListener('change', e=>{
+  const t = e.target;
+  if(t.dataset.num){
+    const k = t.dataset.num, val = parseFloat(t.value);
+    if(k==='camsrange' || k==='camsnum'){ setCams(val); render(); return; }
+    if(k==='taxRate') state.taxRate = isFinite(val) ? Math.max(0,val)/100 : 0;
+    else if(k==='adjust') state.adjust = isFinite(val) ? Math.round(val*100) : 0;
+    else if(k==='extraBoxes') state.extraBoxes = isFinite(val) ? Math.max(0, Math.round(val)) : 0;
+    else if(k==='footage') state.footage = isFinite(val) ? Math.max(0, Math.round(val)) : null;
+    render();
+  } else if(t.dataset.sel){
+    const k = t.dataset.sel; state[k] = t.value; render();
+  } else if(t.dataset.txt){ state[t.dataset.txt] = t.value; chrome(); }
+});
+function liveCams(n){
+  setCams(n);
+  const now = document.querySelector('.cc-now'); if(now) now.textContent = state.cams;
+  const num = document.querySelector('[data-num="camsnum"]'); if(num && document.activeElement!==num) num.value = state.cams;
+  chrome();
+}
+document.addEventListener('input', e=>{
+  const t = e.target;
+  if(t.dataset.contact){ state.contact[t.dataset.contact] = t.value; const er=$('#e_'+t.dataset.contact); if(er) er.textContent=''; }
+  if(t.dataset.num==='camsrange' || t.dataset.num==='camsnum'){ liveCams(+t.value); }
+});
+document.addEventListener('change', e=>{
+  const t = e.target;
+  if(t.dataset.file==='floorPlan'){ const f = t.files && t.files[0]; if(!f) return;
+    if(f.size > 15*1048576){ state.contact.floorPlanImg = { name:f.name, type:f.type, size:f.size, dataUrl:'', tooBig:true }; render(); return; }
+    const rd = new FileReader();
+    rd.onload = () => { state.contact.floorPlanImg = { name:f.name, type:f.type||'application/octet-stream', size:f.size, dataUrl:rd.result }; render(); };
+    rd.onerror = () => { state.contact.floorPlanImg = { name:f.name, type:f.type, size:f.size, dataUrl:'', error:true }; render(); };
+    rd.readAsDataURL(f);
+  }
+});
+document.addEventListener('submit', e=>{
+  if(e.target.id==='cform'){ e.preventDefault(); if(validateContact(true)) go(cur+1); return; }
+  // PUBLIC BUILD — no rep PIN form.
+});
+$('#prev').onclick = ()=>go(cur-1);
+$('#next').onclick = ()=>go(cur+1);
+$('#openIndex').onclick = openDrawer;
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && drawer) return closeDrawer();
+  // When embedded (homepage overlay), Esc with the drawer closed asks the host to close the overlay.
+  if(e.key==='Escape'){ try{ if(window.parent && window.parent!==window){ window.parent.postMessage({ type:'iotcctv:close' }, '*'); return; } }catch(_){} }
+  if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || drawer) return;
+  if(e.key==='ArrowRight') go(cur+1);
+  if(e.key==='ArrowLeft') go(cur-1);
+});
+/* swipe */
+(()=>{ let x0=null, y0=0, t0=0;
+  const vp = $('#viewport');
+  vp.addEventListener('pointerdown', e=>{ if(e.target.closest('input,textarea,select,.level-carousel,.cc-slider')) return; x0=e.clientX; y0=e.clientY; t0=Date.now(); });
+  vp.addEventListener('pointerup', e=>{ if(x0===null) return; const dx=e.clientX-x0, dy=e.clientY-y0; x0=null;
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && Date.now()-t0<800) go(cur + (dx<0?1:-1)); });
+  vp.addEventListener('pointercancel', ()=>x0=null);
+})();
+
+render();
+</script>
+
+</body></html>

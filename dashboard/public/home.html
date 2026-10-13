@@ -358,7 +358,7 @@
       <p class="lede">IOT TECHS designs and installs modern security cameras, audio, networking, and access control across the NYC &amp; NJ metro — monitored 24/7/365 and managed from your phone. Ask us how we can save you thousands a year.</p>
       <div class="hero-cta">
         <button class="btn btn-gold" onclick="openDemoModal('','Get More Information','Tell us what you\'re looking for and we\'ll be in touch within one business day.')">Learn More</button>
-        <a class="btn btn-soft" href="#services">See What We Do</a>
+        <a class="btn btn-soft" href="/build" onclick="openBuild(event)">See What We Do</a>
       </div>
       <div class="hero-meta">
         <span class="item"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> ADT Monitoring</span>
@@ -1526,6 +1526,77 @@
     s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&libraries=places&loading=async';
     s.async=true;s.onload=attach;document.head.appendChild(s);
   }).catch(function(){});
+})();
+</script>
+
+<!-- ===== Build Your Camera System — full-screen overlay hosting the public CCTV quote calculator =====
+     The calculator is a self-contained widget (dark VAULT styling, its own in-step nav). This overlay just
+     surfaces it from "See What We Do" and hands finished quotes to the lead pipeline. Direct /build and
+     /quote URLs serve the same widget full-screen (rewrites), so the link is shareable/textable. -->
+<style>
+  .build-overlay{position:fixed;inset:0;z-index:4000;display:none;flex-direction:column;background:#0B0F1A}
+  .build-overlay.on{display:flex}
+  .build-bar{flex:0 0 auto;min-height:46px;display:flex;align-items:center;justify-content:flex-end;padding:env(safe-area-inset-top,0px) 10px 0;background:#05070D;border-bottom:1px solid #1a2236}
+  .build-x{background:transparent;border:1px solid #3a4258;color:#FAF8F4;border-radius:8px;padding:9px 15px;font:600 14px/1 inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .build-x:hover{border-color:#C9A96E}
+  .build-frame{flex:1 1 auto;width:100%;border:0;background:#0B0F1A;display:block}
+  html.build-open,html.build-open body{overflow:hidden}
+</style>
+<script>
+(function(){
+  var ov, frame, scrollY = 0;
+  function ensure(){
+    if(ov) return;
+    ov = document.createElement('div');
+    ov.className = 'build-overlay';
+    ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true'); ov.setAttribute('aria-label','Build your camera system');
+    ov.innerHTML = '<div class="build-bar"><button type="button" class="build-x" aria-label="Close">✕ Close</button></div>'
+      + '<iframe class="build-frame" title="Build your camera system" src="about:blank" allow="clipboard-write"></iframe>';
+    document.body.appendChild(ov);
+    frame = ov.querySelector('.build-frame');
+    ov.querySelector('.build-x').addEventListener('click', requestClose);
+  }
+  function requestClose(){ if(location.pathname === '/build' || location.pathname === '/quote'){ history.back(); } else { closeBuild(true); } }
+  window.openBuild = function(e){
+    if(e){ if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.button===1) return; e.preventDefault(); }
+    ensure();
+    if(!/\/build(\?|$)/.test(frame.src)) frame.src = '/build';
+    scrollY = window.scrollY || window.pageYOffset || 0;
+    document.documentElement.classList.add('build-open');
+    ov.classList.add('on');
+    if(location.pathname !== '/build'){ try{ history.pushState({ build:1 }, '', '/build'); }catch(_){ } }
+    try{ if(window.gtag) gtag('event','calculator_opened'); else if(window.dataLayer) dataLayer.push({ event:'calculator_opened' }); }catch(_){ }
+    var x = ov.querySelector('.build-x'); if(x) x.focus();
+  };
+  window.closeBuild = function(fromHistory){
+    if(!ov) return;
+    ov.classList.remove('on');
+    document.documentElement.classList.remove('build-open');
+    window.scrollTo(0, scrollY);
+    if(!fromHistory && (location.pathname === '/build' || location.pathname === '/quote')){ try{ history.replaceState({}, '', '/'); }catch(_){ } }
+    setTimeout(function(){ if(ov && !ov.classList.contains('on') && frame) frame.src = 'about:blank'; }, 350);  // free the iframe on close
+  };
+  // Browser Back dismisses the overlay (the pushState above created a history entry at /build).
+  window.addEventListener('popstate', function(){
+    if(ov && ov.classList.contains('on') && location.pathname !== '/build' && location.pathname !== '/quote') closeBuild(true);
+  });
+  // Esc closes.
+  window.addEventListener('keydown', function(e){ if(e.key === 'Escape' && ov && ov.classList.contains('on')) requestClose(); });
+  // Lead handoff — the calculator posts the finished snapshot up; this is the ONE place the homepage
+  // hands a lead to the pipeline. Stubbed: logs + ready to POST to the FSM backend (snapshot + floor plan).
+  window.addEventListener('message', function(e){
+    var d = e.data; if(!d) return;
+    if(d.type === 'iotcctv:close'){ if(ov && ov.classList.contains('on')) requestClose(); return; }
+    if(d.type === 'iotcctv:lead' && d.snapshot){ submitLead(d.snapshot); return; }
+  });
+  function submitLead(snapshot){
+    try{ console.log('[home] CCTV quote lead', snapshot.id, snapshot); }catch(_){ }
+    try{ if(window.gtag) gtag('event','quote_submitted',{ value: (snapshot.total||0)/100 }); }catch(_){ }
+    // TODO(backend): POST the lead to the FSM platform. The floor-plan data URL (when present) lives at
+    // snapshot.inputs.contact.floorPlanImg.dataUrl — convert to a File and send multipart alongside the JSON.
+    // var fd = new FormData(); fd.append('snapshot', JSON.stringify(snapshot)); /* + floorplan file */
+    // fetch('/api/leads/cctv', { method:'POST', body: fd }).catch(function(){});
+  }
 })();
 </script>
 </body>
