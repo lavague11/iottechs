@@ -231,6 +231,15 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .field{display:grid;gap:4px}
 .field label{font-size:13px;font-weight:600}
 .field input,.field textarea,.field select{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);width:100%}
+/* address autocomplete — Photon fallback dropdown (Google renders its own .pac-container) */
+.addr-sug{display:none;margin-top:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden;box-shadow:0 10px 28px rgba(16,17,18,.14)}
+.addr-sug.open{display:block}
+.addr-opt{display:flex;flex-direction:column;gap:1px;padding:9px 12px;cursor:pointer;border-top:1px solid var(--line)}
+.addr-opt:first-child{border-top:0}
+.addr-opt:hover{background:var(--sel)}
+.addr-opt b{font-weight:600;font-size:14px}
+.addr-opt span{font-size:12px;color:var(--muted)}
+.pac-container{z-index:5000}
 .field .err{font-size:12px;color:var(--red)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .btn{border:none;border-radius:8px;padding:12px 18px;font-weight:700;background:var(--gold);color:#0B0F1A}
@@ -995,6 +1004,7 @@ function render(){
   $('#track').innerHTML = CONFIG.slides.map((s,i)=>`<section class="slide" id="sl-${s.id}" aria-hidden="${i!==cur}" ${i!==cur?'inert':''}><div class="wrap">${R[s.type](s,q,i)}</div></section>`).join('');
   document.querySelectorAll('.slide').forEach((el,i)=>{ if(keepScroll[i]) el.scrollTop = keepScroll[i]; });
   chrome(q);
+  attachAddr();   // (re)bind Google Places to the rebuilt address field
 }
 function chrome(q){
   q = q || Engine.compute(state);
@@ -1016,6 +1026,7 @@ function go(i){
   if(i>cur) for(let k=cur;k<i;k++) done.add(k);
   cur = i; chrome();
   const sl = document.querySelectorAll('.slide')[cur]; if(sl) sl.scrollTop = 0;
+  attachAddr();   // reaching the address step (via nav, no re-render) triggers the lazy Maps load + binding
 }
 
 /* ---------- index drawer ---------- */
@@ -1286,6 +1297,66 @@ document.addEventListener('keydown', e=>{
     if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && Date.now()-t0<800) go(cur + (dx<0?1:-1)); });
   vp.addEventListener('pointercancel', ()=>x0=null);
 })();
+
+/* ---------- address autocomplete ----------
+   Google Places on the Address field (US, biased to the NY/NJ metro) when the app provides a Maps key,
+   with a free Photon fallback otherwise. The field is rebuilt on every render(), so attachAddr() re-binds
+   the fresh input; both paths write the chosen address into state.contact.address. */
+var gmapsState = 'idle';   // idle | loading | ready | none
+// Lazy: only load Maps (an API call that counts toward quota) once the visitor actually reaches the
+// address field — not on every /build page view, so intro bounces cost nothing.
+function loadMaps(){
+  if(gmapsState!=='idle') return;
+  if(location.protocol==='file:'){ gmapsState='none'; attachAddr(); return; }   // standalone file use → Photon only
+  gmapsState='loading';
+  fetch('/api/config').then(function(r){ return r.json(); }).then(function(cfg){
+    var key = cfg && cfg.googleMapsApiKey;
+    if(!key){ gmapsState='none'; attachAddr(); return; }
+    window.__cctvGmapsReady = function(){ gmapsState='ready'; attachAddr(); };
+    var s=document.createElement('script');
+    s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&libraries=places&callback=__cctvGmapsReady&loading=async';
+    s.async=true; s.defer=true; s.onerror=function(){ gmapsState='none'; attachAddr(); };
+    document.head.appendChild(s);
+  }).catch(function(){ gmapsState='none'; attachAddr(); });
+}
+function setAddress(v){ state.contact.address = v; var el=$('#c_address'); if(el) el.value=v; var er=$('#e_address'); if(er) er.textContent=''; }
+function attachAddr(){
+  var el = document.getElementById('c_address'); if(!el) return;
+  if(gmapsState==='idle' && CONFIG.slides[cur] && CONFIG.slides[cur].id==='contact') loadMaps();   // reached the address step → load now
+  if(gmapsState==='ready' && window.google && google.maps && google.maps.places){
+    if(el._acBound) return; el._acBound = true;
+    document.querySelectorAll('.pac-container').forEach(function(n){ n.remove(); });   // drop stale dropdowns from a previous bind
+    try{
+      var bounds = new google.maps.LatLngBounds({lat:39.8,lng:-75.6},{lat:41.5,lng:-73.0});   // NY/NJ metro bias
+      var ac = new google.maps.places.Autocomplete(el, { types:['address'], componentRestrictions:{country:'us'}, bounds, fields:['formatted_address'] });
+      ac.addListener('place_changed', function(){ var p=ac.getPlace(); if(p && p.formatted_address) setAddress(p.formatted_address); });
+    }catch(e){ el._acBound=false; }
+    return;
+  }
+  if(gmapsState==='none' || gmapsState==='loading'){ bindPhoton(el); }   // fallback / while Maps loads
+}
+function bindPhoton(el){
+  if(el._phBound) return; el._phBound = true;
+  var box = document.createElement('div'); box.className='addr-sug';
+  el.insertAdjacentElement('afterend', box);
+  var timer=null, items=[], last='';
+  function close(){ box.classList.remove('open'); box.innerHTML=''; }
+  function pick(it){ var p=it.properties||{}; var l1=[p.housenumber,p.street||p.name].filter(Boolean).join(' ');
+    var l2=[p.city||p.county,p.state,p.postcode].filter(Boolean).join(', '); setAddress([l1,l2].filter(Boolean).join(', ')); close(); }
+  function render(){ if(!items.length){ close(); return; }
+    box.innerHTML = items.map(function(it,i){ var p=it.properties||{}; var l1=[p.housenumber,p.street||p.name].filter(Boolean).join(' ')||p.name||'';
+      var l2=[p.city||p.county,p.state,p.postcode].filter(Boolean).join(', '); return '<div class="addr-opt" data-i="'+i+'"><b>'+esc(l1)+'</b><span>'+esc(l2)+'</span></div>'; }).join('');
+    box.classList.add('open');
+    box.querySelectorAll('.addr-opt').forEach(function(o){ o.addEventListener('mousedown', function(ev){ ev.preventDefault(); pick(items[+o.dataset.i]); }); });
+  }
+  el.addEventListener('input', function(){ if(gmapsState==='ready') return close(); var q=el.value.trim(); clearTimeout(timer);
+    if(q.length<3){ close(); return; } if(q===last) return; last=q;
+    timer=setTimeout(function(){ fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&limit=5&lang=en&lat=40.7128&lon=-74.0060')
+      .then(function(r){ return r.json(); }).then(function(d){ items=(d.features||[]).filter(function(x){ return x.properties && x.properties.country; }); render(); })
+      .catch(function(){}); }, 250);
+  });
+  el.addEventListener('blur', function(){ setTimeout(close, 150); });
+}
 
 render();
 </script>
