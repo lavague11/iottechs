@@ -259,14 +259,34 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .nav{height:44px;padding:0 16px;border-radius:8px;border:1px solid #3a4258;background:transparent;color:var(--bar-fg);font-weight:600}
 .nav.next{background:var(--gold);border-color:var(--gold);color:#0B0F1A}
 .nav:disabled{opacity:.3;cursor:default}
-.mid{display:grid;justify-items:center;gap:6px;min-width:0}
-.dots{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
-.dot{width:8px;height:8px;border-radius:50%;background:#3a4258;border:none;padding:0}
-.dot.done{background:#7d6a49}
-.dot.on{background:var(--gold);width:20px;border-radius:4px}
+.mid{display:grid;justify-items:center;gap:6px;min-width:0;width:100%}
+/* three-segment progress bar (Your Details · Build System · Review Quote) */
+.dots{display:flex;gap:6px;width:100%;max-width:420px}
+.seg{flex:1;min-width:0;border:none;background:#2a3245;color:var(--bar-muted);height:26px;border-radius:7px;padding:0 6px;font:700 10px/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .18s,color .18s}
+.seg>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg.done{background:#5a4e35;color:#e7d9bd}
+.seg.on{background:var(--gold);color:#0B0F1A}
 .total{font-size:12px;color:var(--bar-muted);white-space:nowrap}
 .total b{color:var(--bar-fg);font-size:16px;font-variant-numeric:tabular-nums;margin-left:4px}
 .total i{font-style:normal;color:var(--gold)}
+
+/* ===== 3-step layout: step header + Step-2 accordions ===== */
+.step-h{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.step-h h1{font-size:clamp(22px,4.5vw,28px)}
+.wrap.step-build{gap:12px}
+.acc{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.acc.open{border-color:var(--gold)}
+.acc-h{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:12px 14px;background:none;border:none;text-align:left;color:var(--fg)}
+.acc-ic{flex:none;width:34px;height:34px;display:grid;place-items:center;color:var(--gold-ink)}
+.acc-ic svg{width:26px;height:26px}
+.acc-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.acc-t b{font-size:15.5px;font-weight:700}
+.acc-t small{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc-chev{flex:none;width:20px;height:20px;color:var(--muted);transition:transform .2s}
+.acc.open .acc-chev{transform:rotate(180deg);color:var(--gold-ink)}
+.acc-b{padding:4px 14px 16px;display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line)}
+.acc-b>*{margin:0}
+@media (prefers-reduced-motion:reduce){.acc-chev{transition:none}}
 
 /* index drawer */
 .scrim{position:fixed;inset:0;background:rgba(5,7,13,.55);z-index:20}
@@ -295,7 +315,7 @@ details.why p{margin:6px 0 0;max-width:60ch}
     <div class="brand"><b>IOT TECHS</b><span>Build your camera system</span></div>
     <span class="rep-badge" id="repBadge" hidden>REP</span>
     <div class="step" id="stepLbl"></div>
-    <button class="icon-btn" id="openIndex" aria-label="Open slide index">
+    <button class="icon-btn" id="openIndex" aria-label="Open slide index" hidden>
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5" rx="1"/><rect x="10.5" y="2" width="5.5" height="5.5" rx="1"/><rect x="2" y="10.5" width="5.5" height="5.5" rx="1"/><rect x="10.5" y="10.5" width="5.5" height="5.5" rx="1"/></svg>
     </button>
   </header>
@@ -644,6 +664,8 @@ const estDaysUI = (tb, daily) => daily>0 ? Math.floor(tb/daily) : 0;
 
 const state = Object.assign({}, CONFIG.defaults, { contact:{name:'',phone:'',email:'',company:'',address:'',when:'',notes:'',existingSystem:false,existingType:null,existingWorking:null,construction:false,hasDeadline:false,deadline:'',floorPlans:false,floorPlanImg:null} });
 let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
+// 3-step model (the 14 topic renderers below are regrouped into these; engine/state/actions unchanged).
+let openAcc = 'property';   // Step 2: one accordion open at a time
 
 const ICON = {
   cam:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 10h18l6 4v6l-6 4H5z"/><circle cx="15" cy="17" r="4"/><path d="M9 24v5h8"/></svg>',
@@ -659,12 +681,48 @@ const ICON = {
   none:'<svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="17" cy="17" r="11"/><path d="M10 24L24 10"/></svg>'
 };
 
-/* ---------- slide renderers (keyed by slide.type) ---------- */
-function head(slide, i, lede, skippable=true){
-  return `<div class="eyebrow">Step ${i} of ${CONFIG.slides.length-1}</div>
-    <h1>${slide.h || slide.title}</h1>${lede?`<p class="lede">${lede}</p>`:''}
-    ${skippable && slide.fields ? `<button class="skip" data-act="skip">Skip, keep the recommended setup</button>`:''}`;
+/* ---------- 3-step shell: regroup the topic renderers into Your Details / Build System / Review ---------- */
+const STEP_ICON = { property: ICON.house, cameras: ICON.cam, storage: ICON.nvr, install: ICON.cable };
+const STEPS = [
+  { id:'details', label:'Your Details',  title:'Your information',     single:['contact'] },
+  { id:'build',   label:'Build System',  title:'Customize your system', accordions:[
+      { id:'property', title:'About your property',  types:['site'] },
+      { id:'cameras',  title:'Cameras & security',   types:['level','resolution','count'] },
+      { id:'storage',  title:'Recorder & storage',   types:['recorder'] },
+      { id:'install',  title:'Cable & installation', types:['cable','install','monitor','addons','plan'] },
+  ] },
+  { id:'review',  label:'Review Quote',  title:'Review & submit',       single:['review'] },
+];
+function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
+function renderStep(st, q, i){
+  if(st.accordions) return st.accordions.map(a=>renderAccordion(a, q)).join('');
+  return (st.single||[]).map(t=>R[t](slideOf(t), q, i)).join('');
 }
+function renderAccordion(a, q){
+  const open = (openAcc===a.id);
+  const body = a.types.map(t=>R[t](slideOf(t), q, 0)).join('');
+  return `<section class="acc${open?' open':''}">
+    <button type="button" class="acc-h" data-acc="${a.id}" aria-expanded="${open}">
+      <span class="acc-ic">${STEP_ICON[a.id]||''}</span>
+      <span class="acc-t"><b>${a.title}</b>${open?'':`<small>${esc(accSummary(a,q))}</small>`}</span>
+      <svg class="acc-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="acc-b"${open?'':' hidden'}>${body}</div>
+  </section>`;
+}
+function accSummary(a, q){
+  const c = state.contact;
+  if(a.id==='property'){ const b=[c.existingSystem?'existing system':null,c.construction?'construction':null,c.hasDeadline?'deadline':null,c.floorPlans?'floor plans':null].filter(Boolean); return b.length?b.join(' · '):'A few quick questions'; }
+  if(a.id==='cameras'){ return `${q.n} camera${q.n>1?'s':''} · ${q.level.name} · ${q.n12?(q.n8+' × 8MP, '+q.n12+' × 12MP'):'8MP'}`; }
+  if(a.id==='storage'){ return `${q.ss.activeNvr.name} · ${q.ss.storageTB}TB ≈ ${q.ss.estimatedDays} days`; }
+  if(a.id==='install'){ const m=({buy:'monitor',own:'own monitor',none:'no monitor'})[state.monitorMode]||'monitor'; return `${state.env==='outdoor'?'Outdoor':'Indoor'} cable · ${m}${state.ups?' · UPS':''}${state.plan!=='none'?' · protection':''}`; }
+  return '';
+}
+
+/* ---------- topic renderers (keyed by type) ---------- */
+// head() now renders only the lede — the step/accordion header supplies the title, so there's no
+// "Step X of 13" and no per-topic h1 in the 3-step layout.
+function head(slide, i, lede, skippable){ return lede ? `<p class="lede">${lede}</p>` : ''; }
 function why(text){ return `<details class="why"><summary>Why this?</summary><p>${text}</p></details>`; }
 function repBox(inner){ return ''; }   // PUBLIC BUILD — rep controls never render in the public calculator
 
@@ -1000,9 +1058,13 @@ const R = {
 /* ---------- render ---------- */
 function render(){
   const q = Engine.compute(state);
-  const keepScroll = [...document.querySelectorAll('.slide')].map(el=>el.scrollTop);
-  $('#track').innerHTML = CONFIG.slides.map((s,i)=>`<section class="slide" id="sl-${s.id}" aria-hidden="${i!==cur}" ${i!==cur?'inert':''}><div class="wrap">${R[s.type](s,q,i)}</div></section>`).join('');
-  document.querySelectorAll('.slide').forEach((el,i)=>{ if(keepScroll[i]) el.scrollTop = keepScroll[i]; });
+  const keep = [...document.querySelectorAll('.slide')].map(el=>el.scrollTop);
+  $('#track').innerHTML = STEPS.map((st,i)=>`<section class="slide" id="st-${st.id}" aria-hidden="${i!==cur}" ${i!==cur?'inert':''}>
+    <div class="wrap step-${st.id}">
+      <div class="step-h"><div class="eyebrow">Step ${i+1} of ${STEPS.length}</div><h1>${st.title}</h1></div>
+      ${renderStep(st,q,i)}
+    </div></section>`).join('');
+  document.querySelectorAll('.slide').forEach((el,i)=>{ if(keep[i]) el.scrollTop = keep[i]; });
   chrome(q);
   attachAddr();   // (re)bind Google Places to the rebuilt address field
 }
@@ -1010,23 +1072,29 @@ function chrome(q){
   q = q || Engine.compute(state);
   $('#track').style.transform = `translateX(${-cur*100}%)`;
   document.querySelectorAll('.slide').forEach((el,i)=>{ el.setAttribute('aria-hidden', i!==cur); el.inert = i!==cur; });
-  const s = CONFIG.slides[cur];
-  $('#stepLbl').innerHTML = cur===0 ? 'Start' : `<strong>${cur}</strong> / ${CONFIG.slides.length-1} · ${s.title}`;
-  $('#dots').innerHTML = CONFIG.slides.map((x,i)=>`<button class="dot ${i===cur?'on':''} ${done.has(i)?'done':''}" data-go="${i}" aria-label="Go to ${x.title}"></button>`).join('');
-  $('#total').innerHTML = `Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
+  $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
+  // three-segment progress bar (Your Details → Build System → Review Quote); segments jump when reachable
+  $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span>${st.label}</span></button>`).join('');
+  $('#total').innerHTML = cur===0 ? '' : `Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
   $('#prev').disabled = cur===0;
-  const last = cur===CONFIG.slides.length-1;
-  $('#next').disabled = last;
-  $('#next').querySelector('.lbl').textContent = cur===CONFIG.slides.length-2 ? 'Finish' : 'Next';
+  const nx=$('#next'), lbl=nx.querySelector('.lbl');
+  lbl.textContent = cur===0 ? 'Continue' : cur===1 ? 'Review quote' : 'Submit';
+  nx.disabled = (cur===STEPS.length-1 && !!submitted);
   $('#repBadge').hidden = !rep;
   if(drawer) renderDrawer(q);
 }
 function go(i){
-  i = Math.max(0, Math.min(CONFIG.slides.length-1, i));
+  i = Math.max(0, Math.min(STEPS.length-1, i));
   if(i>cur) for(let k=cur;k<i;k++) done.add(k);
   cur = i; chrome();
   const sl = document.querySelectorAll('.slide')[cur]; if(sl) sl.scrollTop = 0;
-  attachAddr();   // reaching the address step (via nav, no re-render) triggers the lazy Maps load + binding
+  attachAddr();   // reaching the address step (via nav) triggers the lazy Maps load + binding
+}
+// Forward navigation that gates Step 1 on valid contact and submits on the last step.
+function goNext(){
+  if(cur===0){ if(!validateContact(true)){ render(); return; } go(1); return; }
+  if(cur===STEPS.length-1){ if(submitted) return; if(validateContact(true)) finalizeQuote(); else go(0); return; }
+  go(cur+1);
 }
 
 /* ---------- index drawer ---------- */
@@ -1186,6 +1254,8 @@ function copy(text){
 }
 
 document.addEventListener('click', e=>{
+  const acc = e.target.closest('[data-acc]');
+  if(acc){ const id=acc.dataset.acc; openAcc = (openAcc===id ? null : id); render(); return; }   // Step 2 accordion toggle (one open at a time)
   const g = e.target.closest('[data-go]');
   if(g){ go(+g.dataset.go); if(drawer) closeDrawer(); return; }
   const a = e.target.closest('[data-act]'); if(!a) return;
@@ -1279,14 +1349,14 @@ document.addEventListener('submit', e=>{
   // PUBLIC BUILD — no rep PIN form.
 });
 $('#prev').onclick = ()=>go(cur-1);
-$('#next').onclick = ()=>go(cur+1);
+$('#next').onclick = goNext;
 $('#openIndex').onclick = openDrawer;
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape' && drawer) return closeDrawer();
   // When embedded (homepage overlay), Esc with the drawer closed asks the host to close the overlay.
   if(e.key==='Escape'){ try{ if(window.parent && window.parent!==window){ window.parent.postMessage({ type:'iotcctv:close' }, '*'); return; } }catch(_){} }
   if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || drawer) return;
-  if(e.key==='ArrowRight') go(cur+1);
+  if(e.key==='ArrowRight') goNext();
   if(e.key==='ArrowLeft') go(cur-1);
 });
 /* swipe */
@@ -1294,7 +1364,7 @@ document.addEventListener('keydown', e=>{
   const vp = $('#viewport');
   vp.addEventListener('pointerdown', e=>{ if(e.target.closest('input,textarea,select,.level-carousel,.cc-slider')) return; x0=e.clientX; y0=e.clientY; t0=Date.now(); });
   vp.addEventListener('pointerup', e=>{ if(x0===null) return; const dx=e.clientX-x0, dy=e.clientY-y0; x0=null;
-    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && Date.now()-t0<800) go(cur + (dx<0?1:-1)); });
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && Date.now()-t0<800){ if(dx<0) goNext(); else go(cur-1); } });
   vp.addEventListener('pointercancel', ()=>x0=null);
 })();
 
@@ -1322,7 +1392,7 @@ function loadMaps(){
 function setAddress(v){ state.contact.address = v; var el=$('#c_address'); if(el) el.value=v; var er=$('#e_address'); if(er) er.textContent=''; }
 function attachAddr(){
   var el = document.getElementById('c_address'); if(!el) return;
-  if(gmapsState==='idle' && CONFIG.slides[cur] && CONFIG.slides[cur].id==='contact') loadMaps();   // reached the address step → load now
+  if(gmapsState==='idle' && STEPS[cur] && STEPS[cur].id==='details') loadMaps();   // reached the Your Details step → load now
   if(gmapsState==='ready' && window.google && google.maps && google.maps.places){
     if(el._acBound) return; el._acBound = true;
     document.querySelectorAll('.pac-container').forEach(function(n){ n.remove(); });   // drop stale dropdowns from a previous bind
