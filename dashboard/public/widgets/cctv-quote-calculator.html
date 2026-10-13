@@ -218,6 +218,20 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .chip.on{background:var(--slate);color:#FAF8F4;border-color:var(--slate)}
 @media (prefers-reduced-motion:reduce){.chip{transition:none}}
 
+/* security feature checklist (Step 2) */
+.feat-h{font-size:clamp(18px,3.6vw,22px);margin:2px 0 0;line-height:1.15}
+.feat-list{display:flex;flex-direction:column;gap:8px}
+.feat-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);cursor:pointer;min-height:50px;transition:border-color .15s,background .15s}
+.feat-row.on{border-color:var(--gold);background:var(--sel)}
+.feat-box{flex:none;width:22px;height:22px;border:2px solid var(--line);border-radius:6px;position:relative;transition:border-color .15s,background .15s}
+.feat-row.on .feat-box{border-color:var(--gold);background:var(--gold)}
+.feat-row.on .feat-box::after{content:"";position:absolute;left:6px;top:2px;width:6px;height:11px;border:solid #0B0F1A;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+.feat-name{font-weight:600;font-size:15px}
+.feat-rec{margin-top:6px;padding:10px 12px;border:1px solid var(--good);border-radius:9px;background:rgba(60,160,90,.10);font-size:13.5px}
+.feat-rec-k{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px;color:var(--good);margin-right:6px}
+.lvl-price{margin-left:auto;font-weight:700;font-size:16px}
+@media (prefers-reduced-motion:reduce){.feat-row,.feat-box{transition:none}}
+
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
 .promo-row{display:flex;gap:8px}
@@ -379,11 +393,26 @@ const CONFIG = {
       { id:'smart', name:'Smart', tag:'Most popular', line:'AI alerts',
         blurb:'Everything in Essential, plus AI that tells people and vehicles apart and alerts you to what matters.',
         features:['AI human & vehicle detection','Smart alerts to your phone','Far fewer false alarms'],
-        addPerCamera:0, addFlat:0, recommended:true },
+        addPerCamera:2500, addFlat:0, aiLabel:'Advanced AI detection & alerts', recommended:true },
       { id:'pro', name:'Pro', tag:'Advanced', line:'AI search & plates',
         blurb:'Everything in Smart, plus facial recognition, AI search through footage and license-plate capture.',
         features:['Facial recognition','AI smart search (person, vehicle, color)','License plate recognition','Best with 12MP cameras'],
-        addPerCamera:0, addFlat:0, suggest12MP:true }
+        addPerCamera:2500, addFlat:0, aiLabel:'Advanced AI detection & alerts', suggest12MP:true, specialized:true }
+    ],
+    // Security feature checklist (Step 2). `level` is the INTERNAL recommendation tier (1 Essential ·
+    // 2 Smart · 3 Pro), never shown to the customer. `service` = an add-on service (live monitoring),
+    // not a camera-package driver. `specialized` = needs dedicated equipment/analytics (custom quote).
+    securityFeatures: [
+      { id:'rec247',       label:'24/7 Video Recording',          level:1 },
+      { id:'colornight',   label:'Full-Color Night Vision',       level:1 },
+      { id:'hd4k',         label:'4K HD Video',                   level:1 },
+      { id:'mobile',       label:'Mobile App Access',             level:1 },
+      { id:'audio',        label:'Audio Recording',               level:2, caveat:'Audio depends on the camera model — confirmed at the survey.' },
+      { id:'aidetect',     label:'AI Human & Vehicle Detection',  level:2 },
+      { id:'motionnotify', label:'Phone Motion Notifications',    level:2 },
+      { id:'facial',       label:'Facial Recognition',            level:3, specialized:true },
+      { id:'lpr',          label:'License Plate Recognition',     level:3, specialized:true },
+      { id:'livemon',      label:'24/7 Live Monitoring',          level:0, service:true },
     ],
     // 8MP body styles — same price, same sensor. Internal SKU kept private (rep view only).
     styles: {
@@ -434,7 +463,7 @@ const CONFIG = {
     // no client-side codes. A code a customer types is captured into the lead snapshot for the rep to honor.
     promos: {}
   },
-  defaults: { level:'smart', sizeTier:8, cams:4, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
+  defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
               desiredDays:30, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
               skipProg:false, monitorMode:'none', monitor:false, mount:false, ups:false, plan:'none', term:1, billing:'monthly',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
@@ -621,9 +650,16 @@ const Engine = (() => {
       flags.push('Check PoE switch wattage against total camera draw.');
     }
 
-    // security-level AI package (price adders configurable; $0 by default)
-    const levelAmt = Math.round((level.addFlat||0) + (level.addPerCamera||0)*n);
-    if(levelAmt>0) lines.push({ g:'Equipment', code:'AI-'+level.id.toUpperCase(), label:`${level.name} AI package`, qty:1, unit:levelAmt, amt:levelAmt });
+    // security-level AI programming adder. Essential = $0; Smart/Pro = $25/camera advanced AI programming
+    // (same camera hardware, NVR and storage as Essential — only the configuration differs). Pro layers
+    // specialized facial/LPR on top, priced separately at the survey (see the `specialized` flag).
+    const levelPerCam = level.addPerCamera||0, levelFlat = level.addFlat||0;
+    const levelAmt = Math.round(levelFlat + levelPerCam*n);
+    if(levelAmt>0){
+      const aiLabel = level.aiLabel || `${level.name} AI package`;
+      if(levelPerCam>0 && levelFlat===0) lines.push({ g:'Installation', code:'AI-'+level.id.toUpperCase(), label:aiLabel, qty:n, unit:levelPerCam, amt:levelAmt });
+      else lines.push({ g:'Installation', code:'AI-'+level.id.toUpperCase(), label:aiLabel, qty:1, unit:levelAmt, amt:levelAmt });
+    }
 
     // installation services (camera programming is optional)
     C.services.forEach(sv=>{
@@ -743,7 +779,7 @@ const ICON = {
 const STEP_ICON = { property: ICON.house, cameras: ICON.cam, storage: ICON.nvr, install: ICON.cable };
 const STEPS = [
   { id:'details', label:'Intake',  title:'Your information',   single:['contact'] },
-  { id:'project', label:'Project', title:'About your project', single:['site'] },
+  { id:'project', label:'Project', title:'About your project', single:['features','site'] },
   { id:'system',  label:'System',  title:'Your system',        single:['system'] },
 ];
 function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
@@ -779,6 +815,27 @@ function head(slide, i, lede, skippable){ return lede ? `<p class="lede">${lede}
 function why(text){ return `<details class="why"><summary>Why this?</summary><p>${text}</p></details>`; }
 function repBox(inner){ return ''; }   // PUBLIC BUILD — rep controls never render in the public calculator
 
+// ---- Security feature checklist → package recommendation (pure) ----------
+// Recommendation is by the HIGHEST feature level selected, never by count. Monitoring is a separate
+// service and never upgrades the camera package. No camera features → Essential baseline.
+function recommendLevel(features){
+  const sel = new Set(features||[]);
+  const SF = CONFIG.catalog.securityFeatures;
+  const cam = SF.filter(f=>!f.service && sel.has(f.id));
+  const maxLvl = cam.reduce((m,f)=>Math.max(m, f.level||0), 0);
+  const level = maxLvl>=3 ? 'pro' : maxLvl===2 ? 'smart' : 'essential';
+  return {
+    level,
+    hasCamFeatures: cam.length>0,
+    wantsMonitoring: sel.has('livemon'),
+    specialized: SF.filter(f=>f.specialized && sel.has(f.id)).map(f=>f.id),
+    caveats: SF.filter(f=>f.caveat && sel.has(f.id)).map(f=>f.caveat),
+  };
+}
+// Independent total for a given package (Essential/Smart/Pro) at the current camera config — pure, uses
+// the real engine so Smart/Pro correctly carry the $25/cam adder. Does NOT mutate live state.
+function tierTotal(levelId){ try{ return Engine.compute({ ...state, level:levelId }).total; }catch(_){ return null; } }
+
 // ---- Step 3 (System) helpers ---------------------------------------------
 // Secondary choices (cabling, programming, monitor, battery backup, protection plan) are auto-defaulted
 // and surfaced here as small editable rows — no extra step. Each reuses the existing action handlers, so
@@ -804,6 +861,11 @@ function quoteItemized(q){
   const groups = ['Equipment','Installation','Cable'];
   const line = l => `<div class="q-line"><span>${esc(l.label)}<br><small class="num">${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</small></span><span class="amt">${money(l.amt)}</span></div>`;
   const discPct = Math.round((state.discount||0)*100);
+  const rec = recommendLevel(state.features);
+  const secNotes = [
+    rec.wantsMonitoring ? '24/7 live monitoring requested — quoted separately as a monitoring service.' : '',
+    rec.specialized.length ? 'Facial / license-plate recognition needs specialized equipment — specced and priced at your free survey. Total below is preliminary.' : '',
+  ].filter(Boolean);
   return `<div class="eyebrow">Your quote</div>
     <div class="quote">
       ${groups.map(g=>{const ls=q.lines.filter(l=>l.g===g); return ls.length?`<div class="q-group"><h3>${g}</h3>${ls.map(line).join('')}</div>`:'';}).join('')}
@@ -824,6 +886,7 @@ function quoteItemized(q){
       </div>
     </div>
     ${q.warnings.map(w=>`<div class="note">${esc(w)}</div>`).join('')}
+    ${secNotes.map(w=>`<div class="note">${esc(w)}</div>`).join('')}
     <div class="promo-box">
       <label for="promoInput">Promo or voucher code</label>
       <div class="promo-row">
@@ -847,20 +910,40 @@ const R = {
   },
   level(s, q, i){
     const tick = `<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 6-7"/></svg>`;
-    const card = lv => `<div class="opt level ${state.level===lv.id?'sel':''} ${lv.recommended?'is-rec':''}">
-      ${lv.recommended?`<div class="rec-banner">${lv.tag}</div>`:''}
-      <button class="pick" data-act="level" data-v="${lv.id}">
-        <div class="lvl-head">
-          <span class="radio"></span>
-          <div class="lvl-name">${lv.name}</div>
-          ${!lv.recommended?`<span class="lvl-tag">${lv.tag}</span>`:''}
-        </div>
-        <div class="lvl-line">${lv.line}</div>
-        <div class="opt-sub">${lv.blurb}</div>
-        <ul class="feat">${lv.features.map(f=>`<li>${tick}${f}</li>`).join('')}</ul>
-      </button></div>`;
-    return `${head(s,i,'Pick how smart you want the system — you can change this anytime.')}
-      <div class="level-carousel">${CONFIG.catalog.levels.map(card).join('')}</div>`;
+    const rec = recommendLevel(state.features);
+    const names = { essential:'Essential', smart:'Smart', pro:'Pro' };
+    const essTotal = tierTotal('essential');
+    const card = lv => {
+      const tot = tierTotal(lv.id);
+      const delta = (tot!=null && essTotal!=null) ? tot - essTotal : 0;
+      const recForYou = rec.hasCamFeatures && rec.level===lv.id;
+      const mostPopular = !rec.hasCamFeatures && lv.recommended;
+      const banner = recForYou ? 'Recommended for you' : (mostPopular ? lv.tag : '');
+      const spec = lv.specialized && rec.specialized.length>0;   // Pro + facial/LPR requested → custom on top
+      const breakdown = `<details class="why"><summary>Price breakdown</summary>
+        <div class="kv"><span>Base system (Essential)</span><span class="num">${money(essTotal)}</span></div>
+        ${delta>0?`<div class="kv"><span>${lv.aiLabel||'Advanced AI'} · ${q.n} × ${money(lv.addPerCamera)}</span><span class="num">${money(delta)}</span></div>`:''}
+        ${spec?`<div class="kv"><span>Facial / license-plate equipment</span><span class="num">Custom</span></div>`:''}
+        <div class="kv grand"><span>Package total</span><b>${money(tot)}${spec?'+':''}</b></div></details>`;
+      return `<div class="opt level ${state.level===lv.id?'sel':''} ${banner?'is-rec':''}">
+        ${banner?`<div class="rec-banner">${banner}</div>`:''}
+        <button class="pick" data-act="level" data-v="${lv.id}">
+          <div class="lvl-head"><span class="radio"></span><div class="lvl-name">${lv.name}</div>
+            <span class="lvl-price num">${money(tot)}${spec?'+':''}</span></div>
+          <div class="lvl-line">${lv.line}</div>
+          <div class="opt-sub">${lv.blurb}</div>
+          <ul class="feat">${lv.features.map(f=>`<li>${tick}${f}</li>`).join('')}</ul>
+        </button>
+        ${breakdown}</div>`;
+    };
+    const useRec = (state.levelManual && rec.hasCamFeatures && rec.level!==state.level)
+      ? `<button class="skip" data-act="levelauto" style="align-self:flex-start">↺ Use recommended (${names[rec.level]})</button>` : '';
+    const monNote = rec.wantsMonitoring ? `<div class="note">24/7 live monitoring requested — quoted separately as a monitoring service.</div>` : '';
+    const specNote = rec.specialized.length ? `<div class="note">Facial / license-plate recognition needs specialized cameras &amp; analytics — we’ll spec and price these at your free survey, so your total stays preliminary.</div>` : '';
+    const cavNote = rec.caveats.map(c=>`<div class="note">${esc(c)}</div>`).join('');
+    return `${head(s,i,'Same cameras across all three — the difference is the AI programming. Pick one, or keep the recommended.')}
+      <div class="level-carousel">${CONFIG.catalog.levels.map(card).join('')}</div>
+      ${useRec}${monNote}${specNote}${cavNote}`;
   },
   size(s, q, i){
     const card = t => `<div class="opt level ${state.sizeTier===t.ch?'sel':''}">
@@ -1122,6 +1205,22 @@ const R = {
         <p class="fine">Used only to prepare and send your estimate. No spam, and a valid format isn’t a verified number — we may confirm by text or call.</p>
       </form>`;
   },
+  features(s, q, i){
+    const sel = new Set(state.features||[]);
+    const row = f => `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
+      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span></button>`;
+    const rec = recommendLevel(state.features);
+    const recName = ({essential:'Essential',smart:'Smart',pro:'Pro'})[rec.level];
+    const bits = rec.hasCamFeatures ? [`${recName} package`] : [];
+    if(rec.wantsMonitoring) bits.push('24/7 live monitoring');
+    if(rec.specialized.length) bits.push('specialized equipment (reviewed at survey)');
+    const recNote = bits.length ? `<div class="feat-rec"><span class="feat-rec-k">Recommended</span> ${bits.join(' · ')}</div>` : '';
+    return `<div class="eyebrow">Security features</div>
+      <h2 class="feat-h">What security features are you interested in?</h2>
+      <p class="lede">Select all that apply — we'll help you find the right system.</p>
+      <div class="feat-list">${CONFIG.catalog.securityFeatures.map(row).join('')}</div>
+      ${recNote}`;
+  },
   site(s, q, i){
     const c = state.contact;
     return `${head(s,i,'A few quick things that help us quote accurately. All optional.', false)}
@@ -1214,7 +1313,7 @@ function chrome(q){
   $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
   // three-segment progress bar (Intake → Your Project → System); segments jump when reachable
   $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span>${st.label}</span></button>`).join('');
-  const prelim = state.extStorage || q.ss.noStandardFit;   // extended/custom storage → the total isn't final
+  const prelim = state.extStorage || q.ss.noStandardFit || recommendLevel(state.features).specialized.length>0;   // extended storage or specialized facial/LPR → total not final
   // Running total only on the System step — the earlier steps have no cost inputs yet.
   $('#total').innerHTML = cur < STEPS.length-1 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
   $('#prev').disabled = cur===0;
@@ -1344,6 +1443,11 @@ function finalizeQuote(){
       constructionDetails: c.construction ? { noSheetrock:!!c.noSheetrock, dropCeiling:!!c.dropCeiling, needPermits:!!c.needPermits } : null,
       hasDeadline:c.hasDeadline, deadline:c.deadline,
       floorPlans:c.floorPlans, floorPlanFile: fp ? { name:fp.name, type:fp.type, size:fp.size } : null },
+    security:(()=>{ const r=recommendLevel(state.features), SF=CONFIG.catalog.securityFeatures, lbl=id=>(SF.find(f=>f.id===id)||{}).label||id;
+      return { features:[...(state.features||[])], featureLabels:(state.features||[]).map(lbl),
+        recommendedPackage:r.level, selectedPackage:state.level, packageManual:!!state.levelManual,
+        liveMonitoring:r.wantsMonitoring, specializedRequirements:r.specialized, specializedLabels:r.specialized.map(lbl),
+        customQuote: r.specialized.length>0 || !!state.extStorage || q.ss.noStandardFit }; })(),
     storage:{ desiredRetentionDays:q.ss.days, recommendedStorageTB:q.ss.recommendedTB, selectedStorageTB:q.ss.storageTB,
       estimatedRetentionDays:q.ss.estimatedDays, dailySystemTB:+q.ss.daily.toFixed(4), rawRequiredTB:+q.ss.rawTB.toFixed(3),
       drives:q.ss.drives, selectedNvr:q.ss.activeNvr.code, nvrUpgrade:state.nvrUpgrade, requiredUpgrade:q.ss.requiresUpgrade, customSizing:q.ss.noStandardFit,
@@ -1428,7 +1532,15 @@ document.addEventListener('click', e=>{
     case 'deadline': state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; break;
     case 'plans': state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; break;
     case 'planclear': state.contact.floorPlanImg = null; break;
-    case 'level': state.level = v; break;
+    case 'level': state.level = v; state.levelManual = true; break;   // manual pick wins until "use recommended"
+    case 'levelauto': state.levelManual = false; state.level = recommendLevel(state.features).level; break;
+    case 'feat': {   // security-feature checklist → auto-recommend a package (unless manually overridden)
+      const set = new Set(state.features||[]);
+      set.has(v) ? set.delete(v) : set.add(v);
+      state.features = [...set];
+      if(!state.levelManual) state.level = recommendLevel(state.features).level;
+      break;
+    }
     case 'prog': state.skipProg = v ? (v==='skip') : !state.skipProg; break;   // oseg sends inc/skip; the install card toggles
     case 'ups': state.ups = (v==='on'); break;
     case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; break;
