@@ -772,7 +772,7 @@ const CSS = `
 /* Auto-hiding project header (mobile AND desktop) — like browser chrome: scroll down collapses the
    project context (status · workflow · progress), scroll up brings it back. The logo ROW stays put so a
    compact project name can ride next to the logo as a persistent indicator. */
-.dv-head-hidden .dv-jobbar,.dv-head-hidden .dv-gate,.dv-head-hidden .dv-rail{height:0!important;min-height:0!important;padding-top:0!important;padding-bottom:0!important;margin:0!important;opacity:0;overflow:hidden;pointer-events:none;transform:translateY(-8px)}
+.dv-head-hidden .dv-jobbar,.dv-head-hidden .dv-gate{height:0!important;min-height:0!important;padding-top:0!important;padding-bottom:0!important;margin:0!important;opacity:0;overflow:hidden;pointer-events:none;transform:translateY(-8px)}
 .dv-jobbar,.dv-gate,.dv-rail{transition:height .22s var(--dv-e),opacity .18s var(--dv-e),padding .22s var(--dv-e),margin .22s var(--dv-e),transform .22s var(--dv-e)}
 /* Collapsed-state project name + caret by the logo. A flex button; min-width:0 lets max-width:0 actually
    collapse it (flex items default to min-width:auto, which otherwise pins it open). Clicking opens the
@@ -794,6 +794,18 @@ const CSS = `
 .dv-compact .dv-rail{padding-top:9px;padding-bottom:9px}
 .dv-compact .dv-lab .nm{display:none}
 .dv-compact .dv-readout .cap{display:none}
+/* MINI progress — when the header fully collapses, the progress stays with it as a thin strip (28–34px)
+   instead of disappearing: the same 5 stages (dot + number) + the % from the same canonical state, just
+   much smaller. "When the header shrinks, the progress shrinks with it." */
+.dv-head-hidden .dv-rail{padding:3px 24px 7px;gap:12px}
+.dv-head-hidden .dv-lab{margin-top:4px;gap:5px}
+.dv-head-hidden .dv-lab .nm{display:none}
+.dv-head-hidden .dv-readout .cap{display:none}
+.dv-head-hidden .dv-bar{height:2px}
+.dv-head-hidden .dv-beacon{width:5px;height:5px;border-width:1px}
+.dv-head-hidden .dv-lab b{font-size:8.5px}
+.dv-head-hidden .dv-readout .pct{font-size:14px}
+@media (max-width:760px){.dv-head-hidden .dv-rail{padding:3px 16px 6px;gap:8px}}
 .dv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}
 .dv-seg{flex:1;text-align:left;min-width:0;padding-top:6px}
 /* Locked (not-yet-reachable) phase: greyed, still visible + clickable (peek). */
