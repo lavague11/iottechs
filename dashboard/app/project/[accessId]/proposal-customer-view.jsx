@@ -599,17 +599,13 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           <span className="pcv-sum-total-lbl">Total Investment</span>
           <span className="pcv-sum-total-amt">{money(t.grand)}</span>
         </div>
-        <div className="pcv-sum-dep">{
-          depositPct <= 0 ? <>Paid in full upon completion · <b>{money(t.grand)}</b></>
-          : depositPct >= 100 ? <>Paid in full before we begin · <b>{money(t.grand)}</b></>
-          : <>{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</>
-        }</div>
-        <button type="button" className="pcv-sum-more" onClick={() => setDetailOpen((o) => !o)} aria-expanded={detailOpen}>
-          {detailOpen ? "Hide details ▲" : "Details ▾"}
-        </button>
+        {/* The deposit/balance line lived here before, but Payment Terms below spells out the full
+            schedule — so it's dropped to avoid saying the same thing twice. */}
       </div>
 
-      {detailOpen && (<>
+      {/* The breakdown is always shown — Payment Terms and Approve & Sign sit right below it, so there's
+          nothing to collapse for. */}
+      {(<>
       <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
       <div className="pcv-table">
         <div className="pcv-table-head">
