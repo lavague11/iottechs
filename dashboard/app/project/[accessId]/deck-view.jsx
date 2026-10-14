@@ -271,7 +271,11 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             the details drawer). Tapping the name reveals the contact/property drawer below. */}
         {customer && (
           <button className="dv-identity" onClick={() => setCustOpen((o) => !o)} aria-expanded={custOpen}>
-            <span className="dv-code mono">{customer.code}</span>
+            {/* The project-ID chip is a second entry point into the SAME Project Status popover (useful on
+                mobile where it stays visible). Stops propagation so it doesn't also toggle the details drawer. */}
+            <span className="dv-code mono" role="button" tabIndex={0} title="Project status"
+              onClick={(e) => { e.stopPropagation(); setCustOpen(false); setStatusOpen((o) => !o); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setCustOpen(false); setStatusOpen((o) => !o); } }}>{customer.code}</span>
             <h1 className="dv-title">{customer.name}</h1>
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
@@ -897,9 +901,11 @@ const CSS = `
   .dv-roledivide-desk{display:none}
 }
 @media (max-width:760px){.dv-top{padding:8px 16px;flex-wrap:wrap;row-gap:4px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
-  /* Phone: name + Portal share the top line; STATUS drops to its own line below (full label visible). */
-  .dv-code{display:none}
-  .dv-identity{gap:8px;flex:1 1 auto}
+  /* Phone: the project-ID chip STAYS visible (just compact) — the name truncates before the ID is dropped.
+     name + Portal share the top line; STATUS drops to its own line below (full label visible). */
+  .dv-code{padding:4px 6px;font-size:10.5px;flex:0 0 auto}
+  .dv-identity{gap:8px;flex:1 1 auto;min-width:0}
+  .dv-title{min-width:0;flex:1 1 auto}
   .dv-chipwrap{order:9;flex:0 0 auto;max-width:100%}
   .dv-chip{height:21px;padding:0 9px;font-size:9px;letter-spacing:.04em;gap:5px;flex:0 0 auto;min-width:0;max-width:none}
   .dv-chip .dv-chip-caret{width:11px;height:11px;flex:0 0 auto}}
