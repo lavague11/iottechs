@@ -303,7 +303,8 @@
       <span class="tsep"></span>
       <button class="tb wand" id="tEnhance" title="Enhance with AI"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg></button>
       <button class="tb" id="tDl" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
-      <button class="tb" id="tTrace" title="Outline the building"><svg viewBox="0 0 24 24"><path d="M5 9l7-5 7 5v7l-7 4-7-4z"/><circle cx="5" cy="9" r="1.5"/><circle cx="19" cy="9" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="12" cy="20" r="1.5"/></svg><span>Outline</span></button>
+      <!-- The 4-point "Outline" button was removed from the background editor — Create Floor Plan goes
+           straight to Structure over this background (that flow lives in the survey ••• / its rework). -->
       <button class="tb use" id="tDone">Done</button>
     </div>
 
@@ -890,10 +891,10 @@
     tracePts=d.pts.slice(0,500).map(function(q){ return { x:Math.max(0,Math.min(1,+q[0]||0)), y:Math.max(0,Math.min(1,+q[1]||0)) }; }); trClosed=!!d.closed&&tracePts.length>=3; trSel=-1;
     trHist=[trSnap()]; trHi=0; trBtns(); trPaint(); trSync(); }
   function enterTrace(){ exitCrop(); closePops(); tracePts=[]; trClosed=false; trDrag=-1; trHover=-1; trSel=-1; trZReset(); trHist=[trSnap()]; trHi=0; trBtns();
-    preview.classList.add("tracing"); $("tTrace").classList.add("on"); trPaint(); trSync();
+    preview.classList.add("tracing"); var _tt=$("tTrace"); if(_tt) _tt.classList.add("on"); trPaint(); trSync();
     if(window.parent!==window){ try{ parent.postMessage({ type:"iotOutlineReady", project:PID }, "*"); }catch(e){} } }
   window.addEventListener("message", function(e){ var d=e&&e.data; if(!d||d.type!=="iotOutlineLoad"||e.source!==window.parent) return; trDraftFid=d.fid||null; trLoadDraft(d.draft); });
-  function exitTrace(){ if(!preview.classList.contains("tracing")) return; preview.classList.remove("tracing"); $("tTrace").classList.remove("on"); trZReset(); }
+  function exitTrace(){ if(!preview.classList.contains("tracing")) return; preview.classList.remove("tracing"); var _tt=$("tTrace"); if(_tt) _tt.classList.remove("on"); trZReset(); }
   function trPaint(){
     var cv=$("traceCv"); if(!cv) return; var dpr=window.devicePixelRatio||1, box=$("trace"), W=box.clientWidth, H=box.clientHeight; if(!W||!H) return;
     if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){ cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); }
@@ -990,10 +991,8 @@
     window.addEventListener("keydown", function(e){ if(!preview.classList.contains("tracing")) return; var k=(e.key||"").toLowerCase(); if(!(e.ctrlKey||e.metaKey) || (k!=="z" && k!=="y")) return;
       var tg=e.target&&e.target.tagName; if(tg==="INPUT"||tg==="TEXTAREA") return; e.preventDefault(); (k==="y"||e.shiftKey) ? trRedo() : trUndo(); });
     $("trUse").addEventListener("click", trUse);
-    $("tTrace").addEventListener("click", function(){
-      if(preview.classList.contains("tracing")){ exitTrace(); return; }
-      if(preview.classList.contains("show")){ enterTrace(); return; }
-      commitUI(); ensureCaptured().then(function(ok){ if(ok) enterTrace(); }); });
+    // (The Outline button was removed from the toolbar; the outline-only trace is still reached via the
+    //  survey's ••• Create-Floor-Plan entry, which auto-enters trace. No toolbar click handler needed.)
   })();
 </script>
 </body>
