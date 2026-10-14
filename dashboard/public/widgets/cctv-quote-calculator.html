@@ -110,7 +110,10 @@ details.why p{margin:6px 0 0;max-width:60ch}
 /* unified minimal number control (cameras / days) — one number, one slider+/-, compact presets */
 .hero-ctrl{display:flex;flex-direction:column;gap:12px;padding:2px 2px 4px}
 .hero-num{text-align:center;line-height:1}
-.hero-num b{display:block;font-size:clamp(34px,6.5vw,46px);font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.hero-num b,.hero-num .hero-input{display:block;font-size:clamp(34px,6.5vw,46px);font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.hero-num .hero-input{width:2.2em;margin:0 auto;text-align:center;border:none;background:transparent;color:var(--fg);padding:0 0 2px;border-bottom:2px solid transparent;font-family:inherit;-moz-appearance:textfield;caret-color:var(--gold)}
+.hero-num .hero-input:focus{outline:none;border-bottom-color:var(--gold)}
+.hero-num .hero-input::-webkit-outer-spin-button,.hero-num .hero-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .hero-num span{font-size:13px;color:var(--muted)}
 .hero-row{display:flex;align-items:center;gap:14px;margin-top:2px}
 .hero-row .cc-slider{flex:1;margin:0}
@@ -120,6 +123,16 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .hero-presets button{background:none;border:none;color:var(--muted);font:600 14px var(--f-body);padding:6px 16px;border-radius:7px;cursor:pointer;position:relative;font-variant-numeric:tabular-nums}
 .hero-presets button.on{color:var(--fg)}
 .hero-presets button.on::after{content:"";position:absolute;left:16px;right:16px;bottom:2px;height:2px;background:var(--gold);border-radius:2px}
+/* compact Recording & storage summary ("28 days | 8TB") */
+.rs-ctrl{display:flex;flex-direction:column;gap:10px;padding:2px 2px 4px}
+.rs-sum{display:flex;align-items:baseline;justify-content:center;gap:7px;flex-wrap:wrap;line-height:1}
+.rs-sum .rs-num{font-size:clamp(30px,6vw,40px);font-weight:800;width:1.7em;text-align:center;display:inline-block;border:none;background:transparent;color:var(--fg);padding:0 0 2px;border-bottom:2px solid transparent;font-family:inherit;caret-color:var(--gold);-moz-appearance:textfield}
+.rs-sum .rs-num:focus{outline:none;border-bottom-color:var(--gold)}
+.rs-sum .rs-num::-webkit-outer-spin-button,.rs-sum .rs-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rs-unit{font-size:15px;color:var(--muted);font-weight:600}
+.rs-sep{font-size:22px;color:var(--muted);font-weight:300;opacity:.5}
+.rs-tb{font-size:clamp(30px,6vw,40px);font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.rs-help{text-align:center;font-size:12.5px;color:var(--muted);margin-top:-2px}
 #sl-count .wrap{min-height:100%;justify-content:center}
 .intro-hero{min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:16px}
 .intro-hero .start{margin-top:8px}
@@ -296,6 +309,7 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .toast-act{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .toast-act .btn{padding:9px 16px;font-size:13px}
 .toast-act .btn.ghost{background:transparent;color:var(--bar-fg);border:1px solid #3a4258}
+.toast-info .toast-msg{text-align:center}
 /* storage readout (display-only) */
 .stor-info{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .stor-cap{display:flex;align-items:baseline;gap:10px}
@@ -843,7 +857,7 @@ const state = Object.assign({}, CONFIG.defaults, { contact:{
   when:'', notes:'', existingSystem:false, existingType:null, existingWorking:null,
   construction:false, hasDeadline:false, deadline:'', floorPlans:false, floorPlanImg:null } });
 let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
-let advOpen = false, monitorWarn = false;   // Advanced-options collapse state; monitor "only on phone" disclosure
+let advOpen = false, monitorWarn = false, bumpT = null;   // Advanced-options collapse; monitor disclosure; bump-toast timer
 // 3-step model (the 14 topic renderers below are regrouped into these; engine/state/actions unchanged).
 let openAcc = 'property';   // Step 2: one accordion open at a time
 
@@ -936,9 +950,11 @@ function oseg(act, cur, opts){   // opts: [[value,label],...]
 function heroControl(cfg){
   const { value, unit, min, max, adjAct, rangeNum, presets } = cfg;
   const v = Math.min(Math.max(value, min), max);
+  const inputNum = rangeNum.replace('range','num');   // camsrange→camsnum, daysrange→daysnum
+  const aria = unit==='cameras' ? 'Camera count' : 'Recording days';
   const pbtn = p => `<button type="button" class="${p.on?'on':''}" data-act="${p.act}"${p.v!=null?` data-v="${p.v}"`:''}>${p.label}</button>`;
   return `<div class="hero-ctrl">
-    <div class="hero-num"><b>${value}</b><span>${unit}</span></div>
+    <div class="hero-num"><input class="hero-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${value}" data-num="${inputNum}" aria-label="${aria}" autocomplete="off" spellcheck="false"><span>${unit}</span></div>
     <div class="hero-row">
       <button class="hero-pm" data-act="${adjAct}" data-v="-1" aria-label="One fewer" ${value<=min?'disabled':''}>−</button>
       <input type="range" min="${min}" max="${max}" value="${v}" data-num="${rangeNum}" class="cc-slider" aria-label="${unit}">
@@ -1107,7 +1123,7 @@ const R = {
     ];
     const note = over
       ? `<div class="note">Over 32 cameras — we’ll design a custom multi-recorder system at your free survey. The total is preliminary.</div>`
-      : (bumpMsg ? `<div class="note">${esc(bumpMsg)}</div>` : '');
+      : '';   // the recorder auto-size message is a transient toast now, not an inline note
     return heroControl({ value:state.cams, unit:'cameras', min:lo, max:hiAbs, adjAct:'camadj', rangeNum:'camsrange', presets }) + note;
   },
   resolution(s, q, i){
@@ -1141,15 +1157,18 @@ const R = {
     const sysLabel = ss.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || '0 cameras';
     const DMIN = 7, DMAX = 60;
 
-    // RECORDING HISTORY — unified hero control ("how long to keep footage"; storage auto-sizes from this).
-    const dayPresets = [7,30,45,60].map(d=>({ label:String(d), act:'days', v:d, on:ss.days===d }));
-    const daysSlider = heroControl({ value:ss.days, unit:'days', min:DMIN, max:DMAX, adjAct:'dayadj', rangeNum:'daysrange', presets:dayPresets });
-
-    // STORAGE — display only (auto-sized from the days target, capped to the recorder). No slider.
-    const hdd = ss.drives && ss.drives.length ? ss.drives.map(d=>d+'TB').join(' + ') : '';
-    const storInfo = `<div class="stor-info">
-        <div class="stor-cap"><b class="num">${ss.storageTB}TB</b><span>≈ ${ss.estimatedDays} days</span></div>
-        ${hdd?`<div class="hdd-line">${hdd}${ss.drives.length>1?` <span>(${ss.drives.length} drives)</span>`:''}</div>`:''}
+    // RECORDING & STORAGE — one compact summary ("28 days | 8TB"), days editable, storage auto-sized.
+    const hdd = ss.drives && ss.drives.length>1 ? ss.drives.map(d=>d+'TB').join(' + ') : '';
+    const dayPresets = [7,30,45,60].map(d=>`<button type="button" class="${ss.days===d?'on':''}" data-act="days" data-v="${d}">${d}</button>`).join('');
+    const recStorage = `<div class="rs-ctrl">
+        <div class="rs-sum"><input class="hero-input rs-num" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${ss.days}" data-num="daysnum" aria-label="Recording days" autocomplete="off" spellcheck="false"><span class="rs-unit">days</span><span class="rs-sep">|</span><b class="rs-tb">${ss.storageTB}TB</b></div>
+        <div class="rs-help">${q.n} camera${q.n>1?'s':''} • 8MP • 24/7 recording${hdd?` • ${hdd}`:''}</div>
+        <div class="hero-row">
+          <button class="hero-pm" data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=DMIN?'disabled':''}>−</button>
+          <input type="range" min="${DMIN}" max="${DMAX}" value="${Math.min(Math.max(ss.days,DMIN),DMAX)}" data-num="daysrange" class="cc-slider" aria-label="Recording days">
+          <button class="hero-pm" data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=DMAX?'disabled':''}>+</button>
+        </div>
+        <div class="hero-presets">${dayPresets}</div>
       </div>`;
 
     const customNote = ss.noStandardFit ? `<div class="note">Keeping ${ss.days} days of ${sysLabel} needs about ${ss.recommendedTB}TB — more than a standard recorder. We’ll size a custom storage system at your free survey; the total stays preliminary.</div>` : '';
@@ -1164,8 +1183,7 @@ const R = {
     return `<div class="eyebrow">Recorder</div>
       ${nvrSel}
       <div class="eyebrow">Recording &amp; storage</div>
-      ${daysSlider}
-      ${storInfo}
+      ${recStorage}
       ${customNote}
       ${monitorControl()}`;
   },
@@ -1432,6 +1450,10 @@ function renderUpgradeToast(q){
     </div>`;
     return;
   }
+  if(onSystem && bumpMsg){   // transient info: recorder auto-sized to fit the camera count
+    root.innerHTML = `<div class="toast toast-info" role="status" aria-live="polite"><div class="toast-msg">${esc(bumpMsg)}</div></div>`;
+    return;
+  }
   root.innerHTML = '';
 }
 function go(i){
@@ -1488,9 +1510,11 @@ function setCams(n){
   n = Math.min(hi, Math.max(lo, Math.round(n||lo)));
   state.cams = n; state.n12 = Math.min(state.n12, n);
   const t = Engine.nvrTier(n);
+  clearTimeout(bumpT);
   if(t > state.sizeTier){ const room = t - n;
     bumpMsg = `Recorder updated to ${t}-channel — supports your ${n}-camera system${room>0?`, with room for ${room} more`:''}.`;
     state.sizeTier = t;
+    bumpT = setTimeout(()=>{ bumpMsg=''; render(); }, 5000);   // transient toast auto-dismisses
   } else bumpMsg = '';
   resetStorage();
 }
@@ -1700,8 +1724,9 @@ document.addEventListener('change', e=>{
   const t = e.target;
   if(t.dataset.num){
     const k = t.dataset.num, val = parseFloat(t.value);
-    if(k==='camsrange' || k==='camsnum'){ setCams(val); render(); return; }
-    if(k==='daysrange' || k==='daysnum'){ setDays(val); render(); return; }
+    if(k==='camsnum' || k==='daysnum') return;   // hero inputs commit via input + focusout (below)
+    if(k==='camsrange'){ setCams(val); render(); return; }
+    if(k==='daysrange'){ setDays(val); render(); return; }
     if(k==='storrange'){ const o=(Engine.sizeStorage(state).options)||[]; const idx=Math.max(0,Math.min(o.length-1,Math.round(val))); if(o[idx]) state.selectedStorageTB=o[idx].tb; render(); return; }
     if(k==='taxRate') state.taxRate = isFinite(val) ? Math.max(0,val)/100 : 0;
     else if(k==='adjust') state.adjust = isFinite(val) ? Math.round(val*100) : 0;
@@ -1712,15 +1737,35 @@ document.addEventListener('change', e=>{
     const k = t.dataset.sel; state[k] = t.value; render();
   } else if(t.dataset.txt){ state[t.dataset.txt] = t.value; chrome(); }
 });
-function liveCams(src){
+function updateRsTB(slide){   // refresh the "| 8TB" readout + helper line live (no full render)
+  if(!slide) return; const ss = Engine.sizeStorage(state);
+  const tb = slide.querySelector('.rs-tb'); if(tb) tb.textContent = ss.storageTB+'TB';
+  const help = slide.querySelector('.rs-help'); if(help){ const hdd = ss.drives && ss.drives.length>1 ? ss.drives.map(d=>d+'TB').join(' + ') : '';
+    help.textContent = `${state.cams} camera${state.cams>1?'s':''} • 8MP • 24/7 recording${hdd?' • '+hdd:''}`; }
+}
+function liveCams(src){   // slider drag → sync the hero input + the storage readout (unless the user is typing)
   setCams(+src.value);
-  const box = src.closest('.hero-ctrl'); if(box){ const h=box.querySelector('.hero-num b'); if(h) h.textContent = state.cams; }
+  const box = src.closest('.hero-ctrl'); if(box){ const inp=box.querySelector('.hero-input'); if(inp && document.activeElement!==inp) inp.value = state.cams; }
+  updateRsTB(src.closest('.slide'));
   chrome();
 }
 function setDays(n){ n = Math.min(60, Math.max(7, Math.round(n||28))); state.desiredDays = n; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); }
 function liveDays(src){
   setDays(+src.value);
-  const box = src.closest('.hero-ctrl'); if(box){ const h=box.querySelector('.hero-num b'); if(h) h.textContent = state.desiredDays; }
+  const box = src.closest('.rs-ctrl'); if(box){ const inp=box.querySelector('.rs-num'); if(inp && document.activeElement!==inp) inp.value = state.desiredDays; }
+  updateRsTB(src.closest('.slide'));
+  chrome();
+}
+// Hero number typed directly — digits only, allow a temporary empty field, sync the slider, no full render.
+function liveNum(t){
+  const digits = t.value.replace(/[^\d]/g,'').slice(0,3);
+  if(digits !== t.value) t.value = digits;
+  if(digits === ''){ chrome(); return; }   // temporary empty while editing — don't commit/clamp yet
+  const n = parseInt(digits,10);
+  const box = t.closest('.hero-ctrl, .rs-ctrl');
+  if(t.dataset.num==='camsnum'){ setCams(n); if(box){ const rng=box.querySelector('input[type=range]'); if(rng) rng.value = Math.min(Math.max(state.cams,1),32); } }
+  else { setDays(n); if(box){ const rng=box.querySelector('input[type=range]'); if(rng) rng.value = Math.min(Math.max(state.desiredDays,7),60); } }
+  updateRsTB(t.closest('.slide'));
   chrome();
 }
 document.addEventListener('input', e=>{
@@ -1736,7 +1781,17 @@ document.addEventListener('input', e=>{
   if(t.dataset.num==='camsrange'){ liveCams(t); }
   if(t.dataset.num==='daysrange'){ liveDays(t); }
   if(t.dataset.num==='storrange'){ liveStor(t); }
+  if(t.dataset.num==='camsnum' || t.dataset.num==='daysnum'){ liveNum(t); }
 });
+// Hero number: select-all on focus, commit/clamp on blur, Enter commits, Escape restores.
+document.addEventListener('focusin', e=>{ const t=e.target; if(t.classList && t.classList.contains('hero-input')){ requestAnimationFrame(()=>{ try{ t.select(); }catch(_){} }); } });
+document.addEventListener('focusout', e=>{ const t=e.target; if(t.classList && t.classList.contains('hero-input')){ setTimeout(()=>{ if(document.activeElement!==t) render(); }, 0); } });   // defer so a click (preset/±) completes first; render snaps the field to the clamped value
+document.addEventListener('keydown', e=>{ const t=e.target; if(!(t.classList && t.classList.contains('hero-input'))) return;
+  if(e.key==='Enter'){ e.preventDefault(); t.blur(); }
+  else if(e.key==='Escape'){ t.value = (t.dataset.num==='camsnum') ? state.cams : state.desiredDays; t.blur(); }
+});
+// Desktop: don't let the mouse wheel change a focused hero number.
+document.addEventListener('wheel', e=>{ const t=e.target; if(t.classList && t.classList.contains('hero-input') && document.activeElement===t) e.preventDefault(); }, { passive:false });
 // Storage slider — light live update (no full render while dragging), scoped to its own card.
 function liveStor(src){
   const o=(Engine.sizeStorage(state).options)||[]; if(!o.length) return;
