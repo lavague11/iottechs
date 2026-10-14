@@ -273,7 +273,6 @@
       <!-- Trace Building: tap corners to outline the roof, tap the first corner to close, drag to adjust -->
       <div id="trace"><canvas id="traceCv"></canvas></div>
       <button id="trDel" type="button" aria-label="Delete corner" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <div id="traceHint"></div>
       <div id="traceBar">
         <button id="trUndo" class="ic" type="button" aria-label="Undo" title="Undo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg></button>
         <button id="trRedo" class="ic" type="button" aria-label="Redo" title="Redo" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg></button>
@@ -282,12 +281,6 @@
         <button id="trUse" class="use" type="button" disabled>Use Outline</button>
       </div>
     </div>
-    <!-- Demo control: replay the enhance intro on its own. Only shown on the standalone page (never inside the survey embed). -->
-    <button id="introDemo" type="button" title="Preview the enhance intro">
-      <svg class="pI" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-      <svg class="pX" viewBox="0 0 24 24" hidden><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-      <span>Preview intro</span>
-    </button>
   </div>
 
   <!-- Toolbar as a thin, full-width FOOTER below the photo (never floating over the aerial). -->
