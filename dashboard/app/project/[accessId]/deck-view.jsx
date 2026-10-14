@@ -276,6 +276,48 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
         )}
+        {/* STATUS rides the project row now — its popover owns the detailed workflow state (milestones,
+            next step). The old beige one-line reason banner was removed as redundant with the popover. */}
+        {statusChip && (() => {
+          const chip = statusChip, d = chip.detail;
+          // Customer read-only status — a calm badge showing the real human state, no caret/popover/jump.
+          if (chip.readonly) return (
+            <span className="dv-chip dv-chip-ro" style={{ background: chip.color + "1f", color: chip.color }}
+              title={chip.sub || chip.label} aria-label={`Project status — ${chip.label}${chip.sub ? " · " + chip.sub : ""}`}>
+              <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
+            </span>
+          );
+          const canGo = !!(chip.onClick || chip.openTool);
+          const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
+          return (
+            <div className="dv-chipwrap" data-stop>
+              <button className={`dv-chip dv-chip-act dv-chip-status${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
+                aria-expanded={statusOpen} aria-haspopup="dialog" aria-label={`Project status — ${chip.label}`} title={chip.label}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? setStatusOpen((o) => !o) : goNext(); }}>
+                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">Status</span>
+                <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              {d && statusOpen && (<>
+                <div className="dv-statback" onClick={() => setStatusOpen(false)} />
+                <div className="dv-statpop" role="dialog" style={{ "--stat-c": chip.color }}>
+                  <div className="dv-statpop-kick">Project status</div>
+                  <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
+                  <ul className="dv-statlist">
+                    {d.milestones.map((m, i) => (
+                      <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
+                        <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
+                        <span className="dv-statml">{m.label}</span>
+                        {m.active && <span className="dv-statms">Now</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
+                  {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
+                </div>
+              </>)}
+            </div>
+          );
+        })()}
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`}
@@ -335,64 +377,6 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           )}
         </div>
       </header>
-
-      {/* Consolidated status row: the status chip + the one blocking reason, together — not a separate
-          STATUS pill and a separate banner. (The project identity moved up to the top row.) */}
-      <div className="dv-jobbar">
-        {statusChip && (() => {
-          const chip = statusChip, d = chip.detail;
-          // Customer read-only status — a calm badge showing the real human state, no caret/popover/jump.
-          if (chip.readonly) return (
-            <span className="dv-chip dv-chip-ro" style={{ background: chip.color + "1f", color: chip.color }}
-              title={chip.sub || chip.label} aria-label={`Project status — ${chip.label}${chip.sub ? " · " + chip.sub : ""}`}>
-              <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
-            </span>
-          );
-          const canGo = !!(chip.onClick || chip.openTool);
-          // Tapping the pill opens the status popover (context first — never a blind jump, which is the
-          // mobile hazard). The popover's primary button performs the actual navigation.
-          const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
-          return (
-            <div className="dv-chipwrap">
-              <button className={`dv-chip dv-chip-act dv-chip-status${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
-                aria-expanded={statusOpen} aria-haspopup="dialog" aria-label={`Project status — ${chip.label}`} title={chip.label}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? setStatusOpen((o) => !o) : goNext(); }}>
-                {/* Fixed, stable trigger — never the long stage phrase (it truncated to "SCHEDU…"). The dot
-                    keeps the status colour; the real state lives in the popover + the title/aria-label. */}
-                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">Status</span>
-                <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-              </button>
-              {d && statusOpen && (<>
-                <div className="dv-statback" onClick={() => setStatusOpen(false)} />
-                <div className="dv-statpop" role="dialog" style={{ "--stat-c": chip.color }}>
-                  <div className="dv-statpop-kick">Project status</div>
-                  <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
-                  <ul className="dv-statlist">
-                    {d.milestones.map((m, i) => (
-                      <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
-                        <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
-                        <span className="dv-statml">{m.label}</span>
-                        {m.active && <span className="dv-statms">Now</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
-                  {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
-                </div>
-              </>)}
-            </div>
-          );
-        })()}
-
-        {/* The one blocking reason, merged onto the status row (was a separate banner below). The step
-            label is dropped — the status chip already names the phase. */}
-        {gateBanner && (
-          <span className="dv-gate-reason" data-stop>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span className="dv-gate-reason-t">{gateBanner.reason}</span>
-          </span>
-        )}
-      </div>
 
       {/* customer drawer */}
       {customer && (
@@ -912,14 +896,13 @@ const CSS = `
   /* No brand bar on mobile either — the identity row + consolidated status row + rail stack cleanly. */
   .dv-roledivide-desk{display:none}
 }
-@media (max-width:760px){.dv-top{padding:8px 16px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
-  /* Phone: the status chip rides on the SAME line as the name (was wrapping to its own line, too
-     big). Hide the redundant project-code pill (it's in the drawer) to free the room, and shrink the
-     chip so it fits snugly next to a truncating name. */
+@media (max-width:760px){.dv-top{padding:8px 16px;flex-wrap:wrap;row-gap:4px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
+  /* Phone: name + Portal share the top line; STATUS drops to its own line below (full label visible). */
   .dv-code{display:none}
   .dv-identity{gap:8px;flex:1 1 auto}
-  .dv-chip{height:20px;padding:0 7px;font-size:8.5px;letter-spacing:.03em;gap:4px;flex:0 1 auto;min-width:0;max-width:62%}
-  .dv-chip .dv-chip-caret{width:10px;height:10px;flex:0 0 auto}}
+  .dv-chipwrap{order:9;flex:0 0 auto;max-width:100%}
+  .dv-chip{height:21px;padding:0 9px;font-size:9px;letter-spacing:.04em;gap:5px;flex:0 0 auto;min-width:0;max-width:none}
+  .dv-chip .dv-chip-caret{width:11px;height:11px;flex:0 0 auto}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){
   .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
