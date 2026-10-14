@@ -32,7 +32,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Portal", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", dashboardHref = null, statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Portal", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", dashboardHref = null, roleTint = null, viewName = null, statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
   const router = useRouter();
   const N = stages.length;
   const [drag, setDrag] = useState(0);
@@ -279,7 +279,10 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         </button>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
-          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || menu.length || onLock) && setRoleOpen((o) => !o)}>
+          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`}
+            style={roleTint ? { background: roleTint.bg, color: roleTint.fg, borderColor: roleTint.bg } : undefined}
+            title={viewName ? `${viewName.charAt(0).toUpperCase()}${viewName.slice(1)} view${previewRole ? " · preview" : ""}` : undefined}
+            onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || menu.length || onLock) && setRoleOpen((o) => !o)}>
             {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
             {roleLabel}
             {(dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}

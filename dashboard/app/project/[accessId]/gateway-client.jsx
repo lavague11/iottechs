@@ -2839,6 +2839,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"
+        roleTint={ROLE_PILL[cView] || null}
+        viewName={cView}
         dashboardHref={DECK_DASH_HOME[view] || null}
         log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}
