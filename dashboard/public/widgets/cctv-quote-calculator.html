@@ -31,7 +31,11 @@ button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .num{font-variant-numeric:tabular-nums}
 
-.app{height:100%;display:grid;grid-template-rows:auto 1fr auto}
+/* App fills the DYNAMIC viewport and tracks the VISUAL viewport (set by JS) so the on-screen keyboard
+   never hides the footer or the focused field. */
+.app{height:100vh;height:100dvh;height:var(--app-h,100dvh);display:grid;grid-template-rows:auto 1fr auto}
+/* keyboard open → drop the sticky footer so the form (and Places suggestions) get the whole visible area */
+body.kb-open .bottom{display:none}
 
 /* top bar */
 .top{background:var(--bar);color:var(--bar-fg);border-bottom:2px solid var(--gold);padding:10px 16px;display:flex;align-items:center;gap:12px}
@@ -349,7 +353,9 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .form{display:grid;gap:12px}
 .field{display:grid;gap:4px}
 .field label{font-size:13px;font-weight:600}
-.field input,.field textarea,.field select{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);width:100%}
+.field input,.field textarea,.field select{font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);width:100%}
+/* keep any focused field clear of the fixed top bar when scrolled into view */
+input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-bottom:24px}
 /* address autocomplete — Photon fallback dropdown (Google renders its own .pac-container) */
 .addr-sug{display:none;margin-top:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden;box-shadow:0 10px 28px rgba(16,17,18,.14)}
 .addr-sug.open{display:block}
@@ -1304,24 +1310,24 @@ const R = {
   },
   contact(s, q, i){
     const c = state.contact;
-    const fld = (id,label,type,ph,req,ac,im) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label>`
-      + `<input id="c_${id}" type="${type}" value="${esc(c[id]||'')}" data-contact="${id}" placeholder="${ph}" autocomplete="${ac||'off'}"${im?` inputmode="${im}"`:''} spellcheck="false">`
+    const fld = (id,label,type,ph,req,ac,im,ek) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label>`
+      + `<input id="c_${id}" type="${type}" value="${esc(c[id]||'')}" data-contact="${id}" placeholder="${ph}" autocomplete="${ac||'off'}"${im?` inputmode="${im}"`:''}${ek?` enterkeyhint="${ek}"`:''} spellcheck="false">`
       + `<span class="err" id="e_${id}"></span></div>`;
     return `${head(s,i,'Tell us who you are and where the cameras go — your estimate is sent here.', false)}
       <form class="form" id="cform" novalidate>
         <div class="grid2">
-          ${fld('firstName','First name','text','Jane',true,'given-name')}
-          ${fld('lastName','Last name','text','Smith',true,'family-name')}
+          ${fld('firstName','First name','text','Jane',true,'given-name',null,'next')}
+          ${fld('lastName','Last name','text','Smith',true,'family-name',null,'next')}
         </div>
-        ${fld('phone','Phone','tel','(201) 555-0142',true,'tel','tel')}
+        ${fld('phone','Phone','tel','(201) 555-0142',true,'tel','tel','next')}
         <div class="field"><label for="c_email">Email *</label>
-          <input id="c_email" type="email" value="${esc(c.email||'')}" data-contact="email" placeholder="jane@example.com" autocomplete="email" inputmode="email" spellcheck="false">
+          <input id="c_email" type="email" value="${esc(c.email||'')}" data-contact="email" placeholder="jane@example.com" autocomplete="email" inputmode="email" enterkeyhint="next" spellcheck="false">
           ${c.emailSuggest?`<button type="button" class="email-sug" data-act="emailfix">Did you mean <b>${esc(c.emailSuggest)}</b>?</button>`:''}
           <span class="err" id="e_email"></span></div>
-        ${fld('company','Company','text','Business name (optional)',false,'organization')}
+        ${fld('company','Company','text','Business name (optional)',false,'organization',null,'next')}
         <div class="grid-addr">
-          ${fld('address','Property address','text','Start typing your address…',true,'street-address')}
-          ${fld('unit','Apt / Suite','text','Unit (optional)',false,'address-line2')}
+          ${fld('address','Property address','text','Start typing your address…',true,'street-address',null,'next')}
+          ${fld('unit','Apt / Suite','text','Unit (optional)',false,'address-line2',null,'done')}
         </div>
         <p class="fine">Used only to prepare and send your estimate. No spam, and a valid format isn’t a verified number — we may confirm by text or call.</p>
       </form>`;
@@ -1815,6 +1821,51 @@ document.addEventListener('keydown', e=>{ const t=e.target; if(!(t.classList && 
 });
 // Desktop: don't let the mouse wheel change a focused hero number.
 document.addEventListener('wheel', e=>{ const t=e.target; if(t.classList && t.classList.contains('hero-input') && document.activeElement===t) e.preventDefault(); }, { passive:false });
+
+// Next-field navigation on the intake form: Enter / keyboard Next advances firstName→…→address (address
+// keeps Enter for Google Places), scrolling each field into view.
+const CONTACT_ORDER = ['firstName','lastName','phone','email','company','address','unit'];
+document.addEventListener('keydown', e=>{
+  const t = e.target; if(e.key!=='Enter' || !(t.dataset && t.dataset.contact)) return;
+  if(t.dataset.contact==='address') return;   // let Google Places handle Enter to pick a suggestion
+  e.preventDefault();
+  const i = CONTACT_ORDER.indexOf(t.dataset.contact), next = CONTACT_ORDER[i+1];
+  const el = next && document.getElementById('c_'+next);
+  if(el) el.focus(); else t.blur();
+});
+
+/* ---------- mobile keyboard / viewport awareness (iOS Safari + Chrome, Android) ----------
+   Track the visual viewport so the app is only as tall as the on-screen area; drop the sticky footer
+   while the keyboard is open; and scroll the focused field into the visible space above the keyboard. */
+(function keyboardAware(){
+  const vv = window.visualViewport;
+  let raf = 0, baseH = window.innerHeight;
+  function fit(){
+    raf = 0;
+    const h = vv ? vv.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
+    // keyboard is open when the visual viewport is meaningfully shorter than the layout viewport
+    const kbOpen = vv ? (baseH - h) > 110 : false;
+    document.body.classList.toggle('kb-open', kbOpen);
+    if(kbOpen){ const el = document.activeElement; if(isField(el)) ensureVisible(el); }
+  }
+  const schedule = () => { if(!raf) raf = requestAnimationFrame(fit); };
+  function isField(el){ return el && el.matches && el.matches('input:not([type=range]),textarea,select'); }
+  function ensureVisible(el){
+    const slide = el.closest('.slide'); if(!slide) { try{ el.scrollIntoView({block:'center'}); }catch(_){} return; }
+    const vh = vv ? vv.height : window.innerHeight;
+    const r = el.getBoundingClientRect();
+    const topSafe = 64;                       // clear the fixed top bar
+    const bottomSafe = vh - 16;               // keep a little gap above the keyboard
+    if(r.top < topSafe) slide.scrollTop -= (topSafe - r.top);
+    else if(r.bottom > bottomSafe) slide.scrollTop += (r.bottom - bottomSafe);
+  }
+  if(vv){ vv.addEventListener('resize', ()=>{ baseH = Math.max(baseH, vv.height); schedule(); }); vv.addEventListener('scroll', schedule); }
+  window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ baseH = window.innerHeight; schedule(); }, 300); });
+  fit();
+  // On focus, wait for the keyboard animation, then bring the field (and any Places dropdown room) into view.
+  document.addEventListener('focusin', e=>{ if(isField(e.target)){ const el=e.target; setTimeout(()=>ensureVisible(el), 120); setTimeout(()=>ensureVisible(el), 360); } });
+})();
 // Storage slider — light live update (no full render while dragging), scoped to its own card.
 function liveStor(src){
   const o=(Engine.sizeStorage(state).options)||[]; if(!o.length) return;
