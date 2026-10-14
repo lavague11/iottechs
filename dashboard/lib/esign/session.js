@@ -8,8 +8,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { sqliteHandle, getActiveProposal } from "../db.js";
 import { getDocumentInfo, documentIntact, recordSignEvent, setProposalSignPointers, newId } from "./store.js";
 import { maySignProposal } from "./access.js";
-import { ensureProposalUnsigned, proposalFingerprintOf, signBlocker } from "./proposal-source.js";
-import { mergeValues } from "./capture.js";
+import { ensureProposalUnsigned, proposalFingerprintOf, signBlocker, proposalSignerName } from "./proposal-source.js";
+import { mergeValues, cleanName } from "./capture.js";
 
 export const SESSION_TTL_MS = 30 * 60 * 1000;
 const h = () => sqliteHandle();
@@ -72,8 +72,15 @@ export function startSession({ accessId, optKey, caller, resumeToken = null, ip 
   if (resumeToken) {
     const v = validateSession(resumeToken, accessId, caller, { now });
     if (v.ok && v.session.option_key === optKey) {
+      // Backfill the canonical signer name on resume too, so a session opened before the name was
+      // seeded (or any reopen) still shows the customer their auto-filled PREPARED FOR value.
+      let values = v.values;
+      if (!values?.name) {
+        const seedName = cleanName(proposalSignerName(accessId));
+        if (seedName) { values = { ...values, name: seedName }; h().prepare("UPDATE sign_sessions SET values_json=? WHERE id=?").run(JSON.stringify(values), v.session.id); }
+      }
       h().prepare("UPDATE sign_sessions SET expires_at=? WHERE id=?").run(now + SESSION_TTL_MS, v.session.id);
-      return { ok: true, token: resumeToken, session: publicSession({ ...v.session, expires_at: now + SESSION_TTL_MS }), doc: v.doc, values: v.values, row: v.row, resumed: true };
+      return { ok: true, token: resumeToken, session: publicSession({ ...v.session, expires_at: now + SESSION_TTL_MS }), doc: v.doc, values, row: v.row, resumed: true };
     }
   }
   const r = ensureProposalUnsigned(accessId, optKey, { by: caller.role });
@@ -85,15 +92,20 @@ export function startSession({ accessId, optKey, caller, resumeToken = null, ip 
     .run(row.id, caller.role, viaPin, caller.id ?? null);
   const token = randomBytes(24).toString("base64url");
   const id = newId(12);
+  // Seed the signer's name from the canonical PREPARED FOR value so the customer never has to retype
+  // what the proposal already knows. Blank/too-short → leave it for the customer to enter (the fallback).
+  const seedName = cleanName(proposalSignerName(accessId));
+  const seedValues = seedName ? { name: seedName } : {};
   h().prepare(`INSERT INTO sign_sessions (id, token_hash, proposal_id, project_access_id, version, option_key, doc_id, doc_sha256, fingerprint,
-      signer_role, signer_user_id, signer_email, via_pin, expires_at, ip, ua) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      signer_role, signer_user_id, signer_email, via_pin, expires_at, ip, ua, values_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, hashToken(token), row.id, row.project_access_id, row.version, optKey, doc.id, doc.sha256, fingerprint,
-      caller.role, caller.id ?? null, caller.email ? String(caller.email).toLowerCase() : null, viaPin, now + SESSION_TTL_MS, ip, ua ? String(ua).slice(0, 300) : null);
+      caller.role, caller.id ?? null, caller.email ? String(caller.email).toLowerCase() : null, viaPin, now + SESSION_TTL_MS, ip, ua ? String(ua).slice(0, 300) : null,
+      seedName ? JSON.stringify(seedValues) : null);
   if (!row.sign_status) setProposalSignPointers(row.id, { signStatus: "viewed" });
   recordSignEvent({ accessId: row.project_access_id, proposalId: row.id, sessionId: id, kind: "opened", actor: caller.role, ip, ua,
     detail: { version: row.version, option: optKey, docSha256: doc.sha256 } });
   const s = rowBy(hashToken(token));
-  return { ok: true, token, session: publicSession(s), doc, values: {}, row };
+  return { ok: true, token, session: publicSession(s), doc, values: seedValues, row };
 }
 
 // Store a validated patch (name / signature / acks) on the session. Sliding expiry.

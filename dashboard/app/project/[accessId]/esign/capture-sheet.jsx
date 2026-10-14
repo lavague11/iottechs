@@ -11,7 +11,9 @@ const titleCase = (s) => String(s || "").replace(/(^|[\s'\-.])([a-z])/g, (_, p, 
 
 export default function CaptureSheet({ defaultName = "", onAdopt, onCancel, busy = false, error = null }) {
   const [name, setName] = useState(defaultName);
-  const [tab, setTab] = useState("draw");
+  // Type is the default: the name is pre-filled from PREPARED FOR, so the typed signature preview
+  // renders immediately and the customer can Adopt without drawing. Draw/Upload stay available.
+  const [tab, setTab] = useState("type");
   const [ink, setInk] = useState(false);          // draw tab has strokes
   const [upload, setUpload] = useState(null);     // { png } from the upload tab
   const [localErr, setLocalErr] = useState(null);

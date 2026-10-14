@@ -32,6 +32,9 @@ export const ESG_CSS = `
 .esg-f.done{background:rgba(255,255,255,.0);border-color:var(--esg-ok)}
 .esg-f.done img{max-width:100%;max-height:100%;object-fit:contain}
 .esg-f.done span.v{color:#10204a;font-size:clamp(9px,1.8vw,14px);font-weight:700;white-space:nowrap}
+/* System-filled (the date): auto-populated, not a customer action — quiet, no blue tag, no pulse. */
+.esg-f.system{background:transparent;border:1px dashed rgba(16,32,74,.25);cursor:default;animation:none}
+.esg-f.system span.v{color:#5a657e;font-weight:600}
 @keyframes esgPulse{50%{box-shadow:0 0 0 6px rgba(62,111,176,.15)}}
 .esg-f svg{flex:0 0 auto}
 

@@ -85,32 +85,51 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
 
   function scrollTo(i) { scrollRef.current?.querySelector(`[data-field="${fields[i]?.key}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }
   function next() {
-    if (!signed) { const i = fields.findIndex((f) => f.type !== "date"); setActive(Math.max(0, i)); scrollTo(Math.max(0, i)); setSheet("capture"); return; }
-    const i = (active + 1) % Math.max(1, fields.length); setActive(i); scrollTo(i);
+    // Not signed → jump straight to the one real action (the signature; or the name when it wasn't
+    // auto-filled) and open the capture sheet. The date is never a stop.
+    if (!signed) {
+      let i = fields.findIndex((f) => f.type === "signature" && !values.signature);
+      if (i < 0) i = fields.findIndex((f) => f.type === "name" && !values.name);
+      if (i < 0) i = fields.findIndex((f) => f.type !== "date");
+      setActive(Math.max(0, i)); scrollTo(Math.max(0, i)); setSheet("capture"); return;
+    }
+    // Already signed → cycle the active highlight through the non-date fields for review.
+    const nd = fields.map((f, idx) => idx).filter((idx) => fields[idx].type !== "date");
+    const pos = nd.indexOf(active); const i = nd.length ? nd[(pos + 1) % nd.length] : 0;
+    setActive(i); scrollTo(i);
   }
   function tap(f) {
+    if (f.type === "date") return;   // system-filled, not interactive
     setActive(f.i);
-    if (f.type === "date" && signed) return;
     setSheet("capture");
   }
 
   const overlay = (page) => (byPage[page] || []).map((f) => {
+    // The date is system-generated (stamped at completion) and the name is auto-filled from the
+    // proposal's PREPARED FOR value — neither is a field the customer acts on, so neither gets the
+    // interactive highlight. Only an un-filled signature (or a missing name, the fallback) is live.
+    const system = f.type === "date";
     const [label, icon] = TAG[f.type] || [f.type, null];
-    const done = f.type === "name" ? !!values.name : f.type === "signature" ? !!values.signature : signed;
+    const done = system ? true : f.type === "name" ? !!values.name : !!values.signature;
+    const interactive = !system;
     return (
-      <button key={f.key} type="button" data-field={f.key} data-type={f.type} data-done={done ? "1" : "0"} data-testid="esign-field"
-        className={`esg-f${f.i === active ? " on" : ""}${done ? " done" : ""}`} aria-label={label}
+      <button key={f.key} type="button" data-field={f.key} data-type={f.type} data-done={done ? "1" : "0"}
+        data-system={system ? "1" : "0"} data-ro={interactive ? "0" : "1"} data-testid="esign-field"
+        className={`esg-f${f.i === active && interactive ? " on" : ""}${done ? " done" : ""}${system ? " system" : ""}`} aria-label={label}
         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.w * 100}%`, height: `${f.h * 100}%` }}
-        onClick={() => tap(f)}>
-        {!done && <>{icon}{label}</>}
-        {done && f.type === "name" && <span className="v">{values.name}</span>}
-        {done && f.type === "date" && <span className="v">{todayLabel()}</span>}
-        {done && f.type === "signature" && <img alt="Your signature" src={values.signature.data} />}
+        disabled={!interactive} onClick={interactive ? () => tap(f) : undefined}>
+        {system && <span className="v">{todayLabel()}</span>}
+        {!system && !done && <>{icon}{label}</>}
+        {!system && done && f.type === "name" && <span className="v">{values.name}</span>}
+        {!system && done && f.type === "signature" && <img alt="Your signature" src={values.signature.data} />}
       </button>
     );
   });
 
-  const filled = fields.filter((f) => (f.type === "name" ? values.name : f.type === "signature" ? values.signature : signed)).length;
+  // Fields the customer must act on: the signature always, plus the name only when it couldn't be
+  // auto-filled. The date never counts. So a proposal with a known PREPARED FOR shows "0 / 1" → "1 / 1".
+  const actionFields = fields.filter((f) => f.type === "signature" || (f.type === "name" && !values.name));
+  const filled = actionFields.filter((f) => (f.type === "signature" ? !!values.signature : !!values.name)).length;
 
   return createPortal(
     // Portaled to <body>: the deck wraps tools in transformed containers, which would otherwise capture `position: fixed`.
@@ -137,7 +156,7 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
         {!fatal && doc && <PdfPages url={`/api/proposal-doc/${doc.id}`} expectedSha={doc.sha256} zoom={zoom} renderOverlay={overlay} onError={(m) => setFatal({ error: m, code: "ERROR" })} />}
       </div>
       <div className="esg-bar">
-        <span className="esg-count">{fields.length ? `${filled} / ${fields.length}` : ""}</span>
+        <span className="esg-count">{actionFields.length ? `${filled} / ${actionFields.length}` : ""}</span>
         <button type="button" className="esg-go" data-testid="esign-next" disabled={!fields.length || !!fatal} onClick={next}>Next</button>
         <button type="button" className="esg-go" data-testid="esign-finish" disabled={!signed || !!fatal} onClick={() => { setErr(null); setSheet("consent"); }}>Finish</button>
       </div>

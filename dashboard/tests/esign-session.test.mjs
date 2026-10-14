@@ -152,6 +152,28 @@ test("capture: rejects non-PNG, oversize, malformed, wrong method and short name
   assert.equal(C.parsePngDataUrl(PNG).ok, true);
 });
 
+test("seeds the signer name from the proposal's PREPARED FOR (contact_name), cleaned", () => {
+  const a = project("edgar aguilar", "5551110020"); sent(a);   // lower-case on purpose → cleanName title-cases
+  const r = open(a);
+  assert.ok(r.ok, r.error);
+  assert.equal(r.values.name, "Edgar Aguilar", "name auto-filled from PREPARED FOR, not typed by the customer");
+  // Persisted on the session, so a resume / reopen shows the same auto-filled name.
+  const back = open(a, pin(a), { resumeToken: r.token });
+  assert.equal(back.values.name, "Edgar Aguilar");
+  // Date is never a required field; only the signature is missing once the name is seeded.
+  assert.deepEqual(C.missingRequired(r.values, PAYLOAD).filter((m) => m === "name"), [], "name is not outstanding");
+  assert.ok(C.missingRequired(r.values, PAYLOAD).includes("signature"), "signature is the real action");
+});
+
+test("backfills the name on resume for a session opened before it was seeded", () => {
+  const a = project("Nora West", "5551110021"); sent(a);
+  const r = open(a);
+  // Simulate a pre-seed session: wipe the stored values, as an older open would have left them.
+  db.sqliteHandle().prepare("UPDATE sign_sessions SET values_json=NULL WHERE doc_id=?").run(r.doc.id);
+  const back = open(a, pin(a), { resumeToken: r.token });
+  assert.equal(back.values.name, "Nora West", "canonical name backfilled on resume");
+});
+
 test("a draft / already-declined state can't start a session; audit trail records the opens", () => {
   const a = project("Sess Draft", "5551110009");
   db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "T");

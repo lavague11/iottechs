@@ -21,6 +21,15 @@ const SIGNABLE = new Set(["sent", "changes_requested", "accepted", "declined"]);
 
 export function proposalFingerprintOf(row) { return proposalFingerprint(row.payload, row.tax_rate, row.deposit_pct); }
 
+// THE ONE canonical signer identity. This is the exact value that renders as the proposal's
+// "PREPARED FOR" / "CLIENT NAME" (lib/proposal-pdf.js reads meta.customerName), so the signer's
+// name, the signature modal's Name field, the typed-signature preview and the audit name all come
+// from here — never from the project/business/property name independently. Blank when unknown
+// (then the signer falls back to letting the customer type their name).
+export function proposalSignerName(accessId, project = getJobByAccessId(accessId)) {
+  return String(project?.contact_name || project?.customer || "").trim();
+}
+
 // Why a proposal can't be signed right now, or null when it can.
 export function signBlocker(row, optKey) {
   if (!row) return "No proposal to sign.";
@@ -46,7 +55,7 @@ export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(
     signed_name: null, signed_at: null, signature_data: null, signedPayload: null,
   };
   const meta = {
-    customerName: project?.contact_name || project?.customer || "",
+    customerName: proposalSignerName(accessId, project),
     customerAddress: project?.address || "", customerPhone: project?.contact_phone || "", customerEmail: project?.contact_email || "",
     fileBase: projectFileBase(project || { access_id: accessId }), projectId: accessId,
     __return: true, __signing: true, __fields: [],
