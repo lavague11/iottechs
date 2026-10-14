@@ -506,7 +506,7 @@ const CONFIG = {
     // no client-side codes. A code a customer types is captured into the lead snapshot for the rep to honor.
     promos: {}
   },
-  defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
+  defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
               desiredDays:30, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
               skipProg:false, monitorMode:'none', monitor:false, mount:false, ups:false, plan:'none', term:1, billing:'monthly',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
@@ -710,13 +710,12 @@ const Engine = (() => {
       lines.push({ g:'Installation', code:sv.code, label:sv.name, qty:n, unit:sv.price, amt:n*sv.price });
     });
 
-    // cable
+    // cable — material cost is NOT charged separately (owner decision; cabling runs are bundled into the
+    // per-camera installation). Boxes/footage are still computed for the internal spec, but no Cable line.
     const baseBoxes = boxesFor(n), boxes = baseBoxes + (s.extraBoxes||0);
     const cab = C.cable[s.env];
     const footage = s.footage ?? n*C.cable.feetPerCam;
     const allocated = boxes*C.cable.feetPerBox;
-    if(footage > allocated) warnings.push(`Estimated ${footage.toLocaleString()} ft exceeds the ${allocated.toLocaleString()} ft allocated. Add a cable box.`);
-    lines.push({ g:'Cable', code:cab.code, label:`${cab.name} · ${boxes===0.5?'half box':boxes+(boxes===1?' box':' boxes')} (1,000 ft each)`, qty:boxes, unit:cab.price, amt:Math.round(boxes*cab.price) });
 
     const base = lines.reduce((a,l)=>a+l.amt,0);
     const discount = Math.round(base*(s.discount||0));
@@ -909,7 +908,7 @@ function quoteDoc(q){
   const rec = recommendLevel(state.features);
   const sys = q.ss, sysLabel = sys.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || `${q.n} camera${q.n>1?'s':''}`;
   const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const prelim = state.extStorage || sys.noStandardFit || rec.specialized.length>0;
+  const prelim = state.extStorage || state.overCams || sys.noStandardFit || rec.specialized.length>0;
 
   const line = l => `<div class="qd-line"><span class="qd-desc">${esc(l.label)}<em>${l.qty===0.5?'½':l.qty} × ${money(l.unit)}</em></span><span class="qd-amt num">${money(l.amt)}</span></div>`;
   const group = (title, rows) => rows ? `<div class="qd-group"><div class="qd-gh">${title}</div>${rows}</div>` : '';
@@ -1025,18 +1024,18 @@ const R = {
       <div class="level-carousel">${CONFIG.sizeTiers.map(card).join('')}</div>`;
   },
   count(s, q, i){
-    const tierDef = CONFIG.sizeTiers.find(t=>t.ch===state.sizeTier) || CONFIG.sizeTiers[0];
-    const presets = tierDef.presets.slice();
-    const [lo] = CONFIG.camRange, hiAbs = CONFIG.camRange[1], hi = state.sizeTier;
+    const [lo] = CONFIG.camRange, hiAbs = CONFIG.camRange[1];   // 1 … 32
+    const over = !!state.overCams;
 
-    const numCard = n => `<button class="preset ${state.cams===n?'sel':''}" data-act="setcams" data-v="${n}"><b>${n}</b></button>`;
-    const cards = presets.map(numCard).join('');
+    const numCard = n => `<button class="preset ${(!over&&state.cams===n)?'sel':''}" data-act="setcams" data-v="${n}"><b>${n}</b></button>`;
+    const cards = [8,16,32].map(numCard).join('')
+      + `<button class="preset ${over?'sel':''}" data-act="overcams"><b>Over 32</b></button>`;
 
-    // slider is shown by default — presets are quick picks above it
+    // one 1–32 slider; the recorder auto-sizes from the count
     const custom = `<div class="custom-count">
         <div class="cc-val"><input type="number" min="${lo}" max="${hiAbs}" value="${state.cams}" data-num="camsnum" aria-label="Camera count" class="num"> cameras</div>
-        <input type="range" min="${lo}" max="${hi}" value="${Math.min(state.cams,hi)}" data-num="camsrange" aria-label="Camera count slider" class="cc-slider">
-        <div class="cc-scale"><span>${lo}</span><span>${hi}</span></div>
+        <input type="range" min="${lo}" max="${hiAbs}" value="${Math.min(state.cams,hiAbs)}" data-num="camsrange" aria-label="Camera count slider" class="cc-slider">
+        <div class="cc-scale"><span>${lo}</span><span>${hiAbs}</span></div>
         <div class="cc-row">
           <button class="mini-round" data-act="camadj" data-v="-1" aria-label="One fewer" ${state.cams<=lo?'disabled':''}>−</button>
           <span class="num cc-now">${state.cams}</span>
@@ -1044,12 +1043,10 @@ const R = {
         </div>
       </div>`;
 
-    const room = q.nvr.ch - q.n;
-    const note = bumpMsg
-      ? `<div class="note">${esc(bumpMsg)}</div>`
-      : `<div class="note good">${q.n} camera${q.n>1?'s':''} · ${q.nvr.name}${room>0?` · room for ${room} more`:' · at full capacity'} · storage sized automatically</div>`;
+    const note = over
+      ? `<div class="note">Over 32 cameras — we’ll design a custom multi-recorder system at your free survey. The total is preliminary.</div>`
+      : (bumpMsg ? `<div class="note">${esc(bumpMsg)}</div>` : '');
     return `${head(s,i,'One camera for each area you want to see.', false)}
-      <div class="sys-line">${tierDef.label} selected</div>
       ${custom}
       <div class="quick-label">Or tap a common size</div>
       <div class="presets tiered">${cards}</div>
@@ -1149,20 +1146,13 @@ const R = {
       <dl class="specs"><dt>Model</dt><dd>${ss.activeNvr.name}</dd><dt>Channels</dt><dd>${ss.activeNvr.ch} (your system uses ${q.n})</dd><dt>Max storage</dt><dd>${ss.activeMax}TB</dd><dt>This build</dt><dd>${ss.storageTB}TB ≈ ${ss.estimatedDays} days</dd></dl></details>`;
     const nvrOnly = `<div class="panel rec-hero"><div class="panel-h"><span>Recommended recorder</span></div>
       <div class="panel-b"><div style="font-weight:700">${ss.activeNvr.name}</div><div class="opt-sub">${ss.activeNvr.ch}-channel · supports your ${q.n}-camera system</div></div></div>`;
-    return `${head(s,i,'How long would you like to keep footage? We size the recorder and storage for you.', false)}
-      <div class="eyebrow">Recording history</div>
+    return `<div class="eyebrow">Recording history</div>
       <div class="daychips">${chips}</div>
       ${custom}
       ${extNote}
       <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
       ${state.extStorage ? nvrOnly : headline}
-      ${(!state.extStorage && belowTarget && !ss.requiresUpgrade) ? `<div class="note">${ss.estimatedDays} days — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>`:''}
-      ${nvrSpecs}
-      ${state.extStorage ? '' : `<details class="why"><summary>Other storage options</summary>
-        <div class="stor-grid">${cards}</div>
-        ${ss.manual?`<button class="skip" data-act="storauto" style="margin-top:8px">↺ Back to recommended (${ss.recommendedTB}TB)</button>`:''}
-      </details>`}
-      <p class="fine">Estimated for ${R.recordingLabel}. Actual retention varies with frame rate, compression, scene activity and recording settings.</p>`;
+      ${(!state.extStorage && belowTarget && !ss.requiresUpgrade) ? `<div class="note">${ss.estimatedDays} days — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>`:''}`;
   },
   install(s, q, i){
     const C = CONFIG.catalog;
@@ -1230,13 +1220,13 @@ const R = {
   },
   // STEP 3 — the whole system on one flat page: how many cameras + quality, what recorder + how long,
   // then the auto-defaulted options and the itemized quote. No accordions.
-  // STEP 4 — configure the system: cameras + resolution, recorder + retention, options. No package, no quote.
+  // STEP 4 — configure the system: cameras, recorder + retention, options. No resolution/package/quote.
   system(s, q, i){
     const div = '<hr class="sys-div">';
     return head(s,i,'How many cameras, what recorder, and how long to keep footage. Pick your package and see the quote next.', false)
-      + `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}${R.resolution(slideOf('resolution'),q,i)}</div>`
+      + `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}</div>`
       + div
-      + `<div class="sys-block"><div class="eyebrow">Recorder &amp; recording history</div>${R.recorder(slideOf('recorder'),q,i)}</div>`
+      + `<div class="sys-block">${R.recorder(slideOf('recorder'),q,i)}</div>`
       + div
       + `<div class="sys-block">${optionsStrip(q)}</div>`;
   },
@@ -1386,7 +1376,7 @@ function chrome(q){
   $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
   // three-segment progress bar (Intake → Your Project → System); segments jump when reachable
   $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span class="seg-n">${i+1}</span><span class="seg-l">${st.label}</span></button>`).join('');
-  const prelim = state.extStorage || q.ss.noStandardFit || recommendLevel(state.features).specialized.length>0;   // extended storage or specialized facial/LPR → total not final
+  const prelim = state.extStorage || state.overCams || q.ss.noStandardFit || recommendLevel(state.features).specialized.length>0;   // extended storage / 32+ / specialized → total not final
   // Running total on the System + Quote steps — the earlier steps have no cost inputs yet.
   $('#total').innerHTML = cur < STEPS.length-2 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
   $('#prev').disabled = cur===0;
@@ -1446,6 +1436,7 @@ function resetStorage(){ state.selectedStorageTB = null; state.nvrUpgrade = 'aut
 // count is the source of truth; set it, auto-raise the recorder tier if it was exceeded, keep a friendly note
 function setCams(n){
   const [lo,hi] = CONFIG.camRange;
+  state.overCams = false;   // any explicit count clears the "Over 32" flag
   n = Math.min(hi, Math.max(lo, Math.round(n||lo)));
   state.cams = n; state.n12 = Math.min(state.n12, n);
   const t = Engine.nvrTier(n);
@@ -1594,6 +1585,7 @@ document.addEventListener('click', e=>{
     case 'size': { const p=CONFIG.sizeTiers.find(t=>t.ch===+v); state.sizeTier=+v; state.customOpen=false; bumpMsg='';
         state.cams = Math.min(+v, p?p.presets[0]:state.cams); state.n12 = Math.min(state.n12, state.cams); resetStorage(); } break;
     case 'setcams': state.customOpen = false; setCams(+v); break;
+    case 'overcams': setCams(CONFIG.camRange[1]); state.overCams = true; bumpMsg = ''; break;   // 32+ → custom at survey
     case 'customopen': state.customOpen = true; bumpMsg=''; break;
     case 'customdone': state.customOpen = false; bumpMsg=''; break;
     case 'camadj': setCams(state.cams + +v); break;
