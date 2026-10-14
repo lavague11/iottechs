@@ -103,7 +103,7 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .cc-val input{font:inherit;font-size:30px;font-weight:700;width:3.2em;text-align:center;border:none;border-bottom:2px solid var(--gold);background:transparent;color:var(--fg);padding:0 4px}
 .cc-slider{width:100%;accent-color:var(--gold);height:28px}
 .cc-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:-8px;font-variant-numeric:tabular-nums}
-.cc-row{display:flex;align-items:center;gap:14px}
+.cc-row{display:flex;align-items:center;justify-content:center;gap:14px}
 .mini-round{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);font-size:22px;line-height:1}
 .mini-round:disabled{opacity:.35}
 .cc-now{font-size:22px;font-weight:700;min-width:44px;text-align:center}
@@ -507,7 +507,7 @@ const CONFIG = {
     promos: {}
   },
   defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
-              desiredDays:30, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
+              desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
               skipProg:false, monitorMode:'none', monitor:false, mount:false, ups:false, plan:'none', term:1, billing:'monthly',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
   sizeTiers: [
@@ -1048,7 +1048,6 @@ const R = {
       : (bumpMsg ? `<div class="note">${esc(bumpMsg)}</div>` : '');
     return `${head(s,i,'One camera for each area you want to see.', false)}
       ${custom}
-      <div class="quick-label">Or tap a common size</div>
       <div class="presets tiered">${cards}</div>
       ${note}`;
   },
@@ -1081,78 +1080,47 @@ const R = {
   recorder(s, q, i){
     const ss = q.ss, R = CONFIG.catalog.retention;
     const sysLabel = ss.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || '0 cameras';
+    const DMIN = 7, DMAX = 60;
 
-    // RECORDING HISTORY — three simple options (15 / 30 / More than 30). "More than 30" opens a synced
-    // 31–60 control; "60+ days" flags a custom storage quote (sized at the survey, price not committed).
-    const moreOn = state.daysMode==='custom' || state.extStorage;
-    const chips = `
-      <button class="daychip ${!moreOn&&state.desiredDays===15?'on':''}" data-act="days" data-v="15">15 days</button>
-      <button class="daychip ${!moreOn&&state.desiredDays===30?'on':''}" data-act="days" data-v="30">30 days</button>
-      <button class="daychip ${moreOn?'on':''}" data-act="daysmode" data-v="custom">More than 30</button>`;
-    const EXT_MAX = 60;
-    const custom = (state.daysMode==='custom' && !state.extStorage) ? `<div class="custom-count">
-        <div class="cc-val"><input type="number" min="31" max="${EXT_MAX}" value="${ss.days}" data-num="daysnum" aria-label="Recording days" class="num"> days</div>
-        <input type="range" min="31" max="${EXT_MAX}" value="${Math.min(Math.max(ss.days,31),EXT_MAX)}" data-num="daysrange" aria-label="Recording days slider" class="cc-slider">
-        <div class="cc-scale"><span>31</span><span>${EXT_MAX}</span></div>
+    // RECORDING HISTORY slider — "how long to keep footage" (storage auto-sizes from this).
+    const daysSlider = `<div class="custom-count">
+        <div class="cc-val"><input type="number" min="${DMIN}" max="${DMAX}" value="${ss.days}" data-num="daysnum" aria-label="Recording days" class="num"> days</div>
+        <input type="range" min="${DMIN}" max="${DMAX}" value="${Math.min(Math.max(ss.days,DMIN),DMAX)}" data-num="daysrange" aria-label="Recording days slider" class="cc-slider">
+        <div class="cc-scale"><span>${DMIN}</span><span>${DMAX}</span></div>
         <div class="cc-row">
-          <button class="mini-round" data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=31?'disabled':''}>−</button>
+          <button class="mini-round" data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=DMIN?'disabled':''}>−</button>
           <span class="num cc-now">${ss.days}</span>
-          <button class="mini-round" data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=EXT_MAX?'disabled':''}>+</button>
+          <button class="mini-round" data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=DMAX?'disabled':''}>+</button>
         </div>
-        <button class="skip" data-act="extstor" style="align-self:center">Need more than 60 days?</button>
-      </div>` : '';
-    const extNote = state.extStorage ? `<div class="note">Extended retention (60+ days) — we’ll size the storage with you at a free site survey. Your estimate below covers the full system; the extended storage is quoted separately, so the total stays preliminary. <button class="skip" data-act="days" data-v="30" style="display:inline">Back to 30 days</button></div>` : '';
+      </div>`;
 
-    // RECOMMENDED / upgrade / custom-config
-    let headline;
-    if(ss.noStandardFit){
-      headline = `<div class="panel"><div class="panel-h" style="background:var(--warn-bg);color:var(--warn);border-color:var(--warn)"><span>Custom storage configuration</span></div>
-        <div class="panel-b"><p style="margin:0">Keeping <b>${ss.days} days</b> of ${sysLabel} needs about <b>${ss.recommendedTB}TB</b> — more than any standard recorder. IOT TECHS will size the recorder and storage for you at the site survey. You can keep going and we'll finish this part together.</p></div></div>`;
-    } else if(ss.requiresUpgrade){
-      const upNvr = ss.recNvr;
-      headline = `<div class="panel upgrade"><div class="panel-h"><span>Keep your ${ss.days}-day target</span></div>
-        <div class="panel-b">
-          <p style="margin:0">To record <b>${sysLabel}</b> for about <b>${ss.days} days</b> you need <b>${ss.recommendedTB}TB</b>. Your ${ss.currentNvr.name} holds up to ${ss.currentMax}TB (≈ ${ss.maxDaysCurrentNvr} days).</p>
-          <div class="upgrade-opts">
-            <button class="opt ${s.nvrUpgrade==='auto'?'sel':''}" data-act="nvrup" data-v="auto">
-              <div class="opt-title">Upgrade recorder</div>
-              <div class="opt-sub">${upNvr.name} · up to ${ss.activeMax}TB · ≈ ${estDaysUI(ss.recommendedTB,ss.daily)} days</div></button>
-            <button class="opt ${s.nvrUpgrade==='keep'?'sel':''}" data-act="nvrup" data-v="keep">
-              <div class="opt-title">Keep current recorder</div>
-              <div class="opt-sub">${ss.currentNvr.name} · ≈ ${ss.maxDaysCurrentNvr} days max</div></button>
-          </div>
-        </div></div>`;
-    } else {
-      headline = `<div class="panel rec-hero is-rec"><div class="panel-h good"><span>Recommended</span><span class="num">${ss.storageTB}TB</span></div>
-        <div class="panel-b">
-          <div class="rec-days">≈ ${ss.estimatedDays} days<span>of ${R.recordingLabel}</span></div>
-          <div class="opt-sub">Included with the ${ss.activeNvr.name}. Watch live or recorded video from your phone.</div>
-        </div></div>`;
-    }
+    // STORAGE slider — recorder capacity over the valid drive ladder; shows the days it yields.
+    const opts = ss.options || [];
+    const curIdx = opts.findIndex(o=>o.tb===ss.storageTB);
+    const idx = curIdx<0 ? 0 : curIdx;
+    const loTB = opts.length?opts[0].tb:ss.storageTB, hiTB = opts.length?opts[opts.length-1].tb:ss.storageTB;
+    const storSlider = opts.length>1 ? `<div class="custom-count">
+        <div class="cc-val"><b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days</div>
+        <input type="range" min="0" max="${opts.length-1}" value="${idx}" data-num="storrange" aria-label="Storage capacity slider" class="cc-slider">
+        <div class="cc-scale"><span>${loTB}TB</span><span>${hiTB}TB</span></div>
+        <div class="cc-row">
+          <button class="mini-round" data-act="storadj" data-v="-1" aria-label="Less storage" ${idx<=0?'disabled':''}>−</button>
+          <span class="num cc-now">${ss.storageTB}TB</span>
+          <button class="mini-round" data-act="storadj" data-v="1" aria-label="More storage" ${idx>=opts.length-1?'disabled':''}>+</button>
+        </div>
+      </div>` : `<div class="sys-line">${ss.storageTB}TB · ≈ ${ss.estimatedDays} days</div>`;
 
-    // OTHER OPTIONS — capacity cards, retention first
-    const cards = ss.viewOptions.map(o=>{
-      const sel = o.tb===ss.storageTB;
-      return `<div class="opt stor ${sel?'sel':''} ${o.recommended?'is-rec':''}">
-        ${o.recommended?`<div class="rec-banner">Recommended</div>`:''}
-        <button class="pick" data-act="stor" data-v="${o.tb}">
-          <div class="stor-top"><b class="num">${o.tb}TB</b></div>
-          <div class="stor-days num">≈ ${o.days} days</div>
-        </button></div>`;
-    }).join('');
+    const upgradeNote = (ss.requiresUpgrade && !ss.noStandardFit) ? `<div class="note">To keep ${ss.days} days you need about ${ss.recommendedTB}TB — we’ll fit the right recorder (${ss.recNvr.name}) at install.</div>` : '';
+    const customNote = ss.noStandardFit ? `<div class="note">Keeping ${ss.days} days of ${sysLabel} needs about ${ss.recommendedTB}TB — more than a standard recorder. We’ll size a custom storage system at your free survey; the total stays preliminary.</div>` : '';
+    const shortNote = (ss.manual && ss.estimatedDays < ss.days && !ss.noStandardFit) ? `<div class="note">${ss.estimatedDays} days at ${ss.storageTB}TB — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>` : '';
 
-    const belowTarget = !ss.meetsTarget && !ss.noStandardFit;
-    const nvrSpecs = `<details class="why"><summary>Recorder details</summary>
-      <dl class="specs"><dt>Model</dt><dd>${ss.activeNvr.name}</dd><dt>Channels</dt><dd>${ss.activeNvr.ch} (your system uses ${q.n})</dd><dt>Max storage</dt><dd>${ss.activeMax}TB</dd><dt>This build</dt><dd>${ss.storageTB}TB ≈ ${ss.estimatedDays} days</dd></dl></details>`;
-    const nvrOnly = `<div class="panel rec-hero"><div class="panel-h"><span>Recommended recorder</span></div>
-      <div class="panel-b"><div style="font-weight:700">${ss.activeNvr.name}</div><div class="opt-sub">${ss.activeNvr.ch}-channel · supports your ${q.n}-camera system</div></div></div>`;
     return `<div class="eyebrow">Recording history</div>
-      <div class="daychips">${chips}</div>
-      ${custom}
-      ${extNote}
+      ${daysSlider}
       <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
-      ${state.extStorage ? nvrOnly : headline}
-      ${(!state.extStorage && belowTarget && !ss.requiresUpgrade) ? `<div class="note">${ss.estimatedDays} days — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>`:''}`;
+      <div class="eyebrow">Storage</div>
+      ${storSlider}
+      <div class="opt-sub">Recorder: ${ss.activeNvr.name} · auto-sized to your system</div>
+      ${upgradeNote}${customNote}${shortNote}`;
   },
   install(s, q, i){
     const C = CONFIG.catalog;
@@ -1611,7 +1579,8 @@ document.addEventListener('click', e=>{
     case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; break;
     case 'days': state.desiredDays = +v; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); break;
     case 'daysmode': state.daysMode = 'custom'; state.extStorage = false; if(state.desiredDays<31 || state.desiredDays>60) state.desiredDays = 45; resetStorage(); break;
-    case 'dayadj': state.daysMode = 'custom'; state.desiredDays = Math.min(60, Math.max(31, state.desiredDays + +v)); resetStorage(); break;
+    case 'dayadj': setDays(state.desiredDays + +v); break;
+    case 'storadj': { const o=(Engine.sizeStorage(state).options)||[]; const cur=o.findIndex(x=>x.tb===Engine.sizeStorage(state).storageTB); const k=Math.max(0,Math.min(o.length-1,(cur<0?0:cur)+ +v)); if(o[k]) state.selectedStorageTB=o[k].tb; break; }
     case 'extstor': state.extStorage = true; state.daysMode = 'custom'; state.desiredDays = 60; resetStorage(); break;
     case 'stor': state.selectedStorageTB = +v; break;
     case 'storauto': state.selectedStorageTB = null; break;
@@ -1647,6 +1616,7 @@ document.addEventListener('change', e=>{
     const k = t.dataset.num, val = parseFloat(t.value);
     if(k==='camsrange' || k==='camsnum'){ setCams(val); render(); return; }
     if(k==='daysrange' || k==='daysnum'){ setDays(val); render(); return; }
+    if(k==='storrange'){ const o=(Engine.sizeStorage(state).options)||[]; const idx=Math.max(0,Math.min(o.length-1,Math.round(val))); if(o[idx]) state.selectedStorageTB=o[idx].tb; render(); return; }
     if(k==='taxRate') state.taxRate = isFinite(val) ? Math.max(0,val)/100 : 0;
     else if(k==='adjust') state.adjust = isFinite(val) ? Math.round(val*100) : 0;
     else if(k==='extraBoxes') state.extraBoxes = isFinite(val) ? Math.max(0, Math.round(val)) : 0;
@@ -1663,10 +1633,10 @@ function liveCams(n){
   chrome();
 }
 // Recording-duration (31–60) synced control, scoped to its own container so it never fights the camera counter.
-function setDays(n){ n = Math.min(60, Math.max(31, Math.round(n||31))); state.desiredDays = n; state.daysMode = 'custom'; state.extStorage = false; resetStorage(); }
+function setDays(n){ n = Math.min(60, Math.max(7, Math.round(n||28))); state.desiredDays = n; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); }
 function liveDays(src, raw){
   if(raw==='') return;   // don't reset the field while the customer is clearing/editing it
-  const n = Math.min(60, Math.max(31, Math.round(+raw||31))); setDays(n);
+  const n = Math.min(60, Math.max(7, Math.round(+raw||28))); setDays(n);
   const box = src.closest('.custom-count'); if(box){
     const now = box.querySelector('.cc-now'); if(now) now.textContent = n;
     const rng = box.querySelector('[data-num="daysrange"]'); if(rng && rng!==src) rng.value = n;
@@ -1686,7 +1656,18 @@ document.addEventListener('input', e=>{
   }
   if(t.dataset.num==='camsrange' || t.dataset.num==='camsnum'){ liveCams(+t.value); }
   if(t.dataset.num==='daysrange' || t.dataset.num==='daysnum'){ liveDays(t, t.value); }
+  if(t.dataset.num==='storrange'){ liveStor(t); }
 });
+// Storage slider — light live update (no full render while dragging), scoped to its own card.
+function liveStor(src){
+  const o=(Engine.sizeStorage(state).options)||[]; if(!o.length) return;
+  const idx=Math.max(0,Math.min(o.length-1,Math.round(+src.value)));
+  if(!o[idx]) return; state.selectedStorageTB=o[idx].tb;
+  const ss=Engine.sizeStorage(state), box=src.closest('.custom-count');
+  if(box){ const now=box.querySelector('.cc-now'); if(now) now.textContent=ss.storageTB+'TB';
+    const val=box.querySelector('.cc-val'); if(val) val.innerHTML=`<b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days`; }
+  chrome();
+}
 // Final formatting on blur (never mid-typing): name casing + email typo suggestion.
 document.addEventListener('focusout', e=>{
   const t = e.target; if(!t.dataset || !t.dataset.contact) return;
