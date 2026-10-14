@@ -16,25 +16,28 @@ const TAG = { signature: ["Sign", Icon.pen], name: ["Name", Icon.user], date: ["
 const RESTART = new Set(["EXPIRED", "VOID", "CHANGED", "TAMPERED", "NO_SESSION"]);
 const todayLabel = () => new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 
-// Auto-fit a value inside its overlay field: start at `max` px and step down until the text fits the
-// field width (never clips/overflows), re-fitting when the field resizes (PDF zoom). The PDF flatten
-// does the same shrink for the final document, so a long Client Name stays inside the box everywhere.
-function FitValue({ text, max = 14, min = 7 }) {
+// Client Name is a FORM field, not a signature. Its PREFERRED size tracks the FIELD HEIGHT (so it scales
+// with the PDF / zoom and reads like ordinary form text — matching the Date beside it and the flattened
+// 9.5pt), and it only ever SHRINKS to fit a long name's width. A short name is NEVER grown to fill the box
+// (the old fixed 14px did that, dwarfing the Date on a phone). Re-fits when the field resizes (PDF zoom).
+function FitValue({ text, min = 7, cap = 14 }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current; if (!el) return;
     const box = el.parentElement; if (!box) return;
     const fit = () => {
-      let s = max, guard = 80;
-      el.style.fontSize = s + "px";
+      el.style.fontSize = "";                                   // start from the CSS clamp — the SAME size the Date (span.v) uses
       const avail = box.clientWidth - 6;
-      while (s > min && el.scrollWidth > avail && guard-- > 0) { s -= 0.5; el.style.fontSize = s + "px"; }
+      let s = parseFloat(getComputedStyle(el).fontSize) || 12, guard = 80;
+      s = Math.min(s, cap);                                     // never above the preferred cap (restrained)
+      el.style.fontSize = s + "px";
+      while (s > min && el.scrollWidth > avail && guard-- > 0) { s -= 0.5; el.style.fontSize = s + "px"; }   // SHRINK long names only
     };
     fit();
     let ro;
     if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(fit); ro.observe(box); }
     return () => ro?.disconnect();
-  }, [text, max, min]);
+  }, [text, min, cap]);
   return <span ref={ref} className="v">{text}</span>;
 }
 const tokenKey = (a, o) => `esign:${a}:${o}`;
