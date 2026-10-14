@@ -97,7 +97,7 @@ test("a ctx-framed (bgCtx) draw result uses the context-crop feet as the floor s
 
 test("the top-left Fit/Focus zoom button is removed; app focus stays on fullBtn", () => {
   // The owner removed the top-left Fit button (focusBtn, a widget-internal zoom-to-plate). App-level focus
-  // mode lives on the bottom-right Focus control (fullBtn), which asks the host to go full-screen.
+  // mode lives on the top-right Full-screen control (fullBtn), which asks the host to go full-screen.
   assert.ok(!survey.includes('id="focusBtn"') && !survey.includes('id="focusBtnTxt"'), "the Fit/Focus zoom button is gone");
   assert.ok(survey.includes('id="fullBtn"') && survey.includes("iotSurveyReqFocus"), "the bottom-right Focus still requests app-level focus mode");
   const fv = extractFn(survey, "focusView");

@@ -123,6 +123,7 @@
   .coneTip{position:absolute;left:216px;top:-9px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px}
 
   .ctxbar{position:absolute;left:14px;top:14px;z-index:4;display:flex;gap:8px}
+  .ctxbar-r{left:auto;right:14px}   /* top-right: Full screen (its one home) */
   .ctxbtn{background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(16,17,18,.12)}
   /* Manual alignment: a transparent drag surface over the plate + a bottom control bar; both live only while aligning. */
   #alignDrag{position:absolute;inset:0;z-index:7;display:none;cursor:move;touch-action:none}
@@ -282,7 +283,7 @@
   #bgActions>button:hover{border-color:var(--gold)}
   #bgActions>button svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   /* bottom-right ••• drop-up: the ••• button with its menu above it */
-  #planMore{position:absolute;right:14px;bottom:56px;z-index:9;display:none;flex-direction:column;align-items:flex-end;gap:8px}
+  #planMore{position:absolute;right:14px;bottom:14px;z-index:9;display:none;flex-direction:column;align-items:flex-end;gap:8px}
   body.ro #planMore, body.frozen #planMore{display:none!important}
   #bgMore{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);backdrop-filter:blur(6px);padding:0}
   #bgMore:hover{border-color:var(--gold)}
@@ -682,6 +683,10 @@
             <button class="ctxbtn" id="addDeviceBtn" title="Add device" aria-label="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
             <!-- Fit/Focus button removed; camera-angles moved into the device palette (Aim cameras) to declutter the canvas. -->
           </div>
+          <!-- TOP-RIGHT: Full screen (its one home; angles/FOV/grid + build actions live in the ••• sheet). -->
+          <div class="ctxbar ctxbar-r">
+            <button class="ctxbtn" id="fullBtn" title="Full screen" aria-label="Enter full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+          </div>
           <div class="devmenu" id="devMenu"></div>
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
@@ -694,19 +699,8 @@
             <div id="bgMenu" role="menu"><button id="buildPlanBtn" title="Outline the working area, set the grid, draw the structure"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button><button id="replaceBgBtn" title="Start over from a new background source (Satellite / Upload / Draw)"><svg viewBox="0 0 24 24"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button><button id="dimMenuBtn" title="Dim the plan to see the aerial beneath"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg><span>Dim the plan</span></button></div>
             <button id="bgMore" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
           </div>
-          <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
-          <div class="showCtl" id="showCtl">
-            <div class="showPop" id="showPop">
-              <div class="showRow"><label>Angles</label><button class="settog" id="showAnglesTog" title="Show every camera's aim"><span class="knob"></span></button></div>
-              <div class="showRow"><label>FOV</label><button class="settog" id="showFovTog" title="Show the shaded coverage"><span class="knob"></span></button></div>
-              <div class="showRow"><label>Grid</label><div class="viewseg" id="gridSeg" role="group" aria-label="Grid"><button class="vbtn" type="button" data-g="0">Off</button><button class="vbtn" type="button" data-g="1">Light</button><button class="vbtn" type="button" data-g="2">Full</button></div></div>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="showBtn" id="showBtn" title="Show" aria-label="Show angles and coverage"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
-              <!-- Focus = enter app-level fullscreen (handled by the React host). Hidden once already in focus (the header × exits). -->
-              <button class="showBtn" id="fullBtn" title="Focus" aria-label="Enter focus mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-            </div>
-          </div>
+          <!-- Angles / FOV / Grid display toggles now live in the ••• sheet (Display section) — no separate
+               floating Show control. Full screen is top-right; ••• is bottom-right. -->
         </div>
 
       </div>
@@ -780,6 +774,12 @@
           <button class="moreRow" id="moreBuildPlan" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create floor plan</span></button>
           <button class="moreRow" id="moreReplaceBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button>
           <button class="moreRow" id="moreRotate" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg><span>Rotate 90°</span></button>
+        </div>
+        <div class="moreSec" id="moreDisplaySec">
+          <div class="moreLbl">Display</div>
+          <div class="showRow"><label>Angles</label><button class="settog" id="showAnglesTog" title="Show every camera's aim"><span class="knob"></span></button></div>
+          <div class="showRow"><label>FOV</label><button class="settog" id="showFovTog" title="Show the shaded coverage"><span class="knob"></span></button></div>
+          <div class="showRow"><label>Grid</label><div class="viewseg" id="gridSeg" role="group" aria-label="Grid"><button class="vbtn" type="button" data-g="0">Off</button><button class="vbtn" type="button" data-g="1">Light</button><button class="vbtn" type="button" data-g="2">Full</button></div></div>
         </div>
       </div>
     </div>
@@ -1264,13 +1264,10 @@
     }
     // Camera aiming now lives in the device palette (Settings ▸ Aim cameras) instead of a canvas button.
     (function(){ var am=document.getElementById("setAimMode"); if(am) am.addEventListener("click", function(e){ e.stopPropagation(); setAngleMode(!angleMode); queueSave(); }); })();
-    // ---- bottom-right "Show" control: toggle the Angles / FOV display on the plan ----
+    // ---- Angles / FOV / Grid display toggles (now in the ••• sheet · Display) ----
     (function(){
-      var sBtn=document.getElementById("showBtn"), sPop=document.getElementById("showPop");
-      sBtn.addEventListener("click", function(e){ e.stopPropagation(); var open=!sPop.classList.contains("open"); sPop.classList.toggle("open",open); sBtn.classList.toggle("on",open); });
-      document.addEventListener("click", function(e){ if(!document.getElementById("showCtl").contains(e.target)){ sPop.classList.remove("open"); sBtn.classList.remove("on"); } });
-      document.getElementById("showAnglesTog").addEventListener("click", function(e){ e.stopPropagation(); showAllAngles=!showAllAngles; applySettings(); queueSave(); });
-      document.getElementById("showFovTog").addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
+      var sa=document.getElementById("showAnglesTog"); if(sa) sa.addEventListener("click", function(e){ e.stopPropagation(); showAllAngles=!showAllAngles; applySettings(); queueSave(); });
+      var sf=document.getElementById("showFovTog"); if(sf) sf.addEventListener("click", function(e){ e.stopPropagation(); showFovState=!showFovState; applySettings(); queueSave(); });
       (function(){ var gseg=document.getElementById("gridSeg"); if(gseg) [].forEach.call(gseg.querySelectorAll(".vbtn"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); gridMode=Math.max(0,Math.min(2,+b.getAttribute("data-g")||0)); applySettings(); queueSave(); }); }); })();
     })();
     // Undo: remove the last-placed device
@@ -2451,7 +2448,8 @@
       var bp=document.getElementById("moreBuildPlan"); if(bp) bp.style.display=canBuild(f)?"":"none";
       // Rotate 90 lives here now (off the canvas). Only for a plain aerial/upload floor — rotating a
       // hybrid-capable floor (bgData alone) would misalign the ctx aerial/planSvg layers.
-      var rot=document.getElementById("moreRotate"); if(rot) rot.style.display=(hasBg && !cap)?"":"none"; }
+      var rot=document.getElementById("moreRotate"); if(rot) rot.style.display=(hasBg && !cap)?"":"none";
+      var disp=document.getElementById("moreDisplaySec"); if(disp) disp.style.display=(hasBg && !RO)?"":"none"; }   // Angles / FOV / Grid
     function openMoreSheet(){ if(frozen()) return; buildMoreSheet(); document.getElementById("moreSheet").classList.add("on"); }
     function closeMoreSheet(){ var s=document.getElementById("moreSheet"); if(s) s.classList.remove("on"); }
     (function(){ var scrim=document.getElementById("moreScrim"); if(scrim) scrim.addEventListener("click", closeMoreSheet);
@@ -2619,7 +2617,7 @@
       // Setup-only. Setting display="" (not "flex") clears the inline value so the RO/frozen CSS that
       // hides + / angles still applies for read-only viewers.
       var ctxWorking=(idx===1)||(idx===0 && bgHasImage);
-      document.querySelector(".ctxbar").style.display = ctxWorking ? "flex" : "none";
+      [].forEach.call(document.querySelectorAll(".ctxbar"), function(el){ el.style.display = ctxWorking ? "flex" : "none"; });   // top-left (+ Add) and top-right (Full screen)
       var _adb=document.getElementById("addDeviceBtn"), _amb=document.getElementById("angleModeBtn");
       if(_adb) _adb.style.display=(idx===1)?"":"none";
       if(_amb) _amb.style.display=(idx===1)?"":"none";
