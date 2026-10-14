@@ -3471,6 +3471,33 @@ export function markProjectLost(accessId, reason, byName = "Office") {
 export function reactivateProject(accessId, byName = "Office") {
   return reopenProject(accessId, byName);
 }
+// Daily sweep: auto-close APPROVED + UNSIGNED + still-open projects whose 30-day signature deadline has
+// passed ("Closed — Unsigned"). Idempotent by construction — the query only matches OPEN deals (lost_at
+// NULL), so a closed one is never re-closed and no duplicate event is written. Signed/deposit projects
+// are excluded (they never auto-close). Runs from instrumentation.js; never relies on a page load.
+export function autoCloseExpiredUnsigned() {
+  const nowIso = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const rows = db.prepare(
+    `SELECT p.access_id
+       FROM projects p
+       JOIN proposals pr
+         ON pr.project_access_id = p.access_id
+        AND pr.id = (SELECT x.id FROM proposals x
+                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
+                      ORDER BY x.version DESC, x.id DESC LIMIT 1)
+      WHERE p.lost_at IS NULL
+        AND p.completed_at IS NULL
+        AND pr.status = 'accepted'
+        AND (pr.signed_name IS NULL OR pr.signed_name = '')
+        AND pr.signature_deadline IS NOT NULL
+        AND pr.signature_deadline <= ?`
+  ).all(nowIso);
+  let closed = 0;
+  for (const r of rows) {
+    try { closeProject(r.access_id, { reason: "Unsigned 30 days", kind: "unsigned", byName: "System" }); closed++; } catch { /* keep going */ }
+  }
+  return { scanned: rows.length, closed };
+}
 
 // First-login: the customer confirmed their contact details. Stamps the time (once) so the
 // welcome modal never shows again for this project. Idempotent — a second call is a no-op.

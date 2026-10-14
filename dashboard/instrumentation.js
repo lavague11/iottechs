@@ -23,4 +23,18 @@ export async function register() {
 
   setTimeout(run, 90_000);                  // first sweep shortly after boot
   setInterval(run, 30 * 60 * 1000);         // then every 30 minutes
+
+  // Finance sweep: auto-close approved-but-unsigned projects whose 30-day signature deadline has passed
+  // ("Closed — Unsigned"). Server-side so the status is correct even if nobody opens the page. The query
+  // only matches OPEN deals, so it's idempotent — overlapping/repeat runs never double-close or duplicate
+  // the close event. Signed / deposit / completed projects are never touched.
+  const sweepReceivables = async () => {
+    try {
+      const { autoCloseExpiredUnsigned } = await import("./lib/db.js");
+      const r = autoCloseExpiredUnsigned();
+      if (r.closed) console.log(`[receivables] auto-closed ${r.closed} unsigned project(s) past the signature deadline`);
+    } catch (e) { console.error("[receivables] auto-close sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepReceivables, 120_000);              // first sweep ~2 min after boot
+  setInterval(sweepReceivables, 6 * 60 * 60 * 1000);  // then every 6 hours (cheap + idempotent)
 }
