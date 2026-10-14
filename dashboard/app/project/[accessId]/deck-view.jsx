@@ -965,6 +965,7 @@ const CSS = `
   .dv-identity{gap:8px;flex:1 1 auto;min-width:0}
   .dv-title{min-width:0;flex:1 1 auto}
   .dv-sp{display:none}
+  .dv-chev{display:none}   /* just ID · name · hamburger — tapping the name still opens the details drawer */
   .dv-chipwrap{display:none}
   .dv-rolewrap--empty{display:none}
   .dv-rolewrap .dv-solid{background:transparent!important;color:var(--dv-ink-soft)!important;border:none!important;box-shadow:none!important;height:32px;padding:0 4px}
