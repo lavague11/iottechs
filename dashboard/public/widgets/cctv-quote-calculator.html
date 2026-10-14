@@ -321,8 +321,16 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .adv-sum svg{width:18px;height:18px;color:var(--muted);transition:transform .2s}
 .adv.open .adv-sum svg{transform:rotate(180deg);color:var(--gold-ink)}
 .adv-b{padding:4px 16px 16px;border-top:1px solid var(--line)}
-.adv-grid{display:flex;flex-direction:column;gap:14px}
+.adv-grid{display:flex;flex-direction:column;gap:13px}
 .adv-grid .eyebrow{margin-bottom:-6px}
+.adv-grp{font-size:12.5px;font-weight:800;color:var(--fg);letter-spacing:.01em;padding-top:12px;border-top:1px solid var(--line);margin-top:2px}
+.adv-grid>.adv-grp:first-child{border-top:none;padding-top:2px;margin-top:0}
+.mon-qty{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.mon-qty-l{font-weight:600;font-size:14px}
+.qty-step{display:inline-flex;align-items:center;gap:14px}
+.qty-step b{font-size:17px;font-weight:700;min-width:1.2em;text-align:center;font-variant-numeric:tabular-nums}
+.qty-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:18px;line-height:1;cursor:pointer}
+.qty-btn:disabled{opacity:.35;cursor:default}
 @media (prefers-reduced-motion:reduce){.nvr-btn,.adv-sum svg{transition:none}}
 
 .promo-box{display:grid;gap:6px}
@@ -565,8 +573,8 @@ const CONFIG = {
   },
   defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
               desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', nvrPick:null, poe:'auto',
-              skipProg:false, monitorMode:'buy', monitor:true, mount:true, ups:false, plan:'none', term:1, billing:'monthly',
-              cableColor:'white', camColor:'white',
+              skipProg:false, monitorMode:'buy', monitor:true, mount:true, monitorQty:1, ups:false, plan:'none', term:1, billing:'monthly',
+              cableColor:'white', camColor:'white', camRes:'8',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
   sizeTiers: [
     { ch:8,  label:'Up to 8 cameras',  sub:'Best for smaller systems',   presets:[4,6,8] },
@@ -790,7 +798,7 @@ const Engine = (() => {
 
     // add-ons (never discounted)
     const addons = [];
-    ['monitor','mount','ups'].forEach(k=>{ if(s[k]){ const a=C.addons[k]; addons.push({ g:'Add-ons', code:a.code, label:a.name, qty:1, unit:a.price, amt:a.price }); }});
+    ['monitor','mount','ups'].forEach(k=>{ if(s[k]){ const a=C.addons[k]; const qty = (k==='monitor'||k==='mount') ? Math.max(1, s.monitorQty||1) : 1; addons.push({ g:'Add-ons', code:a.code, label:a.name, qty, unit:a.price, amt:a.price*qty }); }});
     const addonTotal = addons.reduce((a,l)=>a+l.amt,0);
 
     // service plan
@@ -967,12 +975,20 @@ function heroControl(cfg){
 function monitorControl(){
   const price = CONFIG.catalog.addons.monitor.price + CONFIG.catalog.addons.mount.price;
   const opt = (v,title,sub) => `<button type="button" class="nvr-btn ${state.monitorMode===v?'on':''}" data-act="mon" data-v="${v}" aria-pressed="${state.monitorMode===v}"><b>${title}</b><span>${sub}</span></button>`;
+  const qty = state.monitorMode==='buy' ? `<div class="mon-qty">
+      <span class="mon-qty-l">How many displays?</span>
+      <div class="qty-step">
+        <button type="button" class="qty-btn" data-act="monqty" data-v="-1" aria-label="Fewer displays" ${(state.monitorQty||1)<=1?'disabled':''}>−</button>
+        <b>${state.monitorQty||1}</b>
+        <button type="button" class="qty-btn" data-act="monqty" data-v="1" aria-label="More displays" ${(state.monitorQty||1)>=8?'disabled':''}>+</button>
+      </div></div>` : '';
   return `<div class="eyebrow">Monitor</div>
     <div class="nvr-seg">
       ${opt('buy','Need a monitor', 'Screen &amp; mount')}
       ${opt('own','I have a monitor','We connect it')}
       ${opt('none','Only on phone','App access')}
-    </div>`;
+    </div>
+    ${qty}`;
 }
 // A labeled card group matching the recorder/monitor style. opts: [{v,title,sub?}].
 function cardGroup(label, act, cur, opts){
@@ -981,13 +997,18 @@ function cardGroup(label, act, cur, opts){
       `<button type="button" class="nvr-btn ${cur===o.v?'on':''}" data-act="${act}" data-v="${o.v}" aria-pressed="${cur===o.v}"><b>${o.title}</b>${o.sub?`<span>${o.sub}</span>`:''}</button>`
     ).join('')}</div>`;
 }
-// Advanced options — card style matching the sections above. Caller wraps in the collapsible.
+// Advanced options — grouped (Camera / Cabling) card style matching the sections above.
 function optionsStrip(q){
+  const up = money(CONFIG.catalog.cam[12].price - CONFIG.catalog.cam[8].price);
+  const grpH = t => `<div class="adv-grp">${t}</div>`;
   return `<div class="adv-grid">
-      ${cardGroup('Cabling', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
-      ${cardGroup('Camera setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included'},{v:'skip',title:'Skip'}])}
-      ${cardGroup('Cable color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${grpH('Camera')}
+      ${cardGroup('Resolution', 'res', state.camRes, [{v:'8',title:'8MP',sub:'4K'},{v:'12',title:'12MP',sub:'+'+up+' ea'}])}
+      ${cardGroup('Setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included'},{v:'skip',title:'Skip'}])}
       ${cardGroup('Camera color', 'camcolor', state.camColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${grpH('Cabling')}
+      ${cardGroup('Cabling', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
+      ${cardGroup('Cable color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
     </div>`;
 }
 // A polished, document-style quote (branded header, prepared-for + system, grouped line items, totals).
@@ -1508,7 +1529,7 @@ function setCams(n){
   const [lo,hi] = CONFIG.camRange;
   state.overCams = false;   // any explicit count clears the "Over 32" flag
   n = Math.min(hi, Math.max(lo, Math.round(n||lo)));
-  state.cams = n; state.n12 = Math.min(state.n12, n);
+  state.cams = n; state.n12 = (state.camRes==='12' ? n : 0);   // resolution applies to all cameras
   const t = Engine.nvrTier(n);
   clearTimeout(bumpT);
   if(t > state.sizeTier){ const room = t - n;
@@ -1685,6 +1706,8 @@ document.addEventListener('click', e=>{
     case 'advtoggle': advOpen = !advOpen; break;  // controlled collapse so clicks inside don't close it
     case 'cablecolor': state.cableColor = v; break;
     case 'camcolor': state.camColor = v; break;
+    case 'res': state.camRes = v; state.n12 = (v==='12' ? state.cams : 0); resetStorage(); break;   // all cameras 8MP or 12MP
+    case 'monqty': state.monitorQty = Math.max(1, Math.min(8, (state.monitorQty||1) + +v)); break;
     case 'days': state.desiredDays = +v; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); break;
     case 'daysmode': state.daysMode = 'custom'; state.extStorage = false; if(state.desiredDays<31 || state.desiredDays>60) state.desiredDays = 45; resetStorage(); break;
     case 'dayadj': setDays(state.desiredDays + +v); break;
