@@ -639,7 +639,9 @@ const CSS = `
 .dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft)}
 .dv-rolemenu .dv-roledivide{height:1px;background:var(--dv-line);margin:4px 6px}
 /* Overflow actions merged into the Portal menu on mobile only (desktop keeps them in the job-bar ···). */
-.dv-role-mobmenu{display:none}
+/* Overflow actions (My projects / Skip survey …) live in the Portal menu on every size now — the
+   job-bar ··· is retired (hidden below), so this shows on desktop too. */
+.dv-role-mobmenu{display:flex;flex-direction:column;gap:2px}
 .dv-rolemenu .dv-role-mobmenu button.danger{color:var(--dv-red,#C4553D)}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -694,7 +696,8 @@ const CSS = `
 .dv-status i{width:6px;height:6px;border-radius:99px;background:var(--dv-blue)}
 .dv-status.mine{color:var(--dv-gold-deep)}.dv-status.mine i{background:var(--dv-gold-deep)}
 .dv-status.idle{color:var(--dv-faint)}.dv-status.idle i{background:var(--dv-faint)}
-.dv-cluster{margin-left:auto;display:flex;align-items:center;gap:8px;position:relative}
+/* Job-bar ··· overflow retired — its actions moved into the Portal menu (desktop + mobile). */
+.dv-cluster{display:none}
 .dv-act{width:30px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--dv-ink-soft);background:rgba(16,20,24,.045)}
 .dv-act:hover{background:var(--dv-raise);color:var(--dv-ink)}
 .dv-menu{position:absolute;top:calc(100% + 8px);right:0;width:216px;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:13px;padding:6px;z-index:70;box-shadow:0 24px 60px -24px rgba(16,20,24,.35);opacity:0;transform:translateY(-6px) scale(.97);pointer-events:none;transform-origin:top right;transition:.22s var(--dv-eo)}
