@@ -2067,6 +2067,31 @@ export function getProposalLibrary() {
 //   • closed/declined & never signed   → "jobs"      — a dead job, NOT a receivable
 // `expected` is the amount owed at the current state; balance = expected − confirmed paid. Totals
 // use the same option+add-on math the payment stage trusts, so figures agree everywhere.
+// Build the canonical financial state from a joined projects+proposals row + its money figures. ONE place
+// that maps DB columns → resolver input, so every surface (AR page, project page, dashboard, customer view)
+// derives identical state from lib/receivables-model.js.
+function financialStateFromRow(r, { total, paid, pendingPay, lastPay }) {
+  const declined = r.status === "declined";
+  return resolveProjectFinancialState({
+    stage: r.stage,
+    total,
+    depositPct: r.deposit_pct,
+    approved: r.status === "accepted",
+    approvedAt: r.selected_at,
+    signed: !!r.signed_name,
+    signedAt: r.signed_at,
+    signatureDeadline: r.signature_deadline,
+    completed: !!r.completed_at || r.stage === "completion" || r.category === "completed",
+    completedAt: r.completed_at,
+    closed: !!r.lost_at || declined,
+    closedAt: r.lost_at || r.declined_at,
+    reopenedAt: r.reopened_at,
+    paidConfirmed: paid,
+    pendingPayments: pendingPay,
+    lastPaymentAt: lastPay,
+  });
+}
+
 // Accounts Receivable — one row per project that has reached Approved/Accepted OR Signed (or is Closed,
 // for history). Every money figure + bucket comes from the ONE canonical resolver (lib/receivables-model.js)
 // so the AR page, project page and dashboard can't disagree. Unsigned-approved deals appear (Awaiting
@@ -2110,26 +2135,7 @@ export function getReceivables() {
     const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
 
     const declined = r.status === "declined";
-    const isClosed = !!r.lost_at || declined;   // lost / auto-closed / declined → one Closed concept
-
-    const st = resolveProjectFinancialState({
-      stage: r.stage,
-      total,
-      depositPct: r.deposit_pct,
-      approved: r.status === "accepted",
-      approvedAt: r.selected_at,
-      signed: !!r.signed_name,
-      signedAt: r.signed_at,
-      signatureDeadline: r.signature_deadline,
-      completed: !!r.completed_at || r.stage === "completion" || r.category === "completed",
-      completedAt: r.completed_at,
-      closed: isClosed,
-      closedAt: r.lost_at || r.declined_at,
-      reopenedAt: r.reopened_at,
-      paidConfirmed: paid,
-      pendingPayments: pendingPay,
-      lastPaymentAt: lastPay,
-    });
+    const st = financialStateFromRow(r, { total, paid, pendingPay, lastPay });
 
     return {
       access_id: r.access_id,
@@ -2161,6 +2167,40 @@ export function getReceivables() {
       paidInFull: st.financialState === FS.COLLECTED,
     };
   }).filter((r) => (r.isReceivable || r.closed) && r.total > 0);
+}
+
+// Single-project financial state — the SAME canonical path as getReceivables, for the project page /
+// dashboard / customer view so no surface recomputes money independently (section 28). Returns the resolver
+// output plus the raw total/paid, or null when there is no proposal to bill against.
+export function getProjectFinancialState(accessId) {
+  const r = db.prepare(
+    `SELECT p.access_id, p.stage, p.category, p.completed_at, p.lost_at, p.lost_reason, p.lost_kind, p.reopened_at,
+            pr.status, pr.payload, pr.tax_rate, pr.deposit_pct, pr.accepted_options, pr.selected_option,
+            pr.selected_at, pr.signed_name, pr.signed_at, pr.signature_deadline, pr.declined_at
+       FROM projects p
+       JOIN proposals pr
+         ON pr.project_access_id = p.access_id
+        AND pr.id = (SELECT x.id FROM proposals x
+                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
+                      ORDER BY x.version DESC, x.id DESC LIMIT 1)
+      WHERE p.access_id = ? COLLATE NOCASE`
+  ).get(String(accessId));
+  if (!r) return null;
+  let grand = 0;
+  try {
+    const pl = JSON.parse(r.payload);
+    const acceptedIds = (() => { try { const a = JSON.parse(r.accepted_options || "[]"); return a.length ? a : (r.selected_option ? [r.selected_option] : []); } catch { return r.selected_option ? [r.selected_option] : []; } })();
+    const acceptedOpts = (pl.options || []).filter((o) => acceptedIds.includes(o.id));
+    const shown = acceptedOpts.length ? acceptedOpts : [(pl.options || [])[0]].filter(Boolean);
+    grand = shown.reduce((s, o) => s + optionTotals(o, r.tax_rate, pl.discount, r.deposit_pct, pl.pcp_credit).grand, 0);
+  } catch { /* bad payload */ }
+  const total = grand + (getApprovedAddons(accessId)?.total || 0);
+  const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(accessId);
+  const paid = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
+  const st = financialStateFromRow(r, { total, paid, pendingPay, lastPay });
+  return { ...st, total, paid, pendingPayments: pendingPay, closeReason: r.lost_reason || null, closeKind: r.lost_kind || null };
 }
 
 // Archive (or restore) a receivable — hides it from the active portal (written off / parked) while
