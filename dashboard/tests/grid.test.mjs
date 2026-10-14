@@ -76,9 +76,11 @@ test("4.3 survey: grid box feet label math (FULL * metersPerPx / 0.3048, 1 decim
   assert.ok(n > 3.0 && n < 3.2);   // 0.9516 m / 0.3048 ≈ 3.1 ft
 });
 
-test("4.3 survey: Rotate is hidden for hybrid-capable floors", () => {
-  assert.ok(extractFn(survey, "renderView").includes('rb.style.display=cap?"none":""'));
-  assert.match(survey, /id="rotateBtn"/);
+test("4.3 survey: Rotate lives in the ••• sheet and is hidden for hybrid-capable floors", () => {
+  // Rotate moved off the canvas into the ••• (moreSheet); buildMoreSheet gates it on a plain aerial floor.
+  assert.match(survey, /id="moreRotate"/);
+  assert.ok(!/id="rotateBtn"/.test(survey), "the on-canvas rotate button is gone");
+  assert.ok(extractFn(survey, "buildMoreSheet").includes('rot.style.display=(hasBg && !cap)?"":"none"'), "••• Rotate hidden on hybrid-capable floors");
 });
 
 // Contextual grid in the draw tool: grid data is always there (snap unaffected), but drawn only while editing.
