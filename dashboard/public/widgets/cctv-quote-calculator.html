@@ -1150,7 +1150,6 @@ const R = {
 
     return `<div class="eyebrow">Recording &amp; storage</div>
       ${daysSlider}
-      <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
       ${storInfo}
       <div class="eyebrow">Recorder</div>
       ${nvrSel}
@@ -1226,8 +1225,7 @@ const R = {
   // STEP 4 — configure the system: cameras, recorder + retention, options. No resolution/package/quote.
   system(s, q, i){
     const div = '<hr class="sys-div">';
-    return head(s,i,'How many cameras, what recorder, and how long to keep footage. Pick your package and see the quote next.', false)
-      + `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}</div>`
+    return `<div class="sys-block"><div class="eyebrow">Cameras</div>${R.count(slideOf('count'),q,i)}</div>`
       + div
       + `<div class="sys-block">${R.recorder(slideOf('recorder'),q,i)}</div>`
       + div
