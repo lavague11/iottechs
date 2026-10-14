@@ -468,6 +468,11 @@
   /* settings rows */
   .devmenu .setrow{display:flex;align-items:center;gap:10px;padding:7px 11px;font-size:13px;color:var(--ink)}
   .devmenu .setrow label{flex:none;width:64px;color:var(--muted);font-weight:600}
+  /* Camera-nested sub-option (Angle): indented under the Camera item with a small tree connector. */
+  .devmenu .setrow-sub{padding-left:34px;position:relative}
+  .devmenu .setrow-sub::before{content:"";position:absolute;left:19px;top:-2px;bottom:50%;width:1px;background:var(--line)}
+  .devmenu .setrow-sub::after{content:"";position:absolute;left:19px;top:50%;width:8px;height:1px;background:var(--line)}
+  .devmenu .setrow-sub label{width:auto;color:var(--ink);font-weight:500}
   .devmenu .setrow input[type=range]{flex:1;accent-color:var(--gold)}
   .devmenu .setrow .setv{flex:none;width:26px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
   .settog{margin-left:auto;flex:none;width:38px;height:22px;border-radius:20px;border:1px solid var(--line);background:#e7e4dd;position:relative;cursor:pointer;transition:background .15s;padding:0}
@@ -585,12 +590,11 @@
     .canvasCol{padding:0}
     .canvasWrap{margin:0 0 8px;border-width:0;border-radius:0}
     #surveyWiz .steps{padding:7px 16px 0}
-    /* Let the action row wrap so Back / Awaiting approval / Unsubmit / Next never clip off the
-       right edge — the floor tabs take the first line, the buttons flow onto the next as needed. */
-    #surveyWiz .nav{padding:9px 16px;flex-wrap:wrap;gap:8px}
-    #surveyWiz .floorTabs{flex:1 1 100%;min-width:0}
-    #surveyWiz .nav .hint{flex:1 1 100%}
-    #surveyWiz .nav .b,#surveyWiz .nav .awaitTag{flex:0 0 auto}
+    /* Floor selector (left) and Back (right) share ONE row — the hint flexes between them and
+       truncates, so the row never wraps onto extra lines or overflows. */
+    #surveyWiz .nav{padding:10px 16px;flex-wrap:nowrap;gap:10px}
+    #surveyWiz .nav .hint{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #surveyWiz .nav .floorSel,#surveyWiz .nav .b,#surveyWiz .nav .awaitTag{flex:0 0 auto}
   }
   /* Landscape phone: compact the nav so it takes as little height as possible under the map. */
   @media (max-height:540px) and (orientation:landscape){
@@ -1207,14 +1211,16 @@
 
     // ---- picker: collapsible colour-coded groups; selecting a type ARMS it (menu stays open) ----
     var CHEV='<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>';
+    // Angle is a CAMERA option, not a peer category — it rides as an indented sub-row right under the
+    // Camera item inside the Cameras group (same #setAimMode toggle + wiring, just relocated).
+    var CAM_ANGLE_ROW='<div class="setrow setrow-sub"><label>Angle</label><button class="settog" id="setAimMode" title="Aim cameras — tap a camera, then tap where it points"><span class="knob"></span></button></div>';
     devMenu.innerHTML=GROUPS.map(function(g){ return '<div class="mg" data-g="'+g.key+'" style="--gc:'+g.color+'">'+
       '<div class="mgrp"><span class="gleft"><span class="gdot"></span>'+g.name+'</span>'+CHEV+'</div>'+
-      '<div class="mitems">'+g.items.map(function(it){ return '<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; }).join("")+'</div></div>'; }).join("")+
+      '<div class="mitems">'+g.items.map(function(it){ var row='<div class="mi" data-k="'+it.k+'"><span class="ic" style="color:'+g.color+'">'+iconOf(it)+'</span>'+it.name+'</div>'; if(it.k==="cam") row+=CAM_ANGLE_ROW; return row; }).join("")+'</div></div>'; }).join("")+
       '<div class="mg" data-g="settings" style="--gc:#8a9099"><div class="mgrp"><span class="gleft"><span class="gdot"></span>Settings</span>'+CHEV+'</div><div class="mitems">'+
         '<div class="setrow"><label>Icon size</label><button class="szTog" id="setIsz" title="Cycle small / medium / large">S</button></div>'+
         '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
         '<div class="setrow"><label>All angles</label><button class="settog" id="setAllAngles" title="Show every camera’s angle at once"><span class="knob"></span></button></div>'+
-        '<div class="setrow"><label>Aim cameras</label><button class="settog" id="setAimMode" title="Aim each camera — drag its label to set the direction"><span class="knob"></span></button></div>'+
       '</div></div>'+
       '<div class="mi mi-erase" data-k="__erase__" title="Eraser — tap a device to delete it"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 21l-4-4a2 2 0 0 1 0-3L13 4a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9z"/><path d="M12 21h9"/></svg></span>Eraser</div>';
     // remember which groups are expanded; default: just the first (Cameras)
