@@ -303,12 +303,13 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .stor-cap span{font-size:14px;color:var(--muted)}
 /* advanced options (collapsed) */
 .adv{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
-.adv>summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between}
-.adv>summary::-webkit-details-marker{display:none}
-.adv>summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
-.adv[open]>summary::after{transform:rotate(-135deg)}
-.adv .opts-strip{padding:2px 16px 16px}
-@media (prefers-reduced-motion:reduce){.nvr-btn,.adv>summary::after{transition:none}}
+.adv-sum{width:100%;cursor:pointer;padding:14px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;color:var(--fg);text-align:left}
+.adv-sum svg{width:18px;height:18px;color:var(--muted);transition:transform .2s}
+.adv.open .adv-sum svg{transform:rotate(180deg);color:var(--gold-ink)}
+.adv-b{padding:4px 16px 16px;border-top:1px solid var(--line)}
+.adv-grid{display:flex;flex-direction:column;gap:14px}
+.adv-grid .eyebrow{margin-bottom:-6px}
+@media (prefers-reduced-motion:reduce){.nvr-btn,.adv-sum svg{transition:none}}
 
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
@@ -551,6 +552,7 @@ const CONFIG = {
   defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
               desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', nvrPick:null, poe:'auto',
               skipProg:false, monitorMode:'buy', monitor:true, mount:true, ups:false, plan:'none', term:1, billing:'monthly',
+              cableColor:'white', camColor:'white',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
   sizeTiers: [
     { ch:8,  label:'Up to 8 cameras',  sub:'Best for smaller systems',   presets:[4,6,8] },
@@ -841,6 +843,7 @@ const state = Object.assign({}, CONFIG.defaults, { contact:{
   when:'', notes:'', existingSystem:false, existingType:null, existingWorking:null,
   construction:false, hasDeadline:false, deadline:'', floorPlans:false, floorPlanImg:null } });
 let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
+let advOpen = false, monitorWarn = false;   // Advanced-options collapse state; monitor "only on phone" disclosure
 // 3-step model (the 14 topic renderers below are regrouped into these; engine/state/actions unchanged).
 let openAcc = 'property';   // Step 2: one accordion open at a time
 
@@ -950,21 +953,25 @@ function monitorControl(){
   const opt = (v,title,sub) => `<button type="button" class="nvr-btn ${state.monitorMode===v?'on':''}" data-act="mon" data-v="${v}" aria-pressed="${state.monitorMode===v}"><b>${title}</b><span>${sub}</span></button>`;
   return `<div class="eyebrow">Monitor</div>
     <div class="nvr-seg">
-      ${opt('buy','Need a monitor', money(price))}
+      ${opt('buy','Need a monitor', 'Screen &amp; mount')}
       ${opt('own','I have a monitor','We connect it')}
       ${opt('none','Only on phone','App access')}
     </div>`;
 }
-// Advanced options (collapsed) — everything except Monitor. Returns just the rows; caller wraps in <details>.
+// A labeled card group matching the recorder/monitor style. opts: [{v,title,sub?}].
+function cardGroup(label, act, cur, opts){
+  return `<div class="eyebrow">${label}</div>
+    <div class="nvr-seg" style="grid-template-columns:repeat(${opts.length},1fr)">${opts.map(o=>
+      `<button type="button" class="nvr-btn ${cur===o.v?'on':''}" data-act="${act}" data-v="${o.v}" aria-pressed="${cur===o.v}"><b>${o.title}</b>${o.sub?`<span>${o.sub}</span>`:''}</button>`
+    ).join('')}</div>`;
+}
+// Advanced options — card style matching the sections above. Caller wraps in the collapsible.
 function optionsStrip(q){
-  const planRow = state.plan==='none' ? '' :
-    `<div class="orow"><span class="olabel">Plan length</span>${oseg('term', state.term, [[1,'1 yr'],[2,'2 yr'],[3,'3 yr']])}</div>`;
-  return `<div class="opts-strip">
-      <div class="orow"><span class="olabel">Cabling</span>${oseg('env', state.env, [['indoor','Indoor'],['outdoor','Outdoor']])}</div>
-      <div class="orow"><span class="olabel">Camera setup</span>${oseg('prog', state.skipProg?'skip':'inc', [['inc','Included'],['skip','Skip']])}</div>
-      <div class="orow"><span class="olabel">Battery backup</span>${oseg('ups', state.ups?'on':'off', [['off','No'],['on','Yes']])}</div>
-      <div class="orow"><span class="olabel">Protection</span>${oseg('plan', state.plan, [['none','None'],['warranty','Warranty'],['protection','Full']])}</div>
-      ${planRow}
+  return `<div class="adv-grid">
+      ${cardGroup('Cabling', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
+      ${cardGroup('Camera setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included'},{v:'skip',title:'Skip'}])}
+      ${cardGroup('Cable color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${cardGroup('Camera color', 'camcolor', state.camColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
     </div>`;
 }
 // A polished, document-style quote (branded header, prepared-for + system, grouped line items, totals).
@@ -1235,7 +1242,11 @@ const R = {
       + div
       + `<div class="sys-block">${R.recorder(slideOf('recorder'),q,i)}</div>`
       + div
-      + `<details class="adv"><summary>Advanced options</summary>${optionsStrip(q)}</details>`;
+      + `<div class="adv ${advOpen?'open':''}">
+          <button type="button" class="adv-sum" data-act="advtoggle" aria-expanded="${advOpen}">Advanced options
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+          ${advOpen ? `<div class="adv-b">${optionsStrip(q)}</div>` : ''}
+        </div>`;
   },
   // STEP 5 — choose the package, then the polished quote document + submit.
   quote(s, q, i){
@@ -1398,16 +1409,30 @@ function chrome(q){
 // customer to approve the upgrade (or keep the max days the current recorder allows). Only on the System step.
 function renderUpgradeToast(q){
   const root = $('#toastRoot'); if(!root) return;
+  const onSystem = STEPS[cur] && STEPS[cur].id==='system' && !submitted;
   const ss = (q||Engine.compute(state)).ss;
-  const show = STEPS[cur] && STEPS[cur].id==='system' && ss.requiresUpgrade && !ss.noStandardFit && !submitted;
-  if(!show){ root.innerHTML = ''; return; }
-  root.innerHTML = `<div class="toast" role="alertdialog" aria-live="polite">
-    <div class="toast-msg">${ss.currentNvr.ch===8?'An':'A'} <b>${ss.currentNvr.ch}-channel</b> recorder holds up to ${ss.currentMax}TB ≈ <b>${ss.maxDaysCurrentNvr} days</b> for ${q.n} camera${q.n>1?'s':''}. Upgrade to ${ss.recNvr.ch===8?'an':'a'} <b>${ss.recNvr.ch}-channel</b> to reach ${ss.days} days?</div>
-    <div class="toast-act">
-      <button class="btn ghost" data-act="dayscap" data-v="${ss.maxDaysCurrentNvr}">Keep ${ss.maxDaysCurrentNvr} days</button>
-      <button class="btn" data-act="nvrpick" data-v="${ss.recNvr.ch}">Upgrade to ${ss.recNvr.ch}-ch</button>
-    </div>
-  </div>`;
+  // Priority 1 — recorder upgrade (approval). Priority 2 — monitor "only on phone" disclosure.
+  if(onSystem && ss.requiresUpgrade && !ss.noStandardFit){
+    root.innerHTML = `<div class="toast" role="alertdialog" aria-live="polite">
+      <div class="toast-msg">${ss.currentNvr.ch===8?'An':'A'} <b>${ss.currentNvr.ch}-channel</b> recorder holds up to ${ss.currentMax}TB ≈ <b>${ss.maxDaysCurrentNvr} days</b> for ${q.n} camera${q.n>1?'s':''}. Upgrade to ${ss.recNvr.ch===8?'an':'a'} <b>${ss.recNvr.ch}-channel</b> to reach ${ss.days} days?</div>
+      <div class="toast-act">
+        <button class="btn ghost" data-act="dayscap" data-v="${ss.maxDaysCurrentNvr}">Keep ${ss.maxDaysCurrentNvr} days</button>
+        <button class="btn" data-act="nvrpick" data-v="${ss.recNvr.ch}">Upgrade to ${ss.recNvr.ch}-ch</button>
+      </div>
+    </div>`;
+    return;
+  }
+  if(onSystem && monitorWarn && state.monitorMode==='none'){
+    root.innerHTML = `<div class="toast" role="alertdialog" aria-live="polite">
+      <div class="toast-msg">Heads up — without a monitor at the recorder, the system is <b>harder to maintain and diagnose</b>. You'd manage and troubleshoot everything from the phone app.</div>
+      <div class="toast-act">
+        <button class="btn ghost" data-act="mon" data-v="buy">Add a monitor</button>
+        <button class="btn" data-act="monack">Got it</button>
+      </div>
+    </div>`;
+    return;
+  }
+  root.innerHTML = '';
 }
 function go(i){
   i = Math.max(0, Math.min(STEPS.length-1, i));
@@ -1631,7 +1656,11 @@ document.addEventListener('click', e=>{
     }
     case 'prog': state.skipProg = v ? (v==='skip') : !state.skipProg; break;   // oseg sends inc/skip; the install card toggles
     case 'ups': state.ups = (v==='on'); break;
-    case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; break;
+    case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; monitorWarn = (v==='none'); break;
+    case 'monack': monitorWarn = false; break;   // dismiss the "only on phone" disclosure (keeps the choice)
+    case 'advtoggle': advOpen = !advOpen; break;  // controlled collapse so clicks inside don't close it
+    case 'cablecolor': state.cableColor = v; break;
+    case 'camcolor': state.camColor = v; break;
     case 'days': state.desiredDays = +v; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); break;
     case 'daysmode': state.daysMode = 'custom'; state.extStorage = false; if(state.desiredDays<31 || state.desiredDays>60) state.desiredDays = 45; resetStorage(); break;
     case 'dayadj': setDays(state.desiredDays + +v); break;
