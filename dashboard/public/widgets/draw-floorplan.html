@@ -273,6 +273,10 @@
   // ZONE_TYPES, plus "site" for the overall usable property. zoneCells: { typeKey -> Set("c,r") }.
   var ZCLASS=[["site","Site","150,156,160"],["interior","Interior","206,178,132"],["exterior","Exterior","132,176,140"],["driveway","Driveway","176,136,84"],["parking","Parking","74,126,206"],["front-yard","Front Yard","84,164,104"],["rear-yard","Rear Yard","138,172,64"],["side-yard","Side Yard","58,160,150"],["street","Street","120,132,148"],["alley","Alley","154,102,170"],["loading","Loading","206,112,72"],["entrance","Entrance","200,84,114"]];
   var ZCOL={}; ZCLASS.forEach(function(t){ ZCOL[t[0]]=t[2]; });
+  // Areas render as ONE neutral gray everywhere (editor canvas + exports) — a clean architectural look that
+  // reads distinctly from the WHITE rooms; the type lives in the label (Driveway, Parking…), not a loud fill.
+  // ZCLASS/ZCOL stay intact (device naming, taxonomy, tests) — only the drawn colour is overridden to gray.
+  var AREA_GRAY="120,126,134";
   function zClassLabel(t){ for(var i=0;i<ZCLASS.length;i++) if(ZCLASS[i][0]===t) return ZCLASS[i][1]; return "Area"; }
   var zoneCells={}, zoneType="site";
   function zcGet(t){ if(!zoneCells[t]) zoneCells[t]=new Set(); return zoneCells[t]; }
@@ -645,8 +649,8 @@
       ctx.fillStyle="rgba(185,138,46,.32)";
       rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
     }
-    if(mode==="zone" && dragging && startPt && dragCur){   // classify-paint preview in the active zone colour
-      var zl=dragCells(startPt,dragCur), zcl=ZCOL[zoneType]||ZCOL.site;
+    if(mode==="zone" && dragging && startPt && dragCur){   // classify-paint preview (neutral gray, matching areas)
+      var zl=dragCells(startPt,dragCur), zcl=AREA_GRAY;
       ctx.fillStyle = structOp==="erase" ? "rgba(196,85,61,.26)" : "rgba("+zcl+",.4)";
       zl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
       var zrc=dragRectPx(startPt,dragCur); ctx.setLineDash([6,5]); ctx.strokeStyle = structOp==="erase" ? "#c4553d" : "rgb("+zcl+")"; ctx.lineWidth=1.5;
@@ -689,7 +693,7 @@
     }
   }
   // Named AREAS over the aerial: a subtle fill + a light MAP-STYLE outline (never architectural walls) + the name.
-  function drawAreas(){ (areas||[]).forEach(function(a){ var set=new Set(a.cells||[]); if(!set.size) return; var on=(a===sel), col=ZCOL[a.semanticType]||ZCOL.exterior||"132,176,140";
+  function drawAreas(){ (areas||[]).forEach(function(a){ var set=new Set(a.cells||[]); if(!set.size) return; var on=(a===sel), col=AREA_GRAY;
     ctx.fillStyle="rgba("+col+","+(on?0.26:0.12)+")";
     set.forEach(function(k){ var p=k.split(","); ctx.fillRect(+p[0]*HALF,+p[1]*HALF,HALF,HALF); });
     ctx.save(); ctx.strokeStyle="rgba("+col+","+(on?0.95:0.8)+")"; ctx.lineWidth=on?2:1.4; ctx.lineCap="round"; ctx.lineJoin="round";   // thin CONTINUOUS perimeter so a drawn area clearly reads
@@ -701,7 +705,7 @@
         ctx.font="600 10px "+fontFam(); ctx.strokeText(Math.round(sqft)+" sq ft",lc[0],lc[1]+8,maxW); ctx.fillStyle="#6b7076"; ctx.fillText(Math.round(sqft)+" sq ft",lc[0],lc[1]+8,maxW); }
       else { ctx.font="600 13px "+fontFam(); ctx.strokeText(name,lc[0],lc[1],maxW); ctx.fillStyle="#2b2f36"; ctx.fillText(name,lc[0],lc[1],maxW); } }
   }); }
-  function drawZoneCells(){ for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
+  function drawZoneCells(){ for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=AREA_GRAY;
       ctx.fillStyle="rgba("+col+",.26)"; set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); } }
   // Contextual grid: the grid is ALWAYS mathematically there (snap is unaffected), but drawn only while editing the
   // geometry that benefits from it — clipped to that region so finished rooms stay clean. Returns the clip cell-set,
@@ -1047,7 +1051,7 @@
   // consumer changes. Baked on Done, exactly like the structure + rooms.
   // Zone cells → SVG, coalescing each row's consecutive columns into ONE rect (a solid zone area becomes a
   // handful of rects, not thousands) so a large migrated Site/boundary stays well under the planSvg size cap.
-  function zoneCellsSVG(){ var out=""; for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=ZCOL[t]||ZCOL.site;
+  function zoneCellsSVG(){ var out=""; for(var t in zoneCells){ var set=zoneCells[t]; if(!set||!set.size) continue; var col=AREA_GRAY;
       var byRow={}; set.forEach(function(k){ var a=k.split(","); (byRow[a[1]]=byRow[a[1]]||[]).push(+a[0]); });
       var rects=""; for(var r in byRow){ var cols=byRow[r].sort(function(a,b){return a-b;}), start=cols[0], prev=cols[0], ry=+r*HALF;
         for(var i=1;i<=cols.length;i++){ var c=cols[i];
@@ -1055,7 +1059,7 @@
           rects+='<rect x="'+(start*HALF)+'" y="'+ry+'" width="'+((prev-start+1)*HALF)+'" height="'+HALF+'"/>'; start=c; prev=c; } }
       out+='<g fill="rgb('+col+')" fill-opacity="0.12">'+rects+'</g>'; } return out; }   // subtle translucent fill — the aerial reads through; the perimeter + label (areasSVG) make it read as "drawn"
   // Named AREAS: a thin CONTINUOUS perimeter + the label (over the translucent zoneCells fill) so a drawn Driveway/Backyard clearly reads.
-  function areasSVG(fs){ var o=""; (areas||[]).forEach(function(a){ var set=new Set(a.cells||[]); if(!set.size) return; var col=ZCOL[a.semanticType]||ZCOL.exterior||"132,176,140";
+  function areasSVG(fs){ var o=""; (areas||[]).forEach(function(a){ var set=new Set(a.cells||[]); if(!set.size) return; var col=AREA_GRAY;
     var d=""; edgesOf(set).forEach(function(s){ d+="M"+s[0]+" "+s[1]+"L"+s[2]+" "+s[3]; });
     if(d) o+='<path d="'+d+'" fill="none" stroke="rgb('+col+')" stroke-opacity="0.9" stroke-width="1.3" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
     var name=(a.label||"").trim(); if(name){ var lc=roomLabelCell(a.cells||[]); o+='<text x="'+lc[0]+'" y="'+lc[1]+'" font-size="'+fs+'" font-weight="600" fill="#1a1d20" stroke="#ffffff" stroke-width="2.6" paint-order="stroke" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'; }
