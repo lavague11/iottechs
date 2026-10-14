@@ -284,7 +284,19 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .toast-act{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .toast-act .btn{padding:9px 16px;font-size:13px}
 .toast-act .btn.ghost{background:transparent;color:var(--bar-fg);border:1px solid #3a4258}
-@media (prefers-reduced-motion:reduce){.nvr-btn{transition:none}}
+/* storage readout (display-only) */
+.stor-info{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.stor-cap{display:flex;align-items:baseline;gap:10px}
+.stor-cap b{font-size:28px;font-weight:800;line-height:1}
+.stor-cap span{font-size:14px;color:var(--muted)}
+/* advanced options (collapsed) */
+.adv{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.adv>summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between}
+.adv>summary::-webkit-details-marker{display:none}
+.adv>summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+.adv[open]>summary::after{transform:rotate(-135deg)}
+.adv .opts-strip{padding:2px 16px 16px}
+@media (prefers-reduced-motion:reduce){.nvr-btn,.adv>summary::after{transition:none}}
 
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
@@ -901,15 +913,18 @@ function tierTotal(levelId){ try{ return Engine.compute({ ...state, level:levelI
 function oseg(act, cur, opts){   // opts: [[value,label],...]
   return `<div class="oseg">${opts.map(([v,l])=>`<button type="button" class="${cur===v?'on':''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
 }
+// Monitor control — lives under Storage now (a prominent, common choice).
+function monitorControl(){
+  return `<div class="eyebrow">Monitor</div>
+    <div class="opts-strip"><div class="orow"><span class="olabel">Screen at the recorder</span>${oseg('mon', state.monitorMode, [['none','None'],['own','Own'],['buy','Add']])}</div></div>`;
+}
+// Advanced options (collapsed) — everything except Monitor. Returns just the rows; caller wraps in <details>.
 function optionsStrip(q){
-  const mon = ({buy:'Add',own:'Own',none:'None'})[state.monitorMode]||'None';
   const planRow = state.plan==='none' ? '' :
     `<div class="orow"><span class="olabel">Plan length</span>${oseg('term', state.term, [[1,'1 yr'],[2,'2 yr'],[3,'3 yr']])}</div>`;
-  return `<div class="eyebrow">Options <span class="muted-note">· we picked sensible defaults — change anything</span></div>
-    <div class="opts-strip">
+  return `<div class="opts-strip">
       <div class="orow"><span class="olabel">Cabling</span>${oseg('env', state.env, [['indoor','Indoor'],['outdoor','Outdoor']])}</div>
       <div class="orow"><span class="olabel">Camera setup</span>${oseg('prog', state.skipProg?'skip':'inc', [['inc','Included'],['skip','Skip']])}</div>
-      <div class="orow"><span class="olabel">Monitor</span>${oseg('mon', state.monitorMode, [['none','None'],['own','Own'],['buy','Add']])}</div>
       <div class="orow"><span class="olabel">Battery backup</span>${oseg('ups', state.ups?'on':'off', [['off','No'],['on','Yes']])}</div>
       <div class="orow"><span class="olabel">Protection</span>${oseg('plan', state.plan, [['none','None'],['warranty','Warranty'],['protection','Full']])}</div>
       ${planRow}
@@ -1108,27 +1123,14 @@ const R = {
         </div>
       </div>`;
 
-    // STORAGE slider — recorder capacity over the valid drive ladder; shows the days it yields.
-    const opts = ss.options || [];
-    const curIdx = opts.findIndex(o=>o.tb===ss.storageTB);
-    const idx = curIdx<0 ? 0 : curIdx;
-    const loTB = opts.length?opts[0].tb:ss.storageTB, hiTB = opts.length?opts[opts.length-1].tb:ss.storageTB;
+    // STORAGE — display only (auto-sized from the days target, capped to the recorder). No slider.
     const hdd = ss.drives && ss.drives.length ? ss.drives.map(d=>d+'TB').join(' + ') : '';
-    const hddLine = hdd ? `<div class="hdd-line">${hdd}${ss.drives.length>1?` <span>(${ss.drives.length} drives)</span>`:''}</div>` : '';
-    const storSlider = opts.length>1 ? `<div class="custom-count">
-        <div class="cc-val"><b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days</div>
-        <input type="range" min="0" max="${opts.length-1}" value="${idx}" data-num="storrange" aria-label="Storage capacity slider" class="cc-slider">
-        <div class="cc-scale"><span>${loTB}TB</span><span>${hiTB}TB</span></div>
-        <div class="cc-row">
-          <button class="mini-round" data-act="storadj" data-v="-1" aria-label="Less storage" ${idx<=0?'disabled':''}>−</button>
-          <span class="num cc-now">${ss.storageTB}TB</span>
-          <button class="mini-round" data-act="storadj" data-v="1" aria-label="More storage" ${idx>=opts.length-1?'disabled':''}>+</button>
-        </div>
-        ${hddLine}
-      </div>` : `<div class="sys-line">${ss.storageTB}TB · ≈ ${ss.estimatedDays} days</div>${hddLine}`;
+    const storInfo = `<div class="stor-info">
+        <div class="stor-cap"><b class="num">${ss.storageTB}TB</b><span>≈ ${ss.estimatedDays} days</span></div>
+        ${hdd?`<div class="hdd-line">${hdd}${ss.drives.length>1?` <span>(${ss.drives.length} drives)</span>`:''}</div>`:''}
+      </div>`;
 
     const customNote = ss.noStandardFit ? `<div class="note">Keeping ${ss.days} days of ${sysLabel} needs about ${ss.recommendedTB}TB — more than a standard recorder. We’ll size a custom storage system at your free survey; the total stays preliminary.</div>` : '';
-    const shortNote = (ss.manual && ss.estimatedDays < ss.days && !ss.noStandardFit && !ss.requiresUpgrade) ? `<div class="note">${ss.estimatedDays} days at ${ss.storageTB}TB — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>` : '';
 
     // Recorder selector — 8 / 16 / 32 channel; disabled below the camera count, capacity shown.
     const nvrSel = `<div class="nvr-seg">${[8,16,32].map(ch=>{
@@ -1137,14 +1139,14 @@ const R = {
         <b>${ch}-channel</b><span>${dis?`for ${ch}+ cameras`:`up to ${max}TB`}</span></button>`;
     }).join('')}</div>`;
 
-    return `<div class="eyebrow">Recording history</div>
+    return `<div class="eyebrow">Recording &amp; storage</div>
       ${daysSlider}
       <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
-      <div class="eyebrow">Storage</div>
-      ${storSlider}
+      ${storInfo}
       <div class="eyebrow">Recorder</div>
       ${nvrSel}
-      ${customNote}${shortNote}`;
+      ${customNote}
+      ${monitorControl()}`;
   },
   install(s, q, i){
     const C = CONFIG.catalog;
@@ -1220,7 +1222,7 @@ const R = {
       + div
       + `<div class="sys-block">${R.recorder(slideOf('recorder'),q,i)}</div>`
       + div
-      + `<div class="sys-block">${optionsStrip(q)}</div>`;
+      + `<details class="adv"><summary>Advanced options</summary>${optionsStrip(q)}</details>`;
   },
   // STEP 5 — choose the package, then the polished quote document + submit.
   quote(s, q, i){
