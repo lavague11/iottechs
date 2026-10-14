@@ -631,9 +631,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
       {useForOpen && meta?.id && <UseForAnother accessId={accessId} proposalId={meta.id} onClose={() => setUseForOpen(false)} />}
 
-      {/* Option tabs — the active tab is inline-editable (the option name is merged in, no separate field). */}
+      {/* Option tabs — only meaningful when there's a CHOICE (2+ options). A lone option (e.g.
+          "A · Premium Security") is redundant, so the whole row is hidden unless there are multiple
+          options or you're editing (where "+ Option" lets you add a second). */}
+      {(payload.options.length > 1 || (!readOnly && payload.options.length < 3)) && (
       <div className="prop-tabs">
-        {payload.options.map((o) => {
+        {payload.options.length > 1 && payload.options.map((o) => {
           const active = o.id === activeOpt;
           if (active && !readOnly) return (
             <div key={o.id} className="prop-tab on prop-tab-edit">
@@ -641,9 +644,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
               <input className="prop-tab-name" value={o.name} maxLength={60}
                 size={Math.max(6, (o.name || "").length)}
                 onChange={(e) => patchOption({ name: e.target.value })} placeholder="Option name" />
-              {payload.options.length > 1 && (
-                <span className="prop-tab-x" onClick={() => removeOption(o.id)} title="Remove option">✕</span>
-              )}
+              <span className="prop-tab-x" onClick={() => removeOption(o.id)} title="Remove option">✕</span>
             </div>
           );
           return (
@@ -656,6 +657,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <button className="prop-tab prop-tab-add" onClick={addOption}>+ Option</button>
         )}
       </div>
+      )}
 
       {!readOnly && surveyFloors.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
