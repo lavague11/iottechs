@@ -42,9 +42,12 @@ export async function flattenSigned({ unsignedBytes, fields, values, signedAt, t
       const maxW = Math.min(w - 6, SIG_MAX_W), maxH = h - 2;
       const k = Math.min(maxW / img.width, maxH / img.height);
       const dw = img.width * k, dh = img.height * k;
-      page.drawImage(img, { x: left + 3, y: bottom + (h - dh) / 2, width: dw, height: dh });
-      // The ACCEPTED stamp the legacy signed PDF carried, in the clear middle of the box.
-      const stampX = left + 3 + Math.max(dw, SIG_MAX_W) + 14;
+      // Centered in the field, both axes.
+      const sigX = left + (w - dw) / 2;
+      page.drawImage(img, { x: sigX, y: bottom + (h - dh) / 2, width: dw, height: dh });
+      // The ACCEPTED stamp the legacy signed PDF carried — sits to the right of the centered signature,
+      // and only when it still fits inside the field (a wide signature simply omits it, no overlap).
+      const stampX = sigX + dw + 14;
       if (stampX + 50 < left + w) page.drawText("ACCEPTED", { x: stampX, y: bottom + (h - 11) / 2 + 2, size: 11, font, color: GREEN });
     }
   }
