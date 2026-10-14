@@ -272,18 +272,19 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         {/* When the project header collapses on scroll, the name rides next to the logo as a persistent
             indicator, with a caret to open the full header on demand without scrolling to the top. */}
         <button className="dv-mini-name" data-stop title={customer?.name}
-          aria-label="Show project header" onClick={() => setManualOpen((o) => !o)}>
+          aria-label="Project details"
+          onClick={() => { if (typeof window !== "undefined" && window.matchMedia("(max-width:760px)").matches) setCustOpen((o) => !o); else setManualOpen((o) => !o); }}>
           <span className="dv-mini-txt">{customer?.name}</span>
           <svg className="dv-mini-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>
         </button>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
-          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>
+          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || menu.length || onLock) && setRoleOpen((o) => !o)}>
             {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
             {roleLabel}
-            {(dashboardHref || roleMenu?.length || previewRoles.length > 0 || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+            {(dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
           </button>
-          {roleOpen && (dashboardHref || roleMenu?.length || previewRoles.length > 0 || onLock) && (
+          {roleOpen && (dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock) && (
             <div className="dv-rolemenu">
               {/* Dashboard navigation (staff only — gated by the gateway, and /dashboard enforces its own
                   server-side auth). Routes via the app router, no full reload. Sits above everything. */}
@@ -293,9 +294,19 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
                   Dashboard
                 </button>
               )}
+              {/* Overflow actions (My projects / Skip survey …) live here on MOBILE so the job bar's ••• can
+                  disappear from the compact top; on desktop they stay in the job bar (this block is hidden). */}
+              {menu.length > 0 && (
+                <div className="dv-role-mobmenu">
+                  {dashboardHref && <div className="dv-roledivide" role="separator" />}
+                  {menu.map((m, i) => (
+                    <button key={"mm" + i} className={m.danger ? "danger" : ""} onClick={() => { setRoleOpen(false); m.onClick?.(); }}>{m.label}</button>
+                  ))}
+                </div>
+              )}
               {/* Divider after Dashboard. When the only item below is Lock, its own top border is the
                   divider, so we don't double it. */}
-              {dashboardHref && (roleMenu?.length || previewRoles.length > 0) && <div className="dv-roledivide" role="separator" />}
+              {dashboardHref && (roleMenu?.length || previewRoles.length > 0) && <div className="dv-roledivide dv-roledivide-desk" role="separator" />}
               {roleMenu?.length ? (
                 roleMenu.map((it, i) => (
                   <button key={i} className={it.on ? "on" : ""} onClick={() => { setRoleOpen(false); it.onClick?.(); }}>{it.label}</button>
@@ -624,6 +635,9 @@ const CSS = `
 .dv-rolemenu button.dv-roledash:hover svg,.dv-rolemenu button.dv-rolelock:hover svg{color:var(--dv-ink-soft)}
 .dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft)}
 .dv-rolemenu .dv-roledivide{height:1px;background:var(--dv-line);margin:4px 6px}
+/* Overflow actions merged into the Portal menu on mobile only (desktop keeps them in the job-bar ···). */
+.dv-role-mobmenu{display:none}
+.dv-rolemenu .dv-role-mobmenu button.danger{color:var(--dv-red,#C4553D)}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s;min-width:0;flex:0 1 auto}
@@ -906,7 +920,18 @@ const CSS = `
 .dv-slide[aria-hidden="false"] .dv-tool:nth-child(2){animation-delay:.06s}.dv-slide[aria-hidden="false"] .dv-tool:nth-child(3){animation-delay:.12s}
 @keyframes dvrise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-@media (max-width:760px){.dv-top{padding:0 14px}.dv-jobbar{padding:4px 14px 0;flex-wrap:nowrap;gap:8px}.dv-title{font-size:19px}.dv-rail{padding:14px 14px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
+@media (max-width:760px){
+  /* Compact mobile chrome: one top row = project name (left) + Portal (right). Drop the IOT TECHS
+     logo and the whole job bar (identity/status/···); status lives in the banner below, overflow
+     actions moved into the Portal menu. Banner + progress rail stay. */
+  .dv-logo{display:none}
+  .dv-mini-name{max-width:62vw;opacity:1;margin-left:0}
+  .dv-head-hidden .dv-mini-name{max-width:62vw}
+  .dv-jobbar{display:none}
+  .dv-role-mobmenu{display:flex;flex-direction:column;gap:2px}
+  .dv-roledivide-desk{display:none}
+}
+@media (max-width:760px){.dv-top{padding:8px 16px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
   /* Phone: the status chip rides on the SAME line as the name (was wrapping to its own line, too
      big). Hide the redundant project-code pill (it's in the drawer) to free the room, and shrink the
      chip so it fits snugly next to a truncating name. */

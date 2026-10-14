@@ -2836,7 +2836,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           // Waive the survey for jobs that never get one (monitoring/ADT, phone-quoted). Low-frequency → lives here.
           ...(["admin", "manager"].includes(cView) && !previewRole
             ? [{ label: lp.survey_skipped_at ? "Restore survey" : "Skip survey", onClick: () => setShowSkipSurvey(true) }] : []),
-          ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
+          // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"
         dashboardHref={DECK_DASH_HOME[view] || null}
