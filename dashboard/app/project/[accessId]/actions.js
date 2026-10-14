@@ -897,9 +897,10 @@ export async function closeProjectAction(accessId, reason) {
   if (!["admin","manager","sales"].includes(tok?.role)) return { error: "Unauthorized." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   if (!reason) return { error: "Reason required." };
-  markProjectLost(accessId, reason);
+  markProjectLost(accessId, reason, tok.name || tok.email || tok.role);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
+  revalidatePath("/receivables");
   return { ok: true };
 }
 
@@ -910,9 +911,10 @@ export async function reactivateProjectAction(accessId) {
   if (!["admin","manager","sales"].includes(tok?.role)) return { error: "Unauthorized." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   const { reactivateProject } = await import("../../../lib/db");
-  reactivateProject(accessId);
+  reactivateProject(accessId, tok.name || tok.email || tok.role);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   revalidatePath("/tickets");
+  revalidatePath("/receivables");
   return { ok: true };
 }

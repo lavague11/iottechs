@@ -3435,16 +3435,41 @@ export function setProjectAttention(accessId, needsAttention, note) {
     .run(needsAttention ? 1 : 0, note ? String(note).trim() : null, String(accessId));
 }
 
-export function markProjectLost(accessId, reason) {
-  db.prepare("UPDATE projects SET lost_reason = ?, lost_at = datetime('now') WHERE access_id = ? COLLATE NOCASE")
-    .run(String(reason), String(accessId));
-}
-// Reactivate a closed/lost project — clears the lost stamp so it flows again. Also closes any
-// open "Reopen request" tickets so the queue reflects that the ask was actioned.
-export function reactivateProject(accessId) {
-  db.prepare("UPDATE projects SET lost_reason = NULL, lost_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
-  db.prepare("UPDATE tickets SET status = 'closed', updated_at = datetime('now') WHERE access_id = ? COLLATE NOCASE AND status NOT IN ('closed','resolved') AND subject LIKE 'Reopen request%'").run(String(accessId));
+// ── Canonical project closure (ONE closed state — manual, auto-unsigned, or declined) ──────────────
+// Closing never deletes anything: it stamps lost_at (= closedAt) + the audit fields and logs an event.
+// The project stays searchable and reopenable; the finance resolver reads lost_at as "closed".
+export function closeProject(accessId, { reason = "", kind = "manual", byName = "System" } = {}) {
+  const j = getJobByAccessId(accessId);
+  const prevStage = j?.stage || null;
+  db.prepare("UPDATE projects SET lost_at = datetime('now','localtime'), lost_reason = ?, lost_by = ?, lost_kind = ?, lost_prev_stage = COALESCE(lost_prev_stage, ?) WHERE access_id = ? COLLATE NOCASE")
+    .run(String(reason || ""), String(byName || "System"), String(kind || "manual"), prevStage, String(accessId));
+  const kindLabel = kind === "unsigned" ? "Unsigned 30 days" : kind === "declined" ? "Declined" : (reason || "Manual");
+  try { logProjectEvent(accessId, { kind: "closure", label: `Closed — ${kindLabel}`, actor: byName }); } catch { /* best-effort */ }
   return getJobByAccessId(accessId);
+}
+// Reopen a closed project — clears the closed stamp, records who/when, and (for an approved-but-unsigned
+// deal) starts a FRESH 30-day signature window from the reopen so the stale original deadline can't
+// immediately re-close it. Also closes any open "Reopen request" tickets. Prior close history is preserved
+// in the activity log (we never erase the close event).
+export function reopenProject(accessId, byName = "System") {
+  db.prepare("UPDATE projects SET lost_at = NULL, lost_reason = NULL, lost_kind = NULL, lost_prev_stage = NULL, reopened_at = datetime('now','localtime'), reopened_by = ? WHERE access_id = ? COLLATE NOCASE")
+    .run(String(byName || "System"), String(accessId));
+  db.prepare("UPDATE tickets SET status = 'closed', updated_at = datetime('now') WHERE access_id = ? COLLATE NOCASE AND status NOT IN ('closed','resolved') AND subject LIKE 'Reopen request%'").run(String(accessId));
+  const pr = getActiveProposal(accessId);
+  if (pr && pr.status === "accepted" && !pr.signed_name) {
+    const deadline = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 19).replace("T", " ");
+    db.prepare("UPDATE proposals SET signature_deadline = ? WHERE id = ?").run(deadline, pr.id);
+  }
+  try { logProjectEvent(accessId, { kind: "closure", label: "Reopened", actor: byName }); } catch { /* best-effort */ }
+  return getJobByAccessId(accessId);
+}
+// Back-compat wrappers — existing "mark lost" / "reactivate" callers route through the one closure path
+// (so they get the audit fields + activity events too).
+export function markProjectLost(accessId, reason, byName = "Office") {
+  return closeProject(accessId, { reason, kind: "manual", byName });
+}
+export function reactivateProject(accessId, byName = "Office") {
+  return reopenProject(accessId, byName);
 }
 
 // First-login: the customer confirmed their contact details. Stamps the time (once) so the
