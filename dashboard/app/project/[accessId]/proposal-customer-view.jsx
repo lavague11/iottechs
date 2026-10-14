@@ -387,10 +387,10 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // In the deck's full-screen tool overlay (embedded) the proposal IS the whole screen, so there's
   // nothing to make room for — the document stays expanded even once signed, instead of auto-folding
   // to the acceptance summary. The chevron still lets the viewer collapse it by hand.
-  const docOpen = embedded
-    ? (docOverride == null ? true : docOverride)
-    : (acc ? acc.open : (docOverride == null ? !locked : docOverride));
-  const toggleDoc = () => { if (!embedded && acc) acc.toggle(); else setDocOverride(!docOpen); };
+  // The proposal content is ALWAYS visible — the only collapsible layer is the PROJECT HEADER above.
+  // The old per-proposal "Review" / collapse toolbar was removed, so nothing toggles this any more.
+  const docOpen = true;
+  const toggleDoc = () => {};
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
@@ -457,29 +457,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
           + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
           Deposit" is the focus, but the customer can reopen it anytime. */}
-      <div className="pcv-fold-row">
-        <button type="button" className={`pcv-fold-hd${locked ? " done" : ""}`} onClick={toggleDoc} aria-expanded={docOpen}>
-          <span className="pcv-fold-ic">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </span>
-          {/* Title dropped — the "Proposal" stage heading right above already names it. Keep the
-              icon + status chip + actions (the tool-card language). */}
-          <span className={`pcv-fold-chip${locked ? " done" : acceptedSet.size > 0 ? " ok" : ""}`}>
-            {locked ? "Accepted & Signed" : acceptedSet.size > 0 ? "Accepted" : "Review"}
-          </span>
-        </button>
-        <button type="button" className="pcv-hd-ic" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label="Share">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-          <span className="pcv-hd-lbl">{copied ? "Copied" : "Share"}</span>
-        </button>
-        {/* Customer download is ONE action — the full (detailed) proposal PDF. No Standard/Survey menu here. */}
-        <button type="button" className="pcv-hd-ic" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-          <span className="pcv-hd-lbl">{dlBusy ? "…" : "PDF"}</span>
-        </button>
-        <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
-      </div>
-
+      {/* No per-proposal "Review" toolbar / collapse — the customer is already inside the proposal, so it
+          flows straight into the content below. Share + Download live on the "Your System" row. */}
       {docOpen && (
       <div className="pcv-foldwrap">
       {/* The PDF masthead (logo/tagline/contact) and the Prepared-For/address/phone/email box are REMOVED
@@ -589,7 +568,19 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Summary-first — what you're getting, then the one number that matters, then the action.
           The itemized table (the math) lives behind "View detailed breakdown" just below. */}
       <div className="pcv-sum">
-        <div className="pcv-sum-hd">Your System{p.payload.options.length > 1 ? ` · Option ${opt.id}` : ""}{p.payload.options.length > 1 ? <span className="pcv-sum-hd-nm">{displayOptionName(opt.name)}</span> : null}</div>
+        {/* Section header pattern: title (left) + optional right-side actions. Here the canonical Share
+            and Download actions ride the "Your System" line instead of a separate utility toolbar. */}
+        <div className="pcv-sum-hd">
+          <span className="pcv-sum-hd-t">Your System{p.payload.options.length > 1 ? ` · Option ${opt.id}` : ""}{p.payload.options.length > 1 ? <span className="pcv-sum-hd-nm">{displayOptionName(opt.name)}</span> : null}</span>
+          <span className="pcv-sec-acts">
+            <button type="button" className="pcv-sec-act" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label={copied ? "Link copied" : "Share"}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+            </button>
+            <button type="button" className="pcv-sec-act" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            </button>
+          </span>
+        </div>
         <div className="pcv-sum-cats">
           {(opt.services || []).filter((s) => s.items?.length).map((s, i) => {
             const camCount = s.key === "camera" ? s.items.filter((it) => (it.sub || []).length > 0).length : 0;
@@ -614,7 +605,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           : <>{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</>
         }</div>
         <button type="button" className="pcv-sum-more" onClick={() => setDetailOpen((o) => !o)} aria-expanded={detailOpen}>
-          {detailOpen ? "Hide detailed breakdown ▲" : "View detailed breakdown ▾"}
+          {detailOpen ? "Hide details ▲" : "Details ▾"}
         </button>
       </div>
 
@@ -874,23 +865,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             {!canAct && acceptedSet.size === 0 && <p>Not open for action.</p>}
           </>
         )}
-        {/* Share (deep-link straight to this proposal, still PIN-gated) + Download, at the bottom. */}
-        <div className="pcv-accept-dl">
-          <button type="button" className="pcv-dl" onClick={shareProposal}
-                  title="Copy a link that opens straight to this proposal">
-            <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-            {copied ? "Copied" : "Share"}
-          </button>
-          <button type="button" className="pcv-dl" disabled={dlBusy} onClick={handleDownload}
-                  title="Download a PDF of this proposal (includes the mockup & site survey)">
-            {dlBusy ? "Preparing…" : (
-              <>
-                <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Download PDF
-              </>
-            )}
-          </button>
-        </div>
+        {/* Share + Download live on the "Your System" row at the top now — not duplicated here. */}
       </div>
 
       {p.signed_name && (
@@ -1036,7 +1011,13 @@ const PCV_CSS = `
 /* Summary-first card — scope (what you're getting) + the one number + the primary action, up top.
    The itemized table (the math) is a click away behind "View detailed breakdown". */
 .pcv-sum{margin:24px 22px 4px;border:0;border-radius:0;background:transparent;padding:0;display:flex;flex-direction:column;gap:14px}
-.pcv-sum-hd{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+/* Reusable section header: title (left) + optional right-side actions. */
+.pcv-sum-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pcv-sum-hd-t{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);display:inline-flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.pcv-sec-acts{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+.pcv-sec-act{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);cursor:pointer;font-family:inherit;flex:0 0 auto}
+.pcv-sec-act:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-faint,#A1A6AC)}
+.pcv-sec-act:disabled{opacity:.5;cursor:default}
 .pcv-sum-hd-nm{font-size:.9rem;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--dv-ink,#101418)}
 .pcv-sum-cats{display:flex;flex-direction:column;gap:0;border:0;border-radius:0}
 .pcv-sum-cat{display:flex;align-items:center;gap:10px;padding:9px 0;background:transparent;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
