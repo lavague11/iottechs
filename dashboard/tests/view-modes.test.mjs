@@ -82,10 +82,10 @@ test("4.2 survey: bgCtx and view carry through restore, createFloor, and duplica
   assert.ok(survey.includes('floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true)'), "a draw result stores bgCtx only when flagged");
 });
 
-test("4.2 survey: the Full / Layered / Plan view selector is a compact drop-up wired to renderView", () => {
-  assert.ok(survey.includes('id="viewSel"') && survey.includes('id="viewMenu"') && survey.includes('aria-label="View"'), "a compact view selector + drop-up menu");
-  assert.ok(survey.includes('data-v="full"') && survey.includes('data-v="layered"') && survey.includes('data-v="plan"'), "Full / Layered / Plan options");
-  assert.ok(survey.includes('f.view=b.getAttribute("data-v"); renderView(); queueSave();'), "picking a preset sets the floor's view, re-renders and persists");
+test("4.2 survey: the Full / Layered / Plan view SELECTOR is removed (view still composed by renderView)", () => {
+  // The View drop-up was removed from the toolbar per owner request; the underlying view composition stays.
+  assert.ok(!survey.includes('id="viewSel"') && !survey.includes('id="viewMenu"'), "the view selector + drop-up are gone");
+  assert.ok(survey.includes("renderView()"), "renderView still composes the view stack");
   assert.ok(!survey.includes('data-v="satellite"') && !survey.includes('>Hybrid<'), "the old Aerial/Hybrid 3-button segmented is gone");
 });
 
@@ -95,11 +95,11 @@ test("a ctx-framed (bgCtx) draw result uses the context-crop feet as the floor s
   assert.ok(/applyBackground\(ev\.data\.dataUrl, false, ev\.data\.vector, bgScale, ev\.data\.aerial\)/.test(survey), "applyBackground uses the resolved bgScale");
 });
 
-test("Focus ⇄ Full is a pure viewport toggle (zoom only, no geometry/crop change)", () => {
-  assert.ok(survey.includes('id="focusBtn"') && survey.includes('id="focusBtnTxt"'), "a Focus button beside Show");
+test("the top-left Fit/Focus zoom button is removed; app focus stays on fullBtn", () => {
+  // The owner removed the top-left Fit button (focusBtn, a widget-internal zoom-to-plate). App-level focus
+  // mode lives on the bottom-right Focus control (fullBtn), which asks the host to go full-screen.
+  assert.ok(!survey.includes('id="focusBtn"') && !survey.includes('id="focusBtnTxt"'), "the Fit/Focus zoom button is gone");
+  assert.ok(survey.includes('id="fullBtn"') && survey.includes("iotSurveyReqFocus"), "the bottom-right Focus still requests app-level focus mode");
   const fv = extractFn(survey, "focusView");
-  assert.ok(fv.includes("resetZoom()") && fv.includes("zoomAt(cx,cy,1.6)"), "Full = reset; Focus = zoom toward the plate centre");
-  assert.ok(!fv.includes("ctx.rect") && !fv.includes("f.plan"), "focusView touches only pan/zoom — never the geometry/crop");
-  assert.ok(survey.includes("focusMode=false; updateFocusBtn();"), "each floor opens in Full view");
-  assert.ok(survey.includes('t.textContent=focusMode?"Full":"Focus"'), "the button toggles its label Focus ⇄ Full");
+  assert.ok(!fv.includes("ctx.rect") && !fv.includes("f.plan"), "focusView (kept) still touches only pan/zoom — never the geometry/crop");
 });

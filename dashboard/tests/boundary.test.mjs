@@ -250,12 +250,11 @@ test("#regionLayer is an SVG inside #scene at viewBox 0 0 100 100 (plate-% user 
   assert.ok(/#regionLayer\{[^}]*pointer-events:none/.test(survey), "#regionLayer is pointer-events:none for display");
 });
 
-test("#regionBtn lives in .utils, icon-only with an aria-label (UI constitution)", () => {
-  const utils = survey.slice(survey.indexOf('class="utils"'), survey.indexOf("</div>", survey.indexOf('id="bdRedo"')));
-  assert.ok(utils.includes('id="regionBtn"'), "regionBtn is in the .utils bar");
-  assert.ok(utils.includes('id="bdUndo"') && utils.includes('id="bdRedo"'), "undo/redo live beside it");
-  assert.ok(/id="regionBtn"[^>]*aria-label="Regions"/.test(survey), "regionBtn has an aria-label");
-  assert.ok(/id="regionBtn"[^>]*title="Regions"/.test(survey), "regionBtn has a tooltip");
+test("the manual Regions button is removed; the boundary-edit undo/redo still exist", () => {
+  // The owner removed the toolbar Regions entry point. The region/boundary editor itself remains
+  // (reachable from Site Intelligence Apply), including its own bdUndo / bdRedo controls.
+  assert.ok(!survey.includes('id="regionBtn"'), "the Regions button is gone from the toolbar");
+  assert.ok(survey.includes('id="bdUndo"') && survey.includes('id="bdRedo"'), "the boundary-edit undo/redo controls remain");
 });
 
 test("renderView and fitScene both redraw the boundary", () => {
