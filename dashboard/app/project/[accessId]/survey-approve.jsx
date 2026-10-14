@@ -151,7 +151,8 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
           <span className="tab-check">✓</span>
           <span className="tab-msg">You approved this {label}{acceptance.by ? ` — ${acceptance.by}` : ""}{acceptance.at ? ` · ${fmt(acceptance.at)}` : ""}.</span>
         </div>
-      ) : !submittedCurrent ? (
+      ) : !submission ? (
+        // Truly nothing submitted yet — the only time the customer sees the "being prepared" empty state.
         <div className="tab-row">
           <span className="tab-dot" />
           <span className="tab-msg">Being prepared — we'll notify you.</span>
@@ -161,6 +162,14 @@ export function ToolApproveBar({ accessId, stageKey, meta, acceptance, submissio
           <span className="tab-warn">!</span>
           <span className="tab-msg"><b>Updated</b> — please re-approve.</span>
           {isCustomer && <button className="tab-btn" disabled={busy || preview} onClick={approve}>Re-approve {label}</button>}
+        </div>
+      ) : submittedStale ? (
+        // Submitted, then the office edited the working copy. The customer KEEPS seeing the submitted
+        // survey (never reverts to "being prepared"); approval waits for the office to re-submit the
+        // update, so a customer never approves an unsubmitted working copy.
+        <div className="tab-row">
+          <span className="tab-dot" />
+          <span className="tab-msg">Ready for review — the team is finalizing an update.</span>
         </div>
       ) : (
         <div className="tab-row">
