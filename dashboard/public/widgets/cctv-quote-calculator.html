@@ -1158,14 +1158,14 @@ const R = {
     const nvrSel = `<div class="nvr-seg">${[8,16,32].map(ch=>{
       const nv = CONFIG.catalog.nvr[ch], max = nv.bays*nv.maxTB, dis = ch < state.cams, on = ss.activeNvr.ch===ch;
       return `<button type="button" class="nvr-btn ${on?'on':''}" data-act="nvrpick" data-v="${ch}" ${dis?'disabled':''} aria-pressed="${on}">
-        <b>${ch}-channel</b><span>${dis?`for ${ch}+ cameras`:`up to ${max}TB`}</span></button>`;
+        <b>${ch}-channel</b><span>up to ${ch} cams · ${max}TB</span></button>`;
     }).join('')}</div>`;
 
-    return `<div class="eyebrow">Recording &amp; storage</div>
+    return `<div class="eyebrow">Recorder</div>
+      ${nvrSel}
+      <div class="eyebrow">Recording &amp; storage</div>
       ${daysSlider}
       ${storInfo}
-      <div class="eyebrow">Recorder</div>
-      ${nvrSel}
       ${customNote}
       ${monitorControl()}`;
   },
