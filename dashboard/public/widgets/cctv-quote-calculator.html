@@ -1084,8 +1084,7 @@ const R = {
     const note = over
       ? `<div class="note">Over 32 cameras — we’ll design a custom multi-recorder system at your free survey. The total is preliminary.</div>`
       : (bumpMsg ? `<div class="note">${esc(bumpMsg)}</div>` : '');
-    return `${head(s,i,'One camera for each area you want to see.', false)}
-      ${custom}
+    return `${custom}
       <div class="presets tiered">${cards}</div>
       ${note}`;
   },
