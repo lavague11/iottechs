@@ -582,7 +582,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         // scroll to act. Revise on a sent (readOnly) proposal; Submit on an editable draft. Revising a
         // sent proposal flips it to a draft, so the button naturally becomes Submit for the re-send.
         const reviseBtn = readOnly && (
-          <button type="button" className="prop-head-cta" disabled={busy} onClick={revise} title="Revise — reopen an editable version of this proposal">Revise</button>
+          <button type="button" className="prop-head-cta prop-head-edit" disabled={busy} onClick={revise} title="Edit — reopen an editable version of this proposal">Edit</button>
         );
         const submitBtn = !readOnly && (
           <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title="Submit this proposal to the customer">Submit</button>
@@ -590,7 +590,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         // Embedded (deck overlay): the bar already says "Proposal" — drop the "Proposal builder"
         // title + self-collapse; keep just the status chip, the views eye, and the pricing gear on a slim row.
         if (embedded) {
-          return <div className="prop-head-slim">{statusChip}<span style={{ flex: 1 }} />{shareBtn}{download}{useFor}{eye}{gear}{reviseBtn}{submitBtn}</div>;
+          // One compact toolset (matches the mobile mockup): Sent · Edit · views · share · download.
+          // Copy ("use for another project") is not in the primary toolbar. On mobile the Sent stamp
+          // compacts to just "● Sent" (CSS) and the row centers; desktop keeps the full date/sender stamp.
+          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>

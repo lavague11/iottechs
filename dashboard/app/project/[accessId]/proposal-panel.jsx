@@ -43,6 +43,10 @@ const PROP_CSS = `
 .pvx .prop-head-cta{flex-shrink:0;height:30px;padding:0 12px;border:1px solid var(--dv-ink,#101418);border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-head-cta:hover{filter:brightness(1.12)}
 .pvx .prop-head-cta:disabled{opacity:.45;cursor:default}
+/* Edit = light outlined control (not the dark Submit CTA) — matches the compact deck toolbar. */
+.pvx .prop-head-cta.prop-head-edit{background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);border-color:var(--dv-line,#E4E4DF)}
+.pvx .prop-head-cta.prop-head-edit:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-ink,#101418);filter:none}
+.pvx .prop-head-toolbar{gap:8px}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
@@ -361,7 +365,12 @@ const PROP_CSS = `
      was cramming into a narrow pill and stacking. Let the row wrap so the stamp takes its own line
      (one line at 360-430px; segments wrap whole at narrower); the icon buttons drop to a tidy row. */
   .pvx .prop-head-slim{flex-wrap:wrap;row-gap:10px}
-  .pvx .prop-head-slim .prop-status.sent{flex:1 1 100%}
+  /* The deck toolbar is one centered toolset on mobile (Sent · Edit · views · share · download). */
+  .pvx .prop-head-toolbar{justify-content:center;row-gap:8px}
+  /* Sent shows as just "● Sent" here (the full date/sender stamp stays on desktop) — a compact
+     outlined chip that sits inline, never a full-width line. */
+  .pvx .prop-head-toolbar .prop-status.sent{flex:0 0 auto;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;height:30px;padding:0 11px}
+  .pvx .prop-head-toolbar .prop-status.sent .prop-sent-seg{display:none}
   /* The dense multi-column pricing grid doesn't fit a phone — the fixed qty/price/cost/total
      columns eat the width and collapse the item NAME to nothing. On mobile, stack each line:
      an editable row gives the name its own full-width row, then a compact qty · price · total row
