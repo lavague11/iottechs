@@ -227,6 +227,10 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .feat-row.on .feat-box{border-color:var(--gold);background:var(--gold)}
 .feat-row.on .feat-box::after{content:"";position:absolute;left:6px;top:2px;width:6px;height:11px;border:solid #0B0F1A;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
 .feat-name{font-weight:600;font-size:15px}
+.feat-pkg{margin-left:auto;flex:none;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.feat-pkg.smart{color:var(--gold-ink);border-color:var(--gold)}
+.feat-pkg.pro{color:#FAF8F4;background:var(--slate);border-color:var(--slate)}
+.feat-pkg.service{border-style:dashed}
 .feat-rec{margin-top:6px;padding:10px 12px;border:1px solid var(--good);border-radius:9px;background:rgba(60,160,90,.10);font-size:13.5px}
 .feat-rec-k{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px;color:var(--good);margin-right:6px}
 .lvl-price{margin-left:auto;font-weight:700;font-size:16px}
@@ -1277,8 +1281,9 @@ const R = {
   },
   features(s, q, i){
     const sel = new Set(state.features||[]);
-    const row = f => `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
-      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span></button>`;
+    const pkg = f => f.service ? {t:'service',l:'Service'} : ({1:{t:'ess',l:'Essential'},2:{t:'smart',l:'Smart'},3:{t:'pro',l:'Pro'}})[f.level] || null;
+    const row = f => { const p = pkg(f); return `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
+      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span>${p?`<span class="feat-pkg ${p.t}">${p.l}</span>`:''}</button>`; };
     const rec = recommendLevel(state.features);
     const recName = ({essential:'Essential',smart:'Smart',pro:'Pro'})[rec.level];
     const bits = rec.hasCamFeatures ? [`${recName} package`] : [];
