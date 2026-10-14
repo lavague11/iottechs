@@ -155,6 +155,9 @@ function downloadVcard(lp) {
 }
 
 const LOGIN_ROLES = ["admin", "manager", "sales", "tech", "customer"];
+// Canonical per-role dashboard home for the "Dashboard" item in the deck view dropdown. Staff only —
+// a genuine customer session (no entry here) gets no link, and each route enforces access server-side.
+const DECK_DASH_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech" };
 const BUCKET_LABELS = { OPEN: "Open", IN_PROGRESS: "In Progress", CLOSED: "Closed" };
 
 // ---- Notification data — role-filtered ----
@@ -2836,6 +2839,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
         ]}
         roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
+        dashboardHref={DECK_DASH_HOME[view] || null}
         log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}
         onPreviewRole={onPreviewRole}

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import AddressAutocomplete from "../../components/address-autocomplete";
 import { Wordmark } from "../../components/brand";
 import PropertyToggle from "../../components/property-type";
@@ -31,7 +32,8 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", dashboardHref = null, statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
+  const router = useRouter();
   const N = stages.length;
   const [drag, setDrag] = useState(0);
   const [openTool, setOpenTool] = useState(initialOpenTool || {});   // { [stageIdx]: toolIdx | null }
@@ -265,7 +267,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
       {/* top bar */}
       <header className="dv-top">
-        <a className="dv-logo" href="/go" title="IOT TECHS" aria-label="IOT TECHS home"><Wordmark height={16} /></a>
+        {/* Branding only — navigation moved into the view dropdown (Dashboard). The logo no longer routes. */}
+        <span className="dv-logo" title="IOT TECHS" aria-label="IOT TECHS"><Wordmark height={16} /></span>
         {/* When the project header collapses on scroll, the name rides next to the logo as a persistent
             indicator, with a caret to open the full header on demand without scrolling to the top. */}
         <button className="dv-mini-name" data-stop title={customer?.name}
@@ -275,30 +278,48 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         </button>
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
-          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>
+          <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`} onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || onLock) && setRoleOpen((o) => !o)}>
             {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
             {roleLabel}
-            {(roleMenu?.length || previewRoles.length > 0 || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+            {(dashboardHref || roleMenu?.length || previewRoles.length > 0 || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
           </button>
-          {roleOpen && (roleMenu?.length ? (
+          {roleOpen && (dashboardHref || roleMenu?.length || previewRoles.length > 0 || onLock) && (
             <div className="dv-rolemenu">
-              {roleMenu.map((it, i) => (
-                <button key={i} className={it.on ? "on" : ""} onClick={() => { setRoleOpen(false); it.onClick?.(); }}>{it.label}</button>
-              ))}
-            </div>
-          ) : (previewRoles.length > 0 || onLock) && (
-            <div className="dv-rolemenu">
-              {previewRoles.length > 0 && (
+              {/* Dashboard navigation (staff only — gated by the gateway, and /dashboard enforces its own
+                  server-side auth). Routes via the app router, no full reload. Sits above everything. */}
+              {dashboardHref && (
+                <button className="dv-roledash" onClick={() => { setRoleOpen(false); router.push(dashboardHref); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                  Dashboard
+                </button>
+              )}
+              {/* Divider after Dashboard. When the only item below is Lock, its own top border is the
+                  divider, so we don't double it. */}
+              {dashboardHref && (roleMenu?.length || previewRoles.length > 0) && <div className="dv-roledivide" role="separator" />}
+              {roleMenu?.length ? (
+                roleMenu.map((it, i) => (
+                  <button key={i} className={it.on ? "on" : ""} onClick={() => { setRoleOpen(false); it.onClick?.(); }}>{it.label}</button>
+                ))
+              ) : (
                 <>
-                  <button className={!previewRole ? "on" : ""} onClick={() => { onPreviewRole?.(null); setRoleOpen(false); }}>Your view</button>
-                  {previewRoles.map((r) => (
-                    <button key={r} className={previewRole === r ? "on" : ""} onClick={() => { onPreviewRole?.(r); setRoleOpen(false); }}>Preview as {r}</button>
-                  ))}
+                  {previewRoles.length > 0 && (
+                    <>
+                      <button className={!previewRole ? "on" : ""} onClick={() => { onPreviewRole?.(null); setRoleOpen(false); }}>Your view</button>
+                      {previewRoles.map((r) => (
+                        <button key={r} className={previewRole === r ? "on" : ""} onClick={() => { onPreviewRole?.(r); setRoleOpen(false); }}>Preview as {r}</button>
+                      ))}
+                    </>
+                  )}
+                  {onLock && (
+                    <button className="dv-rolelock" onClick={() => { setRoleOpen(false); onLock(); }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      Lock
+                    </button>
+                  )}
                 </>
               )}
-              {onLock && <button className="dv-rolelock" onClick={() => { setRoleOpen(false); onLock(); }}>Lock</button>}
             </div>
-          ))}
+          )}
         </div>
       </header>
 
@@ -585,8 +606,8 @@ const CSS = `
    touch off native so the browser doesn't hijack the vertical drag before our JS forwards it (BUG #34). */
 .dv-top,.dv-jobbar,.dv-rail{touch-action:none}
 .dv-top{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;flex:0 0 auto}
-.dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px;color:var(--dv-ink);text-decoration:none;cursor:pointer}
-.dv-logo:hover{opacity:.7}.dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
+.dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px;color:var(--dv-ink);text-decoration:none;cursor:default;display:inline-flex;align-items:center}
+.dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
 .dv-sp{flex:1}
 .dv-ghost{display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font-size:12.5px;font-weight:500;color:var(--dv-ink-soft)}
 .dv-solid{background:var(--dv-ink);color:#fff}
@@ -597,7 +618,12 @@ const CSS = `
 .dv-rolemenu button{text-align:left;padding:8px 11px;border-radius:7px;font-size:13px;font-weight:500;color:var(--dv-ink-soft);text-transform:capitalize}
 .dv-rolemenu button:hover{background:var(--dv-paper)}
 .dv-rolemenu button.on{color:var(--dv-gold-deep);font-weight:600}
-.dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft);font-weight:600}
+/* Nav/account rows: small SVG icon + one-word label, compact (~40px). */
+.dv-rolemenu button.dv-roledash,.dv-rolemenu button.dv-rolelock{display:flex;align-items:center;gap:9px;min-height:40px;font-weight:600}
+.dv-rolemenu button.dv-roledash svg,.dv-rolemenu button.dv-rolelock svg{flex:0 0 auto;color:var(--dv-faint,#A1A6AC)}
+.dv-rolemenu button.dv-roledash:hover svg,.dv-rolemenu button.dv-rolelock:hover svg{color:var(--dv-ink-soft)}
+.dv-rolemenu button.dv-rolelock{margin-top:4px;padding-top:9px;border-top:1px solid var(--dv-line);border-radius:0 0 7px 7px;color:var(--dv-ink-soft)}
+.dv-rolemenu .dv-roledivide{height:1px;background:var(--dv-line);margin:4px 6px}
 
 .dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s;min-width:0;flex:0 1 auto}
