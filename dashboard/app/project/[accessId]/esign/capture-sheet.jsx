@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SignaturePad from "signature_pad";
-import { INK, SCRIPT_FONT, trimToPng, typedToPng, fileToPng } from "./sig-image";
+import { INK, trimToPng, typedToPng, fileToPng } from "./sig-image";
 import { Icon } from "./icons";
 
 // "Adopt your signature": confirm the name, then draw / type / upload — all three end as one PNG. The
@@ -19,6 +19,9 @@ export default function CaptureSheet({ defaultName = "", onAdopt, onCancel, busy
   const [localErr, setLocalErr] = useState(null);
   const canvasRef = useRef(null), padRef = useRef(null), fileRef = useRef(null);
   const clean = titleCase(name).replace(/\s+/g, " ").trim();
+  // The typed signature is rendered to its canonical PNG (auto-fit script) — the SAME image that gets
+  // embedded in the PDF — so the preview can never disagree with the final document, and it auto-fits.
+  const typedPng = useMemo(() => (tab === "type" && clean.length >= 2 ? typedToPng(clean) : null), [tab, clean]);
 
   useEffect(() => {
     if (tab !== "draw") return;
@@ -52,7 +55,7 @@ export default function CaptureSheet({ defaultName = "", onAdopt, onCancel, busy
     if (!ready || busy) return;
     let data = null;
     if (tab === "draw") data = trimToPng(canvasRef.current);
-    else if (tab === "type") data = typedToPng(clean);
+    else if (tab === "type") data = typedPng || typedToPng(clean);   // same PNG the preview shows
     else data = upload.png;
     if (!data) { setLocalErr("Add your signature first."); return; }
     onAdopt?.(clean, { method: tab, data });
@@ -77,7 +80,11 @@ export default function CaptureSheet({ defaultName = "", onAdopt, onCancel, busy
           <div className="esg-pad"><canvas ref={canvasRef} data-testid="esign-pad" aria-label="Signature pad" /><div className="base" /></div>
         )}
         {tab === "type" && (
-          <div className="esg-typed" data-testid="esign-typed" style={{ fontFamily: SCRIPT_FONT, fontStyle: "italic" }}>{clean || <span style={{ fontFamily: "inherit", fontStyle: "normal", fontSize: ".85rem", color: "#9aa3b5" }}>Name</span>}</div>
+          <div className="esg-typed" data-testid="esign-typed">
+            {typedPng
+              ? <img alt={clean} src={typedPng} className="esg-typed-img" />
+              : <span className="esg-typed-ph">Name</span>}
+          </div>
         )}
         {tab === "upload" && (
           <div className="esg-typed" style={{ flexDirection: "column", gap: 10 }}>

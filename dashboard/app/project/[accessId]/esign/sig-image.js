@@ -27,17 +27,28 @@ export function trimToPng(src) {
   return out.toDataURL("image/png");
 }
 
-// A typed name rendered in a cursive script (transparent background, navy ink).
+// A typed name rendered in a cursive script (transparent background, navy ink). The font auto-fits:
+// it starts large and steps down until the WHOLE name fits the usable width, then (for an extreme
+// name) scales to fit exactly — so the text is as large as possible yet never clipped. trimToPng then
+// crops to the ink, so the PNG is the signature's true shape; the PDF (flatten) and the modal preview
+// both scale THIS SAME PNG proportionally into their boxes, which is what keeps preview === final PDF.
 export function typedToPng(name) {
+  const text = String(name || "").replace(/\s+/g, " ").trim();
+  if (text.length < 1) return null;
   const c = document.createElement("canvas");
-  c.width = 1200; c.height = 320;
-  const x = c.getContext("2d");
+  c.width = 1600; c.height = 420;
+  const x = c.getContext("2d", { willReadFrequently: true });
   x.fillStyle = INK; x.textBaseline = "middle"; x.textAlign = "left";
-  let size = 170;
+  const MARGIN = 64;                     // keep ink off the canvas edges so nothing is cut
+  const avail = c.width - MARGIN * 2;
   const font = (s) => `italic ${s}px ${SCRIPT_FONT}`;
+  let size = 240;                        // preferred (large, elegant for short names)
   x.font = font(size);
-  while (x.measureText(name).width > 1120 && size > 40) { size -= 6; x.font = font(size); }
-  x.fillText(name, 40, 170);
+  while (size > 28 && x.measureText(text).width > avail) { size -= 4; x.font = font(size); }
+  // Extremely long name still too wide at the floor → scale to fit exactly (guaranteed no clip).
+  const w = x.measureText(text).width;
+  if (w > avail) { size = Math.max(10, Math.floor((size * avail) / w)); x.font = font(size); }
+  x.fillText(text, MARGIN, c.height / 2);
   return trimToPng(c);
 }
 

@@ -48,7 +48,11 @@ export const ESG_CSS = `
 .esg-pad{position:relative;width:100%;height:min(46vh,260px);background:#fff;border-radius:10px;touch-action:none}
 .esg-pad canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:10px}
 .esg-pad .base{position:absolute;left:6%;right:6%;bottom:30%;border-bottom:1px solid #c9ccd6;pointer-events:none}
-.esg-typed{height:min(46vh,260px);background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#10204a;font-size:clamp(34px,9vw,64px);padding:0 14px;white-space:nowrap;overflow:hidden}
+.esg-typed{height:min(46vh,260px);background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:14px 20px}
+/* The preview is the actual generated signature PNG, scaled to fit (same image the PDF embeds) — so a
+   long name shrinks to fit instead of overflowing, and what you see is what gets signed. */
+.esg-typed-img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.esg-typed-ph{font-size:.85rem;color:#9aa3b5}
 .esg-row{display:flex;gap:8px;align-items:center}
 .esg-row .sp{flex:1}
 .esg-in{width:100%;border:1px solid var(--esg-line);background:#0e1322;color:var(--esg-ink);border-radius:8px;padding:12px;font-size:1rem;font-family:inherit}
