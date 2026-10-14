@@ -676,15 +676,13 @@
           </div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device" aria-label="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-            <!-- Fit/Focus button removed — the bottom-right Focus (fullBtn) already enters focus mode. -->
-            <button class="ctxbtn" id="angleModeBtn" title="Camera angles" aria-label="Camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
+            <!-- Fit/Focus button removed; camera-angles moved into the device palette (Aim cameras) to declutter the canvas. -->
           </div>
           <div class="devmenu" id="devMenu"></div>
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
-            <button class="ubtn" id="redoBtn" title="Redo" aria-label="Redo" disabled><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
+            <button class="ubtn" id="redoBtn" title="Redo" aria-label="Redo" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
-            <button class="ubtn" id="regionBtn" title="Regions" aria-label="Regions" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
             <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
             <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
           </div>
@@ -1216,6 +1214,7 @@
         '<div class="setrow"><label>Icon size</label><button class="szTog" id="setIsz" title="Cycle small / medium / large">S</button></div>'+
         '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
         '<div class="setrow"><label>All angles</label><button class="settog" id="setAllAngles" title="Show every camera’s angle at once"><span class="knob"></span></button></div>'+
+        '<div class="setrow"><label>Aim cameras</label><button class="settog" id="setAimMode" title="Aim each camera — drag its label to set the direction"><span class="knob"></span></button></div>'+
       '</div></div>'+
       '<div class="mi mi-erase" data-k="__erase__" title="Eraser — tap a device to delete it"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 21l-4-4a2 2 0 0 1 0-3L13 4a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9z"/><path d="M12 21h9"/></svg></span>Eraser</div>';
     // remember which groups are expanded; default: just the first (Cameras)
@@ -1236,6 +1235,7 @@
       var ib=document.getElementById("setIsz"); if(ib) ib.textContent=ISZ_LABELS[iszIndex()];
       var tg=document.getElementById("setShowFov"); if(tg) tg.classList.toggle("on", showFovState);
       var aa=document.getElementById("setAllAngles"); if(aa) aa.classList.toggle("on", showAllAngles);
+      var am=document.getElementById("setAimMode"); if(am) am.classList.toggle("on", angleMode);
       var sa=document.getElementById("showAnglesTog"); if(sa) sa.classList.toggle("on", showAllAngles);
       var sf=document.getElementById("showFovTog"); if(sf) sf.classList.toggle("on", showFovState);
       var gseg=document.getElementById("gridSeg"); if(gseg) [].forEach.call(gseg.querySelectorAll(".vbtn"), function(b){ var on=(+b.getAttribute("data-g")===gridMode); b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
@@ -1249,15 +1249,15 @@
     // arrow again turns it off — same toggle feel as the add-device button.
     function setAngleMode(on){
       angleMode=on;
-      var b=document.getElementById("angleModeBtn"); if(b) b.classList.toggle("on",angleMode);
+      var b=document.getElementById("setAimMode"); if(b) b.classList.toggle("on",angleMode);
       if(angleMode){ arm(null); devMenu.classList.remove("show"); } else { selId=null; }
       document.body.classList.toggle("show-all-angles", angleMode || showAllAngles);
       devices.forEach(function(d){ var el=document.getElementById("dev-"+d.id); if(el){ el.classList.toggle("aim", angleMode && d.cone); el.classList.toggle("sel", d.id===selId); } });
       renderPanel();
       if(typeof renderRooms==="function") renderRooms();   // angle mode suspends room selection
     }
-    document.getElementById("angleModeBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });
-    document.getElementById("angleModeBtn").addEventListener("click", function(e){ e.stopPropagation(); setAngleMode(!angleMode); queueSave(); });
+    // Camera aiming now lives in the device palette (Settings ▸ Aim cameras) instead of a canvas button.
+    (function(){ var am=document.getElementById("setAimMode"); if(am) am.addEventListener("click", function(e){ e.stopPropagation(); setAngleMode(!angleMode); queueSave(); }); })();
     // ---- bottom-right "Show" control: toggle the Angles / FOV display on the plan ----
     (function(){
       var sBtn=document.getElementById("showBtn"), sPop=document.getElementById("showPop");
@@ -1270,7 +1270,7 @@
     // Undo: remove the last-placed device
     // Undo removes the last placed device and remembers it so Redo can put it back; placing anything new clears the redo stack.
     var redoStk=[];
-    function updateRedoBtn(){ var b=document.getElementById("redoBtn"); if(b) b.disabled=(!redoStk.length||frozen()); }
+    function updateRedoBtn(){ var b=document.getElementById("redoBtn"); if(b) b.style.display=(redoStk.length && !frozen()) ? "" : "none"; }   // Redo only appears when there's something to redo
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; var d=devices[devices.length-1]; redoStk.push(Object.assign({},d)); removeDevice(d.id); updateRedoBtn(); });
     var redoBtn=document.getElementById("redoBtn"); if(redoBtn) redoBtn.addEventListener("click", function(){ if(frozen()||!redoStk.length) return; var sd=redoStk.pop(); reAdd(sd); renderPanel(); updateCount(); reconcileLocations(); queueSave(); updateRedoBtn(); });
     // collapse / expand the SURVEY panel
