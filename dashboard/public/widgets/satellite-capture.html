@@ -156,7 +156,7 @@
   body.outline-only .head,body.outline-only .tbar{display:none!important}
   /* While tracing, the main toolbar (Level/Crop/Trace/Done) docks in the same spot as the trace controls
      and, being higher z-index, would hide them — hide it so Cancel/Redraw/Use Outline are reachable. */
-  #preview.tracing ~ .tbar{display:none}
+  body:has(#preview.tracing) .tbar{display:none}   /* .tbar is now a footer (outside .stage) → match by :has, not ~ */
   /* Trace instruction — tells you what to do while tracing (non-obvious action); updates as you go. */
   #traceHint{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:11;display:none;max-width:88%;text-align:center;
     background:rgba(16,17,18,.82);color:#fff;font:600 12.5px/1.35 var(--sans);padding:7px 13px;border-radius:9px;box-shadow:0 4px 16px rgba(16,17,18,.3);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
@@ -199,10 +199,10 @@
   .b.lite{background:#fff;color:var(--ink);border-color:var(--line)}
   .b:disabled{opacity:.45;cursor:default}
 
-  /* ===== compact vertical toolbar pinned to the RIGHT (keeps the aerial clear) ===== */
-  .tbar{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:12;display:flex;flex-direction:column;align-items:stretch;gap:3px;
-    background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:12px;padding:5px;box-shadow:0 8px 30px rgba(16,17,18,.2);backdrop-filter:blur(8px)}
-  .tb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:46px;height:44px;padding:0;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--ink);font:600 8.5px/1.1 var(--sans);cursor:pointer}
+  /* ===== thin full-width toolbar FOOTER (below the photo, never over the aerial) ===== */
+  .tbar{flex:none;position:relative;z-index:12;display:flex;align-items:center;justify-content:center;gap:4px;width:100%;
+    background:#fff;border-top:1px solid var(--line);padding:6px 10px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 20px rgba(16,17,18,.06)}
+  .tb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:54px;height:44px;padding:0 10px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--ink);font:600 9px/1.1 var(--sans);cursor:pointer}
   .tb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .tb:hover{background:var(--soft)}
   .tb.on{background:var(--ink);color:#fff}
@@ -210,9 +210,9 @@
   .tb.wand.busy{opacity:.5;pointer-events:none}
   .tb.use{background:var(--ink);color:#fff}
   .tb.use:hover{background:#000}
-  .tsep{height:1px;width:calc(100% - 6px);background:var(--line);margin:2px auto}
-  /* popovers open to the LEFT of the toolbar */
-  .pop{position:absolute;z-index:13;right:58px;top:50%;transform:translateY(-50%);display:none;align-items:center;gap:10px;
+  .tsep{width:1px;height:28px;background:var(--line);margin:0 4px}
+  /* Rotate popover opens ABOVE the footer (drop-up), centred. */
+  .pop{position:absolute;z-index:13;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);display:none;align-items:center;gap:10px;max-width:calc(100vw - 20px);
     background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;box-shadow:0 10px 34px rgba(16,17,18,.22);white-space:nowrap}
   .pop.on{display:flex}
   .pop label{font-size:12px;color:var(--muted);font-weight:600}
@@ -227,28 +227,15 @@
   .pop .degfield input{width:38px;border:0;outline:0;background:transparent;font:600 13px/1 var(--sans);color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
   .pop .degfield input::-webkit-outer-spin-button,.pop .degfield input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .pop .degfield span{font-size:13px;color:var(--muted)}
-  /* On a phone the toolbar is centred on the right edge, so its pop-out would land mid-screen — dock it to the bottom instead. */
-  /* Narrow phones OR short landscape: dock the Level pop to the bottom instead of mid-screen. */
-  @media (max-width:640px), (max-height:560px){
-    .pop{position:fixed;z-index:20;right:10px;left:10px;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);transform:none;justify-content:center;flex-wrap:wrap;box-shadow:0 10px 30px rgba(16,17,18,.22)}
-    .pop input[type=range]{width:auto;flex:1 1 120px;min-width:100px}
-  }
+  /* phones: let the Rotate pop wrap + its slider flex so it never overflows the width */
+  @media (max-width:640px){ .pop{flex-wrap:wrap;justify-content:center} .pop input[type=range]{flex:1 1 120px;min-width:100px;width:auto} }
   /* Landscape / short viewport: shrink the search header so the map (.stage flex:1) keeps real height. */
   @media (max-height:520px){
     .head{padding:6px 12px}
     .head input{padding:7px 11px;font-size:14px}
     .head button{width:36px;height:36px}
   }
-  /* Desktop (roomy viewport): the thumb-first vertical rail on the right edge reads as an awkward
-     floating strip with a mid-screen pop-out. Dock it as a proper horizontal toolbar centred along
-     the bottom, with the Rotate pop opening straight above it — the conventional editor layout. */
-  @media (min-width:641px) and (min-height:561px){
-    .tbar{top:auto;bottom:16px;right:50%;transform:translateX(50%);flex-direction:row;align-items:center;gap:4px;padding:6px 8px;border-radius:14px}
-    .tb{flex-direction:column;width:58px;height:50px;gap:3px;font-size:9.5px}
-    .tb svg{width:20px;height:20px}
-    .tsep{width:1px;height:34px;margin:0 3px}
-    .pop{right:50%;left:auto;top:auto;bottom:78px;transform:translateX(50%);justify-content:center}
-  }
+  /* (The toolbar is one uniform full-width footer at every size now — no vertical rail / bottom pill.) */
   /* Google Places autocomplete dropdown — above everything */
   .pac-container{z-index:99999;border-radius:10px;border:1px solid var(--line);box-shadow:0 8px 28px rgba(16,17,18,.16);font-family:var(--sans);margin-top:2px}
 </style>
@@ -301,9 +288,10 @@
       <svg class="pX" viewBox="0 0 24 24" hidden><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
       <span>Preview intro</span>
     </button>
+  </div>
 
-    <!-- floating toolbar over the aerial: Level · Crop · Enhance · Download · Done -->
-    <div class="tbar" id="tbar">
+  <!-- Toolbar as a thin, full-width FOOTER below the photo (never floating over the aerial). -->
+  <div class="tbar" id="tbar">
       <div class="pop" id="popLevel">
         <label>Rotate</label>
         <input id="rot" type="range" min="-45" max="45" value="0">
@@ -318,7 +306,6 @@
       <button class="tb" id="tTrace" title="Outline the building"><svg viewBox="0 0 24 24"><path d="M5 9l7-5 7 5v7l-7 4-7-4z"/><circle cx="5" cy="9" r="1.5"/><circle cx="19" cy="9" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="12" cy="20" r="1.5"/></svg><span>Outline</span></button>
       <button class="tb use" id="tDone">Done</button>
     </div>
-  </div>
 
 <script>
   var API_KEY=null, map=null, geocoder=null, marker=null;
@@ -494,7 +481,8 @@
   var capAerial=null;   // transform of the current capture (rotation/north, center, zoom, crop rect) — posted as `aerial` on every result
   var capMetersW=0, capMetersH=0;   // real-world size of the current capture (rect × meters-per-pixel) — the scale carried to the floor plan
   var preview=$("preview");
-  document.body.appendChild($("popLevel"));   // lift the Level pop out of the (transformed) toolbar so it can dock as a fixed bottom bar on mobile
+  // (The Level pop stays inside the footer toolbar now — it drops UP above the footer. The footer has no
+  //  transform, so it's a valid containing block; no need to lift the pop to <body> as the old rail did.)
   function closePops(){ $("popLevel").classList.remove("on"); $("tLevel").classList.remove("on"); $("levelGrid").classList.remove("on"); }
   // Back from the frozen preview to the live, pannable map so the framing can change again.
   function backToLive(){ preview.classList.remove("show"); exitTrace(); resetCompare(); enhancedOnce=false; capturedCurrent=false; loadedCapture=false; applyLoadedCapture(); $("tEnhance").classList.remove("busy"); }   // back to the live map → Level/Crop return

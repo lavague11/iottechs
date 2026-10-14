@@ -33,7 +33,7 @@ test("top-left = Edit background (direct); Create Hybrid lives in a bottom-right
   assert.ok(!survey.includes('id="enhBtn"'), "no standalone Enhance button");
   // bottom-right ••• drop-up
   has('<div id="planMore">', "bottom-right overflow container");
-  assert.ok(/#planMore\{position:absolute;right:14px;bottom:56px/.test(survey), "••• sits bottom-right (above the Show control)");
+  assert.ok(/#planMore\{position:absolute;right:14px;bottom:14px/.test(survey), "••• sits in the bottom-right corner (the Show control was removed; Full screen is top-right)");
   has('<button id="bgMore"', "••• trigger present");
   has('aria-haspopup="true"', "••• declares a menu popup");
   has('#planMore.menu #bgMenu{display:flex}', "the drop-up opens from the ••• container");
