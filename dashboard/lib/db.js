@@ -11,6 +11,7 @@ import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flo
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
+import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
@@ -2066,12 +2067,20 @@ export function getProposalLibrary() {
 //   • closed/declined & never signed   → "jobs"      — a dead job, NOT a receivable
 // `expected` is the amount owed at the current state; balance = expected − confirmed paid. Totals
 // use the same option+add-on math the payment stage trusts, so figures agree everywhere.
+// Accounts Receivable — one row per project that has reached Approved/Accepted OR Signed (or is Closed,
+// for history). Every money figure + bucket comes from the ONE canonical resolver (lib/receivables-model.js)
+// so the AR page, project page and dashboard can't disagree. Unsigned-approved deals appear (Awaiting
+// Signature) but are NEVER counted as money due.
 export function getReceivables() {
+  const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
+  const iso = (d) => (d instanceof Date ? d.toISOString() : (d || null));
   return db.prepare(
     `SELECT p.access_id, p.customer, p.contact_name, p.address, p.stage, p.category,
-            p.contact_phone, p.contact_email, p.completed_at, p.lost_at, p.ar_archived_at,
+            p.contact_phone, p.contact_email, p.completed_at, p.lost_at, p.lost_reason, p.lost_kind,
+            p.lost_by, p.lost_prev_stage, p.reopened_at, p.ar_archived_at,
             pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
-            pr.accepted_options, pr.selected_option, pr.signed_name, pr.sent_at, pr.updated_at
+            pr.accepted_options, pr.selected_option, pr.selected_at, pr.signed_name, pr.signed_at,
+            pr.signature_deadline, pr.declined_at, pr.declined_reason, pr.sent_at, pr.updated_at
        FROM projects p
        JOIN proposals pr
          ON pr.project_access_id = p.access_id
@@ -2079,6 +2088,7 @@ export function getReceivables() {
                       WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
                       ORDER BY x.version DESC, x.id DESC LIMIT 1)
       WHERE pr.status IN ('sent','changes_requested','accepted','declined')
+         OR pr.signed_name IS NOT NULL OR p.lost_at IS NOT NULL
       ORDER BY p.id DESC`
   ).all().map((r) => {
     let grand = 0;
@@ -2094,27 +2104,33 @@ export function getReceivables() {
     } catch { /* bad payload */ }
     const addons = getApprovedAddons(r.access_id);
     const total  = grand + (addons?.total || 0);
-    const pays = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
+    const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
     const paid    = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
-    const pending = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
 
-    const signed    = !!r.signed_name;
-    const completed = !!r.completed_at || r.stage === "completion" || r.category === "completed";
-    const closed    = !!r.lost_at || r.status === "declined";   // dead/lost deal
+    const declined = r.status === "declined";
+    const isClosed = !!r.lost_at || declined;   // lost / auto-closed / declined → one Closed concept
 
-    // Bucket + the receivable EXPECTED at this state (owner's rule).
-    let bucket, expected;
-    if (!signed && closed)   { bucket = "jobs";      expected = 0; }          // dead — not a receivable
-    else if (completed)      { bucket = "completed"; expected = total; }        // 100% due
-    else if (signed)         { bucket = "signed";    expected = +(total * 0.5).toFixed(2); }  // 50% due now
-    else                     { bucket = "pending";   expected = total; }        // tentative (whole total pending)
-    const balance = Math.max(0, +(expected - paid).toFixed(2));
+    const st = resolveProjectFinancialState({
+      stage: r.stage,
+      total,
+      depositPct: r.deposit_pct,
+      approved: r.status === "accepted",
+      approvedAt: r.selected_at,
+      signed: !!r.signed_name,
+      signedAt: r.signed_at,
+      signatureDeadline: r.signature_deadline,
+      completed: !!r.completed_at || r.stage === "completion" || r.category === "completed",
+      completedAt: r.completed_at,
+      closed: isClosed,
+      closedAt: r.lost_at || r.declined_at,
+      reopenedAt: r.reopened_at,
+      paidConfirmed: paid,
+      pendingPayments: pendingPay,
+      lastPaymentAt: lastPay,
+    });
 
-    const lastPay = pays.map((x) => x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
-    const since = lastPay || r.sent_at || r.updated_at || null;
-    let daysOut = 0;
-    if (since) { const d = Math.floor((Date.now() - new Date(since.replace(" ", "T")).getTime()) / 86400000); daysOut = Number.isFinite(d) ? Math.max(0, d) : 0; }
-    const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
     return {
       access_id: r.access_id,
       customer: r.customer || r.contact_name || r.access_id,
@@ -2122,18 +2138,29 @@ export function getReceivables() {
       phone: r.contact_phone || null,
       stage: r.stage,
       status: r.status,
-      signed, completed, closed,
-      bucket,                            // pending | signed | completed | jobs
-      archived: !!r.ar_archived_at,      // hidden from the active portal (written off / parked)
-      billedAt: dOnly(r.sent_at),        // when it became a receivable (proposal sent)
-      lastActivity: dOnly(since),        // most recent money movement, else billed date
-      total,                             // full proposal total (what the job is worth)
-      expected,                          // receivable due at the current state
-      paid, pending, balance,
-      paidInFull: bucket !== "jobs" && balance <= 0.01 && expected > 0,
-      lastPay, daysOut,
+      financialState: st.financialState,          // awaiting_signature | awaiting_deposit | due_now | pending | collected | closed | none
+      isReceivable: st.isReceivable,
+      amountDueNow: st.amountDueNow,               // real obligation currently due (0 for Awaiting Signature)
+      pendingAmount: st.pendingAmount,             // scheduled-but-not-yet-due
+      paid,                                        // confirmed collected
+      pending: pendingPay,                         // customer-submitted, awaiting staff confirm
+      balance: st.balance,                         // contract remaining
+      total,                                       // full contract value
+      agingDays: st.agingDays,
+      agingBasis: st.agingBasis,
+      signatureDeadline: dOnly(iso(st.signatureDeadline)),
+      signatureOverdue: st.signatureOverdue,
+      closed: st.financialState === FS.CLOSED,
+      closeKind: r.lost_kind || (declined ? "declined" : null),
+      closeReason: r.lost_reason || (declined ? (r.declined_reason || "Declined") : null),
+      closedAt: dOnly(r.lost_at || r.declined_at),
+      archived: !!r.ar_archived_at,                // hidden from the active portal (written off / parked)
+      billedAt: dOnly(r.sent_at),                  // when it became a receivable (proposal sent)
+      lastActivity: dOnly(lastPay || r.sent_at || r.updated_at),
+      lastPay,
+      paidInFull: st.financialState === FS.COLLECTED,
     };
-  }).filter((r) => r.total > 0);
+  }).filter((r) => (r.isReceivable || r.closed) && r.total > 0);
 }
 
 // Archive (or restore) a receivable — hides it from the active portal (written off / parked) while
