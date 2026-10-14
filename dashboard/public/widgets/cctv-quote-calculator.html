@@ -249,6 +249,9 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .subseg button{flex:1 1 auto;min-width:max-content;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font:600 13px var(--f-body);white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s,color .15s}
 .subseg button.on{border-color:var(--gold);background:var(--sel);color:var(--fg)}
 @media (prefers-reduced-motion:reduce){.subseg button{transition:none}}
+/* "None of the above" — shows only when nothing on the Project step is selected; advances to the next step */
+.opt-none{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:6px;padding:14px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--muted);font:600 14px var(--f-body);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s,border-color .15s}
+.opt-none:hover,.opt-none:focus-visible{color:var(--fg);border-color:var(--gold)}
 .cflags{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:7px 14px;min-height:36px;font:600 13px var(--f-body);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .chip.on{background:var(--slate);color:#FAF8F4;border-color:var(--slate)}
@@ -587,7 +590,7 @@ const CONFIG = {
     // no client-side codes. A code a customer types is captured into the lead snapshot for the rep to honor.
     promos: {}
   },
-  defaults: { level:'essential', levelManual:false, features:['rec247','colornight','hd4k','mobile'], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'indoor', footage:null, extraBoxes:0,
+  defaults: { level:'essential', levelManual:false, features:['rec247','colornight','hd4k','mobile','audio'], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'indoor', footage:null, extraBoxes:0,
               desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', nvrPick:null, poe:'auto',
               skipProg:false, monitorMode:'buy', monitor:true, mount:true, monitorQty:1, ups:false, plan:'none', term:1, billing:'monthly',
               cableColor:'white', camColor:'white', camRes:'8',
@@ -1403,7 +1406,9 @@ const R = {
             <span class="opt-sub">PNG, JPG or PDF — or skip for now</span>
           </label>`) : ''}
         </div>
-      </div>`;
+      </div>
+      ${(!c.existingSystem && !c.construction && !c.hasDeadline && !c.floorPlans)
+        ? `<button type="button" class="opt-none" data-act="projnone">None of the above <span aria-hidden="true">→</span></button>` : ''}`;
   }
 };
 
@@ -1706,6 +1711,7 @@ document.addEventListener('click', e=>{
     case 'deadline': state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; break;
     case 'plans': state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; break;
     case 'planclear': state.contact.floorPlanImg = null; break;
+    case 'projnone': goNext(); return;   // "None of the above" → advance to the next step
     case 'level': state.level = v; state.levelManual = true; break;   // manual pick wins until "use recommended"
     case 'levelauto': state.levelManual = false; state.level = recommendLevel(state.features).level; break;
     case 'feat': {   // security-feature checklist → auto-recommend a package (unless manually overridden)
