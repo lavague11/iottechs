@@ -240,8 +240,15 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .plan-meta b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .plan-meta span{font-size:12px;color:var(--muted)}
 
-.sub-q{display:grid;gap:8px;padding:0 12px 12px}
+.sub-q{display:grid;gap:14px;padding:0 12px 14px}
 .sub-q .row{justify-content:space-between}
+/* stacked conditional sub-questions — label on its own line, full-width wrapping answer buttons (never clipped) */
+.subq-field{display:flex;flex-direction:column;gap:7px;min-width:0}
+.subq-field>label{font-size:13px;font-weight:600;color:var(--fg)}
+.subseg{display:flex;flex-wrap:wrap;gap:6px}
+.subseg button{flex:1 1 auto;min-width:max-content;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font:600 13px var(--f-body);white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s,color .15s}
+.subseg button.on{border-color:var(--gold);background:var(--sel);color:var(--fg)}
+@media (prefers-reduced-motion:reduce){.subseg button{transition:none}}
 .cflags{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:7px 14px;min-height:36px;font:600 13px var(--f-body);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .chip.on{background:var(--slate);color:#FAF8F4;border-color:var(--slate)}
@@ -1358,10 +1365,10 @@ const R = {
           <button type="button" class="pick opt-head" data-act="existing"><span class="check"></span>
             <div><div class="opt-title">I have an existing system</div><div class="opt-sub">Cameras or wiring already in place we may be able to reuse</div></div></button>
           ${c.existingSystem?`<div class="sub-q">
-            <div class="row"><label style="font-size:13px">What type?</label>
-              <div class="seg">${[['ip','IP / digital'],['analog','Analog / coax'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingType===v?'on':''}" data-act="extype" data-v="${v}">${l}</button>`).join('')}</div></div>
-            <div class="row"><label style="font-size:13px">Is it working?</label>
-              <div class="seg">${[['yes','Working'],['no','Not working'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingWorking===v?'on':''}" data-act="exwork" data-v="${v}">${l}</button>`).join('')}</div></div>
+            <div class="subq-field"><label>What type of system?</label>
+              <div class="subseg">${[['ip','IP / Digital'],['analog','Analog / Coax'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingType===v?'on':''}" data-act="extype" data-v="${v}">${l}</button>`).join('')}</div></div>
+            <div class="subq-field"><label>Is the system working?</label>
+              <div class="subseg">${[['yes','Yes'],['no','No'],['partial','Partially'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingWorking===v?'on':''}" data-act="exwork" data-v="${v}">${l}</button>`).join('')}</div></div>
           </div>`:''}
         </div>
         <div class="opt ${c.hasDeadline?'sel':''}">
