@@ -45,6 +45,8 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const [savingCust, setSavingCust] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);   // smart status pill popover
+  const [statusPos, setStatusPos] = useState(null);      // viewport-aware fixed position for the popover
+  const statusTrigRef = useRef(null);                    // the control that opened it (focus returns here)
   const [moved, setMoved] = useState(false);
   const [compact, setCompact] = useState(false);         // scrolled into content → condense the header (reclaim vertical space)
   // Auto-hiding project header (mobile + desktop) — like browser chrome: scroll down → the project
@@ -80,6 +82,27 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   const overHeader = useRef(false);
 
   const go = useCallback((i) => { const n = Math.max(0, Math.min(N - 1, i)); setMoved(true); onIdx ? onIdx(n) : null; }, [N, onIdx]);
+  // The Project Status popover is ONE canonical panel opened from either trigger — the desktop STATUS
+  // chip or the mobile project-ID chip. It's rendered position:fixed and clamped inside the viewport so
+  // it never clips off an edge (the old absolute right:0 panel clipped on narrow screens).
+  const openStatusFrom = useCallback((el) => {
+    statusTrigRef.current = el || null;
+    try {
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth, pad = 12;
+      const w = Math.min(320, vw - pad * 2);
+      const left = Math.max(pad, Math.min(r.left, vw - w - pad));   // clamp fully inside the viewport
+      setStatusPos({ top: Math.round(r.bottom + 8), left: Math.round(left), w });
+    } catch {
+      const vw = typeof window !== "undefined" ? window.innerWidth : 360;
+      setStatusPos({ top: 60, left: 12, w: Math.min(320, vw - 24) });
+    }
+    setStatusOpen(true);
+  }, []);
+  const closeStatus = useCallback(() => {
+    setStatusOpen(false);
+    const t = statusTrigRef.current; if (t && t.focus) { try { t.focus(); } catch {} }
+  }, []);
   // Jump to a named tool AND open it — used by the "your next step" chip so tapping it lands the
   // customer on the exact tool (heavy tools launch full-screen; light ones expand inline).
   const openNamedTool = useCallback((name) => {
@@ -179,11 +202,21 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         if (e.key === "ArrowRight") { go(idx + 1); }
         if (e.key === "ArrowLeft") { go(idx - 1); }
       }
-      if (e.key === "Escape") { setMenuOpen(false); setCustOpen(false); setOverlay(null); }
+      if (e.key === "Escape") { setMenuOpen(false); setCustOpen(false); setOverlay(null); if (statusOpen) closeStatus(); }
     }
     const el = deckRef.current; el?.addEventListener("keydown", onKey);
     return () => el?.removeEventListener("keydown", onKey);
-  }, [idx, go]);
+  }, [idx, go, statusOpen, closeStatus]);
+  // Status popover: Escape closes (focus returns to the trigger) and a viewport resize dismisses it, so the
+  // fixed, pre-measured position can't go stale. Document-level because the popover renders outside the deck.
+  useEffect(() => {
+    if (!statusOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") closeStatus(); };
+    const onResize = () => setStatusOpen(false);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => { document.removeEventListener("keydown", onKey); window.removeEventListener("resize", onResize); };
+  }, [statusOpen, closeStatus]);
   useEffect(() => {
     function onDoc(e) {
       // Skip the bug tool, and skip a target React just detached (clicking "Edit" re-renders the drawer,
@@ -217,6 +250,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
   };
 
   const cur = stages[idx] || {};
+  // Does the Portal control have anything behind it? (Dashboard / overflow / preview-as / Lock.) On mobile
+  // it renders as a hamburger when there's a menu, and hides entirely for a role with no secondary nav.
+  const hasMenu = !!(dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock);
   const turnText = cur.turn === "customer" ? "Waiting on customer" : cur.turn === "mine" ? `Next · ${cur.need || ""}` : (cur.need || "");
 
   // Stage marker state — one shared language across every Deck (camera + ADT):
@@ -274,8 +310,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             {/* The project-ID chip is a second entry point into the SAME Project Status popover (useful on
                 mobile where it stays visible). Stops propagation so it doesn't also toggle the details drawer. */}
             <span className="dv-code mono" role="button" tabIndex={0} title="Project status"
-              onClick={(e) => { e.stopPropagation(); setCustOpen(false); setStatusOpen((o) => !o); }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setCustOpen(false); setStatusOpen((o) => !o); } }}>{customer.code}</span>
+              aria-haspopup="dialog" aria-expanded={statusOpen} aria-label={`View project status for ${customer.code}`}
+              onClick={(e) => { e.stopPropagation(); setCustOpen(false); statusOpen ? closeStatus() : openStatusFrom(e.currentTarget); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setCustOpen(false); statusOpen ? closeStatus() : openStatusFrom(e.currentTarget); } }}>{customer.code}</span>
             <h1 className="dv-title">{customer.name}</h1>
             <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
           </button>
@@ -291,48 +328,36 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
               <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
             </span>
           );
-          const canGo = !!(chip.onClick || chip.openTool);
           const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
+          // Button only — the popover itself is rendered once, below the header (position:fixed, clamped).
           return (
             <div className="dv-chipwrap" data-stop>
               <button className={`dv-chip dv-chip-act dv-chip-status${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
                 aria-expanded={statusOpen} aria-haspopup="dialog" aria-label={`Project status — ${chip.label}`} title={chip.label}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? setStatusOpen((o) => !o) : goNext(); }}>
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? (statusOpen ? closeStatus() : openStatusFrom(e.currentTarget)) : goNext(); }}>
                 <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">Status</span>
                 <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </button>
-              {d && statusOpen && (<>
-                <div className="dv-statback" onClick={() => setStatusOpen(false)} />
-                <div className="dv-statpop" role="dialog" style={{ "--stat-c": chip.color }}>
-                  <div className="dv-statpop-kick">Project status</div>
-                  <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
-                  <ul className="dv-statlist">
-                    {d.milestones.map((m, i) => (
-                      <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
-                        <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
-                        <span className="dv-statml">{m.label}</span>
-                        {m.active && <span className="dv-statms">Now</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
-                  {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
-                </div>
-              </>)}
             </div>
           );
         })()}
         <div className="dv-sp" />
-        <div className="dv-rolewrap" data-stop>
+        {/* Portal / secondary nav. Desktop: a labelled, role-tinted button. Mobile: a neutral hamburger
+            (the label + tint drop away via CSS); when the role has no menu at all it's hidden on mobile. */}
+        <div className={`dv-rolewrap${hasMenu ? "" : " dv-rolewrap--empty"}`} data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`}
             style={roleTint ? { background: roleTint.bg, color: roleTint.fg, borderColor: roleTint.bg } : undefined}
             title={viewName ? `${viewName.charAt(0).toUpperCase()}${viewName.slice(1)} view${previewRole ? " · preview" : ""}` : undefined}
-            onClick={() => (dashboardHref || roleMenu?.length || previewRoles.length || menu.length || onLock) && setRoleOpen((o) => !o)}>
-            {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
-            {roleLabel}
-            {(dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock) && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+            aria-label={hasMenu ? "Open project menu" : undefined} aria-expanded={hasMenu ? roleOpen : undefined} aria-haspopup={hasMenu ? "menu" : undefined}
+            onClick={() => hasMenu && setRoleOpen((o) => !o)}>
+            <span className="dv-burger" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg></span>
+            <span className="dv-portal-lbl">
+              {previewRole && <span className="dv-eye"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>}
+              {roleLabel}
+              {hasMenu && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>}
+            </span>
           </button>
-          {roleOpen && (dashboardHref || roleMenu?.length || previewRoles.length > 0 || menu.length || onLock) && (
+          {roleOpen && hasMenu && (
             <div className="dv-rolemenu">
               {/* Dashboard navigation (staff only — gated by the gateway, and /dashboard enforces its own
                   server-side auth). Routes via the app router, no full reload. Sits above everything. */}
@@ -381,6 +406,33 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           )}
         </div>
       </header>
+
+      {/* Canonical Project Status popover — ONE panel for both triggers (desktop STATUS chip, mobile
+          project-ID chip). Rendered position:fixed and pre-clamped inside the viewport so it never clips. */}
+      {statusChip && !statusChip.readonly && statusChip.detail && statusOpen && statusPos && (() => {
+        const d = statusChip.detail;
+        const canGo = !!(statusChip.onClick || statusChip.openTool);
+        const goNext = () => { setStatusOpen(false); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); };
+        return (<>
+          <div className="dv-statback" onClick={closeStatus} />
+          <div className="dv-statpop" role="dialog" aria-label="Project status" aria-modal="false"
+            style={{ "--stat-c": statusChip.color, top: statusPos.top, left: statusPos.left, width: statusPos.w }}>
+            <div className="dv-statpop-kick">Project status</div>
+            <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
+            <ul className="dv-statlist">
+              {d.milestones.map((m, i) => (
+                <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
+                  <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
+                  <span className="dv-statml">{m.label}</span>
+                  {m.active && <span className="dv-statms">Now</span>}
+                </li>
+              ))}
+            </ul>
+            {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
+            {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
+          </div>
+        </>);
+      })()}
 
       {/* customer drawer */}
       {customer && (
@@ -593,6 +645,9 @@ const CSS = `
 .dv-solid{background:var(--dv-ink);color:#fff}
 .dv-solid.previewing{background:var(--dv-gold-deep)}
 .dv-eye{display:inline-flex}
+/* Portal button content: the labelled cluster (eye + role + caret) on desktop, a hamburger on mobile. */
+.dv-portal-lbl{display:inline-flex;align-items:center;gap:7px}
+.dv-burger{display:none;align-items:center}
 .dv-rolewrap{position:relative}
 .dv-rolemenu{position:absolute;top:calc(100% + 6px);right:0;z-index:60;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:11px;box-shadow:0 14px 34px rgba(16,20,24,.14);padding:5px;min-width:170px;display:flex;flex-direction:column;gap:2px}
 .dv-rolemenu button{text-align:left;padding:8px 11px;border-radius:7px;font-size:13px;font-weight:500;color:var(--dv-ink-soft);text-transform:capitalize}
@@ -638,7 +693,9 @@ const CSS = `
    backdrop-dismiss, no hover dependency). */
 .dv-chipwrap{position:relative;display:inline-flex;min-width:0;max-width:100%}
 .dv-statback{position:fixed;inset:0;z-index:65;background:transparent}
-.dv-statpop{position:absolute;top:calc(100% + 8px);right:0;left:auto;z-index:66;width:258px;max-width:86vw;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:14px;padding:14px 15px;box-shadow:0 24px 60px -24px rgba(16,20,24,.42);animation:dvStatIn .16s var(--dv-eo)}
+/* Fixed + clamped in JS (top/left/width inline) so it always sits fully inside the viewport — on a phone
+   it rides just below the project-ID chip, never clipping off an edge. Width capped at min(320px,100vw-24px). */
+.dv-statpop{position:fixed;z-index:66;max-width:calc(100vw - 24px);max-height:80dvh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--dv-raise);border:1px solid var(--dv-line);border-radius:14px;padding:14px 15px;box-shadow:0 24px 60px -24px rgba(16,20,24,.42);animation:dvStatIn .16s var(--dv-eo)}
 @keyframes dvStatIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
 .dv-statpop-kick{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--dv-faint);font-weight:700}
 .dv-statpop-head{display:flex;align-items:baseline;gap:8px;margin:5px 0 13px;flex-wrap:wrap}
@@ -900,15 +957,20 @@ const CSS = `
   /* No brand bar on mobile either — the identity row + consolidated status row + rail stack cleanly. */
   .dv-roledivide-desk{display:none}
 }
-@media (max-width:760px){.dv-top{padding:8px 16px;flex-wrap:wrap;row-gap:4px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
-  /* Phone: the project-ID chip STAYS visible (just compact) — the name truncates before the ID is dropped.
-     name + Portal share the top line; STATUS drops to its own line below (full label visible). */
+@media (max-width:760px){.dv-top{padding:8px 16px;flex-wrap:nowrap;row-gap:4px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
+  /* Simpler mobile header: [ project-ID · name ........ ☰ ]. The project-ID chip stays visible (name
+     truncates first) and IS the Status trigger; the separate STATUS pill is hidden; the spacer collapses
+     so the name gets the room; Portal becomes a neutral hamburger. */
   .dv-code{padding:4px 6px;font-size:10.5px;flex:0 0 auto}
   .dv-identity{gap:8px;flex:1 1 auto;min-width:0}
   .dv-title{min-width:0;flex:1 1 auto}
-  .dv-chipwrap{order:9;flex:0 0 auto;max-width:100%}
-  .dv-chip{height:21px;padding:0 9px;font-size:9px;letter-spacing:.04em;gap:5px;flex:0 0 auto;min-width:0;max-width:none}
-  .dv-chip .dv-chip-caret{width:11px;height:11px;flex:0 0 auto}}
+  .dv-sp{display:none}
+  .dv-chipwrap{display:none}
+  .dv-rolewrap--empty{display:none}
+  .dv-rolewrap .dv-solid{background:transparent!important;color:var(--dv-ink-soft)!important;border:none!important;box-shadow:none!important;height:32px;padding:0 4px}
+  .dv-rolewrap .dv-solid.previewing{color:var(--dv-gold-deep)!important}
+  .dv-portal-lbl{display:none}
+  .dv-burger{display:inline-flex}}
 /* Phones: compact status chip, single-column left-aligned contact fields, one-line icon row */
 @media (max-width:560px){
   .dv-chip{font-size:9.5px;height:21px;padding:0 8px;gap:5px;letter-spacing:.04em}
