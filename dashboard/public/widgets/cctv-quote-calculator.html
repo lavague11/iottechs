@@ -538,7 +538,7 @@ const CONFIG = {
   },
   defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
               desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', nvrPick:null, poe:'auto',
-              skipProg:false, monitorMode:'none', monitor:false, mount:false, ups:false, plan:'none', term:1, billing:'monthly',
+              skipProg:false, monitorMode:'buy', monitor:true, mount:true, ups:false, plan:'none', term:1, billing:'monthly',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
   sizeTiers: [
     { ch:8,  label:'Up to 8 cameras',  sub:'Best for smaller systems',   presets:[4,6,8] },
@@ -916,10 +916,16 @@ function tierTotal(levelId){ try{ return Engine.compute({ ...state, level:levelI
 function oseg(act, cur, opts){   // opts: [[value,label],...]
   return `<div class="oseg">${opts.map(([v,l])=>`<button type="button" class="${cur===v?'on':''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
 }
-// Monitor control — lives under Storage now (a prominent, common choice).
+// Monitor control — card style matching the recorder selector. Default: "Need a monitor".
 function monitorControl(){
+  const price = CONFIG.catalog.addons.monitor.price + CONFIG.catalog.addons.mount.price;
+  const opt = (v,title,sub) => `<button type="button" class="nvr-btn ${state.monitorMode===v?'on':''}" data-act="mon" data-v="${v}" aria-pressed="${state.monitorMode===v}"><b>${title}</b><span>${sub}</span></button>`;
   return `<div class="eyebrow">Monitor</div>
-    <div class="opts-strip"><div class="orow"><span class="olabel">Screen at the recorder</span>${oseg('mon', state.monitorMode, [['none','None'],['own','Own'],['buy','Add']])}</div></div>`;
+    <div class="nvr-seg">
+      ${opt('buy','Need a monitor', money(price))}
+      ${opt('own','I have a monitor','We connect it')}
+      ${opt('none','Only on phone','App access')}
+    </div>`;
 }
 // Advanced options (collapsed) — everything except Monitor. Returns just the rows; caller wraps in <details>.
 function optionsStrip(q){
