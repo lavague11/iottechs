@@ -267,16 +267,15 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onWheel={onWheel}>
       {/* top bar */}
       <header className="dv-top">
-        {/* Branding only — navigation moved into the view dropdown (Dashboard). The logo no longer routes. */}
-        <span className="dv-logo" title="IOT TECHS" aria-label="IOT TECHS"><Wordmark height={16} /></span>
-        {/* When the project header collapses on scroll, the name rides next to the logo as a persistent
-            indicator, with a caret to open the full header on demand without scrolling to the top. */}
-        <button className="dv-mini-name" data-stop title={customer?.name}
-          aria-label="Project details"
-          onClick={() => { if (typeof window !== "undefined" && window.matchMedia("(max-width:760px)").matches) setCustOpen((o) => !o); else setManualOpen((o) => !o); }}>
-          <span className="dv-mini-txt">{customer?.name}</span>
-          <svg className="dv-mini-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>
-        </button>
+        {/* The project IS the top anchor now — no brand bar above it. Code badge + name + caret (opens
+            the details drawer). Tapping the name reveals the contact/property drawer below. */}
+        {customer && (
+          <button className="dv-identity" onClick={() => setCustOpen((o) => !o)} aria-expanded={custOpen}>
+            <span className="dv-code mono">{customer.code}</span>
+            <h1 className="dv-title">{customer.name}</h1>
+            <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
+          </button>
+        )}
         <div className="dv-sp" />
         <div className="dv-rolewrap" data-stop>
           <button className={`dv-ghost dv-solid${previewRole ? " previewing" : ""}`}
@@ -337,17 +336,9 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
         </div>
       </header>
 
-      {/* job bar */}
+      {/* Consolidated status row: the status chip + the one blocking reason, together — not a separate
+          STATUS pill and a separate banner. (The project identity moved up to the top row.) */}
       <div className="dv-jobbar">
-        {customer && (
-          <button className="dv-identity" onClick={() => setCustOpen((o) => !o)} aria-expanded={custOpen}>
-            <span className="dv-code mono">{customer.code}</span>
-            <h1 className="dv-title">{customer.name}</h1>
-            <span className={`dv-chev${custOpen ? " up" : ""}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></span>
-          </button>
-        )}
-        {/* Property (Residential/Commercial) lives in the info card below — it's site metadata, not a
-            workflow control, so it no longer competes with the title + Status here. */}
         {statusChip && (() => {
           const chip = statusChip, d = chip.detail;
           // Customer read-only status — a calm badge showing the real human state, no caret/popover/jump.
@@ -393,18 +384,14 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           );
         })()}
 
-        <div className="dv-cluster">
-          {menu.length > 0 && (
-            <button className="dv-act" onClick={(e) => { e.stopPropagation(); setStatusOpen(false); setMenuOpen((o) => !o); }} aria-haspopup="true" aria-expanded={menuOpen}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
-            </button>
-          )}
-          <div className={`dv-menu${menuOpen ? " open" : ""}`} role="menu">
-            {menu.map((m, i) => (
-              <button key={i} role="menuitem" className={m.danger ? "danger" : ""} onClick={() => { setMenuOpen(false); m.onClick?.(); }}>{m.label}</button>
-            ))}
-          </div>
-        </div>
+        {/* The one blocking reason, merged onto the status row (was a separate banner below). The step
+            label is dropped — the status chip already names the phase. */}
+        {gateBanner && (
+          <span className="dv-gate-reason" data-stop>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span className="dv-gate-reason-t">{gateBanner.reason}</span>
+          </span>
+        )}
       </div>
 
       {/* customer drawer */}
@@ -485,16 +472,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
       )}
 
       {/* rail */}
-      {/* Persistent gate banner — the current step + the single thing blocking advancement. Reads from
-          the SAME phaseGate the stepper uses (one source of truth), so it can never disagree. */}
-      {gateBanner && (
-        <div className="dv-gate" role="status" data-stop>
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span className="dv-gate-step">{gateBanner.step}</span>
-          <span className="dv-gate-sep">·</span>
-          <span className="dv-gate-reason">{gateBanner.reason}</span>
-        </div>
-      )}
+      {/* (The gate reason now rides the status row above — no separate banner here.) */}
       <nav className="dv-rail">
         <div className="dv-track">
           {stages.map((s, i) => {
@@ -619,7 +597,7 @@ const CSS = `
 /* Header strip owns its own gestures (swipe pages stages, vertical drag forwards to content) — take
    touch off native so the browser doesn't hijack the vertical drag before our JS forwards it (BUG #34). */
 .dv-top,.dv-jobbar,.dv-rail{touch-action:none}
-.dv-top{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;flex:0 0 auto}
+.dv-top{display:flex;align-items:center;gap:12px;padding:10px 24px 0;min-height:44px;flex:0 0 auto}
 .dv-logo{font-weight:700;letter-spacing:-.02em;font-size:15px;color:var(--dv-ink);text-decoration:none;cursor:default;display:inline-flex;align-items:center}
 .dv-logo em{font-style:normal;color:var(--dv-gold-deep)}
 .dv-sp{flex:1}
@@ -644,7 +622,11 @@ const CSS = `
 .dv-role-mobmenu{display:flex;flex-direction:column;gap:2px}
 .dv-rolemenu .dv-role-mobmenu button.danger{color:var(--dv-red,#C4553D)}
 
-.dv-jobbar{flex:0 0 auto;padding:6px 24px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dv-jobbar{flex:0 0 auto;padding:3px 24px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* Consolidated status row: the one blocking reason sits inline next to the status chip (no banner card). */
+.dv-gate-reason{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--dv-ink-soft);font-size:12.5px;font-weight:500}
+.dv-gate-reason svg{flex:0 0 auto;color:var(--dv-gold-text,#8A6A1F);opacity:.85}
+.dv-gate-reason-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-identity{display:flex;align-items:center;gap:12px;padding:8px 12px 8px 10px;margin-left:-10px;border-radius:12px;transition:background .18s;min-width:0;flex:0 1 auto}
 .dv-identity:hover{background:rgba(16,20,24,.04)}
 .dv-code{font-size:11px;letter-spacing:.09em;color:var(--dv-meta);padding:5px 8px;border:1px solid var(--dv-line);border-radius:7px}
@@ -927,14 +909,7 @@ const CSS = `
 @keyframes dvrise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
 @media (max-width:760px){
-  /* Compact mobile chrome: one top row = project name (left) + Portal (right). Drop the IOT TECHS
-     logo and the whole job bar (identity/status/···); status lives in the banner below, overflow
-     actions moved into the Portal menu. Banner + progress rail stay. */
-  .dv-logo{display:none}
-  .dv-mini-name{max-width:62vw;opacity:1;margin-left:0}
-  .dv-head-hidden .dv-mini-name{max-width:62vw}
-  .dv-jobbar{display:none}
-  .dv-role-mobmenu{display:flex;flex-direction:column;gap:2px}
+  /* No brand bar on mobile either — the identity row + consolidated status row + rail stack cleanly. */
   .dv-roledivide-desk{display:none}
 }
 @media (max-width:760px){.dv-top{padding:8px 16px}.dv-title{font-size:19px}.dv-rail{padding:14px 16px 10px;gap:12px}.dv-seg .nm{display:none}.dv-scroll{padding:2px 14px 14px}.dv-advance{padding:14px 14px 20px}
