@@ -269,6 +269,23 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .qd-grand span{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .qd-grand b{font-size:25px;line-height:1;color:var(--gold-ink)}
 
+/* HDD breakdown + recorder selector + upgrade toast */
+.hdd-line{text-align:center;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hdd-line span{opacity:.75}
+.nvr-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.nvr-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);cursor:pointer;transition:border-color .15s,background .15s}
+.nvr-btn b{font-size:14px;font-weight:700}
+.nvr-btn span{font-size:11px;color:var(--muted)}
+.nvr-btn.on{border-color:var(--gold);background:var(--sel)}
+.nvr-btn:disabled{opacity:.4;cursor:default}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;width:min(560px,calc(100vw - 24px));background:var(--bar);color:var(--bar-fg);border:1px solid #3a4258;border-left:4px solid var(--gold);border-radius:12px;padding:14px 16px;box-shadow:0 14px 40px rgba(5,7,13,.5);display:flex;flex-direction:column;gap:10px}
+.toast-msg{font-size:13.5px;line-height:1.4}
+.toast-msg b{color:var(--gold)}
+.toast-act{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.toast-act .btn{padding:9px 16px;font-size:13px}
+.toast-act .btn.ghost{background:transparent;color:var(--bar-fg);border:1px solid #3a4258}
+@media (prefers-reduced-motion:reduce){.nvr-btn{transition:none}}
+
 .promo-box{display:grid;gap:6px}
 .promo-box>label{font-size:13px;font-weight:600}
 .promo-row{display:flex;gap:8px}
@@ -413,6 +430,7 @@ details.why p{margin:6px 0 0;max-width:60ch}
   </footer>
 </div>
 <div id="drawerRoot"></div>
+<div id="toastRoot"></div>
 
 <script>
 /* =====================================================================
@@ -475,9 +493,9 @@ const CONFIG = {
              indoor: { code:'CB-IN',  name:'Indoor Cat6',        price:10000 },
              feetPerBox:1000, feetPerCam:100 },
     nvr: {
-      8:  { code:'NVR-8',  name:'8-channel recorder',  price:18999, ch:8,  bays:1, maxTB:10, poe:null, verified:false },
-      16: { code:'NVR-16', name:'16-channel recorder', price:36999, ch:16, bays:2, maxTB:10, poe:null, verified:false },
-      32: { code:'NVR-32', name:'32-channel recorder', price:45000, ch:32, bays:4, maxTB:10, poe:16,   verified:true }
+      8:  { code:'NVR-8',  name:'8-channel recorder',  price:18999, ch:8,  bays:1, maxTB:8,  poe:null, verified:false },  // 1 bay × 8TB  = 8TB max
+      16: { code:'NVR-16', name:'16-channel recorder', price:36999, ch:16, bays:2, maxTB:8,  poe:null, verified:false },  // 2 bays × 8TB  = 16TB max
+      32: { code:'NVR-32', name:'32-channel recorder', price:45000, ch:32, bays:4, maxTB:10, poe:16,   verified:true }    // 4 bays × 10TB = 40TB max
     },
     // purchasable surveillance drives, 2TB increments (cents). Any 2TB capacity target is realized from these.
     drives: { 2:17449, 4:19499, 6:32290, 8:42500, 10:52900 },
@@ -491,23 +509,23 @@ const CONFIG = {
     discounts: [0],   // PUBLIC BUILD — rep discount tiers stripped (margin data never ships publicly)
     // ONE SOURCE OF TRUTH for storage/retention assumptions. Admin-editable; never shown to customers.
     retention: {
-      defaultDays: 30, incrementTB: 2, minTB: 2, maxPerBayTB: 10,
+      defaultDays: 28, incrementTB: 2, minTB: 2, maxPerBayTB: 10,
       dayRange: [7, 180], dayPresets: [15, 30, 45, 60, 90],
       recordingLabel: '24/7 continuous recording',
-      // storage rate per camera per day, by resolution. Add 4/5/6MP here later with no code change.
+      // storage rate per camera per day, by resolution. 8MP: ~1TB per camera ≈ 28 days (1/28 TB/day).
       profiles: {
-        '8MP':  { mp:8,  multiplier:1.0, tbPerDay:0.04 },
-        '12MP': { mp:12, multiplier:1.5, tbPerDay:0.06 }
+        '8MP':  { mp:8,  multiplier:1.0, tbPerDay:0.0357 },
+        '12MP': { mp:12, multiplier:1.5, tbPerDay:0.0536 }
       }
     },
-    calcVersion: 'retention-v1 · 8MP 0.04TB/day · 12MP 0.06TB/day · 2TB steps',
+    calcVersion: 'retention-v2 · 8MP ~1TB/cam≈28d (0.0357TB/day) · 2TB steps · 8ch 8TB / 16ch 16TB / 32ch 40TB',
     // PUBLIC BUILD — the promo / voucher code list is intentionally NOT shipped in the public page
     // (it would be discoverable in source). Promo validation belongs server-side; until then there are
     // no client-side codes. A code a customer types is captured into the lead snapshot for the rep to honor.
     promos: {}
   },
   defaults: { level:'smart', levelManual:false, features:[], sizeTier:8, cams:4, overCams:false, customOpen:false, n12:0, env:'outdoor', footage:null, extraBoxes:0,
-              desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', poe:'auto',
+              desiredDays:28, daysMode:'preset', extStorage:false, selectedStorageTB:null, nvrUpgrade:'auto', nvrPick:null, poe:'auto',
               skipProg:false, monitorMode:'none', monitor:false, mount:false, ups:false, plan:'none', term:1, billing:'monthly',
               discount:0, promoCode:null, taxRate:0, adjust:0, adjustReason:'' },
   sizeTiers: [
@@ -598,22 +616,18 @@ const Engine = (() => {
     const rawTB = daily * days;                            // raw requirement
     const recommendedTB = daily>0 ? roundUpTB(rawTB) : R.minTB;
 
-    const channelTier = nvrTier(s.cams);                   // recorder the camera COUNT needs
-    const currentNvr = C.nvr[channelTier];
+    // baseline recorder = the customer's explicit pick (when it has enough channels), else the cam-count tier.
+    const pickOk = s.nvrPick && C.nvr[s.nvrPick] && C.nvr[s.nvrPick].ch >= s.cams;
+    const currentNvr = C.nvr[ pickOk ? s.nvrPick : nvrTier(s.cams) ];
     const currentMax = maxStorageOf(currentNvr);
 
-    const recNvr = smallestNvr(s.cams, recommendedTB);     // satisfies channels AND storage
-    const noStandardFit = !recNvr;                         // beyond entire catalog → custom quote
-    const requiresUpgrade = !noStandardFit && recNvr.ch > currentNvr.ch
-                            || (!noStandardFit && recNvr.code !== currentNvr.code && recommendedTB > currentMax);
+    const recNvr = smallestNvr(s.cams, recommendedTB);     // smallest recorder that would hold the target days
+    const noStandardFit = !recNvr;                         // beyond the whole catalog (40TB) → custom quote
+    const requiresUpgrade = !noStandardFit && recNvr.ch > currentNvr.ch;   // target needs a bigger recorder
 
-    // which recorder is actually active, honoring the customer's upgrade choice
-    let activeNvr;
-    if(noStandardFit) activeNvr = C.nvr[nvrTiers[nvrTiers.length-1]];
-    else if(requiresUpgrade && s.nvrUpgrade==='keep') activeNvr = currentNvr;
-    else activeNvr = recNvr;
-    // channel count alone may still force a bigger recorder than "keep" implies
-    if(activeNvr.ch < s.cams) activeNvr = smallestNvr(s.cams, 0) || activeNvr;
+    // STAY on the current recorder — never silently upgrade; the UI prompts. Storage caps to this recorder.
+    let activeNvr = currentNvr;
+    if(activeNvr.ch < s.cams) activeNvr = smallestNvr(s.cams, 0) || activeNvr;   // channel-count floor
     const activeMax = maxStorageOf(activeNvr);
 
     // storage target: manual pick if any, else recommended, clamped to what the active recorder holds
@@ -1099,6 +1113,8 @@ const R = {
     const curIdx = opts.findIndex(o=>o.tb===ss.storageTB);
     const idx = curIdx<0 ? 0 : curIdx;
     const loTB = opts.length?opts[0].tb:ss.storageTB, hiTB = opts.length?opts[opts.length-1].tb:ss.storageTB;
+    const hdd = ss.drives && ss.drives.length ? ss.drives.map(d=>d+'TB').join(' + ') : '';
+    const hddLine = hdd ? `<div class="hdd-line">${hdd}${ss.drives.length>1?` <span>(${ss.drives.length} drives)</span>`:''}</div>` : '';
     const storSlider = opts.length>1 ? `<div class="custom-count">
         <div class="cc-val"><b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days</div>
         <input type="range" min="0" max="${opts.length-1}" value="${idx}" data-num="storrange" aria-label="Storage capacity slider" class="cc-slider">
@@ -1108,19 +1124,27 @@ const R = {
           <span class="num cc-now">${ss.storageTB}TB</span>
           <button class="mini-round" data-act="storadj" data-v="1" aria-label="More storage" ${idx>=opts.length-1?'disabled':''}>+</button>
         </div>
-      </div>` : `<div class="sys-line">${ss.storageTB}TB · ≈ ${ss.estimatedDays} days</div>`;
+        ${hddLine}
+      </div>` : `<div class="sys-line">${ss.storageTB}TB · ≈ ${ss.estimatedDays} days</div>${hddLine}`;
 
-    const upgradeNote = (ss.requiresUpgrade && !ss.noStandardFit) ? `<div class="note">To keep ${ss.days} days you need about ${ss.recommendedTB}TB — we’ll fit the right recorder (${ss.recNvr.name}) at install.</div>` : '';
     const customNote = ss.noStandardFit ? `<div class="note">Keeping ${ss.days} days of ${sysLabel} needs about ${ss.recommendedTB}TB — more than a standard recorder. We’ll size a custom storage system at your free survey; the total stays preliminary.</div>` : '';
-    const shortNote = (ss.manual && ss.estimatedDays < ss.days && !ss.noStandardFit) ? `<div class="note">${ss.estimatedDays} days at ${ss.storageTB}TB — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>` : '';
+    const shortNote = (ss.manual && ss.estimatedDays < ss.days && !ss.noStandardFit && !ss.requiresUpgrade) ? `<div class="note">${ss.estimatedDays} days at ${ss.storageTB}TB — about ${Math.max(0,ss.days-ss.estimatedDays)} below your ${ss.days}-day target.</div>` : '';
+
+    // Recorder selector — 8 / 16 / 32 channel; disabled below the camera count, capacity shown.
+    const nvrSel = `<div class="nvr-seg">${[8,16,32].map(ch=>{
+      const nv = CONFIG.catalog.nvr[ch], max = nv.bays*nv.maxTB, dis = ch < state.cams, on = ss.activeNvr.ch===ch;
+      return `<button type="button" class="nvr-btn ${on?'on':''}" data-act="nvrpick" data-v="${ch}" ${dis?'disabled':''} aria-pressed="${on}">
+        <b>${ch}-channel</b><span>${dis?`for ${ch}+ cameras`:`up to ${max}TB`}</span></button>`;
+    }).join('')}</div>`;
 
     return `<div class="eyebrow">Recording history</div>
       ${daysSlider}
       <div class="sys-line">${sysLabel} · ${R.recordingLabel}</div>
       <div class="eyebrow">Storage</div>
       ${storSlider}
-      <div class="opt-sub">Recorder: ${ss.activeNvr.name} · auto-sized to your system</div>
-      ${upgradeNote}${customNote}${shortNote}`;
+      <div class="eyebrow">Recorder</div>
+      ${nvrSel}
+      ${customNote}${shortNote}`;
   },
   install(s, q, i){
     const C = CONFIG.catalog;
@@ -1352,7 +1376,23 @@ function chrome(q){
   lbl.textContent = cur < STEPS.length-1 ? 'Continue' : 'Submit';
   nx.disabled = (cur===STEPS.length-1 && !!submitted);
   $('#repBadge').hidden = !rep;
+  renderUpgradeToast(q);
   if(drawer) renderDrawer(q);
+}
+// Floating upgrade prompt: when the target days need a bigger recorder than the current one, ask the
+// customer to approve the upgrade (or keep the max days the current recorder allows). Only on the System step.
+function renderUpgradeToast(q){
+  const root = $('#toastRoot'); if(!root) return;
+  const ss = (q||Engine.compute(state)).ss;
+  const show = STEPS[cur] && STEPS[cur].id==='system' && ss.requiresUpgrade && !ss.noStandardFit && !submitted;
+  if(!show){ root.innerHTML = ''; return; }
+  root.innerHTML = `<div class="toast" role="alertdialog" aria-live="polite">
+    <div class="toast-msg">${ss.currentNvr.ch===8?'An':'A'} <b>${ss.currentNvr.ch}-channel</b> recorder holds up to ${ss.currentMax}TB ≈ <b>${ss.maxDaysCurrentNvr} days</b> for ${q.n} camera${q.n>1?'s':''}. Upgrade to ${ss.recNvr.ch===8?'an':'a'} <b>${ss.recNvr.ch}-channel</b> to reach ${ss.days} days?</div>
+    <div class="toast-act">
+      <button class="btn ghost" data-act="dayscap" data-v="${ss.maxDaysCurrentNvr}">Keep ${ss.maxDaysCurrentNvr} days</button>
+      <button class="btn" data-act="nvrpick" data-v="${ss.recNvr.ch}">Upgrade to ${ss.recNvr.ch}-ch</button>
+    </div>
+  </div>`;
 }
 function go(i){
   i = Math.max(0, Math.min(STEPS.length-1, i));
@@ -1585,6 +1625,8 @@ document.addEventListener('click', e=>{
     case 'stor': state.selectedStorageTB = +v; break;
     case 'storauto': state.selectedStorageTB = null; break;
     case 'nvrup': state.nvrUpgrade = v; state.selectedStorageTB = null; break;
+    case 'nvrpick': state.nvrPick = +v; state.selectedStorageTB = null; break;   // pick a recorder; storage re-auto-sizes & re-clamps to it
+    case 'dayscap': setDays(+v); break;   // "keep N days" from the upgrade prompt — snap the target to the recorder's max
     case 'n12': state.n12 = +v; resetStorage(); break;
     case 'n12d': state.n12 = Math.max(0, Math.min(state.cams, state.n12 + +v)); resetStorage(); break;
     case 'env': state.env = v; break;
@@ -1665,7 +1707,8 @@ function liveStor(src){
   if(!o[idx]) return; state.selectedStorageTB=o[idx].tb;
   const ss=Engine.sizeStorage(state), box=src.closest('.custom-count');
   if(box){ const now=box.querySelector('.cc-now'); if(now) now.textContent=ss.storageTB+'TB';
-    const val=box.querySelector('.cc-val'); if(val) val.innerHTML=`<b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days`; }
+    const val=box.querySelector('.cc-val'); if(val) val.innerHTML=`<b class="num">${ss.storageTB}TB</b> · ≈ ${ss.estimatedDays} days`;
+    const hl=box.querySelector('.hdd-line'); if(hl){ const hdd=(ss.drives||[]).map(d=>d+'TB').join(' + '); hl.innerHTML = hdd + (ss.drives.length>1?` <span>(${ss.drives.length} drives)</span>`:''); } }
   chrome();
 }
 // Final formatting on blur (never mid-typing): name casing + email typo suggestion.
