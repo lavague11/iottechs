@@ -594,7 +594,9 @@ const Engine = (() => {
   function retentionDays(storageTB, daily){ return daily>0 ? storageTB/daily : 0; }       // precise
   function estDays(storageTB, daily){ return Math.floor(retentionDays(storageTB, daily)); } // conservative (floor)
 
-  // cheapest set of real drives (≤bays, each ≤maxPerBay) summing to exactly targetTB
+  // real drives (≤bays, each ≤maxPerBay) summing to exactly targetTB. Maximize usage per slot: use the
+  // FEWEST drives (largest per slot) first, then the cheapest among equal-count sets. e.g. 28TB → 10+10+8,
+  // never 10+10+4+4.
   function realizeDrives(targetTB, nvr){
     const bays = nvr.bays, cap = Math.min(nvr.maxTB, R.maxPerBayTB);
     const usable = driveSizes.filter(d=>d<=cap);
@@ -607,7 +609,8 @@ const Engine = (() => {
       for(const d of usable){ if(d>rem) break;
         const sub = best(rem-d, baysLeft-1);
         if(sub){ const cand = { price:sub.price+C.drives[d], drives:[d,...sub.drives] };
-          if(!win || cand.price<win.price) win = cand; }
+          if(!win || cand.drives.length<win.drives.length
+             || (cand.drives.length===win.drives.length && cand.price<win.price)) win = cand; }
       }
       memo.set(key, win); return win;
     }
