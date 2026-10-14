@@ -1340,6 +1340,20 @@
       if(activePtrs.size>0) return;                                    // another finger still down → was a pinch
       if(placePt) placeAt(placePt.x, placePt.y); });
     work.addEventListener("pointercancel", function(){ placing=false; hideLoupe(); });
+    // Tap empty canvas → deselect the current device. Only a CLEAN tap (no drag) counts, so panning
+    // keeps the selection; placement / aim / erase / region / align modes handle their own taps.
+    (function(){ var dsDown=false, dsx=0, dsy=0;
+      work.addEventListener("pointerdown", function(e){
+        dsDown=false;
+        if(frozen()||armedK||angleMode||eraseMode||regionMode||aligning||placing) return;
+        if(inChrome(e)) return;   // a device or a toolbar control, not empty canvas
+        dsDown=true; dsx=e.clientX; dsy=e.clientY;
+      });
+      work.addEventListener("pointerup", function(e){ if(!dsDown) return; dsDown=false;
+        if(Math.hypot(e.clientX-dsx, e.clientY-dsy)>6) return;   // moved → a pan, not a tap
+        if(selId!=null) select(null);
+      });
+    })();
 
     // ---- tap the finished aerial → view it full-screen (a viewer; it never edits the image) ----
     var bgViewer=null;
