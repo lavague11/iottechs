@@ -195,8 +195,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const status = meta?.status && meta.payload ? meta.status : (meta?.status || "draft");
   const readOnly = status !== "draft";
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
-  // Camera lines display the survey's live location name (by camera_id — the single source of truth).
-  const camNames = cameraNameOverrides(opt?.services, camRoster);
+  // Camera lines display the survey's live location name. Prefer the camera_id link (the single source
+  // of truth); on this staff-only editable surface fall back to a best-effort position match (Nth camera
+  // block ↔ Nth surveyed camera) so survey-imported blocks read "Kitchen 1" etc. instead of the generic
+  // "Full Camera Install" even before they're explicitly linked — a wrong guess here is visible + correctable.
+  const camNames = cameraNameOverrides(opt?.services, camRoster, { byPosition: true });
 
   function patchPayload(next) { setPayload(next); setDirty(true); setErr(null); }
   function patchOption(patch) {
