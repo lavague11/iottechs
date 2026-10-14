@@ -34,7 +34,9 @@
   #floorMenu button{display:block;border:0;background:transparent;color:var(--ink);font:600 13px var(--sans);padding:9px 12px;border-radius:9px;cursor:pointer;text-align:left;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #floorMenu button:hover:not(:disabled),#floorMenu button:focus-visible{background:var(--soft);outline:none}
   #floorMenu button:disabled{opacity:.4;cursor:default}
-  #labelPop{position:absolute;z-index:9;display:none;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.24);padding:6px;width:248px;max-width:calc(100vw - 24px)}
+  /* Name editor + room/door menus must sit ABOVE the toolbars (z14) and every canvas layer so the
+     naming UI is never hidden behind a control; confirm dialogs (z30) still win over them. */
+  #labelPop{position:absolute;z-index:24;display:none;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.24);padding:6px;width:248px;max-width:calc(100vw - 24px)}
   #labelPop.on{display:flex}
   #labelPop input{width:100%;box-sizing:border-box;border:0;border-radius:8px;padding:9px 10px;font:inherit;font-size:15px;font-weight:600;outline:none;color:var(--ink);background:var(--soft)}
   #labelPop input::placeholder{color:#9aa0a6;font-weight:500}
@@ -45,7 +47,7 @@
   #labelPop .lpopt.custom{color:var(--gold);font-weight:600}
   #labelPop .lpopt .lpk{margin-left:auto;font-size:11px;color:#9aa0a6;font-weight:600}
   /* Contextual popovers — double-click / second-tap opens a compact menu (Room actions · Door actions). */
-  #roomMenu,#doorMenu{position:absolute;z-index:10;display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.22);padding:6px;min-width:184px;max-width:calc(100vw - 24px)}
+  #roomMenu,#doorMenu{position:absolute;z-index:24;display:none;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.22);padding:6px;min-width:184px;max-width:calc(100vw - 24px)}
   #roomMenu.on,#doorMenu.on{display:flex}
   #roomMenu button,#doorMenu button{display:flex;align-items:center;gap:11px;border:0;background:transparent;color:var(--ink);font:600 13px var(--sans);padding:11px 12px;border-radius:9px;cursor:pointer;text-align:left;width:100%}
   #roomMenu button:hover,#doorMenu button:hover{background:var(--soft)}
