@@ -1080,10 +1080,16 @@ const PCV_CSS = `
 /* Narrow screens: the title + status chip + Share/PDF collided. Drop the button text (icon-only,
    still labelled for screen readers) and let the icons hold their own so nothing overlaps. */
 @media (max-width:560px){
-  .pcv-fold-row{gap:6px}
+  /* One compact toolset (like the admin deck toolbar): status pill · share · download · collapse,
+     centered. Drop the raised tool-card bar + file-icon badge here — they stay on desktop. */
+  .pcv-fold-row{gap:7px;justify-content:center;flex-wrap:wrap;margin:0 16px}
   .pcv-hd-lbl{display:none}
-  .pcv-hd-ic{padding:0 8px;gap:0}
-  .pcv-fold-hd{padding:11px 12px;gap:8px}
+  .pcv-hd-ic{padding:0 9px;gap:0;height:30px}
+  .pcv-fold-hd{flex:0 0 auto;padding:0;height:30px;border:none;background:none;gap:0}
+  .pcv-fold-hd:hover{background:none}
+  .pcv-fold-ic{display:none}
+  .pcv-fold-chip{height:30px;display:inline-flex;align-items:center;font-size:.7rem;padding:0 12px}
+  .pcv-fold-chev-btn{padding:6px 6px}
   /* 16px mobile gutter across the one rail; metadata stacks; the total shrinks so nothing overflows the page. */
   .pcv-header,.pcv-info-box,.pcv-sum,.pcv-section-hd,.pcv-table,.pcv-pay-list,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
   button.pcv-signbar{width:auto;margin-left:16px;margin-right:16px}
