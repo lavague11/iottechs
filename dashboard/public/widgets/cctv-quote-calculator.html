@@ -107,6 +107,19 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .mini-round{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);font-size:22px;line-height:1}
 .mini-round:disabled{opacity:.35}
 .cc-now{font-size:22px;font-weight:700;min-width:44px;text-align:center}
+/* unified minimal number control (cameras / days) — one number, one slider+/-, compact presets */
+.hero-ctrl{display:flex;flex-direction:column;gap:12px;padding:2px 2px 4px}
+.hero-num{text-align:center;line-height:1}
+.hero-num b{display:block;font-size:clamp(34px,6.5vw,46px);font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.hero-num span{font-size:13px;color:var(--muted)}
+.hero-row{display:flex;align-items:center;gap:14px;margin-top:2px}
+.hero-row .cc-slider{flex:1;margin:0}
+.hero-pm{flex:none;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:22px;line-height:1;cursor:pointer}
+.hero-pm:disabled{opacity:.35;cursor:default}
+.hero-presets{display:flex;justify-content:center;gap:2px}
+.hero-presets button{background:none;border:none;color:var(--muted);font:600 14px var(--f-body);padding:6px 16px;border-radius:7px;cursor:pointer;position:relative;font-variant-numeric:tabular-nums}
+.hero-presets button.on{color:var(--fg)}
+.hero-presets button.on::after{content:"";position:absolute;left:16px;right:16px;bottom:2px;height:2px;background:var(--gold);border-radius:2px}
 #sl-count .wrap{min-height:100%;justify-content:center}
 .intro-hero{min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:16px}
 .intro-hero .start{margin-top:8px}
@@ -915,6 +928,22 @@ function tierTotal(levelId){ try{ return Engine.compute({ ...state, level:levelI
 function oseg(act, cur, opts){   // opts: [[value,label],...]
   return `<div class="oseg">${opts.map(([v,l])=>`<button type="button" class="${cur===v?'on':''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
 }
+// Unified minimal number control: hero number + [−] slider [+] + compact text presets. One canonical
+// state, no duplicate counter. presets: [{label, act, v, on}].
+function heroControl(cfg){
+  const { value, unit, min, max, adjAct, rangeNum, presets } = cfg;
+  const v = Math.min(Math.max(value, min), max);
+  const pbtn = p => `<button type="button" class="${p.on?'on':''}" data-act="${p.act}"${p.v!=null?` data-v="${p.v}"`:''}>${p.label}</button>`;
+  return `<div class="hero-ctrl">
+    <div class="hero-num"><b>${value}</b><span>${unit}</span></div>
+    <div class="hero-row">
+      <button class="hero-pm" data-act="${adjAct}" data-v="-1" aria-label="One fewer" ${value<=min?'disabled':''}>−</button>
+      <input type="range" min="${min}" max="${max}" value="${v}" data-num="${rangeNum}" class="cc-slider" aria-label="${unit}">
+      <button class="hero-pm" data-act="${adjAct}" data-v="1" aria-label="One more" ${value>=max?'disabled':''}>+</button>
+    </div>
+    <div class="hero-presets">${presets.map(pbtn).join('')}</div>
+  </div>`;
+}
 // Monitor control — card style matching the recorder selector. Default: "Need a monitor".
 function monitorControl(){
   const price = CONFIG.catalog.addons.monitor.price + CONFIG.catalog.addons.mount.price;
@@ -1063,29 +1092,16 @@ const R = {
   count(s, q, i){
     const [lo] = CONFIG.camRange, hiAbs = CONFIG.camRange[1];   // 1 … 32
     const over = !!state.overCams;
-
-    const numCard = n => `<button class="preset ${(!over&&state.cams===n)?'sel':''}" data-act="setcams" data-v="${n}"><b>${n}</b></button>`;
-    const cards = [8,16,32].map(numCard).join('')
-      + `<button class="preset ${over?'sel':''}" data-act="overcams"><b>Over 32</b></button>`;
-
-    // one 1–32 slider; the recorder auto-sizes from the count
-    const custom = `<div class="custom-count">
-        <div class="cc-val"><input type="number" min="${lo}" max="${hiAbs}" value="${state.cams}" data-num="camsnum" aria-label="Camera count" class="num"> cameras</div>
-        <input type="range" min="${lo}" max="${hiAbs}" value="${Math.min(state.cams,hiAbs)}" data-num="camsrange" aria-label="Camera count slider" class="cc-slider">
-        <div class="cc-scale"><span>${lo}</span><span>${hiAbs}</span></div>
-        <div class="cc-row">
-          <button class="mini-round" data-act="camadj" data-v="-1" aria-label="One fewer" ${state.cams<=lo?'disabled':''}>−</button>
-          <span class="num cc-now">${state.cams}</span>
-          <button class="mini-round" data-act="camadj" data-v="1" aria-label="One more" ${state.cams>=hiAbs?'disabled':''}>+</button>
-        </div>
-      </div>`;
-
+    const presets = [
+      { label:'8',   act:'setcams',  v:8,  on:!over&&state.cams===8 },
+      { label:'16',  act:'setcams',  v:16, on:!over&&state.cams===16 },
+      { label:'32',  act:'setcams',  v:32, on:!over&&state.cams===32 },
+      { label:'32+', act:'overcams',      on:over },
+    ];
     const note = over
       ? `<div class="note">Over 32 cameras — we’ll design a custom multi-recorder system at your free survey. The total is preliminary.</div>`
       : (bumpMsg ? `<div class="note">${esc(bumpMsg)}</div>` : '');
-    return `${custom}
-      <div class="presets tiered">${cards}</div>
-      ${note}`;
+    return heroControl({ value:state.cams, unit:'cameras', min:lo, max:hiAbs, adjAct:'camadj', rangeNum:'camsrange', presets }) + note;
   },
   resolution(s, q, i){
     const n = state.cams;
@@ -1118,17 +1134,9 @@ const R = {
     const sysLabel = ss.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || '0 cameras';
     const DMIN = 7, DMAX = 60;
 
-    // RECORDING HISTORY slider — "how long to keep footage" (storage auto-sizes from this).
-    const daysSlider = `<div class="custom-count">
-        <div class="cc-val"><input type="number" min="${DMIN}" max="${DMAX}" value="${ss.days}" data-num="daysnum" aria-label="Recording days" class="num"> days</div>
-        <input type="range" min="${DMIN}" max="${DMAX}" value="${Math.min(Math.max(ss.days,DMIN),DMAX)}" data-num="daysrange" aria-label="Recording days slider" class="cc-slider">
-        <div class="cc-scale"><span>${DMIN}</span><span>${DMAX}</span></div>
-        <div class="cc-row">
-          <button class="mini-round" data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=DMIN?'disabled':''}>−</button>
-          <span class="num cc-now">${ss.days}</span>
-          <button class="mini-round" data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=DMAX?'disabled':''}>+</button>
-        </div>
-      </div>`;
+    // RECORDING HISTORY — unified hero control ("how long to keep footage"; storage auto-sizes from this).
+    const dayPresets = [7,30,45,60].map(d=>({ label:String(d), act:'days', v:d, on:ss.days===d }));
+    const daysSlider = heroControl({ value:ss.days, unit:'days', min:DMIN, max:DMAX, adjAct:'dayadj', rangeNum:'daysrange', presets:dayPresets });
 
     // STORAGE — display only (auto-sized from the days target, capped to the recorder). No slider.
     const hdd = ss.drives && ss.drives.length ? ss.drives.map(d=>d+'TB').join(' + ') : '';
@@ -1675,22 +1683,15 @@ document.addEventListener('change', e=>{
     const k = t.dataset.sel; state[k] = t.value; render();
   } else if(t.dataset.txt){ state[t.dataset.txt] = t.value; chrome(); }
 });
-function liveCams(n){
-  setCams(n);
-  const now = document.querySelector('.cc-now'); if(now) now.textContent = state.cams;
-  const num = document.querySelector('[data-num="camsnum"]'); if(num && document.activeElement!==num) num.value = state.cams;
+function liveCams(src){
+  setCams(+src.value);
+  const box = src.closest('.hero-ctrl'); if(box){ const h=box.querySelector('.hero-num b'); if(h) h.textContent = state.cams; }
   chrome();
 }
-// Recording-duration (31–60) synced control, scoped to its own container so it never fights the camera counter.
 function setDays(n){ n = Math.min(60, Math.max(7, Math.round(n||28))); state.desiredDays = n; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); }
-function liveDays(src, raw){
-  if(raw==='') return;   // don't reset the field while the customer is clearing/editing it
-  const n = Math.min(60, Math.max(7, Math.round(+raw||28))); setDays(n);
-  const box = src.closest('.custom-count'); if(box){
-    const now = box.querySelector('.cc-now'); if(now) now.textContent = n;
-    const rng = box.querySelector('[data-num="daysrange"]'); if(rng && rng!==src) rng.value = n;
-    const num = box.querySelector('[data-num="daysnum"]'); if(num && num!==src && document.activeElement!==num) num.value = n;
-  }
+function liveDays(src){
+  setDays(+src.value);
+  const box = src.closest('.hero-ctrl'); if(box){ const h=box.querySelector('.hero-num b'); if(h) h.textContent = state.desiredDays; }
   chrome();
 }
 document.addEventListener('input', e=>{
@@ -1703,8 +1704,8 @@ document.addEventListener('input', e=>{
     if(k==='email' && state.contact.emailSuggest){ state.contact.emailSuggest=''; const b=$('.email-sug'); if(b) b.remove(); }
     const er=$('#e_'+k); if(er) er.textContent='';
   }
-  if(t.dataset.num==='camsrange' || t.dataset.num==='camsnum'){ liveCams(+t.value); }
-  if(t.dataset.num==='daysrange' || t.dataset.num==='daysnum'){ liveDays(t, t.value); }
+  if(t.dataset.num==='camsrange'){ liveCams(t); }
+  if(t.dataset.num==='daysrange'){ liveDays(t); }
   if(t.dataset.num==='storrange'){ liveStor(t); }
 });
 // Storage slider — light live update (no full render while dragging), scoped to its own card.
