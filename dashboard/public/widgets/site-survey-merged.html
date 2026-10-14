@@ -459,6 +459,12 @@
   .devmenu .mi:hover{background:var(--soft)}
   .devmenu .mi .ic{width:26px;height:26px;flex:none;border-radius:7px;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
   .devmenu .mi .ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7}
+  /* Eraser: the last palette entry — delete tool, styled apart (red) and separated by a top rule. */
+  .devmenu .mi-erase{margin-top:4px;border-top:1px solid var(--line);color:#c4553d}
+  .devmenu .mi-erase .ic{color:#c4553d}
+  .devmenu .mi-erase.on{background:rgba(196,85,61,.12);box-shadow:0 0 0 1px rgba(196,85,61,.5) inset}
+  body.erasing .devNode{cursor:crosshair}
+  body.erasing .devNode .devDot{box-shadow:0 0 0 2px rgba(196,85,61,.55)}
   /* settings rows */
   .devmenu .setrow{display:flex;align-items:center;gap:10px;padding:7px 11px;font-size:13px;color:var(--ink)}
   .devmenu .setrow label{flex:none;width:64px;color:var(--muted);font-weight:600}
@@ -674,20 +680,17 @@
             <button class="ctxbtn" id="angleModeBtn" title="Camera angles" aria-label="Camera angles"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M19 11V5h-6"/><path d="M5 13a8 8 0 0 0 6 6"/></svg></button>
           </div>
           <div class="devmenu" id="devMenu"></div>
-          <button class="plandim" id="dimBtn" title="Dim the plan"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
           <div class="utils">
             <button class="ubtn" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+            <button class="ubtn" id="redoBtn" title="Redo" aria-label="Redo" disabled><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
             <button class="ubtn" id="rotateBtn" title="Rotate" aria-label="Rotate plan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg></button>
-            <div id="viewWrap"><button id="viewSel" aria-haspopup="true" aria-expanded="false" title="View" aria-label="View"><svg class="viewSelIc" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span id="viewSelName" hidden>Layered</span></button>
-              <div id="viewMenu" role="menu"><button data-v="full" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Full</button><button data-v="layered" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Layered</button><button data-v="plan" role="menuitemradio"><svg class="vchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Plan</button></div></div>
-            <button class="ubtn" id="alignBtn" title="Align plan to aerial" aria-label="Align plan to aerial" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></button>
             <button class="ubtn" id="regionBtn" title="Regions" aria-label="Regions" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></svg></button>
             <button class="ubtn" id="bdUndo" title="Undo" aria-label="Undo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
             <button class="ubtn" id="bdRedo" title="Redo" aria-label="Redo region edit" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
           </div>
           <!-- bottom-right ••• overflow (drop-up): the rare build action — stacked just above the Show control -->
           <div id="planMore">
-            <div id="bgMenu" role="menu"><button id="buildPlanBtn" title="Outline the working area, set the grid, draw the structure"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button><button id="replaceBgBtn" title="Start over from a new background source (Satellite / Upload / Draw)"><svg viewBox="0 0 24 24"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button></div>
+            <div id="bgMenu" role="menu"><button id="buildPlanBtn" title="Outline the working area, set the grid, draw the structure"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create Hybrid Floor Plan</span></button><button id="replaceBgBtn" title="Start over from a new background source (Satellite / Upload / Draw)"><svg viewBox="0 0 24 24"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button><button id="dimMenuBtn" title="Dim the plan to see the aerial beneath"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg><span>Dim the plan</span></button></div>
             <button id="bgMore" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
           </div>
           <!-- bottom-right "Show" toggle: turn the Angles / FOV display on or off -->
@@ -1213,7 +1216,8 @@
         '<div class="setrow"><label>Icon size</label><button class="szTog" id="setIsz" title="Cycle small / medium / large">S</button></div>'+
         '<div class="setrow"><label>Show FOV</label><button class="settog on" id="setShowFov" title="Show the shaded coverage"><span class="knob"></span></button></div>'+
         '<div class="setrow"><label>All angles</label><button class="settog" id="setAllAngles" title="Show every camera’s angle at once"><span class="knob"></span></button></div>'+
-      '</div></div>';
+      '</div></div>'+
+      '<div class="mi mi-erase" data-k="__erase__" title="Eraser — tap a device to delete it"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 21l-4-4a2 2 0 0 1 0-3L13 4a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9z"/><path d="M12 21h9"/></svg></span>Eraser</div>';
     // remember which groups are expanded; default: just the first (Cameras)
     var MENUKEY="iottechs_survey2_menugroups"; var openG;
     try{ openG=JSON.parse(localStorage.getItem(MENUKEY)); }catch(e){}
@@ -1264,7 +1268,11 @@
       (function(){ var gseg=document.getElementById("gridSeg"); if(gseg) [].forEach.call(gseg.querySelectorAll(".vbtn"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); gridMode=Math.max(0,Math.min(2,+b.getAttribute("data-g")||0)); applySettings(); queueSave(); }); }); })();
     })();
     // Undo: remove the last-placed device
-    var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; removeDevice(devices[devices.length-1].id); });
+    // Undo removes the last placed device and remembers it so Redo can put it back; placing anything new clears the redo stack.
+    var redoStk=[];
+    function updateRedoBtn(){ var b=document.getElementById("redoBtn"); if(b) b.disabled=(!redoStk.length||frozen()); }
+    var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; var d=devices[devices.length-1]; redoStk.push(Object.assign({},d)); removeDevice(d.id); updateRedoBtn(); });
+    var redoBtn=document.getElementById("redoBtn"); if(redoBtn) redoBtn.addEventListener("click", function(){ if(frozen()||!redoStk.length) return; var sd=redoStk.pop(); reAdd(sd); renderPanel(); updateCount(); reconcileLocations(); queueSave(); updateRedoBtn(); });
     // collapse / expand the SURVEY panel
     function applySideCollapsed(){ document.body.classList.toggle("side-collapsed", sideCollapsed); }
     document.getElementById("sideTgl").addEventListener("click", function(){ sideCollapsed=true; applySideCollapsed(); queueSave(); });
@@ -1277,17 +1285,25 @@
       var hdr=e.target.closest(".mgrp");
       if(hdr){ hdr.parentNode.classList.toggle("open"); saveMenuGroups(); return; }   // expand/collapse a group
       var mi=e.target.closest(".mi"); if(!mi) return;
+      if(mi.dataset.k==="__erase__"){ setEraseMode(!eraseMode); devMenu.classList.remove("show"); return; }   // Eraser: toggle delete mode, not a placeable type
       var newK=mi.dataset.k===armedK ? null : mi.dataset.k;
       arm(newK);                                          // click a type to arm it; click it again to unselect
       if(newK) devMenu.classList.remove("show");          // a device is selected → hide the menu so you can place right away (Esc or the + button to change)
     });
-    document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); devMenu.classList.remove("show"); } });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); setEraseMode(false); devMenu.classList.remove("show"); } });
     var PLUS_SVG='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
-    function arm(k){ if(k && angleMode) setAngleMode(false); armedK=k; work.classList.toggle("arming",!!k);
+    function arm(k){ if(k){ if(angleMode) setAngleMode(false); if(eraseMode) setEraseMode(false); } armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
       var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
       if(typeof renderRooms==="function") renderRooms();   // placing a device → room selection off; idle → rooms clickable again
     }
+    // Eraser tool — a palette entry that DELETES instead of placing. Tap Eraser to arm it, then tap a device → confirm → delete.
+    var eraseMode=false;
+    function setEraseMode(on){ eraseMode=!!on; if(eraseMode) arm(null); document.body.classList.toggle("erasing",eraseMode);
+      var mi=devMenu.querySelector(".mi-erase"); if(mi) mi.classList.toggle("on",eraseMode); }
+    function eraseDevice(d){ if(!d||frozen()) return; hideViewPop();
+      var nm=cap(d.locName||(d.name&&d.name.trim())||d.tag||"this device");
+      if(window.confirm("Delete "+nm+"?")) removeDevice(d.id); }
     var activePtrs=new Set();
     work.addEventListener("pointerdown", function(e){ if(e.pointerType!=="mouse") activePtrs.add(e.pointerId); }, true);
     function ptrGone(e){ if(e.pointerType!=="mouse") activePtrs.delete(e.pointerId); }
@@ -1660,7 +1676,8 @@
       var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
       var defRange = pxPerFt()>0 ? (REACH_FT[k] || (it.ring?18:40)) : RANGE;   // scaled floor → real-foot default reach; else legacy px
       var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
-      devices.push(d); mountDevice(d); renderPanel(); updateCount(); reconcileLocations(); queueSave(); }   // a new camera resolves its room/zone location name on placement
+      devices.push(d); mountDevice(d); renderPanel(); updateCount(); reconcileLocations(); queueSave();
+      redoStk.length=0; updateRedoBtn(); }   // a new placement invalidates the redo stack; a new camera resolves its room/zone location on placement
     // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
     function mountDevice(d){
@@ -1669,8 +1686,7 @@
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
-        '<div class="viewBadge" title="View photo"></div>'+
-        '<button class="devRm" title="Remove" aria-label="Remove"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+        '<div class="viewBadge" title="View photo"></div>';
       (document.getElementById("planWorld")||document.getElementById("scene")).appendChild(el);   // devices ride the plan-world transform, aligned to the aerial
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d); ringDrag(el.querySelector(".ringGrip"),d);
       // Read-only (customer): tapping a camera marker opens its VIEW first (the enlarged photo popup,
@@ -1684,10 +1700,8 @@
       vb.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
       vb.addEventListener("click", function(e){ e.stopPropagation(); if(!d.photo) return;
         if(popId===d.id && popPinned){ hideViewPop(); } else { showViewPop(d, el, true); } });
-      // Inline remove on the marker — deletes this device straight from the plan (undoable via ↺, same as the side-panel ×). Staff only; locked on a submitted/approved survey.
-      var rm=el.querySelector(".devRm");
-      if(rm){ rm.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
-        rm.addEventListener("click", function(e){ e.stopPropagation(); if(frozen()) return; hideViewPop(); removeDevice(d.id); }); }
+      // Deletion is no longer a per-marker × — it's the Eraser tool in the device palette (tap Eraser,
+      // then tap a device → confirm → delete). See setEraseMode / eraseDevice.
       renderDevice(d);
     }
     function renderDevice(d){ var el=document.getElementById("dev-"+d.id); if(!el) return;
@@ -1880,7 +1894,7 @@
           ? '<div class="pv has"><span class="pvThumb" style="background-image:url('+d.photo+')"></span><input class="pvName" type="text" spellcheck="false" placeholder="View name"><div class="pvx" title="Remove photo">&times;</div></div>'
           : '<div class="pv"><button class="pvAdd" type="button">'+CAMSVG+'View photo</button></div>');
       card.querySelector(".r1").addEventListener("click", function(e){ if(!e.target.classList.contains("x")&&!e.target.classList.contains("nm")) select(d.id); });
-      card.querySelector(".x").addEventListener("click", function(){ removeDevice(d.id); });
+      card.querySelector(".x").addEventListener("click", function(){ var nm=cap(d.locName||(d.name&&d.name.trim())||d.tag||"this device"); if(window.confirm("Delete "+nm+"?")) removeDevice(d.id); });
       var nmi=card.querySelector(".nm"); nmi.value=d.name;
       var sga=card.querySelector(".sa"); paintSug(card,d);   // suggestion-first: shown only when it differs; the name changes ONLY on this click
       sga.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
@@ -2088,9 +2102,10 @@
     function flushNow(){ var json; try{ json=serialize(); }catch(e){ json=lastJson||localStorage.getItem(PKEY); } if(json) lastJson=json;
       try{ localStorage.setItem(PKEY, json); saveErr(false); }catch(e){ saveErr(true); reclaimInlineImages(); } reportHost();
       pushServer(json); }
-    function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimBtn"); if(b) b.classList.toggle("on",dimmed); }
-    document.getElementById("dimBtn").addEventListener("pointerdown", function(e){ e.stopPropagation(); });   // never fall through to placement
-    document.getElementById("dimBtn").addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); });
+    function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimMenuBtn"); if(b) b.classList.toggle("on",dimmed); }
+    // Dim lives in the bottom-right ••• menu now; toggling it keeps the menu open so you can flip it back.
+    (function(){ var b=document.getElementById("dimMenuBtn"); if(b){ b.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      b.addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); }); } })();
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
@@ -2480,6 +2495,7 @@
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
       dot.addEventListener("pointerdown", function(e){ if(regionMode||aligning) return;                                            // Regions / Align mode suspends device drag/select
+        if(eraseMode && !frozen()){ e.preventDefault(); e.stopPropagation(); eraseDevice(d); return; }   // Eraser tool armed: tap a device to delete it (with confirm)
         if(frozen()){ if(d.photo){ e.stopPropagation(); showViewPop(d, el, true); } return; }   // read-only / submitted: tap a photographed camera to view it (no drag)
         if(angleMode){ select(d.id===selId?null:d.id); return; }   // angle mode: click a camera to select; click again to unselect + hide its angle
         select(d.id);
@@ -2595,7 +2611,13 @@
     function renderSubmitCtl(){}
     var backBtn=document.getElementById("backBtn");
     backBtn.addEventListener("click", function(){ if(curStep>0) goStep(curStep-1); });
-    stepEls.forEach(function(s,i){ s.addEventListener("click",function(){ goStep(i); }); });
+    // Tapping the Background tab goes STRAIGHT into editing the background (reopens the satellite/draw
+    // editor) when this floor already has one — no extra "Edit background" hop. Falls back to the normal
+    // view when there's nothing to edit (no bg yet, read-only, or locked).
+    stepEls.forEach(function(s,i){ s.addEventListener("click",function(){
+      if(i===0 && bgHasImage && !frozen() && !RO){ goStep(0); var cb=document.getElementById("changeBgBtn"); if(cb){ cb.click(); return; } }
+      goStep(i);
+    }); });
     // Location selector → bottom sheet.
     document.getElementById("floorSel").addEventListener("click", openFloorSheet);
     document.getElementById("fsScrim").addEventListener("click", closeFloorSheet);
