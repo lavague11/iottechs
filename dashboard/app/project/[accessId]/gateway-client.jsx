@@ -2838,7 +2838,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ? [{ label: lp.survey_skipped_at ? "Restore survey" : "Skip survey", onClick: () => setShowSkipSurvey(true) }] : []),
           ...(onReAuth ? [{ label: "Lock", onClick: onReAuth }] : []),
         ]}
-        roleLabel={`${cView.charAt(0).toUpperCase()}${cView.slice(1)} view`}
+        roleLabel="Portal"
         dashboardHref={DECK_DASH_HOME[view] || null}
         log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}

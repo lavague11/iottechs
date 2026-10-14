@@ -32,7 +32,7 @@ const stageProgress = (s) => {
   return { done, total, allDone: total > 0 && done === total };
 };
 
-export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Admin view", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", dashboardHref = null, statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
+export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = true, customer = null, menu = [], roleLabel = "Portal", log = null, previewRole = null, onPreviewRole, previewRoles = [], roleMenu = null, onLock = null, logoHref = "/dashboard", dashboardHref = null, statusChip = null, initialOpenTool = null, progressPct = null, openToolOnMount = null, openToolSignal = null, gateBanner = null }) {
   const router = useRouter();
   const N = stages.length;
   const [drag, setDrag] = useState(0);

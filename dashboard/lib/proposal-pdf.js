@@ -432,20 +432,28 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     const infoItems2 = [
       ["CLIENT NAME", customerName || "Client TBD"],
       ["PHONE", customerPhone || "—"],
-      ["EMAIL", (customerEmail || "—").slice(0, 28)],
+      ["EMAIL", customerEmail || "—"],
     ];
+    // Usable width per column (to the next column / the box edge, less a small inset) so a long value —
+    // a long email, business name or address — shrinks to fit instead of spilling past the box border.
+    const colMaxW = [rw * 0.40 - 12, rw * 0.34 - 8, rw * 0.26 - 8];
+    const drawFit = (text, x, yy, maxW) => {
+      let s = 9.5; doc.setFontSize(s);
+      while (s > 6.5 && doc.getTextWidth(String(text)) > maxW) { s -= 0.25; doc.setFontSize(s); }
+      doc.text(String(text), x, yy);
+    };
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
     infoItems.forEach((item, i) => doc.text(item[0], cols[i], y + 12));
-    doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-    infoItems.forEach((item, i) => doc.text(item[1], cols[i], y + 26));
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+    infoItems.forEach((item, i) => drawFit(item[1], cols[i], y + 26, colMaxW[i]));
 
     doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.4);
     doc.line(lm, y + 32.4, lm + rw, y + 32.4);
 
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
     infoItems2.forEach((item, i) => doc.text(item[0], cols[i], y + 45));
-    doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-    infoItems2.forEach((item, i) => doc.text(item[1], cols[i], y + 57.6));
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+    infoItems2.forEach((item, i) => drawFit(item[1], cols[i], y + 57.6, colMaxW[i]));
 
     y += infoH + 7.2;
     doc.setDrawColor(...GOLD); doc.setLineWidth(1);
