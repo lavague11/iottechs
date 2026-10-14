@@ -472,57 +472,23 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
           <span className="pcv-hd-lbl">{copied ? "Copied" : "Share"}</span>
         </button>
-        <details className="pcv-dl" onClick={(e) => { const b = e.target.closest("button[data-mode]"); if (b) { e.currentTarget.removeAttribute("open"); handleDownload(b.dataset.mode); } }}>
-          <summary className="pcv-hd-ic" title="Download this proposal as a PDF" aria-label="Download PDF">
+        {/* Customer download is ONE action — the full (detailed) proposal PDF. No Standard/Survey menu here. */}
+        <button type="button" className="pcv-hd-ic" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
           <span className="pcv-hd-lbl">{dlBusy ? "…" : "PDF"}</span>
-        </summary>
-          <div className="pcv-dl-menu"><button type="button" data-mode="standard" disabled={dlBusy}>Standard PDF</button><button type="button" data-mode="detailed" disabled={dlBusy}>Detailed PDF</button><button type="button" data-mode="survey" disabled={dlBusy}>Site Survey PDF</button></div>
-        </details>
+        </button>
         <button type="button" className="pcv-fold-chev-btn" onClick={toggleDoc} title={docOpen ? "Collapse" : "Expand"}>{docOpen ? "▲" : "▼"}</button>
       </div>
 
       {docOpen && (
       <div className="pcv-foldwrap">
-      <div className="pcv-header">
-        <div className="pcv-hd-left">
-          <a href="/go" className="pcv-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
-          <span className="pcv-tagline">Secure Tomorrow. Today.</span>
-          <span className="pcv-contact">(646) 396-0775 · support@iot-techs.com · www.iot-techs.com</span>
-        </div>
-        <div className="pcv-hd-right">
-          <span className="pcv-pill">Security &amp; Low Voltage</span>
-          <span className="pcv-hd-meta">{propDate}</span>
-          <span className="pcv-hd-meta">Proposal #: {propNum}</span>
-        </div>
-      </div>
+      {/* The PDF masthead (logo/tagline/contact) and the Prepared-For/address/phone/email box are REMOVED
+          from the on-screen customer view — the project header above already carries company + customer
+          context, so repeating it here was redundant. The downloaded PDF keeps the full formal masthead. */}
 
-      <div className="pcv-info-box">
-        <div className="pcv-info-row">
-          <div><span className="pcv-info-lbl">Prepared For</span><b>{customerName || "Client TBD"}</b></div>
-          <div><span className="pcv-info-lbl">Project Address</span>
-            {customerAddress
-              ? <a className="pcv-info-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`} target="_blank" rel="noreferrer">{customerAddress}</a>
-              : <b>Address TBD</b>}
-          </div>
-        </div>
-        <div className="pcv-info-row">
-          <div><span className="pcv-info-lbl">Phone</span>
-            {customerPhone
-              ? <a className="pcv-info-link" href={`tel:${String(customerPhone).replace(/[^\d+]/g, "")}`}>{fmtPhone(customerPhone)}</a>
-              : <b>—</b>}
-          </div>
-          <div><span className="pcv-info-lbl">Email</span>
-            {customerEmail
-              ? <a className="pcv-info-link" href={`mailto:${customerEmail}`}>{customerEmail}</a>
-              : <b>—</b>}
-          </div>
-        </div>
-      </div>
-
-      {/* Your System Layout — floor plan(s) with cameras placed + the mockup photos, so the
-          customer can SEE what they're buying (not just line items). Collapsible, render-only-when-real. */}
-      {hasLayout && (
+      {/* Your System Layout removed from the customer proposal view (per owner) — the walkthrough is still
+          reachable via the per-camera "Placement" chips, and the layout lives on the dedicated tool. */}
+      {false && hasLayout && (
         <div className="pcv-layout">
           <button type="button" className="pcv-layout-hd" onClick={toggleLayout} aria-expanded={layoutOpen}>
             <span className="pcv-layout-ic">
@@ -647,16 +613,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           : depositPct >= 100 ? <>Paid in full before we begin · <b>{money(t.grand)}</b></>
           : <>{depositPct}% deposit to begin · <b>{money(t.grand * depositPct / 100)}</b> · balance due on completion</>
         }</div>
-        {canAct && (
-          <button className="pcv-sum-cta" disabled={busy} onClick={() => choose(opt.id)}>
-            {optAccepted ? `Remove Option ${opt.id}` : (
-              <>
-                <svg className="pcv-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                {diffInfo ? "Review & Sign" : "Approve & Sign"}
-              </>
-            )}
-          </button>
-        )}
         <button type="button" className="pcv-sum-more" onClick={() => setDetailOpen((o) => !o)} aria-expanded={detailOpen}>
           {detailOpen ? "Hide detailed breakdown ▲" : "View detailed breakdown ▾"}
         </button>
@@ -778,19 +734,34 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       </>)}
 
       <div className="pcv-section-hd">Payment Terms</div>
-      <div className="pcv-pay-table">
-        <div className="pcv-pay-head"><span>Phase</span><span>Due date</span><span className="r">%</span><span className="r">Amount</span></div>
+      {/* Stacked milestones (no table on mobile) — phase + % on the left with its due date,
+          amount on the right. The plan's prose terms line is dropped when the milestones already
+          spell out the schedule, so we don't repeat "50% before we begin · 50% on completion". */}
+      <div className="pcv-pay-list">
         {payPhases.map(([ph, trig, pct, amt], i) => (
-          <div key={i} className={"pcv-pay-row" + (i === 0 ? " first" : "")}>
-            <span className="pcv-pay-phase">{ph}</span>
-            <span className="pcv-pay-due">{trig}</span>
-            <span className="r">{pct}</span>
-            <span className="r b">{money(amt)}</span>
+          <div key={i} className={"pcv-pay-item" + (i === 0 ? " first" : "")}>
+            <div className="pcv-pay-left">
+              <span className="pcv-pay-phase">{ph}{pct ? <em> · {pct}</em> : null}</span>
+              <span className="pcv-pay-due">{trig}</span>
+            </div>
+            <span className="pcv-pay-amt">{money(amt)}</span>
           </div>
         ))}
       </div>
-      {payTerms && <div className="pcv-pay-terms">{payTerms}</div>}
+      {payTerms && payPhases.length <= 1 && <div className="pcv-pay-terms">{payTerms}</div>}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
+
+      {/* Primary action lives here, directly under the money — bold gold so it's unmistakable. */}
+      {canAct && (
+        <button className="pcv-signbar" disabled={busy} onClick={() => choose(opt.id)}>
+          {optAccepted ? `Remove Option ${opt.id}` : (
+            <>
+              <svg className="pcv-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+              {diffInfo ? "Review & Sign" : "Approve & Sign"}
+            </>
+          )}
+        </button>
+      )}
 
       {t.pcpCredit > 0 && (
         <>
@@ -876,7 +847,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             )}
             {canAct && (
               <>
-                <p>{diffInfo ? "Review the changes and use Review & Sign above — or request a change / decline." : "Use Approve & Sign above to accept. You can also request a change or decline here."}</p>
+                <p>{diffInfo ? "Review the changes and use Review & Sign under Payment Terms — or request a change / decline here." : "Use Approve & Sign under Payment Terms to accept. You can also request a change or decline here."}</p>
                 <div className="pcv-accept-actions secondary">
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>
                     <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -1114,11 +1085,39 @@ const PCV_CSS = `
   .pcv-hd-ic{padding:0 8px;gap:0}
   .pcv-fold-hd{padding:11px 12px;gap:8px}
   /* 16px mobile gutter across the one rail; metadata stacks; the total shrinks so nothing overflows the page. */
-  .pcv-header,.pcv-info-box,.pcv-sum,.pcv-section-hd,.pcv-table,.pcv-pay-table,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
-  .pcv-info-row{grid-template-columns:1fr;gap:12px}
+  .pcv-header,.pcv-info-box,.pcv-sum,.pcv-section-hd,.pcv-table,.pcv-pay-list,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
+  button.pcv-signbar{width:auto;margin-left:16px;margin-right:16px}
+  /* Cost breakdown reads as a clean 3-column list on a phone: drop the # and Unit columns, give the
+     description the room, keep the amount right-aligned. (The detailed breakdown is opt-in anyway.) */
+  .pcv-table-head,.pcv-row{grid-template-columns:1fr 42px 82px !important}
+  .pcv-table-head > :first-child,.pcv-table-head > :nth-child(4),
+  .pcv-row > :first-child,.pcv-row > :nth-child(4){display:none}
+  .pcv-info-row{grid-template-columns:1fr;gap:10px}
   .pcv-sum-total{flex-wrap:wrap;gap:2px 12px}
   .pcv-sum-total-amt{font-size:1.45rem}
   .pcv-info-link,.pcv-contact{word-break:break-word;overflow-wrap:anywhere}
+  /* ----- compact customer proposal on mobile: less repeated branding, tighter rhythm, price is the moment ----- */
+  /* The portal already shows company + project context above, so drop the PDF masthead's repeated tagline/contact. */
+  .pcv-header{padding:2px 16px 12px;gap:6px}
+  .pcv-tagline,.pcv-contact{display:none}
+  .pcv-brand svg{height:17px}
+  .pcv-hd-right{flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 10px}
+  .pcv-pill{padding:3px 9px;font-size:.58rem}
+  .pcv-hd-meta{font-size:.66rem}
+  .pcv-info-box{margin-top:12px;padding-bottom:12px}
+  .pcv-info-lbl{font-size:.58rem}
+  /* price becomes a clear, prominent moment */
+  .pcv-grand{margin-top:12px;padding:14px 16px;font-size:.9rem;border-radius:12px;align-items:baseline}
+  .pcv-grand span:last-child{font-size:1.5rem;font-weight:800}
+  /* quieter section rhythm + lighter cards so it reads as a document, not stacked tiles */
+  .pcv-layout{border-radius:10px}
+  .pcv-pcp-box{padding:14px}
+  /* keep the proposal inside the mobile column: let dense tables scroll internally instead of forcing
+     the whole document wider than the viewport (which was clipping the price + right-edge content). */
+  .pcv-root{min-width:0;max-width:100%}
+  .pcv-table,.pcv-loc-box{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .pcv-fold-row{min-width:0}
+  .pcv-fold-title,.pcv-info-row b,.pcv-info-link{min-width:0}
 }
 .pcv-table{margin:0 22px}
 .pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:var(--dv-paper,#F4F4F2);
@@ -1148,17 +1147,26 @@ const PCV_CSS = `
 .pcv-loc-list{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-size:.8rem;color:var(--dv-ink,#101418);padding:10px 4px 0}
 .pcv-loc-total{font-weight:600;color:var(--dv-ink-soft,#3A4048);font-size:.8rem;padding:8px 4px 4px}
 
-.pcv-pay-table{margin:0 22px}
-.pcv-pay-head{display:grid;grid-template-columns:1.5fr 1.2fr 50px 110px;gap:6px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);
-  font-size:.72rem;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
-.pcv-pay-head .r{text-align:right}
-.pcv-pay-row{display:grid;grid-template-columns:1.5fr 1.2fr 50px 110px;gap:6px;padding:8px 10px;font-size:.8rem;
-  color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2);border-bottom:1px solid var(--dv-line-soft,#EDEDE9);align-items:center}
-.pcv-pay-row.first{background:rgba(201,169,110,.08);border-left:3px solid var(--dv-gold,#C9A96E)}
-.pcv-pay-row.first .pcv-pay-phase{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
-.pcv-pay-phase{display:flex;flex-direction:column;font-weight:600}
-.pcv-pay-phase em{font-style:normal;font-size:.68rem;font-weight:500;color:var(--dv-meta,#787D84)}
-.pcv-pay-due{font-weight:600;color:var(--dv-ink-soft,#3A4048)}
+/* Payment Terms — stacked milestones, no table. Each milestone is a row: phase + % on the left,
+   the due date beneath it, and the amount right-aligned. First (deposit) gets the gold accent. */
+.pcv-pay-list{margin:0 22px;display:flex;flex-direction:column;gap:8px}
+.pcv-pay-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;
+  background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px}
+.pcv-pay-item.first{background:rgba(201,169,110,.08);border-color:rgba(201,169,110,.30);border-left:3px solid var(--dv-gold,#C9A96E)}
+.pcv-pay-left{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pcv-pay-phase{font-size:.88rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pcv-pay-phase em{font-style:normal;font-weight:600;color:var(--dv-meta,#787D84)}
+.pcv-pay-item.first .pcv-pay-phase{color:var(--dv-gold-text,#8A6A1F)}
+.pcv-pay-due{font-size:.76rem;font-weight:500;color:var(--dv-meta,#787D84)}
+.pcv-pay-amt{flex-shrink:0;font-size:1rem;font-weight:800;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+/* Primary accept action — bold gold, high-specificity + !important so no deck/button reset flattens it. */
+button.pcv-signbar{display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% - 44px);margin:14px 22px 0;
+  min-height:52px;padding:0 20px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:1.02rem;letter-spacing:.01em;
+  background:#F7DC6F !important;color:#1f1a05 !important;border:2px solid #C9A96E !important;font-weight:800 !important;
+  box-shadow:0 2px 10px rgba(201,169,110,.35)}
+button.pcv-signbar:hover:not(:disabled){background:#F2D45A !important}
+button.pcv-signbar:disabled{opacity:.5;cursor:default}
+button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:2px 8px;vertical-align:middle}
 .pcv-waived-strike{color:var(--dv-red,#C4553D);text-decoration:line-through;text-decoration-color:var(--dv-red,#C4553D)}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:var(--dv-ink-soft,#3A4048);font-weight:500;line-height:1.45;border-left:3px solid var(--dv-gold,#C9A96E);padding-left:12px}
