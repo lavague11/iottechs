@@ -216,6 +216,14 @@ function init() {
   if (!cols.includes("install_date"))    db.exec("ALTER TABLE projects ADD COLUMN install_date TEXT");
   if (!cols.includes("lost_reason"))       db.exec("ALTER TABLE projects ADD COLUMN lost_reason TEXT");
   if (!cols.includes("lost_at"))           db.exec("ALTER TABLE projects ADD COLUMN lost_at TEXT");
+  // Closure audit (extends the existing lost_at/lost_reason "closed" concept — one closed state, reopenable):
+  //   lost_at = closedAt · lost_reason = closeReason · lost_by = closedBy · lost_kind = unsigned|manual|declined
+  //   lost_prev_stage = the lifecycle stage captured at close · reopened_at/reopened_by = last reopen.
+  if (!cols.includes("lost_by"))           db.exec("ALTER TABLE projects ADD COLUMN lost_by TEXT");
+  if (!cols.includes("lost_kind"))         db.exec("ALTER TABLE projects ADD COLUMN lost_kind TEXT");          // unsigned (auto) | manual | declined
+  if (!cols.includes("lost_prev_stage"))   db.exec("ALTER TABLE projects ADD COLUMN lost_prev_stage TEXT");
+  if (!cols.includes("reopened_at"))       db.exec("ALTER TABLE projects ADD COLUMN reopened_at TEXT");
+  if (!cols.includes("reopened_by"))       db.exec("ALTER TABLE projects ADD COLUMN reopened_by TEXT");
   if (!cols.includes("needs_attention"))    db.exec("ALTER TABLE projects ADD COLUMN needs_attention INTEGER DEFAULT 0");
   if (!cols.includes("attention_note"))     db.exec("ALTER TABLE projects ADD COLUMN attention_note TEXT");
   if (!cols.includes("commission_rate"))    db.exec("ALTER TABLE projects ADD COLUMN commission_rate REAL DEFAULT 0");
@@ -1160,6 +1168,10 @@ function init() {
   if (!propCols.includes("pcp_agreement_no")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_agreement_no TEXT");
   if (!propCols.includes("pcp_grant_source")) db.exec("ALTER TABLE proposals ADD COLUMN pcp_grant_source TEXT");  // performance | donor | community | company
   if (!propCols.includes("pcp_approved_at"))  db.exec("ALTER TABLE proposals ADD COLUMN pcp_approved_at TEXT");   // admin finalized
+  // Signature clock: when a proposal is accepted, an agreement must be signed within 30 days or the daily
+  // job auto-closes the project "Closed — Unsigned". Stored explicitly (set at acceptance / reset on reopen)
+  // so the finance resolver + sweep read one value instead of recomputing loosely. See lib/receivables-model.js.
+  if (!propCols.includes("signature_deadline")) db.exec("ALTER TABLE proposals ADD COLUMN signature_deadline TEXT");
   ensureEsignSchema(db);   // PDF e-sign: sign_documents / sign_sessions / sign_events + proposals.unsigned_doc_id/signed_doc_id/sign_status (lib/esign/)
   ensureSeoSchema(db);     // SEO engine: seo_pages / seo_facts / seo_case_studies / seo_links / seo_revisions / seo_backlinks (lib/seo/)
 
@@ -5907,9 +5919,12 @@ function _writeOptSets(cur, acc, dec) {
   const status = any ? "accepted" : (anyDec ? "declined" : "sent");
   const now = new Date().toISOString().slice(0, 19).replace("T", " ");
   const firstReason = anyDec ? String(Object.values(dec)[0] || "") : null;
-  db.prepare("UPDATE proposals SET accepted_options=?, declined_options=?, selected_option=?, selected_at=?, status=?, declined_reason=?, declined_at=?, updated_at=datetime('now','localtime') WHERE id=?")
+  // Acceptance starts (or preserves) the 30-day signature clock; un-accepting clears it. A re-toggle while
+  // already accepted keeps the original deadline (accepting a 2nd option must not extend the window).
+  const deadline = any ? (cur.signature_deadline || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 19).replace("T", " ")) : null;
+  db.prepare("UPDATE proposals SET accepted_options=?, declined_options=?, selected_option=?, selected_at=?, status=?, declined_reason=?, declined_at=?, signature_deadline=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(JSON.stringify(acc), JSON.stringify(dec), any ? acc[0] : null, any ? now : null,
-      status, firstReason, anyDec ? now : null, cur.id);
+      status, firstReason, anyDec ? now : null, deadline, cur.id);
   return getActiveProposal(accessId_of(cur));
 }
 function accessId_of(cur) { return cur.project_access_id; }
