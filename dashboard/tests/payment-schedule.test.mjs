@@ -68,18 +68,20 @@ const fullProposal = (plan, full_date) => ({
 const renderTexts = (p) => { const trace = []; downloadProposalPdf(p, { customerName: "Pay Test", __trace: trace, __return: true }); return trace.map((t) => t.text); };
 
 test("PDF: a 100% plan is one payment line (no 0% Final split)", () => {
+  // Each milestone now renders as a clean schedule row: label on top ("PAYMENT"/"DEPOSIT"/"FINAL"),
+  // "% · timing" combined on the muted line beneath, amount right-aligned.
   const pre = renderTexts(fullProposal("100"));
-  assert.ok(pre.includes("Before we begin"), "prepaid shows 'Before we begin'");
-  assert.ok(pre.includes("100%"), "shows 100%");
-  assert.ok(!pre.includes("0%"), "no 0% line");
-  // exactly one phase cell in the payment table
-  assert.equal(pre.filter((t) => t === "Payment").length, 1);
-  assert.equal(pre.filter((t) => t === "Final").length, 0);
+  assert.ok(pre.some((t) => t.includes("Before we begin")), "prepaid shows 'Before we begin'");
+  assert.ok(pre.some((t) => t.includes("100%")), "shows 100%");
+  assert.ok(!pre.some((t) => t.trim().startsWith("0%")), "no 0% milestone");
+  // exactly one milestone label (uppercased) in the schedule; never a Final split
+  assert.equal(pre.filter((t) => t === "PAYMENT").length, 1);
+  assert.equal(pre.filter((t) => t === "FINAL").length, 0);
 
   const post = renderTexts(fullProposal("100_end"));
-  assert.ok(post.includes("Upon completion"));
-  assert.ok(!post.includes("0%"));
+  assert.ok(post.some((t) => t.includes("Upon completion")));
+  assert.ok(!post.some((t) => t.trim().startsWith("0%")));
 
   const byDate = renderTexts(fullProposal("100", "2026-12-01"));
-  assert.ok(byDate.includes("Dec 1, 2026"), "chosen date renders as the due date");
+  assert.ok(byDate.some((t) => t.includes("Dec 1, 2026")), "chosen date renders as the due date");
 });

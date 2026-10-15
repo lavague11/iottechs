@@ -38,7 +38,7 @@ for (const [label, n, opts] of [["short", 1, {}], ["medium", 10, {}], ["long", 3
     // 3. Payment Terms is one block: heading, schedule, methods, plan terms and the tax note share a page.
     // The block is bounded by its header (top) and the tax note (bottom) + the methods line; if those share a
     // page the schedule rows between them do too. (Not "Deposit"/"Final" — those words also appear in the Terms.)
-    const pay = new Set([...pageOf(trace, "PAYMENT TERMS"), ...pageOf(trace, "Payment methods:"), ...pageOf(trace, "Price subject to applicable sales tax")]);
+    const pay = new Set([...pageOf(trace, "PAYMENT TERMS"), ...pageOf(trace, "Payment methods"), ...pageOf(trace, "Price subject to applicable sales tax")]);
     assert.equal(pay.size, 1, `payment terms split across pages ${[...pay]}`);
     // 4. Acceptance is one block: heading, instruction, labels and signature line share a page.
     const acc = new Set([...pageOf(trace, "ACCEPTANCE OF PROPOSAL"), ...pageOf(trace, "By signing below"), ...pageOf(trace, "AUTHORIZED SIGNATURE"), ...pageOf(trace, "PREPARED BY")]);

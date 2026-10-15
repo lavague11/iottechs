@@ -658,57 +658,42 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       return "Progress";
     };
     const payments = sched.map((r, i) => [phaseFor(r.when, i, sched.length), dueFor(r.when), r.pctLabel, "$" + money(r.amount || 0)]);
-    const planTerms = fullDate && (payPlan === "100" || payPlan === "100_end") && sched[0]
-      ? "Paid in full " + sched[0].when + "."       // "Paid in full by Oct 15, 2026."
-      : PAYMENT_PLANS[payPlan]?.terms;
-    doc.setFontSize(8); doc.setFont("helvetica", "bold");
-    const termLines = planTerms ? doc.splitTextToSize(planTerms, rw) : [];
-    const termsH = termLines.length ? termLines.length * LINE_H + 2 : 0;
-    const payH = 22 + 4 + 20 + payments.length * 20 + 7.2 + 12 + termsH + 10 + 4;
+    // A clean payment SCHEDULE, not a nested table: one milestone per row — bold label + large right-aligned
+    // amount on top, "% · timing" muted beneath — with a restrained warm/gold accent on the first (current-due)
+    // milestone so the eye answers "what's owed first?" at a glance. No second table header, no repeated 50/50
+    // sentence (the rows already say it); methods + tax sit quietly below a hairline. Data-driven: 100% → one
+    // row, custom milestones → one row each.
+    const PT_MUTED = [116, 122, 140], PT_WARM = [255, 250, 241], PT_DIV = [224, 219, 208], PT_FAINT = [146, 152, 166];
+    const rowH = 28;
+    const payH = 22 + 10 + payments.length * rowH + 12 + 11 + 9 + 6;
     { const ny = ensureRoom(y + 14.4, payH); y = movedToNewPage(y + 14.4, ny) ? ny : y + 14.4; }
-    y = sectionHeader("PAYMENT TERMS", y) + 4;
-    doc.setFillColor(...SLATE);
-    doc.rect(lm, y, rw, 20, "F");
-    doc.setDrawColor(...GOLD); doc.setLineWidth(1);
-    doc.line(lm, y + 20, lm + rw, y + 20);
-    doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
-    doc.text("Phase", lm + 10, y + 13);
-    doc.text("Due date", lm + rw * 0.28, y + 13);
-    doc.text("%", lm + rw * 0.75, y + 13, { align: "right" });
-    doc.text("Amount", lm + rw - 6, y + 13, { align: "right" });
-    y += 20;
+    y = sectionHeader("PAYMENT TERMS", y) + 10;   // extra breathing room below the header bar
     payments.forEach(([phase, trigger, pct, amt], i) => {
-      const bg = i % 2 === 0 ? [255, 251, 242] : MIST;
-      doc.setFillColor(...bg);
-      doc.rect(lm, y, rw, 20, "F");
-      if (i === 0) { doc.setFillColor(...GOLD); doc.rect(lm, y, 3, 20, "F"); }
-      doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.3);
-      doc.line(lm, y + 20, lm + rw, y + 20);
-      doc.setFontSize(8.5); doc.setFont("helvetica", i === 0 ? "bold" : "normal");
-      doc.setTextColor(...(i === 0 ? GOLD : INK));
-      doc.text(phase, lm + 10, y + 13);
-      doc.setTextColor(...INK); doc.setFont("helvetica", "normal");
-      doc.text(trigger, lm + rw * 0.28, y + 13);
-      doc.text(pct, lm + rw * 0.75, y + 13, { align: "right" });
-      doc.setFont("helvetica", "bold");
-      doc.text(amt, lm + rw - 6, y + 13, { align: "right" });
-      y += 20;
+      const isFirst = i === 0;
+      if (isFirst) { doc.setFillColor(...PT_WARM); doc.rect(lm, y, rw, rowH, "F"); doc.setFillColor(...GOLD); doc.rect(lm, y, 3, rowH, "F"); }
+      // milestone label (uppercase, anchor) + amount (large, right-aligned)
+      doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...(isFirst ? GOLD : INK));
+      doc.text(phase.toUpperCase(), lm + 10, y + 12);
+      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
+      doc.text(amt, lm + rw - 8, y + 12.5, { align: "right" });
+      // "% · timing" beneath — dated milestones read "Due <date>", phase milestones pass through
+      const timing = /^[A-Z][a-z]{2}\s+\d|\b20\d\d\b/.test(trigger) ? "Due " + trigger : trigger;
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(...PT_MUTED);
+      doc.text(pct + " · " + timing, lm + 10, y + 22);
+      y += rowH;
     });
-    y += 7.2;
-    // Accepted payment methods — mirrors the options offered at the payment stage.
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
-    doc.text("Payment methods:", lm, y);
-    const mLbl = doc.getTextWidth("Payment methods: ");
-    doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
-    doc.text("Zelle (preferred), Certified Check, Cash, Card, Wire", lm + mLbl, y);
-    y += 12;
-    if (termLines.length) {
-      doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-      termLines.forEach((ln, i) => doc.text(ln, lm, y + i * LINE_H));
-      y += termsH;
-    }
-    doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(74, 82, 112);
-    doc.text("Price subject to applicable sales tax. Proposal valid 7 days from issue.", lm, y);
+    y += 10;
+    doc.setDrawColor(...PT_DIV); doc.setLineWidth(0.5); doc.line(lm, y, lm + rw, y); y += 11;
+    // Payment methods — one quiet muted line
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...PT_MUTED);
+    doc.text("Payment methods", lm, y);
+    const mLbl = doc.getTextWidth("Payment methods") + 7;
+    doc.setFont("helvetica", "normal");
+    doc.text("Zelle preferred · Certified Check · Cash · Card · Wire", lm + mLbl, y);
+    y += 9;
+    // Tax / validity — quieter footer note
+    doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(...PT_FAINT);
+    doc.text("Price subject to applicable sales tax · Proposal valid 7 days", lm, y);
     y += 4;
 
     // Acceptance / signature — one block (heading, instruction, name/date/total box, signature,
