@@ -116,17 +116,43 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
           ctx.font = `800 ${Math.round(r * (d.code.length > 2 ? 0.72 : 0.9))}px system-ui, "Segoe UI", sans-serif`;
           ctx.fillText(d.code, cx, cy + 0.5);
         }
-        if (scene.showNames && d.label) {
-          ctx.font = `700 ${Math.round(r * 0.85)}px system-ui, "Segoe UI", sans-serif`;
-          const tw = ctx.measureText(d.label).width, ph = Math.round(r * 1.1), pw = tw + r * 0.9;
-          const tx = Math.min(W - pw - 2, cx + r + 4), ty = cy - ph / 2;
-          ctx.fillStyle = "rgba(16,20,24,.86)";
-          roundRect(ctx, tx, ty, pw, ph, 4); ctx.fill();
-          ctx.fillStyle = "#fff"; ctx.textAlign = "left";
-          ctx.fillText(d.label, tx + r * 0.45, cy + 0.5);
-          ctx.textAlign = "center";
-        }
       });
+      // Layer 4 — name tags, placed so a chip never overlaps another chip OR a marker disc. Each label
+      // tries right → left → below → above of its disc, then nudges vertically until it's clear; a leader
+      // line connects a label that had to move far. (A cluster of cameras used to stack labels on top of
+      // each other — e.g. "Grand 1 / Grand 2" overlapping on the PDF.)
+      if (scene.showNames) {
+        const discRects = place.map((q) => ({ x: q.x - r, y: q.y - r, w: 2 * r, h: 2 * r }));
+        const placedL = [], gap = 4;
+        const ov = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+        const hits = (rc) => discRects.some((d) => ov(rc, d)) || placedL.some((p) => ov(rc, p));
+        ctx.textBaseline = "middle";
+        scene.markers.forEach((d, i) => {
+          if (!d.label) return;
+          const q = place[i];
+          ctx.font = `700 ${Math.round(r * 0.85)}px system-ui, "Segoe UI", sans-serif`;
+          const tw = ctx.measureText(d.label).width, ph = Math.round(r * 1.1), pw = Math.round(tw + r * 0.9);
+          const cands = [
+            { x: q.x + r + gap, y: q.y - ph / 2 },        // right (default)
+            { x: q.x - r - gap - pw, y: q.y - ph / 2 },   // left
+            { x: q.x - pw / 2, y: q.y + r + gap },        // below
+            { x: q.x - pw / 2, y: q.y - r - gap - ph },   // above
+          ];
+          for (let k = 1; k <= 8; k++) { cands.push({ x: q.x + r + gap, y: q.y - ph / 2 + k * (ph + 3) }); cands.push({ x: q.x + r + gap, y: q.y - ph / 2 - k * (ph + 3) }); }
+          let best = null;
+          for (const c of cands) { const rc = { x: c.x, y: c.y, w: pw, h: ph }; if (rc.x < 2 || rc.y < 2 || rc.x + pw > W - 2 || rc.y + ph > H - 2) continue; if (!hits(rc)) { best = rc; break; } }
+          if (!best) best = { x: Math.min(W - pw - 2, Math.max(2, q.x + r + gap)), y: Math.min(H - ph - 2, Math.max(2, q.y - ph / 2)), w: pw, h: ph };
+          placedL.push(best);
+          const atRight = Math.abs(best.x - (q.x + r + gap)) < 1 && Math.abs(best.y + ph / 2 - q.y) < 1;
+          if (!atRight) {   // leader line from the disc to the nearest chip edge so a moved label isn't ambiguous
+            const lx = best.x + (best.x + pw / 2 < q.x ? pw : 0), ly = Math.max(best.y, Math.min(best.y + ph, q.y));
+            ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(lx, ly);
+            ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "rgba(16,20,24,.4)"; ctx.setLineDash([]); ctx.stroke();
+          }
+          ctx.fillStyle = "rgba(16,20,24,.86)"; roundRect(ctx, best.x, best.y, pw, ph, 4); ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.fillText(d.label, best.x + r * 0.45, best.y + ph / 2); ctx.textAlign = "center";
+        });
+      }
       ctx.restore();   // end the plan-world group — the north indicator below is screen-fixed, not part of the plan
       // Layer 5 — north indicator (top-right), only when the floor's capture transform knows north.
       if (f.aerial && Number.isFinite(f.aerial.northDeg)) {

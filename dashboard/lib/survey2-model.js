@@ -133,7 +133,7 @@ export const SPK_COVERAGE = { fill: "rgba(96,165,250,0.28)", stroke: "rgba(96,16
 export function surveyScene(floors, floorIndex, W, H, { dense = 16, coneLen = null, pxPerFt = 0, planXf = null } = {}) {
   const all = surveyDevices(floors).filter((d) => d.floor === floorIndex);
   const xf = planXf && !xfIsId(planXf) ? validXf(planXf) : null;
-  const rBase = Math.max(14, Math.round(Math.max(W, H) * 0.011));   // sized by the dominant dimension so markers stay readable on wide/short plans (not tiny)
+  const rBase = Math.max(11, Math.round(Math.max(W, H) * 0.008));   // small-by-default markers (sized by the dominant dimension); kept readable but no longer oversized on the PDF / customer layout
   const r = xf ? Math.max(1, Math.round(rBase * xf.s)) : rBase;     // markers ride the alignment scale, like the widget's #planWorld
   const minWH = Math.min(W, H);
   const scaled = pxPerFt > 0;
