@@ -31,7 +31,7 @@ async function principal() {
 }
 async function principalName() { return (await principal())?.name || null; }
 // Media kinds that count toward something (install photos gate a lifecycle step) must be declared.
-const PROJECT_KINDS = new Set(["install", "install-issue", "survey-view", "survey", "camera", "device", "mockup", "bug", "note", "site"]);
+const PROJECT_KINDS = new Set(["install", "install-issue", "survey-view", "survey", "survey-bg", "camera", "device", "mockup", "bug", "note", "site"]);
 const UPLOAD_ROLES = new Set(["admin", "manager", "sales", "tech"]);
 
 export async function POST(req) {
