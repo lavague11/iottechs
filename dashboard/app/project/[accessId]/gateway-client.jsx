@@ -2347,8 +2347,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // always visible regardless of the active mode — so you never hunt for "submit survey" in Plans
         // and "approve mockup" in Views. Still two independently fingerprinted artifacts, each flushing
         // its own draft before submit (surveySatisfied stays the single gate).
+        const mkSkipped = !!lp.mockup_skipped_at, viewsReq = !!lp.views_required;
         const footerNode = (hasSurvey || hasViews) ? (
           <div className="syp-submit">
+            <div className="syp-submit-head">Consulting deliverables</div>
             {hasSurvey && (
               <div className="syp-submit-row">
                 <span className="syp-submit-lbl">Site survey</span>
@@ -2357,14 +2359,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   role={cView} preview={!!previewRole} onChange={onApprove} />
               </div>
             )}
-            {hasViews && (
+            {hasViews ? (
               <div className="syp-submit-row">
                 <span className="syp-submit-lbl">Camera views</span>
                 <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
                   acceptance={acceptances.mockup} submission={acceptances.submit_mockup}
                   role={cView} preview={!!previewRole} onChange={onApprove} />
               </div>
-            )}
+            ) : (cView !== "customer" && (
+              // Not started: still summarize the state so Review is the authoritative deliverables list.
+              <div className="syp-submit-row">
+                <span className="syp-submit-lbl">Camera views</span>
+                <span className={`syp-vpill${viewsReq ? " req" : ""}`}>{viewsReq ? "Required — not started" : mkSkipped ? "Skipped" : "Optional — not started"}</span>
+              </div>
+            ))}
           </div>
         ) : null;
         // Customer with nothing to review yet → the grayed stub rows, not an empty workspace.

@@ -253,6 +253,13 @@ const CSS = `
 .syp-step.on .syp-dot{background:#fff;border-color:#fff;color:var(--dv-ink,#101418)}
 .syp-step.done:not(.on) .syp-dot{background:var(--dv-gold,#b98a2e);border-color:var(--dv-gold,#b98a2e);color:#fff}
 .syp-sep{display:none}
+@media (max-width:640px){
+  .syp-head{gap:8px}
+  .syp-rail{flex:1 1 auto;-webkit-overflow-scrolling:touch}
+  .syp-step{padding:6px 11px;font-size:.76rem;gap:5px}
+  .syp-dot{width:12px;height:12px;font-size:8px}
+  .syp-vstart{padding:20px 14px}
+}
 .syp-vstart{border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:26px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
 .syp-vstart-h{font-size:1rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-vstart-sub{font-size:.84rem;color:var(--dv-meta,#787D84);max-width:420px}
@@ -290,6 +297,9 @@ const CSS = `
 .syp-empty{text-align:center;padding:40px 16px;color:var(--dv-meta,#787D84);font-size:.86rem;border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px}
 /* One submit surface — both tools' Submit/Approve controls, always visible under either mode. */
 .syp-submit{margin-top:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:6px 16px;display:flex;flex-direction:column}
+.syp-submit-head{font:800 11px var(--sans,inherit);letter-spacing:.09em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:10px 0 4px}
+.syp-vpill{font-size:.76rem;font-weight:700;color:var(--dv-meta,#787D84);background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:4px 12px}
+.syp-vpill.req{color:var(--dv-gold,#b98a2e);border-color:var(--dv-gold,#b98a2e)}
 .syp-submit-row{display:flex;align-items:center;gap:14px;padding:10px 0;flex-wrap:wrap}
 .syp-submit-row + .syp-submit-row{border-top:1px solid var(--dv-line,#E4E4DF)}
 .syp-submit-lbl{font-size:.8rem;font-weight:700;color:var(--dv-ink,#101418);min-width:96px;flex:0 0 auto}

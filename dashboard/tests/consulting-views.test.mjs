@@ -54,3 +54,18 @@ test("Views Start/Skip UI + action wiring", () => {
   assert.ok(gw.includes("onSkipViews={(cView === \"customer\" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}"), "gateway wires onSkipViews (office only)");
   assert.ok(gw.includes("mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}"), "gateway passes the skip/required state");
 });
+
+test("P7: Review status surface summarizes both deliverables (Camera Views shown even when not started)", () => {
+  const gw = read("app/project/[accessId]/gateway-client.jsx");
+  const shell = read("app/project/[accessId]/system-planner.jsx");
+  assert.ok(gw.includes('<div className="syp-submit-head">Consulting deliverables</div>'), "the deliverables header");
+  assert.ok(gw.includes('const mkSkipped = !!lp.mockup_skipped_at, viewsReq = !!lp.views_required;'), "reads the skip/required state");
+  assert.ok(gw.includes('{viewsReq ? "Required — not started" : mkSkipped ? "Skipped" : "Optional — not started"}'), "Camera Views state pill when not started (office)");
+  assert.ok(shell.includes(".syp-vpill"), "the status pill is styled");
+});
+
+test("P9: dead code removed — the orphaned standalone survey-cameras.jsx is gone", () => {
+  let gone = false;
+  try { readFileSync(new URL("../app/project/[accessId]/survey-cameras.jsx", import.meta.url)); } catch { gone = true; }
+  assert.ok(gone, "survey-cameras.jsx deleted (replaced by survey-devices.jsx)");
+});
