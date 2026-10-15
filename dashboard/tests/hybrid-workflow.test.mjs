@@ -99,10 +99,12 @@ test("Use Outline still routes to enterDraw on the CURRENT floor (in-place hando
   has("flushNow(); ol.base=true; enterDraw(ol); return;", "Use Outline flushes, marks the outline as the Project Base, then enters the editor in place");
 });
 
-test("Build Floor Plan → Change background delegate to the existing enterBg/enterDraw/postAerialRestore engine", () => {
-  const cb = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 450);
+test("Build Floor Plan → Change background delegate to the existing enterBg/enterDraw engine", () => {
+  const cb = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 2200);
   assert.ok(cb.includes("if(curBgSource===\"draw\"){ enterDraw(); return; }"), "a drawn floor resumes the draw tool");
-  assert.ok(cb.includes("if(curBgSource===\"satellite\"){ var was=bgToolSrc; if(hybridCapable(floors[curFloor])) pendingCtxSwap=true; enterBg(); postAerialRestore(bgToolSrc!==was); return; }"), "an aerial floor reopens the satellite as leveled (hybrid floor flags the src-only swap)");
+  // an aerial floor reopens the satellite ON the stored enhanced capture (hybrid floor flags the src-only swap)
+  assert.ok(cb.includes("if(curBgSource===\"satellite\"){ var ebf=floors[curFloor], was=bgToolSrc; if(hybridCapable(ebf)) pendingCtxSwap=true; enterBg();"), "an aerial floor reopens the satellite; a hybrid floor flags the src-only swap");
+  assert.ok(cb.includes('type:"iotLoadCapture", src:ebSrc'), "reopens on the stored enhanced aerial (not a blank live-map crop)");
   // Cancel from outline-only closes the tool back to the floor (no derived floor to discard)
   has('ev.data.type!=="iotCaptureCancel"', "the parent handles the outline-only Cancel");
   has("exitBg(false); });", "Cancel exits the tool without committing");

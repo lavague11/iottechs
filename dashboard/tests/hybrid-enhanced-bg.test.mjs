@@ -25,10 +25,13 @@ test("hybridCapable contract unchanged — only a hybrid floor gets the src-only
 });
 
 test("Edit background on a HYBRID floor flags the src-only swap, then reopens the satellite at the inherited capture", () => {
-  const h = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 520);
+  const h = survey.slice(survey.indexOf('getElementById("changeBgBtn").addEventListener'), survey.indexOf('getElementById("changeBgBtn").addEventListener') + 2200);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
-  assert.ok(h.includes('if(curBgSource==="satellite"){ var was=bgToolSrc; if(hybridCapable(floors[curFloor])) pendingCtxSwap=true;'), "ONLY a hybrid floor flags the src-only swap (a plain aerial floor re-captures via the normal path)");
-  assert.ok(h.includes("enterBg(); postAerialRestore(bgToolSrc!==was);"), "reopens the satellite + restores the inherited leveled aerial (SAME framing)");
+  assert.ok(h.includes('if(curBgSource==="satellite"){ var ebf=floors[curFloor], was=bgToolSrc; if(hybridCapable(ebf)) pendingCtxSwap=true; enterBg();'), "ONLY a hybrid floor flags the src-only swap (a plain aerial floor re-captures via the normal path)");
+  // reopens the satellite ON the stored enhanced/leveled aerial (iotLoadCapture), not a blank live-map crop
+  assert.ok(h.includes("var ebSrc=(ebf&&((ebf.ctx&&ebf.ctx.src)||ebf.bg))"), "uses the floor's stored enhanced image (ctx.src || bg)");
+  assert.ok(h.includes('type:"iotLoadCapture", src:ebSrc'), "lands the inherited capture via iotLoadCapture (same framing)");
+  assert.ok(h.includes("else { postAerialRestore(ebChg); }"), "transform-only restore remains the fallback when no image is stored");
   assert.ok(/var pendingCtxSwap=false;/.test(survey), "pendingCtxSwap declared false by default");
 });
 

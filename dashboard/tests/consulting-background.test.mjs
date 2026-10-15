@@ -16,3 +16,18 @@ test("uploadBackground posts kind:'survey-bg' and the media route accepts it", (
   const kindsLine = (route.match(/const PROJECT_KINDS = new Set\(\[[^\]]*\]\)/) || [""])[0];
   assert.ok(/"survey-bg"/.test(kindsLine), "/api/media PROJECT_KINDS must include 'survey-bg' (else uploadBackground 400s → inline data: URL bloat)");
 });
+
+// P2: Edit background on a satellite floor must reopen ON the persisted enhanced/leveled aerial
+// (iotLoadCapture with the stored src), not on a blank live-map crop (transform-only restore), so the
+// enhanced image is never orphaned + re-billed. Hybrid floors still arm the ctx.src-only swap.
+test("Edit background reopens the satellite on the stored enhanced image (not a blank crop)", () => {
+  const survey = read("public/widgets/site-survey-merged.html");
+  const i = survey.indexOf('getElementById("changeBgBtn").addEventListener');
+  const h = survey.slice(i, i + 2200);
+  const sat = h.slice(h.indexOf('curBgSource==="satellite"'));
+  assert.ok(/var ebSrc=\(ebf&&\(\(ebf\.ctx&&ebf\.ctx\.src\)\|\|ebf\.bg\)\)/.test(sat), "feeds the floor's ctx.src || bg");
+  assert.ok(/type:"iotLoadCapture", src:ebSrc, outlineOnly:false/.test(sat), "posts iotLoadCapture with the stored image, normal (non-outline) mode");
+  assert.ok(/if\(hybridCapable\(ebf\)\) pendingCtxSwap=true;/.test(sat), "hybrid floor still arms the ctx.src-only enhanced swap");
+  assert.ok(/else \{ postAerialRestore\(ebChg\); \}/.test(sat), "falls back to the transform-only restore when no image is stored");
+  assert.ok(/satFrame\.addEventListener\("load", function h\(\)\{ satFrame\.removeEventListener\("load",h\); ebPost\(\); \}\); ebPost\(\);/.test(sat), "load-then-post pattern for a (re)loaded iframe");
+});

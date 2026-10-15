@@ -941,7 +941,21 @@
     // (Structure/rooms/devices/grid preserved) — the same enhanced-background swap the old standalone Enhance used.
     document.getElementById("changeBgBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
       if(curBgSource==="draw"){ enterDraw(); return; }
-      if(curBgSource==="satellite"){ var was=bgToolSrc; if(hybridCapable(floors[curFloor])) pendingCtxSwap=true; enterBg(); postAerialRestore(bgToolSrc!==was); return; }
+      if(curBgSource==="satellite"){ var ebf=floors[curFloor], was=bgToolSrc; if(hybridCapable(ebf)) pendingCtxSwap=true; enterBg();
+        // Reopen ON the floor's persisted enhanced/leveled aerial. (BUG: we used to send only the transform via
+        // postAerialRestore, so the satellite landed on a BLANK live-map crop and the enhanced image was orphaned —
+        // forcing a re-capture + re-enhance, another /api/enhance bill.) iotLoadCapture lands that stored image as a
+        // finished capture (enhancedOnce) so Edit background shows the enhanced result with the wand ready to re-prompt.
+        // "Replace background" stays the deliberate path back to a fresh live-map re-level/crop. Falls back to the
+        // transform-only restore when no image is stored.
+        var ebSrc=(ebf&&((ebf.ctx&&ebf.ctx.src)||ebf.bg))||null, ebChg=(bgToolSrc!==was);
+        if(ebSrc){ var ebm={ type:"iotLoadCapture", src:ebSrc, outlineOnly:false, aerial:(ebf&&ebf.aerial)||null,
+            ftW:(ebf&&ebf.ctx&&+ebf.ctx.ftW>0)?+ebf.ctx.ftW:((ebf&&ebf.scale&&+ebf.scale.ftW>0)?+ebf.scale.ftW:0),
+            ftH:(ebf&&ebf.ctx&&+ebf.ctx.ftH>0)?+ebf.ctx.ftH:((ebf&&ebf.scale&&+ebf.scale.ftH>0)?+ebf.scale.ftH:0) },
+          ebPost=function(){ try{ satFrame.contentWindow.postMessage(ebm,"*"); }catch(e){} };
+          if(ebChg) satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); ebPost(); }); ebPost();
+        } else { postAerialRestore(ebChg); }
+        return; }
       satFrame.style.display="none";
       document.getElementById("bgstep").style.display="";
       document.getElementById("working").style.display="none";
