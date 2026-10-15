@@ -96,6 +96,14 @@
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:2200;
        background:var(--ink);border:1px solid var(--gold);color:#fff;
        font-size:12px;padding:9px 18px;display:none}
+  /* ---- per-camera context menu (double-click a tile) ---- */
+  .cellmenu{position:fixed;display:none;flex-direction:column;z-index:2500;background:#fff;border:1px solid var(--line);border-radius:10px;
+       box-shadow:0 12px 34px rgba(16,17,18,.24);padding:5px;min-width:158px;gap:1px}
+  .cellmenu.on{display:flex}
+  .cellmenu button{appearance:none;border:0;background:none;text-align:left;cursor:pointer;border-radius:7px;padding:10px 13px;color:var(--ink);
+       font:600 13.5px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+  .cellmenu button:hover{background:#f2f3f5}
+  .cellmenu button.danger{color:#c4553d}
   /* ---- lightbox ---- */
   .lightbox{position:fixed;inset:0;background:rgba(28,30,34,.86);z-index:3000;display:none;
        align-items:center;justify-content:center;flex-direction:column;gap:14px}
@@ -201,6 +209,7 @@
   <button class="lbrm" id="lbRemove">Remove photo</button>
   <button class="lbrm" id="lbComment" style="display:none">Leave a comment</button>
 </div>
+<div class="cellmenu" id="cellMenu"><button type="button" data-a="replace">Replace photo</button><button type="button" data-a="rename">Rename</button><button type="button" data-a="remove" class="danger">Remove photo</button></div>
 
 <div class="cvoverlay" id="cvOverlay">
   <div class="cvhead">
@@ -276,7 +285,7 @@ function drawCell(c,x,y,w,h,i,o){o=o||{};
   // A cell whose top-left sits on the phone screen's rounded corner would clip its status dot + name —
   // push the label in past the arc so the green dot and "Camera N" always read in full.
   let lx=x+pad,ly=y+pad;
-  if(o.frameCorner&&Math.abs(x-o.frameCorner.x)<2&&Math.abs(y-o.frameCorner.y)<2){const cl=o.frameCorner.r*0.62;lx=x+Math.max(pad,cl);ly=y+Math.max(pad,cl);}
+  if(o.frameCorner&&Math.abs(x-o.frameCorner.x)<2&&Math.abs(y-o.frameCorner.y)<2){const cl=o.frameCorner.r*0.82;lx=x+Math.max(pad,cl);ly=y+Math.max(pad,cl);}   // clear the rounded screen corner (past ~0.71r) so the dot + name aren't squashed by the arc
   dot(c,lx+cf*0.32,ly+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
   osd(c,nameOf(i),lx+cf*0.95,ly+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
   c.restore();
@@ -440,7 +449,7 @@ function bindCanvas(canvas,page){
     // Read-only: double-tap the mockup → ask the host to go fullscreen (not single-camera zoom).
     if(IOT_RO){ try{parent.postMessage({type:'iotMockupFullscreen', project:(new URLSearchParams(location.search).get('project')||'default')},'*');}catch(_e){} return; }
     const h=tileAt(e,canvas,page);
-    if(h&&h.i<S.count)focusCamera(h.i);});
+    if(h&&h.i<S.count)openCellMenu(h,e.clientX,e.clientY);});   // double-click a camera → per-camera menu (replace / rename / remove)
   if(IOT_RO)return;                                             // no drag/drop uploads in read-only mode
   // Track the tile under the pointer so a paste (which carries no drag position) knows where to land.
   canvas.addEventListener('mousemove',e=>{const h=tileAt(e,canvas,page);lastTile=h?{p:page,i:h.i}:{p:null,i:null};});
@@ -454,6 +463,27 @@ function bindCanvas(canvas,page){
     if(h&&files.length)placeFiles(h.i,files);else renderPage(page);});
 }
 slotFile.onchange=e=>{const f=e.target.files[0];if(f&&pendingSlot!=null)loadInto(pendingSlot,f);};
+
+/* ---- per-camera context menu: double-click a tile → Replace/Add · Rename · Remove photo ---- */
+const cellMenu=document.getElementById('cellMenu');
+let cellMenuH=null;
+function openCellMenu(h,clientX,clientY){
+  if(IOT_RO||!h)return; cellMenuH=h; const has=!!S.slots[h.i];
+  cellMenu.querySelector('[data-a="replace"]').textContent=has?'Replace photo':'Add photo';
+  cellMenu.querySelector('[data-a="remove"]').style.display=has?'':'none';
+  cellMenu.classList.add('on');
+  const mw=cellMenu.offsetWidth||158, mh=cellMenu.offsetHeight||120, vw=window.innerWidth, vh=window.innerHeight;
+  let x=clientX, y=clientY; if(x+mw>vw-8)x=vw-mw-8; if(y+mh>vh-8)y=vh-mh-8;
+  cellMenu.style.left=Math.max(8,x)+'px'; cellMenu.style.top=Math.max(8,y)+'px';
+}
+function closeCellMenu(){ cellMenu.classList.remove('on'); cellMenuH=null; }
+cellMenu.addEventListener('click',e=>{ const b=e.target.closest('button'); const h=cellMenuH; if(!b||!h)return; const a=b.getAttribute('data-a'); closeCellMenu();
+  if(a==='replace'){ pendingSlot=h.i; slotFile.value=''; slotFile.click(); }
+  else if(a==='rename'){ openNameEdit(h); }
+  else if(a==='remove'){ S.slots[h.i]=undefined; pushPhotoToSurvey(h.i,null); refreshAll(); }
+});
+document.addEventListener('click',e=>{ if(cellMenu.classList.contains('on')&&!cellMenu.contains(e.target))closeCellMenu(); },true);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&cellMenu.classList.contains('on'))closeCellMenu(); });
 
 /* ===== shared placement (drop · paste): drop N photos starting at a tile, filling empties ===== */
 // One predictable path for drop and paste. Places files[0] at `start` (replacing) and each further
