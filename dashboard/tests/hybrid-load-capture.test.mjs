@@ -2,21 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-// Build Floor Plan → the satellite's focused OUTLINE-ONLY mode. The survey hands THIS floor's aerial to the satellite
-// as the capture (iotLoadCapture, outlineOnly:true) on the SAME floor — no derived floor. The satellite loads that
-// image AS the capture, hides all the live-capture chrome, and auto-enters the trace editor so the user outlines
-// immediately. The loaded capture WINS the race against the satellite's default geocode (the live map never shows
-// through). The widgets are single-file ES5 HTML with no exports, so DOM/handler guards are source-reads; the pure
-// logic (ft→meters) is replicated numerically.
+// Create Floor Plan now enters the Structure editor DIRECTLY (no outline gate). The satellite's focused OUTLINE-ONLY
+// mode survives as a guarded FALLBACK (openOutlineFallback) — used for legacy and the rare image-measure failure. When
+// it runs, the survey hands THIS floor's aerial to the satellite as the capture (iotLoadCapture, outlineOnly:true) on
+// the SAME floor — no derived floor. The satellite loads that image AS the capture, hides all the live-capture chrome,
+// and auto-enters the trace editor. The loaded capture WINS the race against the satellite's default geocode (the live
+// map never shows through). The widgets are single-file ES5 HTML with no exports, so DOM/handler guards are
+// source-reads; the pure logic (ft→meters) is replicated numerically.
 const read = (f) => readFileSync(new URL("../public/widgets/" + f, import.meta.url), "utf8");
 const survey = read("site-survey-merged.html");
 const sat = read("satellite-capture.html");
 
-/* ------------------------------ survey → satellite handoff (in place) ------------------------------ */
-test("the Build Floor Plan handler posts iotLoadCapture{outlineOnly} with THIS floor's src/scale/aerial, load-then-post", () => {
-  const start = survey.indexOf('getElementById("buildPlanBtn").addEventListener');
-  const h = survey.slice(start, start + 1600);
-  assert.ok(h.includes('var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||"";'), "the image is this floor's ctx.src || bg");
+/* ------------------------------ survey → satellite outline FALLBACK (in place) ------------------------------ */
+test("the outline fallback posts iotLoadCapture{outlineOnly} with THIS floor's src/scale/aerial, load-then-post", () => {
+  const start = survey.indexOf("function openOutlineFallback(f, lcBg)");
+  assert.ok(start > -1, "the outline fallback helper exists");
+  const h = survey.slice(start, start + 700);
   assert.ok(h.includes('openBgTool(SAT_SRC+"&buildplan=1", "satellite");'), "opens the satellite via openBgTool in the distinct outline-only src");
   assert.ok(h.includes('type:"iotLoadCapture", outlineOnly:true'), "posts iotLoadCapture in outline-only mode");
   assert.ok(h.includes("src:lcBg"), "carries the aerial as src");

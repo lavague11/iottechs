@@ -967,18 +967,41 @@
     document.getElementById("replaceBgBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
       satFrame.style.display="none"; document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; });
     document.addEventListener("click", function(e){ var w=document.getElementById("planMore"); if(w && w.classList.contains("menu") && !w.contains(e.target)) closeBgMenu(); });   // tap-away closes the overflow
-    // Build Floor Plan — outline the EXISTING aerial IN PLACE (no derived floor): reopen the satellite in a focused
-    // OUTLINE-ONLY mode (distinct &buildplan=1 src → the shared frame reloads clean into/out of this mode) on THIS
-    // floor's aerial (iotLoadCapture). The user outlines, "Use Outline" hands off to the Structure editor on THIS
-    // SAME floor (the existing satellite-capture-result → enterDraw path), and the floor becomes hybrid-capable
-    // (Aerial/Plan/Hybrid). Same load-listener-then-post pattern as postAerialRestore. The floor is never cloned.
+    // Create Floor Plan — the EXISTING aerial IS the plan workspace. No outline step / no gate: the whole current
+    // cropped image becomes the base, so we hand straight off to the Structure editor on THIS floor over the SAME
+    // image at the SAME framing. We synthesize the four bounds the Structure editor needs (the image's own corners)
+    // and a full-frame ctx (rect {0,0,1,1} — NOT a bbox+margin crop, so there is no reframe / zoom-out / white
+    // margin); the seed carries pad:0 so the draw tool fills the canvas with the image. The floor is never cloned,
+    // and becomes hybrid-capable once Done writes the plan. (Legacy outlined floors already carry ctx+plan and load
+    // normally — this path only runs for an aerial-not-yet-plan floor.) If the image can't be measured, fall back
+    // to the old outline tool so the feature is never dead.
+    function openOutlineFallback(f, lcBg){
+      openBgTool(SAT_SRC+"&buildplan=1", "satellite");
+      var lcMsg={ type:"iotLoadCapture", outlineOnly:true, src:lcBg, ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0, aerial:f.aerial||null }, lcPost=function(){ try{ satFrame.contentWindow.postMessage(lcMsg,"*"); }catch(e){} };
+      satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();
+    }
     document.getElementById("buildPlanBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
       var f=floors[curFloor]; if(!canBuild(f)) return;
-      var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;   // need an aerial image to outline
-      snapFloor();                               // freeze the floor's live edits onto its record before reopening the tool
-      openBgTool(SAT_SRC+"&buildplan=1", "satellite");   // distinct src so the shared frame always (re)loads into the outline-only mode
-      var lcMsg={ type:"iotLoadCapture", outlineOnly:true, src:lcBg, ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0, aerial:f.aerial||null }, lcPost=function(){ try{ satFrame.contentWindow.postMessage(lcMsg,"*"); }catch(e){} };
-      satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();   // (re)loaded frame → post on load; also now in case it's already loaded
+      var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;   // need an aerial image
+      snapFloor();                               // freeze the floor's live edits onto its record before opening the tool
+      var ftW=(f.scale&&+f.scale.ftW>0)?+f.scale.ftW:0, ftH=(f.scale&&+f.scale.ftH>0)?+f.scale.ftH:0;
+      var northDeg=(f.aerial&&Number.isFinite(+f.aerial.northDeg))?+f.aerial.northDeg:null;
+      var img=new Image();
+      img.onload=function(){
+        var ar=(img.naturalWidth>0&&img.naturalHeight>0)?(img.naturalWidth/img.naturalHeight):1;
+        var cx=validCtx({ src:lcBg, rect:{x:0,y:0,w:1,h:1}, full:true, ftW:ftW, ftH:ftH, northDeg:northDeg });
+        if(!cx){ openOutlineFallback(f, lcBg); return; }   // bad src (never for a data:/ /api/media aerial) → safe fallback
+        f.ctx=cx; f.outlineDraft=null;
+        // Mirror the outline path's ctx upload: swap the inline aerial blob for an /api/media URL so a few floors don't blow the localStorage budget.
+        if(typeof f.ctx.src==="string" && f.ctx.src.indexOf("data:")===0) uploadBackground(f.ctx.src, function(url){ if(url && f.ctx){ f.ctx.src=url; flushNow(); } });
+        flushNow();
+        // Full-image base: the 4 image corners are the working-area outline; base:true → the editor fills Site cells
+        // (grid extent) and lands in Structure for the user to draw the building. pad:0 → fills the canvas (no zoom-out).
+        // metersPerUnit (y-unit = full image height = ftH feet) keeps the editor's real-scale readout honest.
+        enterDraw({ pts:[[0,0],[1,0],[1,1],[0,1]], aspect:ar, base:true, pad:0, metersPerUnit:(ftH>0?ftH*0.3048:0) });
+      };
+      img.onerror=function(){ openOutlineFallback(f, lcBg); };
+      img.src=lcBg;
     });
     // Enhancing the aerial happens inside the Edit-background / satellite flow (its own Enhance step) — there is no
     // standalone Enhance button on the plan. (pendingCtxSwap for a hybrid floor is still set from that flow.)

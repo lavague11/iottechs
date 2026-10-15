@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-// ONE consolidated "Build Floor Plan" path (replaces the old "Create Hybrid" derived-floor flow). On a floor that HAS
-// an aerial but is NOT yet a plan, a single gold primary verb — "Build Floor Plan" — opens the satellite in a focused
-// outline-only mode on THAT SAME floor's aerial (no derived "· Hybrid" floor, no createFloor). The rarer actions
-// (Change background · Enhance aerial) live under a ••• overflow. The widget is static HTML (no imports), so the
-// DOM/handler guards are source-reads; the gate predicate is replicated and proven numerically.
+// ONE consolidated "Create Floor Plan" path (replaces the old "Create Hybrid" derived-floor flow). On a floor that HAS
+// an aerial but is NOT yet a plan, a single gold primary verb enters the Structure editor DIRECTLY on that same floor's
+// aerial — no outline gate: the whole cropped image is the base (four image-corner bounds synthesized), over a full-frame
+// ctx so there is no reframe/zoom-out (no derived "· Hybrid" floor, no createFloor). The rarer actions (Change background
+// · Enhance aerial) live under a ••• overflow. The widget is static HTML (no imports), so the DOM/handler guards are
+// source-reads; the gate predicate is replicated and proven numerically.
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
@@ -70,21 +71,25 @@ test("canBuild: an aerial-not-yet-plan floor qualifies; a plain or already-built
   assert.equal(canBuild({ name: "Floor 1" }), false, "a non-aerial (plain upload) floor never qualifies");
 });
 
-test("Build Floor Plan builds IN PLACE: no createFloor, no derived floor, outline-only iotLoadCapture on the CURRENT floor", () => {
+test("Create Floor Plan goes STRAIGHT to the Structure editor IN PLACE — no outline gate: full-image base + full-frame ctx, no reframe", () => {
   const start = survey.indexOf('getElementById("buildPlanBtn").addEventListener');
-  const h = survey.slice(start, start + 1600);
+  const h = survey.slice(start, start + 2600);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
   assert.ok(h.includes("if(!canBuild(f)) return;"), "guards the gate again at click time");
-  assert.ok(h.includes("snapFloor();"), "snaps the floor's live edits onto its record before reopening the tool");
+  assert.ok(h.includes("snapFloor();"), "snaps the floor's live edits onto its record before opening the tool");
   assert.ok(!/createFloor\(/.test(h), "NEVER derives/clones a floor — it builds on the current floor");
   assert.ok(!/renderFloorTabs\(\)/.test(h), "no new floor → no floor-tab re-render in the handler");
-  assert.ok(h.includes('openBgTool(SAT_SRC+"&buildplan=1", "satellite");'), "reuses openBgTool with a distinct outline-only src");
-  assert.ok(h.includes('type:"iotLoadCapture", outlineOnly:true'), "posts iotLoadCapture in outline-only mode");
-  assert.ok(h.includes('src:lcBg'), "hands THIS floor's aerial as the capture (outline it, no fresh live shot)");
   assert.ok(h.includes('var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;'), "the image is this floor's ctx.src || bg");
-  assert.ok(h.includes("ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0"), "carries the floor's real-world scale (ft)");
-  assert.ok(h.includes("aerial:f.aerial||null"), "carries the floor's leveled transform");
-  assert.ok(h.includes('satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();'), "one-shot load listener THEN immediate post");
+  // the gate is gone: the PRIMARY path no longer opens the satellite outline-only mode — it enters the editor directly
+  assert.ok(!h.includes('type:"iotLoadCapture", outlineOnly:true'), "the primary path does NOT force the outline-only satellite (gate removed)");
+  assert.ok(h.includes("new Image()"), "measures the aerial to get its aspect for the full-image bounds");
+  assert.ok(h.includes("rect:{x:0,y:0,w:1,h:1}, full:true"), "synthesizes a FULL-FRAME ctx (whole image, no bbox+margin crop → no reframe/zoom-out)");
+  assert.ok(h.includes("enterDraw({ pts:[[0,0],[1,0],[1,1],[0,1]], aspect:ar, base:true, pad:0"), "hands off the four image-corner bounds as the base, pad:0 so the image fills the canvas");
+  assert.ok(h.includes("f.ctx=cx;"), "stores the full-frame ctx on THIS floor before entering the editor");
+  assert.ok(/uploadBackground\(f\.ctx\.src/.test(h), "mirrors the outline path's inline-blob → /api/media upload");
+  // a measurement failure (never for a real data:/ /api/media aerial) falls back to the old outline tool so the feature is never dead
+  assert.ok(h.includes("img.onerror=function(){ openOutlineFallback(f, lcBg); };"), "image-measure failure falls back to the outline tool");
+  assert.ok(survey.includes("function openOutlineFallback(f, lcBg)"), "the outline tool survives as a guarded fallback (legacy + error path)");
 });
 
 test("Use Outline still routes to enterDraw on the CURRENT floor (in-place handoff, unchanged)", () => {
