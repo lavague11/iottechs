@@ -898,6 +898,45 @@
       if(+c.ftW>0&&+c.ftH>0){ o.ftW=+c.ftW; o.ftH=+c.ftH; } return o; }catch(e){ return null; } }
     function validPlanSvg(s){ return (typeof s==="string" && s.indexOf("data:image/svg")===0 && s.length<=400000) ? s : null; }
     function clearCtx(fl){ if(fl){ fl.ctx=null; fl.planSvg=null; fl.bgCtx=false; } }   // a new non-outline background (satellite Use / upload / library) → the context no longer applies (not hybrid-capable)
+    // ---- Non-destructive background / aerial versioning (P3) -------------------------------------------
+    // Each floor keeps a short history of its background (f.bgVersions) and its hybrid aerial (f.ctxVersions)
+    // so a re-enhance never discards the previous image — an earlier version can be restored WITHOUT re-running
+    // (re-billing) AI. The ACTIVE version is the one f.bg / f.ctx point at. Ring buffer: the first recorded image
+    // is the permanent 'original', plus the newest BG_VERS_MAX derived; a version pinned to a submitted/approved
+    // survey is exempt from eviction. These arrays are NEVER part of the fingerprint (tool-data.js survey2Meaning
+    // hashes f.bg's CONTENT + device geometry only), so history can't void an approval. Each src is an /api/media
+    // URL (or inline data: for legacy/offline), bounded exactly like ctx.src.
+    var BG_VERS_MAX=5;
+    function nvId(){ return "bv_"+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-3); }
+    function validVersion(v){ try{ if(!v||typeof v!=="object"||typeof v.src!=="string") return null;
+      if(!(v.src.indexOf("data:image/")===0 || v.src.indexOf("/api/media/")===0) || v.src.length>2500000) return null;
+      var o={ id:(typeof v.id==="string"&&v.id)?v.id:nvId(), src:v.src, kind:(v.kind==="original"||v.kind==="enhanced"||v.kind==="revision")?v.kind:"enhanced",
+        createdAt:(+v.createdAt>0)?+v.createdAt:Date.now(), pinned:!!v.pinned };
+      if(typeof v.createdBy==="string") o.createdBy=v.createdBy;
+      if(+v.revision>0) o.revision=+v.revision;
+      if(v.rect&&typeof v.rect==="object") o.rect=v.rect;
+      if(+v.ftW>0&&+v.ftH>0){ o.ftW=+v.ftW; o.ftH=+v.ftH; }
+      if(typeof v.northDeg==="number"&&isFinite(v.northDeg)) o.northDeg=v.northDeg;
+      if(typeof v.prompt==="string"&&v.prompt.length<=600) o.prompt=v.prompt;
+      return o; }catch(e){ return null; } }
+    function validVersions(a){ if(!Array.isArray(a)) return null; var out=[]; for(var i=0;i<a.length&&out.length<24;i++){ var v=validVersion(a[i]); if(v) out.push(v); } return out.length?out:null; }
+    // Append a version (dedupe by src → just re-activate), set it active, and ring-buffer older DERIVED,
+    // non-pinned, non-active versions out so the list keeps the original + the newest BG_VERS_MAX derived.
+    function pushVersion(f, listKey, activeKey, ver){ if(!f) return null; ver=validVersion(ver); if(!ver) return null;
+      var list=Array.isArray(f[listKey])?f[listKey]:[];
+      for(var i=0;i<list.length;i++){ if(list[i].src===ver.src){ f[activeKey]=list[i].id; f[listKey]=list; return list[i].id; } }   // same image already kept → re-activate, no dup
+      if(!list.length) ver.kind="original";   // the very first recorded image is the permanent original source
+      list.push(ver); f[activeKey]=ver.id;
+      var derived=list.filter(function(v){ return v.kind!=="original"; });
+      while(derived.length>BG_VERS_MAX){ var victim=null; for(var j=0;j<derived.length;j++){ if(!derived[j].pinned && derived[j].id!==f[activeKey]){ victim=derived[j]; break; } } if(!victim) break;
+        list.splice(list.indexOf(victim),1); derived.splice(derived.indexOf(victim),1); }
+      f[listKey]=list; return ver.id; }
+    function recordBgVersion(f, src, kind){ if(!f||!src) return; pushVersion(f, "bgVersions", "bgActive", { src:src, kind:kind||"enhanced" }); }
+    function recordCtxVersion(f, kind){ if(!f||!f.ctx||!f.ctx.src) return; pushVersion(f, "ctxVersions", "ctxActive", { src:f.ctx.src, kind:kind||"enhanced", rect:f.ctx.rect, ftW:f.ctx.ftW, ftH:f.ctx.ftH, northDeg:f.ctx.northDeg }); }
+    // Pin the active bg + ctx version of every floor — called on Submit so the exact image the customer
+    // reviews/approves is never ring-buffered away (recoverable even after later re-enhances).
+    function pinActiveVersions(f){ if(!f) return; [["bgVersions","bgActive"],["ctxVersions","ctxActive"]].forEach(function(p){ var l=f[p[0]], a=f[p[1]]; if(Array.isArray(l)&&a) l.forEach(function(v){ if(v.id===a) v.pinned=true; }); }); }
+    function pinAllFloorsActiveVersions(){ (floors||[]).forEach(pinActiveVersions); }
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
       if(!committed) pendingCtxSwap=false;   // Phase H2: backed out of the satellite without "Use" (satBack / refresh-exit) → cancel any pending enhanced-background swap so a later capture never swaps ctx.src
@@ -1005,7 +1044,7 @@
         var ar=(img.naturalWidth>0&&img.naturalHeight>0)?(img.naturalWidth/img.naturalHeight):1;
         var cx=validCtx({ src:lcBg, rect:{x:0,y:0,w:1,h:1}, full:true, ftW:ftW, ftH:ftH, northDeg:northDeg });
         if(!cx){ openOutlineFallback(f, lcBg); return; }   // bad src (never for a data:/ /api/media aerial) → safe fallback
-        f.ctx=cx; f.outlineDraft=null;
+        f.ctx=cx; f.outlineDraft=null; recordCtxVersion(f, "original");
         // Mirror the outline path's ctx upload: swap the inline aerial blob for an /api/media URL so a few floors don't blow the localStorage budget.
         if(typeof f.ctx.src==="string" && f.ctx.src.indexOf("data:")===0) uploadBackground(f.ctx.src, function(url){ if(url && f.ctx){ f.ctx.src=url; flushNow(); } });
         flushNow();
@@ -1044,14 +1083,14 @@
         var f=floors[curFloor];
         var swapped=validCtx({ src:ev.data.dataUrl, rect:f.ctx.rect, full:true, ftW:f.ctx.ftW, ftH:f.ctx.ftH,
           northDeg:(ev.data.aerial && Number.isFinite(+ev.data.aerial.northDeg)) ? +ev.data.aerial.northDeg : f.ctx.northDeg });
-        if(swapped){ f.ctx=swapped;   // ← ONLY the image changes; rect/ftW/ftH preserved
+        if(swapped){ f.ctx=swapped; recordCtxVersion(f, "enhanced");   // ← ONLY the image changes; rect/ftW/ftH preserved; keep the prior aerial as a recoverable version
           if(ev.data.aerial && typeof ev.data.aerial==="object"){ f.aerial=ev.data.aerial; }   // the re-enhanced capture's transform (north etc.); rect still KEPT above
           uploadBackground(f.ctx.src, function(url){ if(url && f.ctx){ f.ctx.src=url; flushNow(); renderView(); } });   // mirror the ctx upload: swap the inline blob for an /api/media URL
         }
         pendingCtxSwap=false; curFloorAerial=f.aerial||curFloorAerial;   // don't disturb the leveled transform
         exitBg(true); renderView(); flushNow(); return;
       }
-      if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]){ floors[curFloor].outlineDraft=null; floors[curFloor].ctx=validCtx(ev.data.ctx);
+      if(ol && ol.pts && ol.pts.length>=3){ if(ev.data.aerial){ curFloorAerial=ev.data.aerial; if(floors[curFloor]) floors[curFloor].aerial=ev.data.aerial; } if(floors[curFloor]){ floors[curFloor].outlineDraft=null; floors[curFloor].ctx=validCtx(ev.data.ctx); recordCtxVersion(floors[curFloor], "original");
           // The ctx aerial crop is a ~MB JPEG — push it to /api/media (like bg) and keep the URL, so a few outlined floors don't blow the ~5MB localStorage budget and silently drop the survey. Inline src stays as the fallback until the upload returns.
           var cf=floors[curFloor]; if(cf.ctx && typeof cf.ctx.src==="string" && cf.ctx.src.indexOf("data:")===0) uploadBackground(cf.ctx.src, function(url){ if(url && cf.ctx){ cf.ctx.src=url; flushNow(); } }); } flushNow(); ol.base=true; enterDraw(ol); return; }   // "Define Project Base": the polygon is the WORKING AREA → sets the grid extent + seeds Site (not Building); Building is painted in Setup
       // A draw result carries the transparent plan layer (null when it has no seed/ctx, or an AI raster); any other new background invalidates both layers.
@@ -1155,7 +1194,7 @@
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
-      snapFloor(); flushNow(); renderFloorTabs();   // this background is now this floor's plan — persist it to the server right away (discrete action)
+      snapFloor(); recordBgVersion(floors[curFloor], bgData, "enhanced"); flushNow(); renderFloorTabs();   // record the committed background as a version (first = original) before persisting
       sideCollapsed=(window.innerWidth<=900); applySideCollapsed();   // reveal the device panel on desktop; on mobile keep the drawer closed (rail ▸ opens it) so the canvas stays usable
       goStep(1);   // → Place
     }
@@ -2518,7 +2557,7 @@
       else { lbl="Draft"; col="var(--gold)"; }
       pill.innerHTML='<span class="g" style="background:'+col+'"></span>'+lbl;
       if(typeof updateBgActions==="function") updateBgActions(); }   // submit/unsubmit flips frozen() → re-gate the floor actions
-    function submit(){ snapFloor(); submitted=true; setStatus(); save();
+    function submit(){ snapFloor(); pinAllFloorsActiveVersions(); submitted=true; setStatus(); save();   // pin each floor's active bg/ctx version so the reviewed/approved image is never ring-buffered away
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
       if(curStep===2) goStep(2); }
     // Office pulls it back for edits — clears the awaiting state and tells the host to unsubmit server-side.
@@ -2541,7 +2580,7 @@
       applySettings();   // settings before floors render (FOV + all-angles default OFF)
       sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
       if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),zonesMigrated:!!f.zonesMigrated,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry (+ any future fields) so the plan reopens correctly
+        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),zonesMigrated:!!f.zonesMigrated,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,bgVersions:validVersions(f.bgVersions),ctxVersions:validVersions(f.ctxVersions),bgActive:(typeof f.bgActive==="string"?f.bgActive:null),ctxActive:(typeof f.ctxActive==="string"?f.ctxActive:null),devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry + bg/aerial version history (+ any future fields) so the plan reopens correctly
       else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
       ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
       curFloor=Math.min(st.curFloor||0, floors.length-1);

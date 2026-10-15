@@ -118,5 +118,5 @@ test("derived floors record lineage (derivedFromFloorId) and discrete actions fl
   assert.ok(/function flushNow\(\)\{ var json;/.test(survey), "flushNow serializes the fresh survey");
   assert.ok(survey.includes("pushServer(json);"), "flushNow pushes the fresh blob to the server");
   assert.ok(survey.includes('tool:"survey2",data:json'), "the server push carries the survey2 blob");
-  assert.ok(survey.includes("snapFloor(); flushNow(); renderFloorTabs();"), "Done/background set flushes now");
+  assert.ok(/snapFloor\(\); recordBgVersion\([^;]*\); flushNow\(\); renderFloorTabs\(\);/.test(survey), "Done/background set records a bg version then flushes now");
 });
