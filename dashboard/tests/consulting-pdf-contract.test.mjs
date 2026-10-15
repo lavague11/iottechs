@@ -6,6 +6,7 @@
 // warning. Run before P1 and after every phase; any drift here means a phase leaked into the contract.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { downloadProposalPdf, PDF_PAGE } from "../lib/proposal-pdf.js";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -70,4 +71,15 @@ test("page count is stable for the fixture (drift tripwire)", () => {
   const { pages, footers } = render();
   assert.ok(pages >= 3, `expected at least proposal+survey+mockup pages, got ${pages}`);
   assert.equal(footers.length, pages, "one footer label per page");
+});
+
+test("System Mockup appendix aligns to the document content frame (lm/rw), not its own symmetric margins", () => {
+  // The document's left margin (lm) is wider than the right (brand band): rw = W - lm - 28.8. The mockup
+  // appendix used its own symmetric margin (28.8) → its border stuck out left of the SYSTEM MOCKUP header
+  // and the rest of the document. It must use lm/rw so the frame lines up on every page.
+  const pdf = readFileSync(new URL("../lib/proposal-pdf.js", import.meta.url), "utf8");
+  // mockup section: fit + imgX use the content frame rw/lm, never a bespoke availW/margin
+  assert.ok(pdf.includes("const d = fit(src, rw - 2 * pad, 250);"), "mockup image fits within the content row width (rw)");
+  assert.ok(pdf.includes("const imgX = lm + (rw - d.w) / 2;"), "mockup image centers within the content frame (lm..lm+rw)");
+  assert.ok(!/const margin = 28\.8, availW/.test(pdf), "the bespoke symmetric margin/availW is gone");
 });

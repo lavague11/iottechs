@@ -825,7 +825,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // the tool had real photos (the caller skips the render otherwise).
   const mockupImages = (attachments.mockupImages || []).filter((x) => typeof x === "string" && x.startsWith("data:image"));
   const surveyImages = (attachments.surveyImages || []).filter((f) => f && f.img);
-  const margin = 28.8, availW = W - 2 * margin, pad = 8;
+  // Align the appendix to the SAME content frame as every other page (lm/rw) — the document's left margin
+  // is wider than the right (brand band), so the mockup must NOT use its own symmetric 28.8 margins or its
+  // border lands misaligned (sticking out left of the SYSTEM MOCKUP header + the rest of the document).
+  const pad = 8;
 
   // Document order after the priced proposal: Site Survey → System Mockup → Terms & Conditions (last).
   if (surveyImages.length) {
@@ -856,10 +859,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     currentSection = "Mockup";
     let y = 0;
     mockupImages.forEach((src, i) => {
-      const d = fit(src, availW - 2 * pad, 250);   // cap height so two stack on one page
+      const d = fit(src, rw - 2 * pad, 250);   // cap height so two stack on one page
       if (!d) return;
       if (i % 2 === 0) { y = newPage("portrait"); y = sectionHeader("SYSTEM MOCKUP", y) + 14; }
-      const imgX = margin + (availW - d.w) / 2;
+      const imgX = lm + (rw - d.w) / 2;   // centered within the document content frame (aligned with the header)
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
       doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
       try { doc.addImage(src, "JPEG", imgX, y, d.w, d.h); } catch { /* bad image */ }
