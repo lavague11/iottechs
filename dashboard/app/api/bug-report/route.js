@@ -33,11 +33,15 @@ export async function POST(req) {
   return Response.json({ ok: true, id: r.id });
 }
 
-// Staff-only: list (for the /bugs portal) and resolve/reopen.
+// List, for the /bugs portal AND the site-wide Report widget's staff probe. Returns 200 for everyone, but
+// bug DATA only for staff — a non-staff caller gets an empty list and staff:false (nothing leaks). We avoid
+// a 403 here on purpose: the Report widget calls this on open to decide whether to show the staff Portal
+// link, and a 403 would otherwise be captured as a "network error" inside the user's own bug report. Writes
+// (PATCH) stay staff-gated below.
 export async function GET() {
   const tok = await getSession();
-  if (!isStaff(tok)) return Response.json({ error: "Staff only." }, { status: 403 });
-  return Response.json({ ok: true, bugs: listBugReports() });
+  const staff = !!isStaff(tok);
+  return Response.json({ ok: true, staff, bugs: staff ? listBugReports() : [] });
 }
 export async function PATCH(req) {
   const tok = await getSession();

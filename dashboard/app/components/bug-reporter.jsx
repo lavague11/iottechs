@@ -57,9 +57,10 @@ export default function BugReporter() {
   const [confirmReset, setConfirmReset] = useState(false);   // two-step Reset confirm
 
 
-  // When Report opens, ask the (staff-only) bug list who we are and what's already been reported on THIS
-  // page. 200 → staff: show the Portal link + the "already open here" log so a bug isn't filed twice and
-  // you can jump straight to fixing it. 403/any error → not staff: both stay hidden.
+  // When Report opens, ask the bug list who we are and what's already been reported on THIS page. The route
+  // answers 200 for everyone but only returns bug data + staff:true to staff. staff → show the Portal link +
+  // the "already open here" log so a bug isn't filed twice; non-staff → both stay hidden. (No 403 anymore,
+  // so the probe never pollutes the reporter's own captured network errors.)
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -67,7 +68,7 @@ export default function BugReporter() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!live) return;
-        if (!j?.ok || !Array.isArray(j.bugs)) { setIsStaff(false); setPageBugs([]); return; }
+        if (!j?.staff || !Array.isArray(j.bugs)) { setIsStaff(false); setPageBugs([]); return; }
         setIsStaff(true);
         setPageBugs(j.bugs.filter((b) => b.status === "open" && b.path === pathname));
       })
