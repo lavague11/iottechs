@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -2377,6 +2377,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
             planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
             hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams}
+            mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}
+            onSkipViews={(cView === "customer" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }

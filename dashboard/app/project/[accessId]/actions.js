@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -471,6 +471,41 @@ export async function skipSurveyAction(accessId, skip) {
     revalidatePath(`/project/${accessId}`);
   }
   return { ok: true, skipped: res.skipped, stage };
+}
+
+// Skip (or resume) Camera Views — a reversible "not doing the mockup right now" for a job that doesn't
+// need it yet. Office-only. Unlike the survey skip it waives no customer sign-off (Views are optional by
+// default), so it's a plain change, not an override. When Views are view-required, skipping still can't
+// clear the gate, so we auto-advance only when the skip actually unblocks Consulting.
+export async function skipViewsAction(accessId, skip) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return { error: "Only office staff can skip Camera Views." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const who = tok.name || tok.email || tok.role;
+  const res = setMockupSkipped(accessId, !!skip, who);
+  if (!res.ok) return res;
+  let stage = getJobByAccessId(accessId)?.stage || null;
+  if (res.changed) {
+    logProjectEvent(accessId, { kind: "change", label: skip ? "Camera Views skipped for now" : "Camera Views resumed", actor: who });
+    if (skip) { try { stage = maybeAutoAdvance(accessId) || stage; } catch { /* keep current */ } }
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/project/${accessId}`);
+  }
+  return { ok: true, skipped: res.skipped, stage };
+}
+
+// Mark whether this project REQUIRES Camera Views to clear Consulting (admin/sales decision). Flipping it
+// recalculates the gate on the next facts build — turning it ON can re-close Consulting until Views are approved.
+export async function setViewsRequiredAction(accessId, required) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return { error: "Only office staff can change this." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const res = setViewsRequired(accessId, !!required);
+  if (!res.ok) return res;
+  logProjectEvent(accessId, { kind: "change", label: required ? "Camera Views marked required" : "Camera Views marked optional", actor: tok.name || tok.email || tok.role });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, required: res.required };
 }
 
 // `viewRole` is display-only legacy — the role that authorizes the move comes from the

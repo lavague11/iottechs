@@ -255,6 +255,12 @@ function init() {
   // Admin/manager only; reversible (NULL = not skipped); who/when kept for the audit trail.
   if (!cols.includes("survey_skipped_at"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_at TEXT");
   if (!cols.includes("survey_skipped_by"))  db.exec("ALTER TABLE projects ADD COLUMN survey_skipped_by TEXT");
+  // Camera Views (mockup) optionality — mirrors the survey-skip pattern. mockup_skipped_at = "skipped for
+  // now" (temporary, reversible); views_required = this project MUST have approved Camera Views to clear
+  // Consulting. Default optional: Views never block the gate unless views_required is set.
+  if (!cols.includes("mockup_skipped_at"))  db.exec("ALTER TABLE projects ADD COLUMN mockup_skipped_at TEXT");
+  if (!cols.includes("mockup_skipped_by"))  db.exec("ALTER TABLE projects ADD COLUMN mockup_skipped_by TEXT");
+  if (!cols.includes("views_required"))     db.exec("ALTER TABLE projects ADD COLUMN views_required INTEGER DEFAULT 0");
   // Canonical customer link (CRM): the `users` row (role customer) this project belongs to. One customer,
   // many projects. Nullable + additive; contact_* stay as the project's historical contact snapshot.
   if (!cols.includes("customer_id"))        db.exec("ALTER TABLE projects ADD COLUMN customer_id INTEGER");
@@ -2661,6 +2667,8 @@ export function buildStageFacts(accessId) {
     // approve → satisfied (customer can sail straight through).
     survey_accepted: surveyStageSatisfied(accessId),
     survey_skipped: !!p.survey_skipped_at,
+    mockup_skipped: !!p.mockup_skipped_at,
+    views_required: !!p.views_required,
     // Phase-2 facts: work order fully closed out; QC passed + both sign-offs current.
     // ONE getToolMeta per facts build (it hashes the survey/mockup blobs — never call it twice).
     ...(() => { const m = getToolMeta(accessId); return {
@@ -3401,6 +3409,27 @@ export function setSurveySkipped(accessId, skip, byName) {
     db.prepare("UPDATE projects SET survey_skipped_at = NULL, survey_skipped_by = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
   }
   return { ok: true, skipped: !!skip, changed: true };
+}
+
+// Mark / unmark Camera Views (mockup) as "skipped for now" — temporary + reversible. Returns { ok, skipped, changed }.
+export function setMockupSkipped(accessId, skip, byName) {
+  const proj = db.prepare("SELECT id, mockup_skipped_at FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId));
+  if (!proj) return { error: "Project not found." };
+  const was = !!proj.mockup_skipped_at;
+  if (was === !!skip) return { ok: true, skipped: was, changed: false };
+  if (skip) {
+    db.prepare("UPDATE projects SET mockup_skipped_at = datetime('now','localtime'), mockup_skipped_by = ? WHERE access_id = ? COLLATE NOCASE")
+      .run(String(byName || "").slice(0, 120) || null, String(accessId));
+  } else {
+    db.prepare("UPDATE projects SET mockup_skipped_at = NULL, mockup_skipped_by = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
+  }
+  return { ok: true, skipped: !!skip, changed: true };
+}
+
+// Set whether this project REQUIRES Camera Views to clear Consulting (admin/sales decision). Returns { ok, required }.
+export function setViewsRequired(accessId, required) {
+  const r = db.prepare("UPDATE projects SET views_required = ? WHERE access_id = ? COLLATE NOCASE").run(required ? 1 : 0, String(accessId));
+  return r.changes ? { ok: true, required: !!required } : { error: "Project not found." };
 }
 
 // Bulk backfill from a pasted/CSV list. rows: [{name,phone,email,address,system,installDate,value,notes}].
@@ -6681,7 +6710,12 @@ export function surveyStageSatisfied(accessId) {
   const meta = getToolMeta(accessId);
   const acc = getStageAcceptances(accessId);
   const ok = (metaTool, accKey) => !metaTool.has || !!(acc[accKey] && acc[accKey].fingerprint === metaTool.fingerprint);
-  return ok(meta.survey, "site_survey") && ok(meta.mockup, "mockup");
+  const p = db.prepare("SELECT mockup_skipped_at, views_required FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId)) || {};
+  // Camera Views optionality: when views_required is set, the mockup must be approved (current fingerprint).
+  // Otherwise Views never blocks — an explicit "skip for now" (mockup_skipped_at) or simply no data both pass.
+  // Starting Views does NOT make it required; flipping views_required recalculates here on the next facts build.
+  const mockupOk = p.views_required ? (meta.mockup.has && ok(meta.mockup, "mockup")) : (!!p.mockup_skipped_at || ok(meta.mockup, "mockup"));
+  return ok(meta.survey, "site_survey") && mockupOk;
 }
 export function unacceptStage(accessId, stage) {
   db.prepare("DELETE FROM stage_acceptances WHERE project_access_id=? AND stage=?").run(String(accessId), String(stage));

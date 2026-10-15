@@ -19,6 +19,7 @@ export default function SystemPlanner({
   accessId, customerName = "",
   planNode = null, viewsNode = null, footer = null,
   hasSurvey = false, hasViews = false, hasCams = false,
+  mockupSkipped = false, viewsRequired = false, onSkipViews = null,
   devReadOnly = false, devLocked = false,
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
@@ -28,6 +29,11 @@ export default function SystemPlanner({
   const [railStep, setRailStep] = useState("plan");
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
+  // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
+  // build screen. Local state gives instant feedback; onSkipViews persists the skip for the phase gate.
+  const [viewsStarted, setViewsStarted] = useState(hasViews);
+  const [skipped, setSkipped] = useState(mockupSkipped);
+  const persistSkip = (v) => { setSkipped(v); if (onSkipViews) Promise.resolve(onSkipViews(v)).catch(() => {}); };
   const [walkOpen, setWalkOpen] = useState(false);
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
   const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
@@ -174,7 +180,11 @@ export default function SystemPlanner({
         {planNode || <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
       </div>
       <div className="syp-pane" hidden={paneMode !== "views"}>
-        {viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>}
+        {(hasViews || viewsStarted)
+          ? (viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>)
+          : <ViewsStart camCount={camsPlaced} skipped={skipped} required={viewsRequired} canEdit={!!onSkipViews}
+              onStart={() => { setViewsStarted(true); if (skipped) persistSkip(false); }}
+              onSkip={() => { persistSkip(true); setRailStep("plan"); }} />}
       </div>
       {/* Review — the Consulting status surface (the submit/approve footer below is the content). P7 enriches it. */}
       {paneMode === "review" && (
@@ -202,6 +212,25 @@ export default function SystemPlanner({
   );
 }
 
+// Views entry — shown instead of a second build screen when the mockup was never started. The system
+// already knows the cameras, so this just offers Start (open the mockup on those cameras) or Skip for now.
+function ViewsStart({ camCount = 0, skipped = false, required = false, canEdit = false, onStart, onSkip }) {
+  return (
+    <div className="syp-vstart">
+      <div className="syp-vstart-h">{camCount > 0 ? `${camCount} camera${camCount === 1 ? "" : "s"} ready` : "Camera Views"}</div>
+      <div className="syp-vstart-sub">
+        {skipped ? "Skipped for now — start anytime." : required ? "Required for this project — attach a shot for each camera." : "Optional — attach a real shot for each camera, or skip if this job doesn't need it."}
+      </div>
+      {canEdit ? (
+        <div className="syp-vstart-actions">
+          <button className="syp-vbtn primary" onClick={onStart}>Start Views</button>
+          {!required && !skipped && <button className="syp-vbtn" onClick={onSkip}>Skip for now</button>}
+        </div>
+      ) : <div className="syp-vstart-sub">No camera views yet.</div>}
+    </div>
+  );
+}
+
 const CSS = `
 .syp{display:flex;flex-direction:column;gap:0}
 .syp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 12px;flex-wrap:wrap}
@@ -218,6 +247,14 @@ const CSS = `
 .syp-step.on .syp-dot{background:#fff;border-color:#fff;color:var(--dv-ink,#101418)}
 .syp-step.done:not(.on) .syp-dot{background:var(--dv-gold,#b98a2e);border-color:var(--dv-gold,#b98a2e);color:#fff}
 .syp-sep{display:none}
+.syp-vstart{border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:26px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+.syp-vstart-h{font-size:1rem;font-weight:800;color:var(--dv-ink,#101418)}
+.syp-vstart-sub{font-size:.84rem;color:var(--dv-meta,#787D84);max-width:420px}
+.syp-vstart-actions{display:inline-flex;gap:10px;margin-top:10px}
+.syp-vbtn{appearance:none;cursor:pointer;font:inherit;font-size:.84rem;font-weight:700;padding:9px 18px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418)}
+.syp-vbtn:hover{border-color:var(--dv-ink,#101418)}
+.syp-vbtn.primary{background:var(--dv-ink,#101418);color:#fff;border-color:var(--dv-ink,#101418)}
+.syp-vbtn.primary:hover{background:#000}
 .syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;margin-bottom:12px}
 .syp-review-h{font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-review-sub{margin-top:3px;font-size:.82rem;color:var(--dv-meta,#787D84)}
