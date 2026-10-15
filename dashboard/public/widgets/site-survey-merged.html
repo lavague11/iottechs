@@ -234,6 +234,13 @@
   .moreSeg button.on{background:var(--ink);color:#fff}
   .moreRow{display:flex;align-items:center;gap:11px;width:100%;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:600 14.5px var(--sans);cursor:pointer;text-align:left}
   .moreRow:hover{border-color:var(--ink)}
+  .versRow{display:flex;gap:9px;overflow-x:auto;padding:2px 1px 4px}
+  .versThumb{position:relative;flex:0 0 auto;width:68px;height:52px;border-radius:9px;border:1.5px solid var(--line);background:var(--soft) center/cover no-repeat;cursor:pointer;padding:0;overflow:hidden}
+  .versThumb:hover{border-color:var(--ink)}
+  .versThumb.on{border-color:var(--gold)}
+  .versThumb .vtag{position:absolute;left:3px;bottom:3px;font:800 8px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:#fff;background:rgba(16,17,18,.62);border-radius:4px;padding:1px 4px}
+  .versThumb.on .vtag{background:var(--gold)}
+  .versThumb .vpin{position:absolute;right:3px;top:3px;width:12px;height:12px;stroke:#fff;fill:none;stroke-width:2.4;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
   .moreRow svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   .moreRow>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #moreFloorBtn svg{opacity:.5;margin-left:auto}
@@ -774,6 +781,10 @@
           <button class="moreRow" id="moreBuildPlan" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create floor plan</span></button>
           <button class="moreRow" id="moreReplaceBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button>
           <button class="moreRow" id="moreRotate" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg><span>Rotate 90°</span></button>
+        </div>
+        <div class="moreSec" id="moreVersSec" style="display:none">
+          <div class="moreLbl">Versions</div>
+          <div class="versRow" id="moreVersList"></div>
         </div>
         <div class="moreSec" id="moreDisplaySec">
           <div class="moreLbl">Display</div>
@@ -2525,7 +2536,28 @@
       // Rotate 90 lives here now (off the canvas). Only for a plain aerial/upload floor — rotating a
       // hybrid-capable floor (bgData alone) would misalign the ctx aerial/planSvg layers.
       var rot=document.getElementById("moreRotate"); if(rot) rot.style.display=(hasBg && !cap)?"":"none";
-      var disp=document.getElementById("moreDisplaySec"); if(disp) disp.style.display=(hasBg && !RO)?"":"none"; }   // Angles / FOV / Grid
+      var disp=document.getElementById("moreDisplaySec"); if(disp) disp.style.display=(hasBg && !RO)?"":"none";   // Angles / FOV / Grid
+      renderVersionPicker(f, cap); }
+    // Restore picker: a thumbnail strip of this floor's kept background (or hybrid aerial) versions. Shown
+    // only when there are 2+ to choose between. Clicking one switches the ACTIVE version — no AI re-run.
+    function versInfo(f, cap){ var list=(cap && Array.isArray(f.ctxVersions) && f.ctxVersions.length) ? f.ctxVersions : (Array.isArray(f.bgVersions)?f.bgVersions:[]);
+      var key=(list===f.ctxVersions)?"ctx":"bg", active=(key==="ctx")?f.ctxActive:f.bgActive; return { list:list||[], key:key, active:active }; }
+    function renderVersionPicker(f, cap){ var sec=document.getElementById("moreVersSec"), box=document.getElementById("moreVersList"); if(!sec||!box) return;
+      var vi=versInfo(f, cap);
+      if(RO || !bgHasImage || bgToolOpen || vi.list.length<2){ sec.style.display="none"; box.innerHTML=""; return; }
+      sec.style.display=""; box.innerHTML="";
+      vi.list.slice().reverse().forEach(function(v){ var b=document.createElement("button"); b.type="button"; b.className="versThumb"+(v.id===vi.active?" on":"");
+        b.setAttribute("data-vid", v.id); b.style.backgroundImage="url('"+String(v.src).replace(/'/g,"%27")+"')"; b.title=(v.kind==="original"?"Original":"Enhanced")+(v.pinned?" · kept":"");
+        var tag=document.createElement("span"); tag.className="vtag"; tag.textContent=(v.kind==="original"?"Orig":(v.id===vi.active?"Active":"Prev")); b.appendChild(tag);
+        if(v.pinned){ var p=document.createElementNS("http://www.w3.org/2000/svg","svg"); p.setAttribute("viewBox","0 0 24 24"); p.setAttribute("class","vpin"); p.innerHTML='<path d="M12 17v5M9 10.8V4h6v6.8l2 3.2H7z"/>'; b.appendChild(p); }
+        box.appendChild(b); }); }
+    // Switch the active background/aerial to a kept version (no re-enhance). Mirrors the enhanced-swap:
+    // a hybrid floor swaps ONLY ctx.src; a plain floor swaps f.bg. Geometry/devices never move.
+    function restoreVersion(id){ if(frozen()) return; var f=floors[curFloor]; if(!f||!id) return; var cap=hybridCapable(f), vi=versInfo(f, cap);
+      var ver=null; vi.list.forEach(function(v){ if(v.id===id) ver=v; }); if(!ver) return;
+      if(vi.key==="ctx" && f.ctx){ f.ctxActive=id; f.ctx.src=ver.src; }
+      else { f.bgActive=id; f.bg=ver.src; bgData=ver.src; }
+      renderView(); flushNow(); buildMoreSheet(); }
     function openMoreSheet(){ if(frozen()) return; buildMoreSheet(); document.getElementById("moreSheet").classList.add("on"); }
     function closeMoreSheet(){ var s=document.getElementById("moreSheet"); if(s) s.classList.remove("on"); }
     (function(){ var scrim=document.getElementById("moreScrim"); if(scrim) scrim.addEventListener("click", closeMoreSheet);
@@ -2534,7 +2566,8 @@
       var ff=document.getElementById("moreFloorBtn"); if(ff) ff.addEventListener("click", function(){ closeMoreSheet(); openFloorSheet(); });
       function relay(id,tgt){ var b=document.getElementById(id); if(b) b.addEventListener("click", function(){ closeMoreSheet(); var t=document.getElementById(tgt); if(t) t.click(); }); }
       relay("moreEditBg","changeBgBtn"); relay("moreBuildPlan","buildPlanBtn"); relay("moreReplaceBg","replaceBgBtn");
-      var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); }); })();
+      var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); });
+      var vl=document.getElementById("moreVersList"); if(vl) vl.addEventListener("click", function(e){ var b=e.target.closest(".versThumb"); if(b) restoreVersion(b.getAttribute("data-vid")); }); })();
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
       if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
       var wasCur=(curFloor===i);

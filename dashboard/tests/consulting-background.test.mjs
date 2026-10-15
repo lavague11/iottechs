@@ -94,3 +94,17 @@ test("widget wiring: versions recorded at every background/ctx commit, pinned on
   assert.ok(survey.includes("snapFloor(); pinAllFloorsActiveVersions(); submitted=true;"), "submit pins every floor's active versions");
   assert.ok(survey.includes("bgVersions:validVersions(f.bgVersions),ctxVersions:validVersions(f.ctxVersions),bgActive:"), "restore validates the version arrays");
 });
+
+// P3b: the restore picker — a thumbnail strip in the ••• sheet to switch the active version, no AI re-run.
+test("restore picker: version section + thumbnails + restoreVersion wired (hybrid swaps ctx.src, plain swaps bg)", () => {
+  const survey = read("public/widgets/site-survey-merged.html");
+  assert.ok(survey.includes('<div class="moreSec" id="moreVersSec"'), "the Versions section exists in the ••• sheet");
+  assert.ok(survey.includes('id="moreVersList"'), "the thumbnail container exists");
+  assert.ok(survey.includes("function renderVersionPicker("), "buildMoreSheet renders the picker");
+  assert.ok(survey.includes("renderVersionPicker(f, cap); }"), "buildMoreSheet calls renderVersionPicker");
+  assert.ok(/vi\.list\.length<2\)\{ sec\.style\.display="none"/.test(survey), "picker hidden until 2+ versions exist");
+  assert.ok(survey.includes("function restoreVersion("), "restoreVersion exists");
+  assert.ok(/if\(vi\.key==="ctx" && f\.ctx\)\{ f\.ctxActive=id; f\.ctx\.src=ver\.src; \}/.test(survey), "hybrid restore swaps ONLY ctx.src");
+  assert.ok(/else \{ f\.bgActive=id; f\.bg=ver\.src; bgData=ver\.src; \}/.test(survey), "plain restore swaps f.bg");
+  assert.ok(survey.includes("restoreVersion(b.getAttribute(\"data-vid\"))"), "thumbnail click restores that version");
+});
