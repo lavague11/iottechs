@@ -854,11 +854,9 @@
     if(edit){ $("tAdd").classList.toggle("on", structOp!=="erase"); $("tErase").classList.toggle("on", structOp==="erase"); }   // keep the toggle visual in sync
     var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display="none";   // Areas are named like rooms now — no type picker
     cv.style.cursor = (edit||m==="eraser") ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
-    // No instructional hint copy — the controls speak for themselves (assume a competent user). The one
-    // exception is the very first empty canvas, where there is nothing on screen to act on yet.
-    var h=$("hint"); if(h){ var firstRun = m==="structure" && !cells.size;
-      h.innerHTML = firstRun ? "Drag to block out the structure" : "";
-      h.style.display = (firstRun && !$("preview").classList.contains("show")) ? "block" : "none"; }
+    // No instructional hint copy — the controls speak for themselves (assume a competent user). Even the
+    // empty first canvas gets none: the aerial + grid + Structure control make the intent clear on their own.
+    var h=$("hint"); if(h){ h.innerHTML=""; h.style.display="none"; }
     updateTools(); redraw(); }
 
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
