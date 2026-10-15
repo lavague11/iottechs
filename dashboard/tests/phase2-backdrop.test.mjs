@@ -24,10 +24,25 @@ test("draw tool receives the backdrop and loads it as an image", () => {
 });
 
 test("backdrop draws BEHIND the areas (after clearRect, before drawStructure) via the seed transform", () => {
-  assert.ok(/clearRect\(0,0,W\(\),H\(\)\);\s*drawBackdrop\(\);\s*drawAreas\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")),
+  // redraw clears in identity, applies the fit-to-fill view transform, THEN paints backdrop -> areas -> structure.
+  assert.ok(/clearRect\(0,0,W\(\),H\(\)\);.*drawBackdrop\(\);\s*drawAreas\(\);\s*drawStructure\(\)/.test(draw.replace(/\n/g, " ")),
     "redraw order: clear -> backdrop -> areas -> structure");
   assert.ok(draw.includes("ctx.drawImage(_bdImg, +_seed.offx||0, +_seed.offy||0, a*sc, sc)"),
     "positioned through the same seed transform ctxVB uses (full aerial fraction -> canvas px)");
+});
+
+test("fit-to-fill view transform: aerial floors scale to fill the frame; pointer + overlays map through it; export untouched", () => {
+  // computeView derives one scale from the aerial plate box (contain) so the photo fills the canvas edge-to-edge.
+  assert.ok(draw.includes("function computeView()"), "has the fit-to-fill view computation");
+  assert.ok(draw.includes("k=Math.min(W0/bw, H0/bh)"), "contain fit → fills the frame without cropping");
+  assert.ok(draw.includes("if(!(_bdImg && _seed && +_seed.sc>0)) return;"), "only aerial floors fill; hand-drawn stay vk=1");
+  // redraw paints through the view; pointer input inverse-maps through it; DOM overlays map through it.
+  assert.ok(draw.includes("ctx.setTransform(dpr*_vk,0,0,dpr*_vk, dpr*_vx, dpr*_vy)"), "redraw paints through the view transform");
+  assert.ok(draw.includes("return {x:(e.clientX-r.left-_vx)/_vk, y:(e.clientY-r.top-_vy)/_vk}"), "rel() inverse-maps pointer input through the view");
+  assert.ok(draw.includes("p={ x:p.x*_vk+_vx, y:p.y*_vk+_vy, w:p.w*_vk, h:p.h*_vk };"), "positionPop maps the world bbox through the view");
+  // the view is purely visual — stored geometry still exports from world space (planOut/ctxVB never read _vk)
+  const planOut = draw.slice(draw.indexOf("function planOut("), draw.indexOf("function planOut(") + 400);
+  assert.ok(!/_vk|_vx|_vy/.test(planOut), "planOut never reads the view transform (export stays in world space)");
 });
 
 test("aerial toggle cycles Off -> Light -> Full; Full is true full colour, default Full", () => {

@@ -349,7 +349,21 @@
   window.addEventListener("resize", fitCanvas);
   function fontFam(){ return getComputedStyle(document.body).fontFamily; }
 
-  function rel(e){ var r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+  // --- Fit-to-fill view transform (purely visual) ---------------------------------------------------
+  // An aerial floor's plate is painted via _seed; its box can sit far smaller than the canvas (a legacy
+  // building-fit seed, or a resized / fullscreen canvas), leaving a wide white margin. We scale EVERY
+  // on-canvas draw + inverse-map pointer input + DOM-overlay placement by ONE factor so the aerial FILLS
+  // the frame (contain, centered). Floors with no aerial keep vk=1 — byte-identical to before. This never
+  // changes what's exported: cells, ctxVB, planSvg and device coords all stay in untouched world space.
+  var _vk=1, _vx=0, _vy=0;
+  function computeView(){ _vk=1; _vx=0; _vy=0;
+    if(!(_bdImg && _seed && +_seed.sc>0)) return;            // only aerial floors fill; hand-drawn stay 1:1
+    var a=+_seed.aspect||1, sc=+_seed.sc, bw=a*sc, bh=sc;    // the aerial plate box in world px (drawBackdrop's rect)
+    if(!(bw>0&&bh>0)) return;
+    var W0=W(), H0=H(), k=Math.min(W0/bw, H0/bh);            // contain → fills the frame edge-to-edge, never crops
+    if(!(k>0)||!isFinite(k)) return;
+    _vk=k; _vx=(W0-bw*k)/2-(+_seed.offx||0)*k; _vy=(H0-bh*k)/2-(+_seed.offy||0)*k; }
+  function rel(e){ var r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left-_vx)/_vk, y:(e.clientY-r.top-_vy)/_vk}; }
   // Rooms are grid-cell sets in the SAME coordinate space as the structure, so a room can only ever occupy
   // cells the structure occupies (ROOM ⊆ STRUCTURE). Hit-test / bbox / boundary all derive from those cells.
   function cellAt(x,y){ return [Math.floor(x/HALF), Math.floor(y/HALF)]; }
@@ -720,21 +734,27 @@
     if(mode==="zone" && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected area → its local grid only
     return false;                                                        // idle / finished → no grid
   }
-  function drawGrid(){ var clip=gridClip(); if(clip===false) return; var w=W(), h=H();
+  function drawGrid(){ var clip=gridClip(); if(clip===false) return;
+    // Cover the VISIBLE world rect (inverse of the canvas corners under the fit-to-fill view) so the grid
+    // reaches the frame edges at any zoom — not just 0..W/0..H, which the view transform would shift off-screen.
+    var x0=(-_vx)/_vk, y0=(-_vy)/_vk, x1=(W()-_vx)/_vk, y1=(H()-_vy)/_vk;
     ctx.save();
     if(clip){ ctx.beginPath(); clip.forEach(function(k){ var a=k.split(","); ctx.rect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); ctx.clip(); }
-    ctx.strokeStyle="rgba(16,17,18,.12)"; ctx.lineWidth=1; ctx.beginPath();
-    for(var x=0;x<=w;x+=FULL){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,h); }
-    for(var y=0;y<=h;y+=FULL){ ctx.moveTo(0,y+0.5); ctx.lineTo(w,y+0.5); }
+    ctx.strokeStyle="rgba(16,17,18,.12)"; ctx.lineWidth=1/_vk; ctx.beginPath();
+    for(var x=Math.floor(x0/FULL)*FULL;x<=x1;x+=FULL){ ctx.moveTo(x,y0); ctx.lineTo(x,y1); }
+    for(var y=Math.floor(y0/FULL)*FULL;y<=y1;y+=FULL){ ctx.moveTo(x0,y); ctx.lineTo(x1,y); }
     ctx.stroke(); ctx.restore(); }
-  function redraw(){ ctx.clearRect(0,0,W(),H());
+  function redraw(){ var dpr=window.devicePixelRatio||1; computeView();
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W(),H());        // clear the whole canvas in identity
+    ctx.setTransform(dpr*_vk,0,0,dpr*_vk, dpr*_vx, dpr*_vy);              // then paint everything through the fit-to-fill view (vk=1 → unchanged)
     drawBackdrop();
     drawAreas();
     drawStructure();
     rooms.forEach(function(r){ drawRoom(r, r===sel); });
     drawGrid();
     drawPreview();
-    drawFootprintDims(); }
+    drawFootprintDims();
+    ctx.setTransform(dpr,0,0,dpr,0,0); }                                  // leave the context in identity for any out-of-redraw draw
   // Overall footprint size, shown only when the floor has a real scale (seeded from a trace).
   function drawFootprintDims(){ if(!(metersPerPx>0) || !cells.size) return;
     var bb=cellsBBoxPx(Array.from(cells));
@@ -949,6 +969,7 @@
   // Collision-aware placement: keep the popup inside the viewport and clear of the bottom toolbar/keyboard.
   function positionLabel(r){ positionPop($("labelPop"), cellsBBoxPx(r.cells||[])); }
   function positionPop(pop, p){   // p = a plan-px bbox {x,y,w,h} (a room's cells, or a door segment)
+    p={ x:p.x*_vk+_vx, y:p.y*_vk+_vy, w:p.w*_vk, h:p.h*_vk };   // map world-px → on-canvas px through the fit-to-fill view
     var sr=stage.getBoundingClientRect();
     pop.style.left="0px"; pop.style.top="0px"; pop.classList.add("on");   // measure at natural size
     var pw=pop.offsetWidth||248, ph=pop.offsetHeight||120, GUT=12;
