@@ -2387,6 +2387,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             hasSurvey={hasSurvey} hasViews={hasViews} hasCams={hasCams}
             mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}
             onSkipViews={(cView === "customer" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}
+            customer={cView === "customer"}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }

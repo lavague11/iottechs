@@ -20,7 +20,7 @@ export default function SystemPlanner({
   planNode = null, viewsNode = null, footer = null,
   hasSurvey = false, hasViews = false, hasCams = false,
   mockupSkipped = false, viewsRequired = false, onSkipViews = null,
-  devReadOnly = false, devLocked = false,
+  devReadOnly = false, devLocked = false, customer = false,
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
@@ -152,31 +152,74 @@ export default function SystemPlanner({
     { key: "review", label: "Review", done: false, enabled: true },
   ];
 
+  // CUSTOMER head: no staff rail — just a floor/view pager + a full-width Walkthrough. The pager steps
+  // through the submitted floors (driving the survey pane's floor with the existing, RO-safe `floor` cmd)
+  // and lands on Camera Views as the last stop when a mockup exists. Index is tracked shell-side
+  // (optimistic) so paging feels instant and never depends on an echo.
+  const floorCount = Math.max(roster.length, floors.length, hasSurvey ? 1 : 0);
+  const showViewsStop = hasViews || viewsStarted;
+  const custStops = floorCount + (showViewsStop ? 1 : 0);
+  const onViews = railStep === "views";
+  const custIdx = onViews ? floorCount : Math.min(curFloor, Math.max(0, floorCount - 1));
+  const floorLabel = (i) => (roster[i] && roster[i].name) || (floors[i] && floors[i].name) || `Floor ${i + 1}`;
+  const custLabel = onViews ? "Camera Views" : floorLabel(custIdx);
+  const goCust = (idx) => {
+    if (idx < 0 || idx >= custStops) return;
+    if (showViewsStop && idx === floorCount) { setRailStep("views"); return; }   // the Camera Views stop
+    setRailStep("plan"); setCurFloor(idx); surveyCmd({ cmd: "floor", i: idx });
+  };
+
   return (
     <div className="syp" ref={rootRef}>
       <style>{CSS}</style>
 
-      <div className="syp-head">
-        <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
-          {steps.map((s, i) => (
-            <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
-              className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
-              onClick={() => s.enabled && goRail(s.key)}>
-              <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
-              <span className="syp-steplbl">{s.label}</span>
-              {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
-            </button>
-          ))}
+      {customer ? (
+        /* CUSTOMER — no staff rail. A floor/view pager (when there's more than one) + a full-width
+           Walkthrough. The customer reviews; they don't build. */
+        (custStops > 1 || canWalk) && (
+          <div className="syp-head syp-head--cust">
+            {custStops > 1 && (
+              <div className="syp-pager" role="group" aria-label="Floors">
+                <button className="syp-pg" aria-label="Previous floor" disabled={custIdx <= 0} onClick={() => goCust(custIdx - 1)}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+                </button>
+                <span className="syp-pg-lbl">{custLabel}</span>
+                <button className="syp-pg" aria-label="Next floor" disabled={custIdx >= custStops - 1} onClick={() => goCust(custIdx + 1)}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+            )}
+            {canWalk && (
+              <button className="syp-play syp-play--full" onClick={() => setWalkOpen(true)}>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                <span>Walkthrough</span>
+              </button>
+            )}
+          </div>
+        )
+      ) : (
+        <div className="syp-head">
+          <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
+            {steps.map((s, i) => (
+              <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
+                className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
+                onClick={() => s.enabled && goRail(s.key)}>
+                <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
+                <span className="syp-steplbl">{s.label}</span>
+                {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+          <div className="syp-head-actions">
+            {/* Walkthrough — icon-only play button (Consulting stage). */}
+            {canWalk && (
+              <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              </button>
+            )}
+          </div>
         </div>
-        <div className="syp-head-actions">
-          {/* Walkthrough — icon-only play button (Consulting stage). */}
-          {canWalk && (
-            <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
           flows as a document: the survey MAP gets its own bounded height, and the camera roster flows
@@ -279,6 +322,17 @@ const CSS = `
 .syp-play{border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff}
 .syp-play:hover{background:#000}
 .syp-play svg{margin-left:1px}
+/* CUSTOMER head — a centered floor/view pager over a full-width Walkthrough. No staff rail.
+   Selectors are scoped under .syp-head--cust (two classes) so they beat the deck's dv-shell button
+   reset (which would otherwise strip the button backgrounds). */
+.syp-head--cust{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px}
+.syp-head--cust .syp-pager{display:flex;align-items:center;justify-content:center;gap:14px}
+.syp-head--cust .syp-pg{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#F2F2EF);color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
+.syp-head--cust .syp-pg:hover:not(:disabled){background:#fff}
+.syp-head--cust .syp-pg:disabled{opacity:.32;cursor:default}
+.syp-head--cust .syp-pg-lbl{min-width:96px;text-align:center;font-weight:700;font-size:.9rem;letter-spacing:.01em;color:var(--dv-ink,#101418)}
+.syp-head--cust .syp-play--full{width:100%;height:42px;gap:8px;font:inherit;font-weight:700;font-size:.9rem;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;border:1px solid var(--dv-ink,#101418)}
+.syp-head--cust .syp-play--full:hover{background:#000}
 .syp-pane[hidden]{display:none!important}
 /* PLAN pane flows like a document — bound only the MAP, never the whole survey (which would clip the
    camera roster below it). The survey node itself stays auto-height so the roster + comments flow. */

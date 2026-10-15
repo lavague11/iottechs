@@ -2134,8 +2134,11 @@
     }
     // Commands from the OUTSIDE device panel (React host) → drive the same in-tool operations, live.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotSurveyCmd"||(PID&&m.project!==PID)) return;
-      if(RO) return;
+      // Floor switching is pure view navigation (no data mutation; pushServer is RO-guarded) — allow it
+      // even in read-only so the customer's floor pager can page the submitted floors. Everything else is
+      // an edit and stays office-only.
       if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
+      if(RO) return;
       // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
       // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
       if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step); if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); } return; }
