@@ -2136,6 +2136,9 @@
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotSurveyCmd"||(PID&&m.project!==PID)) return;
       if(RO) return;
       if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
+      // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
+      // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
+      if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step); if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); } return; }
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
       // Relay from the host: focus the camera with this cid (System Planner cross-mode selection).
@@ -2736,8 +2739,17 @@
       renderSubmitCtl();                             // just Next / (hidden on the last step) — submit is in the host footer
       setHint("");   // no step instructions — the UI speaks for itself
       updateBgActions();   // the floor actions (Build Floor Plan + ••• Change background / Enhance aerial) track the current floor + step
+      emitSurveyStep();    // tell the host rail which step we're on + what's done (Background/Plan/Cameras completion)
       queueSave();
     }
+    // Echo the survey's internal step + completion signals up to the System Planner rail, so the rail
+    // indicator follows goStep (incl. the Background→Setup auto-advance after Done) without the shell
+    // guessing. hasPlan = a real structure exists; camCount drives the Cameras/Views steps.
+    function emitSurveyStep(){ try{ var lf=floors[curFloor]||{};
+      var camCount=(floors||[]).reduce(function(n,f){ return n+((f&&f.devices)||[]).filter(function(d){ return d&&d.k==="cam"; }).length; }, 0);
+      parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep,
+        bgReady:!!bgHasImage, hasPlan:!!(hybridCapable(lf) || (lf.plan && (lf.plan.cells||lf.plan.rooms))), camCount:camCount }, "*");
+    }catch(e){} }
     // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup
     // step tabs are the manual navigation. renderSubmitCtl kept as a no-op so existing call sites are safe.
     function renderSubmitCtl(){}

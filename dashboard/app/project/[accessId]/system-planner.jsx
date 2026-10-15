@@ -21,7 +21,13 @@ export default function SystemPlanner({
   hasSurvey = false, hasViews = false, hasCams = false,
   devReadOnly = false, devLocked = false,
 }) {
-  const [mode, setMode] = useState("plan");     // "plan" (survey) | "views" (camera mockups)
+  // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
+  // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
+  // (iotSurveyCmd {cmd:"step"}); Views is the mockup pane; Review is the status surface. Both iframes stay
+  // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
+  const [railStep, setRailStep] = useState("plan");
+  const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
+  const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   const [walkOpen, setWalkOpen] = useState(false);
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
   const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
@@ -53,6 +59,13 @@ export default function SystemPlanner({
       // A rename made INSIDE the mockup (it already persisted to survey2 by cid) → relay to the survey
       // iframe so the live map/Devices strip reflect it immediately, closing the sync loop both ways.
       else if (m.type === "iotMockupRenamed" && m.cid) { post("Site Survey", { type: "iotSurveyCmd", cmd: "renameCid", project: accessId, cid: m.cid, name: m.name || "" }); }
+      // The survey echoes its internal step + completion signals → keep the rail indicator honest and follow
+      // the Background→Setup auto-advance (after Done). Plan/Cameras/Review are distinguished shell-side, so
+      // within Setup (step 1) we only auto-advance OFF Background; an explicit Plan/Cameras/Review stays put.
+      else if (m.type === "iotSurveyStep") {
+        setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });
+        setRailStep((cur) => (m.step === 0 ? "background" : cur === "background" ? "plan" : cur));
+      }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -109,19 +122,42 @@ export default function SystemPlanner({
   const camCount = floors.reduce((n, f) => n + (f.cams || []).length, 0);
   const canWalk = hasCams || camCount > 0;
 
+  // Navigate the rail. Background/Plan/Cameras drive the SAME survey pane's internal step (postMessage,
+  // no reload); Views/Review are shell-only. Internal users can jump to any completed section freely.
+  const goRail = (step) => {
+    setRailStep(step);
+    if (step === "background") surveyCmd({ cmd: "step", step: 0 });
+    else if (step === "plan") surveyCmd({ cmd: "step", step: 1 });
+    else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });
+    // views / review: shell state only — both iframes stay mounted
+  };
+  const camsPlaced = sig.camCount || camCount;
+  const steps = [
+    { key: "background", label: "Background", done: sig.bgReady, enabled: true },
+    { key: "plan", label: "Plan", done: sig.hasPlan, enabled: sig.bgReady },
+    { key: "cameras", label: "Cameras", done: camsPlaced > 0, enabled: sig.bgReady },
+    { key: "views", label: "Views", done: hasViews, enabled: camsPlaced > 0 || hasViews },
+    { key: "review", label: "Review", done: false, enabled: true },
+  ];
+
   return (
     <div className="syp" ref={rootRef}>
       <style>{CSS}</style>
 
       <div className="syp-head">
-        <div className="syp-seg" role="tablist" aria-label="Planner mode">
-          <button role="tab" aria-selected={mode === "plan"} className={`syp-tab${mode === "plan" ? " on" : ""}`} onClick={() => setMode("plan")}>Plans</button>
-          <button role="tab" aria-selected={mode === "views"} className={`syp-tab${mode === "views" ? " on" : ""}`} onClick={() => setMode("views")}>Views</button>
+        <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
+          {steps.map((s, i) => (
+            <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
+              className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
+              onClick={() => s.enabled && goRail(s.key)}>
+              <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
+              <span className="syp-steplbl">{s.label}</span>
+              {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
+            </button>
+          ))}
         </div>
         <div className="syp-head-actions">
-          {/* Focus (fullscreen) now lives ON the plan canvas itself (the ⤢ button), so it's no longer
-              duplicated on this line — the Plans/Views row stays just the mode switch + walkthrough. */}
-          {/* Walkthrough is just a play button now (icon only) — Consulting stage. */}
+          {/* Walkthrough — icon-only play button (Consulting stage). */}
           {canWalk && (
             <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
               <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
@@ -132,13 +168,21 @@ export default function SystemPlanner({
 
       {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
           flows as a document: the survey MAP gets its own bounded height, and the camera roster flows
-          BELOW it (the page scrolls) — never trapped inside a fixed frame that would clip the roster. */}
-      <div className="syp-pane syp-plan" hidden={mode !== "plan"}>
+          BELOW it (the page scrolls) — never trapped inside a fixed frame that would clip the roster.
+          Background/Plan/Cameras all show the survey pane (the rail drove its internal step). */}
+      <div className="syp-pane syp-plan" hidden={paneMode !== "plan"}>
         {planNode || <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
       </div>
-      <div className="syp-pane" hidden={mode !== "views"}>
+      <div className="syp-pane" hidden={paneMode !== "views"}>
         {viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>}
       </div>
+      {/* Review — the Consulting status surface (the submit/approve footer below is the content). P7 enriches it. */}
+      {paneMode === "review" && (
+        <div className="syp-review">
+          <div className="syp-review-h">Review &amp; submit</div>
+          <div className="syp-review-sub">Confirm the site survey{hasViews ? " and camera views" : ""}, then submit for the customer to approve.</div>
+        </div>
+      )}
 
       {/* The DEVICES roster — the camera account. Shared across BOTH tabs (not tied to the survey map),
           so cameras can be named/photographed from either mode. Office-only (customers see cameras in
@@ -161,11 +205,22 @@ export default function SystemPlanner({
 const CSS = `
 .syp{display:flex;flex-direction:column;gap:0}
 .syp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 12px;flex-wrap:wrap}
-.syp-seg{display:inline-flex;padding:3px;gap:2px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px}
-.syp-tab{appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;letter-spacing:.01em;
-  color:var(--dv-meta,#787D84);padding:7px 16px;border-radius:100px;transition:background .18s,color .18s}
-.syp-tab:hover{color:var(--dv-ink,#101418)}
-.syp-tab.on{background:var(--dv-ink,#101418);color:#fff}
+/* The ONE Consulting rail — Background · Plan · Cameras · Views · Review. Compact, icon-free, state via
+   a leading dot (✓ done · filled = current · hollow = pending). Minimal vault styling, horizontally scrollable. */
+.syp-rail{display:inline-flex;align-items:center;gap:0;max-width:100%;overflow-x:auto;padding:3px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px}
+.syp-step{position:relative;appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;letter-spacing:.01em;white-space:nowrap;
+  color:var(--dv-meta,#787D84);display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:100px;transition:background .18s,color .18s}
+.syp-step:hover:not(:disabled){color:var(--dv-ink,#101418)}
+.syp-step.on{background:var(--dv-ink,#101418);color:#fff}
+.syp-step:disabled{opacity:.42;cursor:default}
+.syp-step.done:not(.on){color:var(--dv-ink,#101418)}
+.syp-dot{width:13px;height:13px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:9px;line-height:1;border:1.5px solid currentColor}
+.syp-step.on .syp-dot{background:#fff;border-color:#fff;color:var(--dv-ink,#101418)}
+.syp-step.done:not(.on) .syp-dot{background:var(--dv-gold,#b98a2e);border-color:var(--dv-gold,#b98a2e);color:#fff}
+.syp-sep{display:none}
+.syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;margin-bottom:12px}
+.syp-review-h{font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
+.syp-review-sub{margin-top:3px;font-size:.82rem;color:var(--dv-meta,#787D84)}
 .syp-head-actions{display:inline-flex;align-items:center;gap:8px}
 .syp-ico,.syp-play{appearance:none;cursor:pointer;width:38px;height:38px;border-radius:100px;display:inline-flex;align-items:center;justify-content:center;transition:background .18s,border-color .18s}
 .syp-ico{border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418)}

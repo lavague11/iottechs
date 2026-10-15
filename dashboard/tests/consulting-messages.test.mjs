@@ -28,7 +28,7 @@ const EXPECTED_TYPES = new Set([
   "iotOutlineSave", "iotPlanLoad", "iotPlanReady", "iotPlanSave", "iotSurvey",
   "iotSurvey2Submit", "iotSurvey2Unsubmit", "iotSurveyCmd", "iotSurveyComment", "iotSurveyContext",
   "iotSurveyDevices", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyReqFocus", "iotSurveySelect",
-  "iotSurveySubmitState", "iotSurveyZoom", "iotZonePolys", "iotZonesMigrated",
+  "iotSurveyStep", "iotSurveySubmitState", "iotSurveyZoom", "iotZonePolys", "iotZonesMigrated",
 ]);
 
 test("no cross-iframe message type is renamed or added without updating the drift guard", () => {
@@ -42,7 +42,7 @@ test("no cross-iframe message type is renamed or added without updating the drif
 // The iotSurveyCmd verbs the survey widget handles (host → survey iframe). The rail (P4) adds "step";
 // the photo-sync path (P6) routes "photo" by cid. Frozen so a handler rename is caught.
 const EXPECTED_SURVEY_CMDS = new Set([
-  "floor", "select", "selectCid", "hover", "renameCid", "rename", "fov", "delete", "photo", "clearPhoto",
+  "floor", "step", "select", "selectCid", "hover", "renameCid", "rename", "fov", "delete", "photo", "clearPhoto",
 ]);
 test("iotSurveyCmd verbs handled by the survey widget stay stable", () => {
   const survey = read("public/widgets/site-survey-merged.html");
