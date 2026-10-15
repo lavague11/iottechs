@@ -948,7 +948,7 @@ export function validatePayload(payload) {
         for (const x of rows) {
           if (String(x.name || "").length > 120) return "Item name too long.";
           if (!(+x.qty >= 0 && +x.qty <= 9999)) return "Bad quantity.";
-          if (!(+x.price >= 0 && +x.price <= 1000000)) return "Bad price.";
+          if (!(+x.price >= -1000000 && +x.price <= 1000000)) return "Bad price.";   // negative price allowed → a line item can be a customer CREDIT (e.g. "Wiring Credit" −$150)
           if (x.cost != null && !(+x.cost >= 0 && +x.cost <= 1000000)) return "Bad cost.";
           if (x.techPrice != null && !(+x.techPrice >= 0 && +x.techPrice <= 1000000)) return "Bad tech price.";
         }

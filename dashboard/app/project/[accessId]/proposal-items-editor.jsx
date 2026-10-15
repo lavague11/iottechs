@@ -419,7 +419,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { qty: e.target.value }) : patchItem(it.id, { qty: e.target.value }))} />
       )}
       {hasSub ? <span /> : (
-        <input className="num" type="number" min="0" step="0.01" value={it.price} disabled={readOnly}
+        <input className="num" type="number" step="0.01" value={it.price} disabled={readOnly}
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { price: e.target.value }) : patchItem(it.id, { price: e.target.value }))} />
       )}
       {showCost && (hasSub ? <span /> : (
