@@ -266,6 +266,17 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .feat-row.on .feat-box{border-color:var(--gold);background:var(--gold)}
 .feat-row.on .feat-box::after{content:"";position:absolute;left:6px;top:2px;width:6px;height:11px;border:solid #0B0F1A;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
 .feat-name{font-weight:600;font-size:15px}
+/* learn-more info icon — understated, right after the name; its own click opens a popover (never toggles the row) */
+.feat-info{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-left:-6px;padding:0;color:var(--muted);background:none;border:0;border-radius:50%;cursor:pointer;transition:color .15s,background .15s}
+.feat-info:hover{color:var(--gold-ink);background:rgba(0,0,0,.05)}
+.feat-info svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.feat-info:focus{outline:none}
+.feat-info:focus-visible{outline:2px solid var(--gold);outline-offset:1px;color:var(--gold-ink)}
+/* small click-popover — appears near the icon with a slight fade, no modal/overlay */
+.feat-pop{position:fixed;z-index:9000;max-width:min(300px,calc(100vw - 32px));background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.22);padding:11px 13px;font-size:13px;line-height:1.46;opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
+.feat-pop.on{opacity:1;transform:translateY(0);pointer-events:auto}
+.feat-pop b{display:block;font-weight:700;font-size:12.5px;letter-spacing:.01em;margin-bottom:3px}
+@media (prefers-reduced-motion:reduce){.feat-pop{transition:none}}
 .feat-pkg{margin-left:auto;flex:none;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .feat-pkg.smart{color:var(--gold-ink);border-color:var(--gold)}
 .feat-pkg.pro{color:#FAF8F4;background:var(--slate);border-color:var(--slate)}
@@ -530,17 +541,17 @@ const CONFIG = {
     // 2 Smart · 3 Pro), never shown to the customer. `service` = an add-on service (live monitoring),
     // not a camera-package driver. `specialized` = needs dedicated equipment/analytics (custom quote).
     securityFeatures: [
-      { id:'rec247',       label:'24/7 Video Recording',          level:1 },
-      { id:'colornight',   label:'Full-Color Night Vision',       level:1 },
-      { id:'hd4k',         label:'4K HD Video',                   level:1 },
-      { id:'mobile',       label:'Mobile App Access',             level:1 },
-      { id:'audio',        label:'Audio Recording',               level:1, allPackages:true, caveat:'Audio depends on the camera model — confirmed at the survey.' },
-      { id:'aidetect',     label:'AI Human & Vehicle Detection',  level:2 },
-      { id:'motionnotify', label:'Phone Motion Notifications',    level:2 },
-      { id:'facial',       label:'Facial Recognition',            level:3, specialized:true },
-      { id:'lpr',          label:'License Plate Recognition',     level:3, specialized:true },
-      { id:'livemon',      label:'24/7 Live Monitoring',          level:0, service:true },
-      { id:'alarm',        label:'Security Alarm + Monitoring',    level:0, service:true },
+      { id:'rec247',       label:'24/7 Video Recording',          level:1, info:'Every camera records around the clock to the on-site recorder, so footage is always there to review — not only when motion is detected.' },
+      { id:'colornight',   label:'Full-Color Night Vision',       level:1, info:'Cameras stay in full color after dark instead of black-and-white infrared, so clothing, vehicle and skin tones are visible at night.' },
+      { id:'hd4k',         label:'4K HD Video',                   level:1, info:'8-megapixel 4K resolution — sharp enough to read detail and zoom into recorded footage without it turning to blur.' },
+      { id:'mobile',       label:'Mobile App Access',             level:1, info:'View live and recorded video from your phone anywhere, and jump to any camera in a couple of taps.' },
+      { id:'audio',        label:'Audio Recording',               level:1, allPackages:true, caveat:'Audio depends on the camera model — confirmed at the survey.', info:'Records sound alongside video where the camera and local law allow it — confirmed per camera at the survey.' },
+      { id:'aidetect',     label:'AI Human & Vehicle Detection',  level:2, info:'The system tells people and vehicles apart from wind, rain and moving shadows, so you get far fewer false alerts.' },
+      { id:'motionnotify', label:'Phone Motion Notifications',    level:2, info:'Your phone is notified the moment the cameras detect activity, with a snapshot so you can glance and decide.' },
+      { id:'facial',       label:'Facial Recognition',            level:3, specialized:true, info:'Flags and searches for specific faces you enroll — for staff, VIPs or watch lists. Needs dedicated setup, reviewed at the survey.' },
+      { id:'lpr',          label:'License Plate Recognition',     level:3, specialized:true, info:'Reads and logs vehicle license plates as they pass a positioned camera. Works best on 12MP cameras; reviewed at the survey.' },
+      { id:'livemon',      label:'24/7 Live Monitoring',          level:0, service:true, info:'A monitoring team watches your cameras live and responds to events — an optional add-on service, not part of the camera hardware.' },
+      { id:'alarm',        label:'Security Alarm + Monitoring',    level:0, service:true, info:'Adds alarm sensors with professional monitoring; on a verified alarm the monitoring provider can request emergency response. Dispatch depends on verification procedures and local requirements.' },
     ],
     // 8MP body styles — same price, same sensor. Internal SKU kept private (rep view only).
     styles: {
@@ -886,6 +897,7 @@ const state = Object.assign({}, CONFIG.defaults, { contact:{
   construction:false, hasDeadline:false, deadline:'', floorPlans:false, floorPlanImg:null } });
 let cur = 0, rep = false, drawer = false, done = new Set(), submitted = null, promoMsg = '', bumpMsg = '';
 let advOpen = false, monitorWarn = false, bumpT = null;   // Advanced-options collapse; monitor disclosure; bump-toast timer
+let featPopFor = null;   // id of the feature whose info popover is open (null = none)
 // 3-step model (the 14 topic renderers below are regrouped into these; engine/state/actions unchanged).
 let openAcc = 'property';   // Step 2: one accordion open at a time
 
@@ -1349,8 +1361,9 @@ const R = {
   features(s, q, i){
     const sel = new Set(state.features||[]);
     const pkg = f => f.service ? {t:'service',l:'Service'} : ({1:{t:'ess',l:'Essential'},2:{t:'smart',l:'Smart'},3:{t:'pro',l:'Pro'}})[f.level] || null;
+    const info = f => f.info ? `<span class="feat-info" data-act="featinfo" data-v="${f.id}" role="button" tabindex="0" aria-label="About ${f.label}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11.3v4.4"/><circle cx="12" cy="7.9" r="1" fill="currentColor" stroke="none"/></svg></span>` : '';
     const row = f => { const p = pkg(f); return `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
-      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span>${p?`<span class="feat-pkg ${p.t}">${p.l}</span>`:''}</button>`; };
+      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span>${info(f)}${p?`<span class="feat-pkg ${p.t}">${p.l}</span>`:''}</button>`; };
     const rec = recommendLevel(state.features);
     const recName = ({essential:'Essential',smart:'Smart',pro:'Pro'})[rec.level];
     const bits = rec.hasCamFeatures ? [`${recName} package`] : [];
@@ -1686,7 +1699,40 @@ function copy(text){
   try{ navigator.clipboard.writeText(text).then(()=>{ if(msg) msg.textContent='Copied. Paste it into a text or email to your IOT TECHS rep.'; }, fallback); }catch(_){ fallback(); }
 }
 
+// Feature info popover — a small click-popover anchored to the ⓘ icon; never touches the checkbox.
+function closeFeatPop(){ featPopFor=null; const p=$('#featPop'); if(p){ p.classList.remove('on'); p.setAttribute('aria-hidden','true'); } }
+function openFeatPop(iconEl, id){
+  if(featPopFor===id){ closeFeatPop(); return; }   // second click on the same icon closes it
+  const f = (CONFIG.catalog.securityFeatures||[]).find(x=>x.id===id); if(!f || !f.info) return;
+  let p = $('#featPop');
+  if(!p){ p=document.createElement('div'); p.id='featPop'; p.className='feat-pop'; p.setAttribute('role','tooltip'); document.body.appendChild(p); }
+  p.innerHTML = `<b></b><span></span>`;
+  p.querySelector('b').textContent = f.label;
+  p.querySelector('span').textContent = f.info;
+  featPopFor = id;
+  p.setAttribute('aria-hidden','false');
+  // measure then place: below the icon by default, flipped above when it would clip the viewport bottom
+  p.style.left='0px'; p.style.top='0px'; p.classList.add('on');
+  const r = iconEl.getBoundingClientRect(), pr = p.getBoundingClientRect(), gap=8, m=12;
+  let left = r.left + r.width/2 - pr.width/2;
+  left = Math.max(m, Math.min(left, innerWidth - pr.width - m));
+  let top = r.bottom + gap;
+  if(top + pr.height > innerHeight - m) top = Math.max(m, r.top - gap - pr.height);
+  p.style.left = Math.round(left)+'px';
+  p.style.top = Math.round(top)+'px';
+}
+addEventListener('scroll', ()=>{ if(featPopFor) closeFeatPop(); }, true);
+addEventListener('resize', ()=>{ if(featPopFor) closeFeatPop(); });
+addEventListener('keydown', e=>{
+  if(e.key==='Escape' && featPopFor){ closeFeatPop(); return; }
+  if((e.key==='Enter'||e.key===' ') && e.target.closest && e.target.closest('[data-act="featinfo"]')){
+    const a=e.target.closest('[data-act="featinfo"]'); e.preventDefault(); openFeatPop(a, a.dataset.v);
+  }
+});
+
 document.addEventListener('click', e=>{
+  // outside-tap closes the feature info popover (but not when tapping the popover or an info icon)
+  if(featPopFor && !e.target.closest('#featPop') && !e.target.closest('[data-act="featinfo"]')) closeFeatPop();
   const acc = e.target.closest('[data-acc]');
   if(acc){ const id=acc.dataset.acc; openAcc = (openAcc===id ? null : id); render(); return; }   // Step 2 accordion toggle (one open at a time)
   const g = e.target.closest('[data-go]');
@@ -1694,6 +1740,7 @@ document.addEventListener('click', e=>{
   const a = e.target.closest('[data-act]'); if(!a) return;
   const v = a.dataset.v, act = a.dataset.act;
   switch(act){
+    case 'featinfo': openFeatPop(a, v); return;   // ⓘ info popover — never toggles the feature checkbox
     case 'next': go(cur+1); return;
     case 'skip': skipSlide(); return;
     case 'close': closeDrawer(); return;
