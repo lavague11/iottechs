@@ -24,7 +24,7 @@ const corpus = FILES.map(read).join("\n");
 const EXPECTED_TYPES = new Set([
   "iotAerialRestore", "iotBgReady", "iotCaptureCancel", "iotDrawBackdrop", "iotDrawFloor",
   "iotFloors", "iotLoadCapture", "iotMockup", "iotMockupCmd", "iotMockupComment",
-  "iotMockupFullscreen", "iotMockupRenamed", "iotMockupSelect", "iotOutlineLoad", "iotOutlineReady",
+  "iotMockupFullscreen", "iotMockupPhoto", "iotMockupRenamed", "iotMockupSelect", "iotOutlineLoad", "iotOutlineReady",
   "iotOutlineSave", "iotPlanLoad", "iotPlanReady", "iotPlanSave", "iotSurvey",
   "iotSurvey2Submit", "iotSurvey2Unsubmit", "iotSurveyCmd", "iotSurveyComment", "iotSurveyContext",
   "iotSurveyDevices", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyReqFocus", "iotSurveySelect",

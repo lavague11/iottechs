@@ -749,7 +749,11 @@ rebuildCards();
     var pid=new URLSearchParams(location.search).get('project'); if(!pid) return;
     try{ fetch('/api/project-cameras',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
       body:JSON.stringify({ accessId:pid, floor:c.floor, di:c.di, photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }) })
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok&&Array.isArray(j.cameras)) SURVEY_CAMS=j.cameras; }).catch(function(){}); }catch(_){}
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok&&Array.isArray(j.cameras)) SURVEY_CAMS=j.cameras;
+        // Tell the shell (→ the live survey iframe + the shared Devices roster) that THIS camera's photo
+        // changed, keyed by its stable cid — so the roster/map/walkthrough update instantly, no reload.
+        try{ parent.postMessage({ type:'iotMockupPhoto', cid:(c.id||c.cid||null), photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }, '*'); }catch(e){}
+      }).catch(function(){}); }catch(_){}
   }
 
   // Host → tool commands from the native toolbar in the React wrapper.

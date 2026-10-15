@@ -72,6 +72,12 @@ export default function SystemPlanner({
         setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });
         setRailStep((cur) => (m.step === 0 ? "background" : cur === "background" ? "plan" : cur));
       }
+      // A photo attached in the mockup wrote the survey2 blob server-side but can't touch the live survey
+      // iframe. Relay it (by stable cid) so the survey updates its device, re-emits iotSurveyDevices, and
+      // the shared Devices roster + walkthrough refresh instantly — no reload. (Fixes stale "No photo".)
+      else if (m.type === "iotMockupPhoto" && m.cid) {
+        post("Site Survey", { type: "iotSurveyCmd", cmd: "photo", project: accessId, cid: m.cid, photo: m.photo || null, photoName: m.photoName || null });
+      }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -92,7 +98,7 @@ export default function SystemPlanner({
     }));
     return out;
   }, [roster]);
-  const liveKey = useMemo(() => liveCameras.map((c) => `${c.id}:${c.name}`).join("|"), [liveCameras]);
+  const liveKey = useMemo(() => liveCameras.map((c) => `${c.id}:${c.name}:${c.photo ? 1 : 0}`).join("|"), [liveCameras]);  // photo bit → a photo added anywhere re-feeds the mockup grid
   useEffect(() => {
     if (!liveCameras.length) return;
     try {

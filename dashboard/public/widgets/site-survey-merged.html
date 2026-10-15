@@ -2149,6 +2149,14 @@
       // (the name lives once; a rename anywhere shows everywhere). Current floor only; other floors were
       // already updated server-side and re-hydrate on reload.
       if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ applyManualName(rd, m.name); renderDevice(rd); renderPanel(); reconcileLocations(); queueSave(); } return; }
+      // Photo relayed from the mockup (by stable cid) — update the device's photo so the map + the shared
+      // Devices roster (via reportDevices → iotSurveyDevices) reflect it live. A photo is NOT in the survey
+      // fingerprint, so this is applied even on a submitted/frozen survey (Views are often done after submit).
+      if(m.cmd==="photo" && m.cid){ var ph=m.photo||null, curHit=null;
+        for(var pi=0;pi<devices.length;pi++){ if(devices[pi].cid===m.cid){ curHit=devices[pi]; break; } }   // current floor → the live array
+        if(curHit){ curHit.photo=ph; curHit.photoName=ph?(m.photoName||curHit.name||null):null; renderDevice(curHit); }
+        else { for(var pf=0;pf<floors.length;pf++){ var dl=(floors[pf]&&floors[pf].devices)||[]; for(var pj=0;pj<dl.length;pj++){ if(dl[pj].cid===m.cid){ dl[pj].photo=ph; dl[pj].photoName=ph?(m.photoName||dl[pj].name||null):null; break; } } } }   // any other floor → its stored devices (re-emitted in the roster by reportDevices)
+        renderPanel(); queueSave(); return; }   // renderPanel → reportDevicesSoon → the shared Devices roster + liveCameras refresh
       if(!d) return;
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
       if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); }
