@@ -46,6 +46,10 @@ export default function SystemPlanner({
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
   const [bgTool, setBgTool] = useState(null);     // "draw" | "satellite" | null — which build tool is open inside the survey (from iotSurveyStep)
   const rootRef = useRef(null);
+  // Devices roster: expanded by default (desktop unchanged); collapsed on a phone after mount so the list
+  // doesn't tower below the canvas. A one-line "Devices (N)" summary toggles it. Default true → no desktop flash.
+  const [devOpen, setDevOpen] = useState(true);
+  useEffect(() => { try { if (window.matchMedia("(max-width:700px)").matches) setDevOpen(false); } catch { /* no matchMedia */ } }, []);
 
   // Talk to the survey iframe (the devices live in survey2). The roster is shared across both tabs, so
   // its edits post straight to the survey iframe (which stays mounted even while the Plan pane is hidden).
@@ -400,9 +404,19 @@ export default function SystemPlanner({
       {/* The DEVICES roster — the camera account. Shared across BOTH tabs (not tied to the survey map),
           so cameras can be named/photographed from either mode. Office-only (customers see cameras in
           the views). */}
-      {!devReadOnly && (
-        <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} />
-      )}
+      {!devReadOnly && (() => {
+        const devCount = (roster || []).reduce((n, f) => n + (f && Array.isArray(f.devices) ? f.devices.length : 0), 0);
+        return (
+          <div className={`syp-devwrap${devOpen ? " open" : ""}`}>
+            {/* Toggle shows only on a phone (CSS) — desktop stays expanded. */}
+            <button type="button" className="syp-devtog" aria-expanded={devOpen} onClick={() => setDevOpen((o) => !o)}>
+              <span>Devices{devCount ? ` (${devCount})` : ""}</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} />}
+          </div>
+        );
+      })()}
 
       {/* Customer: the Approve surface stays directly below the viewer. (Staff: the submit bars moved
           into the Review pane above; the nav footer carries the headline Submit/Continue CTA.) */}
@@ -535,6 +549,16 @@ const CSS = `
 .syp-vbtn:hover{border-color:var(--dv-ink,#101418)}
 .syp-vbtn.primary{background:var(--dv-ink,#101418);color:#fff;border-color:var(--dv-ink,#101418)}
 .syp-vbtn.primary:hover{background:#000}
+/* Devices roster collapse — desktop shows the roster with no toggle; a phone gets a one-line "Devices (N)"
+   summary that expands on tap (default collapsed via the mount effect). */
+.syp-devtog{display:none}
+@media (max-width:700px){
+  .syp-devtog{display:flex;align-items:center;justify-content:space-between;width:100%;appearance:none;cursor:pointer;
+    font:inherit;font-weight:700;font-size:.9rem;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);
+    border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;padding:12px 14px;margin-top:8px}
+  .syp-devwrap.open .syp-devtog svg{transform:rotate(180deg)}
+  .syp-devtog svg{transition:transform .18s}
+}
 .syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;margin-bottom:12px}
 .syp-review-h{font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-review-sub{margin-top:3px;font-size:.82rem;color:var(--dv-meta,#787D84)}
