@@ -12,8 +12,9 @@
   body{font:15px/1.45 var(--sans);color:var(--ink);background:#fff;display:flex;flex-direction:column;overflow:hidden}
 
   .head{flex:none;display:flex;align-items:center;gap:10px;padding:12px 16px 11px;border-bottom:1px solid var(--line)}
-  /* Embedded in the deck the brand already shows above — drop the redundant logo, keep the search. */
-  body.embed .head>a[aria-label="IOT TECHS home"]{display:none}
+  /* The brand already shows above in the deck — the logo is redundant here; drop it everywhere so the
+     address field spans the full width (keep the search button). */
+  .head>a[aria-label="IOT TECHS home"]{display:none}
   .head .lbl{display:none}   /* seamless in the survey: just the search bar, no tool label */
   .head input{flex:1;min-width:0;padding:10px 13px;font-size:15px;border:1px solid var(--line);border-radius:var(--r);outline:none;color:var(--ink)}
   .head input:focus{border-color:var(--ink)}
@@ -210,6 +211,7 @@
   .tb.wand.busy{opacity:.5;pointer-events:none}
   .tb.use{background:var(--ink);color:#fff}
   .tb.use:hover{background:#000}
+  .tb.back{position:absolute;left:10px;min-width:40px}   /* pinned left; the rest of the dock stays centred */
   .tsep{width:1px;height:28px;background:var(--line);margin:0 4px}
   /* Rotate popover opens ABOVE the footer (drop-up), centred. */
   .pop{position:absolute;z-index:13;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);display:none;align-items:center;gap:10px;max-width:calc(100vw - 20px);
@@ -285,6 +287,8 @@
 
   <!-- Toolbar as a thin, full-width FOOTER below the photo (never floating over the aerial). -->
   <div class="tbar" id="tbar">
+      <!-- Back lives in this one dock (the redundant host #bgWiz strip is retired) → cancel back to the floor. -->
+      <button class="tb back" id="tBack" title="Back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
       <div class="pop" id="popLevel">
         <label>Rotate</label>
         <input id="rot" type="range" min="-45" max="45" value="0">
@@ -505,6 +509,8 @@
   function commitUI(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } closePops(); }
   $("tDl").addEventListener("click", function(){ commitUI(); ensureCaptured().then(function(ok){ if(ok) downloadImg(); }); });
   $("tDone").addEventListener("click", function(){ commitUI(); ensureCaptured().then(function(ok){ if(ok) usePreview(); }); });
+  // Back → abandon back to the floor (the stored aerial is unchanged). The host handles iotCaptureCancel → exitBg(false).
+  $("tBack").addEventListener("click", function(){ try{ parent.postMessage({type:"iotCaptureCancel"},"*"); }catch(e){} });
   $("tEnhance").addEventListener("click", function(){ if($("tEnhance").classList.contains("busy")) return;
     if(enhancedOnce){ $("revBox").classList.contains("on")?closeRev():openRev(); return; }
     commitUI(); ensureCaptured().then(function(ok){ if(ok) enhance(""); }); });

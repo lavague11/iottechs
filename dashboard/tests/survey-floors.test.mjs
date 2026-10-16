@@ -95,17 +95,23 @@ test("approval fingerprint: Structure changes it, bookkeeping (id/aerial/legacyI
   assert.notEqual(vary({ plan: { ...base.floors[0].plan, cells: ["0,0", "1,0", "2,0"] } }), fp(base), "Structure IS meaning");
 });
 
-test("the satellite tool shows the Back strip; the draw tool carries Back in its own dock", () => {
-  // The slim #bgWiz strip is shown for the SATELLITE/Aerial tool (its Back chip → exitBg). The Structure
-  // (draw) tool now carries Back in its own dock, so the redundant strip is hidden for it (one dock, not two
-  // stacked rows). Back still delegates to exitBg(false), clearing bgToolOpen so a refresh stays out.
+test("the #bgWiz Back strip is retired — BOTH tools carry Back in their own dock", () => {
+  // The redundant slim "‹ Background" strip is gone for both the SATELLITE/Aerial tool and the Structure
+  // (draw) tool: each carries Back in its own dock (satellite #tBack / draw #tBack → iotCaptureCancel), the
+  // host answers iotCaptureCancel → exitBg(false), clearing bgToolOpen so a refresh stays out. One dock, never
+  // two stacked rows.
   const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
+  const sat = readFileSync(new URL("../public/widgets/satellite-capture.html", import.meta.url), "utf8");
   const open = survey.slice(survey.indexOf("function openBgTool("), survey.indexOf("function enterBg("));
-  assert.ok(/bgWiz\.style\.display = source==="draw" \? "none" : "";/.test(open), "strip hidden for draw, shown for satellite");
-  assert.ok(open.includes('source==="draw" ?'), "strip label adapts to the tool");
+  assert.ok(open.includes('bgWiz.style.display="none";'), "the Back strip is hidden for every tool");
+  assert.ok(!/source==="draw" \? "none" : "";/.test(open), "no per-tool strip toggle remains (strip fully retired)");
   const exit = survey.slice(survey.indexOf("function exitBg("), survey.indexOf("function exitBg(") + 600);
-  assert.ok(exit.includes('bgWiz.style.display="none";'), "exitBg hides the Back strip");
-  assert.ok(/getElementById\("satBack"\)\.addEventListener\("click", function\(\)\{ exitBg\(false\); \}\)/.test(survey), "Back → exitBg(false)");
+  assert.ok(exit.includes('bgWiz.style.display="none";'), "exitBg keeps the Back strip hidden");
+  // the satellite tool owns a Back control in its dock that cancels back to the floor
+  assert.ok(sat.includes('id="tBack"'), "satellite tool has a dock Back button");
+  assert.ok(/\$\("tBack"\)\.addEventListener\("click", function\(\)\{ try\{ parent\.postMessage\(\{type:"iotCaptureCancel"\}/.test(sat), "satellite Back posts iotCaptureCancel");
+  // the host answers iotCaptureCancel → exitBg(false) (covers both the satellite dock Back and the outline cancel)
+  assert.ok(/ev\.data\.type!=="iotCaptureCancel"[^]*?exitBg\(false\)/.test(survey), "host: iotCaptureCancel → exitBg(false)");
 });
 
 test("derived floors record lineage (derivedFromFloorId) and discrete actions flush to the server now", () => {

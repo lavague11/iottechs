@@ -887,10 +887,9 @@
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
-      // The Structure (draw) tool carries its own Back in its dock now, so drop the redundant "‹ Background"
-      // strip for it (one fewer stacked row on mobile). The satellite/Aerial tool still uses the strip.
-      bgWiz.style.display = source==="draw" ? "none" : "";
-      var lbl=bgWiz.querySelector(".bgstriplbl"); if(lbl) lbl.textContent = source==="draw" ? "Structure" : "Aerial";   // 1-word context tag — the back chip is the control, no instructional sentence (UI constitution)
+      // Both tools (Structure/draw AND Satellite/Aerial) now carry their own Back in their dock, so the
+      // redundant "‹ Background" strip is retired entirely — one dock, never two stacked rows.
+      bgWiz.style.display="none";
       sideCollapsed=true; applySideCollapsed();
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
       if(typeof updateBgActions==="function") updateBgActions();   // the tool fills the canvas → hide the floor-action cluster (it must not float over the iframe)
