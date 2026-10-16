@@ -13,7 +13,7 @@ test("SystemPlanner takes a customer flag, passed as cView === 'customer'", () =
 });
 
 test("customer branch shows a pager + full-width walkthrough, and NO staff rail", () => {
-  const branch = sp.slice(sp.indexOf("{customer ? ("), sp.indexOf("<div className=\"syp-head\">"));
+  const branch = sp.slice(sp.indexOf("{customer ? ("), sp.indexOf("syp-head--staff"));
   assert.ok(branch.includes('syp-head--cust'), "customer head");
   assert.ok(branch.includes('className="syp-pager"'), "floor pager");
   assert.ok(branch.includes('syp-play--full'), "full-width walkthrough");
@@ -21,8 +21,8 @@ test("customer branch shows a pager + full-width walkthrough, and NO staff rail"
   assert.ok(!branch.includes('role="tablist"'), "the staff rail is NOT in the customer branch");
 });
 
-test("the staff rail (5 steps) is unchanged for non-customers", () => {
-  for (const label of ["Background", "Plan", "Cameras", "Views", "Review"]) {
+test("the staff rail (5 steps) still exists for non-customers", () => {
+  for (const label of ["Background", "Floor Plan", "Cameras", "Views", "Review"]) {
     assert.ok(sp.includes(`label: "${label}"`), `staff rail still has ${label}`);
   }
   assert.ok(sp.includes('role="tablist" aria-label="Consulting workflow"'), "staff tablist present");

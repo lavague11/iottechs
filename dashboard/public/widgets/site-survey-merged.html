@@ -552,6 +552,7 @@
   body.frozen #addDeviceBtn,body.frozen #angleModeBtn,body.frozen .devmenu,body.frozen .utils{display:none}
   body.ro .wiz .nav .b,body.ro .wiz .floorTabs{display:none}
   body.ro #surveyWiz{display:none}   /* customer just reviews the plan to approve — no Background/Setup/Submit tabs or nav */
+  body.planner #surveyWiz{display:none!important}   /* System Planner owns the floor selector + rail now — hide the in-canvas strip (important beats exitBg's inline restore) */
   body.ro .card .x,body.ro .card .fov input{display:none}
   body.ro .devNode .fovWrap{display:block}
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}
@@ -832,6 +833,13 @@
     var SURVEY_PROP = (new URLSearchParams(location.search).get("prop")||"").toLowerCase()==="residential" ? "residential" : "commercial";
     var RO = new URLSearchParams(location.search).get("ro")==="1";   // customer read-only view
     if(RO) document.body.classList.add("ro");
+    // planner=1: embedded in the System Planner, which now owns the floor selector (above the canvas) and
+    // the workflow rail (below it). Hide our in-canvas "Background | Setup" strip (#surveyWiz) — it also
+    // held the floor selector + goStep Back button, all now relocated to the shell. CSS-hidden only; the
+    // node stays in the DOM (goStep/openBgTool/exitBg reference it), with display:none!important so it
+    // survives exitBg's inline-style restore.
+    var PLANNER = new URLSearchParams(location.search).get("planner")==="1";
+    if(PLANNER) document.body.classList.add("planner");
     // Embedded in the project deck: the deck already shows the brand, job, address + status, so the
     // widget's own top bar is pure redundancy — hide it (and tell the satellite tool to drop its logo).
     var EMB = new URLSearchParams(location.search).get("embed")==="1";
@@ -2142,6 +2150,13 @@
       // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
       // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
       if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step); if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); } return; }
+      // Floor management from the host's top selector — reuse the SAME canonical floor functions as the
+      // in-canvas sheet (parity, no behavior change: add/rename/delete work, duplicate self-guards on
+      // frozen). reportDevices() after each so the shell's selector reflects the new floor list / current.
+      if(m.cmd==="addFloor"){ addFloor(); reportDevices(); return; }
+      if(m.cmd==="duplicateFloor"){ duplicateFloor(curFloor); reportDevices(); return; }
+      if(m.cmd==="deleteFloor"){ deleteFloor(curFloor); reportDevices(); return; }
+      if(m.cmd==="renameFloor"){ var rf=floors[curFloor]; if(rf && typeof m.name==="string" && m.name.trim()){ rf.name=m.name.trim(); renderFloorTabs(); renderPanel(); queueSave(); reportDevices(); } return; }
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
       // Relay from the host: focus the camera with this cid (System Planner cross-mode selection).

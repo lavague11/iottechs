@@ -11,7 +11,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261012-6";
+const WIDGET_VERSION = "20261015-1";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
@@ -63,7 +63,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // biz = business context for intelligent room-name suggestions (stable per project → safe in the URL;
   // it never changes mid-session, so it won't remount the iframe). propertyType is mutable and is sent
   // via postMessage instead (see pushContext).
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}&v=${WIDGET_VERSION}`;
+  // planner=1 when embedded in the System Planner (the shell lifts the roster → noRoster). It tells the
+  // widget to hide its in-canvas "Background | Setup" strip + floor selector, which the planner now owns
+  // above/below the canvas. Stable per mount → never remounts the iframe.
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.

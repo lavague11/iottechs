@@ -21,6 +21,7 @@ export default function SystemPlanner({
   hasSurvey = false, hasViews = false, hasCams = false,
   mockupSkipped = false, viewsRequired = false, onSkipViews = null,
   devReadOnly = false, devLocked = false, customer = false,
+  surveySubmitted = false,
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
@@ -46,6 +47,14 @@ export default function SystemPlanner({
     try { const fr = rootRef.current && rootRef.current.querySelector('iframe[title="Site Survey"]');
       if (fr && fr.contentWindow) fr.contentWindow.postMessage({ type: "iotSurveyCmd", project: accessId, ...payload }, "*"); } catch { /* iframe not ready */ }
   };
+
+  // Floor management — the top selector drives the survey iframe's canonical floor functions by cmd
+  // (switch/add/rename/duplicate/delete). Floor logic lives once, in the widget; the shell only asks.
+  const goFloor = (i) => { if (i === curFloor) return; setCurFloor(i); surveyCmd({ cmd: "floor", i }); };
+  const addFloor = () => surveyCmd({ cmd: "addFloor" });
+  const duplicateFloor = () => surveyCmd({ cmd: "duplicateFloor" });
+  const renameFloor = (name) => { const n = String(name || "").trim(); if (n) surveyCmd({ cmd: "renameFloor", name: n }); };
+  const deleteFloor = () => surveyCmd({ cmd: "deleteFloor" });
 
   // The camera is ONE object across the two modes. Each iframe broadcasts the cid the user picked; we
   // relay it to the OTHER iframe so the same camera is focused there — even while that pane is hidden,
@@ -146,7 +155,9 @@ export default function SystemPlanner({
   const camsPlaced = sig.camCount || camCount;
   const steps = [
     { key: "background", label: "Background", done: sig.bgReady, enabled: true },
-    { key: "plan", label: "Plan", done: sig.hasPlan, enabled: sig.bgReady },
+    // Floor Plan is "done" when built geometry exists OR the survey was submitted — a submitted survey
+    // proves the plan regardless of which floor is in view or whether a structure was explicitly drawn.
+    { key: "plan", label: "Floor Plan", done: sig.hasPlan || surveySubmitted, enabled: sig.bgReady },
     { key: "cameras", label: "Cameras", done: camsPlaced > 0, enabled: sig.bgReady },
     { key: "views", label: "Views", done: hasViews, enabled: camsPlaced > 0 || hasViews },
     { key: "review", label: "Review", done: false, enabled: true },
@@ -198,27 +209,15 @@ export default function SystemPlanner({
           </div>
         )
       ) : (
-        <div className="syp-head">
-          <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
-            {steps.map((s, i) => (
-              <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
-                className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
-                onClick={() => s.enabled && goRail(s.key)}>
-                <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
-                <span className="syp-steplbl">{s.label}</span>
-                {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
-              </button>
-            ))}
+        /* STAFF — TOP = where am I (the floor/property selector). The workflow rail moved BELOW the
+           canvas (see .syp-railbar). The selector is a survey concept, so it shows only on the survey
+           panes (Background/Floor Plan/Cameras), not on Views/Review. */
+        paneMode === "plan" && (
+          <div className="syp-head syp-head--staff">
+            <FloorSelect floors={roster} curFloor={curFloor}
+              onSwitch={goFloor} onAdd={addFloor} onRename={renameFloor} onDuplicate={duplicateFloor} onDelete={deleteFloor} />
           </div>
-          <div className="syp-head-actions">
-            {/* Walkthrough — icon-only play button (Consulting stage). */}
-            {canWalk && (
-              <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-              </button>
-            )}
-          </div>
-        </div>
+        )
       )}
 
       {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
@@ -240,6 +239,30 @@ export default function SystemPlanner({
         <div className="syp-review">
           <div className="syp-review-h">Review &amp; submit</div>
           <div className="syp-review-sub">Confirm the site survey{hasViews ? " and camera views" : ""}, then submit for the customer to approve.</div>
+        </div>
+      )}
+
+      {/* STAFF workflow rail — moved to sit DIRECTLY BELOW the canvas, so it reads as the canvas's mode
+          switcher (where-am-I selector is on top; what-mode is here). Background/Floor Plan/Cameras drive
+          the survey pane's internal step; Views/Review are shell-only. */}
+      {!customer && (
+        <div className="syp-railbar">
+          <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
+            {steps.map((s, i) => (
+              <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
+                className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
+                onClick={() => s.enabled && goRail(s.key)}>
+                <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
+                <span className="syp-steplbl">{s.label}</span>
+                {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+          {canWalk && (
+            <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+          )}
         </div>
       )}
 
@@ -276,6 +299,76 @@ function ViewsStart({ camCount = 0, skipped = false, required = false, canEdit =
           {!required && !skipped && <button className="syp-vbtn" onClick={onSkip}>Skip for now</button>}
         </div>
       ) : <div className="syp-vstart-sub">No camera views yet.</div>}
+    </div>
+  );
+}
+
+// FLOOR SELECTOR (staff) — the "where am I" control at the top of the planner. Replaces the survey
+// widget's in-canvas floor sheet; drives the SAME canonical floor functions by cmd (switch/add/
+// rename/duplicate/delete), so floor logic lives once in the widget. Compact closed; the open menu
+// lists floors (✓ current) then Add/Rename/Duplicate/Delete acting on the current floor. Rename and
+// Delete resolve inline (no native dialogs), matching the vault-dark system.
+function FloorSelect({ floors = [], curFloor = 0, onSwitch, onAdd, onRename, onDuplicate, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const [menuMode, setMenuMode] = useState("list");   // "list" | "rename" | "confirm"
+  const [draft, setDraft] = useState("");
+  const ref = useRef(null);
+  const list = Array.isArray(floors) && floors.length ? floors : [{ name: "Floor 1" }];
+  const curName = (list[curFloor] && list[curFloor].name) || `Floor ${curFloor + 1}`;
+  const only = list.length <= 1;
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setMenuMode("list"); } };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const close = () => { setOpen(false); setMenuMode("list"); };
+  const startRename = () => { setDraft(curName); setMenuMode("rename"); };
+  const commitRename = () => { const n = draft.trim(); if (n && n !== curName) onRename && onRename(n); close(); };
+  return (
+    <div className="syp-fsel" ref={ref}>
+      <button className="syp-fsel-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V8l6-4 6 4v13M10 21v-5h4v5" /></svg>
+        <span className="syp-fsel-name">{curName}</span>
+        <svg viewBox="0 0 10 6" width="9" height="9" fill="currentColor" aria-hidden="true" style={{ opacity: .6, transform: open ? "rotate(180deg)" : "none", transition: "transform .16s" }}><path d="M0 0l5 6 5-6z" /></svg>
+      </button>
+      {open && (
+        <div className="syp-fsel-menu" role="menu">
+          {menuMode === "rename" ? (
+            <div className="syp-fsel-form">
+              <input className="syp-fsel-input" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setMenuMode("list"); }} placeholder="Floor name" />
+              <div className="syp-fsel-formbtns">
+                <button className="syp-fsel-mini" onClick={() => setMenuMode("list")}>Cancel</button>
+                <button className="syp-fsel-mini primary" onClick={commitRename}>Save</button>
+              </div>
+            </div>
+          ) : menuMode === "confirm" ? (
+            <div className="syp-fsel-form">
+              <div className="syp-fsel-confirm">Delete “{curName}”?</div>
+              <div className="syp-fsel-formbtns">
+                <button className="syp-fsel-mini" onClick={() => setMenuMode("list")}>Cancel</button>
+                <button className="syp-fsel-mini danger" onClick={() => { onDelete && onDelete(); close(); }}>Delete</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {list.map((f, i) => (
+                <button key={i} className={`syp-fsel-opt${i === curFloor ? " on" : ""}`} role="menuitem"
+                  onClick={() => { if (i !== curFloor) onSwitch && onSwitch(i); close(); }}>
+                  <span className="syp-fsel-optname">{f.name || `Floor ${i + 1}`}</span>
+                  {i === curFloor && <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>}
+                </button>
+              ))}
+              <div className="syp-fsel-sep" />
+              <button className="syp-fsel-act" role="menuitem" onClick={() => { onAdd && onAdd(); close(); }}>+ Add floor</button>
+              <button className="syp-fsel-act" role="menuitem" onClick={startRename}>Rename</button>
+              <button className="syp-fsel-act" role="menuitem" onClick={() => { onDuplicate && onDuplicate(); close(); }}>Duplicate</button>
+              <button className="syp-fsel-act danger" role="menuitem" disabled={only} onClick={() => setMenuMode("confirm")}>Delete</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -333,6 +426,37 @@ const CSS = `
 .syp-head--cust .syp-pg-lbl{min-width:96px;text-align:center;font-weight:700;font-size:.9rem;letter-spacing:.01em;color:var(--dv-ink,#101418)}
 .syp-head--cust .syp-play--full{width:100%;height:42px;gap:8px;font:inherit;font-weight:700;font-size:.9rem;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;border:1px solid var(--dv-ink,#101418)}
 .syp-head--cust .syp-play--full:hover{background:#000}
+/* STAFF top = the floor/property selector (where am I). Left-aligned, tight above the canvas. */
+.syp-head--staff{justify-content:flex-start;padding:0 2px 10px;flex-wrap:nowrap}
+/* STAFF workflow rail — relocated directly below the canvas (what mode am I in), centered. */
+.syp-railbar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:12px 2px 10px}
+.syp-railbar .syp-play{background:var(--dv-ink,#101418);color:#fff;border:1px solid var(--dv-ink,#101418)}
+.syp-railbar .syp-play:hover{background:#000}
+/* Floor selector dropdown — compact pill + menu (switch/add/rename/duplicate/delete). Button bg rules
+   are scoped under .syp-fsel so they beat the deck's .dv-shell button reset. */
+.syp-fsel{position:relative;display:inline-block}
+.syp-fsel .syp-fsel-btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:.92rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:8px 14px;transition:background .15s,border-color .15s}
+.syp-fsel .syp-fsel-btn:hover{background:#fff;border-color:var(--dv-ink,#101418)}
+.syp-fsel-name{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.syp-fsel-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:224px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;display:flex;flex-direction:column;gap:1px}
+.syp-fsel .syp-fsel-opt{appearance:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font:inherit;font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);background:transparent;border:0;border-radius:8px;padding:8px 10px;text-align:left}
+.syp-fsel .syp-fsel-opt:hover{background:var(--dv-raise,#F2F2EF)}
+.syp-fsel .syp-fsel-opt.on{color:var(--dv-gold,#b98a2e)}
+.syp-fsel-optname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.syp-fsel-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 4px}
+.syp-fsel .syp-fsel-act{appearance:none;cursor:pointer;font:inherit;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);background:transparent;border:0;border-radius:8px;padding:8px 10px;text-align:left}
+.syp-fsel .syp-fsel-act:hover:not(:disabled){background:var(--dv-raise,#F2F2EF)}
+.syp-fsel .syp-fsel-act:disabled{opacity:.35;cursor:default}
+.syp-fsel .syp-fsel-act.danger{color:#c0392b}
+.syp-fsel .syp-fsel-act.danger:hover:not(:disabled){background:rgba(192,57,43,.08)}
+.syp-fsel-form{padding:6px;display:flex;flex-direction:column;gap:8px;min-width:224px}
+.syp-fsel-input{font:inherit;font-size:.9rem;padding:8px 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;color:var(--dv-ink,#101418);outline:none;background:#fff}
+.syp-fsel-input:focus{border-color:var(--dv-ink,#101418)}
+.syp-fsel-confirm{font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);padding:2px 2px 0}
+.syp-fsel-formbtns{display:flex;justify-content:flex-end;gap:8px}
+.syp-fsel .syp-fsel-mini{appearance:none;cursor:pointer;font:inherit;font-size:.82rem;font-weight:700;padding:7px 14px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418)}
+.syp-fsel .syp-fsel-mini.primary{background:var(--dv-ink,#101418);color:#fff;border-color:var(--dv-ink,#101418)}
+.syp-fsel .syp-fsel-mini.danger{background:#c0392b;color:#fff;border-color:#c0392b}
 .syp-pane[hidden]{display:none!important}
 /* PLAN pane flows like a document — bound only the MAP, never the whole survey (which would clip the
    camera roster below it). The survey node itself stays auto-height so the roster + comments flow. */

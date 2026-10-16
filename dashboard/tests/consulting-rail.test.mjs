@@ -13,7 +13,7 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
   assert.ok(!shell.includes('className="syp-seg"'), "the old Plans|Views segmented toggle is gone");
   assert.ok(!/>Plans<\/button>/.test(shell) && !/setMode\(/.test(shell), "no Plans/Views tab buttons or mode toggle remain");
   assert.ok(shell.includes('className="syp-rail"'), "the rail exists");
-  for (const label of ["Background", "Plan", "Cameras", "Views", "Review"]) assert.ok(shell.includes(`label: "${label}"`), `rail has the ${label} step`);
+  for (const label of ["Background", "Floor Plan", "Cameras", "Views", "Review"]) assert.ok(shell.includes(`label: "${label}"`), `rail has the ${label} step`);
 });
 
 test("rail drives the survey's internal step via postMessage (Background→0, Plan→1, Cameras→1+devices); Views/Review shell-only", () => {
