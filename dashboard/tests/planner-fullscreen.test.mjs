@@ -17,8 +17,8 @@ test("planner owns fullscreen via the Fullscreen API (no reparent), with a focus
   assert.ok(!sp.includes("createPortal"), "no createPortal in the planner shell (would reload the iframes)");
 });
 
-test("the root carries the fullscreen class + a ⛶ toggle sits in the rail", () => {
-  assert.ok(sp.includes('className={`syp${fsOn ? " syp--fs" : ""}`}'), "root gets .syp--fs when fullscreen");
+test("the root carries the fullscreen class + a ⛶ toggle in the floor header", () => {
+  assert.ok(sp.includes('${fsOn ? " syp--fs" : ""}'), "root gets .syp--fs when fullscreen");
   assert.ok(sp.includes('onClick={fsOn ? exitFs : enterFs}'), "a single ⛶/exit toggle");
   assert.ok(/\.syp:fullscreen/.test(sp), "fullscreen layout CSS present");
 });

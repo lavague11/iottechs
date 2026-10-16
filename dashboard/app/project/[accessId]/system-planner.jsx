@@ -57,6 +57,24 @@ export default function SystemPlanner({
   const renameFloor = (name) => { const n = String(name || "").trim(); if (n) surveyCmd({ cmd: "renameFloor", name: n }); };
   const deleteFloor = () => surveyCmd({ cmd: "deleteFloor" });
 
+  // Swipe/drag the floor HEADER (never the canvas — canvas gestures belong to the editor) to page floors,
+  // like carousel slides. A real horizontal drag past a threshold moves exactly one floor; a tiny/vertical
+  // move is ignored (so it never fights a tap on the floor name or an accidental nudge).
+  const fbDrag = useRef(null);
+  const fbDown = (e) => {
+    // ignore drags that start on the menu/arrows/buttons — those have their own click behavior
+    if (e.target.closest("button, .syp-fsel-menu")) { fbDrag.current = null; return; }
+    fbDrag.current = { x: e.clientX, y: e.clientY, moved: false };
+  };
+  const fbMove = (e) => { const d = fbDrag.current; if (d) d.moved = Math.abs(e.clientX - d.x) > 6 || d.moved; };
+  const fbUp = (e) => {
+    const d = fbDrag.current; fbDrag.current = null; if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;   // not a decisive horizontal swipe
+    const target = dx < 0 ? curFloor + 1 : curFloor - 1;                   // swipe left → next floor
+    if (target >= 0 && target < floorCount) goFloor(target);
+  };
+
   // Planner-level fullscreen (Phase 2). The ⛶ fullscreens the WHOLE planner (.syp: floor selector +
   // canvas + rail + tools) via the Fullscreen API, which promotes it to the browser's top layer — so it
   // escapes the deck's transformed slide and, crucially, DOES NOT reparent the node, so neither iframe
@@ -207,7 +225,7 @@ export default function SystemPlanner({
   };
 
   return (
-    <div className={`syp${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
+    <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
 
       {customer ? (
@@ -235,15 +253,27 @@ export default function SystemPlanner({
           </div>
         )
       ) : (
-        /* STAFF — TOP = where am I (the floor/property selector). The workflow rail moved BELOW the
-           canvas (see .syp-railbar). The selector is a survey concept, so it shows only on the survey
-           panes (Background/Floor Plan/Cameras), not on Views/Review. */
-        paneMode === "plan" && (
-          <div className="syp-head syp-head--staff">
+        /* STAFF — one continuous frame: a FULL-WIDTH floor carousel header on top (where am I),
+           the canvas in the middle, the contextual nav footer below. Arrows + tap-to-manage + a
+           header-only swipe change floors; canvas gestures stay with the editor. */
+        <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
+          <div className="syp-fb-nav">
+            <button className="syp-fb-arrow" aria-label="Previous floor" disabled={curFloor <= 0} onClick={() => goFloor(curFloor - 1)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+            </button>
             <FloorSelect floors={roster} curFloor={curFloor}
               onSwitch={goFloor} onAdd={addFloor} onRename={renameFloor} onDuplicate={duplicateFloor} onDelete={deleteFloor} />
+            <button className="syp-fb-arrow" aria-label="Next floor" disabled={curFloor >= floorCount - 1} onClick={() => goFloor(curFloor + 1)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
           </div>
-        )
+          {/* Fullscreen the whole planner (header + canvas + tools + footer); only the project chrome hides. */}
+          <button className="syp-fb-fs" title={fsOn ? "Exit full screen" : "Full screen"} aria-label={fsOn ? "Exit full screen" : "Full screen"} onClick={fsOn ? exitFs : enterFs}>
+            {fsOn
+              ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
+              : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
+          </button>
+        </div>
       )}
 
       {/* Both panes stay mounted; only visibility toggles, so the iframes never reload. The PLAN pane
@@ -289,12 +319,6 @@ export default function SystemPlanner({
               <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             </button>
           )}
-          {/* Fullscreen the whole planner (floor context + rail + tools stay; only the project chrome hides). */}
-          <button className="syp-ico" title={fsOn ? "Exit full screen" : "Full screen"} aria-label={fsOn ? "Exit full screen" : "Full screen"} onClick={fsOn ? exitFs : enterFs}>
-            {fsOn
-              ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
-              : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
-          </button>
         </div>
       )}
 
@@ -458,7 +482,18 @@ const CSS = `
 .syp-head--cust .syp-pg-lbl{min-width:96px;text-align:center;font-weight:700;font-size:.9rem;letter-spacing:.01em;color:var(--dv-ink,#101418)}
 .syp-head--cust .syp-play--full{width:100%;height:42px;gap:8px;font:inherit;font-weight:700;font-size:.9rem;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;border:1px solid var(--dv-ink,#101418)}
 .syp-head--cust .syp-play--full:hover{background:#000}
-/* STAFF top = the floor/property selector (where am I). Left-aligned, tight above the canvas. */
+/* STAFF — one continuous frame: full-width floor carousel header → canvas → nav footer, aligned to
+   the same width with no gaps. The header rounds the top, the footer the bottom, the canvas squares to
+   join them. */
+.syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:0;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
+.syp-floorbar .syp-fb-nav{display:inline-flex;align-items:center;gap:10px}
+.syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
+.syp-floorbar .syp-fb-arrow:hover:not(:disabled){background:#fff;border-color:var(--dv-ink,#101418)}
+.syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}
+.syp-floorbar .syp-fb-fs{position:absolute;right:12px;top:50%;transform:translateY(-50%);appearance:none;cursor:pointer;width:34px;height:34px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+.syp-floorbar .syp-fb-fs:hover{border-color:var(--dv-ink,#101418)}
+/* the canvas joins the header seamlessly (square its top corners, no doubled border) */
+.syp--staff .syp-plan .ss-embed-frame{border-top-left-radius:0;border-top-right-radius:0;border-top:none}
 .syp-head--staff{justify-content:flex-start;padding:0 2px 10px;flex-wrap:nowrap}
 /* STAFF workflow rail — relocated directly below the canvas (what mode am I in), centered. */
 .syp-railbar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:12px 2px 10px}

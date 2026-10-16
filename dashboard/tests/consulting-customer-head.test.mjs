@@ -13,7 +13,7 @@ test("SystemPlanner takes a customer flag, passed as cView === 'customer'", () =
 });
 
 test("customer branch shows a pager + full-width walkthrough, and NO staff rail", () => {
-  const branch = sp.slice(sp.indexOf("{customer ? ("), sp.indexOf("syp-head--staff"));
+  const branch = sp.slice(sp.indexOf("{customer ? ("), sp.indexOf("syp-floorbar"));
   assert.ok(branch.includes('syp-head--cust'), "customer head");
   assert.ok(branch.includes('className="syp-pager"'), "floor pager");
   assert.ok(branch.includes('syp-play--full'), "full-width walkthrough");
