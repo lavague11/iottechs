@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
+import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
@@ -22,6 +23,9 @@ export default function SystemPlanner({
   mockupSkipped = false, viewsRequired = false, onSkipViews = null,
   devReadOnly = false, devLocked = false, customer = false,
   surveySubmitted = false,
+  // contextual nav footer (staff): canonical submit/approve/continue wiring from the gateway
+  surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null,
+  svMeta = null, mkMeta = null, acceptances = null,
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
@@ -207,6 +211,40 @@ export default function SystemPlanner({
     { key: "review", label: "Review", done: false, enabled: true },
   ];
 
+  // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next / Submit, replacing the always-on 5-tab rail.
+  // The canonical workflow still lives in steps/railStep/goRail; this only derives the next/prev + CTA.
+  // Views drops out of the Next flow when it's optional and untouched (Cameras → Review), but stays
+  // reachable via the ••• Go-to menu.
+  const viewsInFlow = hasViews || viewsStarted || viewsRequired;
+  const navOrder = ["background", "plan", "cameras", ...(viewsInFlow ? ["views"] : []), "review"];
+  const navIdx = Math.max(0, navOrder.indexOf(railStep === "views" && !viewsInFlow ? "cameras" : railStep));
+  const prevStep = navOrder[navIdx - 1] || null;
+  const nextStep = navOrder[navIdx + 1] || null;
+  const NEXT_PROMPT = { background: "Background", plan: "Create Floor Plan", cameras: "Place Cameras", views: "Add Camera Views", review: "Review & Submit" };
+  // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
+  // nothing about the fingerprint/approval architecture changes).
+  const svApproved = toolAccepted(svMeta, acceptances && acceptances.site_survey);
+  const svSubCurrent = toolAccepted(svMeta, acceptances && acceptances.submit_site_survey);
+  const svStale = !!(acceptances && acceptances.submit_site_survey) && !svSubCurrent;
+  const mkApproved = toolAccepted(mkMeta, acceptances && acceptances.mockup);
+  const mkSubCurrent = toolAccepted(mkMeta, acceptances && acceptances.submit_mockup);
+  const mkStale = !!(acceptances && acceptances.submit_mockup) && !mkSubCurrent;
+  const reviewCta = (() => {
+    if (svMeta && svMeta.has && !svApproved) {
+      if (svStale) return { label: "Re-submit Site Survey", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
+      if (svSubCurrent) return { label: "Awaiting customer approval", muted: true };
+      return { label: "Submit Site Survey", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
+    }
+    if (viewsInFlow && mkMeta && mkMeta.has && !mkApproved) {
+      if (mkStale) return { label: "Re-submit Camera Views", primary: true, act: () => onSubmitTool && onSubmitTool("mockup") };
+      if (mkSubCurrent) return { label: "Awaiting customer approval", muted: true };
+      return { label: "Submit Camera Views", primary: true, act: () => onSubmitTool && onSubmitTool("mockup") };
+    }
+    if (surveyOk) return { label: "Continue to Proposal →", primary: true, act: () => onContinue && onContinue() };
+    return null;
+  })();
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
+
   // CUSTOMER head: no staff rail — just a floor/view pager + a full-width Walkthrough. The pager steps
   // through the submitted floors (driving the survey pane's floor with the existing, RO-safe `floor` cmd)
   // and lands on Camera Views as the last stop when a mockup exists. Index is tracked shell-side
@@ -290,35 +328,62 @@ export default function SystemPlanner({
               onStart={() => { setViewsStarted(true); if (skipped) persistSkip(false); }}
               onSkip={() => { persistSkip(true); setRailStep("plan"); }} />}
       </div>
-      {/* Review — the Consulting status surface (the submit/approve footer below is the content). P7 enriches it. */}
-      {paneMode === "review" && (
+      {/* Review — the Consulting status surface. The detailed per-tool submit/approve bars (footer) live
+          HERE now (contextual to Review), not always-below; the nav footer's CTA is the headline action. */}
+      {!customer && paneMode === "review" && (
         <div className="syp-review">
           <div className="syp-review-h">Review &amp; submit</div>
           <div className="syp-review-sub">Confirm the site survey{hasViews ? " and camera views" : ""}, then submit for the customer to approve.</div>
+          {footer}
         </div>
       )}
 
-      {/* STAFF workflow rail — moved to sit DIRECTLY BELOW the canvas, so it reads as the canvas's mode
-          switcher (where-am-I selector is on top; what-mode is here). Background/Floor Plan/Cameras drive
-          the survey pane's internal step; Views/Review are shell-only. */}
+      {/* STAFF contextual nav footer — the bottom of the one frame. Guided Back / Next · prompt / CTA
+          (Submit / Re-submit / Awaiting / Continue), with a ••• Go-to menu so staff still jump to any
+          mode. Replaces the always-on 5-tab rail; the workflow state is unchanged underneath. */}
       {!customer && (
-        <div className="syp-railbar">
-          <div className="syp-rail" role="tablist" aria-label="Consulting workflow">
-            {steps.map((s, i) => (
-              <button key={s.key} role="tab" aria-selected={railStep === s.key} disabled={!s.enabled}
-                className={`syp-step${railStep === s.key ? " on" : ""}${s.done ? " done" : ""}`}
-                onClick={() => s.enabled && goRail(s.key)}>
-                <span className="syp-dot" aria-hidden="true">{s.done && railStep !== s.key ? "✓" : ""}</span>
-                <span className="syp-steplbl">{s.label}</span>
-                {i < steps.length - 1 && <span className="syp-sep" aria-hidden="true" />}
-              </button>
-            ))}
-          </div>
-          {canWalk && (
-            <button className="syp-play" title="Play walkthrough" aria-label="Play walkthrough" onClick={() => setWalkOpen(true)}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        <div className="syp-nav">
+          {prevStep ? (
+            <button className="syp-nav-back" onClick={() => goRail(prevStep)}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+              <span>Back</span>
             </button>
-          )}
+          ) : <span />}
+          <div className="syp-nav-actions">
+            {nextStep && <span className="syp-nav-hint">Next · {NEXT_PROMPT[nextStep]}</span>}
+            {nextStep ? (
+              <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>Next <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+            ) : reviewCta ? (
+              <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+            ) : null}
+            <div className="syp-nav-morewrap">
+              <button className="syp-nav-more" aria-label="More" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+              </button>
+              {navMenuOpen && (
+                <>
+                  <div className="syp-nav-backdrop" onClick={() => setNavMenuOpen(false)} />
+                  <div className="syp-nav-menu" role="menu">
+                    <div className="syp-nav-menu-h">Go to</div>
+                    {steps.map((s) => (
+                      <button key={s.key} className={`syp-nav-mi${railStep === s.key ? " on" : ""}`} role="menuitem" disabled={!s.enabled}
+                        onClick={() => { if (s.enabled) { goRail(s.key); setNavMenuOpen(false); } }}>
+                        <span className="syp-nav-mi-dot">{s.done ? "✓" : ""}</span>{s.label}
+                      </button>
+                    ))}
+                    {canWalk && (
+                      <>
+                        <div className="syp-nav-sep" />
+                        <button className="syp-nav-mi" role="menuitem" onClick={() => { setWalkOpen(true); setNavMenuOpen(false); }}>
+                          <span className="syp-nav-mi-dot"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></span>Walkthrough
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -329,8 +394,9 @@ export default function SystemPlanner({
         <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} />
       )}
 
-      {/* ONE submit surface — both tools' Submit/Approve, always visible under either mode. */}
-      {footer}
+      {/* Customer: the Approve surface stays directly below the viewer. (Staff: the submit bars moved
+          into the Review pane above; the nav footer carries the headline Submit/Continue CTA.) */}
+      {customer && footer}
 
       {walkOpen && (
         <SystemWalkthrough accessId={accessId} floors={floors} photos={photos} focusCid={selectedCid} customerName={customerName}
@@ -495,10 +561,27 @@ const CSS = `
 /* the canvas joins the header seamlessly (square its top corners, no doubled border) */
 .syp--staff .syp-plan .ss-embed-frame{border-top-left-radius:0;border-top-right-radius:0;border-top:none}
 .syp-head--staff{justify-content:flex-start;padding:0 2px 10px;flex-wrap:nowrap}
-/* STAFF workflow rail — relocated directly below the canvas (what mode am I in), centered. */
-.syp-railbar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:12px 2px 10px}
-.syp-railbar .syp-play{background:var(--dv-ink,#101418);color:#fff;border:1px solid var(--dv-ink,#101418)}
-.syp-railbar .syp-play:hover{background:#000}
+/* STAFF contextual nav footer — the bottom of the one frame. Guided Back / Next·prompt / CTA, + ••• Go-to. */
+.syp-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-top:none;border-radius:0 0 14px 14px;min-height:58px}
+.syp-nav .syp-nav-back{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.86rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:0;padding:8px 10px;border-radius:100px}
+.syp-nav .syp-nav-back:hover{color:var(--dv-ink,#101418)}
+.syp-nav-actions{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.syp-nav-hint{font-size:.82rem;font-weight:600;letter-spacing:.01em;color:var(--dv-meta,#787D84);white-space:nowrap}
+.syp-nav .syp-nav-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.88rem;font-weight:800;letter-spacing:.01em;padding:10px 18px;border-radius:100px;border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff;transition:background .15s}
+.syp-nav .syp-nav-cta.primary:hover{background:#000}
+.syp-nav .syp-nav-cta.muted{background:transparent;color:var(--dv-meta,#787D84);border-color:var(--dv-line,#E4E4DF);cursor:default;font-weight:700}
+.syp-nav-morewrap{position:relative;display:inline-block}
+.syp-nav .syp-nav-more{appearance:none;cursor:pointer;width:38px;height:38px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s}
+.syp-nav .syp-nav-more:hover{border-color:var(--dv-ink,#101418)}
+.syp-nav-backdrop{position:fixed;inset:0;z-index:39}
+.syp-nav-menu{position:absolute;bottom:calc(100% + 8px);right:0;z-index:40;min-width:206px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.16);padding:6px;display:flex;flex-direction:column;gap:1px}
+.syp-nav-menu-h{font-size:.66rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:7px 10px 4px}
+.syp-nav .syp-nav-mi{appearance:none;cursor:pointer;display:flex;align-items:center;gap:9px;font:inherit;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);background:transparent;border:0;border-radius:8px;padding:8px 10px;text-align:left}
+.syp-nav .syp-nav-mi:hover:not(:disabled){background:var(--dv-raise,#F2F2EF)}
+.syp-nav .syp-nav-mi.on{color:var(--dv-gold,#b98a2e)}
+.syp-nav .syp-nav-mi:disabled{opacity:.34;cursor:default}
+.syp-nav-mi-dot{width:14px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dv-gold,#b98a2e);font-size:11px}
+.syp-nav-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 4px}
 /* Floor selector dropdown — compact pill + menu (switch/add/rename/duplicate/delete). Button bg rules
    are scoped under .syp-fsel so they beat the deck's .dv-shell button reset. */
 .syp-fsel{position:relative;display:inline-block}

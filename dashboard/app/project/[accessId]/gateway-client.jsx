@@ -2389,6 +2389,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             onSkipViews={(cView === "customer" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}
             customer={cView === "customer"}
             surveySubmitted={!!acceptances.submit_site_survey}
+            surveyOk={surveyOk} svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
+            onContinue={() => browse("proposal")}
+            onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }

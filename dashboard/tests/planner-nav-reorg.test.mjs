@@ -17,17 +17,32 @@ test("Plan is renamed to Floor Plan, and its ✓ tracks built geometry OR submis
   assert.ok(gw.includes("surveySubmitted={!!acceptances.submit_site_survey}"), "gateway passes submission state");
 });
 
-test("staff: floor selector on top, rail relocated below the canvas", () => {
-  assert.ok(sp.includes("syp-head--staff"), "staff top head");
-  assert.ok(sp.includes("<FloorSelect floors={roster}"), "top selector is the FloorSelect");
-  assert.ok(sp.includes('className="syp-railbar"'), "a dedicated rail bar exists");
-  // the rail bar (below) must come AFTER the plan pane in source order (i.e. below the canvas)
+test("staff: floor carousel header on top, contextual nav footer below the canvas", () => {
+  assert.ok(sp.includes('className="syp-floorbar"'), "full-width floor carousel header");
+  assert.ok(sp.includes("<FloorSelect floors={roster}"), "the header's floor name opens FloorSelect");
+  assert.ok(sp.includes('className="syp-nav"'), "a contextual nav footer exists");
+  // the nav footer (below) must come AFTER the plan pane in source order (i.e. below the canvas)
   const panePos = sp.indexOf('className="syp-pane syp-plan"');
-  const railbarPos = sp.indexOf('className="syp-railbar"');
-  assert.ok(panePos > 0 && railbarPos > panePos, "rail bar is rendered after (below) the canvas pane");
-  // and the staff top head must NOT contain the tablist rail anymore
-  const staffHead = sp.slice(sp.indexOf("syp-head--staff"), sp.indexOf("syp-head--staff") + 400);
-  assert.ok(!staffHead.includes('role="tablist"'), "the rail is no longer in the top head");
+  const navPos = sp.indexOf('className="syp-nav"');
+  const floorbarPos = sp.indexOf('className="syp-floorbar"');
+  assert.ok(floorbarPos > 0 && floorbarPos < panePos, "floor header is above the canvas");
+  assert.ok(panePos > 0 && navPos > panePos, "nav footer is rendered after (below) the canvas pane");
+  // the always-on 5-tab rail is gone (replaced by the guided footer + ••• Go-to)
+  assert.ok(!sp.includes('role="tablist"'), "the 5-tab rail tablist is removed");
+});
+
+test("contextual nav footer: Back/Next progression + a state-derived Review CTA (canonical submit/continue)", () => {
+  // guided navigation reuses goRail; Views drops out of the Next flow when optional+untouched
+  assert.ok(sp.includes('const navOrder = ["background", "plan", "cameras", ...(viewsInFlow ? ["views"] : []), "review"];'), "Next skips optional Views");
+  assert.ok(sp.includes("const nextStep = navOrder[navIdx + 1] || null;") && sp.includes("const prevStep = navOrder[navIdx - 1] || null;"), "prev/next derived from the canonical order");
+  assert.ok(sp.includes("Submit Site Survey") && sp.includes("Re-submit Site Survey") && sp.includes("Continue to Proposal"), "Review CTA = Submit / Re-submit / Continue");
+  assert.ok(sp.includes('onSubmitTool && onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
+  assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");
+  // gateway passes the canonical wiring
+  assert.ok(gw.includes("surveyOk={surveyOk}") && gw.includes("onSubmitTool=") && gw.includes("onContinue={() => browse(\"proposal\")}"), "gateway wires surveyOk/onSubmitTool/onContinue");
+  // the detailed submit bars live in the Review pane now (not always-below); customer keeps the standalone approve surface
+  assert.ok(/syp-review[\s\S]{0,600}\{footer\}/.test(sp), "submit bars (footer) moved into the Review pane");
+  assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");
 });
 
 test("FloorSelect exposes full parity: switch/add/rename/duplicate/delete", () => {

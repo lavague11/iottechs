@@ -21,11 +21,11 @@ test("customer branch shows a pager + full-width walkthrough, and NO staff rail"
   assert.ok(!branch.includes('role="tablist"'), "the staff rail is NOT in the customer branch");
 });
 
-test("the staff rail (5 steps) still exists for non-customers", () => {
+test("the 5 workflow steps still exist for non-customers (now in the nav + Go-to menu)", () => {
   for (const label of ["Background", "Floor Plan", "Cameras", "Views", "Review"]) {
-    assert.ok(sp.includes(`label: "${label}"`), `staff rail still has ${label}`);
+    assert.ok(sp.includes(`label: "${label}"`), `workflow still has ${label}`);
   }
-  assert.ok(sp.includes('role="tablist" aria-label="Consulting workflow"'), "staff tablist present");
+  assert.ok(sp.includes('className="syp-nav-menu"') && sp.includes(">Go to<"), "the ••• Go-to menu lists the modes");
 });
 
 test("pager walks floors then Camera Views, driving the survey floor cmd", () => {
