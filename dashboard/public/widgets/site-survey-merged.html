@@ -553,6 +553,7 @@
   body.ro .wiz .nav .b,body.ro .wiz .floorTabs{display:none}
   body.ro #surveyWiz{display:none}   /* customer just reviews the plan to approve — no Background/Setup/Submit tabs or nav */
   body.planner #surveyWiz{display:none!important}   /* System Planner owns the floor selector + rail now — hide the in-canvas strip (important beats exitBg's inline restore) */
+  body.planner #fullBtn{display:none!important}   /* the planner owns fullscreen (fullscreens the whole shell incl. the rail) — drop the in-canvas ⛶ so there's one entry */
   body.ro .card .x,body.ro .card .fov input{display:none}
   body.ro .devNode .fovWrap{display:block}
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}

@@ -39,6 +39,7 @@ export default function SystemPlanner({
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
   const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
   const [curFloor, setCurFloor] = useState(0);
+  const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
   const rootRef = useRef(null);
 
   // Talk to the survey iframe (the devices live in survey2). The roster is shared across both tabs, so
@@ -55,6 +56,31 @@ export default function SystemPlanner({
   const duplicateFloor = () => surveyCmd({ cmd: "duplicateFloor" });
   const renameFloor = (name) => { const n = String(name || "").trim(); if (n) surveyCmd({ cmd: "renameFloor", name: n }); };
   const deleteFloor = () => surveyCmd({ cmd: "deleteFloor" });
+
+  // Planner-level fullscreen (Phase 2). The ⛶ fullscreens the WHOLE planner (.syp: floor selector +
+  // canvas + rail + tools) via the Fullscreen API, which promotes it to the browser's top layer — so it
+  // escapes the deck's transformed slide and, crucially, DOES NOT reparent the node, so neither iframe
+  // reloads (a React body-portal would remount them). Entry is a real user gesture (this click). If the
+  // API is blocked (e.g. an embedded webview), fall back to the survey widget's own portal fullscreen so
+  // the button always does something. The project header/phase rail live OUTSIDE .syp → hidden in fs.
+  const enterFs = () => {
+    const el = rootRef.current; if (!el) return;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) {
+      Promise.resolve(req.call(el)).catch(() => {
+        try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch { /* no-op */ }
+      });
+    } else {
+      try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch { /* no-op */ }
+    }
+  };
+  const exitFs = () => { try { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); } catch { /* no-op */ } };
+  useEffect(() => {
+    const onChange = () => { const fsEl = document.fullscreenElement || document.webkitFullscreenElement; setFsOn(!!fsEl && fsEl === rootRef.current); };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => { document.removeEventListener("fullscreenchange", onChange); document.removeEventListener("webkitfullscreenchange", onChange); };
+  }, []);
 
   // The camera is ONE object across the two modes. Each iframe broadcasts the cid the user picked; we
   // relay it to the OTHER iframe so the same camera is focused there — even while that pane is hidden,
@@ -181,7 +207,7 @@ export default function SystemPlanner({
   };
 
   return (
-    <div className="syp" ref={rootRef}>
+    <div className={`syp${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
 
       {customer ? (
@@ -263,6 +289,12 @@ export default function SystemPlanner({
               <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             </button>
           )}
+          {/* Fullscreen the whole planner (floor context + rail + tools stay; only the project chrome hides). */}
+          <button className="syp-ico" title={fsOn ? "Exit full screen" : "Full screen"} aria-label={fsOn ? "Exit full screen" : "Full screen"} onClick={fsOn ? exitFs : enterFs}>
+            {fsOn
+              ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
+              : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
+          </button>
         </div>
       )}
 
@@ -466,6 +498,17 @@ const CSS = `
    not the phone COVER mode that crops the sides and blocks zooming back out. */
 .syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(74vh,680px);min-height:560px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
 @media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px} }
+/* PLANNER FULLSCREEN (Phase 2) — .syp is promoted to the top layer by the Fullscreen API (no reparent →
+   iframes don't reload) and so covers the whole viewport, hiding the deck header/phase rail that live
+   outside it. Keep the floor selector + rail + tools; just give the canvas more of the taller screen. */
+/* split into standalone rules — a selector LIST is discarded whole if any member (e.g. an unrecognized
+   :-webkit-full-screen) is invalid, which would silently drop the .syp--fs styling too. */
+.syp.syp--fs{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
+.syp:fullscreen{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
+.syp:-webkit-full-screen{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
+.syp.syp--fs .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
+.syp:fullscreen .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
+.syp:-webkit-full-screen .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
 /* One workspace, not stacked tools: the header's Plans/Views tabs already name the mode, so drop each
    widget's redundant descriptive tag ("Live survey editor · N floors" / the empty mockup tag) and keep
    only the functional controls (fullscreen, etc.) pinned to the right of a slim bar. */
