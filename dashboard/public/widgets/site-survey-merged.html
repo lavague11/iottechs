@@ -137,6 +137,7 @@
   .abtn:hover{background:rgba(255,255,255,.2)} .abtn.atxt{letter-spacing:.2px} .abtn.prim{background:#fff;color:#101418}
   .abtn.prim:hover{background:#eee}
   .ctxbtn svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .ctxbtn.build{background:var(--gold);border-color:var(--gold)}   /* primary build action — distinct from the neutral + Add */
   .ctxnote{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font-size:12px;color:var(--muted);box-shadow:0 2px 10px rgba(16,17,18,.08)}
   .utils{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;z-index:4}
   .ubtn{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;height:34px;width:34px;padding:0;display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12);backdrop-filter:blur(4px)}
@@ -690,6 +691,8 @@
           </div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device" aria-label="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+            <!-- Primary build action: shown only on an aerial-not-yet-plan floor (canBuild), hidden otherwise. One home, top-left. -->
+            <button class="ctxbtn build" id="buildPlanFab" title="Create floor plan" aria-label="Create floor plan" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Floor Plan</span></button>
             <!-- Fit/Focus button removed; camera-angles moved into the device palette (Aim cameras) to declutter the canvas. -->
           </div>
           <!-- TOP-RIGHT: Full screen (its one home; angles/FOV/grid + build actions live in the ••• sheet). -->
@@ -769,18 +772,11 @@
           <div class="moreLbl">Mode</div>
           <div class="viewseg moreSeg" id="moreMode" role="group" aria-label="Mode"><button type="button" data-v="layered">Layered</button><button type="button" data-v="plan">Plan</button><button type="button" data-v="full">Satellite</button></div>
         </div>
-        <div class="moreSec" id="moreStepSec">
-          <div class="moreLbl">Step</div>
-          <div class="viewseg moreSeg" id="moreStep" role="group" aria-label="Step"><button type="button" data-s="0">Background</button><button type="button" data-s="1">Setup</button></div>
-        </div>
-        <div class="moreSec" id="moreFloorSec">
-          <div class="moreLbl">Floor</div>
-          <button class="moreRow" id="moreFloorBtn" type="button"><span id="moreFloorName">Floor 1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-        </div>
+        <!-- Step + Floor are owned by the React shell (footer rail + top floor carousel); not duplicated here. -->
         <div class="moreSec" id="moreBgSec">
           <div class="moreLbl">Background</div>
           <button class="moreRow" id="moreEditBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span>Edit background</span></button>
-          <button class="moreRow" id="moreBuildPlan" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Create floor plan</span></button>
+          <!-- Create floor plan is now the top-left floating canvas action (#buildPlanFab), not a sheet row. -->
           <button class="moreRow" id="moreReplaceBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button>
           <button class="moreRow" id="moreRotate" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg><span>Rotate 90°</span></button>
         </div>
@@ -1043,8 +1039,11 @@
     // Top-left Edit background shows over a real floor on the Background tab (not the chooser, not inside a
     // tool). The bottom-right ••• (Create Hybrid Floor Plan) shows only on an aerial-not-yet-plan floor.
     function updateBgActions(){ var w=document.getElementById("bgActions");
-      if(w) w.style.display="none";   // the TL "Edit background" button is retired — Edit/Replace/Create live in the ••• sheet now
-      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display = canBuild(floors[curFloor]) ? "flex" : "none";
+      if(w) w.style.display="none";   // the TL "Edit background" button is retired — Edit/Replace live in the ••• sheet now
+      // Create floor plan = the top-left #buildPlanFab (one home). The old bottom-right drop-up entry is retired
+      // (stays hidden); Replace/Dim remain in that ••• drop-up.
+      var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display="none";
+      var fab=document.getElementById("buildPlanFab"); if(fab) fab.style.display = (canBuild(floors[curFloor]) && !bgToolOpen) ? "flex" : "none";
       // ••• More is available on EVERY step whenever a real background exists (not just Background) — it's the
       // secondary-control home in both normal and focus mode (never pinned to the canvas beyond this one dot).
       var pmShow=(bgHasImage && !frozen() && !bgToolOpen);
@@ -1090,6 +1089,8 @@
       img.onerror=function(){ openOutlineFallback(f, lcBg); };
       img.src=lcBg;
     });
+    // Top-left Create-Floor-Plan FAB — one home for the build action; relays to the single build handler (DRY).
+    (function(){ var fab=document.getElementById("buildPlanFab"); if(fab) fab.addEventListener("click", function(){ var b=document.getElementById("buildPlanBtn"); if(b) b.click(); }); })();
     // Enhancing the aerial happens inside the Edit-background / satellite flow (its own Enhance step) — there is no
     // standalone Enhance button on the plan. (pendingCtxSwap for a hybrid floor is still set from that flow.)
     // Cancel from the satellite's focused outline-only mode → close the tool back to this floor (unchanged).
@@ -2604,11 +2605,8 @@
     function buildMoreSheet(){ var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?normView(f.view):"layered", hasBg=bgHasImage && !bgToolOpen;
       var ms=document.getElementById("moreModeSec"); if(ms) ms.style.display=cap?"":"none";
       [].forEach.call(document.querySelectorAll("#moreMode button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); });
-      var ss=document.getElementById("moreStepSec"); if(ss) ss.style.display=hasBg?"":"none";
-      [].forEach.call(document.querySelectorAll("#moreStep button"), function(b){ b.classList.toggle("on", +b.getAttribute("data-s")===curStep); });
-      var fn=document.getElementById("moreFloorName"); if(fn) fn.textContent=(f.name||("Floor "+(curFloor+1)));
       var bgSec=document.getElementById("moreBgSec"); if(bgSec) bgSec.style.display=hasBg?"":"none";
-      var bp=document.getElementById("moreBuildPlan"); if(bp) bp.style.display=canBuild(f)?"":"none";
+      // Create floor plan is the canvas FAB now (#buildPlanFab via updateBgActions) — not a sheet row.
       // Rotate 90 lives here now (off the canvas). Only for a plain aerial/upload floor — rotating a
       // hybrid-capable floor (bgData alone) would misalign the ctx aerial/planSvg layers.
       var rot=document.getElementById("moreRotate"); if(rot) rot.style.display=(hasBg && !cap)?"":"none";
@@ -2638,10 +2636,8 @@
     function closeMoreSheet(){ var s=document.getElementById("moreSheet"); if(s) s.classList.remove("on"); }
     (function(){ var scrim=document.getElementById("moreScrim"); if(scrim) scrim.addEventListener("click", closeMoreSheet);
       [].forEach.call(document.querySelectorAll("#moreMode button"), function(b){ b.addEventListener("click", function(){ var f=floors[curFloor]; if(!f||!hybridCapable(f)) return; if(typeof aligning!=="undefined"&&aligning) exitAlign(true); f.view=b.getAttribute("data-v"); renderView(); queueSave(); buildMoreSheet(); }); });
-      [].forEach.call(document.querySelectorAll("#moreStep button"), function(b){ b.addEventListener("click", function(){ goStep(+b.getAttribute("data-s")); buildMoreSheet(); }); });
-      var ff=document.getElementById("moreFloorBtn"); if(ff) ff.addEventListener("click", function(){ closeMoreSheet(); openFloorSheet(); });
       function relay(id,tgt){ var b=document.getElementById(id); if(b) b.addEventListener("click", function(){ closeMoreSheet(); var t=document.getElementById(tgt); if(t) t.click(); }); }
-      relay("moreEditBg","changeBgBtn"); relay("moreBuildPlan","buildPlanBtn"); relay("moreReplaceBg","replaceBgBtn");
+      relay("moreEditBg","changeBgBtn"); relay("moreReplaceBg","replaceBgBtn");
       var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); });
       var vl=document.getElementById("moreVersList"); if(vl) vl.addEventListener("click", function(e){ var b=e.target.closest(".versThumb"); if(b) restoreVersion(b.getAttribute("data-vid")); }); })();
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();

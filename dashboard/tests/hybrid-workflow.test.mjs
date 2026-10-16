@@ -11,16 +11,16 @@ import { readFileSync } from "node:fs";
 const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const has = (s, msg) => assert.ok(survey.includes(s), msg || `missing: ${s}`);
 
-test("Create Hybrid Floor Plan is the item in the bottom-right ••• drop-up (inline-SVG, gold icon, no emoji)", () => {
-  has('<button id="buildPlanBtn"', "build button element");
-  has("Create Hybrid Floor Plan", "primary workflow label (kept)");
-  const i = survey.indexOf('<button id="buildPlanBtn"');
+test("Create floor plan is the top-left gold FAB (inline-SVG, no emoji); the old drop-up entry is retired", () => {
+  has('<button class="ctxbtn build" id="buildPlanFab"', "the build FAB element (top-left ctxbar)");
+  const i = survey.indexOf('<button class="ctxbtn build" id="buildPlanFab"');
   const btn = survey.slice(i, survey.indexOf("</button>", i));
   assert.ok(btn.includes("<svg"), "icon is inline SVG");
+  assert.ok(btn.includes('aria-label="Create floor plan"'), "the FAB has an accessible name");
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(btn), "no emoji in the label/icon");
-  // it lives inside the ••• menu now (not a top-left gold button); its icon carries the gold accent
-  assert.ok(survey.includes('<div id="bgMenu" role="menu"><button id="buildPlanBtn"'), "Create Hybrid Floor Plan is the ••• menu item");
-  assert.ok(/#bgMenu #buildPlanBtn svg\{[^}]*color:var\(--gold\)/.test(survey), "the build item's icon carries the gold accent");
+  assert.ok(/\.ctxbtn\.build\{background:var\(--gold\)/.test(survey), "the FAB carries the gold (primary build) accent");
+  // the bottom-right drop-up still carries the markup but is retired as a visible entry (hidden by JS) — no third copy
+  has('<button id="buildPlanBtn"', "the legacy build handler element is kept (the FAB relays to it)");
   // the OLD derived-floor entry is gone — no #hybridBtn, derived/"· Hybrid" floors, canCreateHybrid.
   assert.ok(!survey.includes('id="hybridBtn"'), "the old #hybridBtn element is gone");
   assert.ok(!survey.includes('" · Hybrid"') && !survey.includes("· Hybrid"), "no '· Hybrid' floor naming anywhere");
@@ -48,11 +48,12 @@ test("top-left = Edit background (direct); Create Hybrid lives in a bottom-right
 test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, and not frozen", () => {
   has('function floorHasAerial(f){ return !!(f && (f.bgSource==="satellite" || f.aerial || (f.ctx && f.ctx.src)));', "floorHasAerial reads the floor record");
   has("function canBuild(f){ return !!(f && floorHasAerial(f) && !hybridCapable(f) && !frozen()); }", "canBuild composes floorHasAerial AND !hybridCapable AND !frozen");
-  // updateBgActions drives visibility: the ••• More sheet is the home for Edit/Replace/Create (+ Mode/
-  // Floor/Step), so it shows over ANY real background on every step; the Create-floor-plan ITEM gates on
-  // canBuild. The old top-left "Edit background" button is retired (its action moved into the sheet).
+  // updateBgActions drives visibility: Create floor plan is the top-left #buildPlanFab, gated on canBuild (and
+  // outside any tool); the legacy drop-up #buildPlanBtn is retired (hidden). The ••• More sheet (Edit/Replace/
+  // Rotate · Mode · Versions · Display) shows over ANY real background on every step; Step/Floor live in the shell.
   has('var pmShow=(bgHasImage && !frozen() && !bgToolOpen);', "the ••• shows over any real background, outside any tool, on every step");
-  has('bp.style.display = canBuild(floors[curFloor]) ? "flex" : "none"', "Create floor plan shows only when canBuild");
+  has('fab.style.display = (canBuild(floors[curFloor]) && !bgToolOpen) ? "flex" : "none"', "the top-left Create-floor-plan FAB shows only when canBuild and outside a tool");
+  has('var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display="none";', "the legacy drop-up build entry is retired (hidden)");
   has('pm.style.display = pmShow ? "flex" : "none"', "the ••• (More sheet trigger) shows over any real background");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)
   has("updateBgActions();   // the floor actions", "goStep re-gates the floor actions");
