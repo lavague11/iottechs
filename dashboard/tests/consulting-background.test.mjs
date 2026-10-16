@@ -87,7 +87,9 @@ test("ring buffer: original is permanent, keeps newest 5 derived, pinned exempt,
 
 test("widget wiring: versions recorded at every background/ctx commit, pinned on submit, validated on restore", () => {
   const survey = read("public/widgets/site-survey-merged.html");
-  assert.ok(survey.includes('recordBgVersion(floors[curFloor], bgData, "enhanced")'), "finishBackground records a bg version");
+  // finishBackground now uploads the committed bg to a URL first, then records the version with that URL
+  // (never a multi-MB inline blob) — so the survey2 blob stays small and always saves.
+  assert.ok(survey.includes('recordBgVersion(_cf, url, "enhanced")') || survey.includes('recordBgVersion(_cf, _bg, "enhanced")'), "finishBackground records a bg version (from the uploaded URL)");
   assert.ok(survey.includes('f.ctx=cx; f.outlineDraft=null; recordCtxVersion(f, "original")'), "Create Floor Plan records the ctx original");
   assert.ok(survey.includes('f.ctx=swapped; recordCtxVersion(f, "enhanced")'), "the enhanced-aerial swap records a ctx version");
   assert.ok(/floors\[curFloor\]\.ctx=validCtx\(ev\.data\.ctx\); recordCtxVersion\(floors\[curFloor\], "original"\)/.test(survey), "the outline handoff records the ctx original");

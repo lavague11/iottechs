@@ -951,8 +951,18 @@
       while(derived.length>BG_VERS_MAX){ var victim=null; for(var j=0;j<derived.length;j++){ if(!derived[j].pinned && derived[j].id!==f[activeKey]){ victim=derived[j]; break; } } if(!victim) break;
         list.splice(list.indexOf(victim),1); derived.splice(derived.indexOf(victim),1); }
       f[listKey]=list; return ver.id; }
-    function recordBgVersion(f, src, kind){ if(!f||!src) return; pushVersion(f, "bgVersions", "bgActive", { src:src, kind:kind||"enhanced" }); }
-    function recordCtxVersion(f, kind){ if(!f||!f.ctx||!f.ctx.src) return; pushVersion(f, "ctxVersions", "ctxActive", { src:f.ctx.src, kind:kind||"enhanced", rect:f.ctx.rect, ftW:f.ctx.ftW, ftH:f.ctx.ftH, northDeg:f.ctx.northDeg }); }
+    // Persist a version's image as a small /api/media URL, NEVER a multi-MB inline blob — history images
+    // used to pile up inline and overflow the 5MB localStorage / 8MB server caps, which made the WHOLE
+    // survey2 blob (incl. the devices) fail to save → dropped camera edits. Inline src → upload first,
+    // record the URL; an already-URL src records immediately.
+    function saveVersionsSoon(){ try{ localStorage.setItem(PKEY, serialize()); }catch(e){} pushServer(lastJson=serialize()); }
+    function recordBgVersion(f, src, kind){ if(!f||!src) return;
+      if(typeof src==="string" && src.indexOf("data:")===0){ uploadBackground(src, function(url){ if(f && url && url.indexOf("data:")!==0){ pushVersion(f, "bgVersions", "bgActive", { src:url, kind:kind||"enhanced" }); saveVersionsSoon(); } }); }
+      else pushVersion(f, "bgVersions", "bgActive", { src:src, kind:kind||"enhanced" }); }
+    function recordCtxVersion(f, kind){ if(!f||!f.ctx||!f.ctx.src) return;
+      var meta={ kind:kind||"enhanced", rect:f.ctx.rect, ftW:f.ctx.ftW, ftH:f.ctx.ftH, northDeg:f.ctx.northDeg }, src=f.ctx.src;
+      if(typeof src==="string" && src.indexOf("data:")===0){ uploadBackground(src, function(url){ if(f && url && url.indexOf("data:")!==0){ var o={src:url}; for(var k in meta) o[k]=meta[k]; pushVersion(f, "ctxVersions", "ctxActive", o); saveVersionsSoon(); } }); }
+      else { var o2={src:src}; for(var k2 in meta) o2[k2]=meta[k2]; pushVersion(f, "ctxVersions", "ctxActive", o2); } }
     // Pin the active bg + ctx version of every floor — called on Submit so the exact image the customer
     // reviews/approves is never ring-buffered away (recoverable even after later re-enhances).
     function pinActiveVersions(f){ if(!f) return; [["bgVersions","bgActive"],["ctxVersions","ctxActive"]].forEach(function(p){ var l=f[p[0]], a=f[p[1]]; if(Array.isArray(l)&&a) l.forEach(function(v){ if(v.id===a) v.pinned=true; }); }); }
@@ -1214,7 +1224,16 @@
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
-      snapFloor(); recordBgVersion(floors[curFloor], bgData, "enhanced"); flushNow(); renderFloorTabs();   // record the committed background as a version (first = original) before persisting
+      snapFloor();
+      // Persist the committed background as an /api/media URL, not a multi-MB inline blob, so the survey2
+      // blob (which ALSO carries the devices) stays small and ALWAYS saves. A bloated blob fails the 8MB
+      // server cap and silently drops camera edits. Upload ONCE, reuse the URL for both the active bg and
+      // its version. flushNow() now lands geometry/devices immediately; the image swaps to a URL + re-saves.
+      (function(){ var _cf=floors[curFloor], _bg=bgData;
+        if(_cf && _bg && typeof _bg==="string" && _bg.indexOf("data:")===0){
+          uploadBackground(_bg, function(url){ if(url && url.indexOf("data:")!==0 && _cf){ _cf.bg=url; if(floors[curFloor]===_cf) bgData=url; recordBgVersion(_cf, url, "enhanced"); flushNow(); } });
+        } else recordBgVersion(_cf, _bg, "enhanced"); })();
+      flushNow(); renderFloorTabs();
       sideCollapsed=(window.innerWidth<=900); applySideCollapsed();   // reveal the device panel on desktop; on mobile keep the drawer closed (rail ▸ opens it) so the canvas stays usable
       goStep(1);   // → Place
     }
@@ -2210,13 +2229,27 @@
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
     var lastJson=null;   // freshest serialization kept in memory, so the SERVER push never depends on a successful localStorage write (the server has no 5 MB cap → a full local cache can't lose a change)
     function serialize(){ snapFloor(); return JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, gridMode:gridMode, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen }); }
-    function pushServer(json){ if(RO||!PID||!json) return; try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:json})}).catch(function(){}); }catch(e){} }
+    // The SERVER is the source of truth. pushServer reports GENUINE failures (a >8MB reject or a network
+    // error) so a lost camera edit can never be silent — but it debounces, because a transient reject
+    // during an in-flight image upload self-heals on the very next (shrunk-blob) save.
+    var _srvFailT=null;
+    function serverSaveState(ok){ if(RO) return;
+      if(ok){ if(_srvFailT){ clearTimeout(_srvFailT); _srvFailT=null; } saveErr(false); return; }
+      if(_srvFailT) return; _srvFailT=setTimeout(function(){ _srvFailT=null; saveErr(true); }, 2500); }
+    function pushServer(json){ if(RO||!PID||!json) return;
+      try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:json})})
+        .then(function(r){ if(!r||!r.ok) return {error:1}; return r.json().catch(function(){ return {ok:1}; }); })
+        .then(function(j){ serverSaveState(!(j&&j.error)); })
+        .catch(function(){ serverSaveState(false); }); }catch(e){ serverSaveState(false); } }
     function save(){ var json; try{ json=serialize(); }catch(e){ json=null; } if(json) lastJson=json;
       var ok=false; if(json){ try{ localStorage.setItem(PKEY, json); ok=true; }catch(e){ ok=false; } }
-      if(!ok && json){ pushServer(json); reclaimInlineImages(); }   // local cache full → the change still reaches the server (no loss), and we shrink the blob by moving inline images to /api/media URLs
-      saveErr(!ok); reportHost(); }
-    // A full cache no longer means lost work — staff edits are pushed straight to the server. Keep the notice honest.
-    function saveErr(on){ var b=document.getElementById("saveErr"); if(!b){ if(!on) return; b=document.createElement("div"); b.id="saveErr"; b.textContent=(RO?"Storage full — changes aren’t being saved.":"Cache full — saving to the server."); document.body.appendChild(b); } b.style.display=on?"block":"none"; }
+      if(!ok && json) reclaimInlineImages();   // local cache full → shrink the blob (inline images → /api/media URLs); localStorage is only a cache
+      if(json) pushServer(json);               // ALWAYS persist to the server — the device edits must never live only in a (possibly full) local cache
+      reportHost(); }
+    // localStorage is a cache, not the save — a full cache is NOT an error (the server has the data).
+    // This banner now fires ONLY on a genuine server-save failure (via serverSaveState), so it reflects
+    // real data risk, not a benign cache overflow.
+    function saveErr(on){ var b=document.getElementById("saveErr"); if(!b){ if(!on) return; b=document.createElement("div"); b.id="saveErr"; b.textContent=(RO?"Storage full — changes aren’t being saved.":"Couldn’t save your last change — check your connection and keep this tab open."); document.body.appendChild(b); } b.style.display=on?"block":"none"; }
     // Reclaim: move any inline data: images (background, aerial crop, device view photos) to /api/media so
     // the saved blob holds small URLs instead of multi-MB base64 — the real cause of the quota overflow.
     // One pass at a time; each swap re-saves so the cache shrinks as uploads land. Offline → no-op (URLs come later).
@@ -2243,8 +2276,8 @@
     // otherwise means a fast tab-close could lose them. localStorage stays the working copy; this also pushes the FRESH
     // serialization now (not a re-read of localStorage, which could be stale/empty after a quota failure).
     function flushNow(){ var json; try{ json=serialize(); }catch(e){ json=lastJson||localStorage.getItem(PKEY); } if(json) lastJson=json;
-      try{ localStorage.setItem(PKEY, json); saveErr(false); }catch(e){ saveErr(true); reclaimInlineImages(); } reportHost();
-      pushServer(json); }
+      try{ localStorage.setItem(PKEY, json); }catch(e){ reclaimInlineImages(); }   // cache full is benign — shrink the blob; the server push below is the real save + reports genuine failures
+      reportHost(); pushServer(json); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimMenuBtn"); if(b) b.classList.toggle("on",dimmed); }
     // Dim lives in the bottom-right ••• menu now; toggling it keeps the menu open so you can flip it back.
     (function(){ var b=document.getElementById("dimMenuBtn"); if(b){ b.addEventListener("pointerdown", function(e){ e.stopPropagation(); });

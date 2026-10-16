@@ -118,5 +118,11 @@ test("derived floors record lineage (derivedFromFloorId) and discrete actions fl
   assert.ok(/function flushNow\(\)\{ var json;/.test(survey), "flushNow serializes the fresh survey");
   assert.ok(survey.includes("pushServer(json);"), "flushNow pushes the fresh blob to the server");
   assert.ok(survey.includes('tool:"survey2",data:json'), "the server push carries the survey2 blob");
-  assert.ok(/snapFloor\(\); recordBgVersion\([^;]*\); flushNow\(\); renderFloorTabs\(\);/.test(survey), "Done/background set records a bg version then flushes now");
+  // Done/background set: snapshot the floor, then upload the committed bg to a URL (records the version
+  // + swaps the active bg to the URL so the saved blob never holds a multi-MB inline image), flush now.
+  const fin = survey.slice(survey.indexOf("function finishBackground"), survey.indexOf("function saveToLibrary"));
+  assert.ok(fin.includes("snapFloor();"), "Done snapshots the floor");
+  assert.ok(fin.includes("uploadBackground(_bg, function(url)") && fin.includes("_cf.bg=url"), "Done uploads the committed bg to /api/media");
+  assert.ok(fin.includes('recordBgVersion(_cf, url, "enhanced")'), "Done records the bg version from the uploaded URL");
+  assert.ok(fin.includes("flushNow(); renderFloorTabs();"), "Done flushes to the server now");
 });

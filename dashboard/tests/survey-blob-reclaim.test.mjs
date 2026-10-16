@@ -30,3 +30,22 @@ test("server rejects >8MB payloads — so shrinking the blob also prevents silen
   const route = readFileSync(new URL("../app/api/tool-data/route.js", import.meta.url), "utf8");
   assert.ok(/data\.length > 8_000_000/.test(route), "tool-data caps at 8MB");
 });
+
+test("versions never persist inline — recordBgVersion/recordCtxVersion upload first, store the URL", () => {
+  const rb = widget.slice(widget.indexOf("function recordBgVersion"), widget.indexOf("function pinActiveVersions"));
+  assert.ok(/uploadBackground\(src, function\(url\)\{[^}]*pushVersion/.test(rb.replace(/\n/g, " ")), "bg version uploads before recording the URL");
+  assert.ok(rb.includes('recordCtxVersion'), "recordCtxVersion present");
+  assert.ok(/pushVersion\(f, "ctxVersions", "ctxActive", o\)/.test(rb), "ctx version records a URL object");
+});
+
+test("finishBackground uploads the committed bg to a URL so the blob (with devices) stays saveable", () => {
+  const fb = widget.slice(widget.indexOf("function finishBackground"), widget.indexOf("function saveToLibrary"));
+  assert.ok(fb.includes("uploadBackground(_bg, function(url)"), "committed bg is uploaded to /api/media");
+  assert.ok(fb.includes("_cf.bg=url"), "active bg becomes the URL (no multi-MB inline in the saved blob)");
+});
+
+test("cameras always reach the server: save() pushes to the server, failures surface (debounced)", () => {
+  assert.ok(widget.includes("if(json) pushServer(json);"), "save() always pushes to the server (not only on cache-fail)");
+  assert.ok(widget.includes("serverSaveState(!(j&&j.error))"), "server reject / network error is detected");
+  assert.ok(widget.includes("setTimeout(function(){ _srvFailT=null; saveErr(true); }, 2500)"), "a genuine failure surfaces (debounced, so transient upload rejects don't flash)");
+});
