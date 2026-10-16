@@ -27,7 +27,7 @@ test("rail drives the survey's internal step via postMessage (Background→0, Pl
 
 test("the shell follows the survey's step echo (iotSurveyStep) for the live indicator + Done→Plan auto-advance", () => {
   assert.ok(shell.includes('else if (m.type === "iotSurveyStep")'), "shell handles the survey step echo");
-  assert.ok(shell.includes('setRailStep((cur) => (m.step === 0 ? "background" : cur === "background" ? "plan" : cur));'), "follows Background↔Setup; keeps an explicit Plan/Cameras/Review within Setup");
+  assert.ok(shell.includes('setRailStep((cur) => (m.bgTool === "draw" ? "plan" : m.step === 0 ? "background" : cur === "background" ? "plan" : cur));'), "draw tool → Floor Plan; else follows Background↔Setup");
   assert.ok(shell.includes("setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });"), "completion signals come from the echo");
 });
 

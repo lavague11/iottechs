@@ -857,7 +857,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
-    function drawSrc(){ return "draw-floorplan.html?v=20260921-rooms"
+    function drawSrc(){ return "draw-floorplan.html?v=20261016-dock"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
@@ -891,11 +891,14 @@
       satFrame.style.display="block";
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
-      bgWiz.style.display="";           // …but keep the slim strip so "← Background" (back out of the tool) is always there
+      // The Structure (draw) tool carries its own Back in its dock now, so drop the redundant "‹ Background"
+      // strip for it (one fewer stacked row on mobile). The satellite/Aerial tool still uses the strip.
+      bgWiz.style.display = source==="draw" ? "none" : "";
       var lbl=bgWiz.querySelector(".bgstriplbl"); if(lbl) lbl.textContent = source==="draw" ? "Structure" : "Aerial";   // 1-word context tag — the back chip is the control, no instructional sentence (UI constitution)
       sideCollapsed=true; applySideCollapsed();
       bgToolOpen=source; queueSave();   // remember we're inside a tool → a refresh mid-edit reopens it here
       if(typeof updateBgActions==="function") updateBgActions();   // the tool fills the canvas → hide the floor-action cluster (it must not float over the iframe)
+      emitSurveyStep();   // tell the host a build tool is open (bgTool) so the nav reflects Floor Plan while drawing
     }
     function enterBg(){ openBgTool(SAT_SRC, "satellite"); }
     // Reopen the map AS IT WAS LEVELED (the tool stashes it until Maps is ready). changed = enterBg() just
@@ -979,6 +982,7 @@
       else if(!bgHasImage){ document.getElementById("bgstep").style.display=""; document.getElementById("working").style.display="none"; }
       else { document.getElementById("working").style.display="block"; }
       if(typeof updateBgActions==="function") updateBgActions();   // left the tool → re-gate the floor-action cluster for the current floor/step
+      emitSurveyStep();   // tool closed → clear bgTool so the host nav returns to the normal step CTA
     }
 
     document.getElementById("doorSat").addEventListener("click", enterBg);
@@ -2819,7 +2823,9 @@
     // guessing. hasPlan = a real structure exists; camCount drives the Cameras/Views steps.
     function emitSurveyStep(){ try{ var lf=floors[curFloor]||{};
       var camCount=(floors||[]).reduce(function(n,f){ return n+((f&&f.devices)||[]).filter(function(d){ return d&&d.k==="cam"; }).length; }, 0);
-      parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep,
+      // bgTool: which build tool is open ("draw" = Structure editor, "satellite" = aerial) or null. The host
+      // maps a live draw tool to the Floor Plan step so the nav CTA isn't "Create Floor Plan" while you ARE.
+      parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep, bgTool:bgToolOpen||null,
         bgReady:!!bgHasImage, hasPlan:!!(hybridCapable(lf) || (lf.plan && (lf.plan.cells||lf.plan.rooms))), camCount:camCount }, "*");
     }catch(e){} }
     // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup

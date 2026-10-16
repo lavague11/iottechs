@@ -107,7 +107,13 @@
   .segb{border:0;background:transparent;color:var(--ink);font:600 13px var(--sans);padding:8px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
   .segb.on{background:var(--ink);color:#fff}
   .segb.locked{opacity:.4;pointer-events:none}
-  .segToggle{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:0;border-radius:11px;background:var(--ink);color:#fff;font:600 13px var(--sans);cursor:pointer;flex:none;white-space:nowrap}
+  /* Light, not black — only the primary Done stays dark (one clear primary per the UI constitution). */
+  .segToggle{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:700 13px var(--sans);cursor:pointer;flex:none;white-space:nowrap}
+  .segToggle:hover{border-color:var(--ink)}
+  /* quiet mode context label in the dock (replaces the removed Background/Structure strip) */
+  .tctx{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 11px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:center}
+  .tb.ico.back{color:var(--muted)}
+  .tb.ico.back:hover{color:var(--ink)}
   #modeMenu{left:0;right:auto}
   #modeMenu button .mchk{opacity:0}
   #modeMenu button.on .mchk{opacity:1;color:var(--gold)}
@@ -116,11 +122,13 @@
   .tb{display:flex;align-items:center;gap:7px;height:40px;padding:0 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);font:600 13px var(--sans);cursor:pointer}
   .tb.ico{width:40px;padding:0;justify-content:center}
   .tb.snap{font-weight:800;font-size:15px}
-  .tb.ico.on{background:var(--ink);color:#fff}
+  /* active tool = subtle selected state (soft fill + gold), NOT a heavy black fill */
+  .tb.ico.on{background:var(--soft);color:var(--gold);border-color:var(--line)}
+  .tb.ico.on.erasing{color:#c4553d}
   .tb.ico.locked{opacity:.4;pointer-events:none}
   .tb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .tb:hover{background:var(--soft)}
-  .tb.ico.on:hover{background:#000}
+  .tb.ico.on:hover{background:var(--soft)}
   .tb.use{background:var(--ink);color:#fff;border-color:var(--ink);padding:0 18px;flex:none}
   .tb.use:hover{background:#000}
   .tb:disabled{opacity:.4;cursor:default}
@@ -198,6 +206,9 @@
 
   <!-- Toolbar is a real bottom FOOTER now (out of the canvas) so it never covers the plan. -->
   <div class="tbar" id="tbar">
+      <!-- Back out of the Structure tool (geometry already autosaves) — replaces the separate "‹ Background"
+           strip the host used to show, so the planner has one dock, not two stacked rows. -->
+      <button class="tb ico back" id="tBack" title="Back" aria-label="Back to floor"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <!-- ONE compact drawing-mode selector (drop-up) — "What am I drawing?": Structure / Room / Area / Opening. Keeps the dock narrow. -->
       <div class="morewrap" id="modeWrap">
         <button class="segToggle" id="modeSel" aria-haspopup="true" aria-expanded="false" title="Drawing mode" aria-label="Drawing mode">
@@ -213,15 +224,18 @@
         </div>
       </div>
       <span id="structTools" class="stools">
+        <!-- ONE add/erase toggle (was two buttons) — shows + for Add, flips to the eraser for Erase. -->
         <button class="tb ico on" id="tAdd" title="Add" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-        <button class="tb ico" id="tErase" title="Erase" aria-label="Erase"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
+        <button class="tb ico" id="tErase" title="Erase" aria-label="Erase" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg></button>
         <button class="tb ico snap on" id="tSnap" title="Snap: half grid" aria-label="Snap: half grid">½</button>
         <button class="tb ico" id="tAerial" title="Aerial" aria-label="Aerial backdrop" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg></button>
         <select id="zoneTypeSel" title="Area type" aria-label="Area type" style="display:none;height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:600 13px var(--sans);padding:0 8px;cursor:pointer"></select>
       </span>
+      <span class="tctx" id="tCtx" aria-hidden="true"></span>
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
         <div class="moremenu" id="moreMenu">
+          <button id="mAerial"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg> <span id="mAerialTxt">Aerial backdrop</span></button>
           <button id="mClean"><svg viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="M15 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/><path d="M18.5 13l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/></svg> <span id="mCleanTxt">Enhance</span></button>
           <button id="mExport"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           <button id="mImportZones" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 13v5m-2-3 2-2 2 2"/></svg> Import areas</button>
@@ -333,9 +347,11 @@
   function bdAlpha(){ return _bdMode===2?1:(_bdMode===1?0.5:0); }   // Full = true full colour (opaque); Light dims it so painted cells read
   function drawBackdrop(){ if(!_bdImg||!_bdMode||!_seed||!(+_seed.sc>0)) return; var a=+_seed.aspect||1, sc=+_seed.sc;
     ctx.save(); ctx.globalAlpha=bdAlpha(); try{ ctx.drawImage(_bdImg, +_seed.offx||0, +_seed.offy||0, a*sc, sc); }catch(e){} ctx.restore(); }
-  function updateAerialBtn(){ var b=$("tAerial"); if(!b) return; var on=!!(_bdImg&&_seed&&+_seed.sc>0);
-    b.style.display=on?"":"none"; b.classList.toggle("on", on && _bdMode>0); b.setAttribute("aria-pressed", (on&&_bdMode>0)?"true":"false");
-    b.title=_bdMode===2?"Aerial: full":(_bdMode===1?"Aerial: light":"Aerial: off"); }
+  function updateAerialBtn(){ var b=$("tAerial"); if(b) b.style.display="none";   // moved into the ••• menu (#mAerial) — keep the dock button hidden
+    var on=!!(_bdImg&&_seed&&+_seed.sc>0);
+    var mi=$("mAerial"), mt=$("mAerialTxt");
+    if(mi) mi.style.display=on?"":"none";   // only offer it when an aerial actually exists for this floor
+    if(mt) mt.textContent = "Aerial · " + (_bdMode===2?"full":(_bdMode===1?"light":"off")); }
   function pxToFeet(px){ return metersPerPx>0 ? (px*metersPerPx)/M_PER_FT : 0; }
   function cellsSqFt(n){ var h=pxToFeet(HALF); return metersPerPx>0 ? n*h*h : 0; }
   // Feet per full grid box — inline copy of lib/site-transform.js gridBoxFeet(); tests/site-transform-drift.test.mjs keeps the formula identical.
@@ -870,9 +886,10 @@
     var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="eraser" ? "Eraser" : "Room")));
     var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones. Eraser is erase-only (no toggle).
     $("tAdd").style.display = edit ? "inline-flex" : "none";
-    $("tErase").style.display = edit ? "inline-flex" : "none";
-    if(edit){ $("tAdd").classList.toggle("on", structOp!=="erase"); $("tErase").classList.toggle("on", structOp==="erase"); }   // keep the toggle visual in sync
+    $("tErase").style.display = "none";   // merged into the single #tAdd add/erase toggle
+    if(edit) syncPaintBtn();   // reflect the current op on the one toggle button
     var zsel=$("zoneTypeSel"); if(zsel) zsel.style.display="none";   // Areas are named like rooms now — no type picker
+    var tctx=$("tCtx"); if(tctx) tctx.textContent = "Floor Plan · " + (mtn ? mtn.textContent : "Structure");   // quiet context (replaces the removed Background/Structure row)
     cv.style.cursor = (edit||m==="eraser") ? (structOp==="erase" ? "cell" : "crosshair") : (m==="opening"||m==="removewall" ? "pointer" : "crosshair");
     // No instructional hint copy — the controls speak for themselves (assume a competent user). Even the
     // empty first canvas gets none: the aerial + grid + Structure control make the intent clear on their own.
@@ -1250,8 +1267,15 @@
   // Area: classify site + exterior area cells (one class per cell). The type picker lists the taxonomy.
   (function(){ var sel=$("zoneTypeSel"); if(!sel) return; ZCLASS.forEach(function(t){ var o=document.createElement("option"); o.value=t[0]; o.textContent=t[1]; sel.appendChild(o); }); sel.value=zoneType;
     sel.addEventListener("change", function(){ zoneType=sel.value; if(structOp==="erase"){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); } $("hint").innerHTML="Paint the <b>"+zClassLabel(zoneType)+"</b> area on the grid."; redraw(); }); })();
-  $("tAdd").addEventListener("click", function(){ structOp="add"; $("tAdd").classList.add("on"); $("tErase").classList.remove("on"); cv.style.cursor="crosshair"; });
-  $("tErase").addEventListener("click", function(){ structOp="erase"; $("tErase").classList.add("on"); $("tAdd").classList.remove("on"); cv.style.cursor="cell"; });
+  // ONE add/erase toggle on #tAdd — flips structOp and swaps its own icon (+ ⇄ eraser). #tErase is kept
+  // in the DOM (hidden) so the existing setMode/picker sync lines stay valid.
+  function syncPaintBtn(){ var a=$("tAdd"); if(!a) return; var er=structOp==="erase";
+    a.innerHTML = er ? '<svg viewBox="0 0 24 24"><path d="M4 15l6-6 8 8H7z"/><path d="M9 10l6-6 5 5-6 6"/><path d="M4 21h16"/></svg>'
+                     : '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+    a.title=er?"Erase":"Add"; a.setAttribute("aria-label",er?"Erase (tap to add)":"Add (tap to erase)"); a.classList.add("on"); a.classList.toggle("erasing",er); }
+  $("tAdd").addEventListener("click", function(){ structOp = structOp==="erase" ? "add" : "erase"; syncPaintBtn(); cv.style.cursor = structOp==="erase" ? "cell" : "crosshair"; });
+  $("tErase").addEventListener("click", function(){ structOp="erase"; syncPaintBtn(); cv.style.cursor="cell"; });   // hidden, but kept harmless
+  $("tBack").addEventListener("click", function(){ try{ parent.postMessage({type:"iotCaptureCancel"}, "*"); }catch(e){} });   // back out of the Structure tool (host → exitBg; geometry already autosaved)
   // ONE snap toggle — tap flips ½ ↔ 1 (persists for the session).
   function applySnapUI(){ var half=snap===0.5, b=$("tSnap"), lbl=half?"Snap: half grid":"Snap: full grid";
     b.textContent = half ? "½" : "1"; b.title = lbl; b.setAttribute("aria-label", lbl); }
@@ -1259,7 +1283,9 @@
     try{ localStorage.setItem("iot_struct_snap", String(snap)); }catch(e){} redraw(); });
   // Aerial backdrop: cycle Off → Light → Full (see the roof while painting Building cells). Session-persisted.
   (function(){ try{ var m=localStorage.getItem("iot_struct_aerial"); if(m!=null && isFinite(+m)) _bdMode=Math.max(0,Math.min(2,+m)); }catch(e){} })();
-  $("tAerial").addEventListener("click", function(){ _bdMode=(_bdMode+1)%3; try{ localStorage.setItem("iot_struct_aerial", String(_bdMode)); }catch(e){} updateAerialBtn(); redraw(); });
+  function cycleAerial(){ _bdMode=(_bdMode+1)%3; try{ localStorage.setItem("iot_struct_aerial", String(_bdMode)); }catch(e){} updateAerialBtn(); redraw(); }
+  $("tAerial").addEventListener("click", cycleAerial);
+  (function(){ var mi=$("mAerial"); if(mi) mi.addEventListener("click", function(e){ e.stopPropagation(); cycleAerial(); }); })();   // aerial backdrop cycle now lives in the ••• menu
   // Undo: while the Enhance preview is up, the first Undo dismisses it (back to the drawing) — the
   // enhance overlay isn't a cells/rooms edit, so plain undo() couldn't reach it; that left it stuck.
   $("tUndo").addEventListener("click", function(){ if(busy) return; if(backToDraw()) return; undo(); });

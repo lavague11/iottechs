@@ -11,7 +11,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261015-4";
+const WIDGET_VERSION = "20261016-1";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.

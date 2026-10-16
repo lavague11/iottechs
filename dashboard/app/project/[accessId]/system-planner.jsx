@@ -44,6 +44,7 @@ export default function SystemPlanner({
   const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
   const [curFloor, setCurFloor] = useState(0);
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
+  const [bgTool, setBgTool] = useState(null);     // "draw" | "satellite" | null — which build tool is open inside the survey (from iotSurveyStep)
   const rootRef = useRef(null);
 
   // Talk to the survey iframe (the devices live in survey2). The roster is shared across both tabs, so
@@ -127,7 +128,10 @@ export default function SystemPlanner({
       // within Setup (step 1) we only auto-advance OFF Background; an explicit Plan/Cameras/Review stays put.
       else if (m.type === "iotSurveyStep") {
         setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });
-        setRailStep((cur) => (m.step === 0 ? "background" : cur === "background" ? "plan" : cur));
+        setBgTool(m.bgTool || null);
+        // The Structure (draw) tool IS the Floor Plan step — reflect that so the rail/nav don't say
+        // "Create Floor Plan" while you're drawing it. Otherwise follow the Background→Setup auto-advance.
+        setRailStep((cur) => (m.bgTool === "draw" ? "plan" : m.step === 0 ? "background" : cur === "background" ? "plan" : cur));
       }
       // A photo attached in the mockup wrote the survey2 blob server-side but can't touch the live survey
       // iframe. Relay it (by stable cid) so the survey updates its device, re-emits iotSurveyDevices, and
@@ -350,12 +354,18 @@ export default function SystemPlanner({
             </button>
           ) : <span />}
           <div className="syp-nav-actions">
-            {nextStep && <span className="syp-nav-hint">Next · {NEXT_PROMPT[nextStep]}</span>}
-            {nextStep ? (
-              <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>Next <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
-            ) : reviewCta ? (
-              <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
-            ) : null}
+            {bgTool === "draw" ? (
+              /* Drawing the structure IS the Floor Plan step — the dock's Done finishes it, so show quiet
+                 context here and suppress a competing Next CTA (no "Done vs Next" confusion). */
+              <span className="syp-nav-hint">Floor Plan · Structure — tap <b>Done</b> when finished</span>
+            ) : (<>
+              {nextStep && <span className="syp-nav-hint">Next · {NEXT_PROMPT[nextStep]}</span>}
+              {nextStep ? (
+                <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>Next <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+              ) : reviewCta ? (
+                <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+              ) : null}
+            </>)}
             <div className="syp-nav-morewrap">
               <button className="syp-nav-more" aria-label="More" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>

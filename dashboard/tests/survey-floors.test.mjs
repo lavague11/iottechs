@@ -95,13 +95,13 @@ test("approval fingerprint: Structure changes it, bookkeeping (id/aerial/legacyI
   assert.notEqual(vary({ plan: { ...base.floors[0].plan, cells: ["0,0", "1,0", "2,0"] } }), fp(base), "Structure IS meaning");
 });
 
-test("background tools always show the Back strip, and Back leaves the tool via exitBg", () => {
-  // The slim #bgWiz strip (with the "← Background" button) must be revealed whenever a tool opens, so there is
-  // always a way back out of the satellite/draw tool to the chooser. Back delegates to exitBg(false), which
-  // clears bgToolOpen so a refresh doesn't drop you back inside the tool.
+test("the satellite tool shows the Back strip; the draw tool carries Back in its own dock", () => {
+  // The slim #bgWiz strip is shown for the SATELLITE/Aerial tool (its Back chip → exitBg). The Structure
+  // (draw) tool now carries Back in its own dock, so the redundant strip is hidden for it (one dock, not two
+  // stacked rows). Back still delegates to exitBg(false), clearing bgToolOpen so a refresh stays out.
   const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
   const open = survey.slice(survey.indexOf("function openBgTool("), survey.indexOf("function enterBg("));
-  assert.ok(/bgWiz\.style\.display="";/.test(open), "openBgTool reveals the Back strip");
+  assert.ok(/bgWiz\.style\.display = source==="draw" \? "none" : "";/.test(open), "strip hidden for draw, shown for satellite");
   assert.ok(open.includes('source==="draw" ?'), "strip label adapts to the tool");
   const exit = survey.slice(survey.indexOf("function exitBg("), survey.indexOf("function exitBg(") + 600);
   assert.ok(exit.includes('bgWiz.style.display="none";'), "exitBg hides the Back strip");
