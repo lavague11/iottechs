@@ -2174,7 +2174,10 @@
       if(RO) return;
       // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
       // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
-      if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step); if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); } return; }
+      if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step);
+        if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: open the device panel, no editor
+        else if(typeof m.step==="number") contextualEdit(m.step);               // Background/Floor Plan: land on the step → open its editor
+        return; }
       // Floor management from the host's top selector — reuse the SAME canonical floor functions as the
       // in-canvas sheet (parity, no behavior change: add/rename/delete work, duplicate self-guards on
       // frozen). reportDevices() after each so the shell's selector reflects the new floor list / current.
@@ -2767,6 +2770,17 @@
     // survey steps — scoped to the survey bar only
     var stepEls=surveyWiz.querySelectorAll(".steps .s");
     var unsubConfirm=false, unsubTimer=null;   // second-tap confirm before an unsubmit
+    // Contextual editing (owner request): navigating to a step via the host rail opens THAT step's editor
+    // directly — Background → the background editor (reuses #changeBgBtn, which reopens on the STORED image via
+    // iotLoadCapture: no re-capture, no paid enhance), Floor Plan → the Structure editor on the stored plan.
+    // Only on a real host navigation (goRail → cmd:"step") — never on passive restore; !bgToolOpen blocks
+    // re-entrancy; Cameras is excluded by the focus branch. Aerial-not-yet-plan floors keep the FAB (no surprise).
+    function contextualEdit(step){
+      if(RO || frozen() || bgToolOpen || !bgHasImage) return;
+      var f=floors[curFloor]||{};
+      if(step===0){ var cb=document.getElementById("changeBgBtn"); if(cb) cb.click(); return; }   // Background → reopen the bg editor
+      if(step===1){ if(hybridCapable(f) || (f.plan && (f.plan.cells||f.plan.rooms))) enterDraw(); }   // Floor Plan (plan exists) → Structure editor
+    }
     function goStep(idx){
       idx=Math.max(0,Math.min(1,idx));   // 0 Background · 1 Setup (submit is in the host footer; clamps any stale Submit/4-step save)
       if(idx>0 && !bgHasImage) return;   // gate: can't Setup/Submit until this floor has a background
