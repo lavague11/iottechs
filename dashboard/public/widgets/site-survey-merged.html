@@ -2223,9 +2223,18 @@
     var reclaiming=false;
     function reclaimInlineImages(){ if(RO||!PID||reclaiming) return;
       var tasks=[]; floors.forEach(function(f){ if(!f) return;
-        if(typeof f.bg==="string" && f.bg.indexOf("data:")===0) tasks.push({set:function(u){ f.bg=u; if(f===floors[curFloor]) bgData=u; }, src:f.bg});
+        // f.bg is the ONE fingerprinted image (survey2Meaning hashes it), so swapping it inline->URL would
+        // change the fingerprint and void a customer approval. Only migrate it while UNSUBMITTED; a
+        // submitted survey keeps its exact bg. ctx.src / device photos / version history are NOT
+        // fingerprinted, so they migrate freely (and are the real bloat).
+        if(!submitted && typeof f.bg==="string" && f.bg.indexOf("data:")===0) tasks.push({set:function(u){ f.bg=u; if(f===floors[curFloor]) bgData=u; }, src:f.bg});
         if(f.ctx && typeof f.ctx.src==="string" && f.ctx.src.indexOf("data:")===0) tasks.push({set:function(u){ if(f.ctx) f.ctx.src=u; }, src:f.ctx.src});
         (f.devices||[]).forEach(function(d){ if(d && typeof d.photo==="string" && d.photo.indexOf("data:")===0) tasks.push({set:function(u){ d.photo=u; }, src:d.photo}); });
+        // Background/aerial HISTORY (bgVersions/ctxVersions) — each enhancement keeps a prior image; these
+        // are recorded inline and were NOT reclaimed before, so a few enhances alone blew the localStorage
+        // budget (and risked the server cap → lost edits). Migrate their srcs to /api/media URLs too.
+        ["bgVersions","ctxVersions"].forEach(function(key){ (Array.isArray(f[key])?f[key]:[]).forEach(function(v){
+          if(v && typeof v.src==="string" && v.src.indexOf("data:")===0) tasks.push({set:function(u){ v.src=u; }, src:v.src}); }); });
       });
       if(!tasks.length) return; reclaiming=true;
       var i=0; (function next(){ if(i>=tasks.length){ reclaiming=false; return; } var t=tasks[i++];
@@ -2652,6 +2661,9 @@
       if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
       // Refresh mid-edit → reopen the build tool right where they left off (draw geometry is per-floor persisted).
       if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ if(st.bgTool==="draw") enterDraw(); else { var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); } }   // satellite reopens AS LEVELED
+      // Proactively migrate any inline images (esp. bg/aerial version history) to /api/media URLs so an
+      // already-bloated blob self-heals on load, before the next edit overflows localStorage.
+      if(!RO) setTimeout(reclaimInlineImages, 800);
     }catch(e){ renderFloorTabs(); } }
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
