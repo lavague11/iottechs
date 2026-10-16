@@ -450,7 +450,6 @@ function FloorSelect({ floors = [], curFloor = 0, onSwitch, onAdd, onRename, onD
   return (
     <div className="syp-fsel" ref={ref}>
       <button className="syp-fsel-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V8l6-4 6 4v13M10 21v-5h4v5" /></svg>
         <span className="syp-fsel-name">{curName}</span>
         <svg viewBox="0 0 10 6" width="9" height="9" fill="currentColor" aria-hidden="true" style={{ opacity: .6, transform: open ? "rotate(180deg)" : "none", transition: "transform .16s" }}><path d="M0 0l5 6 5-6z" /></svg>
       </button>
@@ -585,9 +584,9 @@ const CSS = `
 /* Floor selector dropdown — compact pill + menu (switch/add/rename/duplicate/delete). Button bg rules
    are scoped under .syp-fsel so they beat the deck's .dv-shell button reset. */
 .syp-fsel{position:relative;display:inline-block}
-.syp-fsel .syp-fsel-btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:.92rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:8px 14px;transition:background .15s,border-color .15s}
+.syp-fsel .syp-fsel-btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:inherit;font-size:.92rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:9px 22px;min-width:220px;transition:background .15s,border-color .15s}
 .syp-fsel .syp-fsel-btn:hover{background:#fff;border-color:var(--dv-ink,#101418)}
-.syp-fsel-name{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.syp-fsel-name{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
 .syp-fsel-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:224px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;display:flex;flex-direction:column;gap:1px}
 .syp-fsel .syp-fsel-opt{appearance:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font:inherit;font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);background:transparent;border:0;border-radius:8px;padding:8px 10px;text-align:left}
 .syp-fsel .syp-fsel-opt:hover{background:var(--dv-raise,#F2F2EF)}
