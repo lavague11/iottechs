@@ -44,9 +44,26 @@ test("start-from levels: only the plan-carrying levels keep the drawn plan; item
     assert.ok(create.includes(`${k}:(wp&&from.${k})`), `${k} is carried only when carrying the plan`);
   }
   assert.ok(create.includes("devices:(from&&withItems)?cloneDevices(from.devices):[]"), "devices only on +items");
-  // the sheet offers the middle option between +items and background-only
-  assert.ok(html.includes('id="flBgPlan"') && html.includes("Background + floor plan"), "a Background + floor plan option exists");
-  assert.ok(html.includes('pickFloor("bgplan")') && html.includes('createFloor(mode==="none"?null:prev, mode==="bgplan"||mode==="bgitems", mode==="bgitems")'), "bgplan carries the plan without devices");
+  // the add-floor modal is now two-step: (1) Blank vs Copy, (2) carry-over checkboxes mapped onto the same tiers
+  assert.ok(html.includes('id="flStep1"') && html.includes('id="flStep2"') && html.includes('id="flCopy"'), "two-step add-floor (blank vs copy, then layers)");
+  for (const id of ["flcBg", "flcPlan", "flcDev"]) assert.ok(html.includes(`id="${id}"`), `carry-over checkbox ${id} exists`);
+  assert.ok(html.includes('f(dv ? "bgitems" : pl ? "bgplan" : "bg")'), "checkboxes map to the createFloor tiers (devices→+items, plan→+floor plan, else background-only)");
+  assert.ok(html.includes("if(!bg){ f(\"none\"); return; }"), "copying nothing (Background unchecked) → blank floor");
+  // the addFloor callback still feeds those modes into the canonical createFloor
+  assert.ok(html.includes('createFloor(mode==="none"?null:prev, mode==="bgplan"||mode==="bgitems", mode==="bgitems")'), "the mode strings drive the canonical createFloor");
+});
+
+// Hierarchical dependencies between the carry-over checkboxes (Devices ⊃ Floor Plan ⊃ Background).
+test("add-floor carry-over dependencies: Devices implies Floor Plan implies Background; unchecking cascades down", () => {
+  // Replicate the sync handlers wired in the widget and prove the hierarchy.
+  const mk = () => ({ bg: true, pl: false, dv: false });
+  const onBg = (s) => { if (!s.bg) { s.pl = false; s.dv = false; } };
+  const onPl = (s) => { if (s.pl) s.bg = true; else s.dv = false; };
+  const onDv = (s) => { if (s.dv) { s.pl = true; s.bg = true; } };
+  let s = mk(); s.dv = true; onDv(s); assert.deepEqual(s, { bg: true, pl: true, dv: true }, "checking Devices pulls in Floor Plan + Background");
+  s = { bg: false, pl: false, dv: false }; s.pl = true; onPl(s); assert.equal(s.bg, true, "checking Floor Plan pulls in Background");
+  s = { bg: true, pl: true, dv: true }; s.bg = false; onBg(s); assert.deepEqual(s, { bg: false, pl: false, dv: false }, "unchecking Background clears Floor Plan + Devices");
+  s = { bg: true, pl: true, dv: true }; s.pl = false; onPl(s); assert.equal(s.dv, false, "unchecking Floor Plan clears Devices");
 });
 
 // Guards: the capture transform being dropped anywhere between the satellite result and a reload.

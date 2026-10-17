@@ -542,6 +542,13 @@
   .flOpt b{font-size:13.5px;color:var(--ink)}
   .flOpt span{font-size:11.5px;color:var(--muted)}
   .flCancel{margin-top:4px;align-self:flex-end;background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;padding:6px 4px}
+  /* add-floor step 2: compact carry-over checkboxes (Background base → Floor Plan → Devices, hierarchical) */
+  .flChecks{display:flex;flex-direction:column;gap:6px;margin:6px 0 16px}
+  .flChk{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink)}
+  .flChk:hover{border-color:var(--gold);background:var(--soft)}
+  .flChk input{width:16px;height:16px;accent-color:var(--gold);cursor:pointer;margin:0}
+  .flCreate{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .flCreate:hover{background:#000}
   /* delete-floor x on the floor tabs */
   .ftab .fdel{margin-left:7px;opacity:.5;font-size:14px;line-height:1;cursor:pointer}
   .ftab .fdel:hover{opacity:1}
@@ -806,16 +813,28 @@
   <!-- confirm dialog (destructive actions) -->
   <div id="confirmModal"><div class="cfCard"><div class="cfMsg" id="cfMsg"></div><div class="cfBtns"><button class="cfNo" id="cfNo">Cancel</button><button class="cfYes" id="cfYes">Delete</button></div></div></div>
 
-  <!-- add-floor: import the background from the previous floor? (with items or just the plan) -->
+  <!-- add-floor: two-step — (1) blank vs copy, (2) if copy, choose which layers carry over -->
   <div id="floorModal"><div class="cfCard">
-    <div class="cfMsg">Start the new floor from <b id="flPrev">the previous floor</b>?</div>
-    <div class="cfCol">
-      <button class="flOpt" id="flBoth"><b>Background + items</b><span>Copy the plan and all placed cameras/devices</span></button>
-      <button class="flOpt" id="flBgPlan"><b>Background + floor plan</b><span>Copy the aerial and the drawn plan — place devices fresh</span></button>
-      <button class="flOpt" id="flBg"><b>Background only</b><span>Copy just the aerial — draw the plan fresh</span></button>
-      <button class="flOpt" id="flBlank"><b>Blank floor</b><span>Start from the background chooser</span></button>
+    <div id="flStep1">
+      <div class="cfMsg">How should this floor start?</div>
+      <div class="cfCol">
+        <button class="flOpt" id="flBlank"><b>Blank floor</b><span>Start from a new background</span></button>
+        <button class="flOpt" id="flCopy"><b>Copy from <span id="flPrev">the previous floor</span></b><span>Carry over selected work</span></button>
+      </div>
+      <button class="flCancel" id="flCancel">Cancel</button>
     </div>
-    <button class="flCancel" id="flCancel">Cancel</button>
+    <div id="flStep2" style="display:none">
+      <div class="cfMsg">Copy from <b id="flPrev2">the previous floor</b></div>
+      <div class="flChecks">
+        <label class="flChk"><input type="checkbox" id="flcBg" checked><span>Background</span></label>
+        <label class="flChk"><input type="checkbox" id="flcPlan"><span>Floor Plan</span></label>
+        <label class="flChk"><input type="checkbox" id="flcDev"><span>Devices</span></label>
+      </div>
+      <div class="cfBtns">
+        <button class="cfNo" id="flBack">Back</button>
+        <button class="cfNo flCreate" id="flCreate">Create Floor</button>
+      </div>
+    </div>
   </div></div>
 
   <!-- upload source picker -->
@@ -2743,16 +2762,31 @@
     document.getElementById("cfNo").addEventListener("click", closeConfirm);
     document.getElementById("cfYes").addEventListener("click", function(){ var f=pendingYes; closeConfirm(); if(f) f(); });
     document.getElementById("confirmModal").addEventListener("click", function(e){ if(e.target===this) closeConfirm(); });
-    // add-floor import chooser
+    // add-floor import chooser — TWO steps. Step 1: Blank vs Copy. Step 2 (copy only): which layers carry
+    // over. The three checkboxes map straight onto the existing createFloor(from, withPlan, withItems):
+    // Background = a non-null `from` (bg/ctx/aerial/scale always ride with it); Floor Plan = withPlan;
+    // Devices = withItems. No new copy engine — createFloor already deep-copies coords + mints fresh cids.
     var floorCb=null;
-    function askFloorImport(prevName, cb){ document.getElementById("flPrev").textContent=prevName||"the previous floor"; floorCb=cb; document.getElementById("floorModal").classList.add("on"); }
+    function flShow(step){ document.getElementById("flStep1").style.display=step===1?"":"none"; document.getElementById("flStep2").style.display=step===2?"":"none"; }
+    function askFloorImport(prevName, cb){ var nm=prevName||"the previous floor";
+      document.getElementById("flPrev").textContent=nm; document.getElementById("flPrev2").textContent=nm; floorCb=cb;
+      document.getElementById("flcBg").checked=true; document.getElementById("flcPlan").checked=false; document.getElementById("flcDev").checked=false;   // default: Background only (the common copy)
+      flShow(1); document.getElementById("floorModal").classList.add("on"); }
     function closeFloorModal(){ document.getElementById("floorModal").classList.remove("on"); floorCb=null; }
-    function pickFloor(mode){ var f=floorCb; closeFloorModal(); if(f) f(mode); }
-    document.getElementById("flBoth").addEventListener("click", function(){ pickFloor("bgitems"); });
-    document.getElementById("flBgPlan").addEventListener("click", function(){ pickFloor("bgplan"); });
-    document.getElementById("flBg").addEventListener("click", function(){ pickFloor("bg"); });
-    document.getElementById("flBlank").addEventListener("click", function(){ pickFloor("none"); });
+    document.getElementById("flBlank").addEventListener("click", function(){ var f=floorCb; closeFloorModal(); if(f) f("none"); });
+    document.getElementById("flCopy").addEventListener("click", function(){ flShow(2); });
+    document.getElementById("flBack").addEventListener("click", function(){ flShow(1); });
     document.getElementById("flCancel").addEventListener("click", closeFloorModal);
+    document.getElementById("flCreate").addEventListener("click", function(){
+      var bg=document.getElementById("flcBg").checked, pl=document.getElementById("flcPlan").checked, dv=document.getElementById("flcDev").checked;
+      var f=floorCb; closeFloorModal(); if(!f) return;
+      if(!bg){ f("none"); return; }                          // nothing carried over → blank floor
+      f(dv ? "bgitems" : pl ? "bgplan" : "bg"); });           // map to the existing createFloor tiers
+    // hierarchical dependencies: Devices ⊃ Floor Plan ⊃ Background (the base)
+    (function(){ var bg=document.getElementById("flcBg"), pl=document.getElementById("flcPlan"), dv=document.getElementById("flcDev");
+      bg.addEventListener("change", function(){ if(!bg.checked){ pl.checked=false; dv.checked=false; } });
+      pl.addEventListener("change", function(){ if(pl.checked) bg.checked=true; else dv.checked=false; });
+      dv.addEventListener("change", function(){ if(dv.checked){ pl.checked=true; bg.checked=true; } }); })();
     document.getElementById("floorModal").addEventListener("click", function(e){ if(e.target===this) closeFloorModal(); });
 
     // ---- Upload or reuse: one door → the library modal, which offers "Upload from device" plus this
