@@ -66,6 +66,22 @@ test("add-floor carry-over dependencies: Devices implies Floor Plan implies Back
   s = { bg: true, pl: true, dv: true }; s.pl = false; onPl(s); assert.equal(s.dv, false, "unchecking Floor Plan clears Devices");
 });
 
+// Start Over — reset ONLY the current floor's working state, protecting the project / other floors / submitted snapshot.
+test("Start Over: a ••• row that resets the current floor, gated on !frozen(), keeping id/name/version history", () => {
+  assert.ok(html.includes('id="moreStartOver"') && html.includes("Start over"), "a Start Over row lives in the ••• sheet");
+  const so = region("function startOverFloor(", "function frozen(");
+  assert.ok(so.includes("if(frozen()) return;"), "Start Over is blocked while submitted/RO (protects the approved snapshot)");
+  assert.ok(so.includes("resetFloorRecord(floors[curFloor]); loadFloor(curFloor)") && so.includes("goStep(0)"), "it resets the floor record then lands on the chooser");
+  assert.ok(so.includes('askConfirm(') && so.includes('"Start Over"'), "it confirms with a Start Over action when there is work");
+  assert.ok(so.includes("if(floorHasWork(f)) askConfirm") && so.includes("else go();"), "no scary confirm when the floor has nothing to lose");
+  // resetFloorRecord clears working fields but NEVER touches id/name/version history (off the approval fingerprint)
+  const rf = region("function resetFloorRecord(", "function startOverFloor(");
+  for (const f of ["f.bg=null", "f.started=false", "f.planSvg=null", "f.ctx=null", "f.devices=[]", "f.zones=[]"]) assert.ok(rf.includes(f), `resetFloorRecord clears ${f}`);
+  assert.ok(!/f\.id=|f\.name=|bgVersions|ctxVersions/.test(rf), "resetFloorRecord never touches id/name/version history");
+  // the shared confirm dialog can carry a non-destructive-default label
+  assert.ok(html.includes("function askConfirm(msg, onYes, yesLabel)") && html.includes('yesLabel||"Delete"'), "askConfirm takes an optional button label, defaulting to Delete");
+});
+
 // Guards: the capture transform being dropped anywhere between the satellite result and a reload.
 test("the capture transform is carried through applyBackground → finishBackground → snap/load/restore", () => {
   assert.ok(html.includes("function applyBackground(dataUrl, skipSave, vector, scale, aerial)"), "applyBackground takes aerial");

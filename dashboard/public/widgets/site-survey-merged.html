@@ -235,6 +235,8 @@
   .moreSeg button.on{background:var(--ink);color:#fff}
   .moreRow{display:flex;align-items:center;gap:11px;width:100%;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:600 14.5px var(--sans);cursor:pointer;text-align:left}
   .moreRow:hover{border-color:var(--ink)}
+  .moreRow.danger{color:#c9302c;margin-top:4px}   /* Start Over — destructive (reset this floor), set apart from the edit rows */
+  .moreRow.danger:hover{border-color:#c9302c;background:#fdf3f3}
   .versRow{display:flex;gap:9px;overflow-x:auto;padding:2px 1px 4px}
   .versThumb{position:relative;flex:0 0 auto;width:68px;height:52px;border-radius:9px;border:1.5px solid var(--line);background:var(--soft) center/cover no-repeat;cursor:pointer;padding:0;overflow:hidden}
   .versThumb:hover{border-color:var(--ink)}
@@ -786,6 +788,9 @@
           <!-- Create floor plan is now the top-left floating canvas action (#buildPlanFab), not a sheet row. -->
           <button class="moreRow" id="moreReplaceBg" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/></svg><span>Replace background</span></button>
           <button class="moreRow" id="moreRotate" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg><span>Rotate 90°</span></button>
+          <!-- Start Over: reset THIS floor's working state back to the chooser (never deletes the project,
+               other floors, or a submitted snapshot — the sheet is locked while submitted). -->
+          <button class="moreRow danger" id="moreStartOver" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/></svg><span>Start over</span></button>
         </div>
         <div class="moreSec" id="moreVersSec" style="display:none">
           <div class="moreLbl">Versions</div>
@@ -2660,6 +2665,7 @@
       function relay(id,tgt){ var b=document.getElementById(id); if(b) b.addEventListener("click", function(){ closeMoreSheet(); var t=document.getElementById(tgt); if(t) t.click(); }); }
       relay("moreEditBg","changeBgBtn"); relay("moreReplaceBg","replaceBgBtn");
       var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); });
+      var so=document.getElementById("moreStartOver"); if(so) so.addEventListener("click", function(){ closeMoreSheet(); startOverFloor(); });
       var vl=document.getElementById("moreVersList"); if(vl) vl.addEventListener("click", function(e){ var b=e.target.closest(".versThumb"); if(b) restoreVersion(b.getAttribute("data-vid")); }); })();
     function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
       if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
@@ -2668,6 +2674,22 @@
       floors.forEach(function(f,idx){ if(/^Floor \d+$/.test(f.name)) f.name="Floor "+(idx+1); });   // renumber only default-named floors; keep custom names
       if(curFloor>i) curFloor--; else if(wasCur) curFloor=Math.min(i, floors.length-1);
       loadFloor(curFloor); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); flushNow();   // delete is discrete + destructive → flush now
+    }
+    // ---- Start Over: reset ONLY the current floor's WORKING state back to the background chooser ----------
+    // This is NOT Delete Project and NOT Delete Floor: the floor stays in place (same id + name + slot). It
+    // clears the working background/aerial/plan/structure/devices (reusing the deleteFloor blank-record shape)
+    // and returns to "What's the base for this floor?". It is gated on !frozen() — while submitted/RO the •••
+    // sheet is hidden, so a reviewed/approved snapshot is never touched (staff must Unsubmit first). Version
+    // history (bgVersions/ctxVersions) is KEPT: it's off the approval fingerprint and is the restore safety net.
+    function floorHasWork(f){ return !!(f && (f.started || f.bg || (f.devices&&f.devices.length) || f.planSvg || (f.plan && (f.plan.cells||f.plan.rooms)))); }
+    function resetFloorRecord(f){ if(!f) return;
+      f.bg=null; f.bgSource=null; f.started=false; f.scale=null; f.aerial=null;
+      f.plan=null; f.outlineDraft=null; f.ctx=null; f.planSvg=null; f.bgCtx=false;
+      f.view=null; f.sides=null; f.grid=null; f.planXf=null; f.zonesMigrated=false; f.boundary=null; f.zones=[]; f.devices=[]; }
+    function startOverFloor(){ if(frozen()) return; var f=floors[curFloor]; if(!f) return;
+      var go=function(){ resetFloorRecord(floors[curFloor]); loadFloor(curFloor); renderFloorTabs(); goStep(0); flushNow(); };   // discrete+destructive → flush now; loadFloor(0)/goStep(0) land on the chooser and re-emit bgReady:false,hasPlan:false
+      if(floorHasWork(f)) askConfirm("Start over on "+(f.name||("Floor "+(curFloor+1)))+"? This clears the current setup for this floor and returns it to background selection. Your last submitted version is not deleted.", go, "Start Over");
+      else go();   // nothing meaningful to lose → straight to the chooser, no scary confirm (owner's #20)
     }
     // A submitted survey is locked for editing (staff must Unsubmit to change it) — same as the customer's
     // read-only view, but staff keep the Unsubmit control. frozen() gates every edit action below.
@@ -2757,7 +2779,7 @@
     // Upload a picture → file picker → drop the image onto the plan as the background
     // ---- confirm dialog (destructive) ----
     var pendingYes=null;
-    function askConfirm(msg, onYes){ document.getElementById("cfMsg").textContent=msg; pendingYes=onYes; document.getElementById("confirmModal").classList.add("on"); }
+    function askConfirm(msg, onYes, yesLabel){ document.getElementById("cfMsg").textContent=msg; document.getElementById("cfYes").textContent=yesLabel||"Delete"; pendingYes=onYes; document.getElementById("confirmModal").classList.add("on"); }
     function closeConfirm(){ document.getElementById("confirmModal").classList.remove("on"); pendingYes=null; }
     document.getElementById("cfNo").addEventListener("click", closeConfirm);
     document.getElementById("cfYes").addEventListener("click", function(){ var f=pendingYes; closeConfirm(); if(f) f(); });
