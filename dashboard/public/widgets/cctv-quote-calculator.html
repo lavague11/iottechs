@@ -344,15 +344,21 @@ details.why p{margin:6px 0 0;max-width:60ch}
 .stor-cap b{font-size:28px;font-weight:800;line-height:1}
 .stor-cap span{font-size:14px;color:var(--muted)}
 /* advanced options (collapsed) */
-.adv{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
-.adv-sum{width:100%;cursor:pointer;padding:14px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;color:var(--fg);text-align:left}
+/* Advanced = a continuation of the configurator, NOT a card/form. No border/background — it sits on the
+   same ivory page as Recorder/Monitor; the sys-div above it is the only separator. */
+.adv{}
+.adv-sum{width:100%;cursor:pointer;padding:10px 2px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;color:var(--fg);text-align:left}
 .adv-sum svg{width:18px;height:18px;color:var(--muted);transition:transform .2s}
 .adv.open .adv-sum svg{transform:rotate(180deg);color:var(--gold-ink)}
-.adv-b{padding:4px 16px 16px;border-top:1px solid var(--line)}
-.adv-grid{display:flex;flex-direction:column;gap:13px}
-.adv-grid .eyebrow{margin-bottom:-6px}
-.adv-grp{font-size:12.5px;font-weight:800;color:var(--fg);letter-spacing:.01em;padding-top:12px;border-top:1px solid var(--line);margin-top:2px}
-.adv-grid>.adv-grp:first-child{border-top:none;padding-top:2px;margin-top:0}
+.adv-b{padding:6px 0 0}
+.adv-grid{display:flex;flex-direction:column;gap:12px}
+/* section header (CAMERA / CABLE) — one subtle divider before Cable, none before the first */
+.adv-grp{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink);padding-top:14px;border-top:1px solid var(--line);margin-top:2px}
+.adv-grid>.adv-grp:first-child{border-top:none;padding-top:4px;margin-top:0}
+/* attribute label — quiet, no gold rule (the section header carries the context) */
+.adv-lbl{font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:-2px}
+/* compact option cards in Advanced (shorter than the primary System choices) */
+.adv .nvr-btn{padding:9px 10px}
 .mon-qty{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
 .mon-qty-l{font-weight:600;font-size:14px}
 .qty-step{display:inline-flex;align-items:center;gap:14px}
@@ -1023,24 +1029,25 @@ function monitorControl(){
     ${qty}`;
 }
 // A labeled card group matching the recorder/monitor style. opts: [{v,title,sub?}].
+// Uses a quiet .adv-lbl (not the gold-ruled .eyebrow) — the section header already says Camera/Cable.
 function cardGroup(label, act, cur, opts){
-  return `<div class="eyebrow">${label}</div>
+  return `<div class="adv-lbl">${label}</div>
     <div class="nvr-seg" style="grid-template-columns:repeat(${opts.length},1fr)">${opts.map(o=>
       `<button type="button" class="nvr-btn ${cur===o.v?'on':''}" data-act="${act}" data-v="${o.v}" aria-pressed="${cur===o.v}"><b>${o.title}</b>${o.sub?`<span>${o.sub}</span>`:''}</button>`
     ).join('')}</div>`;
 }
-// Advanced options — grouped (Camera / Cabling) card style matching the sections above.
+// Advanced — a continuation of the configurator (Camera / Cable), same cards, no inner card/form chrome.
 function optionsStrip(q){
   const up = money(CONFIG.catalog.cam[12].price - CONFIG.catalog.cam[8].price);
   const grpH = t => `<div class="adv-grp">${t}</div>`;
   return `<div class="adv-grid">
       ${grpH('Camera')}
-      ${cardGroup('Resolution', 'res', state.camRes, [{v:'8',title:'8MP',sub:'4K'},{v:'12',title:'12MP',sub:'+'+up+' ea'}])}
-      ${cardGroup('Setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included'},{v:'skip',title:'Skip'}])}
-      ${cardGroup('Camera color', 'camcolor', state.camColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
-      ${grpH('Cabling')}
-      ${cardGroup('Cabling', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
-      ${cardGroup('Cable color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${cardGroup('Resolution', 'res', state.camRes, [{v:'8',title:'8MP',sub:'4K'},{v:'12',title:'12MP',sub:'+'+up+' / camera'}])}
+      ${cardGroup('Camera setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included',sub:'Configured for you'},{v:'skip',title:'Skip'}])}
+      ${cardGroup('Color', 'camcolor', state.camColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${grpH('Cable')}
+      ${cardGroup('Type', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
+      ${cardGroup('Color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
     </div>`;
 }
 // A polished, document-style quote (branded header, prepared-for + system, grouped line items, totals).
@@ -1314,7 +1321,7 @@ const R = {
       + `<div class="sys-block">${R.recorder(slideOf('recorder'),q,i)}</div>`
       + div
       + `<div class="adv ${advOpen?'open':''}">
-          <button type="button" class="adv-sum" data-act="advtoggle" aria-expanded="${advOpen}">Advanced options
+          <button type="button" class="adv-sum" data-act="advtoggle" aria-expanded="${advOpen}">Advanced
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
           ${advOpen ? `<div class="adv-b">${optionsStrip(q)}</div>` : ''}
         </div>`;
