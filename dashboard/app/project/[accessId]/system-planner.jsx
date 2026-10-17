@@ -661,10 +661,11 @@ const CSS = `
    reparents, so the iframes keep their state (no reload) and stay editable. 100dvh + safe-area for mobile. */
 .syp.syp--fs{position:fixed;inset:0;z-index:9999;width:100vw;height:100dvh;background:var(--dv-bg,#F7F7F5);
   overflow:auto;padding:14px clamp(14px,3vw,28px);padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
-/* .syp sits inside a translateX-ed .dv-slide — a transform makes that slide the containing block for
-   position:fixed, clipping the overlay. Neutralize that one slide's transform/overflow while fullscreen so
-   the overlay resolves against the viewport. */
-.dv-slide.syp-fs-host{transform:none!important;overflow:visible!important}
+/* .syp sits inside a translateX-ed .dv-slide. BOTH its transform AND its will-change:transform make that
+   slide the containing block for position:fixed (will-change does so even when transform is none), which
+   would clip the overlay to the slide. Neutralize both (and overflow) on just that slide while fullscreen
+   so the overlay resolves against the viewport. */
+.dv-slide.syp-fs-host{transform:none!important;will-change:auto!important;overflow:visible!important}
 body.syp-fs-lock{overflow:hidden}
 .syp.syp--fs .syp-plan .ss-embed-frame{height:min(82vh,1200px);min-height:0}
 /* One workspace, not stacked tools: the header's Plans/Views tabs already name the mode, so drop each
