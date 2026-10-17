@@ -84,29 +84,36 @@ export default function SystemPlanner({
     if (target >= 0 && target < floorCount) goFloor(target);
   };
 
-  // Planner-level fullscreen (Phase 2). The ⛶ fullscreens the WHOLE planner (.syp: floor selector +
-  // canvas + rail + tools) via the Fullscreen API, which promotes it to the browser's top layer — so it
-  // escapes the deck's transformed slide and, crucially, DOES NOT reparent the node, so neither iframe
-  // reloads (a React body-portal would remount them). Entry is a real user gesture (this click). If the
-  // API is blocked (e.g. an embedded webview), fall back to the survey widget's own portal fullscreen so
-  // the button always does something. The project header/phase rail live OUTSIDE .syp → hidden in fs.
+  // Planner-level fullscreen (Phase 2, rev 2) — a CSS overlay, NOT the Fullscreen API. The whole planner
+  // (.syp: floor selector + canvas + rail + tools + footer) expands to fill the viewport; only the project
+  // header/phase rail (outside .syp) are covered. Why not the Fullscreen API: in some embedders (the Claude
+  // preview pane, sandboxed webviews) the fullscreen request is silently ignored — it neither resolves nor
+  // rejects — so the old .catch fallback never fired and the ⛶ did nothing. A fixed overlay works
+  // everywhere, needs no permission, and never reparents .syp, so both iframes keep their state (no reload,
+  // stays fully editable). .syp lives inside a CSS-transformed .dv-slide, which would otherwise be the
+  // containing block for position:fixed, so we neutralize that one slide's transform while fullscreen.
+  const slideHostRef = useRef(null);
   const enterFs = () => {
     const el = rootRef.current; if (!el) return;
-    const req = el.requestFullscreen || el.webkitRequestFullscreen;
-    if (req) {
-      Promise.resolve(req.call(el)).catch(() => {
-        try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch { /* no-op */ }
-      });
-    } else {
-      try { window.dispatchEvent(new CustomEvent("iotSurveyFocus", { detail: { project: accessId } })); } catch { /* no-op */ }
-    }
+    const slide = el.closest(".dv-slide"); slideHostRef.current = slide || null;
+    if (slide) slide.classList.add("syp-fs-host");
+    try { document.body.classList.add("syp-fs-lock"); } catch { /* no-op */ }
+    setFsOn(true);
   };
-  const exitFs = () => { try { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); } catch { /* no-op */ } };
+  const exitFs = () => {
+    if (slideHostRef.current) { slideHostRef.current.classList.remove("syp-fs-host"); slideHostRef.current = null; }
+    try { document.body.classList.remove("syp-fs-lock"); } catch { /* no-op */ }
+    setFsOn(false);
+  };
+  // Esc leaves fullscreen (the API's native Esc is gone with it); always clean up the classes on unmount.
   useEffect(() => {
-    const onChange = () => { const fsEl = document.fullscreenElement || document.webkitFullscreenElement; setFsOn(!!fsEl && fsEl === rootRef.current); };
-    document.addEventListener("fullscreenchange", onChange);
-    document.addEventListener("webkitfullscreenchange", onChange);
-    return () => { document.removeEventListener("fullscreenchange", onChange); document.removeEventListener("webkitfullscreenchange", onChange); };
+    if (!fsOn) return;
+    const onKey = (e) => { if (e.key === "Escape") exitFs(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fsOn]);
+  useEffect(() => () => {
+    try { if (slideHostRef.current) slideHostRef.current.classList.remove("syp-fs-host"); document.body.classList.remove("syp-fs-lock"); } catch { /* no-op */ }
   }, []);
 
   // The camera is ONE object across the two modes. Each iframe broadcasts the cid the user picked; we
@@ -649,17 +656,17 @@ const CSS = `
    not the phone COVER mode that crops the sides and blocks zooming back out. */
 .syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(74vh,680px);min-height:560px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
 @media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px} }
-/* PLANNER FULLSCREEN (Phase 2) — .syp is promoted to the top layer by the Fullscreen API (no reparent →
-   iframes don't reload) and so covers the whole viewport, hiding the deck header/phase rail that live
-   outside it. Keep the floor selector + rail + tools; just give the canvas more of the taller screen. */
-/* split into standalone rules — a selector LIST is discarded whole if any member (e.g. an unrecognized
-   :-webkit-full-screen) is invalid, which would silently drop the .syp--fs styling too. */
-.syp.syp--fs{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
-.syp:fullscreen{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
-.syp:-webkit-full-screen{background:var(--dv-bg,#F7F7F5);overflow:auto;padding:14px clamp(14px,3vw,28px)}
-.syp.syp--fs .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
-.syp:fullscreen .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
-.syp:-webkit-full-screen .syp-plan .ss-embed-frame{height:min(84vh,1200px);min-height:0}
+/* PLANNER FULLSCREEN (Phase 2, rev 2) — a CSS overlay (no Fullscreen API; see enterFs). .syp becomes a
+   fixed, viewport-filling layer that covers the deck header/phase rail (which live outside it). It never
+   reparents, so the iframes keep their state (no reload) and stay editable. 100dvh + safe-area for mobile. */
+.syp.syp--fs{position:fixed;inset:0;z-index:9999;width:100vw;height:100dvh;background:var(--dv-bg,#F7F7F5);
+  overflow:auto;padding:14px clamp(14px,3vw,28px);padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+/* .syp sits inside a translateX-ed .dv-slide — a transform makes that slide the containing block for
+   position:fixed, clipping the overlay. Neutralize that one slide's transform/overflow while fullscreen so
+   the overlay resolves against the viewport. */
+.dv-slide.syp-fs-host{transform:none!important;overflow:visible!important}
+body.syp-fs-lock{overflow:hidden}
+.syp.syp--fs .syp-plan .ss-embed-frame{height:min(82vh,1200px);min-height:0}
 /* One workspace, not stacked tools: the header's Plans/Views tabs already name the mode, so drop each
    widget's redundant descriptive tag ("Live survey editor · N floors" / the empty mockup tag) and keep
    only the functional controls (fullscreen, etc.) pinned to the right of a slim bar. */
