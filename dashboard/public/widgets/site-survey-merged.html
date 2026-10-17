@@ -564,6 +564,8 @@
   body.ro #surveyWiz{display:none}   /* customer just reviews the plan to approve — no Background/Setup/Submit tabs or nav */
   body.planner #surveyWiz{display:none!important}   /* System Planner owns the floor selector + rail now — hide the in-canvas strip (important beats exitBg's inline restore) */
   body.planner #fullBtn{display:none!important}   /* the planner owns fullscreen (fullscreens the whole shell incl. the rail) — drop the in-canvas ⛶ so there's one entry */
+  #doorSample{display:none}   /* dev/demo only — revealed by body.devsample (?sample=1), out of the production chooser */
+  body.devsample #doorSample{display:inline-flex}
   body.ro .card .x,body.ro .card .fov input{display:none}
   body.ro .devNode .fovWrap{display:block}
   body.ro .devNode .icLabel{pointer-events:none;cursor:default}
@@ -861,6 +863,9 @@
     // survives exitBg's inline-style restore.
     var PLANNER = new URLSearchParams(location.search).get("planner")==="1";
     if(PLANNER) document.body.classList.add("planner");
+    // "Load sample" is a dev/demo helper — out of the production chooser by default. The shell forwards
+    // &sample=1 (from ?sample=1 on the project URL) only for a deliberate demo/dev session → body.devsample.
+    if(new URLSearchParams(location.search).get("sample")==="1") document.body.classList.add("devsample");
     // Embedded in the project deck: the deck already shows the brand, job, address + status, so the
     // widget's own top bar is pure redundancy — hide it (and tell the satellite tool to drop its logo).
     var EMB = new URLSearchParams(location.search).get("embed")==="1";

@@ -66,7 +66,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // planner=1 when embedded in the System Planner (the shell lifts the roster → noRoster). It tells the
   // widget to hide its in-canvas "Background | Setup" strip + floor selector, which the planner now owns
   // above/below the canvas. Stable per mount → never remounts the iframe.
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}&v=${WIDGET_VERSION}`;
+  // Dev/demo "Load sample" is out of the production chooser; forward &sample=1 only when the project URL
+  // carries ?sample=1 (a deliberate dev/demo session) so the widget reveals the helper (body.devsample).
+  const sampleOn = typeof window !== "undefined" && /[?&]sample=1(?:&|$)/.test(window.location.search);
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}${sampleOn ? "&sample=1" : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.

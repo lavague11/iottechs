@@ -66,6 +66,14 @@ test("add-floor carry-over dependencies: Devices implies Floor Plan implies Back
   s = { bg: true, pl: true, dv: true }; s.pl = false; onPl(s); assert.equal(s.dv, false, "unchecking Floor Plan clears Devices");
 });
 
+// Load Sample is a dev/demo helper — out of the production chooser, behind a ?sample=1 dev flag.
+test("Load Sample is gated behind ?sample=1 (out of the production UI)", () => {
+  assert.ok(html.includes("#doorSample{display:none}") && html.includes("body.devsample #doorSample{display:inline-flex}"), "Load Sample hidden by default, revealed only by body.devsample");
+  assert.ok(html.includes('get("sample")==="1") document.body.classList.add("devsample")'), "the widget sets devsample from ?sample=1");
+  const widget = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.jsx", import.meta.url), "utf8");
+  assert.ok(widget.includes("sample=1") && widget.includes('sampleOn ? "&sample=1" : ""'), "the shell forwards &sample=1 only when the page URL has it");
+});
+
 // Start Over — reset ONLY the current floor's working state, protecting the project / other floors / submitted snapshot.
 test("Start Over: a ••• row that resets the current floor, gated on !frozen(), keeping id/name/version history", () => {
   assert.ok(html.includes('id="moreStartOver"') && html.includes("Start over"), "a Start Over row lives in the ••• sheet");
