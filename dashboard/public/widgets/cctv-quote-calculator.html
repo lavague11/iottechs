@@ -427,10 +427,6 @@ input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-b
 .seg-n{display:none}
 .seg.done{background:#5a4e35;color:#e7d9bd}
 .seg.on{background:var(--gold);color:#0B0F1A}
-.total{font-size:12px;color:var(--bar-muted);white-space:nowrap}
-.total b{color:var(--bar-fg);font-size:16px;font-variant-numeric:tabular-nums;margin-left:4px}
-.total i{font-style:normal;color:var(--gold)}
-.total .prelim{font-style:normal;color:var(--warn);font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
 .rev-edit{background:none;border:none;color:var(--gold);font:700 12px var(--f-body);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
 
 /* ===== 3-step layout: step header + Step-2 accordions ===== */
@@ -507,7 +503,6 @@ input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-b
     <button class="nav" id="prev" aria-label="Back"><span aria-hidden="true">←</span> <span class="lbl">Back</span></button>
     <div class="mid">
       <div class="dots" id="dots"></div>
-      <div class="total" id="total"></div>
     </div>
     <button class="nav next" id="next" aria-label="Next"><span class="lbl">Next</span> <span aria-hidden="true">→</span></button>
   </footer>
@@ -1475,9 +1470,8 @@ function chrome(q){
   $('#stepLbl').innerHTML = `<strong>${cur+1}</strong> / ${STEPS.length} · ${STEPS[cur].label}`;
   // three-segment progress bar (Intake → Your Project → System); segments jump when reachable
   $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span class="seg-n">${i+1}</span><span class="seg-l">${st.label}</span></button>`).join('');
-  const prelim = state.extStorage || state.overCams || q.ss.noStandardFit || recommendLevel(state.features).specialized.length>0;   // extended storage / 32+ / specialized → total not final
-  // Running total on the System + Quote steps — the earlier steps have no cost inputs yet.
-  $('#total').innerHTML = cur < STEPS.length-2 ? '' : `${prelim?'<em class="prelim">Preliminary ·</em> ':''}Est. total <b>${money(q.total)}</b>${q.plan.monthlyDue?` <i>+ ${money(q.plan.monthlyDue)}/mo</i>`:''}`;
+  // The footer is navigation ONLY — no running total (it competed with Continue and felt like checkout
+  // while configuring). Price lives on the Quote step's quote document, fully calculated as before.
   $('#prev').disabled = cur===0;
   const nx=$('#next'), lbl=nx.querySelector('.lbl');
   lbl.textContent = cur < STEPS.length-1 ? 'Continue' : 'Submit';
