@@ -453,6 +453,47 @@ input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-b
 .sys-block>.eyebrow{margin-bottom:2px}
 .sys-div{border:none;border-top:1px solid var(--line);margin:18px 0 0}
 .muted-note{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+/* ---- Quote step: package picker + feature board + selected summary ---- */
+.pk-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+.pk-card{position:relative;display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:14px 14px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);cursor:pointer;text-align:left;transition:border-color .15s,background .15s,box-shadow .15s}
+.pk-card:hover{border-color:var(--gold)}
+.pk-card.sel{border-color:var(--gold);background:var(--sel);box-shadow:inset 0 0 0 2px var(--gold)}
+.pk-badge{position:absolute;top:-9px;left:12px;background:var(--gold);color:#0B0F1A;font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:100px}
+.pk-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);margin-bottom:5px}
+.pk-card.sel .pk-radio{border-color:var(--gold);background:radial-gradient(circle,var(--gold) 0 3.5px,transparent 4.5px)}
+.pk-name{font-weight:700;font-size:16px;line-height:1.1}
+.pk-line{font-size:12px;color:var(--muted)}
+.pk-price{font-weight:700;font-size:15px;margin-top:4px;font-variant-numeric:tabular-nums}
+.fb-wrap{margin-top:22px;display:flex;flex-direction:column;gap:10px}
+.fb-board{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.fb-row{display:grid;grid-template-columns:1fr 70px 70px 70px;align-items:center}
+.fb-row+.fb-row{border-top:1px solid var(--line)}
+.fb-head{background:var(--surface)}
+.fb-head .fb-feat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.fb-head .fb-cell{font-weight:700;font-size:12.5px;color:var(--fg)}
+.fb-feat{padding:10px 14px;font-size:13px;color:var(--fg)}
+.fb-cell{padding:10px 6px;display:grid;place-items:center}
+.fb-cell.on{background:var(--sel)}
+.fb-yes{color:var(--good)}
+.fb-no{color:var(--muted);opacity:.5;font-size:13px}
+.sel-sum{display:flex;flex-direction:column;gap:11px;padding-top:14px}
+.sel-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sel-k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-ink);font-weight:700}
+.sel-name{font-weight:700;font-size:18px;margin-top:3px}
+.sel-line{font-weight:500;font-size:13px;color:var(--muted)}
+.sel-price{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sel-blurb{margin:0;font-size:13.5px;color:var(--muted);max-width:60ch}
+.bk{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.bk-sec{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
+.bk-q{font-style:normal;color:var(--muted);font-size:12px}
+@media (max-width:520px){
+  .fb-row{grid-template-columns:1fr 52px 52px 52px}
+  .fb-feat{padding:9px 10px;font-size:12.5px}
+  .fb-cell{font-size:12px;padding:10px 2px}
+  .fb-head .fb-cell{font-size:10.5px;line-height:1.1}   /* fit "Essential" without clipping */
+  .pk-card{padding:13px 10px}
+  .pk-name{font-size:15px}
+}
 .opts-strip{display:flex;flex-direction:column;gap:12px}
 .orow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .orow .olabel{font-weight:600;font-size:14px}
@@ -525,16 +566,16 @@ const CONFIG = {
            12:{ code:'CAM-12', name:'12MP camera', price:7500, watts:null } },
     // Security level / feature tier — framed at the start. Price adders default to $0 (set per camera or flat in rep settings).
     levels: [
-      { id:'essential', name:'Essential', tag:'Simple', line:'Record and watch',
-        blurb:'Around-the-clock recording you can check any time from your phone.',
+      { id:'essential', name:'Essential', tag:'Simple', line:'Record & watch',
+        blurb:'Reliable 24/7 recording with live and recorded phone access.',
         features:['24/7 continuous recording','Live & recorded phone viewing','Clear day and night video'],
         addPerCamera:0, addFlat:0 },
       { id:'smart', name:'Smart', tag:'Most popular', line:'AI alerts',
-        blurb:'Everything in Essential, plus AI that tells people and vehicles apart and alerts you to what matters.',
+        blurb:'Adds intelligent person and vehicle alerts for faster review and fewer unnecessary notifications.',
         features:['AI human & vehicle detection','Smart alerts to your phone','Far fewer false alarms'],
         addPerCamera:2500, addFlat:0, aiLabel:'Advanced AI detection & alerts', recommended:true },
       { id:'pro', name:'Pro', tag:'Advanced', line:'AI search & plates',
-        blurb:'Everything in Smart, plus facial recognition, AI search through footage and license-plate capture.',
+        blurb:'Adds advanced search, facial recognition, and license plate recognition.',
         features:['Facial recognition','AI smart search (person, vehicle, color)','License plate recognition','Best with 12MP cameras'],
         addPerCamera:2500, addFlat:0, aiLabel:'Advanced AI detection & alerts', suggest12MP:true, specialized:true }
     ],
@@ -1045,6 +1086,63 @@ function optionsStrip(q){
       ${cardGroup('Color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
     </div>`;
 }
+// ---- Quote step (redesign): compact package picker + a shared feature board + one selected summary ----
+// Packages are strictly cumulative (Smart = Essential + its AI; Pro = Smart + facial/LPR), so the board's
+// ✓/— matrix derives from the canonical levels[].features + their order — no hard-coded mapping.
+const PKG_CHECK = '<svg class="fb-yes" width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 8l3 3 6-7"/></svg>';
+function pkgRecBadge(lv, rec){ if(rec.hasCamFeatures && rec.level===lv.id) return 'Recommended'; if(!rec.hasCamFeatures && lv.recommended) return 'Popular'; return ''; }
+function pkgPicker(q){
+  const rec = recommendLevel(state.features);
+  return `<div class="pk-row">${CONFIG.catalog.levels.map(lv=>{
+    const tot = tierTotal(lv.id), spec = lv.specialized && rec.specialized.length>0, on = state.level===lv.id, badge = pkgRecBadge(lv, rec);
+    return `<button type="button" class="pk-card ${on?'sel':''}" data-act="level" data-v="${lv.id}" aria-pressed="${on}">
+      ${badge?`<span class="pk-badge">${badge}</span>`:''}
+      <span class="pk-radio" aria-hidden="true"></span>
+      <span class="pk-name">${lv.name}</span><span class="pk-line">${lv.line}</span>
+      <span class="pk-price num">${money(tot)}${spec?'+':''}</span></button>`;
+  }).join('')}</div>`;
+}
+function pkgBoard(q){
+  const levels = CONFIG.catalog.levels, selIdx = levels.findIndex(l=>l.id===state.level);
+  const rows = []; levels.forEach((lv,idx)=> lv.features.forEach(f=> rows.push({ label:f, min:idx })));
+  const cell = (ci, inner) => `<span class="fb-cell${ci===selIdx?' on':''}">${inner}</span>`;
+  const headRow = `<div class="fb-row fb-head"><span class="fb-feat">Feature</span>${levels.map((lv,ci)=>cell(ci, lv.name)).join('')}</div>`;
+  const body = rows.map(r=>`<div class="fb-row"><span class="fb-feat">${r.label}</span>${levels.map((lv,ci)=>cell(ci, ci>=r.min?PKG_CHECK:'<span class="fb-no">—</span>')).join('')}</div>`).join('');
+  return `<div class="fb-wrap"><div class="eyebrow">Compare features</div><div class="fb-board" role="table">${headRow}${body}</div></div>`;
+}
+function pkgSummary(q){
+  const levels = CONFIG.catalog.levels, names = { essential:'Essential', smart:'Smart', pro:'Pro' };
+  const lv = levels.find(l=>l.id===state.level) || levels[0];
+  const rec = recommendLevel(state.features);
+  const tot = tierTotal(lv.id);
+  const spec = lv.specialized && rec.specialized.length>0;
+  // One breakdown for the SELECTED package, from the real engine lines (q reflects state.level). No new math.
+  const lineRow = l => `<div class="kv"><span>${esc(l.label)}${(l.qty>1||l.qty===0.5)?` <em class="bk-q">× ${l.qty===0.5?'½':l.qty}</em>`:''}</span><span class="num">${money(l.amt)}</span></div>`;
+  const section = (title,g) => { const ls=(q.lines||[]).filter(l=>l.g===g); return ls.length?`<div class="bk-sec">${title}</div>${ls.map(lineRow).join('')}`:''; };
+  const breakdown = `<details class="why"><summary>View price breakdown</summary>
+      <div class="bk">
+        ${section('Equipment','Equipment')}
+        ${section('Installation','Installation')}
+        ${section('Cable','Cable')}
+        ${(q.addons&&q.addons.length)?`<div class="bk-sec">Add-ons</div>${q.addons.map(lineRow).join('')}`:''}
+        <div class="kv grand"><span>Total due at install</span><b>${money(q.total)}${spec?'+':''}</b></div>
+      </div></details>`;
+  const useRec = (state.levelManual && rec.hasCamFeatures && rec.level!==state.level)
+    ? `<button class="skip" data-act="levelauto">↺ Use recommended (${names[rec.level]})</button>` : '';
+  const monNote = rec.wantsMonitoring ? `<div class="note">24/7 live monitoring requested — quoted separately as a monitoring service.</div>` : '';
+  const specNote = rec.specialized.length ? `<div class="note">Facial / license-plate recognition needs specialized cameras &amp; analytics — specced and priced at your free survey, so your total stays preliminary.</div>` : '';
+  const cavNote = rec.caveats.map(c=>`<div class="note">${esc(c)}</div>`).join('');
+  return `<hr class="sys-div">
+    <div class="sel-sum">
+      <div class="sel-row">
+        <div><div class="sel-k">Selected package</div><div class="sel-name">${lv.name}<span class="sel-line"> · ${lv.line}</span></div></div>
+        <div class="sel-price num">${money(tot)}${spec?'+':''}</div>
+      </div>
+      <p class="sel-blurb">${lv.blurb}</p>
+      ${breakdown}
+      ${useRec}${monNote}${specNote}${cavNote}
+    </div>`;
+}
 // A polished, document-style quote (branded header, prepared-for + system, grouped line items, totals).
 function quoteDoc(q){
   const c = state.contact;
@@ -1331,10 +1429,8 @@ const R = {
           <div class="row"><button class="btn" data-act="copy">Copy quote</button><button class="btn ghost" data-act="edit">Make changes</button></div>
           <p class="fine" id="copyMsg" aria-live="polite">Your IOT TECHS rep will reach out to book a free site survey.</p></div>`;
     }
-    return head(s,i,'Choose your package, then review your quote.', false)
-      + `<div class="sys-block"><div class="eyebrow">Choose your package</div>${R.level(slideOf('level'),q,i)}</div>`
-      + `<hr class="sys-div">`
-      + quoteDoc(q);
+    return head(s,i,'Choose the package that fits you best.', false)
+      + pkgPicker(q) + pkgBoard(q) + pkgSummary(q);
   },
   contact(s, q, i){
     const c = state.contact;
